@@ -1,8 +1,7 @@
-// Sign-in proxies redirect expired API requests to another origin, which fetch rejects, while the service
-// worker answers navigations from cache. A `reauth` navigation skips the worker (vite.pwa.ts) so the proxy
-// can sign the user in. After one attempt, wait for a request to succeed before trying again.
+// Sign-in proxies redirect expired API requests to another origin, which fetch rejects, while the service worker
+// serves navigations from cache. A `reauth` navigation skips the worker so the proxy can sign the user in again.
+// After one attempt, wait for a same-origin request to succeed before trying again.
 let armed = !new URLSearchParams(location.search).has("reauth")
-let probing = false
 
 export const fetchThroughSignInProxy: typeof globalThis.fetch = Object.assign(
   async (resource: RequestInfo | URL, init?: RequestInit) => {
@@ -14,7 +13,7 @@ export const fetchThroughSignInProxy: typeof globalThis.fetch = Object.assign(
         return response
       },
       (error) => {
-        if (armed && sameOrigin && !request.signal.aborted) void reauthenticate()
+        if (armed && sameOrigin && !request.signal.aborted) reauthenticate()
         throw error
       },
     )
@@ -23,20 +22,16 @@ export const fetchThroughSignInProxy: typeof globalThis.fetch = Object.assign(
   { preconnect: () => {} },
 )
 
-async function reauthenticate() {
-  if (probing) return
-  probing = true
-  // A socket that died while the device slept can stall fetch for minutes and block later checks.
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10_000)
-  const response = await fetch("/api/info", { redirect: "manual", cache: "no-store", signal: controller.signal }).catch(
-    () => undefined,
-  )
-  clearTimeout(timer)
-  probing = false
-  if (response?.type !== "opaqueredirect") return
+function reauthenticate() {
   armed = false
-  const url = new URL(location.href)
-  url.searchParams.set("reauth", "1")
-  location.assign(url)
+  // The timeout keeps a socket that died while the device slept from blocking recovery.
+  fetch("/api/info", { redirect: "manual", cache: "no-store", signal: AbortSignal.timeout(10_000) })
+    .catch(() => undefined)
+    .then((response) => {
+      armed = response?.type !== "opaqueredirect"
+      if (armed) return
+      const url = new URL(location.href)
+      url.searchParams.set("reauth", "1")
+      location.assign(url)
+    })
 }
