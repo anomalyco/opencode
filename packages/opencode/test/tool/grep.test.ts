@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Layer } from "effect"
 import { GrepTool } from "../../src/tool/grep"
 import { provideInstance, testInstanceStoreLayer, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -111,6 +111,30 @@ describe("tool.grep", () => {
       )
       expect(result.metadata.matches).toBe(0)
       expect(result.output).toBe("No files found")
+    }),
+  )
+
+  it.instance("fails with clear error when search path does not exist", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const missing = path.join(test.directory, "does-not-exist")
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      const exit = yield* provideInstance(test.directory)(
+        grep.execute(
+          {
+            pattern: "anything",
+            path: missing,
+          },
+          ctx,
+        ),
+      ).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      const message = Exit.isFailure(exit)
+        ? Cause.prettyErrors(exit.cause).map((e) => e.message).join("\n")
+        : ""
+      expect(message).toContain("does not exist")
+      expect(message).toContain(missing)
     }),
   )
 
