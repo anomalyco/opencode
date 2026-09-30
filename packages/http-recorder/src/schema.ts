@@ -22,6 +22,7 @@ export const RequestSnapshotSchema = Schema.Struct({
   url: Schema.String,
   headers: Schema.Record(Schema.String, Schema.String),
   body: Schema.String,
+  bodyEncoding: Schema.optional(Schema.Literals(["text", "base64"])),
 })
 
 export const ResponseSnapshotSchema = Schema.Struct({

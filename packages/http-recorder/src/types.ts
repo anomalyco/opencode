@@ -9,8 +9,10 @@ export interface RequestSnapshot {
   readonly url: string
   /** Allowed and redacted request headers. */
   readonly headers: Record<string, string>
-  /** Request body after redaction. */
+  /** Text or base64-encoded binary request body after redaction. */
   readonly body: string
+  /** Encoding used by `body`; omitted for ordinary text. */
+  readonly bodyEncoding?: "text" | "base64"
 }
 
 /** @internal */

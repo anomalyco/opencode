@@ -27,10 +27,14 @@ export const canonicalSnapshot = (snapshot: RequestSnapshot): string =>
     method: snapshot.method,
     url: snapshot.url,
     headers: canonicalizeJson(snapshot.headers),
-    body: Option.match(decodeJson(snapshot.body), {
-      onNone: () => snapshot.body,
-      onSome: canonicalizeJson,
-    }),
+    body:
+      snapshot.bodyEncoding === "base64"
+        ? snapshot.body
+        : Option.match(decodeJson(snapshot.body), {
+            onNone: () => snapshot.body,
+            onSome: canonicalizeJson,
+          }),
+    bodyEncoding: snapshot.bodyEncoding,
   })
 
 export const defaultMatcher: RequestMatcher = (incoming, recorded) =>
@@ -80,8 +84,13 @@ export const requestDiff = (expected: RequestSnapshot, received: RequestSnapshot
   }
   const headers = headerDiffs(expected.headers, received.headers)
   if (headers.length > 0) lines.push("headers:", ...headers.slice(0, 8))
-  const expectedBody = jsonBody(expected.body)
-  const receivedBody = jsonBody(received.body)
+  if (expected.bodyEncoding !== received.bodyEncoding)
+    lines.push(
+      "body encoding:",
+      `  expected ${safeText(expected.bodyEncoding)}, received ${safeText(received.bodyEncoding)}`,
+    )
+  const expectedBody = expected.bodyEncoding === "base64" ? undefined : jsonBody(expected.body)
+  const receivedBody = received.bodyEncoding === "base64" ? undefined : jsonBody(received.body)
   const body =
     expectedBody !== undefined && receivedBody !== undefined
       ? valueDiffs(expectedBody, receivedBody).map((line) => `  ${line}`)
