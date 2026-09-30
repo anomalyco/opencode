@@ -465,15 +465,14 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
             const delta = choice.delta
 
-            // Capture reasoning_opaque for Copilot multi-turn reasoning
-            if (delta.reasoning_opaque) {
-              if (reasoningOpaque != null) {
-                throw new InvalidResponseDataError({
-                  data: delta,
-                  message:
-                    "Multiple reasoning_opaque values received in a single response. Only one thinking part per response is supported.",
-                })
-              }
+            // Capture reasoning_opaque for Copilot multi-turn reasoning.
+            // Models with interleaved thinking (Claude Opus 5/5.5, Fable 5.1) emit a fresh
+            // signed blob before each tool call within a single response, so more than one
+            // value per response is expected rather than exceptional. The wire format carries
+            // a single `reasoning_opaque` per assistant message and
+            // convert-to-openai-compatible-chat-messages already resolves multiple parts with
+            // a first-wins rule, so mirror that here instead of failing the stream.
+            if (delta.reasoning_opaque && reasoningOpaque == null) {
               reasoningOpaque = delta.reasoning_opaque
             }
 

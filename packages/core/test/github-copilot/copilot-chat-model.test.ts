@@ -71,6 +71,16 @@ const FIXTURES = {
     `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only_2","index":1,"type":"function"}]}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":12,"prompt_tokens":123,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":135,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
     `data: [DONE]`,
   ],
+
+  // Interleaved thinking: Claude Opus 5/5.5 and Fable 5.1 emit a fresh signed
+  // reasoning_opaque before each tool call, so one response carries several of them.
+  multipleReasoningOpaque: [
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","reasoning_text":"**Planning the first lookup**\\n\\n"}}],"created":1769917500,"id":"interleaved-1","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"claude-opus-5"}`,
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"filePath\\":\\"/README.md\\"}","name":"read_file"},"id":"call_first","index":0,"type":"function"}],"reasoning_opaque":"opaque-first"}}],"created":1769917501,"id":"interleaved-1","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"claude-opus-5"}`,
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","reasoning_text":"**Planning the second lookup**\\n\\n"}}],"created":1769917502,"id":"interleaved-1","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"claude-opus-5"}`,
+    `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"filePath\\":\\"/package.json\\"}","name":"read_file"},"id":"call_second","index":1,"type":"function"}],"reasoning_opaque":"opaque-second"}}],"created":1769917503,"id":"interleaved-1","usage":{"completion_tokens":42,"prompt_tokens":1200,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":1242,"reasoning_tokens":84},"model":"claude-opus-5"}`,
+    `data: [DONE]`,
+  ],
 }
 
 function createMockFetch(chunks: string[]) {
@@ -532,6 +542,42 @@ describe("doStream", () => {
 
     const rawChunks = parts.filter((p) => p.type === "raw")
     expect(rawChunks.length).toBeGreaterThan(0)
+  })
+
+  test("should not fail the stream when a response carries multiple reasoning_opaque values", async () => {
+    const mockFetch = createMockFetch(FIXTURES.multipleReasoningOpaque)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+
+    // Interleaved thinking must not surface as a stream error.
+    expect(parts.filter((p) => p.type === "error")).toEqual([])
+
+    // First signature wins, matching convert-to-openai-compatible-chat-messages,
+    // which keeps the first reasoningOpaque it finds across assistant parts.
+    const reasoningEnd = parts.find((p) => p.type === "reasoning-end")
+    expect(reasoningEnd).toMatchObject({
+      type: "reasoning-end",
+      id: "reasoning-0",
+      providerMetadata: { copilot: { reasoningOpaque: "opaque-first" } },
+    })
+
+    // Both tool calls still arrive intact.
+    expect(parts.filter((p) => p.type === "tool-call")).toMatchObject([
+      { type: "tool-call", toolCallId: "call_first", toolName: "read_file" },
+      { type: "tool-call", toolCallId: "call_second", toolName: "read_file" },
+    ])
+
+    expect(parts.at(-1)).toMatchObject({
+      type: "finish",
+      finishReason: { unified: "tool-calls" },
+      providerMetadata: { copilot: { reasoningOpaque: "opaque-first" } },
+    })
   })
 })
 
