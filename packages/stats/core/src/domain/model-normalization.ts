@@ -8,6 +8,7 @@ export const MODEL_AUTHOR_RULES = [
   { match: "hy3", author: "tencent" },
   { match: "hy4", author: "tencent" },
   { match: "kimi", author: "moonshot" },
+  { match: "longcat", author: "meituan" },
   { match: "mimo", author: "xiaomi" },
   { match: "minimax", author: "minimax" },
   { match: "muse-spark", author: "meta" },

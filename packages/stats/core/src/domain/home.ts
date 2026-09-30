@@ -2,7 +2,7 @@ import { Client } from "@planetscale/database"
 import { Effect } from "effect"
 import { Resource } from "sst/resource"
 import type { ModelStatMetric } from "./model"
-import { statProvider } from "./model-normalization"
+import { RETIRED_STAT_PROVIDERS, statProvider } from "./model-normalization"
 import { isMissingRetentionTable } from "./retention"
 import { DATA_SITE_TIERS, normalizeTier } from "./stat"
 
@@ -212,15 +212,20 @@ export function getStatsModelData(
   return Effect.tryPromise({
     try: async () => {
       const [modelRows, retentionRows] = await Promise.all([listModelDaily(), listRetentionWeekly()])
-      const normalized = modelRows.flatMap(normalizeStatRow)
+      const normalized = normalizeStatRows(modelRows)
       const resolvedModel = resolveModelName(model, normalized, provider)
       if (!resolvedModel) return null
       const window = modelRowsWindow(modelRows, "2M")
       const resolvedProvider = resolveModelProvider(resolvedModel, normalized, provider)
+      const countryRows = window
+        ? await listCountryTotals(window, { model: resolvedModel, provider: resolvedProvider })
+        : []
       return buildStatsModelData(
         resolvedModel,
         modelRows,
-        window ? await listCountryTotals(window, { model: resolvedModel, provider: resolvedProvider }) : [],
+        countryRows.length === 0 && window && resolvedProvider && resolvedProvider !== "unknown"
+          ? await listCountryTotals(window, { model: resolvedModel, provider: "unknown" })
+          : countryRows,
         provider,
         retentionRows,
       )
@@ -383,7 +388,7 @@ export function buildStatsHomeData(
   countryRows: CountryTotalRow[],
   retentionRows: RetentionMetricRow[],
 ): StatsHomeData {
-  const normalized = modelRows.flatMap(normalizeStatRow)
+  const normalized = normalizeStatRows(modelRows)
   if (normalized.length === 0) return emptyStatsHomeData()
 
   const earliest = Math.min(...normalized.map((row) => row.periodStart))
@@ -444,7 +449,7 @@ function buildStatsModelData(
   providerParam?: string,
   retentionRows: RetentionMetricRow[] = [],
 ): StatsModelData | null {
-  const normalized = modelRows.flatMap(normalizeStatRow)
+  const normalized = normalizeStatRows(modelRows)
   if (normalized.length === 0) return null
 
   const model = resolveModelName(modelParam, normalized, providerParam)
@@ -513,7 +518,7 @@ function buildStatsModelData(
 }
 
 function buildStatsLabData(providerParam: string, modelRows: ModelStatMetric[]): StatsLabData | null {
-  const normalized = modelRows.flatMap(normalizeStatRow)
+  const normalized = normalizeStatRows(modelRows)
   if (normalized.length === 0) return null
 
   const provider = resolveProviderName(providerParam, normalized)
@@ -981,6 +986,30 @@ function createRangeRecord<T>(value: (range: UsageRange) => T): Record<UsageRang
   }
 }
 
+export function normalizeStatRows(rows: ModelStatMetric[]) {
+  const current = new Set(
+    rows
+      .filter((row) => row.provider !== "unknown" && !RETIRED_STAT_PROVIDERS.includes(row.provider.toLowerCase()))
+      .map((row) => [row.periodKey, normalizeTier(row.tier), row.model.toLowerCase(), row.provider].join("\u0000")),
+  )
+  // Before cleanup finishes, an old unknown row may coexist with the lab row.
+  // Only suppress it when the known fallback identifies that same lab.
+  return rows
+    .filter(
+      (row) =>
+        row.provider !== "unknown" ||
+        !current.has(
+          [
+            row.periodKey,
+            normalizeTier(row.tier),
+            row.model.toLowerCase(),
+            statProvider(row.model, "", "unknown"),
+          ].join("\u0000"),
+        ),
+    )
+    .flatMap(normalizeStatRow)
+}
+
 function normalizeStatRow(row: ModelStatMetric): StatMetricRow[] {
   const periodStart = periodKeyTime(row.periodKey)
   const updatedAt = dateTime(row.updatedAt)
@@ -991,7 +1020,10 @@ function normalizeStatRow(row: ModelStatMetric): StatMetricRow[] {
       periodStart,
       updatedAt,
       tier: normalizeTier(row.tier),
-      provider: statProvider(row.model, undefined, row.provider) || "unknown",
+      provider:
+        row.provider === "unknown" || RETIRED_STAT_PROVIDERS.includes(row.provider.toLowerCase())
+          ? statProvider(row.model, undefined, row.provider) || "unknown"
+          : row.provider,
       model: row.model || "unknown",
     },
   ]
