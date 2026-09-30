@@ -54,6 +54,7 @@ describe("settings search index", () => {
     expect(targets({})).not.toContain("settings-experimental-browser")
     expect(targets({})).not.toContain("settings-show-project-icon")
     expect(targets({})).toContain("settings-tab-layout")
+    expect(targets({})).toContain("settings-new-tab-project")
     expect(targets({ desktop: true })).toContain("settings-pinch-zoom")
     expect(targets({ browser: true })).not.toContain("settings-experimental-browser")
     expect(targets({})).not.toContain("settings-show-project-icon")

@@ -287,56 +287,66 @@ export function Titlebar(props: {
               tabsStoreActions.removeSessions(detail)
             })
 
+            const homeProject = (lastSelected: boolean) => {
+              const selection = layout.home.selection()
+              const conn =
+                global.servers.list().find((item) => ServerConnection.key(item) === selection.server) ??
+                global.servers.list()[0]
+              const projects = conn ? global.ensureServerCtx(conn).projects : undefined
+              const selected = projects?.list().find((item) => item.worktree === selection.directory)
+              const last = projects?.list().find((item) => item.worktree === projects.last())
+              const project = (lastSelected ? (last ?? selected) : (selected ?? last)) ?? projects?.list()[0]
+              if (conn && project) return { server: ServerConnection.key(conn), directory: project.worktree }
+            }
+
             const openNewTab = () => {
               const route = layout.route()
+              const lastSelected = settings.general.newTabProject() === "last-selected"
               switch (route.type) {
                 case "session": {
                   const pending = tabs.pendingSession(route.server, route.sessionId)
                   if (pending) {
-                    const model = tabs.stateValue<ComposerState>(pending.draft, "prompt")?.model.current()
-                    void tabs.newDraft({ server: route.server, directory: pending.draft.directory }, "", model)
+                    const sourceModel = tabs.stateValue<ComposerState>(pending.draft, "prompt")?.model.current()
+                    const target = lastSelected
+                      ? (homeProject(lastSelected) ?? { server: route.server, directory: pending.draft.directory })
+                      : { server: route.server, directory: pending.draft.directory }
+                    void tabs.newDraft(target, "", target.server === route.server ? sourceModel : undefined)
                     return
                   }
                   const activeSession = session()
-                  if (!activeSession) return
+                  if (!activeSession && !lastSelected) return
 
-                  const sessionTab = {
-                    type: "session" as const,
-                    server: route.server,
-                    sessionId: activeSession.id,
-                  }
-                  const model = tabs.stateValue<ComposerState>(sessionTab, "prompt")?.model.current()
-                  void tabs.newDraft(
-                    { server: sessionTab.server, directory: activeSession.location.directory },
-                    "",
-                    model,
-                  )
+                  const sourceModel = activeSession
+                    ? tabs
+                        .stateValue<ComposerState>(
+                          { type: "session", server: route.server, sessionId: activeSession.id },
+                          "prompt",
+                        )
+                        ?.model.current()
+                    : undefined
+                  const target = lastSelected
+                    ? (homeProject(lastSelected) ??
+                      (activeSession && { server: route.server, directory: activeSession.location.directory }))
+                    : activeSession && { server: route.server, directory: activeSession.location.directory }
+                  if (target) void tabs.newDraft(target, "", target.server === route.server ? sourceModel : undefined)
                   return
                 }
                 case "draft": {
                   const activeTab = currentTab()
                   if (activeTab?.type !== "draft") return
 
-                  const model = tabs.stateValue<ComposerState>(activeTab, "prompt")?.model.current()
-                  void tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
+                  const sourceModel = tabs.stateValue<ComposerState>(activeTab, "prompt")?.model.current()
+                  const target = lastSelected
+                    ? (homeProject(lastSelected) ?? { server: activeTab.server, directory: activeTab.directory })
+                    : { server: activeTab.server, directory: activeTab.directory }
+                  void tabs.newDraft(target, "", target.server === activeTab.server ? sourceModel : undefined)
                   return
                 }
                 case "settings":
                 case "connect":
                 case "home": {
-                  const selection = layout.home.selection()
-                  const conn =
-                    global.servers.list().find((item) => ServerConnection.key(item) === selection.server) ??
-                    global.servers.list()[0]
-                  const projects = conn ? global.ensureServerCtx(conn).projects : undefined
-                  const project =
-                    projects?.list().find((item) => item.worktree === selection.directory) ??
-                    projects?.list().find((item) => item.worktree === projects.last()) ??
-                    projects?.list()[0]
-                  if (conn && project) {
-                    void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
-                    return
-                  }
+                  const target = homeProject(lastSelected)
+                  if (target) void tabs.newDraft(target, "")
                 }
               }
             }

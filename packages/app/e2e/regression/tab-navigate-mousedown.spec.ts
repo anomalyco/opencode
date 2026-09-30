@@ -46,6 +46,102 @@ test("new session tab matches neighboring session widths", async ({ page }, test
   }
 })
 
+for (const preference of ["current-tab", "last-selected"] as const) {
+  test(`new session tab uses ${preference} project preference`, async ({ page }) => {
+    const selectedDirectory = "C:/selected-project"
+    const lastDirectory = "C:/last-project"
+    await mockServer(page)
+    await page.addInitScript(
+      ({ server, sessionID, directory, selectedDirectory, lastDirectory, preference }) => {
+        localStorage.setItem("settings.v3", JSON.stringify({ general: { newTabProject: preference } }))
+        localStorage.setItem(
+          "opencode.global.dat:server",
+          JSON.stringify({
+            projects: {
+              local: [{ worktree: directory }, { worktree: selectedDirectory }, { worktree: lastDirectory }],
+            },
+            lastProject: { local: lastDirectory },
+          }),
+        )
+        localStorage.setItem(
+          "opencode.global.dat:layout",
+          JSON.stringify({ home: { selection: { server, directory: selectedDirectory } } }),
+        )
+        localStorage.setItem(
+          "opencode.window.browser.dat:tabs",
+          JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
+        )
+      },
+      { server, sessionID: sessionA.id, directory: sessionA.directory, selectedDirectory, lastDirectory, preference },
+    )
+
+    await page.goto(`/server/${base64Encode(server)}/session/${sessionA.id}`)
+    await expect(page.locator('[data-slot="titlebar-tabs"]').getByText(sessionA.title, { exact: true })).toBeVisible()
+    await expect(page.getByRole("textbox", { name: "Prompt" })).toBeVisible()
+    await page.keyboard.press("Control+n")
+    await expect(page.locator('[data-titlebar-tab-link][href^="/new-session?draftId="]')).toBeVisible()
+    await expect(
+      page.getByRole("button", { name: preference === "current-tab" ? "tab-project" : "last-project" }),
+    ).toBeVisible()
+  })
+}
+
+test("new tab project preference is editable and persists", async ({ page }) => {
+  await mockServer(page)
+  await page.goto("/settings")
+  const setting = page.locator('[data-action="settings-new-tab-project"]')
+  await expect(setting).toContainText("Current tab's directory")
+  await setting.click()
+  await page.getByRole("option", { name: "Last selected project" }).click()
+  await expect(setting).toContainText("Last selected project")
+  await page.reload()
+  await expect(setting).toContainText("Last selected project")
+})
+
+test("selecting a project on Home updates the last-selected new tab destination", async ({ page }) => {
+  const selectedDirectory = "C:/selected-project"
+  await mockServer(page)
+  await page.addInitScript(
+    ({ server, sessionID, directory, selectedDirectory }) => {
+      localStorage.setItem("settings.v3", JSON.stringify({ general: { newTabProject: "last-selected" } }))
+      localStorage.setItem(
+        "opencode.global.dat:server",
+        JSON.stringify({
+          projects: { local: [{ worktree: directory }, { worktree: selectedDirectory }] },
+          lastProject: { local: directory },
+        }),
+      )
+      localStorage.setItem(
+        "opencode.window.browser.dat:tabs",
+        JSON.stringify([{ type: "session", server, sessionId: sessionID }]),
+      )
+    },
+    { server, sessionID: sessionA.id, directory: sessionA.directory, selectedDirectory },
+  )
+
+  await page.goto("/")
+  const project = page.locator('[data-component="home-project-row"]').filter({ hasText: "selected-project" })
+  await expect(project).toBeVisible()
+  await project.click()
+  await expect(project).toHaveAttribute("aria-current", "page")
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const state = JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}") as {
+          lastProject?: { local?: string }
+        }
+        return state.lastProject?.local
+      }),
+    )
+    .toBe(selectedDirectory)
+
+  await page.locator(`[data-titlebar-tab-link][href="/server/${base64Encode(server)}/session/${sessionA.id}"]`).click()
+  await expect(page).toHaveURL(new RegExp(`/session/${sessionA.id}$`))
+  await page.keyboard.press("Control+t")
+  await expect(page).toHaveURL(/\/new-session\?draftId=/)
+  await expect(page.getByRole("button", { name: "selected-project" })).toBeVisible()
+})
+
 test("pressing mouse down on a tab navigates before mouse up", async ({ page }) => {
   await mockServer(page)
   await page.addInitScript(
