@@ -9,7 +9,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import type { Project } from "@/runtime/server/types"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
-import { TabStorage } from "@/shell/tabs/schema"
+import { ServerKey } from "@/runtime/server/persistence"
 import { decode64 } from "@/runtime/persistence/base64"
 import { same } from "@/runtime/persistence/equality"
 import { createScrollPersistence, type SessionScroll } from "./scroll"
@@ -168,7 +168,7 @@ export const layoutSchema = Persistence.struct({
   sessionView: Persistence.record(Persistence.fallback(sessionViewSchema, () => ({ scroll: {} }))),
   home: Persistence.struct({
     selection: Persistence.struct({
-      server: Schema.optional(TabStorage.ServerKey),
+      server: Schema.optional(ServerKey),
       directory: Schema.optional(Schema.String),
     }),
   }),

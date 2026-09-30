@@ -6,6 +6,7 @@ import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Option, Schema } from "effect"
 import { pathKey } from "@/workspaces/path-key"
 import { ScopedKey, ServerScope } from "@/runtime/server/scope"
+import { Codec } from "./codec"
 import { persistStore } from "./persist"
 import { Persistence } from "./schema"
 
@@ -472,25 +473,57 @@ export function removePersisted(
   }
 }
 
-export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
+type Definition<S extends Schema.ConstraintCodec<object, unknown> | Codec.Any> =
+  | S
+  | Persistence.Migrated<Extract<S, Schema.ConstraintCodec<object, unknown>>>
+  | Codec.Migrated<Extract<S, Codec.Any>>
+
+// Persisted stores are moving from Effect Schema to the plain codecs in ./codec so the renderer
+// stops paying for Effect at startup; both are accepted while the migration is underway.
+function serializer<S extends Schema.ConstraintCodec<object, unknown> | Codec.Any>(
+  definition: Definition<S>,
+  initial: S["Type"],
+) {
+  if (Codec.isCodec(definition) || (!("current" in definition) ? false : Codec.isCodec(definition.current))) {
+    const codec = Codec.withInitial(definition as Codec.Any | Codec.Migrated<Codec.Any>, initial)
+    const json = Codec.fromJsonString(codec)
+    return {
+      decode: (raw: string) => Codec.decodeOption(json, raw) as S["Type"] | undefined,
+      deserialize: (raw: unknown) => Codec.decodeOrThrow(json, raw) as S["Type"],
+      serialize: (value: S["Type"]) => json.encode(value),
+      encode: (value: S["Type"]) => codec.encode(value),
+      initial: Codec.decodeOrThrow(codec, codec.encode(initial)) as S["Type"],
+    }
+  }
+  const schema = definition as Schema.ConstraintCodec<object, unknown> | Persistence.Migrated<Schema.ConstraintCodec<object, unknown>>
+  const initialized = Persistence.withInitial(schema, initial as object)
+  const json = Schema.fromJsonString(initialized)
+  const decode = Schema.decodeUnknownOption(json)
+  return {
+    decode: (raw: string) => Option.getOrUndefined(decode(raw)) as S["Type"] | undefined,
+    deserialize: Schema.decodeUnknownSync(json) as (raw: unknown) => S["Type"],
+    serialize: Schema.encodeSync(json) as (value: S["Type"]) => string,
+    encode: Schema.encodeSync(initialized) as (value: S["Type"]) => unknown,
+    initial: Schema.decodeUnknownSync(Schema.toType(initialized))(initial as object) as S["Type"],
+  }
+}
+
+export function persisted<S extends Schema.ConstraintCodec<object, unknown> | Codec.Any>(
   target: string | PersistTarget,
-  schema: S | Persistence.Migrated<S>,
+  schema: Definition<S>,
   initial: NoInfer<S["Type"]>,
   platformOverride?: Platform,
 ): PersistedWithReady<S["Type"]> {
   const platform = platformOverride ?? usePlatform()
   const config = resolveTarget(typeof target === "string" ? { key: target } : target, platform)
 
-  const initialized = Persistence.withInitial(schema, initial)
-  const json = Schema.fromJsonString(initialized)
-  const decode = Schema.decodeUnknownOption(json)
-  const encode = Schema.encodeSync(initialized)
-  const serialize = Schema.encodeSync(json)
+  const codec = serializer<S>(schema, initial)
+  const { encode, serialize } = codec
   const normalize = (raw: string) => {
-    const value = decode(raw)
-    if (Option.isSome(value)) return serialize(value.value)
+    const value = codec.decode(raw)
+    if (value !== undefined) return serialize(value)
   }
-  const store = createStore<S["Type"]>(Schema.decodeUnknownSync(Schema.toType(initialized))(initial))
+  const store = createStore<S["Type"]>(codec.initial)
   const isDesktop = platform.platform === "desktop" && !!platform.storage
   const draft = config.draft ? platform.draftStore : undefined
   const prefix = `${config.storage ?? "default"}:`
@@ -602,7 +635,7 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
     name: config.key,
     storage,
     serialize,
-    deserialize: Schema.decodeUnknownSync(json),
+    deserialize: codec.deserialize,
     sync: channel ? messageSync(channel) : undefined,
     // Drafts take the encoded document itself so large text is externalized without the store
     // re-parsing the serialized form on every save.

@@ -3,13 +3,12 @@ import { createRoot, getOwner, onCleanup } from "solid-js"
 import { createTabMemory } from "./memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed"
 import { findSessionTab, sessionIDHasOpenTab, tabHref, tabKey, type SessionTab, type Tab } from "./tabs"
-import { Schema } from "effect"
 import { TabStorage } from "./schema"
 import type { ServerConnection } from "@/runtime/server/registry"
-import { Persistence } from "@/runtime/persistence/schema"
+import { Codec } from "@/runtime/persistence/codec"
 
 const server = "local\nhttp://localhost:4096" as ServerConnection.Key
-const decodeTabs = Schema.decodeUnknownSync(Persistence.withInitial(TabStorage.Tabs, []))
+const decodeTabs = ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(TabStorage.Tabs, []), input))
 
 function sessionTab(sessionId: string): SessionTab {
   return { type: "session", server, sessionId }
@@ -26,7 +25,7 @@ describe("tab migration", () => {
     }
     const restored = decodeTabs([legacy, draft])
     expect(restored).toEqual([legacy, draft])
-    expect(decodeTabs(Schema.encodeSync(TabStorage.Tabs)(restored))).toEqual([legacy, draft])
+    expect(decodeTabs(TabStorage.Tabs.encode(restored))).toEqual([legacy, draft])
   })
 
   test("drops null and malformed persisted tabs", () => {
@@ -64,13 +63,13 @@ describe("tab migration", () => {
       draft,
     ])
     expect(tabs).toEqual([sessionTab("root"), draft])
-    expect(Schema.encodeSync(TabStorage.Tabs)(tabs)).toEqual(tabs)
-    expect(decodeTabs(Schema.encodeSync(TabStorage.Tabs)(tabs))).toEqual(tabs)
+    expect(TabStorage.Tabs.encode(tabs)).toEqual(tabs)
+    expect(decodeTabs(TabStorage.Tabs.encode(tabs))).toEqual(tabs)
   })
 
   test("salvages valid closed session tabs", () => {
     expect(
-      Schema.decodeUnknownSync(Persistence.withInitial(TabStorage.Closed, []))([
+      ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(TabStorage.Closed, []), input))([
         { tab: sessionTab("a"), index: 1 },
         { tab: sessionTab("b"), index: -1 },
         { tab: { type: "draft", server, draftID: "d", directory: "/project" }, index: 0 },
@@ -81,16 +80,16 @@ describe("tab migration", () => {
 
   test("validates auxiliary tab state", () => {
     expect(
-      Schema.decodeUnknownSync(Persistence.withInitial(TabStorage.Recent, { key: undefined }))({ key: 1 }),
+      ((input: unknown) => Codec.decodeOrThrow(Codec.withInitial(TabStorage.Recent, { key: undefined }), input))({ key: 1 }),
     ).toEqual({ key: undefined })
-    expect(Schema.decodeUnknownSync(TabStorage.Infos)({})).toEqual({})
-    expect(Schema.decodeUnknownSync(TabStorage.Panes)({})).toEqual({})
-    expect(Schema.decodeUnknownSync(TabStorage.Infos)({ tab: { title: "Title", directory: "/project" } })).toEqual({
+    expect(Codec.decodeOrThrow(TabStorage.Infos, {})).toEqual({})
+    expect(Codec.decodeOrThrow(TabStorage.Panes, {})).toEqual({})
+    expect(Codec.decodeOrThrow(TabStorage.Infos, { tab: { title: "Title", directory: "/project" } })).toEqual({
       tab: { title: "Title", directory: "/project" },
     })
-    const panes = Schema.decodeUnknownSync(TabStorage.Panes)({ tab: { terminal: true, terminalHeight: 300 } })
-    expect(Schema.encodeSync(TabStorage.Panes)(panes)).toEqual({ tab: { terminal: true, terminalHeight: 300 } })
-    expect(() => Schema.decodeUnknownSync(TabStorage.Panes)({ tab: { terminal: "yes" } })).toThrow()
+    const panes = Codec.decodeOrThrow(TabStorage.Panes, { tab: { terminal: true, terminalHeight: 300 } })
+    expect(TabStorage.Panes.encode(panes)).toEqual({ tab: { terminal: true, terminalHeight: 300 } })
+    expect(() => Codec.decodeOrThrow(TabStorage.Panes, { tab: { terminal: "yes" } })).toThrow()
   })
 })
 
@@ -209,3 +208,5 @@ describe("closed tab stack", () => {
     expect(nextTabAfterClose([sessionTab("a")], 0, true)).toBeNull()
   })
 })
+
+
