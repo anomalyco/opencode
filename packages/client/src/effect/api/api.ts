@@ -1922,6 +1922,7 @@ export type WidgetListOutput = {
       | { readonly type: "global"; readonly path: string }
       | { readonly type: "project"; readonly path: string }
     readonly state: { readonly status: "active" } | { readonly status: "failed"; readonly error: string }
+    readonly requests: ReadonlyArray<"read" | "write" | "full">
   }>
 }
 export type WidgetListOperation<E = never> = (input?: WidgetListInput) => Effect.Effect<WidgetListOutput, E>

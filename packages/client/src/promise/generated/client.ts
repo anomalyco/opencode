@@ -1688,7 +1688,7 @@ export function make(options: ClientOptions) {
         request<WidgetReadOutput>(
           {
             method: "GET",
-            path: `/api/widget/file/${encodePath(input.path)}`,
+            path: `/widget/${encodePath(input.path)}`,
             query: { location: input["location"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404],

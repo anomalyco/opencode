@@ -5,6 +5,17 @@ import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/un
 import { FileNotFoundError } from "../errors.js"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
+// Widget assets are user-authored static files served from a public path so the
+// frame can load them without a server credential. Only `/api/widget` (the list)
+// stays behind authorization; the asset path is exempted the same way PTY
+// connect tickets and pairing links are.
+export const WIDGET_ASSET_PREFIX = "/widget/"
+export const WIDGET_ASSET_ROUTE = "/widget/*"
+
+export function isWidgetAssetURL(url: URL) {
+  return url.pathname.startsWith(WIDGET_ASSET_PREFIX)
+}
+
 export const WidgetGroup = HttpApiGroup.make("server.widget")
   .add(
     HttpApiEndpoint.get("widget.list", "/api/widget", {
@@ -22,7 +33,7 @@ export const WidgetGroup = HttpApiGroup.make("server.widget")
       ),
   )
   .add(
-    HttpApiEndpoint.get("widget.read", "/api/widget/file/*", {
+    HttpApiEndpoint.get("widget.read", WIDGET_ASSET_ROUTE, {
       query: LocationQuery,
       success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
       error: FileNotFoundError,
@@ -33,7 +44,7 @@ export const WidgetGroup = HttpApiGroup.make("server.widget")
           identifier: "widget.read",
           summary: "Read widget asset",
           description:
-            "Serve one widget asset. The path after /api/widget/file/ is `<id>/<asset>`; a missing asset falls back to the widget entry so single-page widgets keep working on reload.",
+            "Serve one widget asset from a public path. The path after /widget/ is `<id>/<asset>`; a missing asset falls back to the widget entry so single-page widgets keep working on reload. This route is intentionally unauthenticated so a sandboxed widget frame can load its own files.",
         }),
       ),
   )

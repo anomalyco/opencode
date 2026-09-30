@@ -6,6 +6,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWidgetsQuery } from "@/runtime/server/widgets"
+import { useWidgetGrants, type WidgetCapability } from "@/session/widgets/grants"
 import { useMcpToggle } from "@/providers/connect/mcp"
 import { pluginLabels } from "@/providers/catalog/plugin"
 import { ExternalLink } from "@/runtime/platform/external-link"
@@ -22,10 +23,14 @@ interface PluginRowItem {
   name: string
 }
 
+const WIDGET_LEVELS: readonly WidgetCapability[] = ["read", "write", "full"]
+
 // Widgets available to the whole server, discovered from the global config
 // widgets directory. Project-level widgets appear in the project settings view.
 const ServerWidgets: Component = () => {
   const language = useLanguage()
+  const server = useServerSDK()
+  const grants = useWidgetGrants()
   const query = useWidgetsQuery({ key: "server-widgets" })
   const widgets = () => (query.isPending || query.isError ? [] : (query.data?.data ?? []))
 
@@ -39,6 +44,7 @@ const ServerWidgets: Component = () => {
           {language.t("settings.extensions.manageConfig")}
         </span>
       </div>
+      <p class="project-settings-extension-empty-description">{language.t("widgets.access.description")}</p>
       <SettingsList variant="catalog">
         <For each={widgets()}>
           {(widget) => (
@@ -51,15 +57,28 @@ const ServerWidgets: Component = () => {
                 />
                 <span class="settings-extension-name truncate">{widget.title}</span>
               </div>
-              <span
-                class="text-11-regular"
-                classList={{
-                  "text-v2-text-text-muted": widget.state.status === "active",
-                  "text-v2-state-fg-danger": widget.state.status === "failed",
-                }}
-              >
-                {widget.state.status === "failed" ? widget.state.error : widget.source.path}
-              </span>
+              <div class="flex items-center gap-3">
+                <For each={WIDGET_LEVELS}>
+                  {(capability) => (
+                    <span
+                      class="flex items-center gap-1.5"
+                      title={language.t(`widgets.access.${capability}.description`)}
+                    >
+                      <span class="text-11-regular text-v2-text-text-muted">
+                        {language.t(`widgets.access.${capability}`)}
+                      </span>
+                      <Switch
+                        checked={grants.granted(server.scope, widget.id).includes(capability)}
+                        disabled={!widget.requests.includes(capability) || widget.state.status === "failed"}
+                        hideLabel
+                        onChange={(checked) => grants.toggle(server.scope, widget.id, capability, checked)}
+                      >
+                        {language.t(`widgets.access.${capability}`)}
+                      </Switch>
+                    </span>
+                  )}
+                </For>
+              </div>
             </div>
           )}
         </For>

@@ -339,6 +339,8 @@ export type WidgetSource = { type: "global"; path: string } | { type: "project";
 
 export type WidgetState = { status: "active" } | { status: "failed"; error: string }
 
+export type WidgetCapability = "read" | "write" | "full"
+
 export type RpcOutput = { output?: any }
 
 export type PermissionReply = "once" | "always" | "reject"
@@ -1565,7 +1567,14 @@ export type PermissionAsked = {
   }
 }
 
-export type WidgetInfo = { id: string; title: string; description?: string; source: WidgetSource; state: WidgetState }
+export type WidgetInfo = {
+  id: string
+  title: string
+  description?: string
+  source: WidgetSource
+  state: WidgetState
+  requests: Array<WidgetCapability>
+}
 
 export type PermissionReplied = {
   id: string

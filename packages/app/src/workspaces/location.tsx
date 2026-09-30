@@ -58,4 +58,5 @@ const context = createSimpleContext({
 })
 
 export const useWorkspaceLocation: () => Accessor<WorkspaceLocation> = context.use
+export const useOptionalWorkspaceLocation: () => Accessor<WorkspaceLocation> | undefined = context.useOptional
 export const LocationProvider = context.provider

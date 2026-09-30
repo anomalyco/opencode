@@ -14,10 +14,12 @@ export const handler = Effect.fn("cli.web-ui.handler")(function* (options?: { re
       const request = yield* HttpServerRequest.HttpServerRequest
       const url = new URL(request.url, "http://localhost")
       // Serve the web shell before API authentication so a signed-out browser gets the app's sign-in screen.
+      // Widget assets are public static files routed through the API surface, so they pass through here too.
       if (
         url.pathname === "/api" ||
         url.pathname.startsWith("/api/") ||
         url.pathname.startsWith("/auth/") ||
+        url.pathname.startsWith("/widget/") ||
         url.pathname === "/openapi.json"
       )
         return yield* api.pipe(

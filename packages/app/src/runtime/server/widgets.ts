@@ -1,19 +1,23 @@
 import { useQuery, useQueryClient } from "@tanstack/solid-query"
 import { createEffect, onCleanup } from "solid-js"
 import { useServerSDK } from "@/runtime/server/client"
-import { useWorkspaceLocation } from "@/workspaces/location"
+import { useOptionalWorkspaceLocation } from "@/workspaces/location"
 
 /**
  * Loads the widgets for a location and keeps them fresh when the widgets
  * directory changes on disk. The server watches that directory and publishes
  * `widget.updated`, so a widget dropped on disk appears without a restart.
+ *
+ * The Location context is optional: the session panel and project settings run
+ * under a LocationProvider, while server-level settings pass an explicit
+ * directory (or none for the server-wide list).
  */
 export function useWidgetsQuery(input: { directory?: string; key?: string } = {}) {
   const server = useServerSDK()
-  const location = useWorkspaceLocation()
+  const location = useOptionalWorkspaceLocation()
   const queryClient = useQueryClient()
 
-  const directory = () => input.directory ?? location().directory
+  const directory = () => input.directory ?? location?.().directory
   const queryKey = () => [server.scope, input.key ?? "widgets", directory()]
 
   const query = useQuery(() => ({
@@ -24,7 +28,8 @@ export function useWidgetsQuery(input: { directory?: string; key?: string } = {}
 
   createEffect(() => {
     const dir = directory()
-    onCleanup(server.event.location(dir).on("widget.updated", () => void queryClient.invalidateQueries({ queryKey: queryKey() })))
+    const events = dir === undefined ? server.event : server.event.location(dir)
+    onCleanup(events.on("widget.updated", () => void queryClient.invalidateQueries({ queryKey: queryKey() })))
   })
 
   return query

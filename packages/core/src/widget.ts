@@ -18,7 +18,15 @@ export const Source = WidgetSchema.Source
 export type Source = WidgetSchema.Source
 export const State = WidgetSchema.State
 export type State = WidgetSchema.State
+export const Capability = WidgetSchema.Capability
+export type Capability = WidgetSchema.Capability
 export const Event = WidgetSchema.Event
+export const BRIDGE = WidgetSchema.BRIDGE
+export const BRIDGE_ID = WidgetSchema.BRIDGE_ID
+export const BRIDGE_ASSET = WidgetSchema.BRIDGE_ASSET
+export const BRIDGE_HELPER = WidgetSchema.BRIDGE_HELPER
+
+const CAPABILITIES = ["read", "write", "full"] as const
 
 // Widgets are user-authored panels shipped as a folder with an index.html and an
 // optional widget.json manifest. They are discovered from disk so adding or
@@ -70,6 +78,7 @@ function locate(fs: FSUtil.Interface, base: string, type: Source["type"]) {
             title: manifest.title,
             ...(manifest.description ? { description: manifest.description } : {}),
             source: { type, path: root },
+            requests: manifest.requests,
           }
           if (!(yield* fs.existsSafe(path.join(root, ENTRY))))
             return Option.some<Located>({ ...info, state: { status: "failed", error: `Missing ${ENTRY}` }, root })
@@ -83,14 +92,25 @@ function locate(fs: FSUtil.Interface, base: string, type: Source["type"]) {
 function readManifest(fs: FSUtil.Interface, root: string) {
   return Effect.gen(function* () {
     const file = path.join(root, MANIFEST)
-    if (!(yield* fs.existsSafe(file))) return { title: path.basename(root) }
+    if (!(yield* fs.existsSafe(file))) return { title: path.basename(root), requests: [] }
     const raw = yield* fs.readJson(file).pipe(Effect.orElseSucceed(() => undefined))
-    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { title: path.basename(root) }
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return { title: path.basename(root), requests: [] }
     const data = raw as Record<string, unknown>
     const title = typeof data.title === "string" && data.title.trim() ? data.title.trim() : path.basename(root)
     const description = typeof data.description === "string" ? data.description : undefined
-    return { title, description }
+    return { title, description, requests: parseRequests(data.capabilities) }
   })
+}
+
+// A manifest may request capabilities. Only known names count, and requesting
+// "full" implies the lower levels, so the settings UI can offer one switch per
+// level without the widget having to repeat itself.
+function parseRequests(input: unknown): Capability[] {
+  if (!Array.isArray(input)) return []
+  const requested = new Set(input.filter((item): item is Capability => CAPABILITIES.includes(item)))
+  if (requested.has("full")) return ["read", "write", "full"]
+  if (requested.has("write")) return ["read", "write"]
+  return requested.has("read") ? ["read"] : []
 }
 
 // Global widgets live under the config directory; project widgets live under
@@ -162,6 +182,12 @@ const layer = Layer.effect(
         return found.map(({ root: _root, ...info }) => info)
       }),
       read: Effect.fn("Widget.read")(function* (id, relative) {
+        // The bridge helper is a virtual asset served for every widget so a
+        // widget can load it without bundling the protocol itself.
+        if (id === BRIDGE_ID) {
+          if ((relative || BRIDGE_ASSET) !== BRIDGE_ASSET) return undefined
+          return { body: new TextEncoder().encode(BRIDGE_HELPER), mime: "text/javascript" }
+        }
         const found = yield* discover(fs, global, config)
         const widget = found.find((item) => item.id === id)
         if (!widget) return undefined
