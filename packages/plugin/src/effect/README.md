@@ -27,7 +27,7 @@ Plugin setup registers hooks imperatively through each domain's `hook` method.
 
 Configuration supplied for the plugin is available as `ctx.options`.
 
-Registrations are owned by the plugin scope. Closing the scope removes them automatically; a registration may also be removed early through `dispose`.
+Registrations are owned by the scope they are registered in, which is the plugin scope during setup. Closing the scope removes them automatically; a registration may also be removed early through `dispose`.
 
 ## Transform Hooks
 
@@ -78,6 +78,15 @@ Effect.gen(function* () {
       })
   })
 })
+```
+
+Tool transforms may be limited to one Session. They replay after every unscoped tool transform and only affect that
+Session's catalog, execution, and `ctx.tool.list({ sessionID })`. Register them in the scope that owns their
+availability, so closing that scope removes the tools:
+
+```ts
+// Inside a scope that stays open while the Session has the capability, such as a pending RPC call.
+yield * ctx.tool.transform((editor) => editor.add(attachedTool), { sessionID })
 ```
 
 ## Runtime Hooks

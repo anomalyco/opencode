@@ -3,8 +3,9 @@ export { CallID, Content, Error, FileContent, TextContent } from "@opencode/sche
 export type { Context, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai"
+import type { ToolScope } from "@opencode/plugin/effect/tool"
 import { Tool } from "@opencode/schema/tool"
-import { Context, Effect, Layer, Result, Schema, SchemaIssue, Types } from "effect"
+import { Context, Effect, Layer, Result, Schema, SchemaIssue, Scope, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
@@ -38,9 +39,20 @@ type Data = {
   errors: { kind: "tool" | "namespace"; name: string; namespace?: string; error: RegistrationError }[]
 }
 
+type View = {
+  readonly state: State.Interface<Data, Editor>
+  readonly refresh: () => void
+  registrations: number
+}
+
 export interface Interface extends State.Transformable<Editor> {
-  readonly list: () => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
-  readonly snapshot: (permissions?: Permission.Ruleset) => Effect.Effect<Snapshot>
+  /** A Session-scoped transform replays over the Location value only for that Session's reads. */
+  readonly transform: (
+    transform: (editor: Editor) => void,
+    scope?: ToolScope,
+  ) => Effect.Effect<State.Registration, never, Scope.Scope>
+  readonly list: (scope?: ToolScope) => Effect.Effect<ReadonlyArray<Tool.Info & { readonly id: string }>>
+  readonly snapshot: (permissions?: Permission.Ruleset, sessionID?: SessionSchema.ID) => Effect.Effect<Snapshot>
 }
 
 /** A local execution result after hooks and content normalization. */
@@ -155,7 +167,59 @@ const layer = Layer.effect(
       }
     })
 
-    let catalog: { data: Data; names: string; value: CodeModeCatalog.Inventory } | undefined
+    // Keyed by materialized value: each rebuild and each Session view owns its own entry.
+    const catalogs = new WeakMap<Data, { names: string; value: CodeModeCatalog.Inventory }>()
+    const editor = (editor: Data): Editor => ({
+      list: () => Array.from(editor.tools.values()),
+      get: (id) => editor.tools.get(id),
+      namespace: (namespace) => {
+        const error = namespaceError(namespace.name)
+        if (error) {
+          editor.errors.push({ kind: "namespace", name: namespace.name, namespace: namespace.name, error })
+          return
+        }
+        editor.namespaces.set(namespace.name, { ...namespace })
+      },
+      add: (tool) => {
+        const error = registrationError(tool)
+        if (error) {
+          editor.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
+          return
+        }
+        const id = effectiveName(tool)
+        editor.tools.set(id, { ...tool, id, options: tool.options && { ...tool.options } })
+      },
+      update: (id, update) => {
+        const current = editor.tools.get(id)
+        if (!current) return
+        const tool = { ...current, options: current.options && { ...current.options } }
+        update(tool)
+        tool.name = current.name
+        tool.id = id
+        if (tool.options?.namespace !== current.options?.namespace)
+          tool.options = { ...tool.options, namespace: current.options?.namespace }
+        const error = registrationError(tool)
+        if (error) {
+          editor.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
+          return
+        }
+        editor.tools.set(id, tool)
+      },
+      remove: (id) => {
+        editor.tools.delete(id)
+      },
+    })
+    const notify = (value: Data) =>
+      Effect.forEach(
+        value.errors,
+        ({ kind, name, namespace, error }) =>
+          Effect.logError(`Skipping invalid ${kind} registration`, {
+            name,
+            namespace,
+            error: error.message,
+          }),
+        { discard: true },
+      )
     const state = State.create<Data, Editor>({
       name: "tool",
       initial: () => ({
@@ -163,68 +227,71 @@ const layer = Layer.effect(
         namespaces: new Map(),
         errors: [],
       }),
-      editor: (editor) => ({
-        list: () => Array.from(editor.tools.values()),
-        get: (id) => editor.tools.get(id),
-        namespace: (namespace) => {
-          const error = namespaceError(namespace.name)
-          if (error) {
-            editor.errors.push({ kind: "namespace", name: namespace.name, namespace: namespace.name, error })
-            return
-          }
-          editor.namespaces.set(namespace.name, { ...namespace })
-        },
-        add: (tool) => {
-          const error = registrationError(tool)
-          if (error) {
-            editor.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
-            return
-          }
-          const id = effectiveName(tool)
-          editor.tools.set(id, { ...tool, id, options: tool.options && { ...tool.options } })
-        },
-        update: (id, update) => {
-          const current = editor.tools.get(id)
-          if (!current) return
-          const tool = { ...current, options: current.options && { ...current.options } }
-          update(tool)
-          tool.name = current.name
-          tool.id = id
-          if (tool.options?.namespace !== current.options?.namespace)
-            tool.options = { ...tool.options, namespace: current.options?.namespace }
-          const error = registrationError(tool)
-          if (error) {
-            editor.errors.push({ kind: "tool", name: tool.name, namespace: tool.options?.namespace, error })
-            return
-          }
-          editor.tools.set(id, tool)
-        },
-        remove: (id) => {
-          editor.tools.delete(id)
-        },
-      }),
-      notify: (value) => {
-        catalog = undefined
-        return Effect.forEach(
-          value.errors,
-          ({ kind, name, namespace, error }) =>
-            Effect.logError(`Skipping invalid ${kind} registration`, {
-              name,
-              namespace,
-              error: error.message,
-            }),
-          { discard: true },
-        )
-      },
+      editor,
+      notify,
     })
 
+    // A Session view exists while it has registrations and replays them over the Location value.
+    const views = new Map<SessionSchema.ID, View>()
+    const view = (sessionID: SessionSchema.ID) => {
+      const existing = views.get(sessionID)
+      if (existing) return existing
+      let base = state.get()
+      const session = State.create<Data, Editor>({
+        name: "tool",
+        initial: () => ({ tools: new Map(base.tools), namespaces: new Map(base.namespaces), errors: [] }),
+        editor,
+        notify,
+      })
+      const created: View = {
+        state: session,
+        // The Location value is a read-time dependency of every Session view.
+        refresh: () => {
+          const current = state.get()
+          if (current === base) return
+          base = current
+          session.invalidate()
+        },
+        registrations: 0,
+      }
+      views.set(sessionID, created)
+      return created
+    }
+    const read = (sessionID?: SessionSchema.ID) => {
+      const current = sessionID === undefined ? undefined : views.get(sessionID)
+      if (!current) return state.get()
+      current.refresh()
+      return current.state.get()
+    }
+
     return Service.of({
-      transform: state.transform,
+      transform: (update, scope) => {
+        const sessionID = scope?.sessionID
+        if (sessionID === undefined) return state.transform(update)
+        return Effect.uninterruptible(
+          Effect.gen(function* () {
+            const current = view(sessionID)
+            current.refresh()
+            current.registrations++
+            let released = false
+            const release = Effect.sync(() => {
+              if (released) return
+              released = true
+              current.registrations--
+              if (current.registrations === 0) views.delete(sessionID)
+            })
+            // Added before the transform's own finalizer so the view is dropped after it is disposed.
+            yield* Effect.addFinalizer(() => release)
+            const registration = yield* current.state.transform(update)
+            return { dispose: registration.dispose.pipe(Effect.andThen(release)) }
+          }),
+        )
+      },
       reload: state.reload,
-      list: () => Effect.sync(() => Array.from(state.get().tools.values())),
-      snapshot: Effect.fn("Tool.snapshot")((permissions) =>
+      list: (scope) => Effect.sync(() => Array.from(read(scope?.sessionID).tools.values())),
+      snapshot: Effect.fn("Tool.snapshot")((permissions, sessionID) =>
         Effect.sync(() => {
-          const data = state.get()
+          const data = read(sessionID)
           const active = new Map<string, Tool.Info>()
           const rules = permissions ?? []
           for (const [name, tool] of data.tools) {
@@ -246,12 +313,13 @@ const layer = Layer.effect(
           const names = Array.from(codeModeTools.keys()).join("\0")
           // Discovery is immutable for a registry revision and visible tool set. Keep request
           // definitions/executors fresh, but share the much larger rendered catalog across steps.
+          const cached = catalogs.get(data)
           const codeModeCatalog = !codeModeEnabled
             ? undefined
-            : catalog?.data === data && catalog.names === names
-              ? catalog.value
+            : cached?.names === names
+              ? cached.value
               : CodeModeTool.catalog(codeModeInventory)
-          if (codeModeCatalog) catalog = { data, names, value: codeModeCatalog }
+          if (codeModeCatalog) catalogs.set(data, { names, value: codeModeCatalog })
           return {
             ...(codeModeCatalog === undefined ? {} : { codeModeCatalog }),
             definitions: [

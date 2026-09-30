@@ -41,6 +41,8 @@ The service uses shared `State` to replay synchronous transforms in registration
 - Disposing a registration or closing its scope removes only its transform and rebuilds from the remaining transforms, revealing any earlier definition it overrode.
 - Each model request captures the effective definitions and executors it advertises; later reloads and disposal affect later snapshots. Captured executors may still reference mutable producer-owned state.
 
+A transform may be scoped to one Session with `transform(callback, { sessionID })`. Session transforms replay after every Location transform, only for reads and snapshots of that Session; unscoped reads never see them. Each Session with registrations keeps a view that treats the Location value as a read-time dependency, and the view is dropped when its last registration closes. Tie a Session registration to the scope that owns the underlying availability, such as the browser plugin's long-lived `attach` call, instead of filtering Location tools per request. Registrations created from an RPC handler run outside the plugin's registration group.
+
 MCP owns one stable tool transform that reads its latest discovered tools. Tool-list changes update that source and reload the tool state instead of re-registering at the end of the transform order. MCP refresh therefore preserves the precedence of later plugin overrides.
 
 Type safety ends at registration. The registry validates model input and declared output at runtime and should not carry producer schema generics through storage or execution.
@@ -58,7 +60,3 @@ Tool filtering is catalog visibility, not execution authorization. A call still 
 Built-ins return complete tool responses. `Tool.Snapshot.execute` is the local execution boundary. Generic output bounding is applied by the Session runner after execution.
 
 Producer capture remains local to producers. Shell stores combined process output in its backing file and returns a bounded tail with the full-output path when truncated.
-
-## Current Gaps
-
-- Future Session-scoped registrations still need an explicit canonical registration design.

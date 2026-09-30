@@ -6,7 +6,12 @@ import type { Agent } from "@opencode/schema/agent"
 import type { Session } from "@opencode/schema/session"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import type { Types } from "effect"
-import type { Hooks, Transform } from "./registration.js"
+import type { Hooks, Registration } from "./registration.js"
+
+export interface ToolScope {
+  /** Limits the registration or read to one Session. Unscoped registrations apply to every Session. */
+  readonly sessionID?: Session.ID
+}
 
 export interface ToolContext extends Omit<Tool.Context, "progress"> {
   readonly signal: AbortSignal
@@ -64,9 +69,10 @@ interface ToolHooks {
 }
 
 export interface ToolDomain {
-  readonly transform: Transform<ToolEditor>
+  /** Session-scoped transforms replay after every unscoped transform, only for that Session. */
+  readonly transform: (callback: (editor: ToolEditor) => void, scope?: ToolScope) => Promise<Registration>
   readonly reload: () => Promise<void>
   /** Currently registered tools, after every transform, keyed by effective name. */
-  readonly list: () => Promise<readonly (Info & { readonly id: string })[]>
+  readonly list: (scope?: ToolScope) => Promise<readonly (Info & { readonly id: string })[]>
   readonly hook: Hooks<ToolHooks>
 }

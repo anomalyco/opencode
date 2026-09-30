@@ -7,7 +7,7 @@ export default Plugin.define({
   id: "opencode.browser",
   effect: (ctx) =>
     Effect.gen(function* () {
-      const connection = yield* BrowserConnection.make(ctx)
-      yield* BrowserTools.register(ctx, connection)
+      // Browser tools exist only for Sessions with an attached desktop.
+      yield* BrowserConnection.make(ctx, (attachment) => BrowserTools.register(ctx, attachment))
     }),
 })

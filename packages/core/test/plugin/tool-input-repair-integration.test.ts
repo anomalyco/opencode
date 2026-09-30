@@ -112,3 +112,35 @@ it.effect("repairs namespaced inner tool input called from Code Mode", () =>
     expect(executed).toEqual([{ count: 3 }])
   }),
 )
+
+it.effect("repairs Session-scoped inner tool input called from Code Mode", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
+    yield* registry.transform(
+      (draft) =>
+        draft.add({
+          name: "count",
+          options: { namespace: "attached" },
+          description: "Record a count",
+          input: Schema.Struct({ count: Schema.Int }),
+          execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
+        }),
+      { sessionID: identity.sessionID },
+    )
+
+    const snapshot = yield* registry.snapshot(undefined, identity.sessionID)
+    yield* snapshot.execute({
+      ...identity,
+      call: {
+        type: "tool-call",
+        id: "call-session-repair",
+        name: "execute",
+        input: { code: 'return await tools.attached.count({ count: "4" })' },
+      },
+    })
+    expect(executed).toEqual([{ count: 4 }])
+  }),
+)

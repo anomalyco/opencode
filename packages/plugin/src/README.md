@@ -140,6 +140,15 @@ await ctx.tool.transform((tools) => {
 })
 ```
 
+Tool transforms may be limited to one Session. They replay after every unscoped tool transform and only affect that
+Session's catalog, execution, and `ctx.tool.list({ sessionID })`. Dispose the registration when the Session loses the
+capability; otherwise it lasts until the plugin unloads:
+
+```ts
+const registration = await ctx.tool.transform((tools) => tools.add(attachedTool), { sessionID })
+await registration.dispose()
+```
+
 ## Reloading A Domain
 
 When data captured by a transform changes, reload the affected domain:

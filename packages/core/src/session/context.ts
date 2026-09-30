@@ -131,7 +131,7 @@ const layer = Layer.effect(
       const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
       const loaded = yield* Effect.all(
         {
-          tools: registry.snapshot(permissions),
+          tools: registry.snapshot(permissions, session.id),
           builtins: builtins.load(),
           discovery: discovery.load(),
           skills: skillInstructions.load(permissions),

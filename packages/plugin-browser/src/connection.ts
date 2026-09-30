@@ -4,7 +4,7 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { RpcRegistration } from "@opencode/plugin/effect/rpc"
 import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
-import { Deferred, Effect, Schema, Stream } from "effect"
+import { Deferred, Effect, Schema, Scope, Stream } from "effect"
 import { Browser } from "./rpc.js"
 import { BrowserTunnel } from "./tunnel.js"
 
@@ -16,10 +16,15 @@ type Attachment = {
   tunnels: BrowserTunnel.Tunnels
 }
 
-export type Connection = Effect.Success<ReturnType<typeof make>>
+/** One Session's desktop attachment, for the lifetime of its `attach` call. */
+export interface Attached {
+  readonly sessionID: Session.ID
+  readonly target: (action: Browser.Action) => ReturnType<typeof target>
+}
 
 export const make = Effect.fn("BrowserConnection.make")(function* (
   ctx: Pick<Context, "rpc" | "session" | "location" | "event">,
+  attached: (attachment: Attached) => Effect.Effect<void, never, Scope.Scope>,
 ) {
   const browsers = new Map<Session.ID, Attachment>()
   let active = true
@@ -69,6 +74,11 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             }),
             (browser) => (browsers.get(input.sessionID) === browser ? close(input.sessionID) : Effect.void),
           )
+          // Session registrations made here last exactly as long as this attachment.
+          yield* attached({
+            sessionID: input.sessionID,
+            target: (action) => target(rpc, browsers, input.sessionID, action),
+          })
           yield* rpc.events
             .emit("control", { type: "attached", connectionID: input.connectionID, version: 4 })
             .pipe(Effect.orDie)
@@ -131,42 +141,46 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
     Stream.runForEach((event) => close(event.data.sessionID)),
     Effect.forkScoped({ startImmediately: true }),
   )
+})
 
+// Resolve by Session on every call: a captured tool reaches a replacement attachment, not a closed one.
+const target = Effect.fn("BrowserConnection.target")(function* (
+  rpc: RpcRegistration<typeof Browser.Definition>,
+  browsers: ReadonlyMap<Session.ID, Attachment>,
+  sessionID: Session.ID,
+  action: Browser.Action,
+) {
+  const browser = browsers.get(sessionID)
+  if (!browser)
+    return yield* new Tool.Error({
+      message:
+        "[browser.disconnected] No desktop browser is connected to this session. Open this session in the desktop app and wait for it to connect. Then call browser.tabs.list({}). Repeating browser actions while disconnected will not help.",
+    })
+  const tab = "tabID" in action ? browser.state.tabs.find((tab) => tab.id === action.tabID) : undefined
+  if ("tabID" in action && !tab)
+    return yield* new Tool.Error({
+      message:
+        "[browser.tab_unavailable] This tab is closed or does not belong to the connected session. Call browser.tabs.list({}) and use an exact returned tabID. If no tabs exist, use browser.tabs.open({}). Never substitute a request ID, file ID, or element ref for tabID.",
+    })
+  // Keep the selected attachment and document, even while permissions or file IO wait.
   return {
-    target: Effect.fn("BrowserConnection.target")(function* (sessionID: Session.ID, action: Browser.Action) {
-      const browser = browsers.get(sessionID)
-      if (!browser)
-        return yield* new Tool.Error({
-          message:
-            "[browser.disconnected] No desktop browser is connected to this session. Open this session in the desktop app and wait for it to connect. Then call browser.tabs.list({}). Repeating browser actions while disconnected will not help.",
-        })
-      const tab = "tabID" in action ? browser.state.tabs.find((tab) => tab.id === action.tabID) : undefined
-      if ("tabID" in action && !tab)
-        return yield* new Tool.Error({
-          message:
-            "[browser.tab_unavailable] This tab is closed or does not belong to the connected session. Call browser.tabs.list({}) and use an exact returned tabID. If no tabs exist, use browser.tabs.open({}). Never substitute a request ID, file ID, or element ref for tabID.",
-        })
-      // Keep the selected attachment and document, even while permissions or file IO wait.
-      return {
-        tab,
-        inspect: () =>
-          request(rpc, browser, action, tab, [], { inspect: true }).pipe(
-            Effect.flatMap((result) => Schema.decodeUnknownEffect(Browser.Target)(result.value)),
-            Effect.mapError(
-              (error) =>
-                new Tool.Error({
-                  message:
-                    error instanceof Tool.Error
-                      ? error.message
-                      : "Browser returned invalid target metadata. Check desktop/plugin versions; no action was authorized.",
-                  error,
-                }),
-            ),
-          ),
-        request: (files: readonly Browser.File[], target?: Browser.Target) =>
-          request(rpc, browser, action, tab, files, { target }),
-      }
-    }),
+    tab,
+    inspect: () =>
+      request(rpc, browser, action, tab, [], { inspect: true }).pipe(
+        Effect.flatMap((result) => Schema.decodeUnknownEffect(Browser.Target)(result.value)),
+        Effect.mapError(
+          (error) =>
+            new Tool.Error({
+              message:
+                error instanceof Tool.Error
+                  ? error.message
+                  : "Browser returned invalid target metadata. Check desktop/plugin versions; no action was authorized.",
+              error,
+            }),
+        ),
+      ),
+    request: (files: readonly Browser.File[], target?: Browser.Target) =>
+      request(rpc, browser, action, tab, files, { target }),
   }
 })
 

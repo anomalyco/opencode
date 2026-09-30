@@ -464,41 +464,43 @@ export function fromPromise(plugin: Plugin) {
           },
           tool: {
             reload: () => run(host.tool.reload()),
-            list: () =>
-              run(host.tool.list()).then((tools) =>
+            list: (scope) =>
+              run(host.tool.list(scope)).then((tools) =>
                 tools.map((tool) => ({ ...tool, execute: promiseExecutor(tool.execute) })),
               ),
-            transform: (callback) =>
+            transform: (callback, scope) =>
               register(
-                host.tool.transform((editor) =>
-                  callback({
-                    list: () => editor.list().map((tool) => ({ ...tool, execute: promiseExecutor(tool.execute) })),
-                    get: (id) => {
-                      const tool = editor.get(id)
-                      return tool ? { ...tool, execute: promiseExecutor(tool.execute) } : undefined
-                    },
-                    namespace: editor.namespace,
-                    add: (tool: Info) =>
-                      editor.add({
-                        ...tool,
-                        execute: (input, context) => executePromiseTool(tool, input, context),
-                      }),
-                    update: (id, update) =>
-                      editor.update(id, (tool) => {
-                        const value: Info = {
+                host.tool.transform(
+                  (editor) =>
+                    callback({
+                      list: () => editor.list().map((tool) => ({ ...tool, execute: promiseExecutor(tool.execute) })),
+                      get: (id) => {
+                        const tool = editor.get(id)
+                        return tool ? { ...tool, execute: promiseExecutor(tool.execute) } : undefined
+                      },
+                      namespace: editor.namespace,
+                      add: (tool: Info) =>
+                        editor.add({
                           ...tool,
-                          execute: promiseExecutor(tool.execute),
-                        }
-                        update(value)
-                        Object.assign(tool, value, {
-                          output: value.output,
-                          options: value.options,
-                          execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
-                            executePromiseTool(value, input, context),
-                        })
-                      }),
-                    remove: editor.remove,
-                  }),
+                          execute: (input, context) => executePromiseTool(tool, input, context),
+                        }),
+                      update: (id, update) =>
+                        editor.update(id, (tool) => {
+                          const value: Info = {
+                            ...tool,
+                            execute: promiseExecutor(tool.execute),
+                          }
+                          update(value)
+                          Object.assign(tool, value, {
+                            output: value.output,
+                            options: value.options,
+                            execute: (input: Parameters<Info["execute"]>[0], context: Tool.Context) =>
+                              executePromiseTool(value, input, context),
+                          })
+                        }),
+                      remove: editor.remove,
+                    }),
+                  scope,
                 ),
               ),
             hook: (name, callback) =>

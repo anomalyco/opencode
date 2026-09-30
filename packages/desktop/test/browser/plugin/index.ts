@@ -13,19 +13,16 @@ export default Plugin.define({
   id: "browser.smoke",
   effect: (ctx) =>
     Effect.gen(function* () {
-      const tools = new Map<string, Tool.Info>()
-      yield* ctx.tool
-        .transform((editor) => {
-          editor
-            .list()
-            .filter((tool) => tool.options?.namespace?.startsWith("browser"))
-            .forEach((tool) => tools.set(tool.id, tool))
-        })
-        .pipe(Effect.orDie)
       yield* ctx.rpc
         .register(Smoke, {
           execute: (input) =>
             Effect.gen(function* () {
+              // Browser tools are registered only for the attached Session.
+              const tools = new Map(
+                (yield* ctx.tool.list({ sessionID: input.sessionID }))
+                  .filter((tool) => tool.options?.namespace?.startsWith("browser"))
+                  .map((tool) => [tool.id, tool] as const),
+              )
               const result = yield* CodeModeTool.create({ tools }, (name, tool, input, context) =>
                 execute(tool, input, context),
               ).execute(

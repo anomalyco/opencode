@@ -32,6 +32,9 @@ The source of truth for inputs, descriptions, and outputs is
 
 The plugin entrypoint only composes its two owners: `connection.ts` manages
 desktop attachments and pending RPC requests; `tools.ts` runs the tool workflow.
+Tools are registered for one Session inside its `attach` call, so only Sessions
+with an attached desktop see the `browser` namespace. Closing the attachment
+removes them from that Session's next step.
 Server-local file IO stays in `files.ts`. The public `rpc.ts` entrypoint remains
 pure and does not load any of these runtime modules.
 

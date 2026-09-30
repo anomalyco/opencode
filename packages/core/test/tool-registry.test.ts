@@ -1204,4 +1204,97 @@ describe("Tool", () => {
       ])
     }),
   )
+
+  it.effect("scopes registrations to one Session and removes them with their scope", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const other = Session.ID.make("ses_registry_other")
+      yield* transform(service, { echo: make() }, { codemode: false })
+      const attachment = yield* Scope.make()
+      yield* service
+        .transform(
+          (editor) => {
+            editor.namespace({ name: "acme", description: "Attached operations" })
+            editor.add({ ...constant("attached"), name: "lookup", options: { namespace: "acme" } })
+          },
+          { sessionID },
+        )
+        .pipe(Scope.provide(attachment))
+
+      const scoped = yield* service.snapshot(undefined, sessionID)
+      expect(scoped.codeModeCatalog?.tools).toMatchObject([{ name: "acme", description: "Attached operations" }])
+      expect(codeModeListings(scoped.codeModeCatalog!).map((tool) => tool.path)).toEqual(["acme.lookup"])
+      expect((yield* service.list({ sessionID })).map((tool) => tool.id)).toEqual(["echo", "acme_lookup"])
+      const lookup = yield* scoped.execute({
+        ...call("execute"),
+        call: {
+          type: "tool-call",
+          id: "call-lookup",
+          name: "execute",
+          input: { code: 'return await tools.acme.lookup({ text: "request" })' },
+        },
+      })
+      expect(JSON.stringify(lookup.content)).toContain("attached")
+
+      const unscoped = yield* service.snapshot(undefined, other)
+      expect(unscoped.codeModeCatalog?.tools).toEqual([])
+      expect(unscoped.definitions.map((tool) => tool.name)).toEqual(["echo", "execute"])
+      expect((yield* service.snapshot()).codeModeCatalog?.tools).toEqual([])
+      expect((yield* service.list()).map((tool) => tool.id)).toEqual(["echo"])
+
+      yield* Scope.close(attachment, Exit.void)
+      expect((yield* service.snapshot(undefined, sessionID)).codeModeCatalog?.tools).toEqual([])
+      expect((yield* service.list({ sessionID })).map((tool) => tool.id)).toEqual(["echo"])
+    }),
+  )
+
+  it.effect("replays Session registrations over the current Location value", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      let text = "original"
+      yield* service.transform((editor) =>
+        editor.add({ ...constant(text), name: "echo", options: { codemode: false } }),
+      )
+      const registration = yield* service.transform(
+        (editor) =>
+          editor.update("echo", (tool) => {
+            tool.description = "Session echo"
+          }),
+        { sessionID },
+      )
+      const description = (snapshot: Tool.Snapshot) =>
+        snapshot.definitions.find((tool) => tool.name === "echo")?.description
+      expect(description(yield* service.snapshot(undefined, sessionID))).toBe("Session echo")
+      expect(description(yield* service.snapshot())).toBe("Return text")
+
+      text = "refreshed"
+      yield* service.reload()
+      const refreshed = yield* service.snapshot(undefined, sessionID)
+      expect(description(refreshed)).toBe("Session echo")
+      expect((yield* refreshed.execute(call("echo"))).content).toEqual([{ type: "text", text: "refreshed" }])
+
+      yield* registration.dispose
+      yield* registration.dispose
+      expect(description(yield* service.snapshot(undefined, sessionID))).toBe("Return text")
+    }),
+  )
+
+  it.effect("keeps a Session view until its last registration closes", () =>
+    Effect.gen(function* () {
+      const service = yield* Tool.Service
+      const add = (name: string) =>
+        service.transform((editor) => editor.add({ ...make(), name, options: { codemode: false } }), { sessionID })
+      const names = service.list({ sessionID }).pipe(Effect.map((tools) => tools.map((tool) => tool.id)))
+      const first = yield* add("first")
+      const second = yield* add("second")
+      expect(yield* names).toEqual(["first", "second"])
+
+      yield* first.dispose
+      expect(yield* names).toEqual(["second"])
+      yield* second.dispose
+      expect(yield* names).toEqual([])
+      yield* add("third")
+      expect(yield* names).toEqual(["third"])
+    }),
+  )
 })
