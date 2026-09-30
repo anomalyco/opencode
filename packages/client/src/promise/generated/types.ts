@@ -1467,6 +1467,7 @@ export type ModelCompatibility = {
   requireFinishReason?: boolean
   requireAssistantAfterTool?: boolean
   supportsPromptCacheKey?: boolean
+  supportsThinkingBlockBinding?: boolean
 }
 
 export type ModelCost = {

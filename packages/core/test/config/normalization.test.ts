@@ -481,6 +481,34 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("migrates the legacy thinking block-binding opt-out into model compatibility", () => {
+    const result = normalized({
+      provider: {
+        gateway: {
+          models: {
+            anthropic: { options: { thinking: { type: "adaptive", blockBinding: false }, effort: "high" } },
+            bedrock: { options: { reasoningConfig: { blockBinding: false } } },
+            untouched: { options: { thinking: { type: "adaptive" } } },
+          },
+        },
+      },
+    })
+    expect(result.encoded.providers).toMatchObject({
+      gateway: {
+        models: {
+          anthropic: {
+            compatibility: { supportsThinkingBlockBinding: false },
+            settings: { thinking: { type: "adaptive" }, effort: "high" },
+          },
+          bedrock: { compatibility: { supportsThinkingBlockBinding: false }, settings: {} },
+          untouched: { settings: { thinking: { type: "adaptive" } } },
+        },
+      },
+    })
+    expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "bedrock", "settings", "reasoningConfig"])
+    expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "untouched", "compatibility"])
+  })
+
   test("invalid legacy provider overlays skip only that provider", () => {
     const result = normalized({
       provider: {
