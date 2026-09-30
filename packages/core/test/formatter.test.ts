@@ -1,6 +1,7 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
+import { $ } from "bun"
 import { Deferred, Effect, Fiber } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
@@ -133,6 +134,50 @@ describe("Formatter", () => {
             expect(disabled).toBe(false)
             expect(enabled).toBe(true)
           }),
+      ),
+    ),
+  )
+  ;[
+    { dependency: "require", directory: "." },
+    { dependency: "require", directory: "app" },
+    { dependency: "require-dev", directory: "app" },
+  ].forEach((entry) =>
+    it.live(`runs Pint declared in ${entry.dependency} from ${entry.directory}`, () =>
+      withTemp((temporary) =>
+        Effect.gen(function* () {
+          const project = AbsolutePath.make(path.join(temporary, "php project"))
+          const directory = AbsolutePath.make(path.join(project, entry.directory))
+          const file = path.join(directory, "Example.php")
+          const executable = path.join(project, "vendor", "bin", process.platform === "win32" ? "pint.cmd" : "pint")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.dirname(executable), { recursive: true })
+            await fs.mkdir(directory, { recursive: true })
+            await $`git init`.cwd(project).quiet()
+            await fs.writeFile(path.join(project, "opencode.json"), JSON.stringify({ formatter: true }))
+            await fs.writeFile(
+              path.join(project, "composer.json"),
+              JSON.stringify({ [entry.dependency]: { "laravel/pint": "^1.0" } }),
+            )
+            await fs.writeFile(file, "<?php\n")
+            await fs.writeFile(
+              executable,
+              process.platform === "win32"
+                ? '@echo off\r\necho formatted>>"%~1"\r\n'
+                : '#!/bin/sh\nprintf "formatted\\n" >> "$1"\n',
+              { mode: 0o755 },
+            )
+          })
+          yield* Effect.gen(function* () {
+            const plugins = yield* Plugin.Service
+            yield* plugins.awaitActivation
+            const location = yield* Location.Service
+            expect(location.directory).toBe(directory)
+            expect(location.project.directory).toBe(project)
+            const formatter = yield* Formatter.Service
+            expect(yield* formatter.file(file)).toBe(true)
+            expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toContain("formatted")
+          }).pipe(Effect.scoped, Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory }))))
+        }),
       ),
     ),
   )
