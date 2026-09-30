@@ -299,6 +299,16 @@ ol {
   padding: 0 !important;
 }
 
+.sl-markdown-content ol {
+  list-style: decimal !important;
+  padding-inline-start: 1.5rem !important;
+}
+
+.sl-markdown-content ul:not([role="tablist"]) {
+  list-style: disc !important;
+  padding-inline-start: 1.5rem !important;
+}
+
 .sl-markdown-content .tab > [role="tab"][aria-selected="true"] {
   border-color: var(--color-text-strong);
 }

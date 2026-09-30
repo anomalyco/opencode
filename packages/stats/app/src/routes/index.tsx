@@ -65,7 +65,7 @@ type StatsHomePageData = {
   updatedAt: string | null
   usage: UsagePoint[]
   users: UsagePoint[]
-  leaderboard: LeaderboardEntry[]
+  leaderboard: { daily: LeaderboardEntry[]; weekly: LeaderboardEntry[] }
   market: MarketDay[]
   tokenCost: TokenCostEntry[]
   cacheRatio: CacheRatioEntry[]
@@ -86,7 +86,7 @@ const getData = query(async () => {
     updatedAt: stats.updatedAt,
     usage: stats.usage.Go["2M"],
     users: stats.users.Go["2M"],
-    leaderboard: stats.leaderboard.Go["2M"],
+    leaderboard: { daily: stats.leaderboard.Go["1D"], weekly: stats.leaderboard.Go["1W"] },
     market: stats.market["2M"],
     tokenCost: priceTokenCostFromCatalog(stats.tokenCost.Go, catalog),
     cacheRatio: stats.cacheRatio.Go,
@@ -162,7 +162,7 @@ export default function StatsHome() {
                 <MarketShareSection data={stats().market} />
                 <GeoBreakdownSection data={stats().country} />
                 <ComparisonCardsSection
-                  pairs={homeComparisonPairs(stats().leaderboard, stats().catalogLabs)}
+                  pairs={homeComparisonPairs(stats().leaderboard.weekly, stats().catalogLabs)}
                   title="Model Comparisons"
                   description="Popular model pairs from the leaderboard."
                   variant="featured"
@@ -376,11 +376,13 @@ function formatUpdatedAtLabel(value: { date: string; time: string }) {
 
 function TopModelsSection(props: {
   data: UsagePoint[]
-  leaderboard: LeaderboardEntry[]
+  leaderboard: StatsHomePageData["leaderboard"]
   catalogLabs: readonly string[]
 }) {
   const i18n = useI18n()
   const [activeModel, setActiveModel] = createSignal<string>()
+  const [period, setPeriod] = createSignal<"weekly" | "daily">("weekly")
+  const leaderboard = createMemo(() => props.leaderboard[period()])
 
   return (
     <section id="top-models" data-section="top-models">
@@ -397,14 +399,41 @@ function TopModelsSection(props: {
       >
         <TopModelsChart data={props.data} range="2M" activeModel={activeModel()} onActiveModelChange={setActiveModel} />
       </Show>
+      <div data-slot="leaderboard-period" role="group" aria-label={i18n.t("nav.leaderboard")}>
+        <div data-component="usage-filter" data-variant="range">
+          <button
+            type="button"
+            data-active={period() === "weekly" ? "true" : undefined}
+            aria-pressed={period() === "weekly"}
+            onClick={() => {
+              setPeriod("weekly")
+              setActiveModel(undefined)
+            }}
+          >
+            {i18n.t("chart.weekly")}
+          </button>
+          <button
+            type="button"
+            data-active={period() === "daily" ? "true" : undefined}
+            aria-pressed={period() === "daily"}
+            onClick={() => {
+              setPeriod("daily")
+              setActiveModel(undefined)
+            }}
+          >
+            {i18n.t("chart.daily")}
+          </button>
+        </div>
+      </div>
       <Show
-        when={props.leaderboard.length > 0}
+        when={leaderboard().length > 0}
         fallback={
           <EmptyState title={i18n.t("home.noLeaderboardTitle")} description={i18n.t("home.noLeaderboardDescription")} />
         }
       >
         <Leaderboard
-          data={props.leaderboard}
+          data={leaderboard()}
+          showChange={period() === "weekly"}
           activeModel={activeModel()}
           onActiveModelChange={setActiveModel}
           catalogLabs={props.catalogLabs}
@@ -819,6 +848,7 @@ function formatUsers(value: number) {
 
 function Leaderboard(props: {
   data: LeaderboardEntry[]
+  showChange: boolean
   activeModel: string | undefined
   onActiveModelChange: (model: string | undefined) => void
   catalogLabs: readonly string[]
@@ -833,6 +863,7 @@ function Leaderboard(props: {
           {(entry) => (
             <LeaderboardCard
               entry={entry}
+              showChange={props.showChange}
               size="featured"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
@@ -847,6 +878,7 @@ function Leaderboard(props: {
           {(entry) => (
             <LeaderboardCard
               entry={entry}
+              showChange={props.showChange}
               size="compact"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
@@ -860,6 +892,7 @@ function Leaderboard(props: {
           {(entry) => (
             <LeaderboardCard
               entry={entry}
+              showChange={props.showChange}
               size="featured"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
@@ -874,6 +907,7 @@ function Leaderboard(props: {
 
 function LeaderboardCard(props: {
   entry: LeaderboardEntry
+  showChange: boolean
   size: "featured" | "compact"
   active: boolean
   onActiveModelChange: (model: string | undefined) => void
@@ -882,6 +916,7 @@ function LeaderboardCard(props: {
   const i18n = useI18n()
   const language = useLanguage()
   const hasProvider = () => isKnownCatalogLab(props.entry.provider, props.catalogLabs)
+  const icon = () => (hasProvider() ? getProviderIconId(props.entry.author) : "synthetic")
   return (
     <a
       data-component="leader-card"
@@ -900,13 +935,9 @@ function LeaderboardCard(props: {
       onClick={() => props.onActiveModelChange(props.entry.model)}
     >
       <span data-slot="rank">{String(props.entry.rank).padStart(2, "0")}</span>
-      <Show when={hasProvider()}>
-        <ProviderIcon data-slot="leader-watermark" aria-hidden="true" id={getProviderIconId(props.entry.author)} />
-      </Show>
+      <ProviderIcon data-slot="leader-watermark" aria-hidden="true" id={icon()} />
       <div data-slot="leader-body">
-        <Show when={hasProvider()}>
-          <ProviderIcon data-slot="leader-avatar" aria-hidden="true" id={getProviderIconId(props.entry.author)} />
-        </Show>
+        <ProviderIcon data-slot="leader-avatar" aria-hidden="true" id={icon()} />
         <div data-slot="leader-copy">
           <div>
             <strong>{props.entry.model}</strong>
@@ -916,13 +947,15 @@ function LeaderboardCard(props: {
             <Show when={hasProvider()} fallback={<span />}>
               <span>{props.entry.author}</span>
             </Show>
-            <span
-              data-slot="delta"
-              data-new={props.entry.change === null ? "true" : undefined}
-              data-negative={props.entry.change !== null && props.entry.change < 0 ? "true" : undefined}
-            >
-              {formatChange(props.entry.change, i18n)}
-            </span>
+            <Show when={props.showChange || props.entry.change === null}>
+              <span
+                data-slot="delta"
+                data-new={props.entry.change === null ? "true" : undefined}
+                data-negative={props.entry.change !== null && props.entry.change < 0 ? "true" : undefined}
+              >
+                {formatChange(props.entry.change, i18n)}
+              </span>
+            </Show>
           </div>
         </div>
       </div>

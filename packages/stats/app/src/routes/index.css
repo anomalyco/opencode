@@ -1212,6 +1212,10 @@ body {
   cursor: pointer;
 }
 
+[data-page="stats"] [data-slot="top-models-bar"][data-active="true"] {
+  z-index: 2;
+}
+
 [data-page="stats"] [data-slot="top-models-bar"]::before {
   position: absolute;
   top: 0;
@@ -1545,6 +1549,25 @@ body {
   background: var(--stats-layer-2);
 }
 
+[data-page="stats"] [data-slot="leaderboard-period"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  color: var(--stats-muted);
+  font-size: 13px;
+}
+
+[data-page="stats"] [data-slot="leaderboard-period"] [data-component="usage-filter"] button {
+  width: auto;
+  padding: 0 8px;
+}
+
+[data-page="stats"] [data-slot="leaderboard-period"] + [data-component="leaderboard"] {
+  margin-top: 12px;
+}
+
 [data-page="stats"] [data-component="chart-tooltip"] {
   position: absolute;
   right: auto;
@@ -1553,7 +1576,7 @@ body {
   gap: 8px;
   min-width: 220px;
   padding: 16px;
-  background: #fffffff2;
+  background: #ffffff;
   border: 1px solid var(--stats-line-strong);
   box-shadow:
     0 8px 16px #0000000a,
@@ -1621,7 +1644,7 @@ body {
   width: 192px;
   min-width: 192px;
   padding: 0;
-  background: #fffffff2;
+  background: #ffffff;
   border: 0;
   box-shadow:
     0 0 0 0.5px #00000024,
@@ -2371,7 +2394,7 @@ body {
   min-width: 228px;
   padding: 0;
   border: 0;
-  background: #fffffff2;
+  background: #ffffff;
   box-shadow:
     0 0 0 0.5px #00000024,
     0 8px 16px #0000000f,
@@ -7306,7 +7329,7 @@ body {
 
 [data-page="stats"][data-theme="dark"] [data-component="chart-tooltip"],
 :root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
-  background: #242424f2;
+  background: #242424;
 }
 
 [data-page="stats"][data-theme="dark"]
@@ -7321,7 +7344,7 @@ body {
   [data-page="stats"]:not([data-theme="light"])
   :is([data-section="top-models"], [data-section="unique-users"])
   [data-component="chart-tooltip"] {
-  background: #242424f2;
+  background: #242424;
   box-shadow:
     0 0 0 0.5px #ffffff24,
     0 8px 16px #0000003d,
@@ -7484,14 +7507,14 @@ body {
   }
 
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
-    background: #242424f2;
+    background: #242424;
   }
 
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-section="top-models"]
     [data-component="chart-tooltip"] {
-    background: #242424f2;
+    background: #242424;
     box-shadow:
       0 0 0 0.5px #ffffff24,
       0 8px 16px #0000003d,
