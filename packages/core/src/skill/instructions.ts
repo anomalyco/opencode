@@ -13,12 +13,20 @@ const Summary = Schema.Struct({
 })
 type Summary = typeof Summary.Type
 
+// Skill fields reach this renderer from two trust levels. Filesystem skills are authored in the
+// repo, but an MCP-served skill's name and description arrive over the wire from a third-party
+// server and land in the baseline context of every session that can see it. Escaping the three
+// interpolated fields keeps a server from closing the surrounding element early and smuggling
+// instructions into the prompt.
+const escape = (value: string) =>
+  value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;")
+
 const entries = (skills: ReadonlyArray<Summary>) =>
   skills.flatMap((skill) => [
     "  <skill>",
-    `    <id>${skill.id}</id>`,
-    `    <name>${skill.name}</name>`,
-    `    <description>${skill.description}</description>`,
+    `    <id>${escape(skill.id)}</id>`,
+    `    <name>${escape(skill.name)}</name>`,
+    `    <description>${escape(skill.description)}</description>`,
     "  </skill>",
   ])
 

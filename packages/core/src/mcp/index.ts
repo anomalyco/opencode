@@ -48,6 +48,18 @@ export type ResourceCatalog = Mcp.ResourceCatalog
 export const ResourceContent = Mcp.ResourceContent
 export type ResourceContent = Mcp.ResourceContent
 
+/**
+ * One entry of a SEP-2640 `skills/list` result: the skill's `SKILL.md` resource URI, the frontmatter
+ * the server publishes for it, and the digest and byte length of every file it comprises. The
+ * digests are what let a host refuse content that is not what the listing promised.
+ */
+export interface ServerSkill {
+  readonly uri: string
+  readonly name: string
+  readonly description?: string
+  readonly files: ReadonlyArray<{ readonly uri: string; readonly digest: string; readonly size: number }>
+}
+
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("MCP.NotFoundError", {
   server: ServerName,
 }) {
@@ -123,6 +135,11 @@ export interface Interface extends State.Transformable<Editor> {
     readonly server: ServerName | string
     readonly uri: string
   }) => Effect.Effect<ResourceContent | undefined, Error>
+  /**
+   * Lists the skills a server publishes under the SEP-2640 extension. Servers that do not implement
+   * it reject the unknown method, which the client turns into an empty list rather than a failure.
+   */
+  readonly skills: (input: { readonly server: ServerName | string }) => Effect.Effect<ServerSkill[], Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/MCP") {}
@@ -684,6 +701,14 @@ export const layer = (options?: Options) =>
           return Array.from(entries.values())
             .flatMap((entry) => entry.prompts ?? [])
             .toSorted((a, b) => a.server.localeCompare(b.server) || a.name.localeCompare(b.name))
+        }),
+        skills: Effect.fn("MCP.skills")(function* (input) {
+          const target = yield* requireServer(input.server)
+          yield* target.entry.startup.await
+          if (!target.entry.client) return [] as ServerSkill[]
+          return yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
+            connection.skills(),
+          ).pipe(Effect.orElseSucceed(() => [] as ServerSkill[]))
         }),
         prompt: Effect.fn("MCP.prompt")(function* (input) {
           const target = yield* requireServer(input.server)
