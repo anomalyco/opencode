@@ -428,7 +428,6 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
         ? (payload as IssueCommentEvent | IssuesEvent).issue.number
         : (payload as PullRequestEvent | PullRequestReviewCommentEvent).pull_request.number
     const runUrl = `/${owner}/${repo}/actions/runs/${runId}`
-    const shareBaseUrl = isMock ? "https://dev.opencode.ai" : "https://opencode.ai"
 
     let appToken: string
     let octoRest: Octokit
@@ -436,6 +435,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
     let gitConfig: string
     let session: { id: SessionID; title: string; version: string }
     let shareId: string | undefined
+    let shareUrl: string | undefined
     let exitCode = 0
     let githubClientReady = false
     type PromptFiles = Awaited<ReturnType<typeof getUserPrompt>>["promptFiles"]
@@ -515,7 +515,8 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
       shareId = await (async () => {
         if (share === false) return
         if (!share && repoData.data.private) return
-        await runLocalEffect(sessionShare.share(session.id))
+        const shared = await runLocalEffect(sessionShare.share(session.id))
+        shareUrl = shared.url
         return session.id.slice(-8)
       })()
       console.log("opencode session", session.id)
@@ -576,7 +577,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
             const summary = await summarize(response)
             await pushToLocalBranch(summary, uncommittedChanges)
           }
-          const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
+          const hasShared = prData.comments.nodes.some((c) => shareUrl !== undefined && c.body.includes(shareUrl))
           await createComment(`${response}${footer({ image: !hasShared })}`)
           await removeReaction(commentType)
         }
@@ -594,7 +595,7 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
             const summary = await summarize(response)
             await pushToForkBranch(summary, prData, uncommittedChanges)
           }
-          const hasShared = prData.comments.nodes.some((c) => c.body.includes(`${shareBaseUrl}/s/${shareId}`))
+          const hasShared = prData.comments.nodes.some((c) => shareUrl !== undefined && c.body.includes(shareUrl))
           await createComment(`${response}${footer({ image: !hasShared })}`)
           await removeReaction(commentType)
         }
@@ -1353,16 +1354,16 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
 
     function footer(opts?: { image?: boolean }) {
       const image = (() => {
-        if (!shareId) return ""
+        if (!shareUrl) return ""
         if (!opts?.image) return ""
 
         const titleAlt = encodeURIComponent(session.title.substring(0, 50))
         const title64 = Buffer.from(session.title.substring(0, 700), "utf8").toString("base64")
 
-        return `<a href="${shareBaseUrl}/s/${shareId}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
+        return `<a href="${shareUrl}"><img width="200" alt="${titleAlt}" src="https://social-cards.sst.dev/opencode-share/${title64}.png?model=${providerID}/${modelID}&version=${session.version}&id=${shareId}" /></a>\n`
       })()
-      const shareUrl = shareId ? `[opencode session](${shareBaseUrl}/s/${shareId})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
-      return `\n\n${image}${shareUrl}[github run](${runUrl})`
+      const link = shareUrl ? `[opencode session](${shareUrl})&nbsp;&nbsp;|&nbsp;&nbsp;` : ""
+      return `\n\n${image}${link}[github run](${runUrl})`
     }
 
     async function fetchRepo() {
