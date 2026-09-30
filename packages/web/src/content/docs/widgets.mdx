@@ -8,6 +8,10 @@ just a folder with an `index.html`; OpenCode discovers it on disk and renders it
 in a sandboxed frame. No rebuild, no plugin bundle, and no server restart — drop
 the folder in and it shows up.
 
+By default a widget is a static page with no access to OpenCode. If you want a
+widget to read the current session or drive it, it asks for **capabilities** and
+you grant them per widget.
+
 ---
 
 ## Place files
@@ -23,15 +27,26 @@ takes precedence over a project widget with the same id.
 
 ### Add a manifest
 
-An optional `widget.json` gives the widget a title and description. Without it,
-the title falls back to the folder name.
+An optional `widget.json` gives the widget a title, a description, and the
+capabilities it wants to use. Without it, the title falls back to the folder
+name and the widget gets no capabilities.
 
 ```json
 {
   "title": "Session Stats",
-  "description": "Shows a summary of the current session"
+  "description": "Shows a summary of the current session",
+  "capabilities": ["read"]
 }
 ```
+
+| Field          | Required | Description                                                       |
+| -------------- | -------- | ----------------------------------------------------------------- |
+| `title`        | no       | Panel name. Falls back to the folder name.                        |
+| `description`  | no       | Shown under the title in the widget list.                         |
+| `capabilities` | no       | Access the widget requests. See [Capabilities](#capabilities).    |
+
+A manifest that fails to parse is ignored: the widget still loads with its
+folder name and no capabilities.
 
 ---
 
@@ -94,7 +109,226 @@ list refreshes on its own — there is nothing to restart.
 
 ---
 
+## Capabilities
+
+A widget runs in a sandboxed frame with an opaque origin, so it cannot reach
+OpenCode, your files, or the network on its own. To do anything useful it must
+ask for a capability in `widget.json`, and you decide whether to grant it. Grants
+are stored on your device and can be revoked at any time.
+
+| Capability | What it unlocks                                                                        | Risk     |
+| ---------- | -------------------------------------------------------------------------------------- | -------- |
+| `read`     | Read the current session, its messages, and location events through the bridge.        | Low      |
+| `write`    | Read access plus sending prompts, running commands, interrupting, and switching agent or model. | High     |
+| `full`     | Load the widget with the server credential so it can call the API directly.            | Critical |
+
+Capabilities are cumulative: requesting `write` implies `read`, and `full`
+implies everything. A manifest lists only what it needs:
+
+```json
+{ "capabilities": ["write"] }
+```
+
+### Grant access
+
+Requests are not grants. A widget that asks for `read` still starts with no
+access until you allow it.
+
+1. Open **Settings → Extensions → Widgets** (server-wide) or the **Widgets** tab
+   in a project's settings.
+2. Turn on the switch for each capability you want to allow.
+3. Capabilities the widget did not request stay disabled.
+
+Granting a higher level turns on the lower ones automatically. Turning `read`
+off clears the whole widget's access.
+
+:::caution
+Granting `write` lets the widget send prompts and run commands as if you typed
+them. Granting `full` hands the widget the server credential and loads it
+same-origin, so it can call the API directly and is no longer contained by the
+sandbox. Only grant these to widgets you have read and trust.
+:::
+
+---
+
+## The bridge
+
+A widget with `read` or `write` talks to OpenCode through a small `postMessage`
+bridge. The app validates every request against the widget's grants, so a widget
+can never do more than you allowed — even a malicious one.
+
+Load the helper from the reserved `@opencode` path and use the `opencode` global:
+
+```html
+<script src="/widget/@opencode/bridge.js"></script>
+<script>
+  const session = await opencode.session.current()
+  document.body.textContent = session.title
+</script>
+```
+
+### Methods
+
+Each method resolves to a promise. Calling one without the required capability
+rejects with an error.
+
+**Read**
+
+| Method                 | Returns                                    |
+| ---------------------- | ------------------------------------------ |
+| `opencode.session.current()` | The current session info, including `title` and `location.directory`. |
+| `opencode.session.messages()` | The session's messages, newest first. |
+| `opencode.session.status()` | The current session id.              |
+| `opencode.location.get()` | The current workspace directory.        |
+| `opencode.context()` | This widget's id and granted capabilities. |
+
+**Write**
+
+| Method                              | Effect                              |
+| ----------------------------------- | ----------------------------------- |
+| `opencode.session.prompt(text)`     | Send a prompt to the current session. |
+| `opencode.session.command(name, text)` | Run a slash command.             |
+| `opencode.session.interrupt()`      | Interrupt the running turn.         |
+| `opencode.session.switchAgent(agent)` | Switch the session's agent.       |
+| `opencode.session.switchModel(model)` | Switch the session's model.       |
+
+### Events
+
+Subscribe to live events with `opencode.on(name, handler)`. It returns an
+unsubscribe function.
+
+```html
+<script src="/widget/@opencode/bridge.js"></script>
+<script>
+  const stop = opencode.on("session.status", (payload) => {
+    console.log("status changed", payload)
+  })
+  // later
+  stop()
+</script>
+```
+
+| Event              | Emitted when                       |
+| ------------------ | ---------------------------------- |
+| `session.status`   | The session's run status changes.  |
+| `permission.asked` | A permission request needs a reply. |
+
+### Example: live session panel
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <h1 id="title">Loading…</h1>
+    <pre id="out"></pre>
+    <script src="/widget/@opencode/bridge.js"></script>
+    <script>
+      const title = document.getElementById("title")
+      const out = document.getElementById("out")
+      async function refresh() {
+        const session = await opencode.session.current()
+        title.textContent = session.title
+        out.textContent = session.location.directory
+      }
+      opencode.on("session.status", refresh)
+      refresh().catch((error) => (out.textContent = error.message))
+    </script>
+  </body>
+</html>
+```
+
+### Example: send a prompt
+
+With `write` granted, a widget can drive the session:
+
+```html
+<!doctype html>
+<html>
+  <body>
+    <textarea id="text"></textarea>
+    <button id="send">Send</button>
+    <script src="/widget/@opencode/bridge.js"></script>
+    <script>
+      const text = document.getElementById("text")
+      document.getElementById("send").addEventListener("click", async () => {
+        try {
+          await opencode.session.prompt(text.value)
+        } catch (error) {
+          alert(error.message)
+        }
+      })
+    </script>
+  </body>
+</html>
+```
+
+### Speak the protocol directly
+
+The helper is a thin wrapper. If you prefer, post messages yourself. The parent
+only trusts messages whose source is the widget's own frame, so an opaque origin
+is fine.
+
+A request:
+
+```js
+window.parent.postMessage(
+  { type: "opencode:widget:request", id: "1", method: "session.current" },
+  "*",
+)
+```
+
+A response:
+
+```js
+// { type: "opencode:widget:response", id: "1", ok: true, result: { ... } }
+// { type: "opencode:widget:response", id: "1", ok: false, error: "…" }
+```
+
+An event:
+
+```js
+// { type: "opencode:widget:event", name: "session.status", payload: { ... } }
+```
+
+---
+
+## Full access
+
+A `full` widget is loaded with `allow-same-origin` and the server credential in
+its URL, so it is not sandboxed. It calls the API directly instead of using the
+bridge and can read anything the app can read, including your server password.
+
+Use `full` only when a widget genuinely needs the whole API. Most widgets should
+use `read` or `write` with the bridge instead.
+
+---
+
 ## Safety
 
-Widgets run in a sandboxed frame with scripts enabled. Treat a widget from an
-untrusted source like any other downloaded file: read it before you use it.
+Widgets run in a sandboxed frame with scripts enabled and an opaque origin, so
+they cannot reach the app, your files, or the network unless you grant a
+capability. Treat a widget from an untrusted source like any other downloaded
+file: read it before you use it.
+
+- `read` and `write` keep the sandbox; the widget never sees the server
+  credential.
+- `full` removes the sandbox and hands over the credential. Grant it only to
+  code you trust completely.
+
+---
+
+## Troubleshoot
+
+If a widget does not show up:
+
+1. Check the folder has an `index.html`.
+2. Check the folder name matches what you expect as the widget id.
+3. Open **Settings → Extensions → Widgets** — a widget that failed to load stays
+   in the list with the reason.
+4. Remember a global widget overrides a project widget with the same id.
+
+If a widget shows an error when it runs:
+
+1. Open **Settings → Extensions → Widgets** and confirm the capability is
+   granted; requests are not grants.
+2. Check the browser console for the rejection message.
