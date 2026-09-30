@@ -29,6 +29,7 @@ import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigg
 import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
+import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsDialog } from "@/settings/command"
 import { updaterAction } from "@/shell/updates/action"
 import type { UpdaterState } from "@/shell/updates/types"
@@ -629,25 +630,15 @@ export function Titlebar(props: {
                           }}
                           onReorder={(keys) => tabsStoreActions.reorder(keys)}
                         />
-                        <Tooltip
-                          placement="bottom"
-                          value={
+                        <RecentlyClosedTabsMenu
+                          onNewTab={openNewTab}
+                          tooltip={
                             <>
                               {language.t("command.session.new")}
                               <Keybind keys={newTabTooltipKeybind(command)} variant="neutral" />
                             </>
                           }
-                        >
-                          <IconButton
-                            type="button"
-                            variant="ghost-muted"
-                            size="large"
-                            class="shrink-0"
-                            icon={<Icon name="plus" />}
-                            onClick={openNewTab}
-                            aria-label={language.t("command.session.new")}
-                          />
-                        </Tooltip>
+                        />
                       </>
                     }
                   >
@@ -669,23 +660,11 @@ export function Titlebar(props: {
                               <ChannelIndicator sidebar debugTools={props.debugTools} />
                             </Show>
                             {homeButton(true)}
-                            <button
-                              type="button"
-                              data-titlebar-tab-action
-                              data-action="vertical-tabs-new-session"
-                              class="group flex h-7 w-full shrink-0 items-center gap-1.5 rounded-[6px] ps-1.5 pe-2 text-[13px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-base"
-                              onClick={openNewTab}
-                              aria-label={language.t("command.session.new")}
-                            >
-                              <Icon name="edit" class="shrink-0" />
-                              <span class="min-w-0 truncate">{language.t("command.session.new")}</span>
-                              <span
-                                class="ms-auto hidden min-w-0 truncate text-v2-text-text-faint group-hover:block group-focus-visible:block"
-                                aria-hidden="true"
-                              >
-                                <bdi dir="ltr">{command.keybind("tab.new")}</bdi>
-                              </span>
-                            </button>
+                            <RecentlyClosedTabsMenu
+                              vertical
+                              onNewTab={openNewTab}
+                              keybind={command.keybind("tab.new")}
+                            />
                             <div class="h-4 w-full shrink-0" aria-hidden="true" />
                             <div class="flex min-h-0 flex-1 flex-col gap-1">
                               <TitlebarTabStrip

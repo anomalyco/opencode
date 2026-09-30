@@ -150,7 +150,11 @@ function SessionTabEntry(props: {
   createEffect(() => {
     const value = session()
     if (!value) return
-    tabs.rememberSessionInfo(props.tab, value)
+    tabs.rememberSessionInfo(
+      props.tab,
+      value,
+      props.serverCtx?.data.session.message.list(value.id).some((message) => message.type === "user") ?? false,
+    )
     const current = sdk()
     if (!current) return
     createTabComposerState(tabs, props.tab, current.scope, {
