@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { makeSession, startWire } from "./wire-fixture"
+import { assistantMessage, makeSession, startWire } from "./wire-fixture"
 
 describe("acp session replay over the wire", () => {
   test("replays user, text, reasoning, and tool messages in order on session/load", async () => {
@@ -104,11 +104,7 @@ describe("acp session replay over the wire", () => {
 
 function replayToolMessage(id: string, state: Record<string, unknown>) {
   return {
-    id: `msg_${id}`,
-    type: "assistant",
-    agent: "build",
-    model: { providerID: "test", id: "test-model" },
-    time: { created: 1, completed: 2 },
+    ...assistantMessage(`msg_${id}`),
     content: [{ type: "tool", id, name: "shell", time: { created: 1, completed: 2 }, state }],
   }
 }
@@ -125,11 +121,7 @@ function replayFixtureMessages(): SessionMessageInfo[] {
         { data: "aGVsbG8=", mime: "text/plain", name: "inline.txt", source: { type: "inline" } },
       ],
     },
-    {
-      id: "msg_assistant",
-      type: "assistant",
-      agent: "build",
-      model: { providerID: "test", id: "test-model" },
+    assistantMessage("msg_assistant", {
       time: { created: 2, completed: 3 },
       content: [
         { type: "text", text: "answer" },
@@ -177,6 +169,6 @@ function replayFixtureMessages(): SessionMessageInfo[] {
           state: { status: "streaming", input: '{"command":' },
         },
       ],
-    },
+    }),
   ]
 }

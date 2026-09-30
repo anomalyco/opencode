@@ -12,7 +12,6 @@ import {
   type McpServer,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
-  type SessionConfigOption,
   type SessionNotification,
   type WriteTextFileRequest,
 } from "@agentclientprotocol/sdk"
@@ -20,6 +19,7 @@ import {
   OpenCode,
   type AgentInfo,
   type CommandInfo,
+  type LocationRef,
   type ModelInfo,
   type ModelRef,
   type OpenCodeEvent,
@@ -27,11 +27,17 @@ import {
   type SessionMessageInfo,
   type TokenUsageInfo,
 } from "@opencode/client/promise"
+import type { BunRequest } from "bun"
+import { Option, Schema } from "effect"
 import { ACP } from "../../src/acp/agent"
 
 type DurableEvent = Extract<OpenCodeEvent, { durable: unknown }>
 type EphemeralEvent = Exclude<OpenCodeEvent, DurableEvent>
 type EventData<Type extends OpenCodeEvent["type"]> = Extract<OpenCodeEvent, { type: Type }>["data"]
+type AssistantMessage = Extract<SessionMessageInfo, { type: "assistant" }>
+
+export type Events = ReadonlyArray<OpenCodeEvent> | void
+type Hook<Input> = (input: Input) => Events | Promise<Events>
 
 export type ServerRequest = {
   readonly method: string
@@ -40,53 +46,98 @@ export type ServerRequest = {
   readonly body: unknown
 }
 
-export type FakeServer = {
-  readonly requests: ServerRequest[]
-  readonly sessions: Map<string, SessionInfo>
-  readonly messages: Map<string, SessionMessageInfo[]>
-  send(event: unknown): void
-}
+const Files = Schema.Array(Schema.Struct({ uri: Schema.String, name: Schema.optional(Schema.String) }))
+const Delivery = Schema.optional(Schema.String)
+const PromptBody = Schema.Struct({ id: Schema.String, text: Schema.String, files: Files, delivery: Delivery })
+const CommandBody = Schema.Struct({ name: Schema.String, text: Schema.String, files: Files, delivery: Delivery })
+const CompactBody = Schema.Struct({ id: Schema.String })
+const SyntheticBody = Schema.Struct({
+  text: Schema.String,
+  description: Schema.optional(Schema.String),
+  delivery: Delivery,
+  resume: Schema.optional(Schema.Boolean),
+})
+const CreateBody = Schema.Struct({ location: Schema.Struct({ directory: Schema.String }) })
+const ModelBody = Schema.Struct({
+  model: Schema.Struct({ providerID: Schema.String, id: Schema.String, variant: Schema.optional(Schema.String) }),
+})
+const AgentBody = Schema.Struct({ agent: Schema.String })
+const ReplyBody = Schema.Struct({ decision: Schema.Literals(["once", "always", "reject"]) })
+const McpBody = Schema.Struct({ config: Schema.Unknown })
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
-type Send = (event: unknown) => void
+export type Submission =
+  | ({ readonly kind: "prompt"; readonly sessionID: string } & typeof PromptBody.Type)
+  | ({ readonly kind: "command"; readonly sessionID: string } & typeof CommandBody.Type)
+  | ({ readonly kind: "compact"; readonly sessionID: string } & typeof CompactBody.Type)
+  | ({ readonly kind: "synthetic"; readonly sessionID: string } & typeof SyntheticBody.Type)
+
+type PromptSubmission = Extract<Submission, { readonly kind: "prompt" }>
+
+export type Selection =
+  | { readonly sessionID: string; readonly model: typeof ModelBody.Type.model }
+  | { readonly sessionID: string; readonly agent: string }
+
+const ChildSession = {
+  rootSessionId: Schema.String,
+  childSessionId: Schema.String,
+  parentSessionId: Schema.String,
+  depth: Schema.Number,
+  title: Schema.optional(Schema.String),
+}
+const ChildUpdate = Schema.Union([
+  Schema.Struct({
+    ...ChildSession,
+    type: Schema.Literal("update"),
+    update: Schema.StructWithRest(Schema.Struct({ sessionUpdate: Schema.String }), [
+      Schema.Record(Schema.String, Schema.Unknown),
+    ]),
+  }),
+  Schema.Struct({
+    ...ChildSession,
+    type: Schema.Literal("status"),
+    status: Schema.Literals(["created", "running", "completed", "failed", "interrupted"]),
+    error: Schema.optional(Schema.Struct({ type: Schema.String, message: Schema.String })),
+  }),
+])
+export type ChildUpdate = typeof ChildUpdate.Type
 
 export type WireOptions = {
-  readonly fetch?: (request: ServerRequest, server: FakeServer) => Response | undefined | Promise<Response | undefined>
-  readonly models?: readonly ModelInfo[]
-  readonly defaultModel?: ModelInfo
-  readonly agents?: readonly AgentInfo[]
-  readonly commands?: readonly CommandInfo[]
-  readonly onPrompt?: (input: {
+  readonly fetch?: (request: ServerRequest) => Response | undefined | Promise<Response | undefined>
+  readonly onPrompt?: Hook<{
     readonly sessionID: string
     readonly id: string
-    readonly body: unknown
+    readonly text: string
     readonly signal: AbortSignal
-    readonly send: Send
-  }) => void | Promise<void>
-  readonly onInterrupt?: (input: { readonly sessionID: string; readonly send: Send }) => unknown
-  readonly onPermissionReply?: (input: {
+  }>
+  readonly onInterrupt?: Hook<{ readonly sessionID: string }>
+  readonly onPermissionReply?: Hook<{
     readonly sessionID: string
     readonly requestID: string
     readonly decision: string
-    readonly send: Send
-  }) => void | Promise<void>
-  readonly onFormCancel?: (input: {
-    readonly sessionID: string
-    readonly formID: string
-    readonly send: Send
-  }) => void | Promise<void>
+  }>
+  readonly onFormCancel?: Hook<{ readonly sessionID: string; readonly formID: string }>
   readonly permission?: (
     request: RequestPermissionRequest,
     signal: AbortSignal,
   ) => RequestPermissionResponse | Promise<RequestPermissionResponse>
 }
 
-export type ClientCapabilities = {
+type CatalogKind = "model" | "default" | "agent" | "command"
+
+export type Catalog = {
+  models: ModelInfo[]
+  // Unset follows the first listed model.
+  defaultModel?: ModelInfo | null
+  agents: AgentInfo[]
+  commands: CommandInfo[]
+}
+
+export type InitializeOptions = {
   readonly writeTextFile?: boolean
   readonly childSessionUpdates?: boolean
   readonly terminalAuth?: boolean
 }
-
-export const ChildSessionUpdateMethod = "opencode/session/child_update"
 
 export const testModel = {
   id: "test-model",
@@ -147,50 +198,57 @@ export function makeSession(
     readonly agent?: string
     readonly model?: ModelRef
     readonly cost?: number
-    readonly tokens?: TokenUsageInfo
     readonly time?: SessionInfo["time"]
-    readonly title?: string
   } = {},
 ): SessionInfo {
   return {
     id,
     projectID: "global",
-    agent: input.agent ?? "build",
-    model: input.model ?? { providerID: "test", id: "test-model", variant: "default" },
+    ...(input.agent ? { agent: input.agent } : {}),
+    ...(input.model ? { model: input.model } : {}),
     cost: input.cost ?? 0,
-    tokens: input.tokens ?? tokens(0),
+    tokens: tokens(0),
     time: input.time ?? { created: 0, updated: 0 },
-    title: input.title ?? `Session ${id}`,
+    title: `Session ${id}`,
     location: { directory: input.cwd ?? "/workspace" },
   }
 }
 
-const ids = { next: 0 }
-
-export function durableEvent<Type extends DurableEvent["type"]>(
-  type: Type,
-  data: Extract<DurableEvent, { type: Type }>["data"],
-) {
-  ids.next++
+export function assistantMessage(id: string, input: Partial<AssistantMessage> = {}) {
   return {
-    id: `evt_${ids.next}`,
-    created: ids.next,
-    type,
-    durable: { aggregateID: "test", seq: ids.next, version: 1 },
-    data,
-  }
-}
-
-export function ephemeralEvent<Type extends EphemeralEvent["type"]>(
-  type: Type,
-  data: Extract<EphemeralEvent, { type: Type }>["data"],
-) {
-  ids.next++
-  return { id: `evt_${ids.next}`, created: ids.next, type, data }
+    id,
+    type: "assistant",
+    agent: "build",
+    model: { providerID: "test", id: "test-model" },
+    content: [],
+    finish: "stop",
+    tokens: tokens(),
+    time: { created: 1, completed: 2 },
+    ...input,
+  } satisfies SessionMessageInfo
 }
 
 export function tokens(value = 1): TokenUsageInfo {
   return { input: value, output: value, reasoning: 0, cache: { read: 0, write: 0 } }
+}
+
+// The fake server stamps ids and sequence numbers when it sends an event.
+function durable<Version extends DurableEvent["durable"]["version"]>(version: Version) {
+  return <Type extends Extract<DurableEvent, { durable: { version: Version } }>["type"]>(
+    type: Type,
+    data: EventData<Type>,
+  ) => ({ id: "", created: 0, type, durable: { aggregateID: "test", seq: 0, version }, data })
+}
+
+export const durableEvent = durable(1)
+const durableEventV2 = durable(2)
+
+export function ephemeralEvent<Type extends EphemeralEvent["type"]>(
+  type: Type,
+  data: EventData<Type>,
+  location?: LocationRef,
+) {
+  return { id: "", created: 0, type, data, ...(location ? { location } : {}) }
 }
 
 export const delivered = (sessionID: string, inboxID: string) =>
@@ -198,16 +256,26 @@ export const delivered = (sessionID: string, inboxID: string) =>
 
 export const succeeded = (sessionID: string) => durableEvent("session.execution.succeeded", { sessionID })
 
+export const interrupted = (sessionID: string) =>
+  durableEvent("session.execution.interrupted", { sessionID, reason: "user" })
+
+export const failed = (sessionID: string, error: EventData<"session.execution.failed">["error"]) =>
+  durableEvent("session.execution.failed", { sessionID, error })
+
+export function turn(sessionID: string, inboxID: string, ...events: OpenCodeEvent[]): OpenCodeEvent[] {
+  return [delivered(sessionID, inboxID), ...events, succeeded(sessionID)]
+}
+
 export const textDelta = (sessionID: string, assistantMessageID: string, delta: string, ordinal = 0) =>
   ephemeralEvent("session.text.delta", { sessionID, assistantMessageID, ordinal, delta })
+
+export const reasoningDelta = (sessionID: string, assistantMessageID: string, delta: string, ordinal = 0) =>
+  ephemeralEvent("session.reasoning.delta", { sessionID, assistantMessageID, ordinal, delta })
 
 export const stepEnded = (
   sessionID: string,
   assistantMessageID: string,
-  input: {
-    readonly finish?: EventData<"session.step.ended">["finish"]
-    readonly tokens?: TokenUsageInfo
-  } = {},
+  input: { readonly finish?: EventData<"session.step.ended">["finish"]; readonly tokens?: TokenUsageInfo } = {},
 ) =>
   durableEvent("session.step.ended", {
     sessionID,
@@ -246,13 +314,27 @@ export function toolSucceeded(
   metadata: EventData<"session.tool.success">["metadata"],
   text: string,
 ) {
-  return durableEvent("session.tool.success", {
+  return durableEventV2("session.tool.success", {
     sessionID,
     assistantMessageID: "msg_tools",
     id,
     metadata,
     content: [{ type: "text", text }],
     executed: true,
+  })
+}
+
+export function toolFailed(
+  sessionID: string,
+  id: string,
+  input: Omit<EventData<"session.tool.failed">, "sessionID" | "assistantMessageID" | "id" | "executed">,
+) {
+  return durableEventV2("session.tool.failed", {
+    sessionID,
+    assistantMessageID: "msg_tools",
+    id,
+    executed: true,
+    ...input,
   })
 }
 
@@ -275,20 +357,6 @@ export function permissionAsked(
   })
 }
 
-export function assistantMessage(id: string, input: Partial<Extract<SessionMessageInfo, { type: "assistant" }>> = {}) {
-  return {
-    id,
-    type: "assistant",
-    agent: "build",
-    model: { providerID: "test", id: "test-model" },
-    content: [],
-    finish: "stop",
-    tokens: tokens(),
-    time: { created: 1, completed: 2 },
-    ...input,
-  } satisfies SessionMessageInfo
-}
-
 export async function startWire(options: WireOptions = {}) {
   const waiters = new Set<() => void>()
   const changed = () => waiters.forEach((check) => check())
@@ -298,16 +366,11 @@ export async function startWire(options: WireOptions = {}) {
   const updates: SessionNotification[] = []
   const permissions: RequestPermissionRequest[] = []
   const writes: WriteTextFileRequest[] = []
-  const extensions: Array<{ readonly method: string; readonly params: Record<string, unknown> }> = []
-  // Handlers record typed params after SDK validation; this counter lets callers wait for them to catch up with the wire.
-  const counts = { tapped: 0, handled: 0 }
-  const handledMethods = new Set<string>([
-    "session/update",
-    "session/request_permission",
-    "fs/write_text_file",
-    ChildSessionUpdateMethod,
-  ])
-  const handled = () => {
+  const childUpdates: ChildUpdate[] = []
+  // Client handlers record SDK-validated params; responses wait until they have seen every earlier agent message.
+  const counts = { sent: 0, handled: 0 }
+  const handled = <Value>(list: Value[], value: Value) => {
+    list.push(value)
     counts.handled++
     changed()
   }
@@ -320,22 +383,16 @@ export async function startWire(options: WireOptions = {}) {
   )
   const clientStream = ndJsonStream(clientToAgent.writable, agentToClient.readable)
   const connection = client({ name: "test" })
-    .onNotification("session/update", (ctx) => {
-      updates.push(ctx.params)
-      handled()
-    })
-    .onNotification(ChildSessionUpdateMethod, objectParams, (ctx) => {
-      extensions.push({ method: ChildSessionUpdateMethod, params: ctx.params })
-      handled()
-    })
+    .onNotification("session/update", (ctx) => handled(updates, ctx.params))
+    .onNotification("opencode/session/child_update", Schema.decodeUnknownSync(ChildUpdate), (ctx) =>
+      handled(childUpdates, ctx.params),
+    )
     .onRequest("session/request_permission", (ctx) => {
-      permissions.push(ctx.params)
-      handled()
+      handled(permissions, ctx.params)
       return options.permission?.(ctx.params, ctx.signal) ?? { outcome: { outcome: "cancelled" } }
     })
     .onRequest("fs/write_text_file", (ctx) => {
-      writes.push(ctx.params)
-      handled()
+      handled(writes, ctx.params)
       return {}
     })
     .connect({
@@ -344,7 +401,7 @@ export async function startWire(options: WireOptions = {}) {
         new TransformStream<AnyMessage, AnyMessage>({
           transform(message, controller) {
             received.push(message)
-            if ("method" in message && handledMethods.has(message.method)) counts.tapped++
+            if ("method" in message && !message.method.startsWith("$/")) counts.sent++
             controller.enqueue(message)
             changed()
           },
@@ -374,52 +431,48 @@ export async function startWire(options: WireOptions = {}) {
     })
   }
 
-  const settle = <T>(promise: Promise<T>) =>
-    promise.finally(() => {
-      const target = counts.tapped
-      return until(() => counts.handled >= target, "client handlers to record agent messages")
-    })
-
   const request = <Method extends AgentRequestMethod>(
     method: Method,
     params: AgentRequestParamsByMethod[Method],
     signal?: AbortSignal,
   ): Promise<AgentRequestResponsesByMethod[Method]> =>
-    settle(connection.agent.request(method, params, signal ? { cancellationSignal: signal } : undefined))
+    connection.agent.request(method, params, signal ? { cancellationSignal: signal } : undefined).finally(() => {
+      const target = counts.sent
+      return until(() => counts.handled >= target, "client handlers for every agent message (is one missing?)")
+    })
 
-  const wire = {
+  const initialize = (capabilities: InitializeOptions = {}) =>
+    request("initialize", {
+      protocolVersion: 1,
+      clientCapabilities: {
+        ...(capabilities.writeTextFile ? { fs: { writeTextFile: true, readTextFile: false } } : {}),
+        _meta: {
+          ...(capabilities.childSessionUpdates ? { "opencode/child-session-updates": true } : {}),
+          ...(capabilities.terminalAuth ? { "terminal-auth": true } : {}),
+        },
+      },
+      clientInfo: { name: "test", version: "1" },
+    })
+
+  return {
     server,
     received,
     updates,
     permissions,
     writes,
-    extensions,
+    childUpdates,
     request,
     until,
-    send<Method extends AgentRequestMethod>(method: Method, params: AgentRequestParamsByMethod[Method]) {
-      const controller = new AbortController()
-      return { response: request(method, params, controller.signal), cancel: () => controller.abort() }
-    },
+    initialize,
     notify: <Method extends AgentNotificationMethod>(method: Method, params: AgentNotificationParamsByMethod[Method]) =>
       connection.agent.notify(method, params),
-    initialize: (capabilities: ClientCapabilities = {}) =>
-      request("initialize", {
-        protocolVersion: 1,
-        clientCapabilities: {
-          ...(capabilities.writeTextFile ? { fs: { writeTextFile: true, readTextFile: false } } : {}),
-          _meta: {
-            ...(capabilities.childSessionUpdates ? { "opencode/child-session-updates": true } : {}),
-            ...(capabilities.terminalAuth ? { "terminal-auth": true } : {}),
-          },
-        },
-        clientInfo: { name: "test", version: "1" },
-      }),
     newSession: (cwd = "/workspace", mcpServers: McpServer[] = []) => request("session/new", { cwd, mcpServers }),
-    prompt: (sessionId: string, prompt: string | ContentBlock[]) =>
-      request("session/prompt", {
-        sessionId,
-        prompt: typeof prompt === "string" ? [{ type: "text", text: prompt }] : prompt,
-      }),
+    prompt: (sessionId: string, prompt: string | ContentBlock[], signal?: AbortSignal) =>
+      request(
+        "session/prompt",
+        { sessionId, prompt: typeof prompt === "string" ? [{ type: "text", text: prompt }] : prompt },
+        signal,
+      ),
     waitForUpdate: (predicate: (update: SessionNotification) => boolean, description = "session/update") =>
       until(() => updates.find(predicate), description),
     async [Symbol.asyncDispose]() {
@@ -428,7 +481,15 @@ export async function startWire(options: WireOptions = {}) {
       await server.stop()
     },
   }
-  return wire
+}
+
+export type Wire = Awaited<ReturnType<typeof startWire>>
+
+export async function startSession(options: WireOptions & { readonly capabilities?: InitializeOptions } = {}) {
+  const wire = await startWire(options)
+  await wire.initialize(options.capabilities)
+  const session = await wire.newSession()
+  return Object.assign(wire, { sessionId: session.sessionId, session })
 }
 
 export async function rpcError(promise: Promise<unknown>) {
@@ -442,205 +503,275 @@ export async function rpcError(promise: Promise<unknown>) {
   return { code: error.code, message: error.message, data: error.data }
 }
 
-export function currentValue(
-  result: { readonly configOptions?: readonly SessionConfigOption[] | null } | undefined,
-  id: string,
-) {
-  return result?.configOptions?.find((option) => option.id === id)?.currentValue
-}
-
-function promptID(request: ServerRequest) {
-  const id = stringField(request.body, "id")
-  if (!id) throw new Error(`missing prompt id for ${request.path}`)
-  return id
-}
-
 function startServer(options: WireOptions, changed: () => void) {
   const encoder = new TextEncoder()
   const streams = new Set<ReadableStreamDefaultController<Uint8Array>>()
-  const requests: ServerRequest[] = []
-  const sessions = new Map<string, SessionInfo>()
-  const messages = new Map<string, SessionMessageInfo[]>()
-  const counter = { sessions: 0 }
-  const models = options.models ?? [testModel, secondModel]
-
-  const send = (event: unknown) => {
-    const chunk = encoder.encode(`data: ${JSON.stringify(event)}\n\n`)
-    for (const stream of streams) {
-      try {
-        stream.enqueue(chunk)
-      } catch {
-        streams.delete(stream)
-      }
-    }
+  const counter = { sessions: 0, events: 0 }
+  const catalog: Catalog = {
+    models: [testModel, secondModel],
+    agents: [buildAgent, planAgent],
+    commands: [reviewCommand],
   }
-  const fake: FakeServer = { requests, sessions, messages, send }
+  const catalogReads: Array<{ readonly kind: CatalogKind; readonly directory: string }> = []
+  const requests: ServerRequest[] = []
+  const submissions: Submission[] = []
+  const selections: Selection[] = []
+  const interrupts: string[] = []
+  const replies: Array<{ readonly sessionID: string; readonly requestID: string; readonly decision: string }> = []
+  const cancelledForms: Array<{ readonly sessionID: string; readonly formID: string }> = []
+  const mcp: Array<{ readonly name: string; readonly directory?: string; readonly config: unknown }> = []
+  const fake = {
+    requests,
+    catalog,
+    catalogReads,
+    sessions: new Map<string, SessionInfo>(),
+    messages: new Map<string, SessionMessageInfo[]>(),
+    submissions,
+    get prompts() {
+      return submissions.filter((item): item is PromptSubmission => item.kind === "prompt")
+    },
+    selections,
+    interrupts,
+    replies,
+    cancelledForms,
+    mcp,
+    send(...events: ReadonlyArray<OpenCodeEvent>) {
+      events.forEach((event) => {
+        const seq = ++counter.events
+        const stamped = {
+          ...event,
+          id: `evt_${seq}`,
+          created: seq,
+          ...("durable" in event ? { durable: { ...event.durable, seq } } : {}),
+        }
+        const chunk = encoder.encode(`data: ${JSON.stringify(stamped)}\n\n`)
+        streams.forEach((stream) => stream.enqueue(chunk))
+      })
+    },
+  }
+  const emit = async (events: Events | Promise<Events>) => {
+    const resolved = await events
+    if (resolved) fake.send(...resolved)
+    return resolved?.length ?? 0
+  }
   const createSession = (source: SessionInfo) => {
     const session = { ...source, id: `ses_${++counter.sessions}` }
-    sessions.set(session.id, session)
+    fake.sessions.set(session.id, session)
     return session
   }
   const notFound = (sessionID: string) =>
     Response.json({ _tag: "SessionNotFoundError", sessionID, message: "session not found" }, { status: 404 })
+  const noContent = () => new Response(null, { status: 204 })
+
+  // Handlers record facts synchronously before awaiting hooks, so waiters can observe a held request.
+  const observed = (response: Response | Promise<Response>) => {
+    changed()
+    return response
+  }
+  const record = async (req: Request) => {
+    const url = new URL(req.url)
+    const text = req.method === "GET" ? "" : await req.text()
+    const request: ServerRequest = {
+      method: req.method,
+      path: url.pathname,
+      query: Object.fromEntries(url.searchParams.entries()),
+      body: text ? Option.getOrUndefined(decodeJson(text)) : undefined,
+    }
+    fake.requests.push(request)
+    changed()
+    return { request, text, override: await options.fetch?.(request) }
+  }
+  function route<Path extends string>(
+    handle: (req: BunRequest<Path>, query: Record<string, string>) => Response | Promise<Response>,
+  ) {
+    return (req: BunRequest<Path>) =>
+      record(req)
+        .then((recorded) => recorded.override ?? observed(handle(req, recorded.request.query)))
+        .finally(changed)
+  }
+  function body<Path extends string, A>(
+    schema: Schema.Codec<A, unknown>,
+    handle: (req: BunRequest<Path>, body: A, query: Record<string, string>) => Response | Promise<Response>,
+  ) {
+    const decode = Schema.decodeUnknownOption(Schema.fromJsonString(schema))
+    return (req: BunRequest<Path>) =>
+      record(req)
+        .then((recorded) => {
+          if (recorded.override) return recorded.override
+          const parsed = decode(recorded.text)
+          if (Option.isNone(parsed)) return new Response(null, { status: 400 })
+          return observed(handle(req, parsed.value, recorded.request.query))
+        })
+        .finally(changed)
+  }
+  const catalogRoute = (kind: CatalogKind) =>
+    route((_req, query) => {
+      const directory = query["location[directory]"] ?? "/workspace"
+      fake.catalogReads.push({ kind, directory })
+      const data = {
+        model: catalog.models,
+        default: catalog.defaultModel === undefined ? (catalog.models[0] ?? null) : catalog.defaultModel,
+        agent: catalog.agents,
+        command: catalog.commands,
+      }[kind]
+      return Response.json({ location: { directory, project: { id: "global", directory } }, data })
+    })
+  const page = <Item>(items: readonly Item[], query: Record<string, string>, limit: number) => {
+    const start = Number(query.cursor ?? 0)
+    const end = start + Number(query.limit ?? limit)
+    return { data: items.slice(start, end), cursor: end < items.length ? { next: String(end) } : {} }
+  }
 
   const http = Bun.serve({
     port: 0,
-    fetch: (raw) => handle(raw).finally(changed),
-  })
-
-  async function handle(raw: Request) {
-    const url = new URL(raw.url)
-    const request: ServerRequest = {
-      method: raw.method,
-      path: url.pathname,
-      query: Object.fromEntries(url.searchParams.entries()),
-      body: raw.method === "GET" || raw.method === "HEAD" ? undefined : await raw.json().catch(() => undefined),
-    }
-    requests.push(request)
-    changed()
-    const override = await options.fetch?.(request, fake)
-    if (override) return override
-
-    const directory = request.query["location[directory]"] ?? "/workspace"
-    const location = { directory, project: { id: "global", directory } }
-    const route = (method: string, pattern: RegExp) =>
-      request.method === method ? pattern.exec(request.path)?.slice(1).map(decodeURIComponent) : undefined
-
-    if (request.path === "/api/event") {
-      const state: { stream?: ReadableStreamDefaultController<Uint8Array> } = {}
-      return new Response(
-        new ReadableStream<Uint8Array>({
-          start(stream) {
-            state.stream = stream
-            streams.add(stream)
-            stream.enqueue(
-              encoder.encode(
-                `data: ${JSON.stringify({ id: "evt_connected", type: "server.connected", data: {} })}\n\n`,
-              ),
-            )
-          },
-          cancel() {
-            if (state.stream) streams.delete(state.stream)
-          },
+    fetch: (req) =>
+      record(req)
+        .then((recorded) => recorded.override ?? new Response(null, { status: 404 }))
+        .finally(changed),
+    routes: {
+      "/api/event": {
+        GET: route(() => {
+          const state: { stream?: ReadableStreamDefaultController<Uint8Array> } = {}
+          return new Response(
+            new ReadableStream<Uint8Array>({
+              start(stream) {
+                state.stream = stream
+                streams.add(stream)
+                stream.enqueue(
+                  encoder.encode(
+                    `data: ${JSON.stringify({ id: "evt_connected", type: "server.connected", data: {} })}\n\n`,
+                  ),
+                )
+              },
+              cancel() {
+                if (state.stream) streams.delete(state.stream)
+              },
+            }),
+            { headers: { "content-type": "text/event-stream" } },
+          )
         }),
-        { headers: { "content-type": "text/event-stream" } },
-      )
-    }
-    if (request.path === "/api/model") return Response.json({ location, data: models })
-    if (request.path === "/api/model/default")
-      return Response.json({ location, data: options.defaultModel ?? models[0] ?? null })
-    if (request.path === "/api/agent")
-      return Response.json({ location, data: options.agents ?? [buildAgent, planAgent] })
-    if (request.path === "/api/command") return Response.json({ location, data: options.commands ?? [reviewCommand] })
-
-    if (request.method === "POST" && request.path === "/api/session") {
-      const cwd = stringField(field(request.body, "location"), "directory") ?? "/workspace"
-      return Response.json({ data: createSession(makeSession("", { cwd })) })
-    }
-    if (request.method === "GET" && request.path === "/api/session") {
-      const data = [...sessions.values()]
-        .filter((session) => !request.query.directory || session.location.directory === request.query.directory)
-        .toSorted((a, b) => b.time.updated - a.time.updated)
-      return Response.json({ data, cursor: {} })
-    }
-    if (request.method === "PUT" && request.path.startsWith("/api/experimental/mcp/"))
-      return new Response(null, { status: 204 })
-
-    const get = route("GET", /^\/api\/session\/([^/]+)$/)
-    if (get?.[0]) {
-      const session = sessions.get(get[0])
-      return session ? Response.json({ data: session }) : notFound(get[0])
-    }
-    const remove = route("DELETE", /^\/api\/session\/([^/]+)$/)
-    if (remove?.[0]) {
-      if (!sessions.delete(remove[0])) return notFound(remove[0])
-      return new Response(null, { status: 204 })
-    }
-    const fork = route("POST", /^\/api\/session\/([^/]+)\/fork$/)
-    if (fork?.[0]) {
-      const source = sessions.get(fork[0])
-      if (!source) return notFound(fork[0])
-      const forked = createSession(source)
-      messages.set(forked.id, [...(messages.get(source.id) ?? [])])
-      return Response.json({ data: forked })
-    }
-    const select = route("POST", /^\/api\/session\/([^/]+)\/(model|agent)$/)
-    if (select?.[0]) return new Response(null, { status: 204 })
-    const list = route("GET", /^\/api\/session\/([^/]+)\/message$/)
-    if (list?.[0]) return Response.json({ data: messages.get(list[0]) ?? [], cursor: {} })
-    const message = route("GET", /^\/api\/session\/([^/]+)\/message\/([^/]+)$/)
-    if (message?.[0] && message[1]) {
-      const messageID = message[1]
-      return Response.json({
-        data: messages.get(message[0])?.find((item) => item.id === messageID) ?? assistantMessage(messageID),
-      })
-    }
-    const prompt = route("POST", /^\/api\/session\/([^/]+)\/prompt$/)
-    if (prompt?.[0]) {
-      const sessionID = prompt[0]
-      const id = promptID(request)
-      await (options.onPrompt ?? completeTurn)({ sessionID, id, body: request.body, signal: raw.signal, send })
-      return Response.json({ data: { text: stringField(request.body, "text") ?? "" } })
-    }
-    const compact = route("POST", /^\/api\/session\/([^/]+)\/compact$/)
-    if (compact?.[0]) {
-      completeTurn({ sessionID: compact[0], id: promptID(request), send })
-      return Response.json({ data: {} })
-    }
-    if (route("POST", /^\/api\/session\/([^/]+)\/command$/)) return new Response(null, { status: 204 })
-    if (route("POST", /^\/api\/session\/([^/]+)\/synthetic$/)) return Response.json({ data: {} })
-    const interrupt = route("POST", /^\/api\/session\/([^/]+)\/interrupt$/)
-    if (interrupt?.[0]) {
-      const sessionID = interrupt[0]
-      if (!sessions.has(sessionID)) return notFound(sessionID)
-      const interrupted = (await options.onInterrupt?.({ sessionID, send })) === true
-      return Response.json({ interrupted })
-    }
-    const reply = route("POST", /^\/api\/session\/([^/]+)\/permission\/([^/]+)\/reply$/)
-    if (reply?.[0] && reply[1]) {
-      const decision = stringField(request.body, "decision")
-      if (!decision) return new Response(null, { status: 400 })
-      await options.onPermissionReply?.({ sessionID: reply[0], requestID: reply[1], decision, send })
-      return new Response(null, { status: 204 })
-    }
-    const form = route("DELETE", /^\/api\/session\/([^/]+)\/form\/([^/]+)$/)
-    if (form?.[0] && form[1]) {
-      await options.onFormCancel?.({ sessionID: form[0], formID: form[1], send })
-      return new Response(null, { status: 204 })
-    }
-    return new Response(null, { status: 404 })
-  }
+      },
+      "/api/model": { GET: catalogRoute("model") },
+      "/api/model/default": { GET: catalogRoute("default") },
+      "/api/agent": { GET: catalogRoute("agent") },
+      "/api/command": { GET: catalogRoute("command") },
+      "/api/session": {
+        GET: route((_req, query) => {
+          const sessions = [...fake.sessions.values()]
+            .filter((session) => !query.directory || session.location.directory === query.directory)
+            .toSorted((a, b) => b.time.updated - a.time.updated)
+          return Response.json(page(sessions, query, 100))
+        }),
+        POST: body(CreateBody, (_req, input) =>
+          Response.json({ data: createSession(makeSession("", { cwd: input.location.directory })) }),
+        ),
+      },
+      "/api/session/:sessionID": {
+        GET: route((req) => {
+          const session = fake.sessions.get(req.params.sessionID)
+          return session ? Response.json({ data: session }) : notFound(req.params.sessionID)
+        }),
+        DELETE: route((req) =>
+          fake.sessions.delete(req.params.sessionID) ? noContent() : notFound(req.params.sessionID),
+        ),
+      },
+      "/api/session/:sessionID/fork": {
+        POST: route((req) => {
+          const source = fake.sessions.get(req.params.sessionID)
+          if (!source) return notFound(req.params.sessionID)
+          const forked = createSession(source)
+          fake.messages.set(forked.id, [...(fake.messages.get(source.id) ?? [])])
+          return Response.json({ data: forked })
+        }),
+      },
+      "/api/session/:sessionID/model": {
+        POST: body(ModelBody, (req, input) => {
+          fake.selections.push({ sessionID: req.params.sessionID, model: input.model })
+          return noContent()
+        }),
+      },
+      "/api/session/:sessionID/agent": {
+        POST: body(AgentBody, (req, input) => {
+          fake.selections.push({ sessionID: req.params.sessionID, agent: input.agent })
+          return noContent()
+        }),
+      },
+      "/api/session/:sessionID/message": {
+        GET: route((req, query) => Response.json(page(fake.messages.get(req.params.sessionID) ?? [], query, 200))),
+      },
+      "/api/session/:sessionID/message/:messageID": {
+        GET: route((req) => {
+          const message = fake.messages.get(req.params.sessionID)?.find((item) => item.id === req.params.messageID)
+          return message ? Response.json({ data: message }) : new Response(null, { status: 404 })
+        }),
+      },
+      "/api/session/:sessionID/prompt": {
+        POST: body(PromptBody, async (req, input) => {
+          const sessionID = req.params.sessionID
+          fake.submissions.push({ kind: "prompt", sessionID, ...input })
+          const hook = options.onPrompt ?? (() => turn(sessionID, input.id))
+          await emit(hook({ sessionID, id: input.id, text: input.text, signal: req.signal }))
+          return Response.json({ data: { text: input.text } })
+        }),
+      },
+      "/api/session/:sessionID/command": {
+        POST: body(CommandBody, (req, input) => {
+          fake.submissions.push({ kind: "command", sessionID: req.params.sessionID, ...input })
+          return noContent()
+        }),
+      },
+      "/api/session/:sessionID/compact": {
+        POST: body(CompactBody, (req, input) => {
+          fake.submissions.push({ kind: "compact", sessionID: req.params.sessionID, ...input })
+          fake.send(...turn(req.params.sessionID, input.id))
+          return Response.json({ data: {} })
+        }),
+      },
+      "/api/session/:sessionID/synthetic": {
+        POST: body(SyntheticBody, (req, input) => {
+          fake.submissions.push({ kind: "synthetic", sessionID: req.params.sessionID, ...input })
+          return Response.json({ data: {} })
+        }),
+      },
+      "/api/session/:sessionID/interrupt": {
+        POST: route(async (req) => {
+          const sessionID = req.params.sessionID
+          fake.interrupts.push(sessionID)
+          if (!fake.sessions.has(sessionID)) return notFound(sessionID)
+          return Response.json({ interrupted: (await emit(options.onInterrupt?.({ sessionID }))) > 0 })
+        }),
+      },
+      "/api/session/:sessionID/permission/:requestID/reply": {
+        POST: body(ReplyBody, async (req, input) => {
+          const reply = { sessionID: req.params.sessionID, requestID: req.params.requestID, decision: input.decision }
+          fake.replies.push(reply)
+          await emit(options.onPermissionReply?.(reply))
+          return noContent()
+        }),
+      },
+      "/api/session/:sessionID/form/:formID": {
+        DELETE: route(async (req) => {
+          const form = { sessionID: req.params.sessionID, formID: req.params.formID }
+          fake.cancelledForms.push(form)
+          await emit(options.onFormCancel?.(form))
+          return noContent()
+        }),
+      },
+      "/api/experimental/mcp/:name": {
+        PUT: body(McpBody, (req, input, query) => {
+          fake.mcp.push({ name: req.params.name, directory: query["location[directory]"], config: input.config })
+          return noContent()
+        }),
+      },
+    },
+  })
 
   return Object.assign(fake, {
     url: http.url.toString(),
     async stop() {
-      for (const stream of streams) {
-        try {
-          stream.close()
-        } catch {}
-      }
+      streams.forEach((stream) => stream.close())
       streams.clear()
       await http.stop(true)
     },
   })
-}
-
-function completeTurn(input: { readonly sessionID: string; readonly id: string; readonly send: Send }) {
-  input.send(delivered(input.sessionID, input.id))
-  input.send(succeeded(input.sessionID))
-}
-
-function objectParams(params: unknown): Record<string, unknown> {
-  if (!params || typeof params !== "object" || Array.isArray(params)) throw new Error("expected object params")
-  return Object.fromEntries(Object.entries(params))
-}
-
-function field(value: unknown, key: string): unknown {
-  if (!value || typeof value !== "object") return undefined
-  return Object.entries(value).find((entry) => entry[0] === key)?.[1]
-}
-
-function stringField(value: unknown, key: string) {
-  const result = field(value, key)
-  return typeof result === "string" ? result : undefined
 }

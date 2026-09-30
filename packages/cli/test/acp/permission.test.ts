@@ -1,12 +1,15 @@
 import { describe, expect, test } from "bun:test"
-import type { RequestPermissionResponse } from "@agentclientprotocol/sdk"
+import type { AnyRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk"
 import fs from "node:fs/promises"
 import path from "node:path"
+import { tmpdir } from "../fixture/tmpdir"
 import {
   childCreated,
   delivered,
   durableEvent,
+  interrupted,
   permissionAsked,
+  startSession,
   startWire,
   stepEnded,
   succeeded,
@@ -14,42 +17,39 @@ import {
   toolCalled,
   toolStarted,
   toolSucceeded,
-  type ServerRequest,
+  turn,
+  type Wire,
 } from "./wire-fixture"
-import { tmpdir } from "../fixture/tmpdir"
+
+const allowOnce = () => ({ outcome: { outcome: "selected", optionId: "once" } }) as const
 
 describe("acp permissions over the wire", () => {
   test("forwards allow-once and allow-always selections to the server", async () => {
-    await using acp = await startWire({
-      onPrompt({ sessionID, id, send }) {
-        send(delivered(sessionID, id))
-        send(
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
           permissionAsked(sessionID, "perm_once", {
             action: "shell",
             metadata: { command: "printf hello" },
             source: { type: "tool", messageID: "msg_allow", id: "call_once" },
           }),
-        )
-        send(
           permissionAsked(sessionID, "perm_always", {
             action: "read",
             metadata: { path: "/workspace/file.ts" },
             source: { type: "tool", messageID: "msg_allow", id: "call_always" },
           }),
-        )
-        send(succeeded(sessionID))
-      },
+        ),
       permission: (request) => ({
         outcome: { outcome: "selected", optionId: request.toolCall.toolCallId === "call_once" ? "once" : "always" },
       }),
     })
-    await acp.initialize()
-    const session = await acp.newSession()
 
-    await acp.prompt(session.sessionId, "hello")
+    await acp.prompt(acp.sessionId, "hello")
 
     expect(acp.permissions[0]).toMatchObject({
-      sessionId: session.sessionId,
+      sessionId: acp.sessionId,
       toolCall: {
         toolCallId: "call_once",
         status: "pending",
@@ -65,7 +65,7 @@ describe("acp permissions over the wire", () => {
       ],
     })
     expect(acp.permissions[1]).toMatchObject({
-      sessionId: session.sessionId,
+      sessionId: acp.sessionId,
       toolCall: {
         toolCallId: "call_always",
         status: "pending",
@@ -75,17 +75,18 @@ describe("acp permissions over the wire", () => {
         rawInput: { path: "/workspace/file.ts" },
       },
     })
-    expect(replies(acp.server.requests)).toEqual([
+    expect(decisions(acp)).toEqual([
       ["perm_once", "once"],
       ["perm_always", "always"],
     ])
   })
 
   test("preserves external directory permission context", async () => {
-    await using acp = await startWire({
-      onPrompt({ sessionID, id, send }) {
-        send(delivered(sessionID, id))
-        send(
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
           permissionAsked(sessionID, "perm_external", {
             action: "external_directory",
             metadata: {
@@ -95,15 +96,11 @@ describe("acp permissions over the wire", () => {
               patterns: ["/tmp/outside/*"],
             },
           }),
-        )
-        send(succeeded(sessionID))
-      },
-      permission: () => ({ outcome: { outcome: "selected", optionId: "once" } }),
+        ),
+      permission: allowOnce,
     })
-    await acp.initialize()
-    const session = await acp.newSession()
 
-    await acp.prompt(session.sessionId, "hello")
+    await acp.prompt(acp.sessionId, "hello")
 
     expect(acp.permissions[0]?.toolCall).toMatchObject({
       title: "Create external directory",
@@ -118,51 +115,43 @@ describe("acp permissions over the wire", () => {
   })
 
   test("routes foreground child permissions through the parent ACP session", async () => {
-    await using acp = await startWire({
-      onPrompt({ sessionID, id, send }) {
-        send(delivered(sessionID, id))
-        send(childCreated("ses_child", sessionID, "Review code"))
-        send(durableEvent("session.execution.started", { sessionID: "ses_child" }))
-        send(
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          childCreated("ses_child", sessionID, "Review code"),
+          durableEvent("session.execution.started", { sessionID: "ses_child" }),
           permissionAsked("ses_child", "perm_child", {
             action: "read",
             metadata: { path: "/workspace/child.ts" },
             source: { type: "tool", messageID: "msg_child", id: "call_child" },
           }),
-        )
-        send(succeeded("ses_child"))
-        send(succeeded(sessionID))
-      },
-      permission: () => ({ outcome: { outcome: "selected", optionId: "once" } }),
+          succeeded("ses_child"),
+        ),
+      permission: allowOnce,
     })
-    await acp.initialize()
-    const session = await acp.newSession()
 
-    await acp.prompt(session.sessionId, "hello")
+    await acp.prompt(acp.sessionId, "hello")
 
     expect(acp.permissions).toHaveLength(1)
     expect(acp.permissions[0]).toMatchObject({
-      sessionId: session.sessionId,
+      sessionId: acp.sessionId,
       toolCall: { toolCallId: "ses_child:call_child", title: "Review code: /workspace/child.ts" },
     })
-    expect(acp.server.requests).toContainEqual(
-      expect.objectContaining({
-        method: "POST",
-        path: "/api/session/ses_child/permission/perm_child/reply",
-        body: { decision: "once" },
-      }),
-    )
+    expect(acp.server.replies).toEqual([{ sessionID: "ses_child", requestID: "perm_child", decision: "once" }])
   })
 
   test("rejects explicit rejection, cancellation, and permission UI failure", async () => {
-    await using acp = await startWire({
-      onPrompt({ sessionID, id, send }) {
-        send(delivered(sessionID, id))
-        send(permissionAsked(sessionID, "perm_selected_reject"))
-        send(permissionAsked(sessionID, "perm_cancelled"))
-        send(permissionAsked(sessionID, "perm_failed"))
-        send(succeeded(sessionID))
-      },
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          permissionAsked(sessionID, "perm_selected_reject"),
+          permissionAsked(sessionID, "perm_cancelled"),
+          permissionAsked(sessionID, "perm_failed"),
+        ),
       permission(request) {
         if (request.toolCall.toolCallId === "perm_selected_reject") {
           return { outcome: { outcome: "selected", optionId: "reject" } }
@@ -171,11 +160,9 @@ describe("acp permissions over the wire", () => {
         throw new Error("client permission UI failed")
       },
     })
-    await acp.initialize()
-    const session = await acp.newSession()
 
-    expect(await acp.prompt(session.sessionId, "hello")).toMatchObject({ stopReason: "end_turn" })
-    expect(replies(acp.server.requests)).toEqual([
+    expect(await acp.prompt(acp.sessionId, "hello")).toMatchObject({ stopReason: "end_turn" })
+    expect(decisions(acp)).toEqual([
       ["perm_selected_reject", "reject"],
       ["perm_cancelled", "reject"],
       ["perm_failed", "reject"],
@@ -184,31 +171,25 @@ describe("acp permissions over the wire", () => {
 
   test("serializes permission requests and replies within one session", async () => {
     const releaseFirst = Promise.withResolvers<RequestPermissionResponse>()
-    await using acp = await startWire({
-      onPrompt({ sessionID, id, send }) {
-        send(delivered(sessionID, id))
-        send(permissionAsked(sessionID, "perm_1"))
-        send(permissionAsked(sessionID, "perm_2"))
-        send(succeeded(sessionID))
-      },
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(sessionID, id, permissionAsked(sessionID, "perm_1"), permissionAsked(sessionID, "perm_2")),
       permission: (request) =>
         request.toolCall.toolCallId === "perm_1"
           ? releaseFirst.promise
           : { outcome: { outcome: "selected", optionId: "always" } },
     })
-    await acp.initialize()
-    const session = await acp.newSession()
 
-    const prompt = acp.prompt(session.sessionId, "hello")
+    const prompt = acp.prompt(acp.sessionId, "hello")
     await acp.until(() => acp.permissions.length === 1, "first permission")
     expect(acp.permissions.map((request) => request.toolCall.toolCallId)).toEqual(["perm_1"])
-    expect(replies(acp.server.requests)).toEqual([])
+    expect(acp.server.replies).toEqual([])
 
     releaseFirst.resolve({ outcome: { outcome: "selected", optionId: "once" } })
     await prompt
 
     expect(acp.permissions.map((request) => request.toolCall.toolCallId)).toEqual(["perm_1", "perm_2"])
-    expect(replies(acp.server.requests)).toEqual([
+    expect(decisions(acp)).toEqual([
       ["perm_1", "once"],
       ["perm_2", "always"],
     ])
@@ -216,80 +197,68 @@ describe("acp permissions over the wire", () => {
 
   test("does not let one session's blocked permission stall another session", async () => {
     const releaseBlocked = Promise.withResolvers<RequestPermissionResponse>()
-    const promptIDs = new Map<string, string>()
-    await using acp = await startWire({
-      onPrompt({ sessionID, id, send }) {
-        promptIDs.set(sessionID, id)
-        const blocked = promptIDs.get("ses_1")
-        const free = promptIDs.get("ses_2")
-        if (!blocked || !free) return
-        send(delivered("ses_1", blocked))
-        send(delivered("ses_2", free))
-        send(permissionAsked("ses_1", "perm_blocked"))
-        send(textDelta("ses_2", "msg_free", "session B continued"))
-        send(stepEnded("ses_2", "msg_free"))
-        send(succeeded("ses_2"))
-        send(succeeded("ses_1"))
-      },
-      permission: () => releaseBlocked.promise,
-    })
+    await using acp = await startWire({ onPrompt: () => undefined, permission: () => releaseBlocked.promise })
     await acp.initialize()
-    await acp.newSession()
-    await acp.newSession()
+    const blockedSession = await acp.newSession()
+    const freeSession = await acp.newSession()
 
-    const blocked = acp.prompt("ses_1", "hello")
-    await acp.until(
-      () => acp.server.requests.some((request) => request.path === "/api/session/ses_1/prompt"),
-      "blocked prompt",
+    const blocked = acp.prompt(blockedSession.sessionId, "hello")
+    const free = acp.prompt(freeSession.sessionId, "hello")
+    const [blockedPrompt, freePrompt] = await acp.until(
+      () => acp.server.prompts.length === 2 && acp.server.prompts,
+      "both prompt submissions",
     )
-    const free = acp.prompt("ses_2", "hello")
+    acp.server.send(
+      delivered(blockedPrompt.sessionID, blockedPrompt.id),
+      delivered(freePrompt.sessionID, freePrompt.id),
+      permissionAsked(blockedPrompt.sessionID, "perm_blocked"),
+      textDelta(freePrompt.sessionID, "msg_free", "session B continued"),
+      stepEnded(freePrompt.sessionID, "msg_free"),
+      succeeded(freePrompt.sessionID),
+      succeeded(blockedPrompt.sessionID),
+    )
     await acp.until(() => acp.permissions.length === 1, "blocked permission")
 
     expect(await free).toMatchObject({ stopReason: "end_turn" })
     expect(acp.updates).toContainEqual({
-      sessionId: "ses_2",
+      sessionId: freePrompt.sessionID,
       update: {
         sessionUpdate: "agent_message_chunk",
         messageId: "msg_free",
         content: { type: "text", text: "session B continued" },
       },
     })
-    expect(replies(acp.server.requests)).toEqual([])
+    expect(acp.server.replies).toEqual([])
 
     releaseBlocked.resolve({ outcome: { outcome: "selected", optionId: "once" } })
     expect(await blocked).toMatchObject({ stopReason: "end_turn" })
-    expect(replies(acp.server.requests)).toEqual([["perm_blocked", "once"]])
+    expect(decisions(acp)).toEqual([["perm_blocked", "once"]])
   })
 
   test("cancelling the turn cancels its pending permission request and rejects the permission", async () => {
-    await using acp = await startWire({
-      onPrompt({ sessionID, id, send }) {
-        send(delivered(sessionID, id))
-        send(permissionAsked(sessionID, "perm_cancel"))
-      },
-      onPermissionReply({ sessionID, send }) {
-        send(durableEvent("session.execution.interrupted", { sessionID, reason: "user" }))
-      },
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), permissionAsked(sessionID, "perm_cancel")],
+      onPermissionReply: ({ sessionID }) => [interrupted(sessionID)],
       permission: (_request, signal) =>
         new Promise((resolve) => {
           signal.addEventListener("abort", () => resolve({ outcome: { outcome: "cancelled" } }), { once: true })
         }),
     })
-    await acp.initialize()
-    const session = await acp.newSession()
 
-    const prompt = acp.prompt(session.sessionId, "hello")
+    const prompt = acp.prompt(acp.sessionId, "hello")
     await acp.until(() => acp.permissions.length === 1, "permission request")
-    await acp.notify("session/cancel", { sessionId: session.sessionId })
+    await acp.notify("session/cancel", { sessionId: acp.sessionId })
 
     expect(await prompt).toMatchObject({ stopReason: "cancelled" })
-    expect(replies(acp.server.requests)).toEqual([["perm_cancel", "reject"]])
-    const asked = acp.received.find((message) => "method" in message && message.method === "session/request_permission")
-    expect(asked && "id" in asked ? asked.id : undefined).toBeDefined()
+    expect(decisions(acp)).toEqual([["perm_cancel", "reject"]])
+    const asked = acp.received.find(
+      (message): message is AnyRequest =>
+        "method" in message && "id" in message && message.method === "session/request_permission",
+    )
     expect(acp.received).toContainEqual({
       jsonrpc: "2.0",
       method: "$/cancel_request",
-      params: { requestId: asked && "id" in asked ? asked.id : undefined },
+      params: { requestId: asked?.id },
     })
   })
 })
@@ -300,23 +269,23 @@ describe("acp edit previews and client file sync over the wire", () => {
     const file = path.join(dir.path, "file.ts")
     await fs.writeFile(file, "before")
     await using acp = await startWire({
-      onPrompt({ sessionID, id, send }) {
-        send(delivered(sessionID, id))
-        send(toolStarted(sessionID, "call_edit", "edit"))
-        send(toolCalled(sessionID, "call_edit", { path: "file.ts", oldString: "before", newString: "after" }))
-        send(
-          permissionAsked(sessionID, "perm_edit", {
-            action: "edit",
-            source: { type: "tool", messageID: "msg_edit", id: "call_edit" },
-          }),
-        )
-      },
-      async onPermissionReply({ sessionID, send }) {
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        toolStarted(sessionID, "call_edit", "edit"),
+        toolCalled(sessionID, "call_edit", { path: "file.ts", oldString: "before", newString: "after" }),
+        permissionAsked(sessionID, "perm_edit", {
+          action: "edit",
+          source: { type: "tool", messageID: "msg_edit", id: "call_edit" },
+        }),
+      ],
+      onPermissionReply: async ({ sessionID }) => {
         await fs.writeFile(file, "after")
-        send(toolSucceeded(sessionID, "call_edit", { files: [{ file: "file.ts" }], replacements: 1 }, "edited"))
-        send(succeeded(sessionID))
+        return [
+          toolSucceeded(sessionID, "call_edit", { files: [{ file: "file.ts" }], replacements: 1 }, "edited"),
+          succeeded(sessionID),
+        ]
       },
-      permission: () => ({ outcome: { outcome: "selected", optionId: "once" } }),
+      permission: allowOnce,
     })
     await acp.initialize({ writeTextFile: true })
     const session = await acp.newSession(dir.path)
@@ -351,28 +320,26 @@ describe("acp edit previews and client file sync over the wire", () => {
       "*** End Patch",
     ].join("\n")
     await using acp = await startWire({
-      onPrompt({ sessionID, id, send }) {
-        send(delivered(sessionID, id))
-        send(toolStarted(sessionID, "call_patch", "patch"))
-        send(toolCalled(sessionID, "call_patch", { patchText }))
-        send(
-          permissionAsked(sessionID, "perm_patch", {
-            action: "edit",
-            source: { type: "tool", messageID: "msg_patch", id: "call_patch" },
-          }),
-        )
-      },
-      async onPermissionReply({ sessionID, send }) {
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        toolStarted(sessionID, "call_patch", "patch"),
+        toolCalled(sessionID, "call_patch", { patchText }),
+        permissionAsked(sessionID, "perm_patch", {
+          action: "edit",
+          source: { type: "tool", messageID: "msg_patch", id: "call_patch" },
+        }),
+      ],
+      onPermissionReply: async ({ sessionID }) => {
         await Promise.all([
           fs.writeFile(path.join(dir.path, "first.ts"), "two\n"),
           fs.writeFile(path.join(dir.path, "second.ts"), "beta\n"),
         ])
-        send(
+        return [
           toolSucceeded(sessionID, "call_patch", { files: [{ file: "first.ts" }, { file: "second.ts" }] }, "patched"),
-        )
-        send(succeeded(sessionID))
+          succeeded(sessionID),
+        ]
       },
-      permission: () => ({ outcome: { outcome: "selected", optionId: "once" } }),
+      permission: allowOnce,
     })
     await acp.initialize({ writeTextFile: true })
     const session = await acp.newSession(dir.path)
@@ -398,28 +365,23 @@ describe("acp edit previews and client file sync over the wire", () => {
     await using dir = await tmpdir()
     await fs.writeFile(path.join(dir.path, "file.ts"), "after")
     await using acp = await startWire({
-      onPrompt({ sessionID, id, send }) {
-        send(delivered(sessionID, id))
-        send(toolStarted(sessionID, "call_edit", "edit"))
-        send(toolCalled(sessionID, "call_edit", { filePath: path.join(dir.path, "file.ts") }))
-        send(toolSucceeded(sessionID, "call_edit", {}, "edited"))
-        send(succeeded(sessionID))
-      },
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          toolStarted(sessionID, "call_edit", "edit"),
+          toolCalled(sessionID, "call_edit", { filePath: path.join(dir.path, "file.ts") }),
+          toolSucceeded(sessionID, "call_edit", {}, "edited"),
+        ),
     })
     await acp.initialize()
     const session = await acp.newSession(dir.path)
 
     expect(await acp.prompt(session.sessionId, "hello")).toMatchObject({ stopReason: "end_turn" })
     expect(acp.writes).toEqual([])
-    expect(acp.received.some((message) => "method" in message && message.method === "fs/write_text_file")).toBe(false)
   })
 })
 
-function replies(requests: readonly ServerRequest[]) {
-  return requests.flatMap((request): Array<[string, string]> => {
-    const match = /^\/api\/session\/[^/]+\/permission\/([^/]+)\/reply$/.exec(request.path)
-    if (!match?.[1] || !request.body || typeof request.body !== "object") return []
-    const decision = "decision" in request.body ? request.body.decision : undefined
-    return typeof decision === "string" ? [[decodeURIComponent(match[1]), decision]] : []
-  })
+function decisions(acp: Wire) {
+  return acp.server.replies.map((reply) => [reply.requestID, reply.decision])
 }

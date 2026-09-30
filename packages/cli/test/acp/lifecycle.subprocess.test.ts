@@ -6,7 +6,8 @@ import type {
   ResumeSessionResponse,
 } from "@agentclientprotocol/sdk"
 import { describe, expect, test } from "bun:test"
-import { createAcpFixture, expectOk, initialize, newSession, selectConfigOption } from "./subprocess"
+import { selectConfigOption } from "./select-options"
+import { createAcpFixture, expectOk, initialize, newSession } from "./subprocess"
 
 describe("acp lifecycle subprocess", () => {
   test("stdin EOF exits cleanly", async () => {
@@ -99,8 +100,9 @@ describe("acp lifecycle subprocess", () => {
     expect(selectConfigOption(resumed.configOptions, "model")?.category).toBe("model")
   }, 60_000)
 
-  // Best effort: finds the private server as a direct child process, which relies on `pgrep` (macOS and Linux only).
-  test.todo(
+  // The private server is found with `pgrep`, which Windows lacks.
+  const todoOutsideWindows = process.platform === "win32" ? test.skip : test.todo
+  todoOutsideWindows(
     "exits when the private server process dies (https://github.com/anomalyco/opencode/issues/51716)",
     async () => {
       await using fixture = await createAcpFixture()
@@ -112,13 +114,14 @@ describe("acp lifecycle subprocess", () => {
         .split("\n")
         .filter(Boolean)
         .map(Number)
-      expect(servers).not.toHaveLength(0)
+      expect(servers).toHaveLength(1)
 
-      servers.forEach((pid) => process.kill(pid, "SIGKILL"))
+      process.kill(servers[0], "SIGKILL")
 
-      const exited = await Promise.race([acp.exited, Bun.sleep(10_000).then(() => "running")])
+      const timeout = Promise.withResolvers<"running">()
+      const timer = setTimeout(() => timeout.resolve("running"), 10_000)
+      const exited = await Promise.race([acp.exited, timeout.promise]).finally(() => clearTimeout(timer))
       expect(exited).not.toBe("running")
-      expect(exited).not.toBe(0)
     },
     60_000,
   )

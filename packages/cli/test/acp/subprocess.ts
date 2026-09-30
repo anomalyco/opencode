@@ -1,9 +1,4 @@
-import type {
-  InitializeResponse,
-  NewSessionResponse,
-  SessionConfigOption,
-  SessionConfigSelectOption,
-} from "@agentclientprotocol/sdk"
+import type { InitializeResponse, NewSessionResponse } from "@agentclientprotocol/sdk"
 import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
@@ -164,29 +159,6 @@ export function expectOk<T>(response: JsonRpcResponse<T>) {
   if (response.error) throw new Error(`ACP request failed: ${JSON.stringify(response.error)}`)
   if (response.result === undefined) throw new Error("ACP response did not include a result")
   return response.result
-}
-
-export function selectConfigOption(options: SessionConfigOption[] | null | undefined, id: string) {
-  return options?.find(
-    (option): option is Extract<SessionConfigOption, { type: "select" }> =>
-      option.id === id && option.type === "select",
-  )
-}
-
-export function requireSelectOption(options: SessionConfigOption[] | null | undefined, id: string) {
-  const option = selectConfigOption(options, id)
-  if (!option) throw new Error(`Missing ACP config option: ${id}`)
-  return option
-}
-
-export function flattenSelectOptions(option: Extract<SessionConfigOption, { type: "select" }>) {
-  return option.options.flatMap((item): SessionConfigSelectOption[] => ("value" in item ? [item] : item.options))
-}
-
-export function alternateValue(option: Extract<SessionConfigOption, { type: "select" }>) {
-  const value = flattenSelectOptions(option).find((item) => item.value !== option.currentValue)?.value
-  if (!value) throw new Error(`ACP config option ${option.id} has no alternate value`)
-  return value
 }
 
 function verifierConfig(llmUrl: string, skills?: string) {

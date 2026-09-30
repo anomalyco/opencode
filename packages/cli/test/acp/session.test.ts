@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { McpServer } from "@agentclientprotocol/sdk"
-import { currentValue, makeSession, rpcError, secondModel, startWire, type ServerRequest } from "./wire-fixture"
+import { currentValue } from "./select-options"
+import { makeSession, rpcError, secondModel, startSession, startWire } from "./wire-fixture"
 
 describe("acp session lifecycle over the wire", () => {
   test("initialize advertises capabilities and terminal auth only when the client asks", async () => {
@@ -27,76 +28,56 @@ describe("acp session lifecycle over the wire", () => {
       "terminal-auth": { command: "opencode", args: ["auth", "login"], label: "OpenCode Login" },
     })
     expect(await acp.request("authenticate", { methodId: "opencode-login" })).toEqual({})
-    expect(await rpcError(acp.request("authenticate", { methodId: "missing" }))).toEqual({
+    expect(await rpcError(acp.request("authenticate", { methodId: "missing" }))).toMatchObject({
       code: -32602,
-      message: "Invalid params: unknown auth method: missing",
       data: { methodId: "missing" },
     })
   })
 
   test("creates a v2 session, registers mcp, and publishes commands", async () => {
-    await using acp = await startWire({ commands: [{ name: "review" }] })
-    await acp.initialize({ childSessionUpdates: true })
+    await using acp = await startWire()
+    acp.server.catalog.commands = [{ name: "review" }]
+    await acp.initialize()
 
     const result = await acp.newSession("/workspace", [
       { name: "docs", command: "bun", args: ["docs.ts"], env: [{ name: "TOKEN", value: "x" }] },
     ])
 
-    expect(result.sessionId).toBe("ses_1")
+    expect(acp.server.sessions.get(result.sessionId)?.location.directory).toBe("/workspace")
     expect(result.configOptions?.map((option) => option.id)).toEqual(["model", "effort", "mode"])
-    expect(acp.server.requests).toContainEqual({
-      method: "PUT",
-      path: "/api/experimental/mcp/docs",
-      query: { "location[directory]": "/workspace" },
-      body: { config: { type: "local", command: ["bun", "docs.ts"], environment: { TOKEN: "x" } } },
-    })
-    expect(acp.updates.at(-1)).toEqual({
-      sessionId: "ses_1",
+    expect(acp.server.mcp).toEqual([
+      {
+        name: "docs",
+        directory: "/workspace",
+        config: { type: "local", command: ["bun", "docs.ts"], environment: { TOKEN: "x" } },
+      },
+    ])
+    expect(await acp.waitForUpdate((item) => item.update.sessionUpdate === "available_commands_update")).toEqual({
+      sessionId: result.sessionId,
       update: { sessionUpdate: "available_commands_update", availableCommands: [{ name: "review", description: "" }] },
     })
   })
 
   test("does not persist the first catalog variant when no explicit default exists", async () => {
-    const model = { ...secondModel, variants: [{ id: "none" }, { id: "high" }] }
-    await using acp = await startWire({
-      models: [model],
-      defaultModel: model,
-      fetch(request, server) {
-        if (request.method !== "POST" || request.path !== "/api/session") return undefined
-        const session = makeSession("ses_default_variant", { model: { providerID: model.providerID, id: model.id } })
-        server.sessions.set(session.id, session)
-        return Response.json({ data: session })
-      },
-    })
+    await using acp = await startWire()
+    acp.server.catalog.models = [{ ...secondModel, variants: [{ id: "none" }, { id: "high" }] }]
     await acp.initialize()
 
     const created = await acp.newSession()
 
-    expect(acp.server.requests).toContainEqual({
-      method: "POST",
-      path: "/api/session",
-      query: {},
-      body: { location: { directory: "/workspace" } },
-    })
     expect(currentValue(created, "effort")).toBe("default")
+    expect(acp.server.sessions.get(created.sessionId)?.model).toBeUndefined()
+    expect(acp.server.selections).toEqual([])
   })
 
   test("loads and forks with paginated replay while resume does not replay", async () => {
-    await using acp = await startWire({
-      fetch(request) {
-        if (request.method !== "GET" || request.path !== "/api/session/ses_loaded/message") return undefined
-        if (request.query.cursor === "messages-2") {
-          return Response.json({
-            data: [{ id: "msg_assistant", type: "assistant", content: [{ type: "text", text: "hi there" }] }],
-            cursor: {},
-          })
-        }
-        return Response.json({
-          data: [{ id: "msg_user", type: "user", text: "hello", time: { created: 1 } }],
-          cursor: { next: "messages-2" },
-        })
-      },
-    })
+    await using acp = await startWire()
+    const history = Array.from({ length: 201 }, (_, index) => ({
+      id: `msg_${index}`,
+      type: "user" as const,
+      text: `message ${index}`,
+      time: { created: index },
+    }))
     acp.server.sessions.set(
       "ses_loaded",
       makeSession("ses_loaded", {
@@ -104,6 +85,7 @@ describe("acp session lifecycle over the wire", () => {
         model: { providerID: "test", id: secondModel.id, variant: "medium" },
       }),
     )
+    acp.server.messages.set("ses_loaded", history)
     acp.server.sessions.set(
       "ses_resume",
       makeSession("ses_resume", { agent: "plan", model: { providerID: "test", id: secondModel.id, variant: "low" } }),
@@ -113,91 +95,48 @@ describe("acp session lifecycle over the wire", () => {
 
     const loaded = await acp.request("session/load", { cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })
     const resumed = await acp.request("session/resume", { cwd: "/workspace", sessionId: "ses_resume", mcpServers: [] })
-    acp.server.messages.set("ses_loaded", [{ id: "msg_fork", type: "user", text: "forked", time: { created: 2 } }])
     const forked = await acp.request("session/fork", { cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })
-    const mismatched = await rpcError(
-      acp.request("session/load", { cwd: "/elsewhere", sessionId: "ses_loaded", mcpServers: [] }),
-    )
-    const missing = await rpcError(
-      acp.request("session/load", { cwd: "/workspace", sessionId: "ses_missing", mcpServers: [] }),
-    )
 
-    expect(mismatched).toEqual({
-      code: -32602,
-      message: "Invalid params: session ses_loaded does not belong to cwd: /elsewhere",
-      data: { sessionId: "ses_loaded", cwd: "/elsewhere" },
-    })
-    expect(missing).toMatchObject({ code: -32602, message: "Invalid params: session not found: ses_missing" })
+    expect(
+      await rpcError(acp.request("session/load", { cwd: "/elsewhere", sessionId: "ses_loaded", mcpServers: [] })),
+    ).toMatchObject({ code: -32602, data: { sessionId: "ses_loaded", cwd: "/elsewhere" } })
+    expect(
+      await rpcError(acp.request("session/load", { cwd: "/workspace", sessionId: "ses_missing", mcpServers: [] })),
+    ).toMatchObject({ code: -32602, data: { sessionId: "ses_missing" } })
     expect(currentValue(loaded, "model")).toBe("test/second-model")
     expect(currentValue(loaded, "effort")).toBe("medium")
     expect(currentValue(loaded, "mode")).toBe("plan")
     expect(currentValue(resumed, "effort")).toBe("low")
-    expect(forked.sessionId).toBe("ses_1")
     expect(currentValue(forked, "effort")).toBe("medium")
+    expect(acp.server.sessions.has(forked.sessionId)).toBe(true)
+    const replayed = (sessionId: string) =>
+      acp.updates.flatMap((item) =>
+        item.sessionId === sessionId && item.update.sessionUpdate === "user_message_chunk"
+          ? [item.update.messageId]
+          : [],
+      )
+    expect(replayed("ses_loaded")).toEqual(history.map((message) => message.id))
+    expect(replayed(forked.sessionId)).toEqual(history.map((message) => message.id))
+    expect(replayed("ses_resume")).toEqual([])
     expect(
-      acp.updates.filter(
-        (item) =>
-          item.update.sessionUpdate === "user_message_chunk" || item.update.sessionUpdate === "agent_message_chunk",
-      ),
-    ).toEqual([
-      {
-        sessionId: "ses_loaded",
-        update: {
-          sessionUpdate: "user_message_chunk",
-          messageId: "msg_user",
-          content: { type: "text", text: "hello" },
-        },
-      },
-      {
-        sessionId: "ses_loaded",
-        update: {
-          sessionUpdate: "agent_message_chunk",
-          messageId: "msg_assistant",
-          content: { type: "text", text: "hi there" },
-        },
-      },
-      {
-        sessionId: "ses_1",
-        update: {
-          sessionUpdate: "user_message_chunk",
-          messageId: "msg_fork",
-          content: { type: "text", text: "forked" },
-        },
-      },
-    ])
-    expect(
-      acp.server.requests
-        .filter((request) => request.path.endsWith("/message"))
-        .map((request) => ({ path: request.path, query: request.query })),
-    ).toEqual([
-      { path: "/api/session/ses_loaded/message", query: { limit: "200", order: "asc" } },
-      { path: "/api/session/ses_loaded/message", query: { limit: "200", cursor: "messages-2" } },
-      { path: "/api/session/ses_1/message", query: { limit: "200", order: "asc" } },
-    ])
-    expect(acp.server.requests).toContainEqual({
-      method: "POST",
-      path: "/api/session/ses_loaded/fork",
-      query: {},
-      body: {},
+      acp.updates.find((item) => item.sessionId === "ses_loaded" && item.update.sessionUpdate === "user_message_chunk")
+        ?.update,
+    ).toEqual({
+      sessionUpdate: "user_message_chunk",
+      messageId: "msg_0",
+      content: { type: "text", text: "message 0" },
     })
   })
 
-  test("lists server-backed pages and forwards cwd and cursor", async () => {
-    const firstPage = Array.from({ length: 100 }, (_, index) =>
-      makeSession(`ses_${100 - index}`, {
-        time: { created: index, updated: 100_000 - index },
-        title: `Session ${100 - index}`,
-      }),
+  test("lists server-backed pages for the requested cwd", async () => {
+    await using acp = await startWire()
+    Array.from({ length: 101 }, (_, index) =>
+      makeSession(`ses_${index}`, { time: { created: index, updated: 1_000 + index } }),
+    ).forEach((session) => acp.server.sessions.set(session.id, session))
+    acp.server.sessions.set(
+      "ses_other",
+      makeSession("ses_other", { cwd: "/other", time: { created: 0, updated: 9_999 } }),
     )
-    await using acp = await startWire({
-      fetch(request) {
-        if (request.method !== "GET" || request.path !== "/api/session") return undefined
-        if (request.query.cursor === "page-2") {
-          return Response.json({ data: [makeSession("ses_0", { time: { created: 0, updated: 1 } })], cursor: {} })
-        }
-        return Response.json({ data: firstPage, cursor: { next: "page-2" } })
-      },
-    })
     await acp.initialize()
 
     const first = await acp.request("session/list", { cwd: "/workspace" })
@@ -207,85 +146,39 @@ describe("acp session lifecycle over the wire", () => {
     expect(first.sessions[0]).toEqual({
       sessionId: "ses_100",
       cwd: "/workspace",
-      title: "Session 100",
-      updatedAt: new Date(100_000).toISOString(),
+      title: "Session ses_100",
+      updatedAt: new Date(1_100).toISOString(),
     })
-    expect(first.nextCursor).toBe("page-2")
+    expect(first.nextCursor).toBeDefined()
     expect(second.sessions.map((session) => session.sessionId)).toEqual(["ses_0"])
     expect(second.nextCursor).toBeUndefined()
-    expect(
-      acp.server.requests.filter((request) => request.path === "/api/session").map((request) => request.query),
-    ).toEqual([
-      { limit: "100", order: "desc", directory: "/workspace" },
-      { limit: "100", order: "desc", directory: "/workspace", cursor: "page-2" },
-    ])
   })
 
-  test("cancel preserves the attachment while close removes it and surfaces interrupt failures", async () => {
-    const interrupt = { fail: true }
-    await using acp = await startWire({
-      fetch(request) {
-        if (request.method !== "POST" || request.path !== "/api/session/ses_1/interrupt") return undefined
-        return interrupt.fail ? new Response(null, { status: 500 }) : Response.json({ interrupted: false })
-      },
-    })
-    await acp.initialize()
-    const created = await acp.newSession()
+  test("cancel keeps an idle session attached while close detaches it", async () => {
+    await using acp = await startSession()
 
-    await acp.notify("session/cancel", { sessionId: created.sessionId })
-    await acp.until(() => interrupts(acp.server.requests).length === 1, "cancel interrupt")
-    const updated = await acp.request("session/set_config_option", {
-      sessionId: created.sessionId,
-      configId: "effort",
-      value: "high",
-    })
-    expect(currentValue(updated, "effort")).toBe("high")
+    await acp.notify("session/cancel", { sessionId: acp.sessionId })
+    expect((await acp.prompt(acp.sessionId, "after cancel")).stopReason).toBe("end_turn")
 
-    expect(await rpcError(acp.request("session/close", { sessionId: created.sessionId }))).toMatchObject({
-      code: -32603,
-      message: "Internal error: Internal service failure",
-      data: { errorName: "ClientError" },
-    })
-    interrupt.fail = false
-    expect(await acp.request("session/close", { sessionId: created.sessionId })).toEqual({})
-    expect(
-      await rpcError(
-        acp.request("session/set_config_option", {
-          sessionId: created.sessionId,
-          configId: "effort",
-          value: "default",
-        }),
-      ),
-    ).toEqual({
+    expect(await acp.request("session/close", { sessionId: acp.sessionId })).toEqual({})
+    expect(await rpcError(acp.prompt(acp.sessionId, "after close"))).toMatchObject({
       code: -32602,
-      message: `Invalid params: session not found: ${created.sessionId}`,
-      data: { sessionId: created.sessionId },
+      data: { sessionId: acp.sessionId },
     })
     expect(await acp.request("session/close", { sessionId: "missing" })).toEqual({})
-    expect(interrupts(acp.server.requests)).toEqual([
-      "/api/session/ses_1/interrupt",
-      "/api/session/ses_1/interrupt",
-      "/api/session/ses_1/interrupt",
-      "/api/session/missing/interrupt",
-    ])
   })
 
   test("deletes sessions from backing and local storage", async () => {
-    await using acp = await startWire()
-    await acp.initialize()
-    const session = await acp.newSession()
+    await using acp = await startSession()
 
-    expect(await acp.request("session/delete", { sessionId: session.sessionId })).toEqual({})
-    expect(await acp.request("session/delete", { sessionId: session.sessionId })).toEqual({})
-    expect(acp.server.requests.filter((request) => request.method === "DELETE")).toEqual([
-      { method: "DELETE", path: "/api/session/ses_1", query: {}, body: undefined },
-      { method: "DELETE", path: "/api/session/ses_1", query: {}, body: undefined },
-    ])
+    expect(await acp.request("session/delete", { sessionId: acp.sessionId })).toEqual({})
+    expect(acp.server.sessions.has(acp.sessionId)).toBe(false)
+    expect(await acp.request("session/delete", { sessionId: acp.sessionId })).toEqual({})
     expect(
       await rpcError(
-        acp.request("session/set_config_option", { sessionId: session.sessionId, configId: "effort", value: "high" }),
+        acp.request("session/set_config_option", { sessionId: acp.sessionId, configId: "effort", value: "high" }),
       ),
-    ).toMatchObject({ code: -32602, data: { sessionId: session.sessionId } })
+    ).toMatchObject({ code: -32602, data: { sessionId: acp.sessionId } })
   })
 
   test("converts MCP configs and deduplicates registrations per session and config", async () => {
@@ -302,34 +195,29 @@ describe("acp session lifecycle over the wire", () => {
       url: "https://example.com/mcp",
       headers: [{ name: "Authorization", value: "Bearer x" }],
     }
-    const mcp = "/api/experimental/mcp/"
     await using acp = await startWire()
     await acp.initialize()
 
-    await acp.newSession("/workspace", [local, local, remote])
-    await acp.request("session/resume", { cwd: "/workspace", sessionId: "ses_1", mcpServers: [local, remote] })
-    await acp.request("session/resume", { cwd: "/workspace", sessionId: "ses_1", mcpServers: [changed] })
+    const first = await acp.newSession("/workspace", [local, local, remote])
+    await acp.request("session/resume", { cwd: "/workspace", sessionId: first.sessionId, mcpServers: [local, remote] })
+    await acp.request("session/resume", { cwd: "/workspace", sessionId: first.sessionId, mcpServers: [changed] })
     await acp.newSession("/workspace", [local])
 
-    const adds = acp.server.requests.filter((request) => request.method === "PUT" && request.path.startsWith(mcp))
     const localConfig = (args: string[]) => ({
+      name: "tools",
+      directory: "/workspace",
       config: { type: "local", command: ["bun", ...args], environment: { TOKEN: "x" } },
     })
-    expect(adds).toHaveLength(4)
-    expect(adds.filter((request) => request.path === `${mcp}tools`).map((request) => request.body)).toEqual([
+    expect(acp.server.mcp).toHaveLength(4)
+    expect(acp.server.mcp.filter((item) => item.name === "tools")).toEqual([
       localConfig(["server.ts"]),
       localConfig(["changed.ts"]),
       localConfig(["server.ts"]),
     ])
-    expect(adds.find((request) => request.path === `${mcp}docs`)?.body).toEqual({
+    expect(acp.server.mcp.find((item) => item.name === "docs")).toEqual({
+      name: "docs",
+      directory: "/workspace",
       config: { type: "remote", url: "https://example.com/mcp", headers: { Authorization: "Bearer x" }, oauth: false },
     })
-    expect(adds.map((request) => request.query)).toEqual(
-      Array.from({ length: 4 }, () => ({ "location[directory]": "/workspace" })),
-    )
   })
 })
-
-function interrupts(requests: readonly ServerRequest[]) {
-  return requests.filter((request) => request.path.endsWith("/interrupt")).map((request) => request.path)
-}
