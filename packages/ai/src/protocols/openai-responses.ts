@@ -124,7 +124,7 @@ const OpenAIResponsesCoreFields = {
   ),
 }
 
-const OpenAIResponsesBody = Schema.Struct({
+export const OpenAIResponsesBody = Schema.Struct({
   ...OpenAIResponsesCoreFields,
   stream: Schema.Literal(true),
 })
@@ -143,14 +143,19 @@ const adapter = {
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 
-// GPT-6 Astra, Sol, and Luna accept `configuration_update` only in standard mode (not `reasoning.mode: "pro"` or
-// `-pro` slugs), and never alongside automatic `context_management` compaction.
+// GPT-6 Astra, Sol, Luna, and GPT-6.1 Sol accept `configuration_update` only in standard mode
+// (not `reasoning.mode: "pro"` or `-pro` slugs), and never alongside automatic `context_management` compaction.
 const supportsEffortUpdates = (request: LLMRequest) => {
   if (request.providerOptions?.contextManagement !== undefined) return false
-  if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(request.http?.body?.reasoning)) return false
+  if (
+    [request.providerOptions?.reasoning, request.http?.body?.reasoning].some(
+      Schema.is(Schema.Struct({ mode: Schema.Literal("pro") })),
+    )
+  )
+    return false
   const override = request.model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
-  return /(?:^|\/)gpt-6-(?:astra|sol|luna)$/i.test(request.model.id)
+  return /(?:^|\/)(?:gpt-6-(?:astra|sol|luna)|gpt-6\.1-sol)$/i.test(request.model.id)
 }
 
 const nativeImageToolInput = (tool: ToolDefinition) => {

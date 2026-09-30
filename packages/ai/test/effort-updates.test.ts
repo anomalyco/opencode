@@ -375,6 +375,8 @@ describe("OpenAI Responses effort updates", () => {
     ["openai/gpt-6-sol", true],
     ["gpt-6-luna", true],
     ["openai/gpt-6-luna", true],
+    ["gpt-6.1-sol", true],
+    ["~openai/gpt-6.1-sol", true],
     ["gpt-6-astra-2026-09-01", false],
     ["gpt-6-sol-pro", false],
     ["gpt-6-luna-pro", false],

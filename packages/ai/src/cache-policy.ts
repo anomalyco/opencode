@@ -49,6 +49,7 @@ const RESPECTS_INLINE_HINTS = new Set([
   "zai-coding-messages",
   "bedrock-converse",
   "openrouter",
+  "openrouter-messages",
 ])
 
 // OpenRouter upstreams other than Anthropic and Alibaba Qwen cache without breakpoints. Gemini uses only the last
@@ -168,7 +169,8 @@ const countHints = (request: LLMRequest) =>
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
   const policy =
-    request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto")
+    (request.model.route.id === "openrouter" || request.model.route.id === "openrouter-messages") &&
+    (request.cache === undefined || request.cache === "auto")
       ? openRouterPolicy(request.model.id)
       : resolve(request.cache)
   if (!policy.tools && !policy.system && !policy.messages) return request

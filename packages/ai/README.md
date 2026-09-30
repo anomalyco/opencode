@@ -1203,11 +1203,21 @@ LLM.request({
 | ----------------------- | ------------------------------------------------------------------------- |
 | Anthropic Messages      | emits up to 4 `cache_control` markers (4-breakpoint cap enforced)         |
 | Bedrock Converse        | emits up to 4 `cachePoint` blocks (4-breakpoint cap enforced)             |
-| OpenRouter              | emits up to 4 `cache_control` markers                                     |
+| OpenRouter              | Anthropic/Qwen emit explicit markers; other families use upstream caching |
 | OpenAI Chat / Responses | no-op (implicit caching above 1024 tokens)                                |
 | Gemini                  | no-op (implicit caching on 2.5+; explicit `CachedContent` is out-of-band) |
 
 Normalized cache usage is read back into `response.usage.cacheReadInputTokens` and `cacheWriteInputTokens` across every provider.
+
+OpenRouter selects its wire API by model family: `openai/*`, `x-ai/*`, and `meta/*` use Responses; `anthropic/*` uses
+Anthropic Messages; other families use Chat Completions. All three Responses families share the existing OpenAI-shaped
+Responses implementation, including namespace tools and hosted-tool events; there are no per-vendor OpenRouter
+protocols. Leading-`~` model aliases follow the same routing. Explicit `openrouter.chat(id)`, `.responses(id)`, and
+`.messages(id)` selectors are available for API-specific integrations.
+Qwen retains Chat's explicit system/conversation cache markers, while Claude uses native Messages cache blocks.
+OpenRouter Responses is stateless (`store: false`); every request includes full history, not `previous_response_id`.
+Meta currently accepts only automatic tool selection on both its Chat and Responses upstreams; forced/disabled tool
+choices can be rejected by the provider.
 
 ## Providers
 

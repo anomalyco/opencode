@@ -263,14 +263,14 @@ describeRecordedGoldenScenarios([
   },
   {
     name: "OpenRouter gpt-4o-mini",
-    prefix: "openai-compatible-chat",
+    prefix: "openrouter-responses",
     model: openrouter,
     requires: ["OPENROUTER_API_KEY"],
     scenarios: ["text", "tool-call", "tool-loop"],
   },
   {
     name: "OpenRouter gpt-5.5",
-    prefix: "openai-compatible-chat",
+    prefix: "openrouter-responses",
     model: openrouterGpt55,
     requires: ["OPENROUTER_API_KEY"],
     tags: ["flagship"],
@@ -278,10 +278,20 @@ describeRecordedGoldenScenarios([
   },
   {
     name: "OpenRouter Claude Opus 4.7",
-    prefix: "openai-compatible-chat",
+    prefix: "openrouter-messages",
     model: openrouterOpus,
     requires: ["OPENROUTER_API_KEY"],
     tags: ["flagship"],
+    scenarios: ["tool-loop"],
+  },
+  {
+    name: "OpenRouter Grok 4.3",
+    prefix: "openrouter-responses",
+    model: OpenRouter.configure({
+      apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
+      providerOptions: { reasoning: { effort: "none" } },
+    }).model("x-ai/grok-4.3"),
+    requires: ["OPENROUTER_API_KEY"],
     scenarios: ["tool-loop"],
   },
 ])

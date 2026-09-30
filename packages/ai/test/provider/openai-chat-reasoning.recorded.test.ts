@@ -16,7 +16,7 @@ const cases = [
       OpenRouter.configure({
         apiKey: process.env.OPENROUTER_API_KEY ?? "fixture",
         providerOptions: { reasoning: { max_tokens: 1024 } },
-      }).model("anthropic/claude-sonnet-4.6"),
+      }).chat("anthropic/claude-sonnet-4.6"),
       { compatibility: { reasoningField: "reasoning" } },
     ),
     requires: ["OPENROUTER_API_KEY"],
