@@ -1,9 +1,10 @@
-import { beforeAll, expect, mock, test } from "bun:test"
+import { afterAll, beforeAll, expect, mock, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ServerSDK } from "@/runtime/server/client"
 import type { Data } from "@opencode/client/solid"
 import type { ServerConnection } from "@/runtime/server/registry"
+import { ServerScope } from "@/runtime/server/scope"
 import type { Tab } from "@/shell/tabs/tabs"
 
 const server = "local\nhttp://localhost:4096" as ServerConnection.Key
@@ -11,11 +12,14 @@ const session = { id: "session-1", title: "Test session", location: { directory:
 const alerts: string[] = []
 const tabs: { store: Tab[] } = { store: [] }
 let createServerNotificationState: typeof import("./notification").createServerNotificationState
+let storage: typeof import("@/runtime/persistence/storage")
 
 beforeAll(async () => {
+  storage = await import("@/runtime/persistence/storage")
   const { sessionIDHasOpenTab } = await import("@/shell/tabs/tabs")
   mock.module("@/runtime/platform/platform", () => ({
     usePlatform: () => ({
+      platform: "web",
       notify: async (title: string) => {
         alerts.push(title)
       },
@@ -33,7 +37,7 @@ beforeAll(async () => {
     sessionIDHasOpenTab,
   }))
   mock.module("@/runtime/persistence/storage", () => ({
-    Persist: { serverGlobal: () => ({}) },
+    ...storage,
     persisted: () => {
       const [store, setStore] = createStore({ list: [] })
       return [store, setStore, undefined, () => false]
@@ -41,6 +45,8 @@ beforeAll(async () => {
   }))
   createServerNotificationState = (await import("./notification")).createServerNotificationState
 })
+
+afterAll(() => mock.module("@/runtime/persistence/storage", () => storage))
 
 test.each([
   ["session.execution.succeeded", "notification.session.responseReady.title"],
@@ -53,6 +59,7 @@ test.each([
     const state = createServerNotificationState({
       key: server,
       sdk: {
+        scope: ServerScope.local,
         event: {
           listen: (fn: typeof listener) => {
             listener = fn
