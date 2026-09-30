@@ -7,7 +7,7 @@ import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { AppProcess } from "@opencode/util/process"
 import path from "path"
-import { Effect, Option, PubSub, Schema, Stream } from "effect"
+import { Effect, PubSub, Result, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
@@ -18,7 +18,7 @@ import { ShellSelect } from "../../shell/select.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import { ConfigMarkdown } from "../markdown.js"
 
-const decodeCommand = Schema.decodeUnknownOption(ConfigCommand.Info)
+const decodeCommand = Schema.decodeUnknownResult(ConfigCommand.Info)
 
 export const Plugin = define({
   id: "opencode.config.command",
@@ -160,7 +160,9 @@ function loadDirectory(fs: FSUtil.Interface, directory: string) {
       .pipe(Effect.orElseSucceed(() => [] as string[]))
     return yield* Effect.forEach(files.toSorted(), (filepath) =>
       fs.readFileStringSafe(filepath).pipe(
-        Effect.map((content) => (content === undefined ? undefined : decode(directory, filepath, content))),
+        Effect.flatMap((content) =>
+          content === undefined ? Effect.succeed(undefined) : decode(directory, filepath, content),
+        ),
         Effect.orElseSucceed(() => undefined),
       ),
     ).pipe(
@@ -171,20 +173,23 @@ function loadDirectory(fs: FSUtil.Interface, directory: string) {
   })
 }
 
-function decode(directory: string, filepath: string, content: string) {
+const decode = Effect.fnUntraced(function* (directory: string, filepath: string, content: string) {
   const markdown = ConfigMarkdown.parseOption(content)
   if (!markdown) return
-  const info = Option.getOrUndefined(decodeCommand({ ...markdown.data, template: markdown.content.trim() }))
-  if (!info) return
+  const info = decodeCommand({ ...markdown.data, template: markdown.content.trim() })
+  if (Result.isFailure(info)) {
+    yield* Effect.logWarning("command file skipped", { filepath, error: info.failure.message })
+    return
+  }
   return {
     name: path
       .relative(directory, filepath)
       .replaceAll("\\", "/")
       .replace(/^(command|commands)\//, "")
       .replace(/\.md$/, ""),
-    info,
+    info: info.success,
   }
-}
+})
 
 function evaluateTemplate(
   template: string,
