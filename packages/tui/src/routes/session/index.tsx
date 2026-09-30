@@ -23,7 +23,15 @@ import { useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { useTheme, useThemes } from "../../context/theme"
-import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
+import {
+  BoxRenderable,
+  ScrollBoxRenderable,
+  addDefaultParsers,
+  TextAttributes,
+  RGBA,
+  MouseEvent,
+  type Renderable,
+} from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import type {
   SessionMessageInfo,
@@ -370,6 +378,7 @@ export function Session(props: {
     firstJump()?.()
     if (!scroll || scroll.isDestroyed) return
     scroll.verticalScrollBar.off("change", updateAwayFromBottom)
+    scroll.content.off("resize", holdAnchor)
     saveScrollAnchor(true)
   })
   const [prompt, setPrompt] = createSignal<PromptRef>()
@@ -389,6 +398,16 @@ export function Session(props: {
         continuation()
       })
     })
+  }
+
+  // Keeps a toggled disclosure's header on its viewport row. The content resize fires inside the
+  // layout pass, before rows take their screen positions, so the correction lands in the same frame.
+  // Renderable positions are still stale at that point; read the computed layout instead.
+  let held: { node: Renderable; top: number } | undefined
+  const layoutTop = (node: Renderable): number =>
+    node === scroll.content || !node.parent ? 0 : node.getLayoutNode().getComputedTop() + layoutTop(node.parent)
+  const holdAnchor = () => {
+    if (held && !held.node.isDestroyed) scroll.scrollTo(layoutTop(held.node) - held.top)
   }
 
   // Tail-first transcript mounting: only the newest rows mount when the session opens. Older rows
@@ -1334,7 +1353,15 @@ export function Session(props: {
       value={{
         anchors,
         groupExpanded,
-        setGroupExpanded: (groupID, expanded) => {
+        setGroupExpanded: (groupID, expanded, anchor) => {
+          // At the bottom, sticky scrolling already keeps rows in place when only content above them changes.
+          if (anchor && isAwayFromBottom()) {
+            const hold = { node: anchor, top: layoutTop(anchor) - scroll.scrollTop }
+            held = hold
+            afterLayout(() => {
+              if (held === hold) held = undefined
+            })
+          }
           sessionTabs.setGroupExpanded(sessionID, groupID, expanded)
           afterLayout(saveScrollAnchor)
         },
@@ -1377,6 +1404,7 @@ export function Session(props: {
                   scroll = r
                   props.scrollRef?.(r)
                   scroll.verticalScrollBar.on("change", updateAwayFromBottom)
+                  scroll.content.on("resize", holdAnchor)
                 }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,

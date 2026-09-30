@@ -1,5 +1,5 @@
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
-import { RGBA } from "@opentui/core"
+import { RGBA, type Renderable } from "@opentui/core"
 import { useRenderer, type JSX } from "@opentui/solid"
 import type { SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client"
 import { createSyntaxStyleMemo, useTheme, useThemes } from "../../context/theme"
@@ -126,7 +126,7 @@ function GroupContent(props: GroupProps) {
     )
     return `${completed() ? "Explored" : "Exploring"}: ${names.join(", ")}`
   })
-  const toggle = disclosure.toggle
+  const toggle = () => disclosure.toggle()
   const children = (mode: "normal" | "thought" | "tool") => (
     <Children {...props} nodes={props.node.children} mode={mode} />
   )
@@ -198,7 +198,10 @@ function GroupContent(props: GroupProps) {
   )
 }
 
-/** Low verbosity: one summary for a run of tools, thoughts and instruction loads. */
+/**
+ * Low verbosity: one summary for a run of tools, thoughts and instruction loads.
+ * Details open above the summary, which stays on the row that was clicked.
+ */
 function ActivityGroup(props: GroupProps) {
   const theme = useTheme()
   const disclosure = useDisclosure(props)
@@ -208,6 +211,11 @@ function ActivityGroup(props: GroupProps) {
   return (
     <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
       <Show when={summary().label}>
+        <Show when={disclosure.expanded()}>
+          <box flexDirection="column" gap={1} marginBottom={1}>
+            <Children {...props} nodes={props.node.children} mode="normal" />
+          </box>
+        </Show>
         <InlineToolRow
           icon={disclosure.expanded() ? "−" : "+"}
           color={hover() ? theme.text.base : theme.text.muted}
@@ -216,15 +224,10 @@ function ActivityGroup(props: GroupProps) {
           spinner={!disclosure.expanded() && summary().active}
           onMouseOver={() => setHover(true)}
           onMouseOut={() => setHover(false)}
-          onMouseUp={disclosure.toggle}
+          onMouseUp={(event) => disclosure.toggle(event.currentTarget)}
         >
           {summary().label}
         </InlineToolRow>
-        <Show when={disclosure.expanded()}>
-          <box flexDirection="column" gap={1} marginTop={1}>
-            <Children {...props} nodes={props.node.children} mode="normal" />
-          </box>
-        </Show>
       </Show>
       <PendingEntries {...props} entries={entries()} />
     </GroupAnchor>
@@ -253,7 +256,7 @@ function InstructionsGroup(props: GroupProps) {
         pending=""
         onMouseOver={() => setHover(true)}
         onMouseOut={() => setHover(false)}
-        onMouseUp={disclosure.toggle}
+        onMouseUp={() => disclosure.toggle()}
       >
         Instructions: {files()} {files() === 1 ? "file" : "files"}
       </InlineToolRow>
@@ -275,10 +278,10 @@ function useDisclosure(props: GroupProps) {
   return {
     id,
     expanded,
-    toggle() {
+    toggle(anchor?: Renderable | null) {
       if (renderer.getSelection()?.getSelectedText()) return
       const key = id()
-      if (key) ctx.setGroupExpanded(key, !expanded())
+      if (key) ctx.setGroupExpanded(key, !expanded(), anchor)
     },
   }
 }
