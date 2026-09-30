@@ -2,19 +2,11 @@ export * as BrowserConnection from "./connection.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { RpcRegistration } from "@opencode/plugin/effect/rpc"
-import type { Permission } from "@opencode/schema/permission"
 import type { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
 import { Deferred, Effect, Schema, Stream } from "effect"
 import { Browser } from "./rpc.js"
 import { BrowserTunnel } from "./tunnel.js"
-
-// Browser tools are hidden when the last rule for the "browser" action is a `*` deny. Every agent
-// gets that deny, and attach appends a session allow while a desktop is held.
-const deny: Permission.Rule = { action: "browser", resource: "*", effect: "deny" }
-const allow: Permission.Rule = { action: "browser", resource: "*", effect: "allow" }
-const same = (a: Permission.Rule, b: Permission.Rule) =>
-  a.action === b.action && a.resource === b.resource && a.effect === b.effect
 
 type Attachment = {
   connectionID: string
@@ -31,23 +23,28 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
 ) {
   const browsers = new Map<Session.ID, Attachment>()
   // Appended after config, so every agent hides the browser until an attachment allows it.
-  yield* ctx.agent.transform((editor) => editor.list().forEach((agent) => agent.permissions.push(deny)))
+  yield* ctx.agent.transform((editor) =>
+    editor.list().forEach((agent) => agent.permissions.push({ action: "browser", resource: "*", effect: "deny" })),
+  )
   // Each attachment adds and removes its own allow, so a replaced attachment keeps the new one's.
   const grant = (sessionID: Session.ID) =>
     Effect.acquireRelease(
-      ctx.session
-        .get({ sessionID })
-        .pipe(
-          Effect.flatMap((session) =>
-            ctx.session.update({ sessionID, permissions: [...(session.permissions ?? []), allow] }),
-          ),
-          Effect.orDie,
+      ctx.session.get({ sessionID }).pipe(
+        Effect.flatMap((session) =>
+          ctx.session.update({
+            sessionID,
+            permissions: [...(session.permissions ?? []), { action: "browser", resource: "*", effect: "allow" }],
+          }),
         ),
+        Effect.orDie,
+      ),
       () =>
         ctx.session.get({ sessionID }).pipe(
           Effect.flatMap((session) => {
             const permissions = session.permissions ?? []
-            const index = permissions.findIndex((rule) => same(rule, allow))
+            const index = permissions.findIndex(
+              (rule) => rule.action === "browser" && rule.resource === "*" && rule.effect === "allow",
+            )
             if (index === -1) return Effect.void
             return ctx.session.update({ sessionID, permissions: permissions.toSpliced(index, 1) })
           }),
