@@ -11,7 +11,7 @@ export const ActionState = Schema.Literals(["disabled", "pressed", "focused", "s
 export type ActionState = Schema.Schema.Type<typeof ActionState>
 export type ActionStateKey = `$${ActionState}`
 
-export const SurfaceName = Schema.Literal("dialog")
+export const SurfaceName = Schema.Literals(["dialog", "palette"])
 export type SurfaceName = Schema.Schema.Type<typeof SurfaceName>
 
 export const FormfieldState = ActionState
@@ -263,6 +263,7 @@ const ThemeDefinitionFields = Schema.Struct({
   categorical: CategoricalDefinition,
   ...CompleteThemeTokensDefinition.fields,
   "@dialog": Schema.optional(ThemeTokensDefinition),
+  "@palette": Schema.optional(ThemeTokensDefinition),
 })
 export const ThemeDefinition = ThemeDefinitionFields
 export type ThemeDefinition = Schema.Schema.Type<typeof ThemeDefinition>
@@ -271,6 +272,7 @@ export const BaseThemeDefinition = Schema.Struct({
   categorical: CategoricalDefinition,
   ...CompleteThemeTokensDefinition.fields,
   "@dialog": Schema.optional(ThemeTokensDefinition),
+  "@palette": Schema.optional(ThemeTokensDefinition),
 })
 export type BaseThemeDefinition = Schema.Schema.Type<typeof BaseThemeDefinition>
 
@@ -279,6 +281,7 @@ export const ModeDefinition = Schema.Struct({
   categorical: Schema.optional(CategoricalDefinition),
   ...ThemeTokensDefinition.fields,
   "@dialog": Schema.optional(ThemeTokensDefinition),
+  "@palette": Schema.optional(ThemeTokensDefinition),
 })
 export type ModeDefinition = Schema.Schema.Type<typeof ModeDefinition>
 

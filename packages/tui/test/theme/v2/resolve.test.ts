@@ -159,7 +159,19 @@ test("resolves independent definitions and hue aliases", () => {
   expect(dialog.background.action.primary.focused.equals(lightTheme.background.action.primary.focused)).toBeTrue()
   expect(dialog.text.action.primary.base.equals(lightTheme.text.action.primary.base)).toBeTrue()
   expect(dialog.surface("dialog")).toBe(dialog)
+  expect(lightTheme.surface("palette")).toBe(dialog)
   expect(darkTheme.surface("dialog").background.base).toBe(darkTheme.background.raised.base)
+})
+
+test("resolves a palette-specific surface independently from dialogs", () => {
+  const theme = resolveTheme({
+    ...light,
+    "@palette": { background: { base: "$hue.neutral.800" } },
+  })
+
+  expect(theme.surface("palette")).not.toBe(theme.surface("dialog"))
+  expect(theme.surface("palette").background.base).toBe(theme.hue.neutral[800])
+  expect(theme.surface("dialog").background.base).toBe(theme.background.raised.base)
 })
 
 test("resolves base hue aliases and rejects circular hue aliases", () => {

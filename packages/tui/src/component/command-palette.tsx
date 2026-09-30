@@ -1,5 +1,6 @@
 import { createMemo } from "solid-js"
 import { DialogSelect, type DialogSelectRef } from "../ui/dialog-select"
+import { ThemeContextProvider } from "../context/theme"
 import { type DialogContext } from "../ui/dialog"
 import { COMMAND_PALETTE_COMMAND, Keymap, type KeymapCommand } from "../context/keymap"
 import { DialogConfig, settingID, settings } from "./dialog-config"
@@ -41,7 +42,7 @@ export function CommandPaletteDialog() {
     searchFooter: `Settings · ${setting.category}`,
     value: `setting:${settingID(setting)}`,
     onSelect: (dialog: DialogContext) => {
-      dialog.replace(() => <DialogConfig current={settingID(setting)} />)
+            dialog.replace(() => <DialogConfig current={settingID(setting)} />, undefined, { surface: "palette" })
     },
   }))
 
@@ -61,6 +62,8 @@ export function CommandPaletteDialog() {
   }
 
   return (
-    <DialogSelect ref={(value) => (ref = value)} title="Commands" options={list()} flat={true} filterThreshold={0.7} />
+    <ThemeContextProvider context="palette">
+      <DialogSelect ref={(value) => (ref = value)} title="Commands" options={list()} flat={true} filterThreshold={0.7} />
+    </ThemeContextProvider>
   )
 }
