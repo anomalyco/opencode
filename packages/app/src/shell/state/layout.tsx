@@ -18,7 +18,7 @@ import type { ProjectAvatarVariant } from "@opencode/ui/project-avatar"
 import { SessionStateKey } from "@/runtime/server/scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 import { requireServerKey } from "@/shell/routes/session"
-import { closeSessionTab, openSessionTab, previewSessionTab, SESSION_BTW_TAB, type SessionTabs } from "./session-tabs"
+import { closeSessionTab, openSessionTab, previewSessionTab, SESSION_BTW_TAB, SESSION_WIDGETS_TAB, type SessionTabs } from "./session-tabs"
 
 export { createSessionKeyReader, ensureSessionKey, pruneSessionKeys }
 
@@ -98,9 +98,15 @@ const normalizeSessionTabList = (path: ReturnType<typeof createPathHelpers> | un
 const normalizeStoredSessionTabs = (key: string, tabs: SessionTabs) => {
   const path = sessionPath(key)
   return {
-    all: normalizeSessionTabList(path, tabs.all).filter((tab) => tab !== SESSION_BTW_TAB),
+    all: normalizeSessionTabList(path, tabs.all).filter(
+      (tab) => tab !== SESSION_BTW_TAB && tab !== SESSION_WIDGETS_TAB,
+    ),
     active:
-      tabs.active === SESSION_BTW_TAB ? undefined : tabs.active ? normalizeSessionTab(path, tabs.active) : tabs.active,
+      tabs.active === SESSION_BTW_TAB || tabs.active === SESSION_WIDGETS_TAB
+        ? undefined
+        : tabs.active
+          ? normalizeSessionTab(path, tabs.active)
+          : tabs.active,
   }
 }
 

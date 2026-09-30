@@ -1915,6 +1915,31 @@ export interface SkillApi<E = never> {
   readonly list: SkillListOperation<E>
 }
 
+export type WidgetListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type WidgetListOutput = {
+  readonly location: Location.PublicRef
+  readonly data: ReadonlyArray<{
+    readonly id: string & Brand.Brand<"Widget.ID">
+    readonly title: string
+    readonly description?: string | undefined
+    readonly source:
+      | { readonly type: "global"; readonly path: string }
+      | { readonly type: "project"; readonly path: string }
+    readonly state: { readonly status: "active" } | { readonly status: "failed"; readonly error: string }
+    readonly requests: ReadonlyArray<"read" | "write" | "full">
+  }>
+}
+export type WidgetListOperation<E = never> = (input?: WidgetListInput) => Effect.Effect<WidgetListOutput, E>
+
+export type WidgetReadInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type WidgetReadOutput = globalThis.Uint8Array
+export type WidgetReadOperation<E = never> = (input?: WidgetReadInput) => Effect.Effect<WidgetReadOutput, E>
+
+export interface WidgetApi<E = never> {
+  readonly list: WidgetListOperation<E>
+  readonly read: WidgetReadOperation<E>
+}
+
 export type RpcCallInput = {
   readonly rpcID: string
   readonly method: string
@@ -2398,6 +2423,7 @@ export interface AppApi<E = never> {
   readonly file: FileApi<E>
   readonly command: CommandApi<E>
   readonly skill: SkillApi<E>
+  readonly widget: WidgetApi<E>
   readonly rpc: RpcApi<E>
   readonly event: EventApi<E>
   readonly pty: PtyApi<E>

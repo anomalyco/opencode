@@ -21,6 +21,7 @@ import { SshProvider } from "@/servers/ssh/context"
 import { SshRestore } from "@/servers/ssh/restore"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
+import { WidgetGrantsProvider } from "@/session/widgets/grants"
 
 export { preloadRoute }
 
@@ -130,9 +131,11 @@ export function AppInterface(props: {
       servers={props.servers}
     >
       <SettingsProvider>
-        <Dynamic component={props.router ?? Router} root={Root}>
-          <AppRoutes />
-        </Dynamic>
+        <WidgetGrantsProvider>
+          <Dynamic component={props.router ?? Router} root={Root}>
+            <AppRoutes />
+          </Dynamic>
+        </WidgetGrantsProvider>
       </SettingsProvider>
     </ServersProvider>
   )

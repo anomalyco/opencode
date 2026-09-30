@@ -187,6 +187,10 @@ import type {
   CommandListOutput,
   SkillListInput,
   SkillListOutput,
+  WidgetListInput,
+  WidgetListOutput,
+  WidgetReadInput,
+  WidgetReadOutput,
   RpcCallInput,
   RpcCallOutput,
   EventSubscribeOutput,
@@ -1664,6 +1668,33 @@ export function make(options: ClientOptions) {
             successStatus: 200,
             declaredStatuses: [400, 401],
             empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    widget: {
+      list: (input?: WidgetListInput, requestOptions?: RequestOptions) =>
+        request<WidgetListOutput>(
+          {
+            method: "GET",
+            path: `/api/widget`,
+            query: { location: input?.["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      read: (input: WidgetReadInput, requestOptions?: RequestOptions) =>
+        request<WidgetReadOutput>(
+          {
+            method: "GET",
+            path: `/widget/${encodePath(input.path)}`,
+            query: { location: input["location"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+            binary: true,
           },
           requestOptions,
         ),

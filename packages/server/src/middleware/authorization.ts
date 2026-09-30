@@ -5,6 +5,7 @@ export { Authorization } from "@opencode/protocol/middleware/authorization"
 import { hasPtyConnectTicketURL } from "@opencode/protocol/groups/pty"
 import { hasPersistentPtyConnectTicketURL } from "@opencode/protocol/groups/persistent-pty"
 import { isPairingConnectURL } from "@opencode/protocol/groups/server"
+import { isWidgetAssetURL } from "@opencode/protocol/groups/widget"
 import { Effect, Encoding, Layer, Redacted } from "effect"
 import { HttpEffect, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 
@@ -82,6 +83,9 @@ export const authorizationLayer = Layer.effect(
         const url = new URL(request.url, "http://localhost")
         if (hasPtyConnectTicketURL(url) || hasPersistentPtyConnectTicketURL(url) || isPairingConnectURL(url))
           return yield* effect
+        // Widget assets are static, user-authored files served so a sandboxed frame can load its
+        // own bundle without a credential. They expose no API surface; the list stays authorized.
+        if (isWidgetAssetURL(url)) return yield* effect
         if (yield* authorizedRequest(request, config)) return yield* effect
         if (challengeRequest(request))
           yield* HttpEffect.appendPreResponseHandler((_request, response) =>

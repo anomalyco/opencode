@@ -39,6 +39,7 @@ import { createFileTabListSync } from "@/session/files/file-tab-scroll"
 import {
   SESSION_OPEN_FILE_TAB,
   SESSION_BTW_TAB,
+  SESSION_WIDGETS_TAB,
   isSessionBrowserTab,
   sessionBrowserTab,
   createOpenSessionFileTab,
@@ -77,6 +78,7 @@ export function SessionSidePanel(props: {
   stacked?: boolean
   browser: ReturnType<typeof createSessionBrowser>
   btwPanel: () => JSX.Element
+  widgetsPanel: () => JSX.Element
 }) {
   const layout = useLayout()
   const settings = useSettings()
@@ -376,6 +378,30 @@ export function SessionSidePanel(props: {
                               </div>
                             </Tabs.Trigger>
                           </Show>
+                          <Show when={tabs().all().includes(SESSION_WIDGETS_TAB)}>
+                            <Tabs.Trigger
+                              value={SESSION_WIDGETS_TAB}
+                              closeButton={
+                                <Tooltip
+                                  value={language.t("common.closeTab")}
+                                  placement="bottom"
+                                  gutter={10}
+                                >
+                                  <Tabs.CloseButton
+                                    onClick={() => tabs().close(SESSION_WIDGETS_TAB)}
+                                    aria-label={language.t("common.closeTab")}
+                                  />
+                                </Tooltip>
+                              }
+                              hideCloseButton
+                              onMiddleClick={() => tabs().close(SESSION_WIDGETS_TAB)}
+                            >
+                              <div class="flex items-center gap-1.5">
+                                <Icon name="widget" size="small" />
+                                <span>{language.t("session.tab.widgets")}</span>
+                              </div>
+                            </Tabs.Trigger>
+                          </Show>
                           <For each={panelTabs()}>
                             {(tab) => (
                               <Switch
@@ -598,6 +624,15 @@ export function SessionSidePanel(props: {
                       <Show when={activeTab() === SESSION_BTW_TAB}>
                         <Tabs.Content value={SESSION_BTW_TAB} class="flex h-full min-h-0 flex-col overflow-hidden">
                           {props.btwPanel()}
+                        </Tabs.Content>
+                      </Show>
+
+                      <Show when={activeTab() === SESSION_WIDGETS_TAB}>
+                        <Tabs.Content
+                          value={SESSION_WIDGETS_TAB}
+                          class="flex flex-col h-full overflow-hidden contain-strict"
+                        >
+                          <div class="relative pt-2 flex-1 min-h-0 overflow-hidden">{props.widgetsPanel()}</div>
                         </Tabs.Content>
                       </Show>
 

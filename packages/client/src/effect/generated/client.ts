@@ -189,6 +189,10 @@ import type {
   CommandListOutput,
   SkillListInput,
   SkillListOutput,
+  WidgetListInput,
+  WidgetListOutput,
+  WidgetReadInput,
+  WidgetReadOutput,
   RpcCallInput,
   RpcCallOutput,
   EventSubscribeOutput,
@@ -1200,6 +1204,21 @@ const EndpointSkillList = (raw: RawClient["server.skill"]) => (input?: SkillList
 
 const adaptGroupSkill = (raw: RawClient["server.skill"]) => ({ list: EndpointSkillList(raw) })
 
+const EndpointWidgetList = (raw: RawClient["server.widget"]) => (input?: WidgetListInput) =>
+  preserveEffect<WidgetListOutput>()(
+    raw["widget.list"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointWidgetRead = (raw: RawClient["server.widget"]) => (input?: WidgetReadInput) =>
+  preserveEffect<WidgetReadOutput>()(
+    raw["widget.read"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupWidget = (raw: RawClient["server.widget"]) => ({
+  list: EndpointWidgetList(raw),
+  read: EndpointWidgetRead(raw),
+})
+
 const EndpointRpcCall = (raw: RawClient["server.rpc"]) => (input: RpcCallInput) =>
   preserveEffect<RpcCallOutput>()(
     raw["rpc.call"]({
@@ -1590,6 +1609,7 @@ const adaptClient = (raw: RawClient) => ({
   file: adaptGroupFile(raw["server.fs"]),
   command: adaptGroupCommand(raw["server.command"]),
   skill: adaptGroupSkill(raw["server.skill"]),
+  widget: adaptGroupWidget(raw["server.widget"]),
   rpc: adaptGroupRpc(raw["server.rpc"]),
   event: adaptGroupEvent(raw["server.event"]),
   pty: adaptGroupPty(raw["server.pty"]),

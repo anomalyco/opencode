@@ -34,5 +34,10 @@ export function createSimpleContext<T, Props extends Record<string, any>>(
       if (!value) throw new Error(`${input.name} context must be used within a context provider`)
       return value
     },
+    // Optional read for consumers that work with or without the provider, such as
+    // a query hook reused in both location-scoped and server-scoped screens.
+    useOptional() {
+      return useContext(ctx)
+    },
   }
 }

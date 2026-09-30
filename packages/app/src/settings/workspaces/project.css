@@ -94,6 +94,13 @@
   background: var(--v2-state-fg-warning);
 }
 
+.project-settings-extension-row-status-error {
+  color: var(--v2-state-fg-danger);
+  max-width: 220px;
+  text-align: right;
+  word-break: break-word;
+}
+
 .project-settings-shared {
   display: flex;
   flex-direction: column;

@@ -13,6 +13,7 @@ import { RpcHandler } from "./handlers/rpc"
 import { EventHandler } from "./handlers/event"
 import { AgentHandler } from "./handlers/agent"
 import { PluginHandler } from "./handlers/plugin"
+import { WidgetHandler } from "./handlers/widget"
 import { ServerHandler } from "./handlers/server"
 import { DebugHandler } from "./handlers/debug"
 import { PtyHandler } from "./handlers/pty"
@@ -38,6 +39,7 @@ export const handlers = Layer.mergeAll(
   LocationHandler,
   AgentHandler,
   PluginHandler,
+  WidgetHandler,
   SessionHandler,
   MessageHandler,
   ModelHandler,
