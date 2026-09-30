@@ -1,6 +1,7 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer, Context, Schema, Scope } from "effect"
 import { formatPatch, structuredPatch } from "diff"
+import path from "node:path"
 import { InstanceState } from "@/effect/instance-state"
 import { Watcher } from "@opencode-ai/core/filesystem/watcher"
 import { Git } from "@/git"
@@ -232,6 +233,86 @@ const track = Effect.fnUntraced(function* (
   return yield* diffAgainstRef(git, cwd, ref, options)
 })
 
+// Git reports an embedded repository (a directory containing its own .git) as a
+// single untracked entry with a trailing slash, e.g. "packages/sub-app/". Once
+// the gitlink is staged (git add / git add -N) or committed, status instead
+// reports it as a regular index entry (mode 160000) with no trailing slash, or
+// not at all. Git never descends into those, so their contents are invisible to
+// the default status/diff. We detect both shapes and aggregate their changes
+// with paths relative to the project worktree so the review panel can show
+// nested repo changes.
+const nestedRepos = Effect.fnUntraced(function* (git: Git.Interface, cwd: string) {
+  const [list, links] = yield* Effect.all([git.status(cwd), git.gitlinks(cwd)], { concurrency: 2 })
+  const repos = new Set(links)
+  for (const item of list) {
+    if (item.code !== "??" || !item.file.endsWith("/")) continue
+    const target = path.resolve(cwd, item.file)
+    if (yield* git.isRepo(target)) repos.add(item.file.slice(0, -1))
+  }
+  return [...repos]
+})
+
+const nestedDiffs = Effect.fnUntraced(function* (
+  git: Git.Interface,
+  root: string,
+  repos: string[],
+  options?: DiffOptions,
+) {
+  const out: FileDiff[] = []
+  for (const repo of repos) {
+    const cwd = path.resolve(root, repo)
+    const ref = (yield* git.hasHead(cwd)) ? "HEAD" : undefined
+    const diffs = yield* track(git, cwd, ref, options)
+    out.push(...diffs.map((item) => ({ ...item, file: `${repo}/${item.file}` })))
+  }
+  return out
+})
+
+const nestedRepo = (file: string, repos: string[]) => repos.includes(file.endsWith("/") ? file.slice(0, -1) : file)
+
+const nestedStatus = Effect.fnUntraced(function* (git: Git.Interface, root: string, repos: string[]) {
+  const out: FileStatus[] = []
+  for (const repo of repos) {
+    const cwd = path.resolve(root, repo)
+    const ref = (yield* git.hasHead(cwd)) ? "HEAD" : undefined
+    const [list, stats] = yield* Effect.all(
+      [git.status(cwd), ref ? git.stats(cwd, ref) : Effect.succeed([])],
+      { concurrency: 2 },
+    )
+    const map = nums(stats)
+    const result = yield* Effect.forEach(
+      list.toSorted((a, b) => a.file.localeCompare(b.file)),
+      (item) =>
+        Effect.gen(function* () {
+          const stat = map.get(item.file) ?? (item.status === "added" ? yield* git.statUntracked(cwd, item.file) : undefined)
+          return {
+            file: `${repo}/${item.file}`,
+            additions: stat?.additions ?? 0,
+            deletions: stat?.deletions ?? 0,
+            status: item.status,
+          } satisfies FileStatus
+        }),
+    )
+    out.push(...result)
+  }
+  return out
+})
+
+const nestedRawDiffs = Effect.fnUntraced(function* (git: Git.Interface, root: string, repos: string[]) {
+  const parts: string[] = []
+  for (const repo of repos) {
+    const cwd = path.resolve(root, repo)
+    const [hasHead, status] = yield* Effect.all([git.hasHead(cwd), git.status(cwd)], { concurrency: 2 })
+    const tracked = hasHead ? (yield* git.patchAll(cwd, "HEAD")).text : ""
+    const untracked = yield* Effect.forEach(
+      status.filter((item) => item.code === "??"),
+      (item) => git.patchUntracked(cwd, item.file).pipe(Effect.map((patch) => patch.text)),
+    )
+    parts.push([tracked, ...untracked].filter(Boolean).join("\n"))
+  }
+  return parts.filter(Boolean).join("\n")
+})
+
 export const Mode = Schema.Literals(["git", "branch"])
 export type Mode = Schema.Schema.Type<typeof Mode>
 
@@ -349,33 +430,47 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return []
         const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
-        const [list, stats] = yield* Effect.all(
-          [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([])],
-          { concurrency: 2 },
+        const [list, stats, nested] = yield* Effect.all(
+          [
+            git.status(ctx.directory),
+            ref ? git.stats(ctx.directory, ref) : Effect.succeed([]),
+            nestedRepos(git, ctx.directory),
+          ],
+          { concurrency: 3 },
         )
         const map = nums(stats)
-        return yield* Effect.forEach(
-          list.toSorted((a, b) => a.file.localeCompare(b.file)),
-          (item) =>
-            Effect.gen(function* () {
-              const stat =
-                map.get(item.file) ??
-                (item.status === "added" ? yield* git.statUntracked(ctx.worktree, item.file) : undefined)
-              return {
-                file: item.file,
-                additions: stat?.additions ?? 0,
-                deletions: stat?.deletions ?? 0,
-                status: item.status,
-              } satisfies FileStatus
-            }),
-        )
+        const [base, extra] = yield* Effect.all([
+          Effect.forEach(
+            list.filter((item) => !nestedRepo(item.file, nested)).toSorted((a, b) => a.file.localeCompare(b.file)),
+            (item) =>
+              Effect.gen(function* () {
+                const stat =
+                  map.get(item.file) ??
+                  (item.status === "added" ? yield* git.statUntracked(ctx.worktree, item.file) : undefined)
+                return {
+                  file: item.file,
+                  additions: stat?.additions ?? 0,
+                  deletions: stat?.deletions ?? 0,
+                  status: item.status,
+                } satisfies FileStatus
+              }),
+          ),
+          nestedStatus(git, ctx.directory, nested),
+        ])
+        return [...base, ...extra]
       }),
       diff: Effect.fn("Vcs.diff")(function* (mode: Mode, options?: DiffOptions) {
         const value = yield* InstanceState.get(state)
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return []
         if (mode === "git") {
-          return yield* track(git, ctx.directory, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined, options)
+          const repos = yield* nestedRepos(git, ctx.directory)
+          const [base, extra] = yield* Effect.all([
+            track(git, ctx.directory, (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined, options),
+            nestedDiffs(git, ctx.directory, repos, options),
+          ])
+          const expanded = base.filter((item) => !nestedRepo(item.file, repos))
+          return [...expanded, ...extra]
         }
 
         if (!value.root) return []
@@ -387,15 +482,17 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
       diffRaw: Effect.fn("Vcs.diffRaw")(function* () {
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return ""
-        const [hasHead, status] = yield* Effect.all([git.hasHead(ctx.directory), git.status(ctx.directory)], {
-          concurrency: 2,
-        })
+        const [hasHead, status, nested] = yield* Effect.all(
+          [git.hasHead(ctx.directory), git.status(ctx.directory), nestedRepos(git, ctx.directory)],
+          { concurrency: 3 },
+        )
         const tracked = hasHead ? (yield* git.patchAll(ctx.directory, "HEAD")).text : ""
         const untracked = yield* Effect.forEach(
-          status.filter((item) => item.code === "??"),
+          status.filter((item) => !nestedRepo(item.file, nested)),
           (item) => git.patchUntracked(ctx.directory, item.file).pipe(Effect.map((patch) => patch.text)),
         )
-        return [tracked, ...untracked].filter(Boolean).join("\n")
+        const extra = yield* nestedRawDiffs(git, ctx.directory, nested)
+        return [[tracked, ...untracked].filter(Boolean).join("\n"), extra].filter(Boolean).join("\n")
       }),
       apply: Effect.fn("Vcs.apply")(function* (input: ApplyInput) {
         const ctx = yield* InstanceState.context
