@@ -8,6 +8,7 @@ import {
   LLMRequest,
   Message,
   ToolCallPart,
+  ToolResultPart,
   ToolDefinition,
   Usage,
   Media,
@@ -28,6 +29,10 @@ const model = AnthropicMessages.route
 const opus48 = AnthropicMessages.route
   .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
   .model({ id: "claude-opus-4-8" })
+
+const opus55 = AnthropicMessages.route
+  .with({ endpoint: { baseURL: "https://api.anthropic.test/v1/" }, auth: Auth.header("x-api-key", "test") })
+  .model({ id: "claude-opus-5-5" })
 
 const compileUnsignedReasoning = (model: LLMRequest["model"]) =>
   compileRequest(
@@ -588,7 +593,80 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects a system update between a local tool call and its result", () =>
+  it.effect("defers system updates until all local tool results, including interrupted results", () =>
+    Effect.gen(function* () {
+      for (const selected of [model, opus48, opus55, vertexOpus48]) {
+        for (const result of [
+          ToolResultPart.make({ id: "call_2", name: "lookup", result: "Done." }),
+          ToolResultPart.make({
+            id: "call_2",
+            name: "lookup",
+            result: { error: "Command cancelled because the server restarted", content: [] },
+            resultType: "error",
+          }),
+          ToolResultPart.make({
+            id: "call_2",
+            name: "lookup",
+            result: "Tool execution interrupted",
+            resultType: "error",
+          }),
+        ]) {
+          const calls = Message.assistant([
+            ToolCallPart.make({ id: "call_1", name: "lookup", input: {} }),
+            ToolCallPart.make({ id: "call_2", name: "lookup", input: {} }),
+          ])
+          const first = Message.tool({ id: "call_1", name: "lookup", result: "First result." })
+          const last = Message.tool(result)
+          const one = Message.system("Environment changed.")
+          const two = Message.system("Instructions changed.")
+          const messages = [calls, one, first, two, last, Message.assistant("Resumed.")]
+          const before = messages.slice()
+          const prepared = yield* compileRequest(LLM.request({ model: selected, messages, cache: "none" }))
+          const expected = yield* compileRequest(
+            LLM.request({
+              model: selected,
+              messages: [calls, first, last, one, two, messages.at(-1)!],
+              cache: "none",
+            }),
+          )
+          expect(prepared.body.messages).toEqual(expected.body.messages)
+          expect(messages).toEqual(before)
+          expect(prepared.body.messages[1]).toMatchObject({
+            role: "user",
+            content: [
+              { type: "tool_result", tool_use_id: "call_1" },
+              {
+                type: "tool_result",
+                tool_use_id: "call_2",
+                is_error: result.result.type === "error" ? true : undefined,
+              },
+              { type: "text", text: "<system-update>\nEnvironment changed.\n</system-update>" },
+              { type: "text", text: "<system-update>\nInstructions changed.\n</system-update>" },
+            ],
+          })
+        }
+      }
+    }),
+  )
+
+  it.effect("lowers a deferred terminal system update like an update after the result", () =>
+    Effect.gen(function* () {
+      for (const selected of [model, opus48, opus55, vertexOpus48]) {
+        const call = Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })])
+        const result = Message.tool({ id: "call_1", name: "lookup", result: "Done." })
+        const update = Message.system("Environment changed.")
+        const prepared = yield* compileRequest(
+          LLM.request({ model: selected, messages: [call, update, result], cache: "none" }),
+        )
+        const expected = yield* compileRequest(
+          LLM.request({ model: selected, messages: [call, result, update], cache: "none" }),
+        )
+        expect(prepared.body.messages).toEqual(expected.body.messages)
+      }
+    }),
+  )
+
+  it.effect("rejects a system update when the pending local tool result is missing", () =>
     Effect.gen(function* () {
       const error = yield* compileRequest(
         LLM.request({
@@ -597,13 +675,61 @@ describe("Anthropic Messages route", () => {
             Message.user("Use the tool."),
             Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
             Message.system("Too early."),
-            Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
           ],
           cache: "none",
         }),
       ).pipe(Effect.flip)
 
       expect(error.message).toContain("system updates cannot split a local tool call from its tool result")
+    }),
+  )
+
+  it.effect("keeps repaired interrupted history representable after a system update", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: opus55,
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.system("Environment changed."),
+            Message.user("Continue."),
+          ],
+          cache: "none",
+        }),
+      )
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: "call_1", content: "Tool result missing", is_error: true },
+            { type: "text", text: "<system-update>\nEnvironment changed.\n</system-update>" },
+          ],
+        },
+        { role: "user", content: [{ type: "text", text: "Continue." }] },
+      ])
+    }),
+  )
+
+  it.effect("does not move a system update across another conversation turn", () =>
+    Effect.gen(function* () {
+      for (const intervening of [Message.user("Next task."), Message.assistant("Next step.")]) {
+        const error = yield* AnthropicMessages.protocol.body
+          .from(
+            LLM.request({
+              model: opus48,
+              messages: [
+                Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+                Message.system("Environment changed."),
+                intervening,
+                Message.tool({ id: "call_1", name: "lookup", result: "Done." }),
+              ],
+              cache: "none",
+            }),
+          )
+          .pipe(Effect.flip)
+        expect(error.message).toContain("system updates cannot split a local tool call from its tool result")
+      }
     }),
   )
 

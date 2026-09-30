@@ -820,9 +820,9 @@ const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
   return message.role === "assistant" && last?.type === "tool-call" && last.providerExecuted === true
 }
 
-const canUseNativeSystemUpdate = (request: LLMRequest, index: number) => {
-  const previous = request.messages[index - 1]
-  const next = request.messages[index + 1]
+const canUseNativeSystemUpdate = (request: LLMRequest, messages: LLMRequest["messages"], index: number) => {
+  const previous = messages[index - 1]
+  const next = messages[index + 1]
   // Vertex currently rejects/404s for a system message after local tool results,
   // so fold it into the user tool-result turn across continuations and history.
   if (request.model.route.id === "google-vertex-messages" && previous?.role === "tool") return false
@@ -835,17 +835,33 @@ const canUseNativeSystemUpdate = (request: LLMRequest, index: number) => {
   )
 }
 
-const splitsLocalToolResults = (messages: LLMRequest["messages"], index: number) => {
+const deferSystemUpdates = Effect.fn("AnthropicMessages.deferSystemUpdates")(function* (
+  messages: LLMRequest["messages"],
+) {
+  const result: LLMRequest["messages"][number][] = []
+  const deferred: LLMRequest["messages"][number][] = []
   const pending = new Set<string>()
-  for (const message of messages.slice(0, index)) {
+  for (const message of messages) {
+    if (message.role === "system" && !effortUpdate(message) && pending.size > 0) {
+      deferred.push(message)
+      continue
+    }
+    // Only move text updates across the outstanding results, never across a
+    // subsequent conversation turn where the new instructions already apply.
+    if (deferred.length > 0 && message.role !== "tool" && message.role !== "system")
+      return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
+    result.push(message)
     for (const part of message.content) {
       if (message.role === "assistant" && part.type === "tool-call" && part.providerExecuted !== true)
         pending.add(part.id)
       if (message.role === "tool" && part.type === "tool-result") pending.delete(part.id)
     }
+    if (pending.size === 0) result.push(...deferred.splice(0))
   }
-  return pending.size > 0
-}
+  if (deferred.length > 0)
+    return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
+  return result
+})
 
 const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUpdate")(function* (
   message: LLMRequest["messages"][number],
@@ -868,8 +884,9 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 ) {
   const messages: AnthropicMessage[] = []
   const providerMetadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const history = yield* deferSystemUpdates(request.messages)
 
-  for (const [index, message] of request.messages.entries()) {
+  for (const [index, message] of history.entries()) {
     if (message.role === "system") {
       const update = effortUpdate(message)
       if (update) {
@@ -877,9 +894,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         messages.push({ role: "system", content: [], output_config: { effort: update.effort ?? DEFAULT_EFFORT } })
         continue
       }
-      if (splitsLocalToolResults(request.messages, index))
-        return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
-      if (supportsNativeSystemUpdates(request) && canUseNativeSystemUpdate(request, index)) {
+      if (supportsNativeSystemUpdates(request) && canUseNativeSystemUpdate(request, history, index)) {
         messages.push(yield* lowerNativeSystemUpdate(message, breakpoints))
         continue
       }
