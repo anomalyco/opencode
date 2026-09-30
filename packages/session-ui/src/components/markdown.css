@@ -81,7 +81,7 @@
   strong,
   b {
     color: var(--v2-text-text-base);
-    font-weight: var(--font-weight-medium);
+    font-weight: 600;
   }
 
   /* Paragraphs */
