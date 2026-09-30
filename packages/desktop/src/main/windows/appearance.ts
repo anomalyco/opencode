@@ -6,7 +6,8 @@ import { emitIpcEvent } from "../ipc-events"
 import type { DesktopPaths } from "../paths"
 import { BACKGROUND_COLOR_KEY, PINCH_ZOOM_ENABLED_KEY } from "../storage/keys"
 import { getStore } from "../storage/store"
-import { storedBackgroundColor, titlebarOverlay, tone } from "./defaults"
+import { storedBackgroundColor, tone } from "./defaults"
+import { titlebarOverlay, windowFrame } from "./frame"
 
 const titlebarThemes = new WeakMap<BrowserWindow, Partial<TitlebarTheme>>()
 const pinchZoomEnabled = new WeakMap<BrowserWindow, boolean>()
@@ -15,24 +16,11 @@ const minZoomLevel = 0.2
 let backgroundColor: string | undefined
 
 export function windowAppearance(path: Path.Path, paths: DesktopPaths.Resolved) {
-  const mode = tone()
   return {
     title: "OpenCode",
     icon: iconPath(path, paths),
     backgroundColor: backgroundColor ?? storedBackgroundColor(),
-    ...(process.platform === "darwin"
-      ? {
-          titleBarStyle: "hidden" as const,
-          trafficLightPosition: { x: 14, y: 14 },
-        }
-      : {}),
-    ...(process.platform === "win32"
-      ? {
-          frame: false,
-          titleBarStyle: "hidden" as const,
-          titleBarOverlay: overlay({ mode }),
-        }
-      : {}),
+    ...windowFrame(process.platform, tone()),
     webPreferences: {
       preload: paths.preloadPath,
       contextIsolation: true,
@@ -67,14 +55,14 @@ export function getBackgroundColor() {
 export function setTitlebar(win: BrowserWindow, theme: Partial<TitlebarTheme> = {}) {
   titlebarThemes.set(win, theme)
   // Native window controls follow nativeTheme, not the renderer theme.
-  if (process.platform === "darwin" || process.platform === "win32") {
+  if (process.platform === "darwin" || process.platform === "win32" || process.platform === "linux") {
     nativeTheme.themeSource = theme.scheme ?? theme.mode ?? "system"
   }
   updateTitlebar(win)
 }
 
 export function updateTitlebar(win: BrowserWindow) {
-  if (process.platform !== "win32") return
+  if (process.platform !== "win32" && process.platform !== "linux") return
   win.setTitleBarOverlay(overlay(titlebarThemes.get(win), win.webContents.getZoomFactor()))
 }
 

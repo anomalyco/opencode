@@ -37,7 +37,7 @@ import devIcon from "../../../../desktop/icons/dev/64x64.png"
 import betaIcon from "../../../../desktop/icons/beta/64x64.png"
 
 const titlebarHeight = 36
-const windowsTitlebarHeight = 44 // Includes the content inset; matches the native Windows overlay.
+const overlayTitlebarHeight = 44 // Includes the content inset; matches the native caption overlay.
 const minTitlebarZoom = 0.25
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
 // Native controls: 14px left inset, two 20px button pitches, and a 14px button.
@@ -67,16 +67,19 @@ export function Titlebar(props: {
   const mac = createMemo(() => platform.platform === "desktop" && platform.os === "macos")
   const windows = createMemo(() => platform.platform === "desktop" && platform.os === "windows")
   const linux = createMemo(() => platform.platform === "desktop" && platform.os === "linux")
+  const overlay = createMemo(() => windows() || linux())
   const macTrafficLights = createMemo(() => mac() && !platform.windowFullscreen?.())
   const macVerticalTabs = createMemo(() => mac() && !!props.verticalTabs)
   const zoom = () => platform.webviewZoom?.() ?? 1
-  const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
+  const titlebarZoom = () => (overlay() ? Math.max(zoom(), minTitlebarZoom) : zoom())
   const minHeight = () => {
     if (mac()) return `${titlebarHeight / zoom()}px`
-    if (windows()) return `env(titlebar-area-height, ${windowsTitlebarHeight / Math.min(titlebarZoom(), 1)}px)`
+    if (overlay()) return `env(titlebar-area-height, ${overlayTitlebarHeight / Math.min(titlebarZoom(), 1)}px)`
     return undefined
   }
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
+  const overlayWidth = () =>
+    `env(titlebar-area-width, ${windows() ? `calc(100vw - ${windowsControlsWidth()})` : "100vw"})`
 
   const [history, setHistory] = createStore({
     stack: [] as HistoryLocation[],
@@ -112,7 +115,7 @@ export function Titlebar(props: {
   const rightState = createMemo<TitlebarRightState>(() => ({
     update: updateState(),
   }))
-  const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
+  const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !overlay())
 
   const back = () => {
     const next = backPath(history)
@@ -165,10 +168,12 @@ export function Titlebar(props: {
         "min-height": minHeight(),
         // Keep native macOS traffic lights clear even when the desktop window is narrow.
         "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
-        width: windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
-        "max-width": windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
-        // Native Windows caption controls remain on the physical right in both writing directions.
-        "margin-right": windows() ? "auto" : undefined,
+        width: overlay() ? overlayWidth() : undefined,
+        "max-width": overlay() ? overlayWidth() : undefined,
+        // Native-control placement is physical, independent of the app's writing direction.
+        // Linux can put controls on either side or both; x and width describe the safe rectangle.
+        "margin-left": overlay() ? "env(titlebar-area-x, 0px)" : undefined,
+        "margin-right": overlay() ? "auto" : undefined,
       }}
       data-tauri-drag-region
     >
@@ -462,14 +467,14 @@ export function Titlebar(props: {
               <div
                 class="h-full flex-1 overflow-hidden flex flex-row items-center gap-1.5 px-2 md:pe-3"
                 classList={{
-                  "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !windows(),
+                  "pt-[max(0px,calc(8px-env(safe-area-inset-top,0px)))]": !bottom() && !overlay(),
                   "pb-[max(0px,calc(8px-var(--safe-area-inset-bottom,env(safe-area-inset-bottom,0px))))]": bottom(),
                   "pl-4": macTrafficLights(),
                   // Center the 20px app icon over the sidebar's 16px icon column.
-                  "ps-3.5": windows(),
+                  "ps-3.5": overlay(),
                 }}
               >
-                <Show when={!mobile() && (!props.verticalTabs || windows())}>
+                <Show when={!mobile() && (!props.verticalTabs || overlay())}>
                   <ChannelIndicator horizontal debugTools={props.debugTools} />
                 </Show>
                 <Show when={windows() || linux()}>
@@ -665,7 +670,7 @@ export function Titlebar(props: {
                                 data-tauri-drag-region
                               />
                             </Show>
-                            <Show when={!windows()}>
+                            <Show when={!overlay()}>
                               <ChannelIndicator sidebar debugTools={props.debugTools} />
                             </Show>
                             {homeButton(true)}

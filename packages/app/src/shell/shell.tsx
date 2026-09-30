@@ -60,10 +60,10 @@ export default function Layout(props: ParentProps) {
       <div
         class="relative bg-v2-background-bg-deep flex-1 min-h-0 min-w-0 flex flex-col select-none [&_input]:select-text [&_textarea]:select-text [&_[contenteditable]]:select-text"
         style={{
-          // Native Windows chrome supplies the gap; retain paint clearance for the panels' outer outlines.
+          // Native caption overlays supply the gap; retain paint clearance for the panels' outer outlines.
           "--shell-top-inset": bottomTitlebar()
             ? "max(0px, calc(8px - env(safe-area-inset-top, 0px)))"
-            : platform.platform === "desktop" && platform.os === "windows"
+            : platform.platform === "desktop" && (platform.os === "windows" || platform.os === "linux")
               ? "1px"
               : "8px",
           "--shell-bottom-inset": bottomTitlebar()
