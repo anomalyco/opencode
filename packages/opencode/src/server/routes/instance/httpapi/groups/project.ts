@@ -62,6 +62,18 @@ export const ProjectApi = HttpApi.make("project")
             description: "Update project properties such as name, icon, and commands.",
           }),
         ),
+        HttpApiEndpoint.delete("remove", `${root}/:projectID`, {
+          params: { projectID: ProjectV2.ID },
+          query: WorkspaceRoutingQuery,
+          success: described(Schema.Boolean, "Project removed"),
+          error: [ProjectNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "project.remove",
+            summary: "Remove project",
+            description: "Remove a project and its sessions from OpenCode. Files on disk are not touched.",
+          }),
+        ),
         HttpApiEndpoint.get("directories", `${root}/:projectID/directories`, {
           params: { projectID: ProjectV2.ID },
           query: WorkspaceRoutingQuery,

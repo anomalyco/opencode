@@ -676,6 +676,28 @@ describe("Project.setInitialized", () => {
   )
 })
 
+describe("Project.remove", () => {
+  it.live("removes the project", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+      const result = yield* project.fromDirectory(tmp)
+
+      yield* project.remove(result.project.id)
+
+      expect(yield* project.get(result.project.id)).toBeUndefined()
+    }),
+  )
+
+  it.live("fails with NotFoundError for an unknown project", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const error = yield* project.remove(ProjectV2.ID.make("missing")).pipe(Effect.flip)
+      expect(error._tag).toBe("Project.NotFoundError")
+    }),
+  )
+})
+
 describe("Project.addSandbox and Project.removeSandbox", () => {
   it.live("addSandbox adds directory and removeSandbox removes it", () =>
     Effect.gen(function* () {

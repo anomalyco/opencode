@@ -8789,6 +8789,40 @@ export type ProjectInitGitResponses = {
 
 export type ProjectInitGitResponse = ProjectInitGitResponses[keyof ProjectInitGitResponses]
 
+export type ProjectRemoveData = {
+  body?: never
+  path: {
+    projectID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/project/{projectID}"
+}
+
+export type ProjectRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * ProjectNotFoundError
+   */
+  404: ProjectNotFoundError
+}
+
+export type ProjectRemoveError = ProjectRemoveErrors[keyof ProjectRemoveErrors]
+
+export type ProjectRemoveResponses = {
+  /**
+   * Project removed
+   */
+  200: boolean
+}
+
+export type ProjectRemoveResponse = ProjectRemoveResponses[keyof ProjectRemoveResponses]
+
 export type ProjectUpdateData = {
   body?: {
     name?: string

@@ -92,6 +92,7 @@ export interface Interface {
   readonly list: () => Effect.Effect<Info[]>
   readonly get: (id: ProjectV2.ID) => Effect.Effect<Info | undefined>
   readonly update: (input: UpdateInput) => Effect.Effect<Info, NotFoundError>
+  readonly remove: (id: ProjectV2.ID) => Effect.Effect<void, NotFoundError>
   readonly initGit: (input: { directory: string; project: Info }) => Effect.Effect<Info>
   readonly setInitialized: (id: ProjectV2.ID) => Effect.Effect<void>
   readonly sandboxes: (id: ProjectV2.ID) => Effect.Effect<string[]>
@@ -363,6 +364,12 @@ const layer = Layer.effect(
       return data
     })
 
+    // Dependent rows (sessions, directories, permissions, workspaces) are removed by ON DELETE CASCADE.
+    const remove = Effect.fn("Project.remove")(function* (id: ProjectV2.ID) {
+      const result = yield* db.delete(ProjectTable).where(eq(ProjectTable.id, id)).returning().get().pipe(Effect.orDie)
+      if (!result) return yield* new NotFoundError({ projectID: id })
+    })
+
     const initGit = Effect.fn("Project.initGit")(function* (input: { directory: string; project: Info }) {
       if (input.project.vcs === "git") return input.project
       if (!(yield* Effect.sync(() => which("git")))) throw new Error("Git is not installed")
@@ -454,6 +461,7 @@ const layer = Layer.effect(
       list,
       get,
       update,
+      remove,
       initGit,
       setInitialized,
       sandboxes,

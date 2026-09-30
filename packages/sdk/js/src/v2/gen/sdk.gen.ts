@@ -140,6 +140,8 @@ import type {
   ProjectInitGitResponses,
   ProjectListErrors,
   ProjectListResponses,
+  ProjectRemoveErrors,
+  ProjectRemoveResponses,
   ProjectUpdateErrors,
   ProjectUpdateResponses,
   PromptInput,
@@ -2613,6 +2615,38 @@ export class Project extends HeyApiClient {
     )
     return (options?.client ?? this.client).post<ProjectInitGitResponses, ProjectInitGitErrors, ThrowOnError>({
       url: "/project/git/init",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Remove project
+   *
+   * Remove a project and its sessions from OpenCode. Files on disk are not touched.
+   */
+  public remove<ThrowOnError extends boolean = false>(
+    parameters: {
+      projectID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "projectID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<ProjectRemoveResponses, ProjectRemoveErrors, ThrowOnError>({
+      url: "/project/{projectID}",
       ...options,
       ...params,
     })
