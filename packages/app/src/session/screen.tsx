@@ -9,6 +9,7 @@ import {
   createEffect,
   createComputed,
   on,
+  type Accessor,
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
@@ -36,6 +37,7 @@ import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
 import { ArtifactMarkdownProvider, ArtifactOpenerProvider } from "./files/open-artifact"
 import { createSessionBtw } from "./btw/model"
+import type { MissingLocation } from "./composer/location-missing"
 
 const SessionMobileFiles = lazy(async () => {
   const { SessionMobileFiles } = await import("./files/session-mobile-files")
@@ -47,19 +49,23 @@ const SessionSummaryPanel = lazy(async () => {
   return { default: SessionSummaryPanel }
 })
 
-export function SessionScreen(props: { session: SessionModel }) {
+export function SessionScreen(props: { session: SessionModel; missing?: Accessor<MissingLocation | undefined> }) {
   // The timeline cache captures its owner when created, so link handling must be provided above it.
   const browser = createSessionBrowser(props.session)
   return (
     <ArtifactOpenerProvider session={props.session} browser={browser}>
       <ArtifactMarkdownProvider>
-        <SessionScreenContent session={props.session} browser={browser} />
+        <SessionScreenContent session={props.session} browser={browser} missing={props.missing} />
       </ArtifactMarkdownProvider>
     </ArtifactOpenerProvider>
   )
 }
 
-function SessionScreenContent(props: { session: SessionModel; browser: ReturnType<typeof createSessionBrowser> }) {
+function SessionScreenContent(props: {
+  session: SessionModel
+  browser: ReturnType<typeof createSessionBrowser>
+  missing?: Accessor<MissingLocation | undefined>
+}) {
   const session = props.session
   const browser = props.browser
   const server = useServer()
@@ -324,7 +330,9 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
       </div>
 
       <Show when={composer.active()} keyed>
-        {(model) => <ActiveSessionComposerRegion model={model} suggestionBoundary={timeline.scroller} />}
+        {(model) => (
+          <ActiveSessionComposerRegion model={model} suggestionBoundary={timeline.scroller} missing={props.missing} />
+        )}
       </Show>
     </>
   )

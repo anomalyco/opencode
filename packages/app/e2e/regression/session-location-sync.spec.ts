@@ -37,7 +37,7 @@ for (const endpoint of ["/api/location", "/api/agent"]) {
         return (
           url.pathname === endpoint &&
           url.searchParams.get("location[directory]") === directory &&
-          (recover ? response.ok() : requests === 3 && response.status() === 500)
+          (recover ? response.ok() : requests >= 3 && response.status() === 500)
         )
       })
       await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
@@ -50,13 +50,60 @@ for (const endpoint of ["/api/location", "/api/agent"]) {
       await settled
       await expect(prompt).toBeEditable()
       await expect(prompt).toHaveText("Continue after reconnecting")
-      expect(requests).toBe(recover ? 2 : 3)
+      expect(requests).toBeGreaterThanOrEqual(recover ? 2 : 3)
       await expect(page.getByText("Session location unavailable", { exact: true })).toHaveCount(0)
       await expect(page.getByRole("button", { name: "Choose directory", exact: true })).toHaveCount(0)
       expect(recovery).toEqual([])
       await page.screenshot({ path: test.info().outputPath("location-sync.png") })
     })
   }
+}
+
+for (const error of [
+  { _tag: "FileNotFoundError", path: "/projects/current", message: "Unrelated file" },
+  { _tag: "LocationNotFoundError", directory: "/projects/other", message: "Other location" },
+  undefined,
+]) {
+  test(`does not recover from an unrelated 404 (${error?._tag ?? "no typed error"})`, async ({ page }) => {
+    const recovery = recoveryRequests(page)
+    const directory = "/projects/current"
+    const sessionID = "ses_location_unrelated_404"
+    await mockOpenCodeServer(page, {
+      directory: fixture.directory,
+      project: fixture.project,
+      provider: fixture.provider,
+      sessions: [{ id: sessionID, projectID: fixture.project.id, directory, title: "Unrelated error" }],
+      fileList: () => [],
+      pageMessages: () => ({
+        items: [{ id: "msg_saved", type: "user", text: "Continue in the current worktree", time: { created: 1 } }],
+      }),
+    })
+    await page.route("**/api/location?**", (route) => {
+      if (new URL(route.request().url()).searchParams.get("location[directory]") !== directory) return route.fallback()
+      return route.fulfill({
+        status: 404,
+        ...(error ? { json: error } : { body: "" }),
+        headers: { "access-control-allow-origin": "*" },
+      })
+    })
+    const failure = page.waitForResponse((response) => {
+      const url = new URL(response.url())
+      return (
+        url.pathname === "/api/location" &&
+        url.searchParams.get("location[directory]") === directory &&
+        response.status() === 404
+      )
+    })
+    await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
+    await failure
+    await expect(page.getByText("Continue in the current worktree", { exact: true })).toBeVisible()
+    const prompt = page.getByRole("textbox", { name: "Prompt", exact: true })
+    await expect(prompt).toBeEditable()
+    await prompt.fill("Keep this draft")
+    await expect(prompt).toHaveText("Keep this draft")
+    await expect(page.getByText("Session location unavailable", { exact: true })).toHaveCount(0)
+    expect(recovery).toEqual([])
+  })
 }
 
 test("follows a live session move while the agent catalog is still loading", async ({ page }) => {
@@ -217,7 +264,7 @@ test("ignores an old failed location read after reconnecting", async ({ page }) 
   await expect(prompt).toHaveText("Keep typing here")
   await expect(page.getByText("Session location unavailable", { exact: true })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "Choose directory", exact: true })).toHaveCount(0)
-  expect(requests).toBe(2)
+  expect(requests).toBeGreaterThanOrEqual(2)
   expect(recovery).toEqual([])
 })
 

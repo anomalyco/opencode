@@ -1,7 +1,9 @@
-import { ErrorBoundary, createEffect, createMemo, Show, type ParentProps } from "solid-js"
+import { ErrorBoundary, createEffect, createMemo, onCleanup, Show, type ParentProps } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
 import { DataProvider } from "@opencode/session-ui/context"
 import { SessionUserMessage } from "@opencode/session-ui/message"
+import { isLocationNotFoundError } from "@opencode/client/promise"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { CommentsProvider } from "@/composer/comments"
 import { readPromptPresentation } from "@/composer/comment-note"
@@ -27,13 +29,46 @@ import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
 import { SessionScreen } from "./screen"
 import { PreparingComposer } from "./preparing-composer"
+import type { MissingLocation } from "./composer/location-missing"
 
 export function TargetSessionRouteContent() {
   const params = useParams<{ serverKey: string; id: string }>()
   const data = useData()
   const server = useServer()
   const tabs = useTabs()
+  const [locationState, setLocationState] = createStore<{ missing?: MissingLocation }>({})
   const directory = createMemo(() => data.session.get(params.id)?.location.directory)
+  createEffect(() => {
+    const session = data.session.get(params.id)
+    const directory = session?.location.directory
+    const project = session && data.project.get(session.projectID)
+    const connected = server.ctx.sdk.connection.status() === "connected"
+    setLocationState("missing", undefined)
+    if (!session || !directory || !project || !connected || directory === project.canonical) return
+    let stale = false
+    onCleanup(() => {
+      stale = true
+    })
+    void server.ctx.sdk.api.location.get({ location: { directory } }).then(
+      () => undefined,
+      (error) => {
+        if (
+          !stale &&
+          server.ctx.sdk.connection.status() === "connected" &&
+          isLocationNotFoundError(error) &&
+          error.directory === directory
+        )
+          setLocationState("missing", { sessionID: session.id, projectID: project.id, directory })
+      },
+    )
+  })
+  const missing = createMemo(() => {
+    const session = data.session.get(params.id)
+    const state = locationState.missing
+    if (!state || !session || session.id !== state.sessionID || session.location.directory !== state.directory) return
+    if (server.ctx.sdk.connection.status() !== "connected") return
+    return state
+  })
 
   return (
     <>
@@ -41,7 +76,10 @@ export function TargetSessionRouteContent() {
       <ModelsProvider directory={directory}>
         <TargetSessionSettingsCommand />
         <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
-          <Show when={tabs.pendingSession(server.key, params.id)} fallback={<ResolvedTargetSessionRoute />}>
+          <Show
+            when={tabs.pendingSession(server.key, params.id)}
+            fallback={<ResolvedTargetSessionRoute missing={missing} />}
+          >
             {(pending) => <PreparingSession sessionID={params.id} pending={pending()} />}
           </Show>
         </SessionRouteErrorBoundary>
@@ -111,7 +149,7 @@ function SessionRouteErrorBoundary(props: ParentProps<{ sessionID?: string; serv
   )
 }
 
-function ResolvedTargetSessionRoute() {
+function ResolvedTargetSessionRoute(props: { missing: () => MissingLocation | undefined }) {
   const params = useParams<{ id: string }>()
   const server = useServer()
   const tabs = useTabs()
@@ -138,7 +176,7 @@ function ResolvedTargetSessionRoute() {
         {(value) => (
           <LocationProvider directory={value}>
             <SessionUIProvider directory={value()} server={server.key}>
-              <TargetSessionPage />
+              <TargetSessionPage missing={props.missing} />
             </SessionUIProvider>
           </LocationProvider>
         )}
@@ -163,7 +201,7 @@ function SessionStatePanel(props: ParentProps) {
   )
 }
 
-function TargetSessionPage() {
+function TargetSessionPage(props: { missing: () => MissingLocation | undefined }) {
   return (
     // These providers select their scoped state reactively and retain bounded caches,
     // so keep their owners alive while navigating between workspaces on this server.
@@ -171,7 +209,7 @@ function TargetSessionPage() {
       <FileProvider>
         <ComposerPersistenceProvider>
           <CommentsProvider>
-            <SessionPage />
+            <SessionPage missing={props.missing} />
           </CommentsProvider>
         </ComposerPersistenceProvider>
       </FileProvider>
@@ -179,9 +217,9 @@ function TargetSessionPage() {
   )
 }
 
-function SessionPage() {
+function SessionPage(props: { missing: () => MissingLocation | undefined }) {
   const session = useSessionModel()
-  return <SessionScreen session={session} />
+  return <SessionScreen session={session} missing={props.missing} />
 }
 
 function MarkSessionNotificationsViewed(props: { sessionID: () => string | undefined }) {

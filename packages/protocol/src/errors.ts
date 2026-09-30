@@ -129,6 +129,15 @@ export class FileNotFoundError extends Schema.TaggedError<FileNotFoundError>()(
   { httpApiStatus: 404 },
 ) {}
 
+export class LocationNotFoundError extends Schema.TaggedError<LocationNotFoundError>()(
+  "LocationNotFoundError",
+  {
+    directory: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
 export class AgentNotFoundError extends Schema.TaggedError<AgentNotFoundError>()(
   "AgentNotFoundError",
   {

@@ -4,7 +4,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
-import { createEffect, createMemo, on, onMount, type Accessor } from "solid-js"
+import { createEffect, createMemo, on, onMount, Show, type Accessor } from "solid-js"
 import { Composer } from "@/composer/composer"
 import { useComposerState } from "@/composer/persistence"
 import { createComposerControls } from "@/composer/selection"
@@ -29,6 +29,7 @@ import { createSessionComposerController, type SessionComposerController } from 
 import { SessionQueuePanel } from "./queue-panel"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
+import { SessionLocationMissing, type MissingLocation } from "./location-missing"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
@@ -219,22 +220,33 @@ export type ActiveSessionRegionModel = ReturnType<typeof createActiveSessionRegi
 export function ActiveSessionComposerRegion(props: {
   model: SessionComposerController
   suggestionBoundary: () => HTMLElement | undefined
+  missing?: Accessor<MissingLocation | undefined>
 }) {
   return (
     <SessionComposerRegion
-      controller={props.model.region}
+      controller={{
+        ...props.model.region,
+        showComposer: () => props.model.region.showComposer() || !!props.missing?.(),
+      }}
       composer={
-        <div class="relative">
-          <SessionQueuePanel queue={props.model.queue} />
-          <div class="relative z-10">
-            <Composer
-              model={props.model.composer}
-              borderUnderlay
-              readOnly={props.model.queue.undoing()}
-              suggestionBoundary={props.suggestionBoundary}
-            />
-          </div>
-        </div>
+        <Show
+          when={props.missing?.()}
+          fallback={
+            <div class="relative">
+              <SessionQueuePanel queue={props.model.queue} />
+              <div class="relative z-10">
+                <Composer
+                  model={props.model.composer}
+                  borderUnderlay
+                  readOnly={props.model.queue.undoing()}
+                  suggestionBoundary={props.suggestionBoundary}
+                />
+              </div>
+            </div>
+          }
+        >
+          {(missing) => <SessionLocationMissing {...missing()} />}
+        </Show>
       }
     />
   )

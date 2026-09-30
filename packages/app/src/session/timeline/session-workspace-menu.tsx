@@ -69,7 +69,7 @@ export function SessionWorkspaceMenu(props: {
               api: sdk.api,
               data,
               directory: props.directory,
-              project: data.location.info({ directory: props.directory })?.project,
+              project: { id: props.project.id, canonical: props.project.worktree, directory: props.project.worktree },
             })
           : selection
       if (!destination) return

@@ -66,9 +66,7 @@ type FormGroups<LocationId extends HttpApiMiddleware.AnyId, LocationService> = R
   typeof makeFormGroup<LocationId, LocationService>
 >
 
-type LocationGroup<LocationId extends HttpApiMiddleware.AnyId, LocationService> = ReturnType<
-  typeof makeLocationGroup<LocationId, LocationService>
->
+type LocationGroup = ReturnType<typeof makeLocationGroup>
 
 type MixedMiddlewareGroups<
   LocationId extends HttpApiMiddleware.AnyId,
@@ -94,7 +92,7 @@ type ApiGroups<
   | typeof PersistentPtyGroup
   | typeof CredentialGroup
   | LocationGroups<LocationId>
-  | LocationGroup<LocationId, LocationService>
+  | LocationGroup
   | FormGroups<LocationId, LocationService>
   | SessionGroups<SessionLocationId, SessionLocationService, FormLocationId, FormLocationService>
   | MixedMiddlewareGroups<LocationId, LocationService, SessionLocationId, SessionLocationService>
@@ -154,7 +152,7 @@ const makeApiFromGroup = <
 > =>
   HttpApi.make("server")
     .add(ServerGroup)
-    .add(makeLocationGroup(locationMiddleware))
+    .add(makeLocationGroup())
     .add(AgentGroup.middleware(locationMiddleware))
     .add(PluginGroup.middleware(locationMiddleware))
     .add(makeSessionGroup(sessionLocationMiddleware, formLocationMiddleware))
