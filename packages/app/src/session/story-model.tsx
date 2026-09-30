@@ -346,6 +346,11 @@ function SessionSurfaceHeader(props: {
             reviewVisible: props.reviewVisible,
             reviewOpened: props.reviewOpened,
             onReviewToggle: props.onReviewToggle,
+            terminalLabel: language.t("command.terminal.toggle"),
+            terminalKeybind: [],
+            terminalVisible: true,
+            terminalOpened: false,
+            onTerminalToggle: () => {},
           }}
         />
         <Button size="small" variant="neutral" onClick={props.onReset}>
