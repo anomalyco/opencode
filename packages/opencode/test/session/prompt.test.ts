@@ -8,7 +8,7 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
 import path from "path"
-import { fileURLToPath } from "url"
+import { fileURLToPath, pathToFileURL } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
 import { Agent as AgentSvc } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
@@ -1583,6 +1583,39 @@ unixNoLLMServer(
       yield* run.assertNotBusy(chat.id)
     }),
   { config: cfg },
+)
+
+unixNoLLMServer("shell output passes through tool.execute.after before it is stored", () =>
+  Effect.gen(function* () {
+    const { directory: dir } = yield* TestInstance
+    const file = path.join(dir, "redact.ts")
+    yield* writeText(
+      file,
+      [
+        "export default async () => ({",
+        '  "tool.execute.after": async (input, output) => {',
+        "    output.title = `${input.tool}:${input.callID}`",
+        '    output.output = output.output.replaceAll("hunter2", "[redacted]")',
+        '    output.metadata.output = output.metadata.output.replaceAll("hunter2", "[redacted]")',
+        "  },",
+        "})",
+        "",
+      ].join("\n"),
+    )
+    yield* writeConfig(dir, { ...cfg, plugin: [pathToFileURL(file).href] })
+    const { prompt, chat } = yield* boot()
+
+    const result = yield* prompt.shell({ sessionID: chat.id, agent: "build", command: "printf hunter2" })
+
+    const tool = completedTool(result.parts)
+    if (!tool) return
+    expect(tool.state.output).toBe("[redacted]")
+    expect(tool.state.metadata.output).toBe("[redacted]")
+    expect(tool.state.title).toBe(`bash:${tool.callID}`)
+    const msgs = yield* MessageV2.filterCompactedEffect(chat.id)
+    const stored = completedTool(msgs.find((item) => item.info.id === result.info.id)?.parts ?? [])
+    expect(stored?.state.output).toBe("[redacted]")
+  }),
 )
 
 unixNoLLMServer(

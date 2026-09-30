@@ -536,13 +536,19 @@ const layer = Layer.effect(
                 yield* sessions.updateMessage(msg)
               }
               if (part.state.status === "running") {
+                // Like agent tool calls, let plugins post-process the output before it is stored.
+                const result = yield* plugin.trigger(
+                  "tool.execute.after",
+                  { tool: ShellID.ToolID, sessionID: input.sessionID, callID: part.callID, args: part.state.input },
+                  { title: "", output, metadata: { output } },
+                )
                 part.state = {
                   status: "completed",
                   time: { ...part.state.time, end: completed },
                   input: part.state.input,
-                  title: "",
-                  metadata: { output },
-                  output,
+                  title: result.title,
+                  metadata: result.metadata,
+                  output: result.output,
                 }
                 yield* sessions.updatePart(part)
               }
