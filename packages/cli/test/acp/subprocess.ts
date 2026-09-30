@@ -45,6 +45,8 @@ type Waiter = {
 }
 
 export type AcpProcess = {
+  readonly pid: number
+  readonly exited: Promise<number>
   readonly request: <T>(method: string, params?: unknown) => Promise<JsonRpcResponse<T>>
   readonly send: <T>(
     method: string,
@@ -326,6 +328,8 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
   }
 
   return {
+    pid: child.pid,
+    exited: child.exited,
     request: <T>(method: string, params?: unknown) => send<T>(method, params).response,
     send,
     notify: (method: string, params: unknown) => write({ jsonrpc: "2.0", method, params }),

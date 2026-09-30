@@ -98,4 +98,28 @@ describe("acp lifecycle subprocess", () => {
 
     expect(selectConfigOption(resumed.configOptions, "model")?.category).toBe("model")
   }, 60_000)
+
+  // Best effort: finds the private server as a direct child process, which relies on `pgrep` (macOS and Linux only).
+  test.todo(
+    "exits when the private server process dies (https://github.com/anomalyco/opencode/issues/51716)",
+    async () => {
+      await using fixture = await createAcpFixture()
+      const acp = fixture.spawn()
+      await initialize(acp)
+      await newSession(acp, fixture.home)
+      const servers = Bun.spawnSync(["pgrep", "-P", String(acp.pid)])
+        .stdout.toString()
+        .split("\n")
+        .filter(Boolean)
+        .map(Number)
+      expect(servers).not.toHaveLength(0)
+
+      servers.forEach((pid) => process.kill(pid, "SIGKILL"))
+
+      const exited = await Promise.race([acp.exited, Bun.sleep(10_000).then(() => "running")])
+      expect(exited).not.toBe("running")
+      expect(exited).not.toBe(0)
+    },
+    60_000,
+  )
 })
