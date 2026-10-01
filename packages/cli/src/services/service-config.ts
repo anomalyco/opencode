@@ -127,10 +127,14 @@ export const options = Effect.fnUntraced(function* (input: { readonly checkVersi
 export const read = Effect.fn("cli.service-config.read")(function* () {
   const { fs, configFile, legacyConfigFile } = yield* paths
   if (legacyConfigFile) yield* migrateConfig(legacyConfigFile, configFile)
-  return yield* fs.readFileString(configFile).pipe(
-    Effect.flatMap(decodeInfo),
-    Effect.orElseSucceed(() => ({}) as Info),
-  )
+  const text = yield* fs.readFileString(configFile).pipe(Effect.option)
+  if (Option.isNone(text)) return {} as Info
+  const decoded = yield* decodeInfo(text.value).pipe(Effect.option)
+  // A file that exists but cannot be decoded is not an absent configuration. Every mutating path
+  // writes back `{ ...read(), changed }`, so reading it as empty silently discards the password,
+  // hostname, cors and env that are still in the file.
+  if (Option.isNone(decoded)) return yield* Effect.fail(new Error(`Invalid service configuration: ${configFile}`))
+  return decoded.value
 })
 
 const write = Effect.fn("cli.service-config.write")(function* (value: Info) {
