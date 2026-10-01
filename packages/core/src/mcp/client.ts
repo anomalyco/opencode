@@ -4,6 +4,8 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import {
   Client,
+  SdkError,
+  SdkErrorCode,
   SdkHttpError,
   StreamableHTTPClientTransport,
   UnauthorizedError,
@@ -34,6 +36,18 @@ const DEFAULT_CATALOG_TIMEOUT = 30_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
 const TERMINATE_TIMEOUT = 1_000
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
+
+// HTTP statuses and network error codes live on error properties and are lost once flattened to a message.
+const describe = (error: unknown) => {
+  if (!(error instanceof Error)) return String(error)
+  const detail =
+    error instanceof SdkHttpError
+      ? `HTTP ${error.status}`
+      : !(error instanceof SdkError) && "code" in error && typeof error.code === "string"
+        ? error.code
+        : undefined
+  return detail && !error.message.includes(detail) ? `${error.message} (${detail})` : error.message
+}
 
 export type { GetPromptResult, Prompt, ReadResourceResult, Resource, Tool }
 export type ResourceTemplate = ResourceTemplateType
@@ -108,7 +122,7 @@ export interface Connection {
     readonly args?: Record<string, unknown>
     readonly sessionID?: Session.ID
   }) => Effect.Effect<CallToolResult, Error>
-  readonly onClose: (callback: () => void) => void
+  readonly onClose: (callback: (reason: string) => void) => void
   readonly onSessionExpired: (callback: () => void) => void
   readonly onToolsChanged: (callback: () => void) => void
   readonly onPromptsChanged: (callback: () => void) => void
@@ -138,7 +152,15 @@ export const connect = Effect.fnUntraced(function* (
     onChanged: () => changed[key](),
   })
 
+  // The SDK fails pending requests with a bare "Connection closed"; the transport error before it says why.
+  let lastError: string | undefined
+  const explain = (error: unknown) =>
+    error instanceof SdkError && error.code === SdkErrorCode.ConnectionClosed && lastError
+      ? `${describe(error)}: ${lastError}`
+      : describe(error)
+
   const initialize = Effect.fnUntraced(function* (transport: Transport) {
+    const runFork = Effect.runForkWith(yield* Effect.context())
     const client = new Client(clientInfo, {
       capabilities: {
         ...(elicitation ? { elicitation: { form: { applyDefaults: true }, url: {} } } : {}),
@@ -153,6 +175,12 @@ export const connect = Effect.fnUntraced(function* (
         resources: listChanged("resources"),
       },
     })
+    // Background work such as the standalone SSE stream reports failures only here; aborts come from close.
+    client.onerror = (error) => {
+      if (error.name === "AbortError") return
+      lastError = describe(error)
+      runFork(Effect.logWarning("mcp transport error", { server, error: lastError }))
+    }
     client.setRequestHandler("roots/list", () => ({ roots: [{ uri: pathToFileURL(directory).href }] }))
     if (elicitation) {
       client.setRequestHandler("elicitation/create", (request, ctx) =>
@@ -179,13 +207,13 @@ export const connect = Effect.fnUntraced(function* (
     reported: false,
   }
   const failure = (error: unknown) => {
-    if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return toError(error)
+    if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
     const expired =
       error.status === 404 ||
       (error.status === 400 &&
         typeof error.data.text === "string" &&
         error.data.text.includes("Bad Request: Server not initialized"))
-    if (!expired) return toError(error)
+    if (!expired) return new Error(explain(error))
     if (!session.reported) {
       session.reported = true
       session.expired?.()
@@ -242,6 +270,8 @@ export const connect = Effect.fnUntraced(function* (
         // Close only aborts streams; the legacy session lives on until the server expires it unless
         // terminated explicitly. Terminate first: close aborts the signal the DELETE shares.
         const transport = session.transport
+        // Termination failures are logged below; onerror would report them a second time.
+        client.onerror = undefined
         if (transport?.sessionId !== undefined && !session.reported)
           yield* Effect.tryPromise({ try: () => transport.terminateSession(), catch: toError }).pipe(
             Effect.timeoutOrElse({
@@ -301,7 +331,7 @@ export const connect = Effect.fnUntraced(function* (
           ),
         ).pipe(Effect.map(toCallToolResult)),
       onClose: (callback) => {
-        client.onclose = callback
+        client.onclose = () => callback(lastError ? `Connection closed: ${lastError}` : "Connection closed")
       },
       onSessionExpired: (callback) => {
         session.expired = callback
@@ -325,7 +355,7 @@ export const connect = Effect.fnUntraced(function* (
       server,
       message: `${error.message}; the server supports ${error.supported.join(", ")}. Set "protocol" for this server to one of those or to "legacy".`,
     })
-  return yield* new ConnectError({ server, message: error instanceof Error ? error.message : String(error) })
+  return yield* new ConnectError({ server, message: explain(error) })
 })
 
 // Absent config is legacy: the SDK sends the plain initialize handshake with no discover probe.
