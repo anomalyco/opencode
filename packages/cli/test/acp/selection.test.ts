@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionConfigOption } from "@agentclientprotocol/sdk"
-import { currentValue } from "./select-options"
-import { durableEvent, secondModel, startSession, stepEnded, turn, type Wire } from "./wire-fixture"
+import { currentValue, selectValues } from "./select-options"
+import {
+  durableEvent,
+  ephemeralEvent,
+  secondModel,
+  startSession,
+  startWire,
+  stepEnded,
+  testModel,
+  turn,
+  type Wire,
+} from "./wire-fixture"
 
 describe("acp follows model and agent selections from other clients", () => {
   test("pushes an external model switch with its variant and uses it for the next prompt", async () => {
@@ -61,17 +71,16 @@ describe("acp follows model and agent selections from other clients", () => {
     await using acp = await startSession({
       // The server publishes the selection event before it answers the switch.
       fetch: (request) => {
-        const sessionID = request.path.split("/")[3] ?? ""
         if (request.method !== "POST") return undefined
         if (request.path.endsWith("/model"))
           acp.server.send(
             durableEvent("session.model.selected", {
-              sessionID,
+              sessionID: acp.sessionId,
               model: { providerID: "test", id: secondModel.id, variant: "medium" },
             }),
           )
         if (request.path.endsWith("/agent"))
-          acp.server.send(durableEvent("session.agent.selected", { sessionID, agent: "plan" }))
+          acp.server.send(durableEvent("session.agent.selected", { sessionID: acp.sessionId, agent: "plan" }))
         return undefined
       },
     })
@@ -114,7 +123,8 @@ describe("acp follows model and agent selections from other clients", () => {
     expect(configUpdates(acp, acp.sessionId)).toEqual([])
 
     const stored = acp.server.sessions.get(acp.sessionId)
-    if (stored) acp.server.sessions.set(acp.sessionId, { ...stored, agent: "plan" })
+    if (!stored) throw new Error(`missing stored session ${acp.sessionId}`)
+    acp.server.sessions.set(acp.sessionId, { ...stored, agent: "plan" })
     const resume = () => acp.request("session/resume", { sessionId: acp.sessionId, cwd: "/workspace" })
     const resumed = await resume()
     await resume()
@@ -124,10 +134,51 @@ describe("acp follows model and agent selections from other clients", () => {
         model: { providerID: "test", id: secondModel.id },
       }),
     )
-    const updates = await optionUpdates(acp, acp.sessionId, 1)
+    await optionUpdates(acp, acp.sessionId, 1)
+    acp.server.send(durableEvent("session.agent.selected", { sessionID: acp.sessionId, agent: "build" }))
+    await optionUpdates(acp, acp.sessionId, 2)
 
     expect(currentValue(resumed, "mode")).toBe("plan")
-    expect(updates.map(values)).toEqual([{ model: "test/second-model", effort: "default", mode: "plan" }])
+    expect(configUpdates(acp, acp.sessionId).map(values)).toEqual([
+      { model: "test/second-model", effort: "default", mode: "plan" },
+      { model: "test/second-model", effort: "default", mode: "build" },
+    ])
+  })
+
+  test("ends on the latest catalog and selection when both change together", async () => {
+    await using acp = await startWire()
+    acp.server.catalog.models = [testModel]
+    await acp.initialize()
+    const { sessionId } = await acp.newSession()
+
+    acp.server.catalog.models = [testModel, secondModel]
+    acp.server.send(
+      ephemeralEvent("model.updated", {}),
+      durableEvent("session.model.selected", {
+        sessionID: sessionId,
+        model: { providerID: "test", id: secondModel.id },
+      }),
+    )
+    await acp.until(
+      () => configUpdates(acp, sessionId).some((options) => selectValues(options, "model").length === 2),
+      "the reloaded catalog",
+    )
+    acp.server.send(durableEvent("session.agent.selected", { sessionID: sessionId, agent: "plan" }))
+    const updates = await acp.until(() => {
+      const updates = configUpdates(acp, sessionId)
+      return values(updates.at(-1)).mode === "plan" && updates
+    }, "the sentinel update")
+
+    expect(
+      updates.slice(-2).map((options) => ({ ...values(options), models: selectValues(options, "model") })),
+    ).toEqual(
+      ["build", "plan"].map((mode) => ({
+        model: "test/second-model",
+        effort: "default",
+        mode,
+        models: ["test/second-model", "test/test-model"],
+      })),
+    )
   })
 })
 

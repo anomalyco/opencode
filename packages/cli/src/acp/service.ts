@@ -99,6 +99,7 @@ export function make(input: {
     }
   })
 
+  // Both selectors update the selection before switching on the server, so the echoed event diffs to no change.
   const selectModel = Effect.fnUntraced(function* (attached: Attached, model: ModelRef) {
     yield* Ref.update(attached.selection, (selection) => ({ ...selection, model }))
     yield* ACPPromise.promise(() => input.client.session.switchModel({ sessionID: attached.id, model }))

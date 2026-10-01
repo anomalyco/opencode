@@ -1,7 +1,7 @@
 import { isDeepStrictEqual } from "node:util"
 import type { McpServer, RequestError } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent, SessionInfo } from "@opencode/client/promise"
-import { Context, Effect, Exit, Ref, Scope, Stream } from "effect"
+import { Context, Deferred, Effect, Exit, Queue, Ref, Scope, Stream } from "effect"
 import type { ACPCatalog, Catalog } from "./catalog"
 import { availableCommands, configOptions, type Selection } from "./config-option"
 import type { ACPConnection } from "./connection"
@@ -34,7 +34,14 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Sessions") {}
 
-type Entry = { readonly attached: Attached; readonly scope: Scope.Closeable }
+type Entry = {
+  readonly attached: Attached
+  readonly scope: Scope.Closeable
+  /** Selection changes from other clients, applied by the session's fold. */
+  readonly selected: Queue.Queue<Selection>
+}
+
+type SelectedEvent = Extract<OpenCodeEvent, { type: "session.model.selected" | "session.agent.selected" }>
 
 export const make = Effect.fnUntraced(function* (input: {
   readonly client: OpenCodeClient
@@ -45,6 +52,27 @@ export const make = Effect.fnUntraced(function* (input: {
   const sessions = new Map<string, Entry>()
   // Kept across re-attachment so resuming with the same servers does not add them again.
   const registeredMcp = new Map<string, Set<string>>()
+  const connected = yield* Deferred.make<void>()
+
+  // Subscribe before any attach so a switch right after `sessions.set` reaches the session.
+  yield* Stream.fromAsyncIterable(input.client.event.subscribe(), (cause) => cause).pipe(
+    Stream.tap((event) => (event.type === "server.connected" ? Deferred.succeed(connected, undefined) : Effect.void)),
+    Stream.filter(
+      (event): event is SelectedEvent =>
+        event.type === "session.model.selected" || event.type === "session.agent.selected",
+    ),
+    Stream.runForEach((event) => {
+      const entry = sessions.get(event.data.sessionID)
+      if (!entry) return Effect.void
+      return Queue.offer(
+        entry.selected,
+        event.type === "session.model.selected" ? { model: event.data.model } : { modeID: event.data.agent },
+      )
+    }),
+    Effect.ignore,
+    Effect.ensuring(Deferred.succeed(connected, undefined)),
+    Effect.forkScoped,
+  )
 
   const sendCommands = (sessionID: string, catalog: Catalog) =>
     input.connection.sessionUpdate({
@@ -52,9 +80,9 @@ export const make = Effect.fnUntraced(function* (input: {
       update: { sessionUpdate: "available_commands_update", availableCommands: availableCommands(catalog) },
     })
 
-  const changed = Effect.fnUntraced(function* (attached: Attached, previous: Catalog, next: Catalog) {
-    const selection = yield* Ref.get(attached.selection)
-    const options = configOptions(next, selection)
+  const changed = Effect.fnUntraced(function* (attached: Attached, previous: Catalog, next: Catalog, patch: Selection) {
+    const selection = yield* Ref.getAndUpdate(attached.selection, (current) => ({ ...current, ...patch }))
+    const options = configOptions(next, { ...selection, ...patch })
     if (!isDeepStrictEqual(options, configOptions(previous, selection))) {
       yield* input.connection.sessionUpdate({
         sessionId: attached.id,
@@ -62,21 +90,6 @@ export const make = Effect.fnUntraced(function* (input: {
       })
     }
     if (!isDeepStrictEqual(next.commands, previous.commands)) yield* sendCommands(attached.id, next)
-  })
-
-  // Follows switches from other clients. ACP's own switches update the selection first, so their echo is a no-op.
-  const selected = Effect.fnUntraced(function* (attached: Attached, event: OpenCodeEvent) {
-    if (event.type !== "session.model.selected" && event.type !== "session.agent.selected") return
-    if (event.data.sessionID !== attached.id) return
-    const catalog = yield* input.catalog.get(attached.cwd)
-    const patch = event.type === "session.model.selected" ? { model: event.data.model } : { modeID: event.data.agent }
-    const previous = yield* Ref.getAndUpdate(attached.selection, (current) => ({ ...current, ...patch }))
-    const options = configOptions(catalog, { ...previous, ...patch })
-    if (isDeepStrictEqual(options, configOptions(catalog, previous))) return
-    yield* input.connection.sessionUpdate({
-      sessionId: attached.id,
-      update: { sessionUpdate: "config_option_update", configOptions: options },
-    })
   })
 
   const registerMcp = (attached: Attached, servers: readonly McpServer[]) =>
@@ -113,6 +126,7 @@ export const make = Effect.fnUntraced(function* (input: {
 
   return Service.of({
     attach: Effect.fn("cli.acp.sessions.attach")(function* (session, cwd, mcpServers) {
+      yield* Deferred.await(connected)
       const current = yield* input.catalog.get(cwd)
       const abort = new AbortController()
       const entry: Entry = {
@@ -123,6 +137,7 @@ export const make = Effect.fnUntraced(function* (input: {
           signal: abort.signal,
         },
         scope: Scope.forkUnsafe(scope),
+        selected: yield* Queue.unbounded<Selection>(),
       }
       // Swap synchronously so concurrent attaches of one ID cannot both keep a scope.
       const replaced = sessions.get(session.id)
@@ -136,20 +151,19 @@ export const make = Effect.fnUntraced(function* (input: {
         Effect.andThen(sendCommands(session.id, current)),
         Effect.onError(() => remove(session.id, entry)),
       )
-      // `changes` emits the latest catalog first, so a reload since `current` is still pushed.
-      yield* input.catalog.changes(cwd).pipe(
+      // `changes` emits the latest catalog first, so a reload since `current` is still pushed. One fold applies
+      // catalog and selection changes so pushes leave the client on the latest pair.
+      yield* Stream.merge(
+        input.catalog.changes(cwd).pipe(Stream.map((catalog) => ({ catalog, patch: {} }))),
+        Stream.fromQueue(entry.selected).pipe(Stream.map((patch) => ({ catalog: undefined, patch }))),
+      ).pipe(
         Stream.runFoldEffect(
           () => current,
-          (previous, next) =>
-            next === previous
-              ? Effect.succeed(previous)
-              : changed(entry.attached, previous, next).pipe(Effect.ignore, Effect.as(next)),
+          (previous, step) => {
+            const next = step.catalog ?? previous
+            return changed(entry.attached, previous, next, step.patch).pipe(Effect.ignore, Effect.as(next))
+          },
         ),
-        Effect.ignore,
-        Effect.forkIn(entry.scope),
-      )
-      yield* Stream.fromAsyncIterable(input.client.event.subscribe(), (cause) => cause).pipe(
-        Stream.runForEach((event) => selected(entry.attached, event).pipe(Effect.ignore)),
         Effect.ignore,
         Effect.forkIn(entry.scope),
       )
