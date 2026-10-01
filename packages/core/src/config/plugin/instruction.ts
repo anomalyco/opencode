@@ -60,21 +60,18 @@ export const Plugin = define({
       })
 
       const globalSource = Effect.fn("ConfigInstructionPlugin.globalSource")(function* () {
-        if (!discovery.global || (yield* fs.isDir(globalFile))) return []
+        if (!discovery.global || !(yield* fs.isFile(globalFile))) return []
         const file = yield* read(globalFile)
         return file ? [file] : []
       })
 
       const projectSource = Effect.fn("ConfigInstructionPlugin.projectSource")(function* () {
         if (!project) return []
-        const walked = yield* Effect.forEach(yield* fs.up({ targets: ["AGENTS.md"], start, stop }), fs.resolve)
-        // A directory named AGENTS.md (or agents.md on case-insensitive filesystems) is not an instruction file.
-        const discovered = new Set(
-          yield* Effect.filter(
-            walked.filter((file) => discovery.global || file !== globalFile),
-            (file) => fs.isDir(file).pipe(Effect.map((dir) => !dir)),
-          ),
+        const walked = yield* Effect.forEach(
+          yield* fs.up({ targets: ["AGENTS.md"], start, stop, type: "file" }),
+          fs.resolve,
         )
+        const discovered = new Set(walked.filter((file) => discovery.global || file !== globalFile))
         const files = yield* Effect.forEach(discovered, read, { concurrency: "unbounded" })
         if (files.some((file) => file === undefined)) return Instructions.unavailable
         return files.filter((file): file is InstructionDiscovery.File => file !== undefined)
