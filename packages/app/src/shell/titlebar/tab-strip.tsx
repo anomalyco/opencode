@@ -242,6 +242,7 @@ export function TitlebarTabStrip(props: {
   const global = useGlobal()
   const language = useLanguage()
   const command = useCommand()
+  const tabs = useTabs()
   const vertical = () => props.orientation === "vertical"
   let listRef!: HTMLDivElement
   const [visibility, setVisibility] = createStore<Record<string, boolean>>({})
@@ -267,11 +268,18 @@ export function TitlebarTabStrip(props: {
     },
   ])
 
+  function navigateTab(tab: Tab, el?: HTMLDivElement) {
+    const current = props.currentTab
+    if (current && tabKey(tab) === tabKey(current)) return
+    tabs.requestPromptFocus(tab)
+    props.onNavigate(tab, el)
+  }
+
   function selectAdjacentTab(offset: -1 | 1) {
     const current = props.currentTab
     const key = adjacentTabKey(visibleTabIds(), current ? tabKey(current) : undefined, offset)
     const next = props.tabs.find((tab) => tabKey(tab) === key)
-    if (next) props.onNavigate(next)
+    if (next) navigateTab(next)
   }
 
   return (
@@ -348,7 +356,7 @@ export function TitlebarTabStrip(props: {
                 const id = tabKey(tab)
                 let ref!: HTMLDivElement
                 const visibleIndex = () => visibleTabs().findIndex((item) => tabKey(item) === id)
-                useTabShortcut(visibleIndex, () => props.onNavigate(tab, ref))
+                useTabShortcut(visibleIndex, () => navigateTab(tab, ref))
                 const serverCtx = useServerCtx(() => {
                   if (tab.type !== "session") return
                   return global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
