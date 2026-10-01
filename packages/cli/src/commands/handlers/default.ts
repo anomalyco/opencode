@@ -64,7 +64,7 @@ export default Runtime.handler(Commands, (input) =>
     let latest: Updater.RunResult | undefined
     const installListeners = new Set<(version: string) => void>()
     const resultListeners = new Set<(result: Updater.RunResult) => void>()
-    // `/update` waits for a running background check so it can't offer an install that is already underway.
+    // Background checks, `/update` lookups, and manual installs take turns so two installs never overlap.
     const checking = yield* Semaphore.make(1)
     yield* updater
       .run((version) => {
@@ -134,7 +134,7 @@ export default Runtime.handler(Commands, (input) =>
             installListeners.delete(notify),
           )
         },
-        apply: (version) => runPromise(updater.apply(version)),
+        apply: (version) => runPromise(checking.withPermits(1)(updater.apply(version))),
       },
       packages: {
         prepare: (spec, install = true) => runPromise(install ? npm.add(spec) : npm.resolve(spec)),
