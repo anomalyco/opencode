@@ -110,14 +110,7 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
   const connection = ACPConnection.make(agentConnection)
   const sessions = yield* ACPSessions.make({ client, connection, catalog })
   const capabilities = yield* Ref.make({ childSessionUpdates: false })
-  const turn = yield* ACPTurn.make({
-    client,
-    connection,
-    permissions: ACPConnection.promise(agentConnection),
-    sessions,
-    catalog,
-    capabilities,
-  })
+  const turn = yield* ACPTurn.make({ client, connection, sessions, catalog, capabilities })
   yield* Deferred.succeed(ready, ACPService.make({ client, connection, catalog, sessions, capabilities, turn }))
   return agentConnection
 })

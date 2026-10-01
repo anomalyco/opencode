@@ -4,7 +4,6 @@ import {
   type RequestError,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
-  type SendRequestOptions,
   type SessionNotification,
 } from "@agentclientprotocol/sdk"
 import { Context, type Effect } from "effect"
@@ -13,6 +12,10 @@ import { ACPPromise } from "./promise"
 
 export interface Interface {
   readonly sessionUpdate: (params: SessionNotification) => Effect.Effect<void, ACPError.Error | RequestError>
+  /** Interruption cancels the client's request. */
+  readonly requestPermission: (
+    params: RequestPermissionRequest,
+  ) => Effect.Effect<RequestPermissionResponse, ACPError.Error | RequestError>
   readonly extNotification: (
     method: string,
     params: Record<string, unknown>,
@@ -25,20 +28,12 @@ export function make(connection: AgentConnection) {
   return Service.of({
     sessionUpdate: (params) =>
       ACPPromise.promise(() => connection.client.notify(methods.client.session.update, params)),
+    requestPermission: (params) =>
+      ACPPromise.promise((signal) =>
+        connection.client.request(methods.client.session.requestPermission, params, { cancellationSignal: signal }),
+      ),
     extNotification: (method, params) => ACPPromise.promise(() => connection.client.notify(method, params)),
   })
-}
-
-export type Connection = {
-  requestPermission(params: RequestPermissionRequest, options?: SendRequestOptions): Promise<RequestPermissionResponse>
-}
-
-/** Promise view for permission requests until they run as effects. */
-export function promise(connection: AgentConnection): Connection {
-  return {
-    requestPermission: (params, options) =>
-      connection.client.request(methods.client.session.requestPermission, params, options),
-  }
 }
 
 export * as ACPConnection from "./connection"

@@ -27,7 +27,7 @@ import { currentModel } from "./config-option"
 import type { ACPConnection } from "./connection"
 import { promptContentToParts } from "./content"
 import { ACPError } from "./error"
-import { replyPermission } from "./permission"
+import { ACPPermission } from "./permission"
 import { ACPPromise } from "./promise"
 import type { ACPSessions, Attached } from "./sessions"
 import { ACPTranslate } from "./translate"
@@ -80,8 +80,6 @@ type Subscription = {
 export const make = Effect.fnUntraced(function* (input: {
   readonly client: OpenCodeClient
   readonly connection: ACPConnection.Interface
-  /** Permission asks still run through the promise view. */
-  readonly permissions: ACPConnection.Connection
   readonly sessions: ACPSessions.Interface
   readonly catalog: ACPCatalog.Interface
   readonly capabilities: Ref.Ref<{ readonly childSessionUpdates: boolean }>
@@ -120,25 +118,26 @@ export const make = Effect.fnUntraced(function* (input: {
     yield* Deferred.await(settled)
   })
 
-  // Interruption cancels the client's permission request; the server still gets the resulting rejection.
-  const reply = (subscription: Subscription, ctx: ACPTranslate.Context, ask: PermissionAsk) =>
-    Effect.callback<void>((resume, signal) => {
-      const replied = replyPermission({
+  const reply = Effect.fnUntraced(
+    function* (subscription: Subscription, ctx: ACPTranslate.Context, ask: PermissionAsk) {
+      const permission = {
         client: input.client,
-        connection: input.permissions,
+        connection: input.connection,
         event: ask.event,
         sessionID: ask.event.data.sessionID,
         clientSessionID: ctx.sessionID,
         cwd: ctx.cwd,
         tool: ask.tool,
-        signal,
         ...(ask.child ? { toolCallPrefix: ask.child.id, titlePrefix: ask.child.title } : {}),
-      }).then(
-        () => resume(Effect.void),
-        (cause) => resume(Effect.logWarning("ACP permission reply failed", cause)),
-      )
-      return Effect.promise(() => replied)
-    }).pipe(Effect.raceFirst(Deferred.await(subscription.cancelled)))
+      }
+      // Asks after a cancel skip the client: the race below would send the request before seeing the cancel.
+      if (yield* Deferred.isDone(subscription.cancelled)) return yield* ACPPermission.reject(permission)
+      yield* ACPPermission.reply(permission).pipe(Effect.raceFirst(Deferred.await(subscription.cancelled)))
+    },
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP permission reply failed", cause),
+    ),
+  )
 
   const interpret = (subscription: Subscription, ctx: ACPTranslate.Context, output: ACPTranslate.Output) => {
     switch (output._tag) {

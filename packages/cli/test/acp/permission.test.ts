@@ -306,6 +306,32 @@ describe("acp permissions over the wire", () => {
       params: { requestId: asked?.id },
     })
   })
+
+  test("rejects asks queued behind a cancelled one without sending them to the client", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        permissionAsked(sessionID, "perm_pending"),
+        permissionAsked(sessionID, "perm_queued"),
+      ],
+      onInterrupt: ({ sessionID }) => [interrupted(sessionID)],
+      permission: (_request, signal) =>
+        new Promise((resolve) => {
+          signal.addEventListener("abort", () => resolve({ outcome: { outcome: "cancelled" } }), { once: true })
+        }),
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await acp.until(() => acp.permissions.length === 1, "permission request")
+    await acp.notify("session/cancel", { sessionId: acp.sessionId })
+
+    expect(await prompt).toMatchObject({ stopReason: "cancelled" })
+    expect(acp.permissions.map((request) => request.toolCall.toolCallId)).toEqual(["perm_pending"])
+    expect(decisions(acp)).toEqual([
+      ["perm_pending", "reject"],
+      ["perm_queued", "reject"],
+    ])
+  })
 })
 
 describe("acp edit previews over the wire", () => {
@@ -399,6 +425,36 @@ describe("acp edit previews over the wire", () => {
         { type: "diff", path: path.join(dir.path, "second.ts"), oldText: "alpha\n", newText: "beta\n" },
       ],
     })
+  })
+
+  test("asks without previews when a patch does not apply to the current file", async () => {
+    await using dir = await tmpdir()
+    await fs.writeFile(path.join(dir.path, "first.ts"), "changed\n")
+    const patchText = ["*** Begin Patch", "*** Update File: first.ts", "@@", "-one", "+two", "*** End Patch"].join("\n")
+    await using acp = await startWire({
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        toolStarted(sessionID, "call_patch", "patch"),
+        toolCalled(sessionID, "call_patch", { patchText }),
+        permissionAsked(sessionID, "perm_patch", {
+          action: "edit",
+          source: { type: "tool", messageID: "msg_patch", id: "call_patch" },
+        }),
+      ],
+      onPermissionReply: ({ sessionID }) => [succeeded(sessionID)],
+      permission: allowOnce,
+    })
+    await acp.initialize()
+    const session = await acp.newSession(dir.path)
+
+    await acp.prompt(session.sessionId, "hello")
+
+    expect(acp.permissions[0]?.toolCall).toMatchObject({
+      kind: "edit",
+      locations: [{ path: path.join(dir.path, "first.ts") }],
+    })
+    expect(acp.permissions[0]?.toolCall.content).toBeUndefined()
+    expect(decisions(acp)).toEqual([["perm_patch", "once"]])
   })
 
   test("reports the same absolute locations for a moved file in the permission and tool updates", async () => {
