@@ -6,6 +6,7 @@ import {
   type AgentNotificationMethod,
   type AgentRequestHandlersByMethod,
   type AgentRequestMethod,
+  type JsonRpcId,
   type Stream,
 } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient } from "@opencode/client/promise"
@@ -40,7 +41,12 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
         Effect.tapCauseIf(Cause.hasDies, (cause) => Effect.logError("ACP request failed", cause)),
         Effect.catchDefect((defect) => Effect.fail(ACPError.toRequestError(ACPError.fromUnknown(defect)))),
       )
-      return (ctx: AgentHandlerContext<Params>) => run(handler(ctx))
+      return (ctx: AgentHandlerContext<Params> & { readonly requestId?: JsonRpcId }) => {
+        if (ctx.requestId === undefined) return run(handler(ctx))
+        return run(
+          handler(ctx).pipe(Effect.provideService(ACPConnection.Responded, acp.connection.responded(ctx.requestId))),
+        )
+      }
     }
   const app = agent({ name: "opencode" })
   const request = <Method extends AgentRequestMethod>(
@@ -106,13 +112,13 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
     "session/cancel",
     handle((service, ctx) => service.cancel(ctx.params)),
   )
-  const agentConnection = app.connect(stream)
-  const connection = ACPConnection.make(agentConnection)
+  const acp = ACPConnection.make(app, stream)
+  const connection = acp.connection
   const sessions = yield* ACPSessions.make({ client, connection, catalog })
   const capabilities = yield* Ref.make({ childSessionUpdates: false, formElicitation: false })
   const turn = yield* ACPTurn.make({ client, connection, sessions, catalog, capabilities })
   yield* Deferred.succeed(ready, ACPService.make({ client, connection, catalog, sessions, capabilities, turn }))
-  return agentConnection
+  return acp.agent
 })
 
 const spanName = (method: string) => `cli.acp.${method.replaceAll("/", ".")}`

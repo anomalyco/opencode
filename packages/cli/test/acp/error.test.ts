@@ -12,9 +12,12 @@ describe("acp errors", () => {
       new ACPError.InvalidModelError({ providerId: "anthropic", modelId: "claude-missing" }),
       new ACPError.InvalidEffortError({ effort: "extreme" }),
       new ACPError.InvalidModeError({ mode: "turbo" }),
+      new ACPError.InvalidRequestError({ message: "Invalid session ID", field: "sessionID" }),
     ]
 
-    expect(cases.map((error) => ACPError.toRequestError(error).code)).toEqual([-32602, -32602, -32602, -32602, -32602])
+    expect(cases.map((error) => ACPError.toRequestError(error).code)).toEqual([
+      -32602, -32602, -32602, -32602, -32602, -32602,
+    ])
   })
 
   test("includes safe validation details", () => {
@@ -77,6 +80,25 @@ describe("acp error boundary over the wire", () => {
     expect(acp.logs.map((log) => ({ message: log.message, cause: Cause.squash(log.cause) }))).toMatchObject([
       { message: ["ACP request failed"], cause: { name: "ClientError", reason: "UnexpectedStatus" } },
     ])
+  })
+
+  test("maps rejected prompt submissions to invalid params with the server's message", async () => {
+    await using acp = await startSession({
+      fetch: (request) =>
+        request.method === "POST" && request.path.endsWith("/prompt")
+          ? Response.json(
+              { _tag: "InvalidRequestError", message: "File not readable: missing.png", field: "files" },
+              { status: 400 },
+            )
+          : undefined,
+    })
+
+    expect(await rpcError(acp.prompt(acp.sessionId, "hello"))).toEqual({
+      code: -32602,
+      message: "Invalid params: File not readable: missing.png",
+      data: { field: "files" },
+    })
+    expect(acp.logs).toEqual([])
   })
 
   test("reports an unavailable server once the server stops", async () => {

@@ -34,6 +34,11 @@ export class UnknownAuthMethodError extends Schema.TaggedError<UnknownAuthMethod
   methodId: Schema.String,
 }) {}
 
+export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()("ACPInvalidRequestError", {
+  message: Schema.String,
+  field: Schema.optional(Schema.String),
+}) {}
+
 export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>()("ACPServiceFailureError", {
   safeMessage: Schema.String,
   service: Schema.optional(Schema.String),
@@ -54,6 +59,7 @@ const Errors = Schema.Union([
   InvalidModeError,
   AuthRequiredError,
   UnknownAuthMethodError,
+  InvalidRequestError,
   ServiceFailureError,
   ServerUnavailableError,
 ])
@@ -86,6 +92,8 @@ export function toRequestError(error: Error): RequestError {
       return RequestError.authRequired({}, "provider authentication required")
     case "ACPUnknownAuthMethodError":
       return RequestError.invalidParams({ methodId: error.methodId }, `unknown auth method: ${error.methodId}`)
+    case "ACPInvalidRequestError":
+      return RequestError.invalidParams(error.field ? { field: error.field } : {}, error.message)
     case "ACPServiceFailureError":
       return RequestError.internalError(
         {

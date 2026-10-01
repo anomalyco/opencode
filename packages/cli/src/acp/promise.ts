@@ -1,5 +1,5 @@
 import { RequestError } from "@agentclientprotocol/sdk"
-import { ClientError } from "@opencode/client/promise"
+import { ClientError, isInvalidRequestError, isSessionNotFoundError } from "@opencode/client/promise"
 import { Effect } from "effect"
 import { ACPError } from "./error"
 
@@ -11,6 +11,10 @@ export function classify(cause: unknown): Effect.Effect<never, ACPError.Error | 
   if (cause instanceof RequestError || ACPError.is(cause)) return Effect.fail(cause)
   if (cause instanceof ClientError && cause.reason === "Transport")
     return Effect.fail(new ACPError.ServerUnavailableError())
+  if (isSessionNotFoundError(cause))
+    return Effect.fail(new ACPError.SessionNotFoundError({ sessionId: cause.sessionID }))
+  if (isInvalidRequestError(cause))
+    return Effect.fail(new ACPError.InvalidRequestError({ message: cause.message, field: cause.field }))
   return Effect.die(cause)
 }
 
