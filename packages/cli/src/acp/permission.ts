@@ -2,7 +2,7 @@ import type { PermissionOption, ToolCallContent, ToolCallLocation } from "@agent
 import type { EventSubscribeOutput, OpenCodeClient } from "@opencode/client/promise"
 import { Patch } from "@opencode/util/patch"
 import { Result } from "effect"
-import { isAbsolute, resolve } from "node:path"
+import { resolve } from "node:path"
 import type { ACPConnection } from "./connection"
 import { pendingToolCall, stringValue, toLocations, type ToolInput } from "./tool"
 
@@ -153,17 +153,13 @@ function permissionLocations(
 }
 
 function readText(path: string, cwd: string) {
-  return Bun.file(resolvePath(path, cwd))
+  return Bun.file(resolve(cwd, path))
     .text()
     .catch(() => "")
 }
 
 function filePath(input: ToolInput) {
   return stringValue(input.path) ?? stringValue(input.filePath) ?? stringValue(input.filepath)
-}
-
-function resolvePath(path: string, cwd: string) {
-  return isAbsolute(path) ? path : resolve(cwd, path)
 }
 
 export * as ACPPermission from "./permission"
