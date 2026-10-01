@@ -18,6 +18,9 @@ export type Provider = WebSearch.Provider
 
 export { Event } from "@opencode/schema/websearch"
 
+export const Category = WebSearch.Category
+export type Category = WebSearch.Category
+
 export const Input = WebSearch.Input
 export type Input = WebSearch.Input
 export type ProviderInput = WebSearch.ProviderInput
@@ -33,6 +36,8 @@ export const Selection = Schema.Union([ID, Schema.Literal("random"), Schema.Lite
 export type Selection = typeof Selection.Type
 
 export interface ProviderImplementation extends Provider {
+  /** Categories the provider searches natively. Providers ignore categories they do not list. */
+  readonly categories?: readonly Category[]
   readonly execute: (input: ProviderInput) => Effect.Effect<readonly Result[], unknown>
 }
 
@@ -130,17 +135,21 @@ const layer = Layer.effect(
       return Option.getOrUndefined(decoded)
     })
 
-    const randomProvider = (now: number, affinity: { provider?: ID }, attempted?: Set<ID>) => {
+    const randomProvider = (now: number, affinity: { provider?: ID }, attempted?: Set<ID>, category?: Category) => {
       const providers = state.get().providers
       cooldowns.forEach((cooldown, id) => {
         if (cooldown.until <= now || !providers.has(id)) cooldowns.delete(id)
       })
-      const current = affinity.provider === undefined ? undefined : providers.get(affinity.provider)
-      if (current && !cooldowns.has(current.id) && !attempted?.has(current.id)) return current
       const available = Array.from(providers.values()).filter(
         (provider) => !cooldowns.has(provider.id) && !attempted?.has(provider.id),
       )
-      const provider = available[Math.floor(Math.random() * available.length)]
+      const current = available.find((provider) => provider.id === affinity.provider)
+      // Category queries prefer a provider that searches the category natively without moving the
+      // session's affinity, so general queries keep their provider.
+      const capable = category ? available.filter((provider) => provider.categories?.includes(category)) : []
+      if (capable.length) return capable.find((provider) => provider === current) ?? pick(capable)
+      if (current) return current
+      const provider = pick(available)
       if (provider) affinity.provider = provider.id
       return provider
     }
@@ -184,7 +193,7 @@ const layer = Layer.effect(
         const affinity = preferred.get(options?.sessionID) ?? { provider: undefined }
         if (choice === "random") {
           preferred.set(options?.sessionID, affinity)
-          provider = randomProvider(yield* Clock.currentTimeMillis, affinity) ?? provider
+          provider = randomProvider(yield* Clock.currentTimeMillis, affinity, undefined, input.category) ?? provider
         }
         const attempted = new Set<ID>()
         while (true) {
@@ -193,7 +202,7 @@ const layer = Layer.effect(
           if (!cooldown || cooldown.until <= (yield* Clock.currentTimeMillis)) {
             attempted.add(provider.id)
             const result = yield* provider
-              .execute({ query: input.query })
+              .execute({ query: input.query, category: input.category })
               .pipe(Effect.flatMap(decodeResults), Effect.result)
             if (result._tag === "Success") return new Response({ providerID: provider.id, results: result.success })
             const cause = result.failure
@@ -204,13 +213,17 @@ const layer = Layer.effect(
             cooldown = { until: now + cooldownMillis(cause.response.headers["retry-after"], now), error }
             cooldowns.set(provider.id, cooldown)
           }
-          provider = randomProvider(yield* Clock.currentTimeMillis, affinity, attempted)
+          provider = randomProvider(yield* Clock.currentTimeMillis, affinity, attempted, input.category)
           if (!provider) return yield* cooldown.error
         }
       }),
     })
   }),
 )
+
+function pick<T>(items: readonly T[]) {
+  return items[Math.floor(Math.random() * items.length)]
+}
 
 function cooldownMillis(value: string | undefined, now: number) {
   if (!value?.trim()) return 60_000

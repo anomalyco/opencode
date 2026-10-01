@@ -13,12 +13,16 @@ export const Provider = Schema.Struct({
   name: Schema.String,
 }).annotate({ identifier: "WebSearch.Provider" })
 
+export const Category = Schema.Literal("developer").annotate({ identifier: "WebSearch.Category" })
+export type Category = typeof Category.Type
+
 export interface Input extends Schema.Schema.Type<typeof Input> {}
 export const Input = Schema.Struct({
   query: Schema.String,
+  category: Category.pipe(optional),
   providerID: ID.pipe(optional),
 }).annotate({ identifier: "WebSearch.Input" })
-export type ProviderInput = Pick<Input, "query">
+export type ProviderInput = Pick<Input, "query" | "category">
 
 export interface Result extends Schema.Schema.Type<typeof Result> {}
 export const Result = Schema.Struct({

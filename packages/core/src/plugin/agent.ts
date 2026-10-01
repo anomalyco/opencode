@@ -119,7 +119,6 @@ export const Plugin = define({
               { action: "glob", resource: "*", effect: "allow" },
               { action: "webfetch", resource: "*", effect: "allow" },
               { action: "websearch", resource: "*", effect: "allow" },
-              { action: "devsearch", resource: "*", effect: "allow" },
               { action: "read", resource: "*", effect: "allow" },
               { action: "read", resource: "*.env", effect: "ask" },
               { action: "read", resource: "*.env.*", effect: "ask" },

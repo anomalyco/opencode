@@ -546,6 +546,7 @@ export function fromPromise(plugin: Plugin) {
                       editor.add({
                         id: definition.id,
                         name: definition.name,
+                        categories: definition.categories,
                         execute: (input) => attempt((signal) => definition.execute(input, { signal })),
                       }),
                     default: editor.default,

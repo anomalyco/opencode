@@ -6553,8 +6553,17 @@ export type WebsearchProvidersOutput = { location: LocationPublicRef; data: Arra
 
 export type WebsearchQueryInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]
-  readonly query: { readonly query: string; readonly providerID?: string }["query"]
-  readonly providerID?: { readonly query: string; readonly providerID?: string }["providerID"]
+  readonly query: { readonly query: string; readonly category?: "developer"; readonly providerID?: string }["query"]
+  readonly category?: {
+    readonly query: string
+    readonly category?: "developer"
+    readonly providerID?: string
+  }["category"]
+  readonly providerID?: {
+    readonly query: string
+    readonly category?: "developer"
+    readonly providerID?: string
+  }["providerID"]
 }
 
 export type WebsearchQueryOutput = {

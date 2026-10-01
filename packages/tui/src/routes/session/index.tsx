@@ -2433,9 +2433,6 @@ function ToolPart(props: { part: SessionMessageAssistantTool; images?: boolean }
       <Match when={display() === "websearch"}>
         <WebSearch {...toolprops} />
       </Match>
-      <Match when={display() === "devsearch"}>
-        <DevSearch {...toolprops} />
-      </Match>
       <Match when={display() === "write"}>
         <Write {...toolprops} />
       </Match>
@@ -3102,19 +3099,6 @@ function WebSearch(props: ToolProps) {
         )}
       </Show>{" "}
       "{stringValue(props.input.query)}"
-    </InlineTool>
-  )
-}
-
-function DevSearch(props: ToolProps) {
-  return (
-    <InlineTool
-      icon="◈"
-      pending="Searching developer sources…"
-      complete={stringValue(props.input.query)}
-      part={props.part}
-    >
-      Developer Search "{stringValue(props.input.query)}"
     </InlineTool>
   )
 }

@@ -2162,7 +2162,7 @@ export function make(options: ClientOptions) {
             method: "POST",
             path: `/api/websearch`,
             query: { location: input["location"] },
-            body: { query: input["query"], providerID: input["providerID"] },
+            body: { query: input["query"], category: input["category"], providerID: input["providerID"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 503],
             empty: false,

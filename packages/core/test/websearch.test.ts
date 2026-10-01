@@ -15,7 +15,7 @@ const it = testEffect(TestWebSearch.layer)
 const firstSession = Session.ID.make("ses_search_first")
 const secondSession = Session.ID.make("ses_search_second")
 
-const register = (id: string) =>
+const register = (id: string, categories?: readonly WebSearch.Category[]) =>
   Effect.gen(function* () {
     const websearch = yield* WebSearch.Service
     const providerID = WebSearch.ID.make(id)
@@ -25,6 +25,7 @@ const register = (id: string) =>
       editor.add({
         id: providerID,
         name: id.toUpperCase(),
+        categories,
         execute: (input) =>
           Effect.gen(function* () {
             calls.push(input)
@@ -214,6 +215,50 @@ describe("WebSearch", () => {
       expect((yield* websearch.query({ query: "still sticky" })).providerID).toBe(replacement.providerID)
       replacement.failure.cause = TestWebSearch.httpError()
       expect((yield* websearch.query({ query: "recovered" })).providerID).toBe(limited.providerID)
+    }),
+  )
+
+  it.effect("routes category queries to a capable random provider without moving the session's provider", () =>
+    Effect.gen(function* () {
+      yield* register("exa")
+      const firecrawl = yield* register("firecrawl", ["developer"])
+      yield* register("parallel")
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("random")
+
+      const general = (yield* websearch.query({ query: "seed" })).providerID
+      expect((yield* websearch.query({ query: "effect retry", category: "developer" })).providerID).toBe(
+        firecrawl.providerID,
+      )
+      expect(firecrawl.calls.at(-1)).toEqual({ query: "effect retry", category: "developer" })
+      expect((yield* websearch.query({ query: "after" })).providerID).toBe(general)
+    }),
+  )
+
+  it.effect("falls back to the whole pool when every capable provider is rate limited", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const firecrawl = yield* register("firecrawl", ["developer"])
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select("random")
+      firecrawl.failure.cause = TestWebSearch.httpError()
+
+      expect((yield* websearch.query({ query: "effect retry", category: "developer" })).providerID).toBe(exa.providerID)
+      expect(firecrawl.calls).toHaveLength(1)
+      expect(exa.calls).toEqual([{ query: "effect retry", category: "developer" }])
+    }),
+  )
+
+  it.effect("keeps an explicit provider selection for category queries", () =>
+    Effect.gen(function* () {
+      const exa = yield* register("exa")
+      const firecrawl = yield* register("firecrawl", ["developer"])
+      const websearch = yield* WebSearch.Service
+      yield* websearch.select(exa.providerID)
+
+      expect((yield* websearch.query({ query: "effect retry", category: "developer" })).providerID).toBe(exa.providerID)
+      expect(exa.calls).toEqual([{ query: "effect retry", category: "developer" }])
+      expect(firecrawl.calls).toEqual([])
     }),
   )
 

@@ -19,10 +19,15 @@ const httpErrors = new Map([
 
 export const description = `Search the web using the user's selected search integration. Use this for current information beyond knowledge cutoff.
 
-The current year is ${new Date().getFullYear()}. Use this year when searching for recent information or current events.`
+The current year is ${new Date().getFullYear()}. Use this year when searching for recent information or current events.
+
+Set category to "developer" for programming questions, such as how a library or API behaves, what an error message means, or whether a bug was fixed. Developer searches prefer an index of repositories, GitHub issues, merged pull requests, READMEs, and documentation, and return the matched passages.`
 
 export const Input = Schema.Struct({
   query: Schema.String.annotate({ description: "Websearch query" }),
+  category: WebSearch.Category.pipe(Schema.optional).annotate({
+    description: 'Set to "developer" for programming questions',
+  }),
 })
 
 const Output = Schema.Struct({

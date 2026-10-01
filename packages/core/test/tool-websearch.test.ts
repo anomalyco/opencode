@@ -139,6 +139,29 @@ describe("WebSearchTool registration", () => {
     }),
   )
 
+  it.effect("forwards the search category to WebSearch", () =>
+    Effect.gen(function* () {
+      const fixture = yield* setup
+      yield* fixture.websearch.select(WebSearch.ID.make("exa"))
+
+      expect(
+        yield* executeTool(fixture.registry, {
+          sessionID,
+          ...toolIdentity,
+          call: {
+            type: "tool-call",
+            id: "call-developer",
+            name: "websearch",
+            input: { query: "effect retry", category: "developer" },
+          },
+        }),
+      ).toMatchObject({ status: "completed" })
+      expect(fixture.websearch.queries).toEqual([
+        { query: "effect retry", category: "developer", providerID: undefined },
+      ])
+    }),
+  )
+
   it.effect("keeps normalized results in structured output", () =>
     Effect.gen(function* () {
       const fixture = yield* setup

@@ -5,6 +5,7 @@ import type { Transform } from "./registration.js"
 export interface WebSearchDefinition {
   readonly id: string
   readonly name: string
+  readonly categories?: readonly WebSearch.Category[]
   readonly execute: (
     input: WebSearch.ProviderInput,
     context: { readonly signal: AbortSignal },

@@ -482,6 +482,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
         response(
           websearch.query({
             query: input.query,
+            category: input.category,
             providerID: input.providerID === undefined ? undefined : WebSearch.ID.make(input.providerID),
           }),
         ),
@@ -493,6 +494,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
               editor.add({
                 id: WebSearch.ID.make(definition.id),
                 name: definition.name,
+                categories: definition.categories,
                 execute: definition.execute,
               }),
             default: {

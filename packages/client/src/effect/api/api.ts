@@ -2344,6 +2344,7 @@ export type WebsearchProvidersOperation<E = never> = (
 export type WebsearchQueryInput = {
   readonly location?: { readonly directory?: string | undefined } | undefined
   readonly query: string
+  readonly category?: WebSearch.Category | undefined
   readonly providerID?: WebSearch.ID | undefined
 }
 export type WebsearchQueryOutput = { readonly location: Location.PublicRef; readonly data: WebSearch.Response }

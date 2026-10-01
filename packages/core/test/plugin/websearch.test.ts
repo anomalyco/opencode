@@ -93,6 +93,59 @@ describe("built-in web search providers", () => {
     }),
   )
 
+  it.effect("searches the Firecrawl developer index for developer queries", () =>
+    Effect.gen(function* () {
+      resetWebSearchFixture(
+        JSON.stringify({
+          success: true,
+          results: [
+            {
+              id: "issue:effect-ts/effect#1234",
+              type: "issue",
+              url: "https://github.com/effect-ts/effect/issues/1234",
+              title: "Retrying HttpClient requests",
+              passages: [{ text: "Use `Effect.retry` with a Schedule." }, { text: "Retries apply to 429 responses." }],
+            },
+            { id: "doc:effect.website/retrying", type: "doc", url: "https://effect.website/docs/retrying" },
+          ],
+          coverage: { doc: "ok", issue: "ok", pull_request: "ok", readme: "ok" },
+          reranked: true,
+        }),
+      )
+      const integrations = yield* Integration.Service
+      const websearch = yield* WebSearch.Service
+      yield* WebSearchFirecrawl.Plugin.effect(
+        host({ integration: integrationHost(integrations), websearch: webSearchHost(websearch) }),
+      )
+      yield* websearch.select("random")
+      const query = { query: "effect retry", category: "developer" as const }
+
+      expect(yield* websearch.query(query)).toEqual(
+        new WebSearch.Response({
+          providerID: WebSearch.ID.make("firecrawl"),
+          results: [
+            {
+              url: "https://github.com/effect-ts/effect/issues/1234",
+              title: "Retrying HttpClient requests",
+              content: "Use `Effect.retry` with a Schedule.\n\nRetries apply to 429 responses.",
+              time: {},
+            },
+            { url: "https://effect.website/docs/retrying", time: {} },
+          ],
+        }),
+      )
+      expect(requests[0]).toMatchObject({
+        url: WebSearchFirecrawl.developerEndpoint,
+        body: { query: "effect retry", k: 8, passages: 3 },
+      })
+      expect(requests[0]?.headers.authorization).toBeUndefined()
+
+      yield* integrations.connection.key({ integrationID: Integration.ID.make("firecrawl"), key: "fc-secret" })
+      yield* websearch.query(query)
+      expect(requests[1]).toMatchObject({ headers: { authorization: "Bearer fc-secret" } })
+    }),
+  )
+
   it.effect("registers Exa with its MCP schema", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
