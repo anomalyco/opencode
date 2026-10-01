@@ -397,4 +397,17 @@ describe("ProjectCopy", () => {
       expect(yield* stored(input.projectID)).not.toContainEqual({ directory: missing, strategy: null })
     }),
   )
+
+  it.live("refresh preserves an association to a temporarily missing directory", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const missing = abs(`${input.root.path}-missing-association`)
+      const directories = yield* ProjectDirectories.Service
+      yield* directories.associate({ projectID: input.projectID, directory: missing })
+
+      const copy = yield* ProjectCopy.Service
+      expect(yield* copy.refresh({ projectID: input.projectID })).toEqual({ updated: [], removed: [] })
+      expect(yield* directories.ownerOf(missing)).toBe(input.projectID)
+    }),
+  )
 })

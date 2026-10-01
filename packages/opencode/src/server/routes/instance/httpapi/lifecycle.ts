@@ -32,6 +32,15 @@ export const markInstanceForDisposal = (ctx: InstanceContext) =>
     )
   })
 
+export const markDirectoryForDisposal = (directory: string) =>
+  Effect.gen(function* () {
+    const store = yield* InstanceStore.Service
+    const bridge = yield* EffectBridge.make()
+    return yield* HttpEffect.appendPreResponseHandler((_request, response) =>
+      Effect.as(Effect.uninterruptible(bridge.run(store.disposeDirectory(directory))), response),
+    )
+  })
+
 export const markInstanceForReload = (ctx: InstanceContext, next: InstanceStore.LoadInput) =>
   Effect.gen(function* () {
     const marked = yield* mark(ctx)

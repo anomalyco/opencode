@@ -22,16 +22,12 @@ env:
 
 jobs:
   unit:
-    name: unit (${{ matrix.settings.name }})
+    name: unit (${{ matrix.platform }})
     strategy:
       fail-fast: false
       matrix:
-        settings:
-          - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
-          - name: windows
-            host: blacksmith-4vcpu-windows-2025
-    runs-on: ${{ matrix.settings.host }}
+        platform: ${{ fromJSON(github.repository == 'internetisalie/opencode' && '["linux"]' || '["linux","windows"]') }}
+    runs-on: ${{ matrix.platform == 'linux' && (github.repository == 'internetisalie/opencode' && 'ubuntu-24.04' || 'blacksmith-4vcpu-ubuntu-2404') || 'blacksmith-4vcpu-windows-2025' }}
     defaults:
       run:
         shell: bash
@@ -80,16 +76,12 @@ jobs:
         run: bun run test:httpapi
 
   e2e:
-    name: e2e (${{ matrix.settings.name }})
+    name: e2e (${{ matrix.platform }})
     strategy:
       fail-fast: false
       matrix:
-        settings:
-          - name: linux
-            host: blacksmith-4vcpu-ubuntu-2404
-          - name: windows
-            host: blacksmith-4vcpu-windows-2025
-    runs-on: ${{ matrix.settings.host }}
+        platform: ${{ fromJSON(github.repository == 'internetisalie/opencode' && '["linux"]' || '["linux","windows"]') }}
+    runs-on: ${{ matrix.platform == 'linux' && (github.repository == 'internetisalie/opencode' && 'ubuntu-24.04' || 'blacksmith-4vcpu-ubuntu-2404') || 'blacksmith-4vcpu-windows-2025' }}
     env:
       PLAYWRIGHT_BROWSERS_PATH: ${{ github.workspace }}/.playwright-browsers
     defaults:

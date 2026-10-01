@@ -209,7 +209,7 @@ function routeWorkspace<E>(
   })
 }
 
-function routeHttpApiWorkspace<E>(
+export function routeHttpApiWorkspace<E>(
   client: HttpClient.HttpClient,
   effect: Effect.Effect<HttpServerResponse.HttpServerResponse, E, WorkspaceRouteContext>,
 ): Effect.Effect<

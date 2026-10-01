@@ -36,7 +36,7 @@ function withTmp<T, A, E, R>(
   })
 }
 
-function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
+function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0], httpID?: string) {
   const source = path.join(dir, "opencode.json")
   return Effect.gen(function* () {
     const config = yield* Effect.promise(
@@ -46,6 +46,8 @@ function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
     return yield* Effect.gen(function* () {
       const plugin = yield* Plugin.Service
       yield* plugin.list()
+      if (!httpID) return undefined
+      return yield* plugin.http(httpID)
     }).pipe(
       Effect.provide(
         LayerNode.compile(Plugin.node, [
@@ -169,6 +171,55 @@ describe("plugin.loader.shared", () => {
         Effect.gen(function* () {
           yield* load(tmp.path)
           expect(yield* Effect.promise(() => Bun.file(tmp.extra.mark).text())).toBe("default")
+        }),
+    ),
+  )
+
+  it.live("rejects duplicate v1 plugin ids before initializing the duplicate", () =>
+    withTmp(
+      async (dir) => {
+        const first = path.join(dir, "first.ts")
+        const second = path.join(dir, "second.ts")
+        const firstMark = path.join(dir, "first.txt")
+        const secondMark = path.join(dir, "second.txt")
+        await Bun.write(
+          first,
+          [
+            "export default {",
+            '  id: "demo.duplicate",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(firstMark)}, "first")`,
+            '    return { http: { fetch: async () => new Response("first") } }',
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(
+          second,
+          [
+            "export default {",
+            '  id: "demo.duplicate",',
+            "  server: async () => {",
+            `    await Bun.write(${JSON.stringify(secondMark)}, "second")`,
+            "    return {}",
+            "  },",
+            "}",
+            "",
+          ].join("\n"),
+        )
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ plugin: [pathToFileURL(first).href, pathToFileURL(second).href] }, null, 2),
+        )
+        return { firstMark, secondMark }
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          const http = yield* load(tmp.path, undefined, "demo.duplicate")
+          expect(yield* Effect.promise(() => Bun.file(tmp.extra.firstMark).text())).toBe("first")
+          expect(yield* Effect.promise(() => Bun.file(tmp.extra.secondMark).exists())).toBe(false)
+          expect(http).toBeUndefined()
         }),
     ),
   )

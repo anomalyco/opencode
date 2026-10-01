@@ -1,6 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
-import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
+import { Cause, Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { Database } from "@opencode-ai/core/database/database"
@@ -144,6 +144,7 @@ export interface Interface {
     timeout?: number,
   ) => Effect.Effect<void, WaitForSyncError>
   readonly startWorkspaceSyncing: (projectID: ProjectV2.ID) => Effect.Effect<void>
+  readonly resumeWorkspaceSyncing: (projectID: ProjectV2.ID) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Workspace") {}
@@ -164,6 +165,8 @@ const layer = Layer.effect(
     const { db } = yield* Database.Service
     const connections = new Map<WorkspaceV2.ID, ConnectionStatus>()
     const syncFibers = yield* FiberMap.make<WorkspaceV2.ID, void, SyncLoopError>()
+    // Tracks projects scanned in this service lifetime, not live connection state.
+    const resumedProjects = new Set<ProjectV2.ID>()
 
     const setStatus = (id: WorkspaceV2.ID, status: ConnectionStatus["status"]) => {
       const prev = connections.get(id)
@@ -364,28 +367,46 @@ const layer = Layer.effect(
     })
 
     const syncWorkspaceLoop = Effect.fn("Workspace.syncWorkspaceLoop")(function* (space: Info) {
-      const target = yield* WorkspaceAdapterRuntime.target(space)
-
-      if (target.type === "local") return
-
       let attempt = 0
 
       while (true) {
         setStatus(space.id, "connecting")
 
-        const stream = yield* connectSSE(target.url, target.headers).pipe(
-          Effect.tap(() => syncHistory(space, target.url, target.headers)),
-          Effect.catch((err) =>
+        const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
+          Effect.catchCause((cause) =>
             Effect.gen(function* () {
+              if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
               setStatus(space.id, "error")
-              yield* Effect.logWarning("failed to connect to global sync", {
-                workspace: space.name,
-                error: errorData(err),
+              yield* Effect.logWarning("failed to resolve workspace target", {
+                workspaceID: space.id,
+                error: errorData(Cause.squash(cause)),
               })
               return null
             }),
           ),
         )
+
+        if (target?.type === "local") {
+          setStatus(space.id, (yield* fs.existsSafe(target.directory)) ? "connected" : "error")
+          return
+        }
+
+        const stream = target
+          ? yield* connectSSE(target.url, target.headers).pipe(
+              Effect.tap(() => syncHistory(space, target.url, target.headers)),
+              Effect.catchCause((cause) =>
+                Effect.gen(function* () {
+                  if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
+                  setStatus(space.id, "error")
+                  yield* Effect.logWarning("failed to connect to global sync", {
+                    workspace: space.name,
+                    error: errorData(Cause.squash(cause)),
+                  })
+                  return null
+                }),
+              ),
+            )
+          : null
 
         if (stream) {
           attempt = 0
@@ -426,6 +447,15 @@ const layer = Layer.effect(
                 })
               }
             }),
+          ).pipe(
+            Effect.catchCause((cause) =>
+              Cause.hasInterrupts(cause)
+                ? Effect.failCause(cause)
+                : Effect.logWarning("workspace event stream ended with an error", {
+                    workspaceID: space.id,
+                    error: errorData(Cause.squash(cause)),
+                  }),
+            ),
           )
 
           setStatus(space.id, "disconnected")
@@ -441,29 +471,30 @@ const layer = Layer.effect(
     const startSync = Effect.fn("Workspace.startSync")(function* (space: Info) {
       if (!flags.experimentalWorkspaces) return
 
+      // A listener in error may still be retrying; keep its backoff and target resolution in place.
+      if (yield* FiberMap.has(syncFibers, space.id)) return
+
       const target = yield* WorkspaceAdapterRuntime.target(space).pipe(
-        Effect.catch((error) =>
+        Effect.catchCause((cause) =>
           Effect.gen(function* () {
-            setStatus(space.id, "error")
+            if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
             yield* Effect.logWarning("workspace target failed", {
               workspaceID: space.id,
-              error: errorData(error),
+              error: errorData(Cause.squash(cause)),
             })
             return null
           }),
         ),
       )
-      if (!target) return
-
-      if (target.type === "local") {
+      // Another start may have installed a listener while target() was pending.
+      if (yield* FiberMap.has(syncFibers, space.id)) return
+      if (target === null) setStatus(space.id, "error")
+      if (target?.type === "local") {
         setStatus(space.id, (yield* fs.existsSafe(target.directory)) ? "connected" : "error")
         return
       }
 
-      const exists = yield* FiberMap.has(syncFibers, space.id)
-      if (exists && connections.get(space.id)?.status !== "error") return
-
-      setStatus(space.id, "disconnected")
+      if (target !== null) setStatus(space.id, "disconnected")
 
       yield* FiberMap.run(
         syncFibers,
@@ -872,6 +903,20 @@ const layer = Layer.effect(
       }
     })
 
+    const resumeWorkspaceSyncing = Effect.fn("Workspace.resumeWorkspaceSyncing")(function* (projectID: ProjectV2.ID) {
+      if (!flags.experimentalWorkspaces || resumedProjects.has(projectID)) return
+      resumedProjects.add(projectID)
+      yield* startWorkspaceSyncing(projectID).pipe(
+        Effect.catchCause((cause) =>
+          Effect.gen(function* () {
+            resumedProjects.delete(projectID)
+            if (Cause.hasInterrupts(cause)) return yield* Effect.failCause(cause)
+            yield* Effect.logWarning("workspace sync recovery failed", { projectID, cause })
+          }),
+        ),
+      )
+    })
+
     return Service.of({
       create,
       sessionWarp,
@@ -883,6 +928,7 @@ const layer = Layer.effect(
       isSyncing,
       waitForSync,
       startWorkspaceSyncing,
+      resumeWorkspaceSyncing,
     })
   }),
 )

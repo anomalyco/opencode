@@ -1,11 +1,13 @@
 import * as InstanceState from "@/effect/instance-state"
 import { Project } from "@/project/project"
 import { ProjectV2 } from "@opencode-ai/core/project"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { isAbsolute } from "path"
 import { Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
 import { ProjectNotFoundError } from "../errors"
-import { markInstanceForReload } from "../lifecycle"
+import { markDirectoryForDisposal, markInstanceForReload } from "../lifecycle"
 
 export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", (handlers) =>
   Effect.gen(function* () {
@@ -53,11 +55,49 @@ export const projectHandlers = HttpApiBuilder.group(InstanceHttpApi, "project", 
       project.directories({ projectID: ctx.params.projectID }),
     )
 
+    // The association table has a foreign key onto `project`, so an unknown id would
+    // surface as a defect rather than a 404. Check first and fail with the error the
+    // route already declares.
+    const known = Effect.fn("ProjectHttpApi.known")(function* (projectID: ProjectV2.ID) {
+      if (yield* svc.get(projectID)) return
+      return yield* Effect.fail(
+        new ProjectNotFoundError({ projectID, message: `Project not found: ${projectID}` }),
+      )
+    })
+
+    const directoryCreate = Effect.fn("ProjectHttpApi.directoryCreate")(function* (ctx: {
+      params: { projectID: ProjectV2.ID }
+      payload: { directory: AbsolutePath; strategy?: string }
+    }) {
+      if (!isAbsolute(ctx.payload.directory)) return yield* new HttpApiError.BadRequest({})
+      yield* known(ctx.params.projectID)
+      const result = yield* project.associate({
+        projectID: ctx.params.projectID,
+        directory: ctx.payload.directory,
+        strategy: ctx.payload.strategy,
+      })
+      yield* markDirectoryForDisposal(ctx.payload.directory)
+      return result
+    })
+
+    const directoryRemove = Effect.fn("ProjectHttpApi.directoryRemove")(function* (ctx: {
+      params: { projectID: ProjectV2.ID }
+      query: { directory: AbsolutePath }
+    }) {
+      if (!isAbsolute(ctx.query.directory)) return yield* new HttpApiError.BadRequest({})
+      yield* known(ctx.params.projectID)
+      const result = yield* project.dissociate({ projectID: ctx.params.projectID, directory: ctx.query.directory })
+      yield* markDirectoryForDisposal(ctx.query.directory)
+      return result
+    })
+
     return handlers
       .handle("list", list)
       .handle("current", current)
       .handle("initGit", initGit)
       .handle("update", update)
       .handle("directories", directories)
+      .handle("directoryCreate", directoryCreate)
+      .handle("directoryRemove", directoryRemove)
   }),
 )

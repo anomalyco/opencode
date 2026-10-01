@@ -223,6 +223,31 @@ const scenarios: Scenario[] = [
     }))
     .json(200, array, "status"),
   http.protected
+    .post("/project/{projectID}/directories", "project.directoryCreate")
+    .mutating()
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: route("/project/{projectID}/directories", { projectID: ctx.state.id }),
+      headers: ctx.headers(),
+      body: { directory: exerciseGlobalRoot },
+    }))
+    .json(200, (body) => {
+      array(body)
+      check(
+        body.some((item) => isRecord(item) && item.directory === exerciseGlobalRoot),
+        "directory create should list the new association",
+      )
+    }),
+  http.protected
+    .delete("/project/{projectID}/directories", "project.directoryRemove")
+    .mutating()
+    .seeded((ctx) => ctx.project())
+    .at((ctx) => ({
+      path: `${route("/project/{projectID}/directories", { projectID: ctx.state.id })}?directory=${encodeURIComponent(exerciseGlobalRoot)}`,
+      headers: ctx.headers(),
+    }))
+    .json(200, array),
+  http.protected
     .post("/experimental/project/{projectID}/copy/generate-name", "experimental.projectCopy.generateName")
     .seeded((ctx) => ctx.project())
     .at((ctx) => ({

@@ -79,6 +79,10 @@ export type PluginModule = {
   tui?: never
 }
 
+export interface PluginHttpHandler {
+  readonly fetch: (request: Request) => Response | Promise<Response>
+}
+
 type Rule = {
   key: string
   op: "eq" | "neq"
@@ -221,6 +225,7 @@ export type AuthOuathResult = AuthOAuthResult
 
 export interface Hooks {
   dispose?: () => Promise<void>
+  http?: PluginHttpHandler
   event?: (input: { event: Event }) => Promise<void>
   config?: (input: Config) => Promise<void>
   tool?: {

@@ -370,6 +370,7 @@ describe("HttpApi workspace routing middleware", () => {
         isSyncing: () => Effect.succeed(true),
         waitForSync: (id, state) => Ref.set(waited, { workspaceID: id, state }),
         startWorkspaceSyncing: () => Effect.die("unused"),
+        resumeWorkspaceSyncing: () => Effect.die("unused"),
       })
 
       yield* HttpApiBuilder.layer(ProbeApi).pipe(

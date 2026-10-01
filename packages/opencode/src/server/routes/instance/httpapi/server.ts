@@ -106,8 +106,9 @@ import { sessionLocationLayer } from "@opencode-ai/server/middleware/session-loc
 import { PtyEnvironment } from "@opencode-ai/server/pty-environment"
 import { schemaErrorLayer as v2SchemaErrorLayer } from "@opencode-ai/server/middleware/schema-error"
 import { workspaceHandlers } from "./handlers/workspace"
-import { instanceContextLayer } from "./middleware/instance-context"
-import { workspaceRoutingLayer } from "./middleware/workspace-routing"
+import { instanceContextLayer, provideInstanceContext } from "./middleware/instance-context"
+import { routeHttpApiWorkspace, workspaceRoutingLayer } from "./middleware/workspace-routing"
+import { pluginRoutes } from "./plugin"
 import { disposeMiddleware } from "./lifecycle"
 import { memoMap } from "@opencode-ai/core/effect/memo-map"
 import { compressionLayer } from "./middleware/compression"
@@ -138,6 +139,25 @@ const httpApiAuthLayer = authorizationLayer.pipe(Layer.provide(ServerAuth.Config
 const ptyConnectHttpApiAuthLayer = ptyConnectAuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.layer))
 const serverHttpApiAuthLayer = serverAuthorizationLayer.pipe(Layer.provide(ServerAuth.Config.layer))
 const workspaceRoutingLive = workspaceRoutingLayer.pipe(Layer.provide(Socket.layerWebSocketConstructorGlobal))
+const pluginContextRouterLayer = HttpRouter.middleware()(
+  Effect.gen(function* () {
+    const store = yield* InstanceStore.Service
+    const makeWebSocket = yield* Socket.WebSocketConstructor
+    const workspace = yield* Workspace.Service
+    const session = yield* Session.Service
+    const client = yield* HttpClient.HttpClient
+    return (effect) =>
+      routeHttpApiWorkspace(client, provideInstanceContext(effect, store, workspace)).pipe(
+        Effect.provideService(Socket.WebSocketConstructor, makeWebSocket),
+        Effect.provideService(Workspace.Service, workspace),
+        Effect.provideService(Session.Service, session),
+      )
+  }),
+)
+const pluginHttpMiddlewareLive = pluginContextRouterLayer
+  .combine(authorizationRouterMiddleware)
+  .layer.pipe(Layer.provide([ServerAuth.Config.layer, Socket.layerWebSocketConstructorGlobal]))
+const pluginHttpRoutes = pluginRoutes.pipe(Layer.provide(pluginHttpMiddlewareLive))
 const rootApiRoutes = HttpApiBuilder.layer(RootHttpApi).pipe(
   Layer.provide([controlHandlers, controlPlaneHandlers, globalHandlers]),
   Layer.provide(schemaErrorLayer),
@@ -279,6 +299,7 @@ export function createRoutes(
     ptyConnectApiRoutes,
     instanceRoutes,
     serverRoutes,
+    pluginHttpRoutes,
     docRoute,
     uiRoute,
   ).pipe(
