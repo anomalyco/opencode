@@ -129,6 +129,9 @@ const layer = Layer.effect(
       if (!agent.info) return yield* new AgentNotFoundError({ sessionID: session.id, agent: session.agent ?? agent.id })
       // Session permissions narrow discovery the same way they narrow the tool snapshot.
       const permissions = Permission.merge(agent.info.permissions, session.permissions ?? [])
+      // Spawn only the MCP servers this Session's permissions can reach; servers denied for this
+      // agent start when a Session that can use them selects here (e.g. an allowed subagent).
+      yield* mcpTools.demand(permissions)
       const loaded = yield* Effect.all(
         {
           tools: registry.snapshot(permissions),

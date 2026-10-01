@@ -12,6 +12,7 @@ export const emptyMcp = Mcp.Service.of({
   servers: () => Effect.succeed([]),
   add: () => Effect.die("unused mcp.add"),
   connect: () => Effect.die("unused mcp.connect"),
+  demand: () => Effect.succeed(false),
   disconnect: () => Effect.die("unused mcp.disconnect"),
   remove: () => Effect.die("unused mcp.remove"),
   tools: () => Effect.succeed([]),
