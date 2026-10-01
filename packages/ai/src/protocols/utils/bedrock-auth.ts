@@ -125,6 +125,7 @@ export interface ResolveAuthInput {
 }
 
 export interface ResolveAuthOptions {
+  readonly apiKeyHeader?: string
   readonly service?: string
   readonly name?: string
   /** `sigv4` ignores an ambient `AWS_BEARER_TOKEN_BEDROCK`; `bearer` is validated by the caller. */
@@ -138,7 +139,8 @@ export interface ResolveAuthOptions {
  */
 export const resolveAuth = (input: ResolveAuthInput, region: string, options: ResolveAuthOptions = {}) => {
   const apiKey = options.mode === "sigv4" ? undefined : (input.apiKey ?? process.env.AWS_BEARER_TOKEN_BEDROCK)
-  if (apiKey !== undefined) return Auth.bearer(apiKey)
+  if (apiKey !== undefined)
+    return options.apiKeyHeader === undefined ? Auth.bearer(apiKey) : Auth.header(options.apiKeyHeader, apiKey)
   if (input.credentials !== undefined) return sigV4({ ...input.credentials, region }, options)
   return sigV4(defaultChain({ region, profile: input.profile }), options)
 }
