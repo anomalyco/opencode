@@ -54,7 +54,13 @@ describe("acp session lifecycle over the wire", () => {
     ])
     expect(await acp.waitForUpdate((item) => item.update.sessionUpdate === "available_commands_update")).toEqual({
       sessionId: result.sessionId,
-      update: { sessionUpdate: "available_commands_update", availableCommands: [{ name: "review", description: "" }] },
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: [
+          { name: "review", description: "" },
+          { name: "compact", description: "Compact the session" },
+        ],
+      },
     })
   })
 

@@ -8,6 +8,7 @@ import {
   type SessionMessageInfo,
 } from "@opencode/client/promise"
 import { FSUtil } from "@opencode/util/fs-util"
+import type { Effect, Scope } from "effect"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import type {
   AuthenticateRequest,
@@ -95,15 +96,17 @@ export interface Interface {
 export function make(input: {
   readonly client: OpenCodeClient
   readonly connection: ACPConnection.Connection
+  readonly catalog: ACPCatalog.Interface
+  readonly run: <A, E>(effect: Effect.Effect<A, E, Scope.Scope>) => Promise<A>
 }): Interface {
   const sessions = new Map<string, Attached>()
   const registeredMcp = new Map<string, Set<string>>()
   const active = new Map<string, { readonly control: TurnControl; readonly turn: Promise<PromptResponse> }>()
   const capabilities = { writeTextFile: false, childSessionUpdates: false }
 
-  const catalogs = ACPCatalog.make({
-    client: input.client,
-    signal: input.connection.signal,
+  const catalogs = ACPCatalog.promise({
+    catalog: input.catalog,
+    run: input.run,
     changed: (live, previous) =>
       Promise.all(
         Array.from(sessions.values())
@@ -126,7 +129,7 @@ export function make(input: {
       sessionId: state.id,
       update: {
         sessionUpdate: "available_commands_update",
-        availableCommands: state.catalog.current.commands.map((command) => ({
+        availableCommands: ACPCatalog.commands(state.catalog.current).map((command) => ({
           name: command.name,
           description: command.description ?? "",
         })),

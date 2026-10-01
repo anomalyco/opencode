@@ -37,7 +37,7 @@ describe("acp catalog and config options over the wire", () => {
       [other.sessionId]: "/other",
     })
     await acp.until(() => acp.updates.filter((item) => commandNames(item)).length === 3, "commands for each session")
-    expect(acp.updates.map(commandNames)).toEqual([["review"], ["review"], ["review"]])
+    expect(acp.updates.map(commandNames)).toEqual(Array.from({ length: 3 }, () => ["review", "compact"]))
   })
 
   test("follows server defaults and refreshes the catalog when location plugins finish activating", async () => {
@@ -57,8 +57,8 @@ describe("acp catalog and config options over the wire", () => {
       currentValue: "copilot-build",
       options: ["copilot-build", "build", "plan"],
     })
-    const commands = await acp.waitForUpdate((item) => commandNames(item)?.length === 2)
-    expect(commandNames(commands)).toEqual(["review", "ship"])
+    const commands = await acp.waitForUpdate((item) => commandNames(item)?.length === 3)
+    expect(commandNames(commands)).toEqual(["review", "ship", "compact"])
     expect(agentReads(acp)).toBe(reads + 1)
 
     const second = await acp.newSession()
@@ -81,7 +81,7 @@ describe("acp catalog and config options over the wire", () => {
 
     acp.server.catalog.commands = [reviewCommand, { name: "ship", description: "Ship it" }]
     acp.server.send(ephemeralEvent("command.updated", {}, { directory: "/workspace" }))
-    const commands = await acp.waitForUpdate((item) => commandNames(item)?.length === 2)
+    const commands = await acp.waitForUpdate((item) => commandNames(item)?.length === 3)
     expect(commands).toEqual({
       sessionId: session.sessionId,
       update: {
@@ -89,6 +89,7 @@ describe("acp catalog and config options over the wire", () => {
         availableCommands: [
           { name: "review", description: "Review changes" },
           { name: "ship", description: "Ship it" },
+          { name: "compact", description: "Compact the session" },
         ],
       },
     })
@@ -193,15 +194,20 @@ describe("acp catalog and config options over the wire", () => {
     })
   })
 
-  test.todo(
-    "advertises the built-in compact command (https://github.com/anomalyco/opencode/issues/37229)",
-    async () => {
-      await using acp = await startSession()
+  test("advertises the built-in compact command once (https://github.com/anomalyco/opencode/issues/37229)", async () => {
+    await using acp = await startSession()
+    const advertised = await acp.waitForUpdate((item) => commandNames(item) !== undefined)
 
-      const commands = await acp.waitForUpdate((item) => commandNames(item) !== undefined)
-      expect(commandNames(commands)).toContain("compact")
-    },
-  )
+    acp.server.catalog.commands = [reviewCommand, { name: "compact", description: "Server compact" }]
+    acp.server.send(ephemeralEvent("command.updated", {}, { directory: "/workspace" }))
+    const replaced = await acp.waitForUpdate((item) => item !== advertised && commandNames(item) !== undefined)
+
+    expect(commandNames(advertised)).toEqual(["review", "compact"])
+    expect(replaced.update.sessionUpdate === "available_commands_update" && replaced.update.availableCommands).toEqual([
+      { name: "review", description: "Review changes" },
+      { name: "compact", description: "Server compact" },
+    ])
+  })
 })
 
 function commandNames(item: SessionNotification) {
