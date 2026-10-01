@@ -112,4 +112,45 @@ describe("tool history normalization", () => {
 
     expect(normalized[1]?.content[0]).toMatchObject({ name: "lookup", namespace: undefined })
   })
+
+  test("moves system updates after the results of pending calls", () => {
+    const calls = Message.assistant([toolCall("first"), toolCall("second")])
+    const first = toolResult("first", "one", "first", "text")
+    const second = toolResult("second", "two", "second", "text")
+    const update = Message.system("First update.")
+    const later = Message.system("Second update.")
+    const user = Message.user("Continue.")
+    const missing = (id: string) =>
+      Message.tool(ToolResultPart.make({ id, name: id, result: "Tool result missing", resultType: "error" }))
+
+    expect(normalizeToolHistory([calls, first, update, later, second, user])).toEqual([
+      calls,
+      first,
+      second,
+      update,
+      later,
+      user,
+    ])
+    expect(normalizeToolHistory([Message.assistant(toolCall("first")), update, user])).toEqual([
+      Message.assistant(toolCall("first")),
+      missing("first"),
+      update,
+      user,
+    ])
+    expect(normalizeToolHistory([Message.assistant(toolCall("first")), update])).toEqual([
+      Message.assistant(toolCall("first")),
+      missing("first"),
+      update,
+    ])
+  })
+
+  test("leaves settled updates and effort markers in place", () => {
+    const history = [Message.assistant(toolCall("first")), toolResult("first", "one", "first", "text")]
+    const update = Message.system("Update.")
+    const input = [Message.user("Start."), update, ...history, update, Message.user("Continue.")]
+    const effort = [history[0]!, Message.effort({ effort: "low", previous: "high" }), history[1]!]
+
+    expect(normalizeToolHistory(input)).toBe(input)
+    expect(normalizeToolHistory(effort)).toBe(effort)
+  })
 })

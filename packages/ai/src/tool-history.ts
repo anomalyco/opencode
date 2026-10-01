@@ -1,3 +1,4 @@
+import { effortUpdate } from "./effort-updates.js"
 import { Message, ToolResultPart, type ToolCallPart } from "./schema/messages.js"
 
 const EMPTY_TOOL_OUTPUT = "(no tool output)"
@@ -6,10 +7,17 @@ const MISSING_TOOL_RESULT = "Tool result missing"
 export function normalizeToolHistory(messages: ReadonlyArray<Message>) {
   const normalized: Message[] = []
   const pending = new Map<string, ToolCallPart>()
+  // Text system updates cannot sit between a tool call and its results, so they wait until every pending call is answered.
+  const held: Message[] = []
+  const releaseHeld = () => {
+    if (pending.size > 0) return
+    normalized.push(...held)
+    held.length = 0
+  }
   const appendMissingResults = () => {
-    if (pending.size === 0) return
-    normalized.push(missingToolResults(pending.values()))
+    if (pending.size > 0) normalized.push(missingToolResults(pending.values()))
     pending.clear()
+    releaseHeld()
   }
 
   for (const message of messages) {
@@ -18,6 +26,12 @@ export function normalizeToolHistory(messages: ReadonlyArray<Message>) {
     if (message.role === "tool") {
       const tool = normalizeToolMessage(message, pending)
       if (tool) normalized.push(tool)
+      releaseHeld()
+      continue
+    }
+
+    if (message.role === "system" && pending.size > 0 && effortUpdate(message) === undefined) {
+      held.push(message)
       continue
     }
 
