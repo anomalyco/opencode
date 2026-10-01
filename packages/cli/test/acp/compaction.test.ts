@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
-import type { OpenCodeEvent, SessionMessageInfo } from "@opencode/client/promise"
+import { OpenCode, type OpenCodeEvent, type SessionMessageInfo } from "@opencode/client/promise"
+import { Event } from "@opencode/schema/event"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { Schema } from "effect"
 import {
   assistantMessage,
@@ -14,51 +16,43 @@ import {
   succeeded,
   textDelta,
   turn,
-  type ServerRequest,
 } from "./wire-fixture"
 
 const summary = "Summary of the earlier conversation"
+const providerError = { type: "provider.error", message: "summary request failed", status: 500 }
 const decodeCompact = Schema.decodeUnknownSync(Schema.Struct({ id: Schema.String }))
 
 describe("acp compaction markers over the wire", () => {
   test("marks a /compact turn without forwarding the summary text", async () => {
-    await using acp = await compactTurn((sessionID, id) => [
+    const compacted = await compactTurn((sessionID, id) => [
       durableEvent("session.compaction.started", { sessionID, reason: "manual", recent: "", inputID: id }),
       ephemeralEvent("session.compaction.delta", { sessionID, text: summary }),
       durableEvent("session.compaction.ended", { sessionID, reason: "manual", text: summary, recent: "" }),
     ])
+    await using acp = compacted.acp
 
     expect(turnUpdates(acp.updates)).toEqual([
-      marker(acp.sessionId, { status: "started", messageId: acp.id, reason: "manual" }),
-      marker(acp.sessionId, { status: "completed", messageId: acp.id, reason: "manual" }),
+      marker(acp.sessionId, { status: "started", messageId: compacted.id, reason: "manual" }),
+      marker(acp.sessionId, { status: "completed", messageId: compacted.id, reason: "manual" }),
     ])
-    expect(acp.response.stopReason).toBe("end_turn")
+    expect(compacted.response.stopReason).toBe("end_turn")
   })
 
-  test("marks a failed /compact turn with the compaction error", async () => {
-    await using acp = await compactTurn((sessionID, id) => [
+  test("marks a failed /compact turn with the full compaction error", async () => {
+    const compacted = await compactTurn((sessionID, id) => [
       durableEvent("session.compaction.started", { sessionID, reason: "manual", recent: "", inputID: id }),
-      durableEvent("session.compaction.failed", {
-        sessionID,
-        reason: "manual",
-        inputID: id,
-        error: { type: "provider.error", message: "summary request failed" },
-      }),
+      durableEvent("session.compaction.failed", { sessionID, reason: "manual", inputID: id, error: providerError }),
     ])
+    await using acp = compacted.acp
 
     expect(turnUpdates(acp.updates)).toEqual([
-      marker(acp.sessionId, { status: "started", messageId: acp.id, reason: "manual" }),
-      marker(acp.sessionId, {
-        status: "failed",
-        messageId: acp.id,
-        reason: "manual",
-        error: { type: "provider.error", message: "summary request failed" },
-      }),
+      marker(acp.sessionId, { status: "started", messageId: compacted.id, reason: "manual" }),
+      marker(acp.sessionId, { status: "failed", messageId: compacted.id, reason: "manual", error: providerError }),
     ])
-    expect(acp.response.stopReason).toBe("end_turn")
+    expect(compacted.response.stopReason).toBe("end_turn")
   })
 
-  test("marks an automatic compaction between steps of a prompt turn", async () => {
+  test("marks an automatic compaction between steps with the ID its replayed message gets", async () => {
     await using acp = await startSession({
       onPrompt: ({ sessionID, id }) =>
         turn(
@@ -73,19 +67,69 @@ describe("acp compaction markers over the wire", () => {
           stepEnded(sessionID, "msg_after"),
         ),
     })
+    using events = await watchEvents(acp.server.url)
 
     const response = await acp.prompt(acp.sessionId, "hello")
 
-    const updates = turnUpdates(acp.updates)
-    const started = updates[1]?.update._meta?.["opencode/compaction"]
-    expect(started).toEqual({ status: "started", messageId: expect.stringMatching(/^msg_/), reason: "auto" })
-    expect(updates).toEqual([
+    const messageId = await events.messageID("session.compaction.started")
+    expect(turnUpdates(acp.updates)).toEqual([
       chunk(acp.sessionId, "msg_before", "before"),
-      marker(acp.sessionId, { status: "started", messageId: messageID(started), reason: "auto" }),
-      marker(acp.sessionId, { status: "completed", messageId: messageID(started), reason: "auto" }),
+      marker(acp.sessionId, { status: "started", messageId, reason: "auto" }),
+      marker(acp.sessionId, { status: "completed", messageId, reason: "auto" }),
       chunk(acp.sessionId, "msg_after", "after"),
     ])
     expect(response.stopReason).toBe("end_turn")
+
+    const live = turnUpdates(acp.updates)
+    acp.server.messages.set(acp.sessionId, [
+      {
+        id: messageId,
+        type: "compaction",
+        status: "completed",
+        reason: "auto",
+        summary,
+        recent: "",
+        time: { created: 1 },
+      },
+    ])
+    await acp.request("session/load", { cwd: "/workspace", sessionId: acp.sessionId, mcpServers: [] })
+
+    expect(turnUpdates(acp.updates).slice(live.length)).toEqual([
+      marker(acp.sessionId, { status: "completed", messageId, reason: "auto" }),
+    ])
+  })
+
+  test("marks automatic compaction failures before and after the compaction starts", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          durableEvent("session.compaction.failed", {
+            sessionID,
+            reason: "auto",
+            error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+          }),
+          durableEvent("session.compaction.started", { sessionID, reason: "auto", recent: "" }),
+          durableEvent("session.compaction.failed", { sessionID, reason: "auto", error: providerError }),
+        ),
+    })
+    using events = await watchEvents(acp.server.url)
+
+    await acp.prompt(acp.sessionId, "hello")
+
+    const unstarted = await events.messageID("session.compaction.failed")
+    const started = await events.messageID("session.compaction.started")
+    expect(turnUpdates(acp.updates)).toEqual([
+      marker(acp.sessionId, {
+        status: "failed",
+        messageId: unstarted,
+        reason: "auto",
+        error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+      }),
+      marker(acp.sessionId, { status: "started", messageId: started, reason: "auto" }),
+      marker(acp.sessionId, { status: "failed", messageId: started, reason: "auto", error: providerError }),
+    ])
   })
 
   test("projects child session compaction markers onto the parent turn", async () => {
@@ -106,19 +150,15 @@ describe("acp compaction markers over the wire", () => {
           succeeded("ses_child"),
         ),
     })
+    using events = await watchEvents(acp.server.url)
 
     await acp.prompt(acp.sessionId, "hello")
 
+    const messageId = await events.messageID("session.compaction.started")
     const child = { id: "ses_child", parentID: acp.sessionId, depth: 1, title: "Explore" }
     expect(turnUpdates(acp.updates).map((item) => item.update._meta)).toEqual([
-      {
-        "opencode/compaction": { status: "started", messageId: expect.stringMatching(/^msg_/), reason: "auto" },
-        "opencode/child-session": child,
-      },
-      {
-        "opencode/compaction": { status: "completed", messageId: expect.stringMatching(/^msg_/), reason: "auto" },
-        "opencode/child-session": child,
-      },
+      { "opencode/compaction": { status: "started", messageId, reason: "auto" }, "opencode/child-session": child },
+      { "opencode/compaction": { status: "completed", messageId, reason: "auto" }, "opencode/child-session": child },
     ])
   })
 
@@ -143,7 +183,7 @@ describe("acp compaction markers over the wire", () => {
         status: "failed",
         messageId: "msg_compaction_failed",
         reason: "auto",
-        error: { type: "provider.error", message: "summary request failed" },
+        error: providerError,
       }),
       marker("ses_compacted", { status: "completed", messageId: "msg_compaction", reason: "manual" }),
       chunk("ses_compacted", "msg_after", "after"),
@@ -163,11 +203,24 @@ async function compactTurn(events: (sessionID: string, id: string) => OpenCodeEv
   const id = decodeCompact(request.body).id
   acp.server.send(...turn(acp.sessionId, id, ...events(acp.sessionId, id)))
   held.resolve(Response.json({ data: {} }))
-  return Object.assign(acp, { id, response: await response })
+  return { acp, id, response: await response }
 }
 
-function messageID(marker: unknown) {
-  return Schema.decodeUnknownSync(Schema.Struct({ messageId: Schema.String }))(marker).messageId
+// Core derives an automatic compaction's message ID from the event ID the server stamps on publish.
+async function watchEvents(url: string) {
+  const controller = new AbortController()
+  const stream = OpenCode.make({ baseUrl: url }).event.subscribe({ signal: controller.signal })[Symbol.asyncIterator]()
+  await stream.next()
+  return {
+    async messageID(type: OpenCodeEvent["type"]) {
+      while (true) {
+        const next = await stream.next()
+        if (next.done) throw new Error(`event stream ended before ${type}`)
+        if (next.value.type === type) return SessionMessage.ID.fromEvent(Event.ID.make(next.value.id))
+      }
+    },
+    [Symbol.dispose]: () => controller.abort(),
+  }
 }
 
 function marker(sessionId: string, value: Record<string, unknown>): SessionNotification {
@@ -192,7 +245,7 @@ function compactedHistory(): SessionMessageInfo[] {
       type: "compaction",
       status: "failed",
       reason: "auto",
-      error: { type: "provider.error", message: "summary request failed" },
+      error: providerError,
       time: { created: 2 },
     },
     {

@@ -7,6 +7,8 @@ import type {
   SessionStructuredError,
   TokenUsageInfo,
 } from "@opencode/client/promise"
+import { Event } from "@opencode/schema/event"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import type { ACPConnection } from "./connection"
 import { partsToContentChunks, type ReplayPart } from "./content"
@@ -56,8 +58,13 @@ type CompactionMarker = {
   readonly status: "started" | "completed" | "failed"
   readonly messageId: string
   readonly reason: "auto" | "manual"
-  readonly error?: { readonly type: string; readonly message: string }
+  readonly error?: SessionStructuredError
 }
+
+type CompactionEvent = Extract<
+  EventSubscribeOutput,
+  { readonly type: "session.compaction.started" | "session.compaction.ended" | "session.compaction.failed" }
+>
 
 type ChildSessionUpdateBase = {
   readonly rootSessionId: string
@@ -237,30 +244,13 @@ export async function streamTurn(input: {
         await send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: retry } })
         continue
       }
-      // Message IDs follow the compaction message projection, so live markers match replayed ones.
-      if (event.type === "session.compaction.started") {
-        const messageId = event.data.inputID ?? messageIDFromEvent(event.id)
-        compactions.set(eventSessionID, messageId)
-        await send(compactionUpdate({ status: "started", messageId, reason: event.data.reason }))
-        continue
-      }
-      if (event.type === "session.compaction.ended") {
-        const messageId = compactions.get(eventSessionID) ?? messageIDFromEvent(event.id)
-        compactions.delete(eventSessionID)
-        await send(compactionUpdate({ status: "completed", messageId, reason: event.data.reason }))
-        continue
-      }
-      if (event.type === "session.compaction.failed") {
-        const messageId = compactions.get(eventSessionID) ?? event.data.inputID ?? messageIDFromEvent(event.id)
-        compactions.delete(eventSessionID)
-        await send(
-          compactionUpdate({
-            status: "failed",
-            messageId,
-            reason: event.data.reason,
-            error: { type: event.data.error.type, message: event.data.error.message },
-          }),
-        )
+      if (
+        event.type === "session.compaction.started" ||
+        event.type === "session.compaction.ended" ||
+        event.type === "session.compaction.failed"
+      ) {
+        const marker = compactionMarker(event, compactions)
+        if (marker) await send(compactionUpdate(marker))
         continue
       }
       if (event.type === "session.text.delta") {
@@ -470,8 +460,25 @@ function toolKey(sessionID: string, id: string) {
   return `${sessionID}:${id}`
 }
 
-function messageIDFromEvent(eventID: string) {
-  return eventID.replace(/^evt_/, "msg_")
+// Message IDs follow core's compaction message projection, so live markers match replayed ones.
+function compactionMarker(event: CompactionEvent, compactions: Map<string, string>): CompactionMarker | undefined {
+  const sessionID = event.data.sessionID
+  if (event.type === "session.compaction.started") {
+    const messageId = event.data.inputID ?? SessionMessage.ID.fromEvent(Event.ID.make(event.id))
+    compactions.set(sessionID, messageId)
+    return { status: "started", messageId, reason: event.data.reason }
+  }
+  const tracked = compactions.get(sessionID)
+  compactions.delete(sessionID)
+  if (event.type === "session.compaction.ended")
+    return tracked ? { status: "completed", messageId: tracked, reason: event.data.reason } : undefined
+  // Automatic compaction can fail before it starts, for example when there is nothing to compact yet.
+  return {
+    status: "failed",
+    messageId: tracked ?? event.data.inputID ?? SessionMessage.ID.fromEvent(Event.ID.make(event.id)),
+    reason: event.data.reason,
+    error: event.data.error,
+  }
 }
 
 function compactionUpdate(marker: CompactionMarker): SessionUpdate {
@@ -542,7 +549,7 @@ async function replayMessage(
         status: message.status,
         messageId: message.id,
         reason: message.reason,
-        ...(message.status === "failed" ? { error: { type: message.error.type, message: message.error.message } } : {}),
+        ...(message.status === "failed" ? { error: message.error } : {}),
       }),
     })
     return
