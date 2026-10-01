@@ -185,6 +185,8 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     params,
     messageTransformOptions: options,
     headers: {
+      "x-opencode-session-id": input.sessionID,
+      ...(input.parentSessionID ? { "x-opencode-parent-session-id": input.parentSessionID } : {}),
       ...(input.model.providerID.startsWith("opencode")
         ? {
             ...(opencodeProjectID ? { "x-opencode-project": opencodeProjectID } : {}),
