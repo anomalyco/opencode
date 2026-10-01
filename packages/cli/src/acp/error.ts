@@ -40,16 +40,27 @@ export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>
   errorName: Schema.optional(Schema.String),
 }) {}
 
-export type Error =
-  | SessionNotFoundError
-  | SessionDirectoryMismatchError
-  | InvalidConfigOptionError
-  | InvalidModelError
-  | InvalidEffortError
-  | InvalidModeError
-  | AuthRequiredError
-  | UnknownAuthMethodError
-  | ServiceFailureError
+export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailableError>()(
+  "ACPServerUnavailableError",
+  {},
+) {}
+
+const Errors = Schema.Union([
+  SessionNotFoundError,
+  SessionDirectoryMismatchError,
+  InvalidConfigOptionError,
+  InvalidModelError,
+  InvalidEffortError,
+  InvalidModeError,
+  AuthRequiredError,
+  UnknownAuthMethodError,
+  ServiceFailureError,
+  ServerUnavailableError,
+])
+
+export type Error = typeof Errors.Type
+
+export const is = Schema.is(Errors)
 
 export function toRequestError(error: Error): RequestError {
   switch (error._tag) {
@@ -83,6 +94,8 @@ export function toRequestError(error: Error): RequestError {
         },
         error.safeMessage,
       )
+    case "ACPServerUnavailableError":
+      return RequestError.internalError({ errorName: "ServerUnavailable" }, "OpenCode server is unavailable")
   }
   const exhaustive: never = error
   return exhaustive

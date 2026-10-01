@@ -34,12 +34,11 @@ export function observeElementOffsetReconnectAware<TScrollElement extends Elemen
     let framesAfterDeadline = 0
     const check = (time: number) => {
       frame = undefined
-      if (element.isConnected) {
-        const offset = instance.options.horizontal
-          ? element.scrollLeft * (instance.options.isRtl ? -1 : 1)
-          : element.scrollTop
-        if (instance.scrollOffset === null || Math.abs(offset - instance.scrollOffset) > 1) deliver(offset, false)
-      }
+      if (
+        element.isConnected &&
+        (instance.scrollOffset === null || Math.abs(element.scrollTop - instance.scrollOffset) > 1)
+      )
+        deliver(element.scrollTop, false)
       if (time >= deadline) framesAfterDeadline += 1
       if (framesAfterDeadline >= 2) return
       frame = targetWindow.requestAnimationFrame(check)
@@ -71,6 +70,6 @@ export function observeElementOffsetReconnectAware<TScrollElement extends Elemen
   }
 }
 
-export function mutationNodesContainElement(nodes: Iterable<Node>, element: Element) {
+function mutationNodesContainElement(nodes: Iterable<Node>, element: Element) {
   return [...nodes].some((node) => node === element || node.contains(element))
 }

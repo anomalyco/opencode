@@ -16,7 +16,6 @@ type Candidate = { name: string; path: string; modified: number; entries: Record
 export const importLegacyStores = Effect.fn("DesktopStorage.importLegacyStores")(function* (
   db: Database,
   userData: string,
-  now = Date.now(),
 ) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
@@ -47,7 +46,7 @@ export const importLegacyStores = Effect.fn("DesktopStorage.importLegacyStores")
   const kept = new Set(
     candidates
       .filter((file) => isDraft(file.name) && Object.keys(file.entries).length > 0)
-      .filter((file) => now - file.modified <= DRAFT_RETENTION_MS)
+      .filter((file) => Date.now() - file.modified <= DRAFT_RETENTION_MS)
       .sort((a, b) => b.modified - a.modified)
       .slice(0, DRAFT_KEEP_RECENT)
       .map((file) => file.name),

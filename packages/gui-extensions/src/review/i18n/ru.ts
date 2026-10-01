@@ -1,0 +1,17 @@
+export default {
+  "tab.title": "Обзор",
+  "tab.count.one": "{{count}} файл изменён",
+  "tab.count.few": "{{count}} файла изменено",
+  "tab.count.many": "{{count}} файлов изменено",
+  "tab.count.other": "{{count}} файла изменено",
+  "mobile.title.one": "Изменение",
+  "mobile.title.few": "Изменения",
+  "mobile.title.many": "Изменений",
+  "mobile.title.other": "Изменения",
+  "empty.git": "Пока нет незафиксированных изменений",
+  "empty.branch": "Пока нет изменений в ветке",
+  "git.title": "Создать репозиторий Git",
+  "git.description": "Отслеживайте, просматривайте и отменяйте изменения в этом проекте",
+  loadingChanges: "Загрузка изменений…",
+  noChanges: "Нет изменений",
+}

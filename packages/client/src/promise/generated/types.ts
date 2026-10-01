@@ -293,6 +293,15 @@ export type McpResourceTemplate = {
   mimeType?: string
 }
 
+export type CredentialOAuth = {
+  type: "oauth"
+  methodID: string
+  refresh: string
+  access: string
+  expires: number
+  metadata?: { [x: string]: JsonValue }
+}
+
 export type ProjectVcs = string
 
 export type ProjectIcon = { url?: string; override?: string; color?: string }
@@ -1656,7 +1665,7 @@ export type FormMultiselectField1 = {
   default?: Array<string>
 }
 
-export type FormAnswer1 = { [x: string]: FormValue1 }
+export type FormAnswer2 = { [x: string]: FormValue1 }
 
 export type SessionStatusUpdated = {
   id: string
@@ -1888,7 +1897,17 @@ export type FormField =
   | FormMultiselectField
   | FormExternalField
 
-export type FormState = { status: "pending" } | { status: "answered"; answer: FormAnswer } | { status: "cancelled" }
+export type FormState =
+  | { status: "pending" }
+  | { status: "answered"; answer: FormAnswer }
+  | { status: "cancelled"; message?: string }
+
+export type CredentialKey = {
+  type: "key"
+  key: string
+  metadata?: { [x: string]: JsonValue }
+  configuration?: FormAnswer
+}
 
 export type ConnectionInfo = ConnectionCredentialInfo | ConnectionEnvInfo
 
@@ -1906,7 +1925,7 @@ export type FormReplied = {
   metadata?: { [x: string]: any }
   type: "form.replied"
   location?: LocationRef
-  data: { id: string; sessionID: string; answer: FormAnswer1 }
+  data: { id: string; sessionID: string; answer: FormAnswer2 }
 }
 
 export type ReferenceInfo = {
@@ -2225,6 +2244,8 @@ export type SessionMessageAssistantTool1 = {
 
 export type FormFields = [FormField, ...Array<FormField>]
 
+export type CredentialValue = CredentialOAuth | CredentialKey
+
 export type FormFields2 = [FormField1, ...Array<FormField1>]
 
 export type SessionsResponse = { data: Array<SessionInfo>; cursor: { previous?: string | null; next?: string | null } }
@@ -2278,6 +2299,14 @@ export type FormDetail = {
 export type IntegrationOAuthMethod = { id: string; type: "oauth"; label: string; form?: FormFields }
 
 export type IntegrationKeyMethod = { type: "key"; label?: string; form?: FormFields }
+
+export type CredentialEntry = {
+  id: string
+  integrationID: string
+  label: string
+  active: boolean
+  value: CredentialValue
+}
 
 export type FormInfo1 = { id: string; sessionID: string; title: string; metadata?: FormMetadata1; fields: FormFields2 }
 
@@ -2885,6 +2914,7 @@ export type SessionStatsOutput = { data: SessionStatsInfo }["data"]
 export type SessionCreateInput = {
   readonly id?: {
     readonly id?: string | null
+    readonly parentID?: string | null
     readonly title?: string | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
@@ -2896,8 +2926,23 @@ export type SessionCreateInput = {
       readonly effect: "allow" | "deny" | "ask"
     }> | null
   }["id"]
+  readonly parentID?: {
+    readonly id?: string | null
+    readonly parentID?: string | null
+    readonly title?: string | null
+    readonly agent?: string | null
+    readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
+    readonly location?: { readonly directory: string } | null
+    readonly metadata?: { readonly [x: string]: JsonValue } | null
+    readonly permissions?: ReadonlyArray<{
+      readonly action: string
+      readonly resource: string
+      readonly effect: "allow" | "deny" | "ask"
+    }> | null
+  }["parentID"]
   readonly title?: {
     readonly id?: string | null
+    readonly parentID?: string | null
     readonly title?: string | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
@@ -2911,6 +2956,7 @@ export type SessionCreateInput = {
   }["title"]
   readonly agent?: {
     readonly id?: string | null
+    readonly parentID?: string | null
     readonly title?: string | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
@@ -2924,6 +2970,7 @@ export type SessionCreateInput = {
   }["agent"]
   readonly model?: {
     readonly id?: string | null
+    readonly parentID?: string | null
     readonly title?: string | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
@@ -2937,6 +2984,7 @@ export type SessionCreateInput = {
   }["model"]
   readonly location?: {
     readonly id?: string | null
+    readonly parentID?: string | null
     readonly title?: string | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
@@ -2950,6 +2998,7 @@ export type SessionCreateInput = {
   }["location"]
   readonly metadata?: {
     readonly id?: string | null
+    readonly parentID?: string | null
     readonly title?: string | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
@@ -2963,6 +3012,7 @@ export type SessionCreateInput = {
   }["metadata"]
   readonly permissions?: {
     readonly id?: string | null
+    readonly parentID?: string | null
     readonly title?: string | null
     readonly agent?: string | null
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string } | null
@@ -5434,6 +5484,7 @@ export type SessionFormReplyOutput = void
 export type SessionFormCancelInput = {
   readonly sessionID: { readonly sessionID: string; readonly formID: string }["sessionID"]
   readonly formID: { readonly sessionID: string; readonly formID: string }["formID"]
+  readonly message?: { readonly message?: string | undefined }["message"]
 }
 
 export type SessionFormCancelOutput = void
@@ -5749,6 +5800,128 @@ export type McpResourceCatalogInput = {
 }
 
 export type McpResourceCatalogOutput = { location: LocationPublicRef; data: McpResourceCatalog }
+
+export type CredentialListOutput = { data: Array<CredentialEntry> }["data"]
+
+export type CredentialCreateInput = {
+  readonly id?: {
+    readonly id?: string
+    readonly integrationID: string
+    readonly label?: string
+    readonly value:
+      | {
+          readonly type: "oauth"
+          readonly methodID: string
+          readonly refresh: string
+          readonly access: string
+          readonly expires: number
+          readonly metadata?: { readonly [x: string]: JsonValue }
+        }
+      | {
+          readonly type: "key"
+          readonly key: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly configuration?: {
+            readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
+          }
+        }
+    readonly activate?: boolean
+  }["id"]
+  readonly integrationID: {
+    readonly id?: string
+    readonly integrationID: string
+    readonly label?: string
+    readonly value:
+      | {
+          readonly type: "oauth"
+          readonly methodID: string
+          readonly refresh: string
+          readonly access: string
+          readonly expires: number
+          readonly metadata?: { readonly [x: string]: JsonValue }
+        }
+      | {
+          readonly type: "key"
+          readonly key: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly configuration?: {
+            readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
+          }
+        }
+    readonly activate?: boolean
+  }["integrationID"]
+  readonly label?: {
+    readonly id?: string
+    readonly integrationID: string
+    readonly label?: string
+    readonly value:
+      | {
+          readonly type: "oauth"
+          readonly methodID: string
+          readonly refresh: string
+          readonly access: string
+          readonly expires: number
+          readonly metadata?: { readonly [x: string]: JsonValue }
+        }
+      | {
+          readonly type: "key"
+          readonly key: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly configuration?: {
+            readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
+          }
+        }
+    readonly activate?: boolean
+  }["label"]
+  readonly value: {
+    readonly id?: string
+    readonly integrationID: string
+    readonly label?: string
+    readonly value:
+      | {
+          readonly type: "oauth"
+          readonly methodID: string
+          readonly refresh: string
+          readonly access: string
+          readonly expires: number
+          readonly metadata?: { readonly [x: string]: JsonValue }
+        }
+      | {
+          readonly type: "key"
+          readonly key: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly configuration?: {
+            readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
+          }
+        }
+    readonly activate?: boolean
+  }["value"]
+  readonly activate?: {
+    readonly id?: string
+    readonly integrationID: string
+    readonly label?: string
+    readonly value:
+      | {
+          readonly type: "oauth"
+          readonly methodID: string
+          readonly refresh: string
+          readonly access: string
+          readonly expires: number
+          readonly metadata?: { readonly [x: string]: JsonValue }
+        }
+      | {
+          readonly type: "key"
+          readonly key: string
+          readonly metadata?: { readonly [x: string]: JsonValue }
+          readonly configuration?: {
+            readonly [x: string]: string | number | "Infinity" | "-Infinity" | "NaN" | boolean | ReadonlyArray<string>
+          }
+        }
+    readonly activate?: boolean
+  }["activate"]
+}
+
+export type CredentialCreateOutput = { data: CredentialEntry }["data"]
 
 export type CredentialUpdateInput = {
   readonly credentialID: { readonly credentialID: string }["credentialID"]

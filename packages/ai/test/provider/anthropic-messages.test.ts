@@ -588,9 +588,9 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects a system update between a local tool call and its result", () =>
+  it.effect("moves a system update between a local tool call and its result after the result", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: opus48,
           messages: [
@@ -601,9 +601,13 @@ describe("Anthropic Messages route", () => {
           ],
           cache: "none",
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("system updates cannot split a local tool call from its tool result")
+      expect(prepared.body.messages.slice(1)).toEqual([
+        { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: '"Done."' }] },
+        { role: "system", content: [{ type: "text", text: "Too early.", cache_control: undefined }] },
+      ])
     }),
   )
 

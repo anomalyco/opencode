@@ -1,0 +1,16 @@
+export default {
+  "command.open": "Odpri brskalnik",
+  "command.reload": "Osveži stran brskalnika",
+  "tab.title": "Spletni brskalnik",
+  "address.label": "Naslov v brskalniku",
+  "address.placeholder": "Vnesite URL",
+  "action.stop": "Ustavi",
+  replaced: "Nadzor brskalnika je premaknjen v drugo namizno okno.",
+  unsupported: "Ta namizna aplikacija ne podpira podokna brskalnika.",
+  suspended: "Brskalnik je začasno ustavljen. Interakcija s sejo za ponovno povezavo.",
+  "empty.title": "Vnesite URL",
+  "empty.description": "Ali vnesite poziv »Odpri v brskalniku aplikacije«",
+  "failed.title": "URL ni dosegljiv",
+  "failed.description": "Preverite URL in povezavo ter poskusite znova.",
+  "action.reload": "Znova naloži",
+}

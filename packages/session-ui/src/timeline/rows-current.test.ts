@@ -1,9 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type {
-  SessionMessageAssistant,
-  SessionMessageAssistantTool,
-  SessionMessageInfo,
-} from "@opencode/client/promise"
+import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageInfo } from "@opencode/client/promise"
 import { storyDocument, storyTool } from "../storybook/current-session-scenarios"
 import { timelinePresets } from "./detail"
 import { createTimelineProjection, Timeline, TimelineRow } from "./projection"
@@ -860,6 +856,52 @@ describe("current session timeline rows", () => {
     const rows = Timeline.constructSessionMessageRows(source, false, { type: "idle" }, undefined, shell, edit).rows
 
     expect(rows.flatMap((row) => (row._tag === "AssistantPart" ? [row.group.type] : []))).toEqual([...types])
+  })
+
+  test("merges adjacent separate reads into one read row split by other parts", () => {
+    const rows = Timeline.constructSessionMessageRows(
+      storyDocument([
+        storyTool("read_1", "read", "completed", { path: "src/a.ts" }),
+        storyTool("read_2", "read", "running", { path: "src/b.ts", limit: 120 }),
+        { type: "reasoning", text: "Keep reading." },
+        storyTool("read_3", "read", "completed", { path: "src/c.ts" }),
+        storyTool("read_image", "read", "completed", { path: "src/logo.png" }),
+        storyTool("read_failed", "read", "error", { path: "src/missing.ts" }),
+        storyTool("read_4", "read", "completed", { path: "src/d.ts" }),
+        storyTool("read_5", "read", "completed", { path: "src/e.ts" }),
+        storyTool("glob", "glob", "completed", { pattern: "*.ts" }),
+        storyTool("read_6", "read", "completed", { path: "src/f.ts" }),
+      ]).messages,
+      true,
+      { type: "idle" },
+      undefined,
+      false,
+      false,
+      undefined,
+      timelinePresets[0].value,
+    ).rows
+
+    expect(
+      rows.flatMap((row) =>
+        row._tag !== "AssistantPart"
+          ? []
+          : [
+              [
+                row.group.type,
+                ...(row.group.type === "part" ? [row.group.ref] : row.group.refs).map((ref) => ref.partID),
+              ],
+            ],
+      ),
+    ).toEqual([
+      ["read", "read_1", "read_2"],
+      ["part", "msg_tool_projection_assistant:reasoning:0"],
+      ["read", "read_3"],
+      ["part", "read_image"],
+      ["part", "read_failed"],
+      ["read", "read_4", "read_5"],
+      ["part", "glob"],
+      ["read", "read_6"],
+    ])
   })
 
   test.each(["shell", "execute", "subagent"])("keeps %s in an existing group throughout execution", (name) => {

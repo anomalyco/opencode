@@ -1,7 +1,7 @@
+import { isDeepStrictEqual } from "node:util"
 import {
   isSessionNotFoundError,
   type CommandInfo,
-  type ModelInfo,
   type ModelRef,
   type OpenCodeClient,
   type SessionInfo,
@@ -40,12 +40,8 @@ import type {
 } from "@agentclientprotocol/sdk"
 import { OPENCODE_VERSION } from "../version"
 import { SessionMessage } from "@opencode/schema/session-message"
-import {
-  buildConfigOptions,
-  DEFAULT_VARIANT_VALUE,
-  parseModelSelection,
-  type ConfigOptionProvider,
-} from "./config-option"
+import { ACPCatalog, type Catalog } from "./catalog"
+import { buildConfigOptions, DEFAULT_VARIANT_VALUE, parseModelSelection } from "./config-option"
 import type { ACPConnection } from "./connection"
 import { promptContentToParts } from "./content"
 import {
@@ -61,22 +57,14 @@ import { ACPError } from "./error"
 
 export const AuthMethodID = "opencode-login"
 
-type Catalog = {
-  readonly providers: ConfigOptionProvider[]
-  readonly models: ModelInfo[]
-  readonly defaultModel: ModelRef
-  readonly modes: Array<{ id: string; name: string; description?: string }>
-  readonly defaultModeID: string
-  readonly commands: CommandInfo[]
-}
-
+// Model and mode are unset while the session follows the server defaults.
 type Attached = {
   readonly id: string
   readonly cwd: string
   readonly abort: AbortController
-  catalog: Catalog
-  model: ModelRef
-  modeID: string
+  readonly catalog: ACPCatalog.Live
+  model?: ModelRef
+  modeID?: string
 }
 
 type PreparedPrompt = {
@@ -109,21 +97,55 @@ export function make(input: {
   readonly connection: ACPConnection.Connection
 }): Interface {
   const sessions = new Map<string, Attached>()
-  const catalogs = new Map<string, Promise<Catalog>>()
   const registeredMcp = new Map<string, Set<string>>()
   const active = new Map<string, { readonly control: TurnControl; readonly turn: Promise<PromptResponse> }>()
-  const capabilities = { writeTextFile: false, childSessionUpdates: false }
+  const capabilities = { childSessionUpdates: false }
 
-  const catalog = (cwd: string) => {
-    const cached = catalogs.get(cwd)
-    if (cached) return cached
-    const loaded = loadCatalog(input.client, cwd).catch((error) => {
-      catalogs.delete(cwd)
-      throw error
+  const catalogs = ACPCatalog.make({
+    client: input.client,
+    signal: input.connection.signal,
+    changed: (live, previous) =>
+      Promise.all(
+        Array.from(sessions.values())
+          .filter((state) => state.catalog === live)
+          .map(async (state) => {
+            const options = configOptions(state)
+            if (!isDeepStrictEqual(options, configOptions(state, previous))) {
+              await input.connection.sessionUpdate({
+                sessionId: state.id,
+                update: { sessionUpdate: "config_option_update", configOptions: options },
+              })
+            }
+            if (!isDeepStrictEqual(live.current.commands, previous.commands)) await sendCommands(state)
+          }),
+      ),
+  })
+
+  const sendCommands = (state: Attached) =>
+    input.connection.sessionUpdate({
+      sessionId: state.id,
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: state.catalog.current.commands.map((command) => ({
+          name: command.name,
+          description: command.description ?? "",
+        })),
+      },
     })
-    catalogs.set(cwd, loaded)
-    return loaded
-  }
+
+  const withReload = <A>(state: Attached, select: () => Promise<A>) =>
+    select().catch(async (error: unknown) => {
+      if (
+        !(
+          error instanceof ACPError.InvalidModelError ||
+          error instanceof ACPError.InvalidModeError ||
+          error instanceof ACPError.InvalidEffortError
+        )
+      )
+        throw error
+      await catalogs.reload(state.catalog)
+      return select()
+    })
 
   const requireSession = async (sessionID: string) => {
     const current = sessions.get(sessionID)
@@ -147,27 +169,19 @@ export function make(input: {
   }
 
   const attach = async (session: SessionInfo, cwd: string, mcpServers: readonly McpServer[]) => {
-    const currentCatalog = await catalog(cwd)
+    const catalog = await catalogs.get(cwd)
     sessions.get(session.id)?.abort.abort()
     const state: Attached = {
       id: session.id,
       cwd,
       abort: new AbortController(),
-      catalog: currentCatalog,
-      model: session.model ?? currentCatalog.defaultModel,
-      modeID: session.agent ?? currentCatalog.defaultModeID,
+      catalog,
+      model: session.model,
+      modeID: session.agent,
     }
     sessions.set(session.id, state)
     await registerMcpServers(input.client, registeredMcp, state, mcpServers)
-    await input.connection.sessionUpdate({
-      sessionId: state.id,
-      update: {
-        sessionUpdate: "available_commands_update",
-        availableCommands: [
-          ...state.catalog.commands.map((command) => ({ name: command.name, description: command.description ?? "" })),
-        ],
-      },
-    })
+    await sendCommands(state)
     return state
   }
 
@@ -175,18 +189,19 @@ export function make(input: {
     await replayMessages(input.connection, state.id, state.cwd, await messages(input.client, state.id))
   }
 
-  const configOptions = (state: Attached) =>
-    buildConfigOptions({
-      providers: state.catalog.providers,
-      currentModel: { providerID: state.model.providerID, modelID: state.model.id },
-      currentVariant: state.model.variant,
-      modes: state.catalog.modes,
-      currentModeId: state.modeID,
+  const configOptions = (state: Attached, catalog = state.catalog.current) => {
+    const model = currentModel(state, catalog)
+    return buildConfigOptions({
+      providers: catalog.providers,
+      currentModel: { providerID: model.providerID, modelID: model.id },
+      currentVariant: model.variant,
+      modes: catalog.modes,
+      currentModeId: state.modeID ?? catalog.defaultModeID,
     })
+  }
 
   return {
     initialize: async (params) => {
-      capabilities.writeTextFile = params.clientCapabilities?.fs?.writeTextFile === true
       capabilities.childSessionUpdates = params.clientCapabilities?._meta?.[ChildSessionUpdatesCapability] === true
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
@@ -216,12 +231,10 @@ export function make(input: {
       return {}
     },
     newSession: async (params) => {
-      const currentCatalog = await catalog(params.cwd)
-      const created = await input.client.session.create({
-        location: { directory: params.cwd },
-        agent: currentCatalog.defaultModeID,
-        model: currentCatalog.defaultModel,
-      })
+      // Load before creating so a catalog failure leaves no session behind. Agent and model stay unset
+      // so the server resolves its defaults after plugins activate.
+      await catalogs.get(params.cwd)
+      const created = await input.client.session.create({ location: { directory: params.cwd } })
       const state = await attach(created, params.cwd, params.mcpServers)
       return { sessionId: state.id, configOptions: configOptions(state) }
     },
@@ -279,37 +292,38 @@ export function make(input: {
     },
     setSessionConfigOption: async (params) => {
       const state = await requireSession(params.sessionId)
-      if (typeof params.value !== "string") throw new ACPError.InvalidConfigOptionError({ configId: params.configId })
-      switch (params.configId) {
-        case "model": {
-          const selected = requireModel(state.catalog, params.value, state.model)
-          state.model = selected
-          await input.client.session.switchModel({ sessionID: state.id, model: selected })
-          break
+      const value = params.value
+      if (typeof value !== "string") throw new ACPError.InvalidConfigOptionError({ configId: params.configId })
+      await withReload(state, async () => {
+        switch (params.configId) {
+          case "model": {
+            const selected = requireModel(state.catalog.current, value, currentModel(state))
+            state.model = selected
+            await input.client.session.switchModel({ sessionID: state.id, model: selected })
+            return
+          }
+          case "effort": {
+            const current = currentModel(state)
+            const model = state.catalog.current.models.find(
+              (item) => item.providerID === current.providerID && item.id === current.id,
+            )
+            if (!model || (value !== DEFAULT_VARIANT_VALUE && !model.variants.some((variant) => variant.id === value)))
+              throw new ACPError.InvalidEffortError({ effort: value })
+            state.model = { ...current, variant: value }
+            await input.client.session.switchModel({ sessionID: state.id, model: state.model })
+            return
+          }
+          case "mode":
+            return selectMode(input.client, state, value)
+          default:
+            throw new ACPError.InvalidConfigOptionError({ configId: params.configId })
         }
-        case "effort": {
-          const model = state.catalog.models.find(
-            (item) => item.providerID === state.model.providerID && item.id === state.model.id,
-          )
-          if (
-            !model ||
-            (params.value !== DEFAULT_VARIANT_VALUE && !model.variants.some((variant) => variant.id === params.value))
-          )
-            throw new ACPError.InvalidEffortError({ effort: params.value })
-          state.model = { ...state.model, variant: params.value }
-          await input.client.session.switchModel({ sessionID: state.id, model: state.model })
-          break
-        }
-        case "mode":
-          await selectMode(input.client, state, params.value)
-          break
-        default:
-          throw new ACPError.InvalidConfigOptionError({ configId: params.configId })
-      }
+      })
       return { configOptions: configOptions(state) }
     },
     setSessionMode: async (params) => {
-      await selectMode(input.client, await requireSession(params.sessionId), params.modeId)
+      const state = await requireSession(params.sessionId)
+      await withReload(state, () => selectMode(input.client, state, params.modeId))
       return {}
     },
     prompt: async (params, signal) => {
@@ -321,7 +335,7 @@ export function make(input: {
         })
       }
       const messageID = SessionMessage.ID.create()
-      const prepared = preparePrompt(state.catalog, params.prompt, messageID)
+      const prepared = preparePrompt(state.catalog.current, params.prompt, messageID)
       const control: TurnControl = { cancelled: false, admission: new AbortController() }
       const extNotification = input.connection.extNotification
       const childSessionUpdate =
@@ -336,7 +350,6 @@ export function make(input: {
         sessionID: state.id,
         cwd: state.cwd,
         start: prepared.start,
-        writeTextFile: capabilities.writeTextFile,
         action: prepared.command !== undefined,
         control,
         connectionSignal: input.connection.signal,
@@ -344,9 +357,9 @@ export function make(input: {
         submit: (signal) => submitPrompt(input.client, state, prepared, signal),
         ...(childSessionUpdate ? { childSessionUpdate } : {}),
       })
-        .then(async (response) => {
-          await sendUsageUpdate(input.client, input.connection, state, response.usage?.totalTokens).catch(() => {})
-          return response
+        .then(async (result) => {
+          await sendUsageUpdate(input.client, input.connection, state, result.contextTokens).catch(() => {})
+          return result.response
         })
         .finally(() => {
           signal?.removeEventListener("abort", cancel)
@@ -410,58 +423,6 @@ function turnStart(messageID: string, slash: PreparedPrompt["slash"]): TurnStart
   return { type: "input", id: messageID }
 }
 
-async function loadCatalog(client: OpenCodeClient, cwd: string): Promise<Catalog> {
-  const location = { directory: cwd }
-  // Some providers discover models in the background after plugin startup begins.
-  const deadline = Date.now() + 5_000
-  let missing = "No models are available"
-  while (Date.now() < deadline) {
-    const [modelResult, defaultResult, agentResult, commandResult] = await Promise.all([
-      client.model.list({ location }),
-      client.model.default({ location }),
-      client.agent.list({ location }),
-      client.command.list({ location }),
-    ])
-    const models = modelResult.data.filter((model) => model.enabled)
-    const preferred = defaultResult.data
-    // Parallel reads can straddle initialization; select only from this model list.
-    const defaultModel = preferred
-      ? models.find((model) => model.providerID === preferred.providerID && model.id === preferred.id)
-      : models[0]
-    const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
-    const defaultAgent = agents.find((agent) => agent.mode === "primary") ?? agents[0]
-    if (defaultModel && defaultAgent) {
-      return {
-        providers: providers(models),
-        models,
-        defaultModel: {
-          providerID: defaultModel.providerID,
-          id: defaultModel.id,
-          variant: defaultModel.variants.find((variant) => variant.id === "default")?.id,
-        },
-        modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
-        defaultModeID: defaultAgent.id,
-        commands: commandResult.data,
-      }
-    }
-    missing = defaultModel ? "No primary agents are available" : "No models are available"
-    await Bun.sleep(25)
-  }
-  throw new Error(missing)
-}
-
-function providers(models: readonly ModelInfo[]): ConfigOptionProvider[] {
-  return Array.from(new Set(models.map((model) => model.providerID)))
-    .toSorted()
-    .map((providerID) => ({
-      id: providerID,
-      name: providerID,
-      models: models
-        .filter((model) => model.providerID === providerID)
-        .map((model) => ({ id: model.id, name: model.name, variants: model.variants.map((variant) => variant.id) })),
-    }))
-}
-
 function requireModel(catalog: Catalog, modelID: string, current: ModelRef): ModelRef {
   const selected = parseModelSelection(modelID, catalog.providers)
   const model = catalog.models.find(
@@ -480,8 +441,13 @@ function requireModel(catalog: Catalog, modelID: string, current: ModelRef): Mod
   return { providerID: model.providerID, id: model.id, variant }
 }
 
+function currentModel(state: Attached, catalog = state.catalog.current) {
+  return state.model ?? catalog.defaultModel
+}
+
 async function selectMode(client: OpenCodeClient, state: Attached, modeID: string) {
-  if (!state.catalog.modes.some((mode) => mode.id === modeID)) throw new ACPError.InvalidModeError({ mode: modeID })
+  if (!state.catalog.current.modes.some((mode) => mode.id === modeID))
+    throw new ACPError.InvalidModeError({ mode: modeID })
   state.modeID = modeID
   await client.session.switchAgent({ sessionID: state.id, agent: modeID })
 }
@@ -567,8 +533,9 @@ async function sendUsageUpdate(
   used?: number,
 ) {
   if (!used) return
-  const model = session.catalog.models.find(
-    (item) => item.providerID === session.model.providerID && item.id === session.model.id,
+  const current = currentModel(session)
+  const model = session.catalog.current.models.find(
+    (item) => item.providerID === current.providerID && item.id === current.id,
   )
   if (!model?.limit.context) return
   const info = await client.session.get({ sessionID: session.id })

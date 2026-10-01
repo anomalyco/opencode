@@ -24,6 +24,11 @@ type PersistTarget = {
   scope?: "window"
   workspaceStorageAliases?: string[]
   previousKey?: string
+  /**
+   * Imports an older key once, from this storage (or `storage` when given) or else the default storage
+   * (e.g. `settings.v3`). With pick, only that part is copied and the source stays.
+   */
+  copyFrom?: { key: string; storage?: string; pick?: (value: unknown) => unknown }
   key: string
 }
 
@@ -178,25 +183,38 @@ function readCurrent(input: { storage: SyncStorage; key: string; normalize: (raw
   return next
 }
 
+type RelocationSource<S> = { storage: S; key?: string; pick?: (value: unknown) => unknown }
+
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+
+/** Applies a source's pick to its raw JSON; the picked part is re-encoded for the target schema. */
+function pickRaw(raw: string | null, pick: ((value: unknown) => unknown) | undefined) {
+  if (raw === null || !pick) return raw
+  const value = decodeJson(raw)
+  if (Option.isNone(value)) return null
+  const picked = pick(value.value)
+  return picked === undefined ? null : JSON.stringify(picked)
+}
+
 function relocateStoredValue(input: {
   current: SyncStorage
-  sources: { storage: SyncStorage; key?: string }[]
+  sources: RelocationSource<SyncStorage>[]
   key: string
   normalize: (raw: string) => string | undefined
 }) {
   for (const source of input.sources) {
     const key = source.key ?? input.key
-    const raw = source.storage.getItem(key)
+    const raw = pickRaw(source.storage.getItem(key), source.pick)
     if (raw === null) continue
 
     const next = input.normalize(raw)
     if (next === undefined) {
-      source.storage.removeItem(key)
+      if (!source.pick) source.storage.removeItem(key)
       continue
     }
     input.current.setItem(input.key, next)
     if (input.current.getItem(input.key) !== next) return null
-    source.storage.removeItem(key)
+    if (!source.pick) source.storage.removeItem(key)
     return next
   }
   return null
@@ -234,22 +252,22 @@ function toAsyncStorage(storage: SyncStorage | AsyncStorage): AsyncStorage {
 
 async function relocateStoredValueAsync(input: {
   current: AsyncStorage
-  sources: { storage: AsyncStorage; key?: string }[]
+  sources: RelocationSource<AsyncStorage>[]
   key: string
   normalize: (raw: string) => string | undefined
 }) {
   for (const source of input.sources) {
     const key = source.key ?? input.key
-    const raw = await source.storage.getItem(key)
+    const raw = pickRaw(await source.storage.getItem(key), source.pick)
     if (raw === null) continue
 
     const next = input.normalize(raw)
     if (next === undefined) {
-      await removeAsync(source.storage, key)
+      if (!source.pick) await removeAsync(source.storage, key)
       continue
     }
     await input.current.setItem(input.key, next)
-    await source.storage.removeItem(key)
+    if (!source.pick) await source.storage.removeItem(key)
     return next
   }
   return null
@@ -387,14 +405,6 @@ export function draftPersistedKeys() {
   return DRAFT_PERSISTED_KEYS
 }
 
-export const PersistTesting = {
-  localStorageDirect,
-  localStorageWithPrefix,
-  resolveTarget,
-  windowStorage,
-  workspaceStorage,
-}
-
 export const Persist = {
   global(key: string): PersistTarget {
     return { storage: GLOBAL_STORAGE, key }
@@ -515,9 +525,21 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
   const storage = (() => {
     if (!isDesktop && !draft) {
       const current = currentStorage as SyncStorage
-      const sources = [
+      const sources: RelocationSource<SyncStorage>[] = [
         ...workspaceAliases.map((storage) => ({ storage: localStorageWithPrefix(storage) })),
         ...(config.previousKey ? [{ storage: localStorageDirect(), key: config.previousKey }] : []),
+        ...(config.copyFrom
+          ? [
+              {
+                storage: config.copyFrom.storage ? localStorageWithPrefix(config.copyFrom.storage) : current,
+                key: config.copyFrom.key,
+                pick: config.copyFrom.pick,
+              },
+            ]
+          : []),
+        ...(config.copyFrom && config.storage
+          ? [{ storage: localStorageDirect(), key: config.copyFrom.key, pick: config.copyFrom.pick }]
+          : []),
       ]
 
       const api: SyncStorage = {
@@ -557,8 +579,26 @@ export function persisted<S extends Schema.ConstraintCodec<object, unknown>>(
         storage: isDesktop ? platform.storage?.(name) : localStorageWithPrefix(name),
       })),
       previousStorage && config.previousKey ? { storage: previousStorage, key: config.previousKey } : undefined,
+      config.copyFrom
+        ? {
+            storage: config.copyFrom.storage
+              ? isDesktop
+                ? platform.storage?.(config.copyFrom.storage)
+                : localStorageWithPrefix(config.copyFrom.storage)
+              : current,
+            key: config.copyFrom.key,
+            pick: config.copyFrom.pick,
+          }
+        : undefined,
+      config.copyFrom && config.storage
+        ? {
+            storage: isDesktop ? platform.storage?.() : localStorageDirect(),
+            key: config.copyFrom.key,
+            pick: config.copyFrom.pick,
+          }
+        : undefined,
     ]
-      .filter((source): source is { storage: SyncStorage | AsyncStorage; key?: string } => !!source?.storage)
+      .filter((source): source is RelocationSource<SyncStorage | AsyncStorage> => !!source?.storage)
       .map((source) => ({ ...source, storage: toAsyncStorage(source.storage) }))
 
     const api: AsyncStorage = {

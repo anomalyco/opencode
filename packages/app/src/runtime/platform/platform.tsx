@@ -3,11 +3,8 @@ import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import type { DesktopMenuAction } from "@/shell/commands/desktop-menu"
 import { ServerConnection } from "@/runtime/server/registry"
-import type { WslServersPlatform } from "@/servers/wsl/types"
-import type { SshPlatform } from "@/servers/ssh/types"
-import type { UpdaterPlatform } from "@/shell/updates/types"
 import type { DraftStore } from "@/runtime/persistence/drafts"
-import type { BrowserPanePlatform } from "./browser-pane"
+import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
 
 type PickerPaths = string | string[] | null
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
@@ -21,10 +18,6 @@ type OpenAttachmentPickerOptions = {
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
 type PlatformName = "web" | "desktop"
 type DesktopOS = "macos" | "windows" | "linux"
-
-export type PairingInfo = {
-  readonly urls: readonly string[]
-}
 
 export type FatalRendererErrorLog = {
   error: string
@@ -80,9 +73,6 @@ type PlatformBase = {
   /** Prompt drafts, history, and their blobs. */
   draftStore?: DraftStore
 
-  /** Application-global desktop updater */
-  updater?: UpdaterPlatform
-
   /** Fetch override */
   fetch?: typeof fetch
 
@@ -91,10 +81,6 @@ type PlatformBase = {
 
   /** Set the default server URL to use on app startup (platform-specific) */
   setDefaultServer?(url: ServerConnection.Key | null): Promise<void> | void
-
-  /** Manage WSL sidecar servers (Electron on Windows only) */
-  wslServers?: WslServersPlatform
-  sshServers?: SshPlatform
 
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
@@ -107,10 +93,6 @@ type PlatformBase = {
 
   /** Allow native pinch/Ctrl-scroll zoom gestures (desktop only) */
   setPinchZoomEnabled?(enabled: boolean): Promise<void> | void
-
-  /** Prevent the local display from sleeping while the desktop app is running. */
-  getKeepScreenActive?(): Promise<boolean>
-  setKeepScreenActive?(enabled: boolean): Promise<void>
 
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
@@ -133,15 +115,8 @@ type PlatformBase = {
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
 
-  /** Native browser pane hosted by the platform (desktop only). */
-  browserPane?: BrowserPanePlatform
-
-  /** Pair another device with the local desktop server. */
-  pair?: {
-    info(): Promise<PairingInfo>
-    /** Single-use code for an `/auth/connect/:code` link. */
-    code(): Promise<string>
-  }
+  /** GUI extension bridge to the main-process extension host (desktop only). */
+  extensions?: Bridge
 }
 
 export type Platform = PlatformBase &

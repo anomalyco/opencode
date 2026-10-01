@@ -34,8 +34,6 @@ jobs:
             runner: blacksmith-4vcpu-ubuntu-2404
           - system: aarch64-linux
             runner: blacksmith-4vcpu-ubuntu-2404-arm
-          - system: x86_64-darwin
-            runner: macos-15-intel
           - system: aarch64-darwin
             runner: macos-latest
     runs-on: ${{ matrix.runner }}
@@ -126,7 +124,7 @@ jobs:
 
           [ -f "$HASH_FILE" ] || echo '{"nodeModules":{}}' > "$HASH_FILE"
 
-          for SYSTEM in x86_64-linux aarch64-linux x86_64-darwin aarch64-darwin; do
+          for SYSTEM in x86_64-linux aarch64-linux aarch64-darwin; do
             FILE="hashes/hash-${SYSTEM}/hash.txt"
             if [ -f "$FILE" ]; then
               HASH="$(tr -d '[:space:]' < "$FILE")"
