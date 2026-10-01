@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Schema, Stream } from "effect"
+import { Cause, Context, Effect, Layer, Ref, Schema, Stream } from "effect"
 import * as Option from "effect/Option"
 import { Auth, type Auth as AuthDef } from "./auth"
 import { Endpoint, type EndpointPatch } from "./endpoint"
@@ -10,10 +10,11 @@ import { WebSocketExecutor } from "./transport"
 import type { Protocol } from "./protocol"
 import { applyCachePolicy } from "../cache-policy"
 import * as ProviderShared from "../protocols/shared"
-import type { LLMError, LLMEvent, PreparedRequestOf, ProtocolID, ProviderOptions } from "../schema"
+import type { LLMError, PreparedRequestOf, ProtocolID, ProviderOptions } from "../schema"
 import {
   GenerationOptions,
   HttpOptions,
+  LLMEvent,
   LLMRequest,
   LLMResponse,
   Model,
@@ -223,6 +224,32 @@ const streamError = (route: string, message: string, cause: Cause.Cause<unknown>
   return ProviderShared.eventError(route, message, Cause.pretty(cause))
 }
 
+/**
+ * Returns a stream mapper that, for each `finish` or `step-finish` event,
+ * merges the LiteLLM billing headers captured from the HTTP response into
+ * `providerMetadata.litellm`.  All other events pass through unchanged.
+ *
+ * The Ref is read once per terminal event so the cost value is always the
+ * authoritative one from the completed response, even when LiteLLM omits the
+ * primary `x-litellm-response-cost` header (falling back to
+ * `x-litellm-response-cost-original` is handled in `http.ts`).
+ */
+const withLiteLLMMetadata =
+  (headersRef: Ref.Ref<Record<string, string>>) =>
+  (event: LLMEvent): Effect.Effect<LLMEvent> => {
+    if (!LLMEvent.is.finish(event) && !LLMEvent.is.stepFinish(event)) return Effect.succeed(event)
+    return Ref.get(headersRef).pipe(
+      Effect.map((headers) => {
+        if (Object.keys(headers).length === 0) return event
+        const existing = (event.providerMetadata ?? {}) as Record<string, unknown>
+        const providerMetadata = { ...existing, litellm: headers }
+        if (LLMEvent.is.finish(event))
+          return LLMEvent.finish({ reason: event.reason, usage: event.usage, providerMetadata })
+        return LLMEvent.stepFinish({ index: event.index, reason: event.reason, usage: event.usage, providerMetadata })
+      }),
+    )
+  }
+
 function makeFromTransport<Body, Prepared, Frame, Event, State>(
   input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
 ): Route<Body, Prepared> {
@@ -284,12 +311,17 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
             Stream.mapEffect(decodeEvent(route)),
             protocol.stream.terminal ? Stream.takeUntil(protocol.stream.terminal) : (stream) => stream,
           )
+        const responseHeaders =
+          "responseHeaders" in (prepared as object)
+            ? (prepared as { responseHeaders: Ref.Ref<Record<string, string>> }).responseHeaders
+            : undefined
         return events.pipe(
           Stream.mapAccumEffect(
             () => protocol.stream.initial(request),
             protocol.stream.step,
             protocol.stream.onHalt ? { onHalt: protocol.stream.onHalt } : undefined,
           ),
+          responseHeaders ? Stream.mapEffect(withLiteLLMMetadata(responseHeaders)) : (stream) => stream,
           Stream.catchCause((cause) => Stream.fail(streamError(route, `Failed to read ${route} stream`, cause))),
         )
       },

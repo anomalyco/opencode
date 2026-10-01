@@ -1,4 +1,4 @@
-import { Effect, Stream } from "effect"
+import { Effect, Ref, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { Auth } from "../auth"
 import { render as renderEndpoint } from "../endpoint"
@@ -19,6 +19,13 @@ export interface JsonRequestParts<Body = unknown> {
 export interface HttpPrepared<Frame> {
   readonly request: HttpClientRequest.HttpClientRequest
   readonly framing: FramingDef<Frame>
+  /**
+   * Side-channel populated by `frames()` with a subset of HTTP response
+   * headers that carry provider-level metadata not available in the body.
+   * Currently captures LiteLLM cost headers so the caller can enrich the
+   * `finish` event's `providerMetadata` with authoritative billing data.
+   */
+  readonly responseHeaders: Ref.Ref<Record<string, string>>
 }
 
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
@@ -115,23 +122,52 @@ export interface HttpJsonTransport<Body, Frame> extends Transport<Body, HttpPrep
   readonly with: (patch: HttpJsonPatch<Body, Frame>) => HttpJsonTransport<Body, Frame>
 }
 
+/**
+ * Extracts LiteLLM billing headers from an HTTP response, falling back from
+ * `x-litellm-response-cost` to `x-litellm-response-cost-original` when the
+ * primary header is absent (LiteLLM 1.98+ omits the primary header when the
+ * value equals the original, causing callers that only read the primary header
+ * to record $0.00 for those responses).
+ *
+ * Returns an empty object when no LiteLLM cost headers are present so callers
+ * can skip the `providerMetadata` merge entirely.
+ */
+const litellmCostHeaders = (headers: Headers.Headers): Record<string, string> => {
+  const cost =
+    Headers.get(headers, "x-litellm-response-cost")._tag === "Some"
+      ? Headers.get(headers, "x-litellm-response-cost").value
+      : Headers.get(headers, "x-litellm-response-cost-original")._tag === "Some"
+        ? Headers.get(headers, "x-litellm-response-cost-original").value
+        : undefined
+  if (cost === undefined) return {}
+  const result: Record<string, string> = { "x-litellm-response-cost": cost }
+  const spend = Headers.get(headers, "x-litellm-key-spend")
+  if (spend._tag === "Some") result["x-litellm-key-spend"] = spend.value
+  return result
+}
+
 export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJsonTransport<Body, Frame> => ({
   id: "http-json",
   with: (patch) => httpJson({ ...input, ...patch }),
   prepare: (prepareInput) =>
-    jsonRequestParts({
-      ...prepareInput,
-    }).pipe(
-      Effect.map((parts) => ({
+    Effect.gen(function* () {
+      const parts = yield* jsonRequestParts({ ...prepareInput })
+      const responseHeaders = yield* Ref.make<Record<string, string>>({})
+      return {
         request: ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
         framing: input.framing,
-      })),
-    ),
+        responseHeaders,
+      }
+    }),
   frames: (prepared, request, runtime) =>
     Stream.unwrap(
       runtime.http
         .execute(prepared.request)
         .pipe(
+          Effect.tap((response) => {
+            const litellm = litellmCostHeaders(response.headers)
+            return Object.keys(litellm).length > 0 ? Ref.set(prepared.responseHeaders, litellm) : Effect.void
+          }),
           Effect.map((response) =>
             prepared.framing.frame(
               response.stream.pipe(
