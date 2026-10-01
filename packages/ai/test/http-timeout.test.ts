@@ -127,15 +127,42 @@ describe("HTTP transport timeouts", () => {
     }),
   )
 
+  it.effect("applies a whole-request timeout while the body is still streaming", () =>
+    Effect.gen(function* () {
+      const server = yield* stalledServer
+      const fiber = yield* LLMClient.generate(
+        LLM.request({ model, prompt: "Hello", http: { timeout: 60_000, chunkTimeout: false } }),
+      ).pipe(Effect.provide(server.layer), Effect.flip, Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(server.stalled)
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("1 minute")
+      const error = yield* Fiber.join(fiber)
+
+      expect(error.reason).toMatchObject({ _tag: "Transport", operation: "read", code: "Timeout" })
+    }),
+  )
+
+  it.effect("bounds the header wait by a shorter whole-request timeout", () =>
+    Effect.gen(function* () {
+      const fiber = yield* LLMClient.generate(
+        LLM.request({ model, prompt: "Hello", http: { timeout: 1_000, headerTimeout: false } }),
+      ).pipe(Effect.provide(silentServer), Effect.flip, Effect.forkChild({ startImmediately: true }))
+      yield* TestClock.adjust("1 second")
+      const error = yield* Fiber.join(fiber)
+
+      expect(error.reason).toMatchObject({ _tag: "Transport", operation: "request", code: "Timeout" })
+    }),
+  )
+
   it.effect("merges timeouts with later values winning", () =>
     Effect.sync(() => {
       const merged = mergeHttpOptions(
-        new HttpOptions({ headerTimeout: 1_000, chunkTimeout: 2_000 }),
+        new HttpOptions({ timeout: 5_000, headerTimeout: 1_000, chunkTimeout: 2_000 }),
         new HttpOptions({ headers: { a: "b" } }),
         new HttpOptions({ chunkTimeout: false }),
       )
 
-      expect(merged).toMatchObject({ headers: { a: "b" }, headerTimeout: 1_000, chunkTimeout: false })
+      expect(merged).toMatchObject({ headers: { a: "b" }, timeout: 5_000, headerTimeout: 1_000, chunkTimeout: false })
       expect(mergeHttpOptions(new HttpOptions({}), undefined)).toBeUndefined()
     }),
   )

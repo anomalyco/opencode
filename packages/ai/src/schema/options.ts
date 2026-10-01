@@ -59,6 +59,8 @@ export class HttpOptions extends Schema.Class<HttpOptions>("AI.HttpOptions")({
   body: Schema.optional(JsonSchema),
   headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   query: Schema.optional(Schema.Record(Schema.String, Schema.String)),
+  /** Time allowed for the whole request, from send until the response completes. Unbounded when unset. */
+  timeout: Schema.optional(HttpTimeout),
   /** Time allowed for response headers to arrive. */
   headerTimeout: Schema.optional(HttpTimeout),
   /** Time allowed between streamed response chunks once headers have arrived. */
@@ -81,10 +83,12 @@ export const mergeHttpOptions = (...items: ReadonlyArray<HttpOptions | undefined
   const body = mergeJsonRecords(...items.map((item) => item?.body))
   const headers = mergeStringRecords(...items.map((item) => item?.headers))
   const query = mergeStringRecords(...items.map((item) => item?.query))
+  const timeout = items.findLast((item) => item?.timeout !== undefined)?.timeout
   const headerTimeout = items.findLast((item) => item?.headerTimeout !== undefined)?.headerTimeout
   const chunkTimeout = items.findLast((item) => item?.chunkTimeout !== undefined)?.chunkTimeout
-  if (!body && !headers && !query && headerTimeout === undefined && chunkTimeout === undefined) return undefined
-  return new HttpOptions({ body, headers, query, headerTimeout, chunkTimeout })
+  if (!body && !headers && !query && timeout === undefined && headerTimeout === undefined && chunkTimeout === undefined)
+    return undefined
+  return new HttpOptions({ body, headers, query, timeout, headerTimeout, chunkTimeout })
 }
 
 export class GenerationOptions extends Schema.Class<GenerationOptions>("LLM.GenerationOptions")({

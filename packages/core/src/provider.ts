@@ -150,6 +150,7 @@ const decodeTimeout = Schema.decodeUnknownOption(HttpTimeout)
 /** Request timeouts from provider settings; invalid values are dropped so the transport default applies. */
 export function timeouts(settings: Readonly<Record<string, unknown>>) {
   return {
+    timeout: Option.getOrUndefined(decodeTimeout(settings.timeout)),
     headerTimeout: Option.getOrUndefined(decodeTimeout(settings.headerTimeout)),
     chunkTimeout: Option.getOrUndefined(decodeTimeout(settings.chunkTimeout)),
   }

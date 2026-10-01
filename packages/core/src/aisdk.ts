@@ -145,13 +145,9 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
         ? undefined
         : setTimeout(() => ctl.abort(new Error(HEADER_TIMEOUT_MESSAGE)), headerTimeout)
     opts.signal = AbortSignal.any(
-      [
-        opts.signal,
-        ctl.signal,
-        options.timeout !== undefined && options.timeout !== null && options.timeout !== false
-          ? AbortSignal.timeout(options.timeout)
-          : undefined,
-      ].filter((item): item is AbortSignal => item !== undefined && item !== null),
+      [opts.signal, ctl.signal, timeouts.timeout ? AbortSignal.timeout(timeouts.timeout) : undefined].filter(
+        (item): item is AbortSignal => item !== undefined && item !== null,
+      ),
     )
 
     if (typeof opts.body === "string" && model.body !== undefined) {

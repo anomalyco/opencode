@@ -475,14 +475,16 @@ export type ConfigModelSettings = { compaction?: ProviderCompaction } & { [x: st
 
 export type ProviderSettings = {
   timeout?: number | false
-  chunkTimeout?: number
+  headerTimeout?: number | false
+  chunkTimeout?: number | false
   compaction?: ProviderCompaction
   transport?: ProviderTransport
 } & { [x: string]: any }
 
 export type ConfigProviderSettings = {
   timeout?: number | false
-  chunkTimeout?: number
+  headerTimeout?: number | false
+  chunkTimeout?: number | false
   compaction?: ProviderCompaction
   transport?: ProviderTransport
 } & { [x: string]: JsonValue | null }

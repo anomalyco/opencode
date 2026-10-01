@@ -295,6 +295,7 @@ describe("ModelResolver", () => {
           settings: {
             apiKey: "secret",
             baseURL: "https://openai.example/v1",
+            timeout: 600_000,
             headerTimeout: false,
             chunkTimeout: 60_000,
           },
@@ -302,7 +303,7 @@ describe("ModelResolver", () => {
       )
       const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
 
-      expect(resolved.defaults?.http).toMatchObject({ headerTimeout: false, chunkTimeout: 60_000 })
+      expect(resolved.defaults?.http).toMatchObject({ timeout: 600_000, headerTimeout: false, chunkTimeout: 60_000 })
       expect(JSON.stringify(prepared.body)).not.toContain("Timeout")
     }),
   )

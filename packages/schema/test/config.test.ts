@@ -28,10 +28,13 @@ describe("Config.Entry", () => {
   })
 
   test("round-trips disabled and numeric provider HTTP timeouts", () => {
-    const input = { providers: { custom: { settings: { headerTimeout: 600_000, chunkTimeout: false } } } } as const
+    const input = {
+      providers: { custom: { settings: { timeout: 900_000, headerTimeout: 600_000, chunkTimeout: false } } },
+    } as const
     const decoded = Schema.decodeUnknownSync(Config.Info)(input)
     expect(Schema.encodeSync(Config.Info)(decoded)).toEqual(input)
     expect(Schema.decodeUnknownSync(Provider.Settings)(decoded.providers?.custom?.settings)).toMatchObject({
+      timeout: 900_000,
       headerTimeout: 600_000,
       chunkTimeout: false,
     })

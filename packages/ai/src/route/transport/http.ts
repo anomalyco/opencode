@@ -1,4 +1,4 @@
-import { Duration, Effect, Stream } from "effect"
+import { Clock, Duration, Effect, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { Auth } from "../auth.js"
 import { render as renderEndpoint } from "../endpoint.js"
@@ -108,13 +108,17 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
             http,
           }),
         })
+      const started = yield* Clock.currentTimeMillis
+      // Unlike the header and chunk limits, the whole-request budget has no default.
+      const total = request.http?.timeout ? Duration.millis(request.http.timeout) : Duration.infinity
       const response = yield* runtime.http.execute(prepared.request, prepared.middleware).pipe(
         Effect.timeoutOrElse({
-          duration: timeoutDuration(request.http?.headerTimeout),
+          duration: Duration.min(timeoutDuration(request.http?.headerTimeout), total),
           orElse: () => timeout("request", "Timed out waiting for response headers"),
         }),
       )
       const http = RequestExecutor.responseHttp(response)
+      const remaining = Duration.subtract(total, Duration.millis((yield* Clock.currentTimeMillis) - started))
       return {
         frames: prepared.framing.frame(
           RequestExecutor.responseStream(response).pipe(
@@ -122,6 +126,11 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
               duration: timeoutDuration(request.http?.chunkTimeout),
               orElse: () => Stream.fail(timeout("read", "Timed out waiting for response data", http)),
             }),
+            Stream.interruptWhen(
+              Effect.sleep(remaining).pipe(
+                Effect.andThen(Effect.fail(timeout("read", "Timed out waiting for the response to complete", http))),
+              ),
+            ),
           ),
         ),
         http,
