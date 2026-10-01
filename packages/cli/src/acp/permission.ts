@@ -1,21 +1,20 @@
 import type { PermissionOption, ToolCallContent, ToolCallLocation } from "@agentclientprotocol/sdk"
-import type { EventSubscribeOutput, OpenCodeClient } from "@opencode/client/promise"
+import type { EventSubscribeOutput, OpenCodeClient, PermissionReplyInput } from "@opencode/client/promise"
 import { Patch } from "@opencode/util/patch"
-import { Effect, Exit } from "effect"
+import { Cause, Effect } from "effect"
 import type { ACPConnection } from "./connection"
 import { ACPPromise } from "./promise"
 import { absolutePath, filePath, patchHunks, pendingToolCall, stringValue, toLocations, type ToolInput } from "./tool"
 
 type PermissionEvent = Extract<EventSubscribeOutput, { type: "permission.asked" }>
 type Tool = { readonly name: string; readonly input: ToolInput }
-type Decision = "once" | "always" | "reject"
 
 type Input = {
   readonly client: OpenCodeClient
   readonly connection: ACPConnection.Interface
   readonly event: PermissionEvent
   readonly sessionID: string
-  readonly clientSessionID?: string
+  readonly clientSessionID: string
   readonly cwd: string
   readonly tool?: Tool
   readonly toolCallPrefix?: string
@@ -29,17 +28,19 @@ const options: PermissionOption[] = [
 ]
 
 /**
- * Asks the client, then replies to the server. Interruption cancels the client's request, and the server still
- * gets `reject`.
+ * Asks the client, then replies to the server. Once `cancelled` completes, the client's request is cancelled or never
+ * sent, and the server gets `reject`. The server reply is uninterruptible, so a server that is alive but stuck can
+ * hold a cancel past `CancelDrainTimeout`; a dead server fails fast.
  */
-export const reply = Effect.fn("cli.acp.permission.reply")(function* (input: Input) {
-  const asked = yield* Effect.exit(Effect.interruptible(ask(input)))
-  yield* respond(input, Exit.isSuccess(asked) ? asked.value : "reject")
-}, Effect.uninterruptible)
-
-/** Rejects without asking the client. */
-export const reject = Effect.fn("cli.acp.permission.reject")(function* (input: Input) {
-  yield* respond(input, "reject")
+export const reply = Effect.fn("cli.acp.permission.reply")(function* (input: Input, cancelled: Effect.Effect<void>) {
+  yield* Effect.uninterruptibleMask((restore) =>
+    // The race starts racers in order and stops once one is done, so an earlier cancel never starts the ask.
+    restore(cancelled.pipe(Effect.as("reject" as const), Effect.raceFirst(ask(input)))).pipe(
+      Effect.tapCauseIf(Cause.hasDies, (cause) => Effect.logWarning("ACP permission ask failed", cause)),
+      Effect.catchCause(() => Effect.succeed("reject" as const)),
+      Effect.flatMap((decision) => respond(input, decision)),
+    ),
+  )
 })
 
 const ask = Effect.fnUntraced(function* (input: Input) {
@@ -48,7 +49,7 @@ const ask = Effect.fnUntraced(function* (input: Input) {
   const previews = yield* permissionPreviews(toolName, toolInput, input.cwd)
   const toolCallID = input.event.data.source?.id ?? input.event.data.id
   const result = yield* input.connection.requestPermission({
-    sessionId: input.clientSessionID ?? input.sessionID,
+    sessionId: input.clientSessionID,
     toolCall: {
       ...pendingToolCall({
         toolCallId: input.toolCallPrefix ? `${input.toolCallPrefix}:${toolCallID}` : toolCallID,
@@ -68,7 +69,7 @@ const ask = Effect.fnUntraced(function* (input: Input) {
   return selected === "once" || selected === "always" ? selected : "reject"
 })
 
-function respond(input: Input, decision: Decision) {
+function respond(input: Input, decision: PermissionReplyInput["decision"]) {
   return ACPPromise.promise(() =>
     input.client.permission.reply({ sessionID: input.sessionID, requestID: input.event.data.id, decision }),
   )
@@ -88,7 +89,9 @@ const permissionPreviews = Effect.fnUntraced(function* (toolName: string, input:
   const path = absolutePath(file, cwd)
   if (tool === "write") {
     const content = stringValue(input.content)
-    return content === undefined ? [] : [diff(path, yield* readText(path), content)]
+    if (content === undefined) return []
+    const oldText = yield* readText(path)
+    return [diff(path, oldText, content)]
   }
   if (tool !== "edit") return []
   const oldString = stringValue(input.oldString)
@@ -107,12 +110,10 @@ function patchPreviews(input: ToolInput, cwd: string) {
     (hunk) =>
       Effect.gen(function* () {
         const path = absolutePath(hunk.path, cwd)
-        if (hunk.type === "add")
-          return diff(
-            path,
-            "",
-            hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`,
-          )
+        if (hunk.type === "add") {
+          const newText = hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
+          return diff(path, "", newText)
+        }
         const oldText = yield* readText(path)
         if (hunk.type === "delete") return diff(path, oldText, "")
         const derived = yield* Effect.try(() => Patch.derive(hunk.path, hunk.chunks, oldText))

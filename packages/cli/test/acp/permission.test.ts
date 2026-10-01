@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AnyRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk"
+import { Cause } from "effect"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../fixture/tmpdir"
@@ -183,6 +184,23 @@ describe("acp permissions over the wire", () => {
       ["perm_selected_reject", "reject"],
       ["perm_cancelled", "reject"],
       ["perm_failed", "reject"],
+    ])
+  })
+
+  test("logs a failed server reply and still answers later asks", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(sessionID, id, permissionAsked(sessionID, "perm_failed"), permissionAsked(sessionID, "perm_next")),
+      fetch: (request) =>
+        request.path.endsWith("/permission/perm_failed/reply") ? new Response(null, { status: 500 }) : undefined,
+      permission: allowOnce,
+    })
+
+    expect(await acp.prompt(acp.sessionId, "hello")).toMatchObject({ stopReason: "end_turn" })
+    expect(acp.permissions.map((request) => request.toolCall.toolCallId)).toEqual(["perm_failed", "perm_next"])
+    expect(decisions(acp)).toEqual([["perm_next", "once"]])
+    expect(acp.logs.map((log) => ({ message: log.message, cause: Cause.squash(log.cause) }))).toMatchObject([
+      { message: ["ACP permission reply failed"], cause: { name: "ClientError", reason: "UnexpectedStatus" } },
     ])
   })
 
