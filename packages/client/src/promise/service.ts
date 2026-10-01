@@ -36,6 +36,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const contenders = new Set<ServiceContender>()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
+  let replacedFailure = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
 
@@ -81,7 +82,14 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           await PtyHandoff.complete(options.file ?? fallback(), service.info)
           return service.endpoint
         }
-        if (compatible && service.state === "failed") throw new Error("Background service failed to start")
+        if (compatible && service.state === "failed") {
+          // Replace a service stuck after a failed boot once, so one bad start never needs a manual restart.
+          if (replacedFailure) throw new Error("Background service failed to start")
+          replacedFailure = true
+          console.warn("Background service failed to start; replacing it")
+          await terminate(service.info, options, timing)
+          lastSpawn = 0
+        }
         if (!compatible) {
           announce("version-mismatch", service.version)
           if (service.state !== "ready")
@@ -118,9 +126,12 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
   const info = await read(options.file)
-  if (options.pty === "handoff" && info !== undefined)
-    await PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
-  else await PtyHandoff.clear(options.file ?? fallback())
+  // Terminal handoff is best-effort; it must never keep the old service running.
+  await (
+    options.pty === "handoff" && info !== undefined
+      ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
+      : PtyHandoff.clear(options.file ?? fallback())
+  ).catch((cause: unknown) => console.warn("Failed to prepare persistent terminals for replacement", cause))
   if (info !== undefined) await terminate(info, options, defaultEnsureTiming)
 }
 

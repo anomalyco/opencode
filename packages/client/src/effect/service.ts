@@ -56,6 +56,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   const contenders = new Set<ServiceContender>()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
+  let replacedFailure = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
@@ -100,8 +101,15 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
         return Option.some(service)
       }
-      if (compatible && service.state === "failed")
-        return yield* Effect.fail(new Error("Background service failed to start"))
+      if (compatible && service.state === "failed") {
+        // Replace a service stuck after a failed boot once, so one bad start never needs a manual restart.
+        if (replacedFailure) return yield* Effect.fail(new Error("Background service failed to start"))
+        replacedFailure = true
+        yield* Effect.logWarning("Background service failed to start; replacing it")
+        yield* terminate(service.info, options, timing)
+        lastSpawn = 0
+        return Option.none<LocalService>()
+      }
       if (compatible) return Option.none<LocalService>()
       yield* announce("version-mismatch", service.version)
       if (service.state !== "ready")
@@ -145,11 +153,14 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
   const info = yield* read(options.file)
-  if (options.pty === "handoff" && info !== undefined)
-    yield* Effect.tryPromise(() =>
-      PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout),
-    )
-  else yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
+  // Terminal handoff is best-effort; it must never keep the old service running.
+  yield* Effect.tryPromise(() =>
+    options.pty === "handoff" && info !== undefined
+      ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
+      : PtyHandoff.clear(options.file ?? fallback()),
+  ).pipe(
+    Effect.catch((cause) => Effect.logWarning("Failed to prepare persistent terminals for replacement", cause)),
+  )
   if (info !== undefined) yield* terminate(info, options, defaultEnsureTiming)
 })
 
