@@ -2,10 +2,12 @@ import { TextField } from "@opencode/ui/text-field"
 import type { captureException } from "@sentry/solid"
 import { Logo } from "@opencode/ui/logo"
 import { Button } from "@opencode/ui/button"
-import { Component, createSignal, onMount, Show } from "solid-js"
+import { Component, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Updater } from "@opencode/gui-extensions/updater"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
+import { createRemotes } from "@/runtime/extension/remote"
 import { Icon } from "@opencode/ui/icon"
 import { errorDescriptionKey, errorStatus } from "./description"
 
@@ -251,13 +253,19 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
       .catch(() => undefined)
   })
 
+  // A crash can take the extension root down with the app, so the page reaches the updater's
+  // main-process remote over the bridge itself.
+  const remotes = createRemotes(platform.extensions)
+  onCleanup(remotes.dispose)
+  const updater = () => remotes.typed(Updater)
+
   async function checkForUpdates() {
-    const state = await platform.updater?.check()
+    const state = await updater()?.check()
     setStore("actionError", state?.status === "error" ? state.message : undefined)
   }
 
   async function installUpdate() {
-    await platform.updater
+    await updater()
       ?.install()
       .then(() => setStore("actionError", undefined))
       .catch((err) => {
@@ -266,7 +274,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   }
 
   const updateVersion = () => {
-    const state = platform.updater?.state()
+    const state = updater()?.state()
     return state?.status === "ready" || state?.status === "download-required" ? state.version : undefined
   }
 
@@ -333,7 +341,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               )
             }}
           </Show>
-          <Show when={platform.updater}>
+          <Show when={updater()}>
             <Show
               when={updateVersion()}
               fallback={
@@ -341,9 +349,9 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
                   size="large"
                   variant="ghost"
                   onClick={checkForUpdates}
-                  disabled={["checking", "downloading", "installing"].includes(platform.updater?.state().status ?? "")}
+                  disabled={["checking", "downloading", "installing"].includes(updater()?.state()?.status ?? "")}
                 >
-                  {platform.updater?.state().status === "checking"
+                  {updater()?.state()?.status === "checking"
                     ? language.t("error.page.action.checking")
                     : language.t("error.page.action.checkUpdates")}
                 </Button>

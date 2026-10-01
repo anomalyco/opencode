@@ -7,12 +7,16 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { matchKeybind, parseKeybind, useCommand } from "@/shell/commands/command"
 import {
   DESKTOP_MENU,
+  desktopMenuKey,
   desktopMenuVisible,
+  desktopMenuWithExtensions,
+  type DesktopMenu,
   type DesktopMenuAction,
   type DesktopMenuEntry,
 } from "@/shell/commands/desktop-menu"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
+import { useExtensionMenubar } from "@/runtime/extension/menubar"
 
 const accelerators = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).flatMap((entry) => {
   if (entry.type === "separator" || !entry.action || !entry.accelerator?.windows) return []
@@ -31,6 +35,14 @@ export function WindowsAppMenu(props: {
 }) {
   let lastFocused: HTMLElement | undefined
   const language = useLanguage()
+  const menubar = useExtensionMenubar()
+  const entries = (menu: DesktopMenu) =>
+    desktopMenuWithExtensions(
+      (menu.items ?? [])
+        .filter((entry) => desktopMenuVisible(entry, "windows"))
+        .map((entry) => ({ key: desktopMenuKey(entry), entry })),
+      menubar?.items().filter((item) => item.menu === menu.id) ?? [],
+    )
 
   const rememberFocus = () => {
     const active = document.activeElement
@@ -101,9 +113,18 @@ export function WindowsAppMenu(props: {
             <For each={DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "windows"))}>
               {(menu) => (
                 <DesktopMenuSubmenu label={language.t(menu.labelKey)}>
-                  <For each={menu.items?.filter((entry) => desktopMenuVisible(entry, "windows"))}>
-                    {(entry) => {
+                  <For each={entries(menu)}>
+                    {(item) => {
+                      const entry = item.entry
                       // Static menu data: an early return keeps the union narrowing a Show fallback would lose.
+                      if ("menu" in entry)
+                        return (
+                          <DesktopMenuItem
+                            label={entry.label}
+                            disabled={!entry.enabled}
+                            onSelect={() => menubar?.run(entry.id)}
+                          />
+                        )
                       if (entry.type === "separator") return <Menu.Separator />
                       return (
                         <DesktopMenuItem

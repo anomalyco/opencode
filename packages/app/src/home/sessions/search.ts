@@ -1,7 +1,7 @@
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { serverName } from "@/runtime/server/registry"
-import { displayName } from "@/shell/layout/helpers"
+import { displayName } from "@opencode/ui/project-avatar"
 import { sessionLabel } from "@/session/title"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMemo, onCleanup } from "solid-js"

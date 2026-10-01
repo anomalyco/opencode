@@ -1,0 +1,134 @@
+import { createEffect, createMemo, lazy, on } from "solid-js"
+import { App, Command, Layout, onIdle, Panel, Sessions, Storage, type Setup } from "../sdk"
+import { createTerminalModel, type TerminalWorkspace } from "./model"
+
+const DOCK = "terminal:main"
+
+const setup: Setup = (ctx) => {
+  const sessions = ctx.use(Sessions)
+  const layout = ctx.use(Layout)
+  const model = createTerminalModel({ storage: ctx.use(Storage), sessions })
+  ctx.cleanup(model.dispose)
+  ctx.cleanup(ctx.use(App).on("workspace.remove", model.remove))
+
+  // The routed session's workspace stays loaded while no panel renders it, like the session route did.
+  const workspace = createMemo<TerminalWorkspace | undefined>((previous) => {
+    const session = sessions.current()
+    return session ? model.load(session) : previous
+  })
+  createEffect(
+    on(
+      workspace,
+      (next, previous) => {
+        if (!previous || next === previous) return
+        previous.trimAll()
+      },
+      { defer: true },
+    ),
+  )
+
+  const routed = createMemo(() => !!sessions.current())
+  const current = () => {
+    const session = sessions.current()
+    if (!session) return
+    return { session, terminal: model.load(session) }
+  }
+
+  ctx.add(
+    Command,
+    (): Command => ({
+      id: "toggle",
+      title: ctx.t("command.toggle"),
+      group: ctx.t("command.category.view"),
+      section: "terminal",
+      featured: true,
+      bind: "ctrl+`",
+      slash: { name: "terminal" },
+      editable: true,
+      enabled: routed(),
+      run() {
+        const target = current()
+        if (!target) return
+        if (layout.dock.opened(target.session)) {
+          target.terminal.cancelFocus()
+          layout.close(DOCK, target.session)
+          return
+        }
+        layout.open(DOCK, target.session)
+        target.terminal.requestFocus(target.terminal.active())
+      },
+    }),
+  )
+
+  ctx.add(
+    Command,
+    (): Command => ({
+      id: "new",
+      title: ctx.t("command.new"),
+      description: ctx.t("command.new.description"),
+      group: ctx.t("command.category"),
+      section: "terminal",
+      bind: "ctrl+alt+t",
+      editable: true,
+      enabled: routed(),
+      run() {
+        const target = current()
+        if (!target) return
+        layout.open(DOCK, target.session)
+        if (target.terminal.all().length > 0) target.terminal.new()
+        if (target.terminal.all().length === 0) target.terminal.requestFocus()
+      },
+    }),
+  )
+
+  ctx.add(
+    Command,
+    (): Command => ({
+      id: "close",
+      title: ctx.t("close"),
+      group: ctx.t("command.category"),
+      section: "terminal",
+      bind: "mod+w",
+      hidden: true,
+      scope: '[data-component="terminal"]',
+      enabled: routed(),
+      run() {
+        const target = current()
+        if (!target) return
+        const id = target.terminal.active()
+        if (!id) return
+        const last = target.terminal.all().length === 1
+        void target.terminal.close(id)
+        if (last) layout.close(DOCK, target.session)
+      },
+    }),
+  )
+
+  const TerminalPanel = lazy(() => import("./panel"))
+  // Warms the panel chunk so the first dock open has no blank frame. ghostty-web still loads on the first terminal.
+  ctx.cleanup(onIdle(() => void TerminalPanel.preload()))
+  // Stable objects with live titles, so a locale change never remounts the dock's terminals.
+  const tab = {
+    id: "main",
+    get title() {
+      return ctx.t("tab.title")
+    },
+  }
+  ctx.add(Panel, {
+    id: "main",
+    region: "dock",
+    mobile: {
+      get title() {
+        return ctx.t("tab.title")
+      },
+      order: 30,
+      kind: "tab",
+    },
+    list: () => [tab],
+    render: (_tab, session) => (
+      <TerminalPanel model={model} session={session} onClose={() => layout.close(DOCK, session)} />
+    ),
+  })
+}
+
+export default setup

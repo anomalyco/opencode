@@ -31,7 +31,7 @@ story("keeps file disclosures keyboard-accessible as the file list changes", asy
   await expect(second).toBeFocused()
 })
 
-story("merges follow-up patches into one stack with distinct files", async ({ mount }, info) => {
+story("merges follow-up patches into one stack with distinct files", async ({ mount }) => {
   const root = await mount("current-tool-group--patch-follow-ups")
   const group = root.locator('[data-component="collapsed-tool-group"]')
   const patches = group.locator('[data-component="apply-patch-tool"]')
@@ -52,7 +52,6 @@ story("merges follow-up patches into one stack with distinct files", async ({ mo
   await expect(patches.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "b.ts", "c.ts"])
   await expect(first).toHaveAttribute("aria-expanded", "true")
   await expect(patches.locator('[data-component="file"]')).toBeVisible()
-  await group.screenshot({ path: info.outputPath("merged.png") })
 })
 
 for (const separator of ["shell", "error", "reasoning"]) {

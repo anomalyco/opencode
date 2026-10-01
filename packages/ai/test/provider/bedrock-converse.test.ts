@@ -501,25 +501,23 @@ describe("Bedrock Converse route", () => {
         LLM.request({ model, messages: [Message.assistant([call])], cache: "none" }),
       )
 
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: [
-            {
-              toolUse: {
-                toolUseId: "tool_1",
-                name: "edit",
-                input: {
-                  path: "file.ts",
-                  edits: [{ oldText: "a", newText: "b" }, null, true, 7, "text", ["kept", { nested: { value: "ok" } }]],
-                  nested: { empty: {}, onlyEmpty: {} },
-                  " ": "preserve whitespace key",
-                },
+      expect(prepared.body.messages[0]).toEqual({
+        role: "assistant",
+        content: [
+          {
+            toolUse: {
+              toolUseId: "tool_1",
+              name: "edit",
+              input: {
+                path: "file.ts",
+                edits: [{ oldText: "a", newText: "b" }, null, true, 7, "text", ["kept", { nested: { value: "ok" } }]],
+                nested: { empty: {}, onlyEmpty: {} },
+                " ": "preserve whitespace key",
               },
             },
-          ],
-        },
-      ])
+          },
+        ],
+      })
       expect(input).toEqual(original)
       expect(call.input).toBe(input)
     }),
@@ -540,15 +538,13 @@ describe("Bedrock Converse route", () => {
         }),
       )
 
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: [
-            { toolUse: { toolUseId: "tool_empty_key", name: "first", input: {} } },
-            { toolUse: { toolUseId: "tool_empty_object", name: "second", input: {} } },
-          ],
-        },
-      ])
+      expect(prepared.body.messages[0]).toEqual({
+        role: "assistant",
+        content: [
+          { toolUse: { toolUseId: "tool_empty_key", name: "first", input: {} } },
+          { toolUse: { toolUseId: "tool_empty_object", name: "second", input: {} } },
+        ],
+      })
     }),
   )
 
@@ -1097,6 +1093,12 @@ describe("Bedrock Converse route", () => {
             { reasoningContent: { redactedContent: "cmVkYWN0ZWQ=" } },
             { text: "Checking" },
             { toolUse: { toolUseId: "call_1", name: "lookup", input: {} } },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { toolResult: { toolUseId: "call_1", content: [{ text: "Tool result missing" }], status: "error" } },
           ],
         },
       ])

@@ -3,7 +3,6 @@ export type SettingsRootTab =
   | "appearance"
   | "notifications"
   | "shortcuts"
-  | "pairing"
   | "projects"
   | "workspaces"
   | "providers"
@@ -11,13 +10,23 @@ export type SettingsRootTab =
   | "extensions"
   | "servers"
   | "experimental"
+  | "gui-extensions"
   | "about"
+
+declare const extensionTab: unique symbol
+/** A root page a GUI extension contributes; the value is its Setting id. */
+export type SettingsExtensionTab = string & { readonly [extensionTab]: true }
 
 export type SettingsServerTab = "general" | "projects" | "workspaces" | "providers" | "models" | "extensions"
 export type SettingsProjectTab = "general" | "workspaces" | "extensions"
 
-export type SettingsView = (
-  | { type: "root"; tab: SettingsRootTab }
+type SettingsViewState = {
+  target?: string
+  subtab?: "mcps" | "plugins" | "skills" | "lsps"
+  searchActivation?: number
+}
+
+type SettingsNestedView =
   | { type: "server"; server: string; tab: SettingsServerTab }
   | {
       type: "project"
@@ -26,11 +35,12 @@ export type SettingsView = (
       tab: SettingsProjectTab
       parent: "root" | "server"
     }
-) & {
-  target?: string
-  subtab?: "mcps" | "plugins" | "skills" | "lsps"
-  searchActivation?: number
-}
+
+export type SettingsView = ({ type: "root"; tab: SettingsRootTab | SettingsExtensionTab } | SettingsNestedView) &
+  SettingsViewState
+
+/** A view of a page the host owns. */
+export type SettingsHostView = ({ type: "root"; tab: SettingsRootTab } | SettingsNestedView) & SettingsViewState
 
 export type SettingsTransientView = Pick<SettingsView, "target" | "searchActivation">
 
@@ -39,7 +49,6 @@ const rootTabs: Record<SettingsRootTab, true> = {
   appearance: true,
   notifications: true,
   shortcuts: true,
-  pairing: true,
   projects: true,
   workspaces: true,
   providers: true,
@@ -47,6 +56,7 @@ const rootTabs: Record<SettingsRootTab, true> = {
   extensions: true,
   servers: true,
   experimental: true,
+  "gui-extensions": true,
   about: true,
 }
 const serverTabs: Record<SettingsServerTab, true> = {
@@ -73,6 +83,7 @@ export function parseSettingsView(
   search: string,
   multipleServers: boolean,
   transient?: SettingsTransientView,
+  extensionTabs?: ReadonlySet<string>,
 ): SettingsView {
   const params = new URLSearchParams(search)
   const tab = params.get("tab") ?? "general"
@@ -96,6 +107,8 @@ export function parseSettingsView(
     return { type: "server", server, tab, subtab: nested === "lsps" ? undefined : nested, ...transient }
   if (!project && !server && isRootTab(tab))
     return { type: "root", tab, subtab: nested === "lsps" ? undefined : nested, ...transient }
+  if (!project && !server && extensionTabs && isExtensionTab(tab, extensionTabs))
+    return { type: "root", tab, subtab: undefined, ...transient }
   return { type: "root", tab: "general", ...transient }
 }
 
@@ -130,6 +143,11 @@ export function settingsViewRedirect(input: {
 
 export function isRootTab(value: string): value is SettingsRootTab {
   return Object.hasOwn(rootTabs, value)
+}
+
+/** Host tabs win over an extension page with the same id. */
+export function isExtensionTab(value: string, tabs: ReadonlySet<string>): value is SettingsExtensionTab {
+  return !isRootTab(value) && tabs.has(value)
 }
 
 export function isServerTab(value: string): value is SettingsServerTab {

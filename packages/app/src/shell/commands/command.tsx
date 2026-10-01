@@ -1,12 +1,13 @@
 import { createSimpleContext } from "@opencode/ui/context"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { type Accessor, batch, createEffect, createMemo, onCleanup, onMount } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { type Accessor, batch, createEffect, createMemo, onCleanup, onMount, untrack } from "solid-js"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
+import { keybindRenames } from "@/settings/keybinds/migration"
 import en from "@/runtime/i18n/en"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 
@@ -15,7 +16,6 @@ const IS_MAC = typeof navigator === "object" && /(Mac|iPod|iPhone|iPad)/.test(na
 const PALETTE_ID = "command.palette"
 export const DEFAULT_PALETTE_KEYBIND = "mod+k,mod+shift+p"
 const SUGGESTED_PREFIX = "suggested."
-const EDITABLE_KEYBIND_IDS = new Set(["terminal.toggle", "terminal.new", "file.attach", "browser.reload"])
 
 type KeyLabel =
   | "common.key.ctrl"
@@ -66,11 +66,6 @@ function signatureFromEvent(event: KeyboardEvent) {
   return signature(keyFromKeyboardEvent(event), event.ctrlKey, event.metaKey, event.shiftKey, event.altKey)
 }
 
-function isAllowedEditableKeybind(id: string | undefined) {
-  if (!id) return false
-  return EDITABLE_KEYBIND_IDS.has(actionId(id))
-}
-
 export type KeybindConfig = string
 
 export interface Keybind {
@@ -81,17 +76,26 @@ export interface Keybind {
   alt: boolean
 }
 
+export const CommandSection = Schema.Literals(["general", "session", "navigation", "model", "terminal", "prompt"])
+export type CommandSection = typeof CommandSection.Type
+
 export interface CommandOption {
   id: string
   title: string
   description?: string
   category?: string
+  /** Section of Settings > Shortcuts. Host commands leave it unset and are placed by id prefix. */
+  section?: CommandSection
   keybind?: KeybindConfig
   slash?: string
   slashArguments?: boolean
   suggested?: boolean
+  /** Listed when the command palette opens without a query. Host commands are listed by id instead. */
+  featured?: boolean
   disabled?: boolean
   hidden?: boolean
+  /** The keybind also fires while a text field has focus. */
+  editable?: boolean
   when?: (event: KeyboardEvent) => boolean
   onSelect?: (source?: "palette" | "keybind" | "slash", input?: string) => void | Promise<void>
   onHighlight?: () => (() => void) | void
@@ -114,6 +118,7 @@ export const CommandCatalogItem = Persistence.struct({
   title: Schema.String,
   description: Schema.optional(Schema.String),
   category: Schema.optional(Schema.String),
+  section: Persistence.optional(CommandSection),
   keybind: Schema.optional(Schema.String),
   slash: Schema.optional(Schema.String),
   hidden: Schema.optional(Schema.Boolean),
@@ -323,12 +328,21 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
               title: opt.title,
               description: opt.description,
               category: opt.category,
+              section: opt.section,
               keybind: opt.keybind,
               slash: opt.slash,
             }),
           )
         }),
       )
+    })
+
+    // Built-in GUI extensions republished these commands under new ids. Drop the old entries so
+    // Settings > Shortcuts lists each command once.
+    createEffect(() => {
+      if (!catalogReady()) return
+      const stale = untrack(() => Object.keys(keybindRenames).filter((id) => id in catalog))
+      if (stale.length) setCatalog(produce((draft) => stale.forEach((id) => delete draft[id])))
     })
 
     const catalogOptions = createMemo(() => Object.entries(catalog).map(([id, meta]) => ({ id, ...meta })))
@@ -408,8 +422,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       const modified = event.ctrlKey || event.metaKey || event.altKey
       const isTab = event.key === "Tab"
 
-      if (isEditableTarget(event.target) && !isPalette && !isAllowedEditableKeybind(option?.id) && !modified && !isTab)
-        return
+      if (isEditableTarget(event.target) && !isPalette && !option?.editable && !modified && !isTab) return
 
       if (isPalette) {
         event.preventDefault()
@@ -466,6 +479,11 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       keybindParts(id: string) {
         const config = keybindConfig(id)
         return config ? formatKeybindParts(config, language.t) : []
+      },
+      /** The event matches the command's effective keybind (user override or default). */
+      matches(id: string, event: KeyboardEvent) {
+        const config = keybindConfig(id)
+        return !!config && matchKeybind(parseKeybind(config), event)
       },
       show: showPalette,
       keybinds(enabled: boolean) {

@@ -285,18 +285,13 @@ export const BrowserElementComment = {
       prompt={text("Tidy up the settings page")}
       comments={[
         {
-          type: "browser",
-          key: "browser:tab_story:c=save",
-          tabID: "tab_00000000-0000-4000-8000-000000000000",
-          url: "http://localhost:5173/settings",
-          title: "Settings",
-          element: {
-            ref: "e42",
-            selector: "#settings > form > button.btn.primary",
-            label: "button.btn.primary",
-            role: "button",
-            name: "Save changes",
-          },
+          type: "note",
+          key: "note:story:c=save",
+          origin: "story",
+          label: "button.btn.primary",
+          icon: "select-element",
+          subject:
+            'the "button.btn.primary" element in browser tab tab_00000000-0000-4000-8000-000000000000 at http://localhost:5173/settings (role button; accessible name "Save changes"; selector "#settings > form > button.btn.primary")',
           comment: "Match the secondary button height",
           commentID: "save",
         },

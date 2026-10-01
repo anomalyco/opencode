@@ -1,4 +1,4 @@
-import { pathKey } from "@/workspaces/path-key"
+import { containsDirectory, sameDirectory } from "@opencode/util/path"
 import type { WorkspaceDefaultDestination, WorkspaceLastUsed } from "@/settings/model"
 import type { SessionInfo, WorktreeDirectory } from "@opencode/client/promise"
 
@@ -83,20 +83,6 @@ export function isWorkspaceDirectory(project: WorkspaceProject | undefined, dire
 export function isProjectDirectory(project: WorkspaceProject | undefined, directory: string) {
   if (!project) return false
   return [project.worktree, ...(project.sandboxes ?? [])].some((root) => containsDirectory(root, directory))
-}
-
-export function containsDirectory(parent: string, child: string) {
-  const normalize = (value: string) => {
-    const key = pathKey(value)
-    return /^[a-z]:\//i.test(key) || key.startsWith("//") ? key.toLowerCase() : key
-  }
-  const root = normalize(parent)
-  const target = normalize(child)
-  return target === root || target.startsWith(root.endsWith("/") ? root : `${root}/`)
-}
-
-export function sameDirectory(a: string, b: string) {
-  return containsDirectory(a, b) && containsDirectory(b, a)
 }
 
 export function isWorkspaceSelection(project: WorkspaceProject | undefined, selection: string) {

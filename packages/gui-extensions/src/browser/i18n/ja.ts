@@ -1,0 +1,16 @@
+export default {
+  "command.open": "ブラウザーを開く",
+  "command.reload": "ブラウザーページを再読み込み",
+  "tab.title": "ブラウザー",
+  "address.label": "ブラウザーのアドレス",
+  "address.placeholder": "URLを入力",
+  "action.stop": "停止",
+  replaced: "ブラウザー制御が別のデスクトップウィンドウに移動しました。",
+  unsupported: "このデスクトップアプリはブラウザペインをサポートしていません。",
+  suspended: "ブラウザーが一時停止しました。このセッションと対話して再接続してください。",
+  "empty.title": "URLを入力",
+  "empty.description": "または「アプリ内ブラウザで開く」とプロンプトに入力",
+  "failed.title": "URLにアクセスできません",
+  "failed.description": "URLと接続を確認して、もう一度お試しください。",
+  "action.reload": "再読み込み",
+}

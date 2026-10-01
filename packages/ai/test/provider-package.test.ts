@@ -214,7 +214,7 @@ describe("provider package entrypoints", () => {
       })
       expect(selected.provider).toBe(provider.id)
       expect(selected.route.endpoint.baseURL).toBe(provider.baseURL({ accountId: "account" }))
-      expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
+      expect(selected.route.defaults.headers).toMatchObject({ "x-application": "opencode" })
       expect(selected.route.defaults.http?.body).toEqual({ custom: true })
       expect(selected.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
     }

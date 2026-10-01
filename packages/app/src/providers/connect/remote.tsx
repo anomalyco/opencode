@@ -6,7 +6,6 @@ export function authServerName(server: ServerConnection.Any) {
   if (ServerConnection.builtin(server)) return undefined
   if (server.type === "http" && ["localhost", "127.0.0.1", "[::1]"].includes(new URL(server.http.url).hostname))
     return undefined
-  if (server.type === "sidecar" && server.variant === "wsl") return server.displayName ?? server.distro
   return serverName(server)
 }
 

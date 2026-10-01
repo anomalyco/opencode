@@ -6,7 +6,7 @@ import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectSessionTitle } from "../../utils/waits"
 import { benchmark, expect } from "../benchmark"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
-import { stressSessionHref } from "./timeline-test-helpers"
+import { sessionHref } from "../../utils/app"
 import { startChromeTrace } from "../chrome-trace"
 
 const file = process.env.LAGGY_SESSION_FILE
@@ -130,7 +130,7 @@ for (const mode of ["compact", "ungrouped"] as const) {
         dirBase64: base64Encode(directory),
       },
     )
-    await page.goto(stressSessionHref(sourceID))
+    await page.goto(sessionHref(sourceID))
     await expectSessionTitle(page, "Benchmark source")
     await expect(page.locator('[data-slot="user-message-text"]')).toHaveText("Benchmark source")
     await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
@@ -152,9 +152,9 @@ for (const mode of ["compact", "ungrouped"] as const) {
         lastID,
         requiredPartID: history === "paged" && mode === "compact" ? `${lastText.id}:text:0` : undefined,
         requireBottomAnchor: true,
-        href: stressSessionHref(session.info.id),
+        href: sessionHref(session.info.id),
         switch: async () => {
-          await page.locator(`[data-slot="titlebar-tabs"] a[href="${stressSessionHref(session.info.id)}"]`).click()
+          await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(session.info.id)}"]`).click()
         },
       })
       await stopTrace?.()
@@ -191,7 +191,7 @@ for (const mode of ["compact", "ungrouped"] as const) {
         if (testInfo.repeatEachIndex === 0) await page.screenshot({ path: `${output}/${mode}.png` })
         break
       }
-      await page.locator(`[data-slot="titlebar-tabs"] a[href="${stressSessionHref(sourceID)}"]`).click()
+      await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(sourceID)}"]`).click()
       await expectSessionTitle(page, "Benchmark source")
       await expect(page.locator('[data-slot="user-message-text"]')).toHaveText("Benchmark source")
       await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()

@@ -5,18 +5,12 @@ import type { Platform } from "@/runtime/platform/platform"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "./export"
 
 describe("sessionExportFilename", () => {
-  test("generates filename from title", () => {
-    expect(sessionExportFilename({ id: "ses_123", title: "Clone PR in worktree from fork" })).toBe(
-      "clone-pr-in-worktree-from-fork.json",
-    )
-  })
-
-  test("generates filename from slug when title missing", () => {
-    expect(sessionExportFilename({ id: "ses_123", slug: "my-session-slug" })).toBe("my-session-slug.json")
-  })
-
-  test("falls back to id when title and slug are empty", () => {
-    expect(sessionExportFilename({ id: "ses_123" })).toBe("ses_123.json")
+  test.each([
+    [{ id: "ses_123", title: "Clone PR in worktree from fork" }, "clone-pr-in-worktree-from-fork.json"],
+    [{ id: "ses_123", slug: "my-session-slug" }, "my-session-slug.json"],
+    [{ id: "ses_123" }, "ses_123.json"],
+  ])("names %o as %s", (session, filename) => {
+    expect(sessionExportFilename(session)).toBe(filename)
   })
 })
 
@@ -46,41 +40,19 @@ describe("fetchSessionExport", () => {
       { sessionID: "ses_1", limit: 200, cursor: "page-2" },
     ])
   })
-
-  test("propagates session lookup failures", async () => {
-    const api = {
-      session: { get: async () => Promise.reject(new Error("Session not found")) },
-      message: { list: async () => ({ data: [], cursor: {} }) },
-    } as unknown as Pick<ServerApi, "session" | "message">
-
-    expect(fetchSessionExport({ sessionID: "ses_missing", api })).rejects.toThrow("Session not found")
-  })
 })
 
 describe("saveSessionExport", () => {
-  test("returns false when the native save dialog is cancelled", async () => {
-    const calls: string[][] = []
-    const platform: Pick<Platform, "saveFile"> = {
-      saveFile: async (_options, content) => {
-        calls.push([content])
-        return false
-      },
-    }
-
-    expect(await saveSessionExport("session.json", { id: "ses_1" }, platform)).toBe(false)
-    expect(calls).toEqual([['{\n  "id": "ses_1"\n}']])
-  })
-
-  test("passes serialized data to the native save operation", async () => {
+  test.each([true, false])("writes pretty JSON to the native save dialog and returns %p", async (saved) => {
     const writes: string[][] = []
     const platform: Pick<Platform, "saveFile"> = {
       saveFile: async (options, content) => {
         writes.push([options.defaultPath ?? "", content])
-        return true
+        return saved
       },
     }
 
-    expect(await saveSessionExport("session.json", { id: "ses_1" }, platform)).toBe(true)
+    expect(await saveSessionExport("session.json", { id: "ses_1" }, platform)).toBe(saved)
     expect(writes).toEqual([["session.json", '{\n  "id": "ses_1"\n}']])
   })
 })

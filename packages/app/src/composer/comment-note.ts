@@ -1,6 +1,6 @@
 import { Option, Schema } from "effect"
 import type { FileSelection } from "@/workspaces/files/model"
-import { BrowserComment, durableBrowserElement, type ContextItem } from "./schema"
+import { durableNote, LegacyBrowserNote, NoteComment, type ContextItem } from "./schema"
 
 export type PromptFileComment = {
   type?: "file"
@@ -10,9 +10,10 @@ export type PromptFileComment = {
   preview?: string
   origin?: "review" | "file"
 }
-export type PromptComment = PromptFileComment | BrowserComment
+export type PromptComment = PromptFileComment | NoteComment
 
-const decodeBrowserComment = Schema.decodeUnknownOption(BrowserComment)
+const decodeNoteComment = Schema.decodeUnknownOption(NoteComment)
+const decodeLegacyBrowserNote = Schema.decodeUnknownOption(LegacyBrowserNote)
 
 /** An attachment the model receives as a path on the server rather than inline bytes. */
 export type PromptAttachmentReference = {
@@ -84,7 +85,8 @@ export function readPromptPresentation(value: unknown) {
     }),
     comments: comments.flatMap((item): PromptComment[] => {
       if (!item || typeof item !== "object") return []
-      if ((item as { type?: unknown }).type === "browser") return Option.toArray(decodeBrowserComment(item))
+      if ((item as { type?: unknown }).type === "note") return Option.toArray(decodeNoteComment(item))
+      if ((item as { type?: unknown }).type === "browser") return Option.toArray(decodeLegacyBrowserNote(item))
       const path = (item as { path?: unknown }).path
       const comment = (item as { comment?: unknown }).comment
       if (typeof path !== "string" || typeof comment !== "string") return []
@@ -107,29 +109,15 @@ export function formatAttachmentReference(input: PromptAttachmentReference) {
   return `Attached file: \`${input.path}\``
 }
 
-export function formatBrowserCommentNote(input: BrowserComment) {
-  const element = input.element
-  // Page-provided strings are quoted so they read as data, not as part of the user's request.
-  const details = [
-    element.role ? `role ${element.role}` : undefined,
-    element.name ? `accessible name ${JSON.stringify(element.name)}` : undefined,
-    element.text && element.text !== element.name ? `text ${JSON.stringify(element.text.slice(0, 80))}` : undefined,
-    // A selector too long to keep is empty rather than cut into invalid syntax.
-    element.selector
-      ? `selector ${JSON.stringify(element.selector)}${element.selector.includes(" >>> ") ? ' (">>>" enters a shadow root)' : ""}`
-      : undefined,
-    element.ref
-      ? `browser ref @${element.ref}, usable as ref in any browser tool including browser.evaluate until the page navigates`
-      : undefined,
-  ].filter((detail) => detail !== undefined)
-  return `The user made the following comment regarding the ${JSON.stringify(element.label)} element in browser tab ${input.tabID} at ${input.url}${details.length ? ` (${details.join("; ")})` : ""}: ${input.comment}`
+/** A note reads with its live subject while it stays in the app process that attached it. */
+export function formatNoteComment(input: NoteComment) {
+  return `The user made the following comment regarding ${input.live?.subject ?? input.subject}: ${input.comment}`
 }
 
 /** Restores a sent comment to the composer, for example after a revert or fork. */
 export function commentContextItem(comment: PromptComment): ContextItem {
-  // The message may predate the desktop process, so its element ref can no longer be trusted.
-  if (comment.type === "browser")
-    return { ...comment, element: durableBrowserElement(comment.element), commentID: crypto.randomUUID() }
+  // The message may predate this app process, so a note's live references can no longer be trusted.
+  if (comment.type === "note") return { ...durableNote(comment), commentID: crypto.randomUUID() }
   return {
     type: "file",
     path: comment.path,

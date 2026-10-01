@@ -40,6 +40,7 @@ const registry = createWindowRegistry<BrowserWindow>({
   read: () => getStore().get(WINDOW_IDS_KEY),
   write: (ids) => getStore().set(WINDOW_IDS_KEY, ids),
 })
+const opened = new Set<(win: BrowserWindow) => void>()
 let relaunchHandler = () => {
   setAppQuitting()
   app.relaunch()
@@ -83,6 +84,19 @@ export function getWindowByID(id: string) {
   const win = registry.get(id)
   if (!win || win.isDestroyed()) return null
   return win
+}
+
+/** App windows that host the renderer, excluding popups and other native windows. */
+export function getMainWindows() {
+  return registry.list().filter((win) => !win.isDestroyed())
+}
+
+/** Runs for each app window as it registers, before its renderer loads. */
+export function onMainWindow(listener: (win: BrowserWindow) => void) {
+  opened.add(listener)
+  return () => {
+    opened.delete(listener)
+  }
 }
 
 export function setWindowThemeReady(win: BrowserWindow) {
@@ -191,6 +205,7 @@ export const makeMainWindows = Effect.fn("Window.make")(function* () {
         ),
       )
     })
+    opened.forEach((listener) => listener(win))
   }
 
   return { create, restore }

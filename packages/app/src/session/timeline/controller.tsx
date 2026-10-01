@@ -11,7 +11,7 @@ import { useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useTabs } from "@/shell/tabs/tabs"
 import type { SessionModel } from "@/session/model"
-import { removedSessionIDs } from "@/session/session-domain"
+import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { useServerSDK } from "@/runtime/server/client"
 import { sessionHref } from "@/shell/routes/session"
 import { sessionTitle } from "@/session/title"
@@ -193,7 +193,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
     const sessions = data.session.list().filter((item) => !item.parentID && !item.time?.archived)
     const index = sessions.findIndex((item) => item.id === id)
     const next = index === -1 ? undefined : (sessions[index + 1] ?? sessions[index - 1])
-    const removed = removedSessionIDs(data.session.list(), id)
+    const removed = sessionTreeIDs(data.session.list(), id)
     const success = await data.session
       .remove(id)
       .then(() => true)
@@ -203,7 +203,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       })
     if (!success) return false
     void navigateAfterRemoval(id, session.parentID, next?.id)
-    notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: [...removed] })
+    notifySessionTabsRemoved({ server: server.key, directory: sdk().directory, sessionIDs: removed })
     return true
   }
 
