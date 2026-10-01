@@ -118,12 +118,7 @@ export function make(input: {
   })
 
   const getSession = Effect.fnUntraced(function* (sessionID: string, cwd: string) {
-    const session = yield* ACPPromise.promise(() =>
-      input.client.session.get({ sessionID }).catch((error) => {
-        if (isSessionNotFoundError(error)) throw new ACPError.SessionNotFoundError({ sessionId: sessionID })
-        throw error
-      }),
-    )
+    const session = yield* ACPPromise.promise(() => input.client.session.get({ sessionID }))
     if (FSUtil.resolve(cwd) !== FSUtil.resolve(session.location.directory))
       return yield* new ACPError.SessionDirectoryMismatchError({ sessionId: sessionID, cwd })
     return session

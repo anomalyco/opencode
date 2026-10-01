@@ -578,15 +578,14 @@ function startServer(options: WireOptions, changed: () => void) {
     Response.json({ _tag: "SessionNotFoundError", sessionID, message: "session not found" }, { status: 404 })
   const noContent = () => new Response(null, { status: 204 })
   // Routes without session-location middleware reject a malformed ID in their path decode; routes with it name the field.
-  const malformed = (sessionID: string, shape: "params" | "field") =>
-    sessionID.startsWith("ses")
-      ? undefined
-      : Response.json(
-          shape === "params"
-            ? { _tag: "InvalidRequestError", message: 'Expected a string starting with "ses"', kind: "Params" }
-            : { _tag: "InvalidRequestError", message: "Invalid session ID", field: "sessionID" },
-          { status: 400 },
-        )
+  const pathDecodeError = {
+    _tag: "InvalidRequestError",
+    message: 'Expected a string starting with "ses"',
+    kind: "Params",
+  }
+  const fieldError = { _tag: "InvalidRequestError", message: "Invalid session ID", field: "sessionID" }
+  const malformed = (sessionID: string, body: object) =>
+    sessionID.startsWith("ses") ? undefined : Response.json(body, { status: 400 })
 
   // Handlers record facts synchronously before awaiting hooks, so waiters can observe a held request.
   const observed = (response: Response | Promise<Response>) => {
@@ -693,21 +692,20 @@ function startServer(options: WireOptions, changed: () => void) {
       },
       "/api/session/:sessionID": {
         GET: route((req) => {
+          const invalid = malformed(req.params.sessionID, pathDecodeError)
+          if (invalid) return invalid
           const session = fake.sessions.get(req.params.sessionID)
-          return (
-            malformed(req.params.sessionID, "params") ??
-            (session ? Response.json({ data: session }) : notFound(req.params.sessionID))
-          )
+          return session ? Response.json({ data: session }) : notFound(req.params.sessionID)
         }),
-        DELETE: route(
-          (req) =>
-            malformed(req.params.sessionID, "params") ??
-            (fake.sessions.delete(req.params.sessionID) ? noContent() : notFound(req.params.sessionID)),
-        ),
+        DELETE: route((req) => {
+          const invalid = malformed(req.params.sessionID, pathDecodeError)
+          if (invalid) return invalid
+          return fake.sessions.delete(req.params.sessionID) ? noContent() : notFound(req.params.sessionID)
+        }),
       },
       "/api/session/:sessionID/fork": {
         POST: route((req) => {
-          const invalid = malformed(req.params.sessionID, "field")
+          const invalid = malformed(req.params.sessionID, fieldError)
           if (invalid) return invalid
           const source = fake.sessions.get(req.params.sessionID)
           if (!source) return notFound(req.params.sessionID)

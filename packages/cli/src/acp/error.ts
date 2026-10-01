@@ -37,7 +37,6 @@ export class UnknownAuthMethodError extends Schema.TaggedError<UnknownAuthMethod
 export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()("ACPInvalidRequestError", {
   message: Schema.String,
   field: Schema.optional(Schema.String),
-  kind: Schema.optional(Schema.String),
 }) {}
 
 export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>()("ACPServiceFailureError", {
@@ -94,7 +93,7 @@ export function toRequestError(error: Error): RequestError {
     case "ACPUnknownAuthMethodError":
       return RequestError.invalidParams({ methodId: error.methodId }, `unknown auth method: ${error.methodId}`)
     case "ACPInvalidRequestError":
-      return RequestError.invalidParams({ field: error.field, kind: error.kind }, error.message)
+      return RequestError.invalidParams(error.field ? { field: error.field } : {}, error.message)
     case "ACPServiceFailureError":
       return RequestError.internalError(
         {

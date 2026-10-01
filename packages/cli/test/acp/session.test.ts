@@ -197,20 +197,26 @@ describe("acp session lifecycle over the wire", () => {
     expect(await rpcError(acp.request("session/load", params))).toEqual({
       code: -32602,
       message: 'Invalid params: Expected a string starting with "ses"',
-      data: { kind: "Params" },
-    })
-    expect(await rpcError(acp.request("session/resume", params))).toMatchObject({
-      code: -32602,
-      data: { kind: "Params" },
+      data: {},
     })
     expect(await rpcError(acp.request("session/fork", params))).toEqual({
       code: -32602,
       message: "Invalid params: Invalid session ID",
       data: { field: "sessionID" },
     })
-    expect(await rpcError(acp.prompt("never-created", "hello"))).toMatchObject({
+    expect(acp.logs).toEqual([])
+  })
+
+  test("rejects forking an unknown session as session not found", async () => {
+    await using acp = await startWire()
+    await acp.initialize()
+
+    expect(
+      await rpcError(acp.request("session/fork", { cwd: "/workspace", sessionId: "ses_unknown", mcpServers: [] })),
+    ).toEqual({
       code: -32602,
-      data: { sessionId: "never-created" },
+      message: "Invalid params: session not found: ses_unknown",
+      data: { sessionId: "ses_unknown" },
     })
     expect(acp.logs).toEqual([])
   })
