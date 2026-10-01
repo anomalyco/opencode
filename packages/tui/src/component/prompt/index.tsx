@@ -57,6 +57,8 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { Identifier } from "@opencode-ai/core/id/id"
+import { createQuickUndo } from "./quick-undo"
 
 registerOpencodeSpinner()
 
@@ -139,6 +141,8 @@ function formatEditorContext(selection: EditorSelection) {
 }
 
 let stashed: { prompt: PromptInfo; cursor: number } | undefined
+// Module scope so a first prompt sent from the home route can still be undone from the session route.
+const quickUndo = createQuickUndo<{ sessionID: string; prompt: PromptInfo }>()
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -297,7 +301,6 @@ export function Prompt(props: PromptProps) {
     extmarkToPartIndex: new Map(),
     interrupt: 0,
   })
-
   createEffect(
     on(
       () => props.sessionID,
@@ -395,7 +398,7 @@ export function Prompt(props: PromptProps) {
         category: "Session",
         hidden: true,
         enabled: status().type !== "idle",
-        run: () => {
+        run: async () => {
           if (auto()?.visible) return
           if (!input.focused) return
           // TODO: this should be its own command
@@ -404,6 +407,17 @@ export function Prompt(props: PromptProps) {
             return
           }
           if (!props.sessionID) return
+
+          const recent = store.prompt.input ? undefined : quickUndo.escape()
+          if (recent && recent.value.sessionID === props.sessionID) {
+            setStore("interrupt", 0)
+            await sdk.client.session.abort({ sessionID: props.sessionID }).catch(() => {})
+            await sdk.client.session.revert({ sessionID: props.sessionID, messageID: recent.messageID })
+            ref.set(recent.value.prompt)
+            input.focus()
+            dialog.clear()
+            return
+          }
 
           setStore("interrupt", store.interrupt + 1)
 
@@ -1090,11 +1104,20 @@ export function Prompt(props: PromptProps) {
         parts: nonTextParts.filter((x) => x.type === "file"),
       })
     } else {
+      const messageID = Identifier.ascending("message")
+      quickUndo.submitted(messageID, {
+        sessionID,
+        prompt: {
+          input: store.prompt.input,
+          parts: [...unwrap(store.prompt.parts)],
+        },
+      })
       move.startSubmit()
       sdk.client.session
         .prompt(
           {
             sessionID,
+            messageID,
             ...selectedModel,
             agent: agent.name,
             model: selectedModel,
