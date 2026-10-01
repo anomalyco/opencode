@@ -39,9 +39,9 @@ export function createEmbeds() {
       height: Math.round(layout.height),
     }
 
-    const visible = !!entry.layout?.visible && entry.shown && !!bounds && bounds.width > 0 && bounds.height > 0
+    const placed = !!entry.layout?.visible && !!bounds && bounds.width > 0 && bounds.height > 0
 
-    if (visible && bounds) {
+    if (placed && bounds) {
       entry.view.setBounds(bounds)
 
       const size = Math.min(
@@ -61,22 +61,23 @@ export function createEmbeds() {
           entry.corners[index]?.setImage(image),
         )
       entry.cornerKey = key
+      // Plain bounds apply in the same frame as the view's; animated ones land a frame later,
+      // which exposes a square page corner whenever the panel moves.
       entry.corners.forEach((corner, index) =>
-        // A composited layer is required above a WebContentsView; a zero-duration update creates it.
-        corner.setBounds(
-          {
-            x: bounds.x + (index ? bounds.width - size : 0),
-            y: bounds.y + bounds.height - size,
-            width: size,
-            height: size,
-          },
-          { animate: { duration: 0 } },
-        ),
+        corner.setBounds({
+          x: bounds.x + (index ? bounds.width - size : 0),
+          y: bounds.y + bounds.height - size,
+          width: size,
+          height: size,
+        }),
       )
     }
 
+    // Keep the corner layers up while the box is laid out, even before the page shows.
+    // Over the DOM card they match its own rounded corners.
+    const visible = placed && entry.shown
+    entry.corners.forEach((corner) => corner.setVisible(placed && !!entry.cornerKey))
     entry.view.setVisible(visible)
-    entry.corners.forEach((corner) => corner.setVisible(visible && !!entry.cornerKey))
 
     if (visible === entry.onscreen) return
     entry.onscreen = visible
@@ -109,6 +110,9 @@ export function createEmbeds() {
       view.setVisible(false)
       window.contentView.addChildView(view)
       corners.forEach((corner) => {
+        // Painting above a WebContentsView needs a composited layer; a zero blur creates one
+        // without an animated bounds update.
+        corner.setBackgroundBlur(0)
         corner.setVisible(false)
         window.contentView.addChildView(corner)
       })
