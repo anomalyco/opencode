@@ -99,7 +99,7 @@ export function make(input: {
   const sessions = new Map<string, Attached>()
   const registeredMcp = new Map<string, Set<string>>()
   const active = new Map<string, { readonly control: TurnControl; readonly turn: Promise<PromptResponse> }>()
-  const capabilities = { writeTextFile: false, childSessionUpdates: false }
+  const capabilities = { childSessionUpdates: false }
 
   const catalogs = ACPCatalog.make({
     client: input.client,
@@ -202,7 +202,6 @@ export function make(input: {
 
   return {
     initialize: async (params) => {
-      capabilities.writeTextFile = params.clientCapabilities?.fs?.writeTextFile === true
       capabilities.childSessionUpdates = params.clientCapabilities?._meta?.[ChildSessionUpdatesCapability] === true
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
@@ -351,7 +350,6 @@ export function make(input: {
         sessionID: state.id,
         cwd: state.cwd,
         start: prepared.start,
-        writeTextFile: capabilities.writeTextFile,
         action: prepared.command !== undefined,
         control,
         connectionSignal: input.connection.signal,

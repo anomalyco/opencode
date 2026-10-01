@@ -4,10 +4,10 @@ import { Patch } from "@opencode/util/patch"
 import { Result } from "effect"
 import { isAbsolute, resolve } from "node:path"
 import type { ACPConnection } from "./connection"
-import { pendingToolCall, stringValue, toLocations, toToolKind, type ToolInput } from "./tool"
+import { pendingToolCall, stringValue, toLocations, type ToolInput } from "./tool"
 
 type PermissionEvent = Extract<EventSubscribeOutput, { type: "permission.asked" }>
-type Connection = Pick<ACPConnection.Connection, "requestPermission" | "writeTextFile">
+type Connection = Pick<ACPConnection.Connection, "requestPermission">
 type Tool = { readonly name: string; readonly input: ToolInput }
 
 const options: PermissionOption[] = [
@@ -67,39 +67,6 @@ function prefixedTitle(prefix: string | undefined, title: string | undefined) {
   if (!prefix) return title
   if (!title) return prefix
   return `${prefix}: ${title}`
-}
-
-export async function syncEditedFiles(input: {
-  readonly connection: Pick<ACPConnection.Connection, "writeTextFile">
-  readonly writeTextFile: boolean
-  readonly sessionID: string
-  readonly cwd: string
-  readonly toolName: string
-  readonly toolInput: ToolInput
-  readonly metadata: Readonly<Record<string, unknown>>
-  readonly signal?: AbortSignal
-}) {
-  if (!input.writeTextFile || !input.connection.writeTextFile || toToolKind(input.toolName) !== "edit") return
-  const files = Array.isArray(input.metadata.files)
-    ? input.metadata.files.flatMap((file): string[] => {
-        if (!file || typeof file !== "object") return []
-        const path = "file" in file ? file.file : undefined
-        return typeof path === "string" ? [path] : []
-      })
-    : []
-  const path = filePath(input.toolInput)
-  const paths = [...new Set([...files, ...(path ? [path] : [])])]
-  await Promise.all(
-    paths.map(async (path) => {
-      const target = resolvePath(path, input.cwd)
-      const file = Bun.file(target)
-      if (!(await file.exists())) return
-      await input.connection.writeTextFile?.(
-        { sessionId: input.sessionID, path: target, content: await file.text() },
-        { cancellationSignal: input.signal },
-      )
-    }),
-  )
 }
 
 async function permissionPreviews(toolName: string, input: ToolInput, cwd: string): Promise<ToolCallContent[]> {

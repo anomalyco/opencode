@@ -9,7 +9,7 @@ import type {
 import type { ACPConnection } from "./connection"
 import { partsToContentChunks, type ReplayPart } from "./content"
 import { ACPError } from "./error"
-import { replyPermission, syncEditedFiles } from "./permission"
+import { replyPermission } from "./permission"
 import {
   completedToolUpdate,
   errorToolUpdate,
@@ -19,7 +19,7 @@ import {
   type ToolInput,
 } from "./tool"
 
-type Connection = Pick<ACPConnection.Connection, "sessionUpdate" | "requestPermission" | "writeTextFile">
+type Connection = Pick<ACPConnection.Connection, "sessionUpdate" | "requestPermission">
 
 export type TurnControl = {
   cancelled: boolean
@@ -84,7 +84,6 @@ export async function streamTurn(input: {
   readonly sessionID: string
   readonly cwd: string
   readonly start: TurnStart
-  readonly writeTextFile: boolean
   readonly action?: boolean
   readonly submit: (signal: AbortSignal) => Promise<unknown>
   readonly control: TurnControl
@@ -284,16 +283,6 @@ export async function streamTurn(input: {
         const key = toolKey(event.data.sessionID, event.data.id)
         const current = tools.get(key) ?? emptyToolState()
         tools.delete(key)
-        await syncEditedFiles({
-          connection: input.connection,
-          writeTextFile: input.writeTextFile,
-          sessionID: input.sessionID,
-          cwd: input.cwd,
-          toolName: current.name,
-          toolInput: current.input,
-          metadata: event.data.metadata ?? {},
-          signal: control.admission.signal,
-        }).catch(() => {})
         await send({
           sessionUpdate: "tool_call_update",
           ...completedToolUpdate({

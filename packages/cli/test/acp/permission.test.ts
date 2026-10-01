@@ -263,8 +263,8 @@ describe("acp permissions over the wire", () => {
   })
 })
 
-describe("acp edit previews and client file sync over the wire", () => {
-  test("previews edits during approval and syncs the completed file", async () => {
+describe("acp edit previews over the wire", () => {
+  test("previews edits during approval", async () => {
     await using dir = await tmpdir()
     const file = path.join(dir.path, "file.ts")
     await fs.writeFile(file, "before")
@@ -287,7 +287,7 @@ describe("acp edit previews and client file sync over the wire", () => {
       },
       permission: allowOnce,
     })
-    await acp.initialize({ writeTextFile: true })
+    await acp.initialize()
     const session = await acp.newSession(dir.path)
 
     await acp.prompt(session.sessionId, "hello")
@@ -298,10 +298,9 @@ describe("acp edit previews and client file sync over the wire", () => {
       locations: [{ path: "file.ts" }],
       content: [{ type: "diff", path: "file.ts", oldText: "before", newText: "after" }],
     })
-    expect(acp.writes).toEqual([{ sessionId: session.sessionId, path: file, content: "after" }])
   })
 
-  test("previews and syncs each file in a patch", async () => {
+  test("previews each file in a patch", async () => {
     await using dir = await tmpdir()
     await Promise.all([
       fs.writeFile(path.join(dir.path, "first.ts"), "one\n"),
@@ -341,7 +340,7 @@ describe("acp edit previews and client file sync over the wire", () => {
       },
       permission: allowOnce,
     })
-    await acp.initialize({ writeTextFile: true })
+    await acp.initialize()
     const session = await acp.newSession(dir.path)
 
     await acp.prompt(session.sessionId, "hello")
@@ -355,30 +354,48 @@ describe("acp edit previews and client file sync over the wire", () => {
         { type: "diff", path: "second.ts", oldText: "alpha\n", newText: "beta\n" },
       ],
     })
-    expect(acp.writes.toSorted((a, b) => a.path.localeCompare(b.path))).toEqual([
-      { sessionId: session.sessionId, path: path.join(dir.path, "first.ts"), content: "two\n" },
-      { sessionId: session.sessionId, path: path.join(dir.path, "second.ts"), content: "beta\n" },
-    ])
   })
 
-  test("does not sync edits when the client did not advertise writeTextFile", async () => {
+  test("does not echo completed edits to a client that advertises writeTextFile", async () => {
     await using dir = await tmpdir()
-    await fs.writeFile(path.join(dir.path, "file.ts"), "after")
+    const file = path.join(dir.path, "file.ts")
+    await fs.writeFile(file, "after")
     await using acp = await startWire({
       onPrompt: ({ sessionID, id }) =>
         turn(
           sessionID,
           id,
           toolStarted(sessionID, "call_edit", "edit"),
-          toolCalled(sessionID, "call_edit", { filePath: path.join(dir.path, "file.ts") }),
-          toolSucceeded(sessionID, "call_edit", {}, "edited"),
+          toolCalled(sessionID, "call_edit", { filePath: file, oldString: "before", newString: "after" }),
+          toolSucceeded(sessionID, "call_edit", { files: [{ file }] }, "edited"),
+          toolStarted(sessionID, "call_write", "write"),
+          toolCalled(sessionID, "call_write", { filePath: file, content: "after" }),
+          toolSucceeded(sessionID, "call_write", {}, "written"),
+          toolStarted(sessionID, "call_patch", "patch"),
+          toolCalled(sessionID, "call_patch", { patchText: "*** Begin Patch\n*** End Patch" }),
+          toolSucceeded(sessionID, "call_patch", { files: [{ file }] }, "patched"),
         ),
     })
-    await acp.initialize()
+    await acp.initialize({ writeTextFile: true })
     const session = await acp.newSession(dir.path)
 
     expect(await acp.prompt(session.sessionId, "hello")).toMatchObject({ stopReason: "end_turn" })
     expect(acp.writes).toEqual([])
+    expect(
+      acp.updates.flatMap((item) =>
+        item.update.sessionUpdate === "tool_call_update" && item.update.status === "completed" ? [item.update] : [],
+      ),
+    ).toMatchObject([
+      {
+        toolCallId: "call_edit",
+        content: [
+          { type: "content", content: { type: "text", text: "edited" } },
+          { type: "diff", path: file, oldText: "before", newText: "after" },
+        ],
+      },
+      { toolCallId: "call_write", content: [{ type: "content", content: { type: "text", text: "written" } }] },
+      { toolCallId: "call_patch", content: [{ type: "content", content: { type: "text", text: "patched" } }] },
+    ])
   })
 })
 
