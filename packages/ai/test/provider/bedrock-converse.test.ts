@@ -697,7 +697,12 @@ describe("Bedrock Converse route", () => {
 
   it.effect("hoists tool-result images for other Bedrock model families", () =>
     Effect.gen(function* () {
-      for (const id of ["qwen.qwen3-vl-235b-a22b", "global.xai.grok-4.7", "global.moonshotai.kimi-k3"]) {
+      for (const id of [
+        "qwen.qwen3-vl-235b-a22b",
+        "global.xai.grok-4.7",
+        "global.moonshotai.kimi-k3",
+        "us.meta.llama4-scout-17b-instruct-v1:0",
+      ]) {
         const prepared = yield* compileRequest(
           LLM.request({
             model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
@@ -727,11 +732,7 @@ describe("Bedrock Converse route", () => {
       }
     }),
   )
-  ;[
-    "global.anthropic.claude-sonnet-4-5-20250929-v1:0",
-    "us.amazon.nova-pro-v1:0",
-    "us.meta.llama4-scout-17b-instruct-v1:0",
-  ].forEach((id) => {
+  ;["global.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.amazon.nova-pro-v1:0"].forEach((id) => {
     it.effect(`keeps ${id} tool images inside the result`, () =>
       Effect.gen(function* () {
         const prepared = yield* compileRequest(
@@ -815,43 +816,6 @@ describe("Bedrock Converse route", () => {
           { image: { format: "jpeg", source: { bytes: "BBBB" } } },
         ],
       })
-    }),
-  )
-
-  it.effect("rejects tool-returned Pixtral images without rejecting ordinary user images", () =>
-    Effect.gen(function* () {
-      const pixtral = AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
-        "us.mistral.pixtral-large-2502-v1:0",
-      )
-      const user = yield* compileRequest(
-        LLM.request({
-          model: pixtral,
-          messages: [Message.user([{ type: "media", media: Media.base64("AAAA", "image/png") }])],
-        }),
-      )
-      expect(user.body.messages[0]).toEqual({
-        role: "user",
-        content: [{ image: { format: "png", source: { bytes: "AAAA" } } }],
-      })
-
-      const error = yield* compileRequest(
-        LLM.request({
-          model: pixtral,
-          messages: [
-            Message.assistant([ToolCallPart.make({ id: "tool_1", name: "read", input: {} })]),
-            Message.tool({
-              id: "tool_1",
-              name: "read",
-              result: {
-                type: "content",
-                value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
-              },
-            }),
-          ],
-        }),
-      ).pipe(Effect.flip)
-      expect(error).toMatchObject({ reason: { _tag: "InvalidRequest" } })
-      expect(error.message).toContain("Pixtral does not support images returned by tools")
     }),
   )
 

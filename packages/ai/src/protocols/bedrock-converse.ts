@@ -309,25 +309,18 @@ const lowerToolResult = Effect.fn("BedrockConverse.lowerToolResult")(function* (
   part: ToolResultPart,
   documentNames: Set<string>,
   normalizeID: (id: string) => string,
-  hoistImages: boolean,
 ) {
-  const content = yield* lowerToolResultContent(part, documentNames)
-  const images: BedrockMedia.ImageBlock[] = hoistImages ? content.filter((item) => "image" in item) : []
-  const resultContent = images.length > 0 ? content.filter((item) => !("image" in item)) : content
   return {
-    block: {
-      toolResult: {
-        toolUseId: normalizeID(part.id),
-        content: images.length > 0 && resultContent.length === 0 ? [{ text: "See attached image." }] : resultContent,
-        status: part.result.type === "error" ? "error" : "success",
-      },
-    } satisfies BedrockToolResultBlock,
-    images,
-  }
+    toolResult: {
+      toolUseId: normalizeID(part.id),
+      content: yield* lowerToolResultContent(part, documentNames),
+      status: part.result.type === "error" ? "error" : "success",
+    },
+  } satisfies BedrockToolResultBlock
 })
 
-// Bedrock validates tool-result image placement per model; keep the tested Claude, Nova, and Llama 4 families inline.
-const keepToolImagesInline = (id: string) => /(?:^|[./])(?:anthropic\.claude-|amazon\.nova-|meta\.llama4-)/i.test(id)
+// Keep Claude and Nova tool-result images inline; put other models' images beside the result.
+const keepToolImagesInline = (id: string) => id.includes("anthropic.claude-") || id.includes("amazon.nova-")
 
 const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
   request: LLMRequest,
@@ -339,7 +332,6 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
   const normalizeID = request.model.id.includes("mistral.") ? MistralToolID.normalizer(request) : (id: string) => id
   const providerMetadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
   const hoistImages = !keepToolImagesInline(request.model.id)
-  const pixtral = /(?:^|[./])mistral\.pixtral-/i.test(request.model.id)
   // Bedrock expects parallel tool results before any images hoisted beside them.
   const pendingImages: BedrockMedia.ImageBlock[] = []
   const flushImages = () => {
@@ -425,13 +417,22 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("Bedrock Converse", "tool", ["tool-result"])
-      const result = yield* lowerToolResult(part, documentNames, normalizeID, hoistImages)
-      if (pixtral && result.images.length > 0)
-        return yield* ProviderShared.invalidRequest(
-          "Bedrock Converse Pixtral does not support images returned by tools",
-        )
-      content.push(result.block)
-      pendingImages.push(...result.images)
+      const result = yield* lowerToolResult(part, documentNames, normalizeID)
+      const images: BedrockMedia.ImageBlock[] = hoistImages
+        ? result.toolResult.content.filter((item) => "image" in item)
+        : []
+      const nonImageContent = result.toolResult.content.filter((item) => !("image" in item))
+      content.push(
+        images.length === 0
+          ? result
+          : {
+              toolResult: {
+                ...result.toolResult,
+                content: nonImageContent.length > 0 ? nonImageContent : [{ text: "See attached image." }],
+              },
+            },
+      )
+      pendingImages.push(...images)
       const cachePoint = BedrockCache.block(breakpoints, part.cache)
       if (cachePoint) content.push(cachePoint)
     }
