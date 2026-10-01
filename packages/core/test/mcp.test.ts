@@ -1,6 +1,6 @@
 import path from "node:path"
 import fs from "node:fs/promises"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, test, setSystemTime } from "bun:test"
 import { Client, InMemoryTransport, StreamableHTTPClientTransport } from "@modelcontextprotocol/client"
 import {
   createMcpHandler,
@@ -779,6 +779,88 @@ test("leaves explicitly disabled MCP servers down when demanded", async () => {
       }).pipe(Effect.provide(resourceMcpLayer(config))),
     ),
   )
+})
+
+test("retries a failed start after the cooldown, bounded by consecutive failures", async () => {
+  const config = new ConfigMCP.Local({ type: "local", command: ["example-mcp"] })
+  const driver = Environment.makeMemoryDriver()
+  const environment = Layer.succeed(
+    Environment.Service,
+    Environment.Service.of({ files: Environment.makeFiles(driver), spawner: EnvironmentUnavailable.spawner }),
+  )
+  const cooldown = 61_000
+
+  try {
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        const status = () =>
+          Effect.map(
+            service.servers(),
+            (servers) => servers.find((server) => server.name === "resources")?.status,
+          )
+
+        // The first demand runs the start; the failure leaves the server started-and-failed.
+        expect(yield* service.demand("resources")).toBe(true)
+        expect((yield* status())?.status).toBe("failed")
+        expect(yield* service.demand("resources")).toBe(false)
+
+        // Past the cooldown the next Session select tries again...
+        setSystemTime(Date.now() + cooldown)
+        expect(yield* service.demand("resources")).toBe(true)
+        expect(yield* service.demand("resources")).toBe(false)
+
+        // ...until the consecutive-failure budget is spent for good, however long the Session lives.
+        setSystemTime(Date.now() + cooldown)
+        expect(yield* service.demand("resources")).toBe(true)
+        setSystemTime(Date.now() + cooldown)
+        expect(yield* service.demand("resources")).toBe(false)
+        setSystemTime(Date.now() + cooldown * 10)
+        expect(yield* service.demand("resources")).toBe(false)
+      }).pipe(Effect.provide(resourceMcpLayer(config, undefined, undefined, { environment }))),
+    )
+  } finally {
+    // No argument: a set date freezes Date.now for the rest of the run; this resumes real time.
+    setSystemTime()
+  }
+})
+
+test("heals a server whose connection drops after a successful start", async () => {
+  const config = new ConfigMCP.Local({
+    type: "local",
+    command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-crash.ts")],
+  })
+
+  try {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          expect(yield* service.demand("resources")).toBe(true)
+
+          // The fixture exits on its own; the close marks the server failed while it stays
+          // started, so only the cooldown decides when the next select may bring it back.
+          const closed = Effect.gen(function* () {
+            const status = (yield* service.servers()).find((server) => server.name === "resources")?.status
+            if (status?.status !== "failed") return yield* Effect.fail(status)
+            return status
+          }).pipe(Effect.retry({ times: 100, schedule: Schedule.spaced("20 millis") }))
+          expect((yield* closed).status).toBe("failed")
+
+          expect(yield* service.demand("resources")).toBe(false)
+
+          setSystemTime(Date.now() + 61_000)
+          expect(yield* service.demand("resources")).toBe(true)
+          expect((yield* service.servers()).find((server) => server.name === "resources")?.status).toEqual({
+            status: "connected",
+          })
+        }).pipe(Effect.provide(resourceMcpLayer(config))),
+      ),
+    )
+  } finally {
+    // No argument: a set date freezes Date.now for the rest of the run; this resumes real time.
+    setSystemTime()
+  }
 })
 
 describe("McpTool.usable", () => {

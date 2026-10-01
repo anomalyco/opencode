@@ -79,9 +79,15 @@ type ServerEntry = {
   readonly config: Mcp.ServerConfig
   status: Status
   readonly startup: Latch.Latch
-  // Set before any start attempt; permission demand starts only entries that never started, so a
-  // failed or user-disconnected server is not resurrected on every Session select.
+  // Set before any start attempt; a user-disconnected (disabled) or auth-blocked server therefore
+  // never comes back through permission demand, only through an explicit connect.
   started: boolean
+  // Consecutive failed starts. Demand retries a failed entry while under the limit and past the
+  // cooldown, so a transient spawn error heals on a later Session select instead of requiring a
+  // restart, while a server that cannot start at all is not respawned on every select.
+  failures?: number
+  // Wall-clock time of the most recent start attempt; starts the retry cooldown.
+  lastAttempt?: number
   scope?: Scope.Closeable
   client?: McpClient.Connection
   tools?: ReadonlyArray<Tool>
@@ -97,6 +103,12 @@ const GLOBAL_ELICITATION_SESSION_ID = "global"
 const URL_ELICITATION_FIELD_KEY = "elicitation"
 // Connections remain Location-scoped, but shared remote endpoints should not receive concurrent startup bursts.
 const endpointLoads = KeyedMutex.makeUnsafe<string>()
+// Permission demand retries a failed start only after this cooldown, at most this many consecutive
+// times. A connection that drops after a successful start heals on the next select without
+// consuming the limit, still spaced by the cooldown: a server dying in a loop respawns at most
+// once per cooldown while Sessions keep selecting.
+const DEMAND_RETRY_COOLDOWN = 60_000
+const DEMAND_RETRY_LIMIT = 3
 
 type Data = {
   servers: Map<ServerName, Types.DeepMutable<Mcp.ServerConfig>>
@@ -117,7 +129,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly servers: () => Effect.Effect<ServerInfo[]>
   readonly add: (server: ServerName | string, config: Mcp.ServerConfig) => Effect.Effect<void>
   readonly connect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
-  /** Starts a server that never started (boot-gated or config-disabled is left down); true when this call started it. */
+  /** Starts a down server: never started, or failed and past the retry cooldown/limit (boot-gated, config-disabled and user-disconnected stay down); true when this call started it. */
   readonly demand: (server: ServerName | string) => Effect.Effect<boolean>
   readonly disconnect: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
   readonly remove: (server: ServerName | string) => Effect.Effect<void, NotFoundError>
@@ -444,6 +456,7 @@ export const layer = (options?: Options) =>
       const startServer = (name: ServerName, entry: ServerEntry) =>
         Effect.gen(function* () {
           entry.started = true
+          entry.lastAttempt = Date.now()
           // Announce the handshake so connect() and credential reconnects don't show a stale
           // disabled/failed status for the duration of the connection attempt.
           entry.status = { status: "pending" }
@@ -475,6 +488,7 @@ export const layer = (options?: Options) =>
             entry.tools = result.value.tools.map((tool) => toTool(name, entry, tool))
             entry.prompts = []
             entry.status = { status: "connected" }
+            entry.failures = 0
             watch(name, entry, result.value.connection)
             yield* Effect.logInfo("mcp connected", { server: name, tools: entry.tools.length })
             // The tool registry reads on this event; a late-connecting server has no other way to appear.
@@ -491,6 +505,8 @@ export const layer = (options?: Options) =>
             error instanceof McpClient.NeedsAuthError
               ? { status: "needs_auth", error: error.message }
               : { status: "failed", error: error instanceof Error ? error.message : String(error) }
+          // Auth waits for a user; only genuine failures consume the demand retry budget.
+          if (entry.status.status === "failed") entry.failures = (entry.failures ?? 0) + 1
           yield* Effect.logWarning("mcp connect failed", { server: name, status: entry.status })
           yield* bus.publish(McpEvent.StatusChanged, { server: name })
         }).pipe(
@@ -672,6 +688,8 @@ export const layer = (options?: Options) =>
           const name = ServerName.make(server)
           yield* Effect.gen(function* () {
             const target = yield* requireServer(name)
+            // An explicit connect is fresh intent: it gets a full retry budget again.
+            target.entry.failures = 0
             yield* stopServer(name, target.entry)
             yield* startServer(name, target.entry)
           }).pipe(locks.withLock(name))
@@ -680,7 +698,14 @@ export const layer = (options?: Options) =>
           const name = ServerName.make(server)
           return yield* Effect.gen(function* () {
             const entry = entries.get(name)
-            if (!entry || entry.started || entry.config.disabled) return false
+            if (!entry || entry.config.disabled) return false
+            if (entry.started) {
+              // Only a failed server is eligible for a retry: disabled covers boot-gated,
+              // config-disabled and user-disconnected servers, needs_auth waits for a login.
+              if (entry.status.status !== "failed") return false
+              if ((entry.failures ?? 0) >= DEMAND_RETRY_LIMIT) return false
+              if (Date.now() - (entry.lastAttempt ?? 0) < DEMAND_RETRY_COOLDOWN) return false
+            }
             yield* startServer(name, entry)
             return true
           }).pipe(locks.withLock(name))
