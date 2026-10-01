@@ -32,6 +32,7 @@ import { McpStdio } from "./stdio.js"
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
+const TERMINATE_TIMEOUT = 1_000
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
 
 export type { GetPromptResult, Prompt, ReadResourceResult, Resource, Tool }
@@ -236,7 +237,19 @@ export const connect = Effect.fnUntraced(function* (
   }).pipe(Effect.exit)
   if (Exit.isSuccess(exit)) {
     const client = exit.value
-    yield* Effect.addFinalizer(() => Effect.promise(() => client.close()).pipe(Effect.ignore))
+    yield* Effect.addFinalizer(() =>
+      Effect.gen(function* () {
+        // Close only aborts streams; the legacy session lives on until the server expires it unless
+        // terminated explicitly. Terminate first: close aborts the signal the DELETE shares.
+        const transport = session.transport
+        if (transport?.sessionId !== undefined && !session.reported)
+          yield* Effect.promise(() => transport.terminateSession()).pipe(
+            Effect.timeout(TERMINATE_TIMEOUT),
+            Effect.ignore,
+          )
+        yield* Effect.promise(() => client.close()).pipe(Effect.ignore)
+      }),
+    )
     const catalog = { timeout: config.timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
     const execution = config.timeout?.execution ?? DEFAULT_EXECUTION_TIMEOUT
     const request = <A>(what: string, run: (signal: AbortSignal) => Promise<A>) =>

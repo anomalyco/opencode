@@ -1131,6 +1131,88 @@ test("reconnects and retries a tool call after the MCP session expires", async (
   )
 })
 
+describe("MCP session termination", () => {
+  const terminations = (input: { hang?: boolean } = {}) => {
+    const deletes: Array<string | null> = []
+    return {
+      deletes,
+      respond: (request: Request) => {
+        if (request.method !== "DELETE") return undefined
+        deletes.push(request.headers.get("mcp-session-id"))
+        return input.hang ? new Promise<undefined>(() => {}) : undefined
+      },
+    }
+  }
+  const remote = (url: string) => new ConfigMCP.Remote({ type: "remote", url, oauth: false })
+
+  test("terminates the legacy session when the connection closes", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const recorded = terminations()
+          const server = yield* resourceServer({ respond: recorded.respond })
+          yield* Effect.scoped(connect("resources", remote(server.url), import.meta.dir))
+          expect(recorded.deletes).toEqual(server.state.sessions)
+          expect(recorded.deletes).toHaveLength(1)
+        }),
+      ),
+    )
+  })
+
+  test("bounds an unanswered termination before closing", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const recorded = terminations({ hang: true })
+          const server = yield* resourceServer({ respond: recorded.respond })
+          const started = performance.now()
+          yield* Effect.scoped(connect("resources", remote(server.url), import.meta.dir))
+          const elapsed = performance.now() - started
+          expect(recorded.deletes).toHaveLength(1)
+          expect(elapsed).toBeGreaterThanOrEqual(900)
+          expect(elapsed).toBeLessThan(3_000)
+        }),
+      ),
+    )
+  })
+
+  test("does not terminate a session the server already expired", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const recorded = terminations()
+          const server = yield* resourceServer({ respond: recorded.respond })
+          yield* Effect.gen(function* () {
+            const connection = yield* connect("resources", remote(server.url), import.meta.dir)
+            yield* Effect.promise(server.restart)
+            yield* connection.callTool({ name: "echo", args: {} }).pipe(Effect.flip)
+          }).pipe(Effect.scoped)
+          expect(recorded.deletes).toEqual([])
+        }),
+      ),
+    )
+  })
+
+  test("does not terminate modern connections", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const recorded = terminations()
+          const server = yield* resourceServer({ modern: true, respond: recorded.respond })
+          yield* Effect.scoped(
+            connect(
+              "resources",
+              new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" }),
+              import.meta.dir,
+            ),
+          )
+          expect(recorded.deletes).toEqual([])
+        }),
+      ),
+    )
+  })
+})
+
 describe.each([
   ["legacy", undefined],
   ["modern", "2026-07-28"],
