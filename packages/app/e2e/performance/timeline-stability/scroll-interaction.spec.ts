@@ -17,7 +17,7 @@ import {
   toolPart,
   userMessage,
   type TimelineMessage,
-} from "./fixture"
+} from "../../utils/timeline"
 
 test("follows an expanded patch that arrives as the user reaches the bottom", async ({ page }) => {
   const toolID = "prt_bottom_follow_patch"

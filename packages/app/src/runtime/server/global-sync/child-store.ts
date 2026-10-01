@@ -1,7 +1,7 @@
 import { createRoot, createSignal, getOwner, onCleanup, runWithOwner, type Accessor, type Owner } from "solid-js"
 import { createStore, type SetStoreFunction, type Store } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
-import type { Path, VcsInfo } from "@/runtime/server/types"
+import type { Path } from "@/runtime/server/types"
 import {
   DIR_IDLE_TTL_MS,
   MAX_DIR_STORES,
@@ -11,7 +11,6 @@ import {
   type MetaCache,
   type ProjectMeta,
   type State,
-  type VcsCache,
 } from "./types"
 import { canDisposeDirectory, pickDirectoriesToEvict } from "./eviction"
 import { useQuery } from "@tanstack/solid-query"
@@ -40,7 +39,6 @@ export function createChildStoreManager(input: {
   }
 }) {
   const children: Record<string, [Store<State>, SetStoreFunction<State>]> = {}
-  const vcsCache = new Map<string, VcsCache>()
   const metaCache = new Map<string, MetaCache>()
   const iconCache = new Map<string, IconCache>()
   const lifecycle = new Map<string, DirState>()
@@ -117,7 +115,6 @@ export function createChildStoreManager(input: {
       return false
     }
 
-    vcsCache.delete(key)
     metaCache.delete(key)
     iconCache.delete(key)
     lifecycle.delete(key)
@@ -160,7 +157,6 @@ export function createChildStoreManager(input: {
       )
       if (!vcs) throw new Error(input.translate("error.childStore.persistedCacheCreateFailed"))
       const vcsStore = vcs[0]
-      vcsCache.set(key, { store: vcsStore, setStore: vcs[1], ready: vcs[3] })
 
       const meta = runWithOwner(input.owner, () =>
         input.persist(Persist.serverWorkspace(input.scope, directory, "project"), ProjectState, { value: undefined }),
@@ -301,18 +297,6 @@ export function createChildStoreManager(input: {
     return childStore
   }
 
-  function peek(directory: string, options: ChildOptions = {}) {
-    const key = directoryKey(directory)
-    const childStore = ensureChild(directory)
-    if (options.mcp) enableMcp(directory, key, childStore)
-    const shouldBootstrap = options.bootstrap ?? true
-    if (shouldBootstrap) activate(key)
-    if (shouldBootstrap && childStore[0].status === "loading") {
-      input.onBootstrap(directory)
-    }
-    return childStore
-  }
-
   function enableMcp(directory: string, key: DirectoryKey, childStore: [Store<State>, SetStoreFunction<State>]) {
     if (mcpDirectories.has(key)) return
     mcpDirectories.add(key)
@@ -360,23 +344,12 @@ export function createChildStoreManager(input: {
     setStore("icon", value)
   }
 
-  function vcs(directory: string, value: VcsInfo) {
-    const key = directoryKey(directory)
-    const child = ensureChild(directory)
-    const cached = vcsCache.get(key)
-    if (!cached) return
-    cached.setStore("value", value)
-    child[1]("vcs", value)
-  }
-
   return {
     children,
     ensureChild,
     child,
-    peek,
     projectMeta,
     projectIcon,
-    vcs,
     mark,
     pin,
     unpin,
@@ -385,9 +358,5 @@ export function createChildStoreManager(input: {
     active: (directory: string) => activeDirectories.has(directoryKey(directory)),
     disableMcp,
     disposeDirectory,
-    runEviction,
-    vcsCache,
-    metaCache,
-    iconCache,
   }
 }

@@ -198,6 +198,7 @@ export type SessionStatsOperation<E = never> = (input?: SessionStatsInput) => Ef
 
 export type SessionCreateInput = {
   readonly id?: Session.ID | undefined
+  readonly parentID?: Session.ID | undefined
   readonly title?: string | undefined
   readonly agent?: Agent.ID | undefined
   readonly model?: Model.Ref | undefined
@@ -710,7 +711,12 @@ export type SessionLogOutput =
             | undefined
           readonly data: {
             readonly sessionID: Session.ID
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly response?: { readonly body: string } | undefined
+            }
           }
         }
       | {
@@ -902,7 +908,12 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly response?: { readonly body: string } | undefined
+            }
             readonly finish?: "content-filter" | undefined
             readonly rawFinish?: string | undefined
             readonly providerState?: SessionMessage.ProviderState | undefined
@@ -1112,7 +1123,12 @@ export type SessionLogOutput =
             readonly sessionID: Session.ID
             readonly assistantMessageID: SessionMessage.ID
             readonly id: string
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly response?: { readonly body: string } | undefined
+            }
             readonly content?:
               | readonly [
                   (
@@ -1157,7 +1173,12 @@ export type SessionLogOutput =
             readonly assistantMessageID: SessionMessage.ID
             readonly attempt: number
             readonly at: number
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly response?: { readonly body: string } | undefined
+            }
           }
         }
       | {
@@ -1238,7 +1259,12 @@ export type SessionLogOutput =
           readonly data: {
             readonly sessionID: Session.ID
             readonly reason: "auto" | "manual"
-            readonly error: { readonly type: string; readonly message: string; readonly status?: number | undefined }
+            readonly error: {
+              readonly type: string
+              readonly message: string
+              readonly status?: number | undefined
+              readonly response?: { readonly body: string } | undefined
+            }
             readonly inputID?: SessionMessage.ID | undefined
             readonly cost?: (number & Brand.Brand<"Money.USD">) | undefined
             readonly tokens?:
@@ -1389,7 +1415,11 @@ export type SessionFormReplyOperation<E = never> = (
   input: SessionFormReplyInput,
 ) => Effect.Effect<SessionFormReplyOutput, E>
 
-export type SessionFormCancelInput = { readonly sessionID: string; readonly formID: Form.ID }
+export type SessionFormCancelInput = {
+  readonly sessionID: string
+  readonly formID: Form.ID
+  readonly message?: string | undefined
+}
 export type SessionFormCancelOutput = void
 export type SessionFormCancelOperation<E = never> = (
   input: SessionFormCancelInput,
@@ -1718,6 +1748,21 @@ export interface McpApi<E = never> {
   readonly resource: { readonly catalog: McpResourceCatalogOperation<E> }
 }
 
+export type CredentialListOutput = ReadonlyArray<Credential.Entry>
+export type CredentialListOperation<E = never> = () => Effect.Effect<CredentialListOutput, E>
+
+export type CredentialCreateInput = {
+  readonly id?: Credential.ID | undefined
+  readonly integrationID: Integration.ID
+  readonly label?: string | undefined
+  readonly value: Credential.Value
+  readonly activate?: boolean | undefined
+}
+export type CredentialCreateOutput = Credential.Entry
+export type CredentialCreateOperation<E = never> = (
+  input: CredentialCreateInput,
+) => Effect.Effect<CredentialCreateOutput, E>
+
 export type CredentialUpdateInput = { readonly credentialID: Credential.ID; readonly label: string }
 export type CredentialUpdateOutput = void
 export type CredentialUpdateOperation<E = never> = (
@@ -1737,6 +1782,8 @@ export type CredentialRemoveOperation<E = never> = (
 ) => Effect.Effect<CredentialRemoveOutput, E>
 
 export interface CredentialApi<E = never> {
+  readonly list: CredentialListOperation<E>
+  readonly create: CredentialCreateOperation<E>
   readonly update: CredentialUpdateOperation<E>
   readonly activate: CredentialActivateOperation<E>
   readonly remove: CredentialRemoveOperation<E>

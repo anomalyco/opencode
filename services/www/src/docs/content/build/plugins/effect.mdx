@@ -821,6 +821,27 @@ effect: (ctx) =>
   }),
 ```
 
+Remove a temporary session with `remove`. Removal stops active execution and recursively deletes child sessions.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Temporary worker" }).pipe(Effect.orDie)
+    yield* ctx.session.remove({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
+Request compaction with `compact`. It returns the admitted inbox item, not a completed summary; compaction runs at
+the next step boundary by default. Pass `delivery: "queue"` to preserve queue order instead.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    const compaction = yield* ctx.session.compact({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
 Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-Model.Ref),
 [`Session.Inbox.User`](/api#schema-Session.Inbox.User),
 [`Session.Inbox.Synthetic`](/api#schema-Session.Inbox.Synthetic).
@@ -830,11 +851,13 @@ type SessionDomain = Pick<
   SessionApi<unknown>,
   | "create"
   | "get"
+  | "remove"
   | "switchAgent"
   | "switchModel"
   | "prompt"
   | "generate"
   | "command"
+  | "compact"
   | "synthetic"
   | "interrupt"
   | "rename"
@@ -867,7 +890,7 @@ effect: (ctx) =>
         id: Skill.ID.make("review"),
         name: Skill.Name.make("Review"),
         description: "Review the current changes",
-        location: "/workspace/.opencode/skills/review.md",
+        path: "/workspace/.opencode/skills/review/SKILL.md",
         content: "Review the current changes for correctness and missing tests.",
       }))
       const review = editor.get("review")

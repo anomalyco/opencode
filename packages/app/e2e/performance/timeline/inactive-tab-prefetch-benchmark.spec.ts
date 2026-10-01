@@ -1,9 +1,9 @@
 import { benchmark, expect } from "../benchmark"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectSessionTitle } from "../../utils/waits"
-import { fixture } from "./session-timeline-stress.fixture"
-import { messages } from "./session-tab-switch.fixture"
-import { installStressSessionTabs, stressSessionHref } from "./timeline-test-helpers"
+import { fixture, installStressSessionTabs } from "../../utils/session-fixture"
+import { sessionHref } from "../../utils/app"
+import { messages } from "../../utils/markdown-sessions"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
 
 const sessions = Array.from({ length: 8 }, (_, index) => ({
@@ -87,7 +87,7 @@ for (const close of [false, true]) {
       await installStressSessionTabs(page, { sessionIDs: sessions.map((session) => session.id) })
       const cdp = await page.context().newCDPSession(page)
       await cdp.send("Performance.enable")
-      await page.goto(stressSessionHref(sessions[0].id))
+      await page.goto(sessionHref(sessions[0].id))
       await expectSessionTitle(page, sessions[0].title)
       await waitForStableTimeline(page, pages[sessions[0].id].at(-2)!.id)
       // Every inactive tab's scheduled attention request must finish. This gates on the
@@ -102,7 +102,7 @@ for (const close of [false, true]) {
       if (close) {
         const tab = page
           .locator("[data-titlebar-tab-slot]")
-          .filter({ has: page.locator(`a[href="${stressSessionHref(closed.id)}"]`) })
+          .filter({ has: page.locator(`a[href="${sessionHref(closed.id)}"]`) })
         await tab.getByRole("button", { name: "Close tab", exact: true }).click()
         await expect(tab).toHaveCount(0)
       }
@@ -126,9 +126,9 @@ for (const close of [false, true]) {
         sourceIDs: pages[sessions[0].id].map((message) => message.id),
         lastID: pages[target.id].at(-2)!.id,
         requiredPartID: `${pages[target.id].at(-1)!.id}:text:0`,
-        href: stressSessionHref(target.id),
+        href: sessionHref(target.id),
         switch: async () => {
-          await page.locator(`[data-slot="titlebar-tabs"] a[href="${stressSessionHref(target.id)}"]`).click()
+          await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(target.id)}"]`).click()
           await expectSessionTitle(page, target.title)
         },
       })

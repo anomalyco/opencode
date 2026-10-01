@@ -8,6 +8,7 @@ import {
   AmazonBedrock,
   AnthropicCompatible,
   CloudflareAIGateway,
+  DigitalOcean,
   GoogleVertexMessages,
   Meta,
   MiniMax,
@@ -113,6 +114,33 @@ describe("applyCachePolicy", () => {
         tools: [{ name: "lookup", cache_control: { type: "ephemeral" } }],
         system: [{ type: "text", text: "You are concise.", cache_control: { type: "ephemeral" } }],
         messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
+      })
+    }),
+  )
+
+  it.effect("'auto' emits cache_control markers on DigitalOcean", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: DigitalOcean.configure({ apiKey: "test" }).model("anthropic-claude-fable-5.1"),
+          system: "You are concise.",
+          tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }],
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ type: "function", function: { name: "lookup" }, cache_control: { type: "ephemeral" } }],
+        messages: [
+          {
+            role: "system",
+            content: [{ text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
+          {
+            role: "user",
+            content: [{ text: "hi", cache_control: { type: "ephemeral" } }],
+          },
+        ],
       })
     }),
   )

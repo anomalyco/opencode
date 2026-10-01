@@ -1,15 +1,4 @@
-import {
-  createEffect,
-  createMemo,
-  createSignal,
-  lazy,
-  on,
-  onCleanup,
-  Show,
-  Suspense,
-  type Accessor,
-  type JSX,
-} from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
@@ -20,8 +9,8 @@ import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import { SummaryPopover } from "../summary/popover"
-import { SessionContextUsage } from "@/session/timeline/session-context-usage"
+import type { BackgroundTask, SessionView } from "@opencode/gui-extensions/sdk"
+import { ExtensionSlot } from "@/runtime/extension/render"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -30,21 +19,16 @@ import { createSessionTimelineRowRenderer } from "@opencode/session-ui/timeline/
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import { createTimelineVirtualizer } from "./virtualizer"
-import { containsDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
+import { containsDirectory } from "@opencode/util/path"
+import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
-import type { BackgroundTask } from "../summary/background"
-
-const SessionSummaryPanel = lazy(async () => {
-  const { SessionSummaryPanel } = await import("../summary/panel")
-  return { default: SessionSummaryPanel }
-})
 
 type SessionBackground = {
   blocking: Accessor<{ type: "shell" | "subagent"; partID: string; id?: string; label?: string }[]>
-  tasks: Accessor<BackgroundTask[]>
+  tasks: Accessor<readonly BackgroundTask[]>
   move: () => Promise<void>
 }
 
@@ -74,6 +58,7 @@ type MessageTimelineProps = {
   hideHeader?: boolean
   active?: boolean
   session: TimelineSessionSource
+  view: SessionView
   background: SessionBackground
   actions?: SessionUserActions
   scroll: { overflow: boolean; jump: boolean }
@@ -89,10 +74,6 @@ type MessageTimelineProps = {
   centered: boolean
   reserveReviewToggle: boolean
   setContentRef: (el: HTMLDivElement) => void
-  diffs: Accessor<{ additions: number; deletions: number }[] | undefined>
-  onReview: () => void
-  workspaceMoveEligible: boolean
-  onSummaryOpenChange: (open: boolean) => void
   anchor: (id: string) => string
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setScrollToEnd?: (fn: () => void) => void
@@ -156,19 +137,6 @@ function MessageTimelineView(
     if (!directory) return
     void data.location.vcs.sync({ directory }).catch(() => undefined)
   })
-  const [workspaceSuggestionDismissed, setWorkspaceSuggestionDismissed] = createSignal(false)
-  const [summaryOpen, setSummaryOpen] = createSignal(false)
-  const setSummary = (open: boolean) => {
-    setSummaryOpen(open)
-    props.onSummaryOpenChange(open)
-  }
-  const sessionDiffs = createMemo(props.diffs)
-  createEffect(
-    on(sessionID, () => {
-      setSummary(false)
-      setWorkspaceSuggestionDismissed(false)
-    }),
-  )
   const turnPadding = () => "px-4 md:px-5"
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const pinned = createMemo(() => props.pinned)
@@ -271,7 +239,6 @@ function MessageTimelineView(
 
   createEffect(() => {
     if (props.active !== false) return
-    setSummary(false)
     setTitle({ draft: "", editing: false, menuOpen: false, pendingRename: false })
   })
 
@@ -523,36 +490,18 @@ function MessageTimelineView(
                 </div>
               </div>
               <Show when={sessionID()} keyed>
-                {(id) => (
+                {(_id) => (
                   <div class="shrink-0 flex items-center gap-2">
                     {props.search}
-                    <SessionContextUsage placement="bottom" />
-                    <Show when={!parentID() && project()}>
-                      {(project) => (
-                        <SummaryPopover active={props.active} open={summaryOpen()} onOpenChange={setSummary}>
-                          <Suspense>
-                            <SessionSummaryPanel
-                              shown={summaryOpen()}
-                              project={project()}
-                              directory={sessionDirectory()}
-                              local={!workspaceSession()}
-                              branch={data.location.vcs.info({ directory: sdk().directory })?.branch.current}
-                              baseBranch={data.location.vcs.info({ directory: project().worktree })?.branch.current}
-                              diffs={sessionDiffs()}
-                              sessionID={id}
-                              moveEligible={props.workspaceMoveEligible}
-                              moveDismissed={workspaceSuggestionDismissed()}
-                              onMoveDismiss={() => setWorkspaceSuggestionDismissed(true)}
-                              onReview={() => {
-                                setSummary(false)
-                                props.onReview()
-                              }}
-                              backgroundTasks={props.background.tasks()}
-                            />
-                          </Suspense>
-                        </SummaryPopover>
-                      )}
-                    </Show>
+                    <ExtensionSlot
+                      at="session.header"
+                      input={{
+                        session: props.view,
+                        get active() {
+                          return props.active !== false
+                        },
+                      }}
+                    />
                     <SessionHeaderSpacer visible={props.reserveReviewToggle} />
                   </div>
                 )}

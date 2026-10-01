@@ -2,16 +2,6 @@ import { expect, test } from "bun:test"
 import { loadConfigFromFile, RendererConfigFactory } from "electron-vite"
 import { createServer } from "vite"
 import { fileURLToPath } from "node:url"
-import { pickerPlugin } from "./picker"
-
-test("injects a browser-loadable URL instead of a bare virtual module", () => {
-  const plugin = pickerPlugin()
-  const tag = plugin.transformIndexHtml.handler()[0]
-  expect(tag.attrs.src).toBe("/__vite_opencode_picker_client.js")
-  const id = plugin.resolveId(tag.attrs.src)
-  expect(id).toBeDefined()
-  expect(plugin.load(id!)).toContain("opencodePickerUi")
-})
 
 test.each([true, false])(
   "serves browser-loadable picker scripts with bundled dev = %s",

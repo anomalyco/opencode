@@ -34,22 +34,39 @@ export class UnknownAuthMethodError extends Schema.TaggedError<UnknownAuthMethod
   methodId: Schema.String,
 }) {}
 
+export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()("ACPInvalidRequestError", {
+  message: Schema.String,
+  field: Schema.optional(Schema.String),
+}) {}
+
 export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>()("ACPServiceFailureError", {
   safeMessage: Schema.String,
   service: Schema.optional(Schema.String),
   errorName: Schema.optional(Schema.String),
 }) {}
 
-export type Error =
-  | SessionNotFoundError
-  | SessionDirectoryMismatchError
-  | InvalidConfigOptionError
-  | InvalidModelError
-  | InvalidEffortError
-  | InvalidModeError
-  | AuthRequiredError
-  | UnknownAuthMethodError
-  | ServiceFailureError
+export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailableError>()(
+  "ACPServerUnavailableError",
+  {},
+) {}
+
+const Errors = Schema.Union([
+  SessionNotFoundError,
+  SessionDirectoryMismatchError,
+  InvalidConfigOptionError,
+  InvalidModelError,
+  InvalidEffortError,
+  InvalidModeError,
+  AuthRequiredError,
+  UnknownAuthMethodError,
+  InvalidRequestError,
+  ServiceFailureError,
+  ServerUnavailableError,
+])
+
+export type Error = typeof Errors.Type
+
+export const is = Schema.is(Errors)
 
 export function toRequestError(error: Error): RequestError {
   switch (error._tag) {
@@ -75,6 +92,8 @@ export function toRequestError(error: Error): RequestError {
       return RequestError.authRequired({}, "provider authentication required")
     case "ACPUnknownAuthMethodError":
       return RequestError.invalidParams({ methodId: error.methodId }, `unknown auth method: ${error.methodId}`)
+    case "ACPInvalidRequestError":
+      return RequestError.invalidParams(error.field ? { field: error.field } : {}, error.message)
     case "ACPServiceFailureError":
       return RequestError.internalError(
         {
@@ -83,6 +102,8 @@ export function toRequestError(error: Error): RequestError {
         },
         error.safeMessage,
       )
+    case "ACPServerUnavailableError":
+      return RequestError.internalError({ errorName: "ServerUnavailable" }, "OpenCode server is unavailable")
   }
   const exhaustive: never = error
   return exhaustive

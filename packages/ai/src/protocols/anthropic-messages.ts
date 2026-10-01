@@ -451,6 +451,9 @@ const AnthropicStreamDelta = Schema.Struct({
   signature: Schema.optional(Schema.String),
   stop_reason: optionalNull(Schema.String),
   stop_sequence: optionalNull(Schema.String),
+  stop_details: optionalNull(
+    Schema.Struct({ category: optionalNull(Schema.String), explanation: optionalNull(Schema.String) }),
+  ),
 })
 type AnthropicStreamDelta = Schema.Schema.Type<typeof AnthropicStreamDelta>
 const decodeAnthropicStreamDelta = Schema.decodeUnknownOption(AnthropicStreamDelta)
@@ -1417,10 +1420,14 @@ const onMessageDelta = (
       stopSequence === null || stopSequence === undefined
         ? state.pendingFinish?.providerMetadata
         : providerMetadata(state.providerMetadataKey, { stopSequence })
+    const category = event.delta?.stop_details?.category
+    const explanation = event.delta?.stop_details?.explanation
     return {
       reason: {
         normalized: mapFinishReason(stopReason),
         raw: stopReason,
+        ...(category ? { category } : {}),
+        ...(explanation ? { explanation } : {}),
       },
       providerMetadata: finishMetadata,
     }
