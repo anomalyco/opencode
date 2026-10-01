@@ -32,8 +32,8 @@ export namespace FSUtil {
     readonly start: string
     readonly stop?: string
     readonly mode?: "all" | "first"
-    /** Only match regular files (following symlinks). By default any existing path matches. */
-    readonly type?: "file"
+    /** Only match regular files or directories (following symlinks). By default any existing path matches. */
+    readonly type?: "file" | "directory"
   }
 
   export interface Interface extends FileSystem.FileSystem {
@@ -167,7 +167,13 @@ export namespace FSUtil {
         while (true) {
           for (const target of options.targets) {
             const search = join(current, target)
-            if (options.type === "file" ? yield* isFile(search) : yield* fs.exists(search)) {
+            const found =
+              options.type === "file"
+                ? yield* isFile(search)
+                : options.type === "directory"
+                  ? yield* isDir(search)
+                  : yield* fs.exists(search)
+            if (found) {
               result.push(search)
               if (options.mode === "first") return result
             }
