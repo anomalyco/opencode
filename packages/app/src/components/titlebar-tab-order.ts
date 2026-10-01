@@ -10,3 +10,14 @@ export function mergeVisibleTabOrder(all: string[], current: string[], next: str
   const reordered = next.values()
   return all.map((key) => (visible.has(key) ? (reordered.next().value ?? key) : key))
 }
+
+export function moveVisibleTab(all: string[], visible: string[], current: string | undefined, offset: -1 | 1) {
+  if (!current) return
+  const index = visible.indexOf(current)
+  const nextIndex = index + offset
+  if (index === -1 || nextIndex < 0 || nextIndex >= visible.length) return
+  const reordered = [...visible]
+  reordered.splice(index, 1)
+  reordered.splice(nextIndex, 0, current)
+  return mergeVisibleTabOrder(all, visible, reordered)
+}

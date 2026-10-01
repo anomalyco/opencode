@@ -53,6 +53,8 @@ export const dict = {
   "command.file.open": "Open file",
   "command.tab.close": "Close tab",
   "command.tab.reopenClosed": "Reopen closed tab",
+  "command.tab.moveLeft": "Move tab left",
+  "command.tab.moveRight": "Move tab right",
   "command.context.addSelection": "Add selection to context",
   "command.context.addSelection.description": "Add selected lines from the current file",
   "command.input.focus": "Focus input",
