@@ -87,11 +87,11 @@ export const dict = {
   "home.heroCopy":
     "Veja quais modelos estão vencendo em uso real, como a combinação está mudando e o que isso significa para o custo.",
   "home.summary":
-    "Em {{date}}, {{first}} liderou o uso no OpenCode Go e nos modelos gratuitos nos últimos 7 dias com {{firstTokens}} tokens, seguido por {{second}} ({{secondTokens}}) e {{third}} ({{thirdTokens}}).",
+    "Em {{date}}, {{first}} liderou o uso do OpenCode nos últimos 7 dias com {{firstTokens}} tokens, seguido por {{second}} ({{secondTokens}}) e {{third}} ({{thirdTokens}}).",
   "home.loadingTitle": "Carregando dados",
   "home.loadingDescription": "Lendo agregados de modelos.",
   "home.usageTitle": "Uso",
-  "home.topModelsDescription": "OpenCode Go e uso gratuito.",
+  "home.topModelsDescription": "Uso de modelos no OpenCode.",
   "home.noUsageTitle": "Sem dados de uso",
   "home.noUsageDescription": "Nenhuma linha de modelo correspondeu a este produto e intervalo.",
   "home.noLeaderboardTitle": "Sem dados de classificação",
@@ -134,7 +134,7 @@ export const dict = {
   "lab.description":
     "Compare modelos da {{lab}} usados no OpenCode, incluindo uso de tokens, ranking de modelos, janelas de contexto, datas de lançamento, custos e dados específicos de cada modelo.",
   "lab.summary":
-    "Os modelos da {{lab}} processaram {{tokens}} tokens no OpenCode Go e nos modelos gratuitos nos últimos dois meses, {{share}} de todo o uso. {{model}} foi o modelo da {{lab}} mais usado.",
+    "Os modelos da {{lab}} processaram {{tokens}} tokens no OpenCode nos últimos dois meses, {{share}} de todo o uso. {{model}} foi o modelo da {{lab}} mais usado.",
   "lab.loadingTitle": "Laboratório de modelos",
   "lab.loadingDescription": "Lendo disponibilidade de modelos e uso recente do OpenCode.",
   "lab.notFound": "Nenhum modelo correspondeu a este laboratório.",
@@ -163,9 +163,8 @@ export const dict = {
   "model.description":
     "Veja dados de uso de {{model}} no OpenCode, incluindo volume de tokens, ranking semanal, combinação de tokens, custos, taxa de cache, sessões, distribuição geográfica e modelos pares.",
   "model.summary":
-    "{{model}} ficou em #{{rank}} em tokens no OpenCode Go e nos modelos gratuitos na semana passada, com {{share}} dos tokens nos últimos dois meses.",
-  "model.summaryUnranked":
-    "{{model}} teve {{share}} dos tokens no OpenCode Go e nos modelos gratuitos nos últimos dois meses.",
+    "{{model}} ficou em #{{rank}} em tokens no OpenCode na semana passada, com {{share}} dos tokens nos últimos dois meses.",
+  "model.summaryUnranked": "{{model}} teve {{share}} dos tokens no OpenCode nos últimos dois meses.",
   "model.summaryPrice": "{{model}} custa {{input}} por 1M de tokens de entrada e {{output}} por 1M de tokens de saída.",
   "model.loadingTitle": "Dados do modelo",
   "model.loadingDescription": "Lendo agregados de modelos.",
@@ -242,9 +241,6 @@ export const dict = {
   "format.tokens": "tokens",
   "methodology.title": "Metodologia",
   "methodology.description": "Como estes dados são coletados.",
-  "methodology.sourceLabel": "Fonte",
-  "methodology.source":
-    "Requisições ao OpenCode Zen de assinantes do OpenCode Go e de modelos gratuitos. Requisições feitas com suas próprias chaves de API de provedores não são incluídas.",
   "methodology.updatesLabel": "Atualizações",
   "methodology.updates": "Dados agregados a cada hora. Dias e semanas usam UTC.",
   "methodology.tokensLabel": "Tokens",
@@ -253,10 +249,9 @@ export const dict = {
   "methodology.users": "Contagens aproximadas de usuários únicos e sessões do OpenCode.",
   "methodology.costLabel": "Custo",
   "methodology.cost":
-    "O custo da sessão é o custo médio do OpenCode Zen por sessão. Os preços de tokens são os preços de tabela do catálogo de modelos do OpenCode.",
+    "O custo da sessão é o custo médio por sessão do OpenCode. Os preços de tokens são os preços de tabela do catálogo de modelos do OpenCode.",
   "methodology.retentionLabel": "Retenção",
-  "methodology.retention":
-    "A parcela dos usuários do OpenCode Go de um modelo em uma semana que voltam a usá-lo na semana seguinte.",
+  "methodology.retention": "A parcela dos usuários de um modelo em uma semana que voltam a usá-lo na semana seguinte.",
   "methodology.citeLabel": "Citação",
   "methodology.cite":
     "Cite o OpenCode Data (opencode.ai/data) com o horário de atualização mostrado no topo da página.",

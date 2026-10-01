@@ -89,11 +89,11 @@ export const dict = {
   "home.heroCopy":
     "実際の利用でどのモデルが伸びているか、利用構成がどう変化しているか、それがコストに何を意味するかを確認できます。",
   "home.summary":
-    "{{date}}時点で、過去7日間のOpenCode Goと無料モデル全体の使用量では{{first}}が{{firstTokens}}トークンで首位となり、{{second}}（{{secondTokens}}）、{{third}}（{{thirdTokens}}）が続きました。",
+    "{{date}}時点で、過去7日間のOpenCode使用量では{{first}}が{{firstTokens}}トークンで首位となり、{{second}}（{{secondTokens}}）、{{third}}（{{thirdTokens}}）が続きました。",
   "home.loadingTitle": "データを読み込み中",
   "home.loadingDescription": "モデル集計を読み込んでいます。",
   "home.usageTitle": "使用量",
-  "home.topModelsDescription": "OpenCode Goと無料モデルの使用量。",
+  "home.topModelsDescription": "OpenCodeにおけるモデルの使用状況。",
   "home.noUsageTitle": "使用データがありません",
   "home.noUsageDescription": "このプロダクトと期間に一致するモデル行はありません。",
   "home.noLeaderboardTitle": "ランキングデータがありません",
@@ -136,7 +136,7 @@ export const dict = {
   "lab.description":
     "OpenCodeで使用されている{{lab}}モデルを、トークン使用量、モデルランキング、コンテキストウィンドウ、リリース日、コスト、モデル別データで比較できます。",
   "lab.summary":
-    "過去2か月間に、{{lab}}モデルはOpenCode Goと無料モデル全体で{{tokens}}トークンを処理し、全使用量の{{share}}を占めました。最も使用された{{lab}}モデルは{{model}}でした。",
+    "過去2か月間に、{{lab}}モデルはOpenCode全体で{{tokens}}トークンを処理し、全使用量の{{share}}を占めました。最も使用された{{lab}}モデルは{{model}}でした。",
   "lab.loadingTitle": "モデルラボ",
   "lab.loadingDescription": "モデルの利用可否と最近のOpenCode使用状況を読み込んでいます。",
   "lab.notFound": "このラボに一致するモデルはありません。",
@@ -164,8 +164,8 @@ export const dict = {
   "model.description":
     "{{model}}のOpenCode使用データを、トークン量、週間ランク、トークン構成、コスト、キャッシュ比率、セッション、地域別内訳、類似モデルまで確認できます。",
   "model.summary":
-    "{{model}}は先週、OpenCode Goと無料モデル全体のトークン数で#{{rank}}位となり、過去2か月間のトークンの{{share}}を占めました。",
-  "model.summaryUnranked": "{{model}}は過去2か月間、OpenCode Goと無料モデル全体のトークンの{{share}}を占めました。",
+    "{{model}}は先週、OpenCode全体のトークン数で#{{rank}}位となり、過去2か月間のトークンの{{share}}を占めました。",
+  "model.summaryUnranked": "{{model}}は過去2か月間、OpenCode全体のトークンの{{share}}を占めました。",
   "model.summaryPrice": "{{model}}の価格は、入力トークン1Mあたり{{input}}、出力トークン1Mあたり{{output}}です。",
   "model.loadingTitle": "モデルデータ",
   "model.loadingDescription": "モデル集計を読み込んでいます。",
@@ -242,9 +242,6 @@ export const dict = {
   "format.tokens": "トークン",
   "methodology.title": "集計方法",
   "methodology.description": "このデータの収集方法。",
-  "methodology.sourceLabel": "データソース",
-  "methodology.source":
-    "OpenCode Goの契約者と無料モデルによるOpenCode Zenへのリクエストが対象です。ご自身のプロバイダーAPIキーを使ったリクエストは含まれません。",
   "methodology.updatesLabel": "更新",
   "methodology.updates": "1時間ごとに集計されます。日・週の区切りはUTC基準です。",
   "methodology.tokensLabel": "トークン",
@@ -253,9 +250,9 @@ export const dict = {
   "methodology.users": "ユニークユーザー数とOpenCodeセッション数の概算値。",
   "methodology.costLabel": "コスト",
   "methodology.cost":
-    "セッションコストは、セッションあたりのOpenCode Zenの平均コストです。トークン価格は、OpenCodeモデルカタログに掲載されている定価です。",
+    "セッションコストは、OpenCodeセッションあたりの平均コストです。トークン価格は、OpenCodeモデルカタログに掲載されている定価です。",
   "methodology.retentionLabel": "継続率",
-  "methodology.retention": "ある週にモデルを使用したOpenCode Goユーザーのうち、翌週も使用したユーザーの割合。",
+  "methodology.retention": "ある週にモデルを使用したユーザーのうち、翌週も使用したユーザーの割合。",
   "methodology.citeLabel": "引用",
   "methodology.cite":
     "引用する際は、OpenCode Data（opencode.ai/data）とページ上部に表示されている更新日時を記載してください。",

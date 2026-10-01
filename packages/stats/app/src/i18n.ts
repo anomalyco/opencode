@@ -105,11 +105,11 @@ const en = {
   "home.justNow": "just now",
   "home.heroCopy": "See which models are winning real usage, how the mix is shifting, and what that means for cost.",
   "home.summary":
-    "As of {{date}}, {{first}} led usage across OpenCode Go and free models over the past 7 days with {{firstTokens}} tokens, followed by {{second}} ({{secondTokens}}) and {{third}} ({{thirdTokens}}).",
+    "As of {{date}}, {{first}} led OpenCode usage over the past 7 days with {{firstTokens}} tokens, followed by {{second}} ({{secondTokens}}) and {{third}} ({{thirdTokens}}).",
   "home.loadingTitle": "Loading data",
   "home.loadingDescription": "Reading model aggregates.",
   "home.usageTitle": "Usage",
-  "home.topModelsDescription": "OpenCode Go & free model usage.",
+  "home.topModelsDescription": "Usage of models across OpenCode.",
   "home.noUsageTitle": "No usage data",
   "home.noUsageDescription": "No model rows matched this product and range.",
   "home.noLeaderboardTitle": "No leaderboard data",
@@ -152,7 +152,7 @@ const en = {
   "lab.description":
     "Compare {{lab}} models used in OpenCode, including token usage, model rankings, context windows, release dates, costs, and model-specific data.",
   "lab.summary":
-    "{{lab}} models processed {{tokens}} tokens across OpenCode Go and free models over the past two months, {{share}} of all usage. {{model}} was the most-used {{lab}} model.",
+    "{{lab}} models processed {{tokens}} tokens across OpenCode over the past two months, {{share}} of all usage. {{model}} was the most-used {{lab}} model.",
   "lab.loadingTitle": "Model Lab",
   "lab.loadingDescription": "Reading model availability and recent OpenCode usage.",
   "lab.notFound": "No models matched this lab.",
@@ -180,9 +180,8 @@ const en = {
   "model.description":
     "View {{model}} OpenCode usage data, including token volume, weekly rank, token mix, costs, cache ratio, sessions, geo breakdowns, and peer models.",
   "model.summary":
-    "{{model}} ranked #{{rank}} by tokens across OpenCode Go and free models last week, with {{share}} of tokens over the past two months.",
-  "model.summaryUnranked":
-    "{{model}} had {{share}} of tokens across OpenCode Go and free models over the past two months.",
+    "{{model}} ranked #{{rank}} by tokens across OpenCode last week, with {{share}} of tokens over the past two months.",
+  "model.summaryUnranked": "{{model}} had {{share}} of tokens across OpenCode over the past two months.",
   "model.summaryPrice": "{{model}} costs {{input}} per 1M input tokens and {{output}} per 1M output tokens.",
   "model.loadingTitle": "Model Data",
   "model.loadingDescription": "Reading model aggregates.",
@@ -259,9 +258,6 @@ const en = {
   "format.tokens": "tokens",
   "methodology.title": "Methodology",
   "methodology.description": "How this data is collected.",
-  "methodology.sourceLabel": "Source",
-  "methodology.source":
-    "OpenCode Zen requests from OpenCode Go subscribers and free models. Requests made with your own provider API keys aren't included.",
   "methodology.updatesLabel": "Updates",
   "methodology.updates": "Aggregated every hour. Days and weeks use UTC.",
   "methodology.tokensLabel": "Tokens",
@@ -270,9 +266,9 @@ const en = {
   "methodology.users": "Approximate counts of distinct users and OpenCode sessions.",
   "methodology.costLabel": "Cost",
   "methodology.cost":
-    "Session cost is the average OpenCode Zen cost per session. Token prices are list prices from the OpenCode model catalog.",
+    "Session cost is the average cost per OpenCode session. Token prices are list prices from the OpenCode model catalog.",
   "methodology.retentionLabel": "Retention",
-  "methodology.retention": "The share of a model's OpenCode Go users in one week who use it again the next week.",
+  "methodology.retention": "The share of a model's users in one week who use it again the next week.",
   "methodology.citeLabel": "Citation",
   "methodology.cite": "Cite OpenCode Data (opencode.ai/data) with the update time shown at the top of the page.",
 } as const

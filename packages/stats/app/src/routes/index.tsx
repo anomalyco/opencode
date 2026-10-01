@@ -130,7 +130,6 @@ export default function StatsHome() {
                 name: i18n.t("app.title"),
                 description: homeSummary(language.locale(), stats()) ?? i18n.t("app.description"),
                 url: statsHomeUrl,
-                technique: i18n.t("methodology.source"),
                 localizedUrl: (path) => localizedUrl(language.locale(), path),
               })}
             />
@@ -1810,7 +1809,6 @@ function homeStructuredData(
     name: string
     description: string
     url: string
-    technique: string
     localizedUrl: (path: string) => string
   },
 ) {
@@ -1827,7 +1825,6 @@ function homeStructuredData(
         creator: openCodeOrganization,
         publisher: openCodeOrganization,
         isAccessibleForFree: true,
-        measurementTechnique: page.technique,
         variableMeasured: ["Tokens", "Unique users", "Sessions", "Cost per session", "Cache ratio", "Weekly retention"],
         ...(data.updatedAt ? { dateModified: data.updatedAt } : {}),
         ...(first && last

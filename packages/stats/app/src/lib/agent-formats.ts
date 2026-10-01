@@ -35,7 +35,6 @@ export function homeMarkdown(data: HomePageData) {
       ["Page", pageUrl("/data/")],
       ["JSON", jsonUrl("/data/")],
       ["Updated", data.updatedAt],
-      ["Coverage", translate("en", "methodology.source")],
     ]),
     "## Top models: past 7 days",
     table(
@@ -130,7 +129,6 @@ export function homeJson(data: HomePageData) {
   return {
     page: pageUrl("/data/"),
     updatedAt: data.updatedAt,
-    coverage: translate("en", "methodology.source"),
     summary: homeSummary("en", data) ?? null,
     leaderboard: {
       pastWeek: data.leaderboard.weekly.map((entry) => ({ ...leaderboardJson(entry), changePercent: entry.change })),
@@ -197,7 +195,6 @@ export function labMarkdown(data: LabPageData) {
       ["Page", pageUrl(path)],
       ["JSON", jsonUrl(path)],
       ["Updated", stats?.updatedAt],
-      ["Coverage", translate("en", "methodology.source")],
       ["Tokens processed: past 2 months", stats && formatTokens(stats.totals.tokens)],
       ["Share of all usage", stats && formatPercent(stats.tokenShare)],
     ]),
@@ -239,7 +236,6 @@ export function labJson(data: LabPageData) {
   return {
     page: pageUrl(`/data/${lab.id}`),
     updatedAt: stats?.updatedAt ?? null,
-    coverage: translate("en", "methodology.source"),
     summary: labSummary("en", data) ?? null,
     lab: { id: lab.id, name: lab.name, description: lab.description ?? null },
     usage: stats && {
@@ -284,7 +280,6 @@ export function modelMarkdown(data: ModelPageData, name: string) {
       ["Model ID", entry?.id ?? stats?.model],
       ["Lab", entry ? formatCatalogLabName(entry.lab) : stats?.author],
       ["Updated", stats?.updatedAt],
-      ["Coverage", translate("en", "methodology.source")],
     ]),
     entry && "## Model facts",
     entry && table(["Fact", "Value"], modelFacts(entry)),
@@ -375,7 +370,6 @@ export function modelJson(data: ModelPageData, name: string) {
   return {
     page: pageUrl(data.path),
     updatedAt: stats?.updatedAt ?? null,
-    coverage: translate("en", "methodology.source"),
     summary: modelSummary("en", data, name) ?? null,
     model: {
       id: entry?.id ?? stats?.model ?? null,
@@ -455,7 +449,6 @@ export function compareMarkdown(data: ComparePageData, params: string[]) {
     facts([
       ["Page", pageUrl(comparePath(data, params))],
       ["Updated", updatedAt],
-      ["Coverage", translate("en", "methodology.source")],
     ]),
     table(
       ["", ...names],
@@ -498,7 +491,6 @@ export function llmsTxt(home: HomePageData, catalog: ModelCatalog) {
     "> AI model usage rankings, token prices, session costs, and market share from OpenCode, updated hourly.",
     homeSummary("en", home),
     facts([
-      ["Coverage", translate("en", "methodology.source")],
       ["Updates", translate("en", "methodology.updates")],
       ["Updated", home.updatedAt],
     ]),

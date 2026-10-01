@@ -88,11 +88,11 @@ export const dict = {
   "home.justNow": "刚刚",
   "home.heroCopy": "查看哪些模型正在赢得真实使用量、使用组合如何变化，以及这对成本意味着什么。",
   "home.summary":
-    "截至 {{date}}，过去 7 天内 {{first}} 以 {{firstTokens}} token 领跑 OpenCode Go 和免费模型的用量，其次是 {{second}}（{{secondTokens}}）和 {{third}}（{{thirdTokens}}）。",
+    "截至 {{date}}，过去 7 天内 {{first}} 以 {{firstTokens}} token 领跑 OpenCode 使用量，其次是 {{second}}（{{secondTokens}}）和 {{third}}（{{thirdTokens}}）。",
   "home.loadingTitle": "正在加载数据",
   "home.loadingDescription": "正在读取模型汇总。",
   "home.usageTitle": "用量",
-  "home.topModelsDescription": "OpenCode Go 与免费模型用量。",
+  "home.topModelsDescription": "OpenCode 中各模型的使用情况。",
   "home.noUsageTitle": "无使用数据",
   "home.noUsageDescription": "没有符合该产品和时间范围的模型行。",
   "home.noLeaderboardTitle": "无排行榜数据",
@@ -135,7 +135,7 @@ export const dict = {
   "lab.description":
     "比较在 OpenCode 中使用的 {{lab}} 模型，包括 token 用量、模型排名、上下文窗口、发布日期、成本和模型专属数据。",
   "lab.summary":
-    "过去两个月，{{lab}} 模型在 OpenCode Go 和免费模型中共处理 {{tokens}} token，占全部用量的 {{share}}。{{model}} 是使用最多的 {{lab}} 模型。",
+    "过去两个月，{{lab}} 模型在 OpenCode 中共处理 {{tokens}} token，占全部用量的 {{share}}。{{model}} 是使用最多的 {{lab}} 模型。",
   "lab.loadingTitle": "模型实验室",
   "lab.loadingDescription": "正在读取模型可用性和近期 OpenCode 使用情况。",
   "lab.notFound": "没有匹配此实验室的模型。",
@@ -162,9 +162,8 @@ export const dict = {
   "model.title": "{{model}} 使用量、成本与排名 | OpenCode 数据",
   "model.description":
     "查看 {{model}} 的 OpenCode 使用数据，包括 token 用量、周排名、token 组合、成本、缓存比例、会话、地理分布和同类模型。",
-  "model.summary":
-    "上周 {{model}} 在 OpenCode Go 和免费模型中按 token 用量排名 #{{rank}}，过去两个月的 token 份额为 {{share}}。",
-  "model.summaryUnranked": "过去两个月，{{model}} 在 OpenCode Go 和免费模型中的 token 份额为 {{share}}。",
+  "model.summary": "上周 {{model}} 在 OpenCode 中按 token 用量排名 #{{rank}}，过去两个月的 token 份额为 {{share}}。",
+  "model.summaryUnranked": "过去两个月，{{model}} 在 OpenCode 中的 token 份额为 {{share}}。",
   "model.summaryPrice": "{{model}} 的价格为每 1M 输入 token {{input}}，每 1M 输出 token {{output}}。",
   "model.loadingTitle": "模型数据",
   "model.loadingDescription": "正在读取模型汇总。",
@@ -240,9 +239,6 @@ export const dict = {
   "format.tokens": "token",
   "methodology.title": "方法说明",
   "methodology.description": "这些数据的收集方式。",
-  "methodology.sourceLabel": "数据来源",
-  "methodology.source":
-    "来自 OpenCode Go 订阅用户和免费模型的 OpenCode Zen 请求。不包括使用你自己的提供商 API 密钥发出的请求。",
   "methodology.updatesLabel": "更新",
   "methodology.updates": "每小时汇总一次。日和周均按 UTC 划分。",
   "methodology.tokensLabel": "Token",
@@ -250,9 +246,9 @@ export const dict = {
   "methodology.usersLabel": "用户和会话",
   "methodology.users": "独立用户数和 OpenCode 会话数的近似值。",
   "methodology.costLabel": "成本",
-  "methodology.cost": "会话成本是每次会话的平均 OpenCode Zen 成本。Token 价格为 OpenCode 模型目录中的标价。",
+  "methodology.cost": "会话成本是每次 OpenCode 会话的平均成本。Token 价格为 OpenCode 模型目录中的标价。",
   "methodology.retentionLabel": "留存率",
-  "methodology.retention": "某一周使用某模型的 OpenCode Go 用户中，下一周再次使用该模型的用户占比。",
+  "methodology.retention": "某一周使用某模型的用户中，下一周再次使用该模型的用户占比。",
   "methodology.citeLabel": "引用",
   "methodology.cite": "引用时请注明 OpenCode Data（opencode.ai/data）以及页面顶部显示的更新时间。",
 } satisfies Record<Key, string>

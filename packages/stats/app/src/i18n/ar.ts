@@ -86,11 +86,11 @@ export const dict = {
   "home.justNow": "الآن للتو",
   "home.heroCopy": "تعرّف على النماذج التي تحقق استخدامًا فعليًا أكبر، وكيف يتغير المزيج، وما يعنيه ذلك للتكلفة.",
   "home.summary":
-    "حتى {{date}}، تصدّر {{first}} الاستخدام عبر OpenCode Go والنماذج المجانية خلال الأيام السبعة الماضية بـ {{firstTokens}} رمز، يليه {{second}} ({{secondTokens}}) ثم {{third}} ({{thirdTokens}}).",
+    "حتى {{date}}، تصدّر {{first}} استخدام OpenCode خلال الأيام السبعة الماضية بـ {{firstTokens}} رمز، يليه {{second}} ({{secondTokens}}) ثم {{third}} ({{thirdTokens}}).",
   "home.loadingTitle": "تحميل البيانات",
   "home.loadingDescription": "قراءة تجميعات النماذج.",
   "home.usageTitle": "الاستخدام",
-  "home.topModelsDescription": "استخدام OpenCode Go والمجاني.",
+  "home.topModelsDescription": "استخدام النماذج عبر OpenCode.",
   "home.noUsageTitle": "لا توجد بيانات استخدام",
   "home.noUsageDescription": "لم تطابق أي صفوف نماذج هذا المنتج وهذا النطاق.",
   "home.noLeaderboardTitle": "لا توجد بيانات ترتيب",
@@ -133,7 +133,7 @@ export const dict = {
   "lab.description":
     "قارن نماذج {{lab}} المستخدمة في OpenCode، بما في ذلك استخدام الرموز، وترتيب النماذج، ونوافذ السياق، وتواريخ الإصدار، والتكاليف، والبيانات الخاصة بكل نموذج.",
   "lab.summary":
-    "خلال الشهرين الماضيين، عالجت نماذج {{lab}} ما مجموعه {{tokens}} رمز عبر OpenCode Go والنماذج المجانية، أي {{share}} من إجمالي الاستخدام. وكان {{model}} أكثر نماذج {{lab}} استخدامًا.",
+    "خلال الشهرين الماضيين، عالجت نماذج {{lab}} ما مجموعه {{tokens}} رمز عبر OpenCode، أي {{share}} من إجمالي الاستخدام. وكان {{model}} أكثر نماذج {{lab}} استخدامًا.",
   "lab.loadingTitle": "مختبر النماذج",
   "lab.loadingDescription": "قراءة توفر النماذج واستخدام OpenCode الأخير.",
   "lab.notFound": "لم تطابق أي نماذج هذا المختبر.",
@@ -161,9 +161,8 @@ export const dict = {
   "model.description":
     "اعرض بيانات استخدام {{model}} في OpenCode، بما في ذلك حجم الرموز، والترتيب الأسبوعي، ومزيج الرموز، والتكاليف، ونسبة التخزين المؤقت، والجلسات، والتوزيع الجغرافي، والنماذج المشابهة.",
   "model.summary":
-    "احتل {{model}} المرتبة #{{rank}} حسب الرموز عبر OpenCode Go والنماذج المجانية الأسبوع الماضي، بحصة {{share}} من الرموز خلال الشهرين الماضيين.",
-  "model.summaryUnranked":
-    "استحوذ {{model}} على {{share}} من الرموز عبر OpenCode Go والنماذج المجانية خلال الشهرين الماضيين.",
+    "احتل {{model}} المرتبة #{{rank}} حسب الرموز عبر OpenCode الأسبوع الماضي، بحصة {{share}} من الرموز خلال الشهرين الماضيين.",
+  "model.summaryUnranked": "استحوذ {{model}} على {{share}} من الرموز عبر OpenCode خلال الشهرين الماضيين.",
   "model.summaryPrice": "سعر {{model}} هو {{input}} لكل 1M رمز إدخال و{{output}} لكل 1M رمز إخراج.",
   "model.loadingTitle": "بيانات النموذج",
   "model.loadingDescription": "قراءة تجميعات النماذج.",
@@ -239,9 +238,6 @@ export const dict = {
   "format.tokens": "رموز",
   "methodology.title": "المنهجية",
   "methodology.description": "كيف تُجمع هذه البيانات.",
-  "methodology.sourceLabel": "المصدر",
-  "methodology.source":
-    "طلبات OpenCode Zen من مشتركي OpenCode Go والنماذج المجانية. لا تشمل البيانات الطلبات المُرسلة بمفاتيح API الخاصة بك من الموفرين.",
   "methodology.updatesLabel": "التحديثات",
   "methodology.updates": "تُجمَّع البيانات كل ساعة. تُحسب الأيام والأسابيع بتوقيت UTC.",
   "methodology.tokensLabel": "الرموز",
@@ -250,9 +246,9 @@ export const dict = {
   "methodology.users": "أعداد تقريبية للمستخدمين الفريدين وجلسات OpenCode.",
   "methodology.costLabel": "التكلفة",
   "methodology.cost":
-    "تكلفة الجلسة هي متوسط تكلفة OpenCode Zen لكل جلسة. أسعار الرموز هي الأسعار المعلنة في كتالوج نماذج OpenCode.",
+    "تكلفة الجلسة هي متوسط التكلفة لكل جلسة OpenCode. أسعار الرموز هي الأسعار المعلنة في كتالوج نماذج OpenCode.",
   "methodology.retentionLabel": "الاحتفاظ بالمستخدمين",
-  "methodology.retention": "حصة مستخدمي OpenCode Go للنموذج في أسبوع ما الذين يستخدمونه مجددًا في الأسبوع التالي.",
+  "methodology.retention": "حصة مستخدمي النموذج في أسبوع ما الذين يستخدمونه مجددًا في الأسبوع التالي.",
   "methodology.citeLabel": "الاستشهاد",
   "methodology.cite": "استشهد بـ OpenCode Data (opencode.ai/data) مع ذكر وقت التحديث المعروض أعلى الصفحة.",
 } as const

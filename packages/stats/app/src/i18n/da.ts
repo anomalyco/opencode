@@ -87,11 +87,11 @@ export const dict = {
   "home.heroCopy":
     "Se hvilke modeller der vinder reel brug, hvordan mixet skifter, og hvad det betyder for omkostningerne.",
   "home.summary":
-    "Pr. {{date}} lå {{first}} øverst i brugen på tværs af OpenCode Go og gratis modeller de sidste 7 dage med {{firstTokens}} tokens, efterfulgt af {{second}} ({{secondTokens}}) og {{third}} ({{thirdTokens}}).",
+    "Pr. {{date}} lå {{first}} øverst i OpenCode-brugen de sidste 7 dage med {{firstTokens}} tokens, efterfulgt af {{second}} ({{secondTokens}}) og {{third}} ({{thirdTokens}}).",
   "home.loadingTitle": "Indlæser data",
   "home.loadingDescription": "Læser modelaggregater.",
   "home.usageTitle": "Brug",
-  "home.topModelsDescription": "Brug i OpenCode Go og gratis modeller.",
+  "home.topModelsDescription": "Brug af modeller på tværs af OpenCode.",
   "home.noUsageTitle": "Ingen brugsdata",
   "home.noUsageDescription": "Ingen modelrækker matchede dette produkt og interval.",
   "home.noLeaderboardTitle": "Ingen ranglistedata",
@@ -134,7 +134,7 @@ export const dict = {
   "lab.description":
     "Sammenlign {{lab}}-modeller brugt i OpenCode, inklusive tokenbrug, modelranglister, kontekstvinduer, udgivelsesdatoer, omkostninger og modelspecifikke data.",
   "lab.summary":
-    "{{lab}}-modeller behandlede {{tokens}} tokens på tværs af OpenCode Go og gratis modeller de sidste to måneder, svarende til {{share}} af den samlede brug. {{model}} var den mest brugte {{lab}}-model.",
+    "{{lab}}-modeller behandlede {{tokens}} tokens på tværs af OpenCode de sidste to måneder, svarende til {{share}} af den samlede brug. {{model}} var den mest brugte {{lab}}-model.",
   "lab.loadingTitle": "Modellab",
   "lab.loadingDescription": "Læser modeltilgængelighed og seneste OpenCode-brug.",
   "lab.notFound": "Ingen modeller matchede dette lab.",
@@ -162,9 +162,8 @@ export const dict = {
   "model.description":
     "Se OpenCode-brugsdata for {{model}}, inklusive tokenvolumen, ugentlig rang, tokenmix, omkostninger, cacheandel, sessioner, geografiske opdelinger og lignende modeller.",
   "model.summary":
-    "{{model}} blev rangeret #{{rank}} efter tokens på tværs af OpenCode Go og gratis modeller i sidste uge og havde en tokenandel på {{share}} over de sidste to måneder.",
-  "model.summaryUnranked":
-    "{{model}} havde en tokenandel på {{share}} på tværs af OpenCode Go og gratis modeller over de sidste to måneder.",
+    "{{model}} blev rangeret #{{rank}} efter tokens på tværs af OpenCode i sidste uge og havde en tokenandel på {{share}} over de sidste to måneder.",
+  "model.summaryUnranked": "{{model}} havde en tokenandel på {{share}} på tværs af OpenCode over de sidste to måneder.",
   "model.summaryPrice": "{{model}} koster {{input}} pr. 1M inputtokens og {{output}} pr. 1M outputtokens.",
   "model.loadingTitle": "Modeldata",
   "model.loadingDescription": "Læser modelaggregater.",
@@ -240,9 +239,6 @@ export const dict = {
   "format.tokens": "tokens",
   "methodology.title": "Metode",
   "methodology.description": "Sådan indsamles disse data.",
-  "methodology.sourceLabel": "Kilde",
-  "methodology.source":
-    "OpenCode Zen-forespørgsler fra OpenCode Go-abonnenter og gratis modeller. Forespørgsler foretaget med dine egne API-nøgler fra udbydere er ikke inkluderet.",
   "methodology.updatesLabel": "Opdateringer",
   "methodology.updates": "Aggregeres hver time. Dage og uger følger UTC.",
   "methodology.tokensLabel": "Tokens",
@@ -251,9 +247,9 @@ export const dict = {
   "methodology.users": "Omtrentligt antal unikke brugere og OpenCode-sessioner.",
   "methodology.costLabel": "Omkostning",
   "methodology.cost":
-    "Sessionsomkostning er den gennemsnitlige OpenCode Zen-omkostning pr. session. Tokenpriser er listepriser fra OpenCode-modelkataloget.",
+    "Sessionsomkostning er den gennemsnitlige omkostning pr. OpenCode-session. Tokenpriser er listepriser fra OpenCode-modelkataloget.",
   "methodology.retentionLabel": "Fastholdelse",
-  "methodology.retention": "Andelen af en models OpenCode Go-brugere i én uge, der bruger den igen ugen efter.",
+  "methodology.retention": "Andelen af en models brugere i én uge, der bruger den igen ugen efter.",
   "methodology.citeLabel": "Kildehenvisning",
   "methodology.cite":
     "Angiv OpenCode Data (opencode.ai/data) som kilde sammen med opdateringstidspunktet, der vises øverst på siden.",

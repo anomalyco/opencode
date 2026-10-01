@@ -1,7 +1,6 @@
 import type { Key } from "../i18n"
 
 export const methodologyItems = [
-  ["methodology.sourceLabel", "methodology.source"],
   ["methodology.updatesLabel", "methodology.updates"],
   ["methodology.tokensLabel", "methodology.tokens"],
   ["methodology.usersLabel", "methodology.users"],

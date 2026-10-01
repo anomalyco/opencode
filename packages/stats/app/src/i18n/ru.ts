@@ -87,11 +87,11 @@ export const dict = {
   "home.heroCopy":
     "Посмотрите, какие модели выигрывают в реальном использовании, как меняется состав и что это значит для стоимости.",
   "home.summary":
-    "По состоянию на {{date}} за последние 7 дней по использованию в OpenCode Go и бесплатных моделях лидировала модель {{first}} с {{firstTokens}} токенов, за ней следуют {{second}} ({{secondTokens}}) и {{third}} ({{thirdTokens}}).",
+    "По состоянию на {{date}} за последние 7 дней по использованию OpenCode лидировала модель {{first}} с {{firstTokens}} токенов, за ней следуют {{second}} ({{secondTokens}}) и {{third}} ({{thirdTokens}}).",
   "home.loadingTitle": "Загрузка данных",
   "home.loadingDescription": "Читаем агрегаты моделей.",
   "home.usageTitle": "Использование",
-  "home.topModelsDescription": "OpenCode Go и бесплатные модели.",
+  "home.topModelsDescription": "Использование моделей в OpenCode.",
   "home.noUsageTitle": "Нет данных использования",
   "home.noUsageDescription": "Нет строк моделей для этого продукта и диапазона.",
   "home.noLeaderboardTitle": "Нет данных рейтинга",
@@ -134,7 +134,7 @@ export const dict = {
   "lab.description":
     "Сравните модели {{lab}}, используемые в OpenCode: использование токенов, рейтинги моделей, контекстные окна, даты релизов, стоимость и данные конкретных моделей.",
   "lab.summary":
-    "За последние два месяца модели {{lab}} обработали {{tokens}} токенов в OpenCode Go и бесплатных моделях — {{share}} всего использования. Самой используемой моделью {{lab}} была {{model}}.",
+    "За последние два месяца модели {{lab}} обработали {{tokens}} токенов в OpenCode — {{share}} всего использования. Самой используемой моделью {{lab}} была {{model}}.",
   "lab.loadingTitle": "Лаборатория моделей",
   "lab.loadingDescription": "Читаем доступность моделей и недавнее использование OpenCode.",
   "lab.notFound": "Нет моделей, соответствующих этой лаборатории.",
@@ -163,9 +163,8 @@ export const dict = {
   "model.description":
     "Посмотрите данные использования {{model}} в OpenCode: объем токенов, недельный ранг, состав токенов, стоимость, долю кэша, сеансы, географические разрезы и похожие модели.",
   "model.summary":
-    "На прошлой неделе модель {{model}} заняла #{{rank}} место по токенам в OpenCode Go и бесплатных моделях; за последние два месяца на нее пришлось {{share}} токенов.",
-  "model.summaryUnranked":
-    "За последние два месяца на модель {{model}} пришлось {{share}} токенов в OpenCode Go и бесплатных моделях.",
+    "На прошлой неделе модель {{model}} заняла #{{rank}} место по токенам в OpenCode; за последние два месяца на нее пришлось {{share}} токенов.",
+  "model.summaryUnranked": "За последние два месяца на модель {{model}} пришлось {{share}} токенов в OpenCode.",
   "model.summaryPrice": "{{model}} стоит {{input}} за 1M входных токенов и {{output}} за 1M выходных токенов.",
   "model.loadingTitle": "Данные модели",
   "model.loadingDescription": "Читаем агрегаты модели.",
@@ -242,9 +241,6 @@ export const dict = {
   "format.tokens": "токены",
   "methodology.title": "Методология",
   "methodology.description": "Как собираются эти данные.",
-  "methodology.sourceLabel": "Источник",
-  "methodology.source":
-    "Запросы к OpenCode Zen от подписчиков OpenCode Go и к бесплатным моделям. Запросы с вашими собственными API-ключами провайдеров не учитываются.",
   "methodology.updatesLabel": "Обновления",
   "methodology.updates": "Данные агрегируются каждый час. Дни и недели считаются по UTC.",
   "methodology.tokensLabel": "Токены",
@@ -253,10 +249,9 @@ export const dict = {
   "methodology.users": "Приблизительное число уникальных пользователей и сеансов OpenCode.",
   "methodology.costLabel": "Стоимость",
   "methodology.cost":
-    "Стоимость сеанса — средняя стоимость OpenCode Zen за сеанс. Цены токенов — официальные цены из каталога моделей OpenCode.",
+    "Стоимость сеанса — средняя стоимость за сеанс OpenCode. Цены токенов — официальные цены из каталога моделей OpenCode.",
   "methodology.retentionLabel": "Удержание",
-  "methodology.retention":
-    "Доля пользователей OpenCode Go, работавших с моделью за неделю, которые снова используют ее на следующей неделе.",
+  "methodology.retention": "Доля пользователей модели за неделю, которые снова используют ее на следующей неделе.",
   "methodology.citeLabel": "Цитирование",
   "methodology.cite":
     "При цитировании указывайте OpenCode Data (opencode.ai/data) и время обновления, показанное вверху страницы.",
