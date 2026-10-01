@@ -7,6 +7,10 @@ on:
     branches: [dev, v2]
   workflow_dispatch:
 
+concurrency:
+  group: ${{ case(github.ref == 'refs/heads/dev', format('{0}-{1}', github.workflow, github.run_id), format('{0}-{1}', github.workflow, github.event.pull_request.number || github.ref)) }}
+  cancel-in-progress: true
+
 jobs:
   check:
     name: typecheck
