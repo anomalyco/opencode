@@ -20,6 +20,7 @@ const AUTO: CachePolicyObject = {
   messages: { tail: 1 },
 }
 
+const MESSAGE_PREFIX: CachePolicyObject = { system: true, messages: { tail: 1 } }
 const NONE: CachePolicyObject = {}
 const BREAKPOINT_CAP = 4
 
@@ -28,8 +29,8 @@ const BREAKPOINT_CAP = 4
 //   - "auto"      → tools + first/last system + final message boundary.
 //   - "none"      → no auto placement; manual `CacheHint`s still flow.
 //   - object form → exactly what the caller asked for.
-const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
-  if (policy === undefined || policy === "auto") return AUTO
+const resolve = (policy: CachePolicy | undefined, automatic = AUTO): CachePolicyObject => {
+  if (policy === undefined || policy === "auto") return automatic
   if (policy === "none") return NONE
   return policy
 }
@@ -38,6 +39,7 @@ const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
 // prefix caching, Gemini's implicit + out-of-band CachedContent). Skip the
 // whole policy pass for these — emitting hints would be harmless but pointless.
 const RESPECTS_INLINE_HINTS = new Set([
+  "alibaba-chat",
   "alibaba-messages",
   "anthropic-messages",
   "anthropic-compatible-messages",
@@ -59,7 +61,7 @@ const openRouterPolicy = (modelID: string): CachePolicyObject => {
   // `~anthropic/claude-sonnet-latest` style IDs are OpenRouter aliases for the latest model in a family.
   const id = modelID.replace(/^~/, "")
   if (id.startsWith("anthropic/")) return AUTO
-  if (id.startsWith("qwen/")) return { system: true, messages: { tail: 1 } }
+  if (id.startsWith("qwen/")) return MESSAGE_PREFIX
   return NONE
 }
 
@@ -153,8 +155,8 @@ const markMessages = (
   return next
 }
 
-const countHints = (request: LLMRequest) =>
-  countToolHints(request.tools) +
+const countHints = (request: LLMRequest, tools = true) =>
+  (tools ? countToolHints(request.tools) : 0) +
   request.system.reduce((count, part) => count + (part.cache === undefined ? 0 : 1), 0) +
   request.messages.reduce(
     (count, message) =>
@@ -168,15 +170,16 @@ const countHints = (request: LLMRequest) =>
 
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
-  const policy =
-    request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto")
-      ? openRouterPolicy(request.model.id)
-      : resolve(request.cache)
+  const cacheTools = request.model.route.id !== "alibaba-chat"
+  const policy = resolve(
+    request.cache,
+    request.model.route.id === "openrouter" ? openRouterPolicy(request.model.id) : cacheTools ? AUTO : MESSAGE_PREFIX,
+  )
   if (!policy.tools && !policy.system && !policy.messages) return request
 
   const hint = makeHint(policy.ttlSeconds)
-  const budget = { remaining: Math.max(0, BREAKPOINT_CAP - countHints(request)) }
-  const tools = policy.tools ? markLastTool(request.tools, hint, budget) : request.tools
+  const budget = { remaining: Math.max(0, BREAKPOINT_CAP - countHints(request, cacheTools)) }
+  const tools = policy.tools && cacheTools ? markLastTool(request.tools, hint, budget) : request.tools
   const system = policy.system ? markSystemBoundaries(request.system, hint, budget) : request.system
   const messages = policy.messages ? markMessages(request.messages, policy.messages, hint, budget) : request.messages
 

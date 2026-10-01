@@ -17,6 +17,8 @@ const record = (api: "chat" | "messages" | "responses") =>
   })
 
 for (const api of ["chat", "messages", "responses"] as const) {
+  // Preserve the request shape of Chat recordings made before explicit caching was enabled.
+  const cache = api === "chat" ? "none" : undefined
   const recorded = record(api)
   describe(`Alibaba ${api} capabilities`, () => {
     for (const enabled of [false, true]) {
@@ -27,6 +29,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
           Effect.gen(function* () {
             const request = LLM.request({
               model: alibaba[api]("qwen3.7-plus"),
+              cache,
               providerOptions:
                 api === "messages"
                   ? { thinking: { type: enabled ? "enabled" : "disabled", ...(enabled ? { budgetTokens: 1024 } : {}) } }
@@ -61,6 +64,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
           const response = yield* LLMClient.generate(
             LLM.request({
               model: alibaba[api]("qwen3.8-flash"),
+              cache,
               providerOptions: api === "messages" ? { thinking: { type: "disabled" } } : { enableThinking: false },
               messages: [
                 Message.user([
@@ -84,6 +88,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
           const response = yield* LLMClient.generate(
             LLM.request({
               model: alibaba[api]("qwen3.8-max"),
+              cache,
               prompt: "Find the current weather in Paris.",
               providerOptions: api === "messages" ? { thinking: { type: "disabled" } } : { reasoningEffort: "none" },
               tools: [
@@ -118,6 +123,7 @@ record("chat").effect.with(
       const response = yield* LLMClient.generate(
         LLM.request({
           model: alibaba.chat("qwen3.8-max"),
+          cache: "none",
           prompt: 'Return a JSON object with one key "city" set to the capital city of France.',
           providerOptions: { reasoningEffort: "none", responseFormat: { type: "json_object" } },
           generation: { maxTokens: 1024 },

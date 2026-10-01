@@ -4,6 +4,7 @@ import type { LanguageModelCompatibility } from "../schema/index.js"
 import { OpenAIChat } from "./openai-chat.js"
 import { JsonObject, ProviderShared } from "./shared.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
+import { newBreakpoints } from "./utils/cache.js"
 
 export type ReasoningEffort = OpenResponsesOptions.ReasoningEffort
 
@@ -67,8 +68,17 @@ export const protocol = Protocol.make({
     }),
     from: Effect.fn("AlibabaChat.fromRequest")(function* (req) {
       const opts = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(req.providerOptions ?? {})
+      const breakpoints = newBreakpoints(4)
       return {
-        ...(yield* OpenAIChat.protocol.body.from(req)),
+        ...(yield* OpenAIChat.fromRequest(req, {
+          // Alibaba caches tool definitions with system content and only supports 5-minute markers.
+          cacheTools: false,
+          cacheControl: (cache) => {
+            if (cache === undefined || breakpoints.remaining === 0) return undefined
+            breakpoints.remaining -= 1
+            return { type: "ephemeral" }
+          },
+        })),
         enable_thinking: opts.enableThinking,
         // Alibaba also rejects an explicit budget that is not below `max_completion_tokens`.
         thinking_budget:

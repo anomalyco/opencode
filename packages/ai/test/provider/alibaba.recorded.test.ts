@@ -19,6 +19,8 @@ const weather = ToolDefinition.make({
 })
 
 for (const api of ["chat", "messages", "responses"] as const) {
+  // Preserve the request shape of Chat recordings made before explicit caching was enabled.
+  const cache = api === "chat" ? "none" : undefined
   const recorded = recordedTests({
     prefix: `alibaba-${api}`,
     provider: "alibaba",
@@ -37,6 +39,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
           Effect.gen(function* () {
             const request = LLM.request({
               model: alibaba[api]("qwen3.8-max"),
+              cache,
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
               providerOptions: api === "messages" ? { effort } : { reasoningEffort: effort },
               generation: { maxTokens: 4096 },
@@ -68,6 +71,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
         Effect.gen(function* () {
           const request = LLM.request({
             model: alibaba[api]("qwen3.8-max"),
+            cache,
             providerOptions:
               api === "messages"
                 ? { effort: "medium" }
