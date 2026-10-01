@@ -114,7 +114,8 @@ const QUOTA_CODES = new Set([
   "creditlimitexceeded",
 ])
 // Google reports an invalid API key as HTTP 400 INVALID_ARGUMENT with this `details[].reason`.
-const AUTH_CODES = new Set(["authentication_error", "permission_error", "api_key_invalid"])
+// Z.ai's Responses API reports account and plan rejections mid-stream as `permission_denied`.
+const AUTH_CODES = new Set(["authentication_error", "permission_error", "permission_denied", "api_key_invalid"])
 const SERVER_CODES = new Set([
   "api_error",
   "internal_error",
@@ -128,6 +129,7 @@ const SERVER_CODES = new Set([
 ])
 // `invalid_request` is the Vercel AI Gateway's code for an upstream request rejection.
 const INVALID_REQUEST_CODES = new Set([
+  "model_not_found",
   "invalid_prompt",
   "invalid_request",
   "invalid_request_error",

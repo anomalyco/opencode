@@ -821,6 +821,16 @@ effect: (ctx) =>
   }),
 ```
 
+Remove a temporary session with `remove`. Removal stops active execution and recursively deletes child sessions.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Temporary worker" }).pipe(Effect.orDie)
+    yield* ctx.session.remove({ sessionID: created.id }).pipe(Effect.orDie)
+  }),
+```
+
 Request compaction with `compact`. It returns the admitted inbox item, not a completed summary; compaction runs at
 the next step boundary by default. Pass `delivery: "queue"` to preserve queue order instead.
 
@@ -841,6 +851,7 @@ type SessionDomain = Pick<
   SessionApi<unknown>,
   | "create"
   | "get"
+  | "remove"
   | "switchAgent"
   | "switchModel"
   | "prompt"

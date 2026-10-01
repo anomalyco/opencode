@@ -422,6 +422,19 @@ describe("provider error rawBody classification", () => {
     expect(
       classifyProviderFailure({ message: "Request failed", rawBody: '{"error":{"code":"insufficient_quota"}}' })._tag,
     ).toBe("QuotaExceeded")
+    // Z.ai Responses stream rejections
+    expect(
+      classifyProviderFailure({
+        message: "Unknown Model, please check the model code.",
+        rawBody: '{"type":"response.failed","response":{"error":{"code":"model_not_found"}}}',
+      })._tag,
+    ).toBe("InvalidRequest")
+    expect(
+      classifyProviderFailure({
+        message: "Your GLM Coding Plan package has expired and is temporarily unavailable.",
+        rawBody: '{"type":"response.failed","response":{"error":{"code":"permission_denied"}}}',
+      })._tag,
+    ).toBe("Authentication")
   })
 })
 
