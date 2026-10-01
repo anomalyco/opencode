@@ -1,8 +1,8 @@
 import { benchmark, benchmarkDiagnostics, expect } from "../benchmark"
 import { measureNavigationMilestones } from "./navigation-milestones"
-import { fixture } from "./session-timeline-stress.fixture"
+import { fixture, installStressSessionTabs, mockStressTimeline } from "../../utils/session-fixture"
+import { sessionHref } from "../../utils/app"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
-import { installStressSessionTabs, mockStressTimeline, stressSessionHref } from "./timeline-test-helpers"
 
 benchmark.use({
   viewport: { width: 1440, height: 900 },
@@ -16,7 +16,7 @@ for (const entry of ["home", "session"] as const) {
   benchmark(`entry: new session from ${entry}`, async ({ page, report }) => {
     await mockStressTimeline(page)
     await installStressSessionTabs(page, { sessionIDs: entry === "home" ? [] : [fixture.sourceID] })
-    await page.goto(entry === "home" ? "/" : stressSessionHref(fixture.sourceID))
+    await page.goto(entry === "home" ? "/" : sessionHref(fixture.sourceID))
     if (entry === "session") await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
     const trigger = entry === "home" ? '[data-action="home-new-session"]' : 'button[aria-label="New session"]'
     await expect(page.locator(trigger)).toBeVisible()
@@ -68,7 +68,7 @@ benchmark("entry: cold session from Home", async ({ page, report }) => {
   const selector = `[data-component="home-session-row-container"][data-session-id="${fixture.targetID}"] [data-component="home-session-row"]`
   await expect(page.locator(selector)).toBeVisible()
   expect(requests).not.toContain(fixture.targetID)
-  const href = stressSessionHref(fixture.targetID)
+  const href = sessionHref(fixture.targetID)
   await benchmarkDiagnostics(page).startTrace()
   const result = await measureSessionSwitch(page, {
     destinationIDs: fixture.messages[fixture.targetID].map((message) => message.id),

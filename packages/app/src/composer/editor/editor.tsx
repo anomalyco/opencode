@@ -514,9 +514,7 @@ export function ComposerAttachments(props: {
   const i18n = useI18n()
   const percent = (upload: Upload) => (upload.size === 0 ? 100 : Math.floor((upload.loaded / upload.size) * 100))
   return (
-    <Show
-      when={props.attachments.length > 0 || (props.uploads?.length ?? 0) > 0 || (props.comments?.length ?? 0) > 0}
-    >
+    <Show when={props.attachments.length > 0 || (props.uploads?.length ?? 0) > 0 || (props.comments?.length ?? 0) > 0}>
       <div data-component="composer-attachments" data-slot="composer-attachments" class="relative">
         <div
           data-slot="composer-attachments-scroll"
@@ -533,8 +531,11 @@ export function ComposerAttachments(props: {
                 >
                   <CommentCard
                     comment={comment.comment ?? ""}
-                    path={comment.path}
-                    selection={comment.selection}
+                    target={
+                      comment.type === "note"
+                        ? { type: "note", label: comment.label, icon: comment.icon }
+                        : { type: "file", path: comment.path, selection: comment.selection }
+                    }
                     active={comment.key === props.activeCommentID}
                     onClick={() => props.onCommentClick?.(comment)}
                   />

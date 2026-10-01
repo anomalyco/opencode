@@ -5,11 +5,13 @@ import type {
   SessionMessageAssistant,
   SessionMessageInfo,
   SessionStructuredError,
+  TokenUsageInfo,
 } from "@opencode/client/promise"
+import { TokenUsage } from "@opencode/schema/token-usage"
 import type { ACPConnection } from "./connection"
 import { partsToContentChunks, type ReplayPart } from "./content"
 import { ACPError } from "./error"
-import { replyPermission, syncEditedFiles } from "./permission"
+import { replyPermission } from "./permission"
 import {
   completedToolUpdate,
   errorToolUpdate,
@@ -19,7 +21,7 @@ import {
   type ToolInput,
 } from "./tool"
 
-type Connection = Pick<ACPConnection.Connection, "sessionUpdate" | "requestPermission" | "writeTextFile">
+type Connection = Pick<ACPConnection.Connection, "sessionUpdate" | "requestPermission">
 
 export type TurnControl = {
   cancelled: boolean
@@ -84,14 +86,13 @@ export async function streamTurn(input: {
   readonly sessionID: string
   readonly cwd: string
   readonly start: TurnStart
-  readonly writeTextFile: boolean
   readonly action?: boolean
   readonly submit: (signal: AbortSignal) => Promise<unknown>
   readonly control: TurnControl
   readonly childSessionUpdate?: (update: ChildSessionUpdate) => Promise<void>
   readonly connectionSignal?: AbortSignal
   readonly sessionSignal?: AbortSignal
-}): Promise<PromptResponse> {
+}): Promise<{ readonly response: PromptResponse; readonly contextTokens: number | undefined }> {
   const streamController = new AbortController()
   const connectionAbort = () => streamController.abort()
   input.connectionSignal?.addEventListener("abort", connectionAbort, { once: true })
@@ -101,14 +102,30 @@ export async function streamTurn(input: {
 
   const control = input.control
   let started = false
-  let assistantMessageID: string | undefined
   let finish: SessionMessageAssistant["finish"]
   let executionError: { readonly type: string; readonly message: string } | undefined
+  let stepError: SessionStructuredError | undefined
+  let usage: { readonly turn: TokenUsageInfo; readonly last: TokenUsageInfo } | undefined
   const tools = new Map<string, ToolState>()
   const retries = new Map<string, RetryStatus>()
   const children = new Map<string, ChildSession>()
   const openChildren = new Set<string>()
   let handedOff = false
+
+  const recordStep = (tokens: TokenUsageInfo) => {
+    const turn = usage?.turn
+    usage = {
+      turn: turn
+        ? {
+            input: turn.input + tokens.input,
+            output: turn.output + tokens.output,
+            reasoning: turn.reasoning + tokens.reasoning,
+            cache: { read: turn.cache.read + tokens.cache.read, write: turn.cache.write + tokens.cache.write },
+          }
+        : tokens,
+      last: tokens,
+    }
+  }
 
   const notifyChild = async (child: ChildSession, value: ChildSessionEvent) => {
     if (!input.childSessionUpdate) return
@@ -196,7 +213,7 @@ export async function streamTurn(input: {
       }
 
       if (event.type === "session.step.started") {
-        if (!child) assistantMessageID = event.data.assistantMessageID
+        if (!child) stepError = undefined
         if (retries.delete(eventSessionID))
           await send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: null } })
         continue
@@ -212,7 +229,6 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.text.delta") {
-        if (!child) assistantMessageID = event.data.assistantMessageID
         await send({
           sessionUpdate: "agent_message_chunk",
           messageId: event.data.assistantMessageID,
@@ -221,7 +237,6 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.reasoning.delta") {
-        if (!child) assistantMessageID = event.data.assistantMessageID
         await send({
           sessionUpdate: "agent_thought_chunk",
           messageId: `${event.data.assistantMessageID}:reasoning:${event.data.ordinal}`,
@@ -230,7 +245,6 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.input.started") {
-        if (!child) assistantMessageID = event.data.assistantMessageID
         tools.set(toolKey(event.data.sessionID, event.data.id), {
           name: event.data.name,
           input: {},
@@ -249,7 +263,6 @@ export async function streamTurn(input: {
         continue
       }
       if (event.type === "session.tool.called") {
-        if (!child) assistantMessageID = event.data.assistantMessageID
         const key = toolKey(event.data.sessionID, event.data.id)
         const current = tools.get(key) ?? emptyToolState()
         current.input = event.data.input
@@ -284,16 +297,6 @@ export async function streamTurn(input: {
         const key = toolKey(event.data.sessionID, event.data.id)
         const current = tools.get(key) ?? emptyToolState()
         tools.delete(key)
-        await syncEditedFiles({
-          connection: input.connection,
-          writeTextFile: input.writeTextFile,
-          sessionID: input.sessionID,
-          cwd: input.cwd,
-          toolName: current.name,
-          toolInput: current.input,
-          metadata: event.data.metadata ?? {},
-          signal: control.admission.signal,
-        }).catch(() => {})
         await send({
           sessionUpdate: "tool_call_update",
           ...completedToolUpdate({
@@ -326,8 +329,15 @@ export async function streamTurn(input: {
       }
       if (event.type === "session.step.ended") {
         if (!child) {
-          assistantMessageID = event.data.assistantMessageID
           finish = event.data.finish
+          recordStep(event.data.tokens)
+        }
+        continue
+      }
+      if (event.type === "session.step.failed") {
+        if (!child) {
+          stepError = event.data.error
+          if (event.data.tokens) recordStep(event.data.tokens)
         }
         continue
       }
@@ -373,14 +383,17 @@ export async function streamTurn(input: {
     if (input.action) {
       streamController.abort()
       await completed.catch(() => {})
-      return response(undefined, undefined, "succeeded", control.cancelled, undefined)
+      return {
+        response: response(undefined, undefined, "succeeded", control.cancelled, undefined),
+        contextTokens: undefined,
+      }
     }
     if (control.cancelled) {
       await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
       if (!started) {
         streamController.abort()
         await completed.catch(() => {})
-        return response(undefined, undefined, "interrupted", true, undefined)
+        return { response: response(undefined, undefined, "interrupted", true, undefined), contextTokens: undefined }
       }
     }
     const terminal = await completed
@@ -391,19 +404,17 @@ export async function streamTurn(input: {
         .catch(() => {})
         .finally(closeStream)
     }
-    const assistant = assistantMessageID
-      ? await input.client.session
-          .message.get({ sessionID: input.sessionID, messageID: assistantMessageID })
-          .catch(() => undefined)
-      : undefined
-    return response(
-      assistant?.type === "assistant" ? assistant : undefined,
-      executionError,
-      terminal,
-      control.cancelled,
-      finish,
-      retries.get(input.sessionID),
-    )
+    return {
+      response: response(
+        usage?.turn,
+        stepError ?? executionError,
+        terminal,
+        control.cancelled,
+        finish,
+        retries.get(input.sessionID),
+      ),
+      contextTokens: usage ? TokenUsage.total(usage.last) : undefined,
+    }
   } catch (error) {
     streamController.abort()
     await completed.catch(() => {})
@@ -577,14 +588,13 @@ function matchesStart(event: EventSubscribeOutput, start: TurnStart) {
 }
 
 function response(
-  assistant: SessionMessageAssistant | undefined,
-  executionError: { readonly type: string; readonly message: string } | undefined,
+  tokens: TokenUsageInfo | undefined,
+  error: { readonly type: string; readonly message: string } | undefined,
   terminal: "succeeded" | "failed" | "interrupted",
   cancelled: boolean,
   finish: SessionMessageAssistant["finish"],
   retry?: RetryStatus,
 ): PromptResponse {
-  const error = assistant?.error ?? executionError
   if (error?.type === "provider.auth") throw new ACPError.AuthRequiredError()
   if (error && error.type !== "aborted" && error.type !== "provider.content-filter") {
     throw new ACPError.ServiceFailureError({
@@ -593,12 +603,11 @@ function response(
       errorName: error.type,
     })
   }
-  const tokens = assistant?.tokens
   const usage = tokens
     ? {
         inputTokens: tokens.input,
         outputTokens: tokens.output,
-        totalTokens: tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write,
+        totalTokens: TokenUsage.total(tokens),
         ...(tokens.reasoning > 0 ? { thoughtTokens: tokens.reasoning } : {}),
         ...(tokens.cache.read > 0 ? { cachedReadTokens: tokens.cache.read } : {}),
         ...(tokens.cache.write > 0 ? { cachedWriteTokens: tokens.cache.write } : {}),

@@ -1,0 +1,13 @@
+export default {
+  "tab.title": "Syn",
+  "tab.count.one": "{{count}} faýl üýtgedi",
+  "tab.count.other": "{{count}} faýl üýtgedi",
+  "mobile.title.one": "Üýtget",
+  "mobile.title.other": "Üýtgeşmeler",
+  "empty.git": "Entek rugsat berilmedik üýtgeşmeler ýok",
+  "empty.branch": "Entek hiç hili şahamça üýtgemeýär",
+  "git.title": "Git ammary dörediň",
+  "git.description": "Bu taslamadaky üýtgeşmeleri yzarlaň, gözden geçiriň we yzyna alyň",
+  loadingChanges: "Üýtgeşmeler ýüklenýär …",
+  noChanges: "Üýtgeşme ýok",
+}

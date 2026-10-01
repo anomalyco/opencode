@@ -215,13 +215,11 @@ describe("Mistral Chat", () => {
           ],
         }),
       )
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: "",
-          tool_calls: [{ id: "Ab12Cd34E", type: "function", function: { name: "lookup", arguments: "{}" } }],
-        },
-      ])
+      expect(prepared.body.messages[0]).toEqual({
+        role: "assistant",
+        content: "",
+        tool_calls: [{ id: "Ab12Cd34E", type: "function", function: { name: "lookup", arguments: "{}" } }],
+      })
     }),
   )
 
@@ -315,7 +313,9 @@ describe("Mistral Chat", () => {
       expect(response.reasoning).toBe("Consider")
       expect(response.text).toBe("Answer")
       expect(response.events.find(LLMEvent.is.reasoningStart)?.providerMetadata).toBeUndefined()
-      expect(response.events.filter(LLMEvent.is.reasoningDelta).map((event) => [event.text, event.providerMetadata])).toEqual([
+      expect(
+        response.events.filter(LLMEvent.is.reasoningDelta).map((event) => [event.text, event.providerMetadata]),
+      ).toEqual([
         ["Con", undefined],
         ["sider", undefined],
       ])

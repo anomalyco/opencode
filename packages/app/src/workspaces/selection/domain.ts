@@ -6,21 +6,6 @@ export function treeEntries(parent: string, nodes: ReadonlyArray<{ name: string;
   })
 }
 
-export function pickerTreeEntries(
-  parent: string,
-  nodes: ReadonlyArray<{ name: string; type: "file" | "directory" }>,
-  mode: "directory" | "file",
-) {
-  return treeEntries(parent, mode === "directory" ? nodes.filter((node) => node.type === "directory") : nodes)
-}
-
-export function pickerSearchEntries<T extends { type: "file" | "directory" }>(
-  nodes: readonly T[],
-  mode: "directory" | "file",
-) {
-  return mode === "directory" ? nodes.filter((node) => node.type === "directory") : [...nodes]
-}
-
 export function pickerMode(mode: "directory" | "file", base?: string) {
   if (mode === "file") {
     return {

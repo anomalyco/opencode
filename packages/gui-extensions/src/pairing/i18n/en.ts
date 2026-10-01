@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Pair device",
+  title: "Pairing",
+  connection: "Local Network",
+  "local.description": "View connection details and a QR code to connect a device on the same network.",
+  "local.open": "Show details",
+  "screenActive.title": "Keep screen active",
+  "screenActive.description": "Prevent this computer’s display from sleeping while OpenCode is running.",
+  "screenActive.error": "Could not update the screen activity setting. Try again.",
+  description: "Connect another device to this machine's OpenCode server.",
+  qr: "Pairing QR code",
+  copy: "Copy details",
+  "copy.error": "Could not copy pairing details. Try again.",
+  error: "Could not update pairing details. Try again.",
+}

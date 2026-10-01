@@ -1,13 +1,17 @@
 import { Icon } from "@opencode/ui/icon"
-import { ProjectAvatar, PROJECT_AVATAR_VARIANTS } from "@opencode/ui/project-avatar"
+import {
+  displayName,
+  getProjectAvatarVariant,
+  ProjectAvatar,
+  PROJECT_AVATAR_VARIANTS,
+} from "@opencode/ui/project-avatar"
 import { Textarea } from "@opencode/ui/textarea"
 import { TextInput } from "@opencode/ui/text-input"
 import { For, Show, type Component } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
-import { getProjectAvatarVariant, type LocalProject } from "@/shell/state/layout"
+import type { LocalProject } from "@/shell/state/layout"
 import { ServerConnection, serverName } from "@/runtime/server/registry"
 import { useSettingsServers } from "@/settings/servers/inventory"
-import { displayName } from "@/shell/layout/helpers"
 import { ProjectIcon } from "@/shell/layout/project-icon"
 import { ProjectOptions } from "./project-options"
 import { SettingsList } from "@/settings/list"

@@ -1,0 +1,13 @@
+export default {
+  "tab.title": "Gjennomgang",
+  "tab.count.one": "{{count}} fil endret",
+  "tab.count.other": "{{count}} filer endret",
+  "mobile.title.one": "Endring",
+  "mobile.title.other": "Endringer",
+  "empty.git": "Ingen endringer som ikke er sjekket inn ennå",
+  "empty.branch": "Ingen grenendringer ennå",
+  "git.title": "Opprett et Git-depot",
+  "git.description": "Spor, gjennomgå og angre endringer i dette prosjektet",
+  loadingChanges: "Laster endringer…",
+  noChanges: "Ingen endringer",
+}

@@ -3,8 +3,8 @@ import type { Page } from "@playwright/test"
 import { expectSessionTitle } from "../../utils/waits"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { benchmark, expect, withBenchmarkPage } from "../benchmark"
-import { fixture } from "./session-timeline-stress.fixture"
-import { installStressSessionTabs, stressSessionHref } from "./timeline-test-helpers"
+import { fixture, installStressSessionTabs } from "../../utils/session-fixture"
+import { sessionHref } from "../../utils/app"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
 
 type ParentHydrationBenchmarkMode = "natural" | "candidate"
@@ -121,11 +121,11 @@ async function trial(page: Page, mode: ParentHydrationBenchmarkMode) {
     }),
   )
   await installStressSessionTabs(page, { sessionIDs: [fixture.sourceID] })
-  await page.goto(stressSessionHref(fixture.sourceID))
+  await page.goto(sessionHref(fixture.sourceID))
   await expectSessionTitle(page, fixture.expected.sourceTitle)
   await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
 
-  const href = stressSessionHref(fixture.targetID)
+  const href = sessionHref(fixture.targetID)
   await page.evaluate(
     ({ href, title }) => {
       const link = document.createElement("a")

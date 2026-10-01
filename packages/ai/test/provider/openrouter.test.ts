@@ -32,6 +32,125 @@ describe("OpenRouter", () => {
     }),
   )
 
+  it.effect("places default cache breakpoints on tools, system boundaries, and the conversation tail", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Model details" },
+            { type: "text", text: "Project instructions" },
+          ],
+          tools: [
+            { name: "read", description: "Read", inputSchema: { type: "object", properties: {} } },
+            { name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } },
+          ],
+          prompt: "Hello",
+        }),
+      )
+
+      expect(prepared.body.tools?.map((tool) => tool.cache_control)).toEqual([undefined, { type: "ephemeral" }])
+      expect(prepared.body.messages).toMatchObject([
+        {
+          role: "system",
+          content: [
+            { text: "Base agent", cache_control: { type: "ephemeral" } },
+            { text: "Model details" },
+            { text: "Project instructions", cache_control: { type: "ephemeral" } },
+          ],
+        },
+        { role: "user", content: [{ text: "Hello", cache_control: { type: "ephemeral" } }] },
+      ])
+      expect(prepared.body.messages[0]?.content).not.toContainEqual(
+        expect.objectContaining({ text: "Model details", cache_control: expect.anything() }),
+      )
+    }),
+  )
+
+  it.effect("places default cache breakpoints on OpenRouter latest-model aliases", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("~anthropic/claude-sonnet-latest"),
+          system: "Base agent",
+          tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
+          prompt: "Hello",
+        }),
+      )
+
+      expect(prepared.body.tools?.[0]?.cache_control).toEqual({ type: "ephemeral" })
+      expect(prepared.body.messages).toMatchObject([
+        { role: "system", content: [{ text: "Base agent", cache_control: { type: "ephemeral" } }] },
+        { role: "user", content: [{ text: "Hello", cache_control: { type: "ephemeral" } }] },
+      ])
+    }),
+  )
+
+  it.effect("skips the tool breakpoint for Qwen, which caches tools with the system prompt", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("qwen/qwen3-coder-plus"),
+          system: "Base agent",
+          tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
+          prompt: "Hello",
+        }),
+      )
+
+      expect(prepared.body.tools?.[0]?.cache_control).toBeUndefined()
+      expect(prepared.body.messages).toMatchObject([
+        { role: "system", content: [{ text: "Base agent", cache_control: { type: "ephemeral" } }] },
+        { role: "user", content: [{ text: "Hello", cache_control: { type: "ephemeral" } }] },
+      ])
+    }),
+  )
+
+  it.effect("places the default Qwen conversation-tail breakpoint inside tool-result text", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("qwen/qwen3-coder-plus"),
+          messages: [
+            Message.user("Call the tool"),
+            Message.assistant([{ type: "tool-call", id: "call_1", name: "lookup", input: {} }]),
+            Message.tool({ id: "call_1", name: "lookup", result: "Done" }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages.at(-1)).toMatchObject({
+        role: "tool",
+        tool_call_id: "call_1",
+        content: [{ type: "text", text: '"Done"', cache_control: { type: "ephemeral" } }],
+      })
+    }),
+  )
+
+  it.effect("sends no default breakpoints to upstreams that cache without them", () =>
+    Effect.gen(function* () {
+      const openrouter = OpenRouter.configure({ apiKey: "test-key" })
+      const bodies = yield* Effect.forEach(["google/gemini-2.5-flash", "openai/gpt-5-mini"], (id) =>
+        compileRequest(
+          LLM.request({
+            model: openrouter.model(id),
+            system: "Base agent",
+            tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
+            prompt: "Hello",
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body)),
+      )
+
+      bodies.forEach((body) => {
+        expect(body.tools?.[0]?.cache_control).toBeUndefined()
+        expect(body.messages).toMatchObject([
+          { role: "system", content: "Base agent" },
+          { role: "user", content: "Hello" },
+        ])
+      })
+    }),
+  )
+
   it.effect("lowers the native cache policy to OpenRouter cache controls", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -74,6 +193,8 @@ describe("OpenRouter", () => {
           cache: "none",
           messages: [
             Message.user("Call the tool"),
+            Message.assistant("Unmarked reply"),
+            Message.user("Call again"),
             Message.assistant([
               { type: "text", text: "Calling", cache: new CacheHint({ type: "ephemeral" }) },
               { type: "tool-call", id: "call_1", name: "lookup", input: {} },
@@ -90,8 +211,17 @@ describe("OpenRouter", () => {
 
       expect(prepared.body.messages).toMatchObject([
         { role: "user", content: "Call the tool" },
-        { role: "assistant", content: "Calling", cache_control: { type: "ephemeral" } },
-        { role: "tool", content: '"Done"', cache_control: { type: "ephemeral", ttl: "1h" } },
+        { role: "assistant", content: "Unmarked reply" },
+        { role: "user", content: "Call again" },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "Calling", cache_control: { type: "ephemeral" } }],
+          tool_calls: [{ id: "call_1", type: "function", function: { name: "lookup", arguments: "{}" } }],
+        },
+        {
+          role: "tool",
+          content: [{ type: "text", text: '"Done"', cache_control: { type: "ephemeral", ttl: "1h" } }],
+        },
       ])
     }),
   )
@@ -118,7 +248,7 @@ describe("OpenRouter", () => {
     }),
   )
 
-  it.effect("preserves cache policy hints on reasoning-only assistant messages", () =>
+  it.effect("does not emit text cache markers on reasoning-only assistant messages", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -130,8 +260,38 @@ describe("OpenRouter", () => {
 
       expect(prepared.body.messages).toMatchObject([
         { role: "user", content: "Think" },
-        { role: "assistant", cache_control: { type: "ephemeral" } },
+        { role: "assistant", content: "" },
       ])
+      expect(prepared.body.messages[1]).not.toHaveProperty("cache_control")
+    }),
+  )
+
+  it.effect("counts wrapped system-update markers once so all four default breakpoints survive", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenRouter.configure({ apiKey: "test-key" }).model("anthropic/claude-sonnet-4.6"),
+          system: [
+            { type: "text", text: "Base agent" },
+            { type: "text", text: "Project instructions" },
+          ],
+          tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object", properties: {} } }],
+          messages: [Message.user("Start"), Message.system("Updated instructions")],
+        }),
+      )
+
+      expect(prepared.body.tools?.[0]?.cache_control).toEqual({ type: "ephemeral" })
+      expect(prepared.body.messages.at(-1)).toMatchObject({
+        role: "user",
+        content: [
+          { type: "text", text: "Start" },
+          {
+            type: "text",
+            text: "<system-update>\nUpdated instructions\n</system-update>",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      })
     }),
   )
 

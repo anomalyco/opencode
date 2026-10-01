@@ -19,18 +19,6 @@ export type ComposerControls = {
     paid: boolean
     loading: boolean
   }
-  session: {
-    tabs: {
-      active: () => string | undefined
-      all: () => string[]
-      open: (tab: string) => void | Promise<void>
-      setActive: (tab: string) => void
-    }
-    reviewPanel: {
-      opened: () => boolean
-      open: () => void
-    }
-  }
 }
 
 export type ComposerSelection = {

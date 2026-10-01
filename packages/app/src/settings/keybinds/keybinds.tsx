@@ -10,6 +10,7 @@ import {
   keyFromKeyboardEvent,
   parseKeybind,
   useCommand,
+  type CommandSection,
 } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
@@ -51,9 +52,18 @@ const groupKey: Record<KeybindGroup, GroupKey> = {
   Prompt: "settings.shortcuts.group.prompt",
 }
 
-function groupFor(id: string): KeybindGroup {
+const sectionGroup: Record<CommandSection, KeybindGroup> = {
+  general: "General",
+  session: "Session",
+  navigation: "Navigation",
+  model: "Model and agent",
+  terminal: "Terminal",
+  prompt: "Prompt",
+}
+
+function groupFor(id: string, section?: CommandSection): KeybindGroup {
+  if (section) return sectionGroup[section]
   if (id === PALETTE_ID) return "General"
-  if (id.startsWith("terminal.")) return "Terminal"
   if (id.startsWith("model.") || id.startsWith("agent.") || id.startsWith("mcp.")) return "Model and agent"
   if (id.startsWith("file.") || id.startsWith("fileTree.")) return "Navigation"
   if (id.startsWith("prompt.")) return "Prompt"
@@ -123,13 +133,13 @@ function listFor(command: Pick<CommandContext, "catalog" | "options">, map: Keyb
   for (const opt of command.catalog) {
     if (opt.id.startsWith("suggested.")) continue
     if (opt.hidden) continue
-    out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
+    out.set(opt.id, { title: opt.title, group: groupFor(opt.id, opt.section) })
   }
 
   for (const opt of command.options) {
     if (opt.id.startsWith("suggested.")) continue
     if (opt.hidden) continue
-    out.set(opt.id, { title: opt.title, group: groupFor(opt.id) })
+    out.set(opt.id, { title: opt.title, group: groupFor(opt.id, opt.section) })
   }
 
   for (const [id, value] of Object.entries(map)) {

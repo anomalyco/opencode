@@ -21,7 +21,7 @@ import {
   textPart,
   userMessage,
   waitForVisualSettle,
-} from "./fixture"
+} from "../../utils/timeline"
 
 test.describe("timeline visual lifecycle stability", () => {
   test("streams empty, short, and long parallel shells to staggered completion", async ({ page }, testInfo) => {

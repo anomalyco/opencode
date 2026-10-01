@@ -140,28 +140,14 @@ describe("web search desktop consent", () => {
     expect(input.listeners.size).toBe(0)
   })
 
-  test("cleans up after a failed consent submission", async () => {
-    const input = fixture()
-    await expect(
-      replyWebSearch({
-        ...input,
-        selection: "exa",
-        reply: async () => {
-          throw new Error("offline")
-        },
-      }),
-    ).rejects.toThrow("offline")
-    expect(input.listeners.size).toBe(0)
-  })
-
-  test("propagates provider submission failures for retry", async () => {
+  test.each([consent.id, provider.id])("propagates a failed %s submission and cleans up", async (failing) => {
     const input = fixture()
     await expect(
       replyWebSearch({
         ...input,
         selection: "exa",
         reply: async (answer) => {
-          if (answer.formID === provider.id) throw new Error("offline")
+          if (answer.formID === failing) throw new Error("offline")
           input.create()
         },
       }),

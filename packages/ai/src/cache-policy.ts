@@ -51,6 +51,17 @@ const RESPECTS_INLINE_HINTS = new Set([
   "openrouter",
 ])
 
+// OpenRouter upstreams other than Anthropic and Alibaba Qwen cache without breakpoints. Gemini uses only the last
+// breakpoint, so a conversation-tail breakpoint writes a new cache every step and costs more than none. Qwen ignores
+// breakpoints on tool definitions and caches tools with the system prompt.
+const openRouterPolicy = (modelID: string): CachePolicyObject => {
+  // `~anthropic/claude-sonnet-latest` style IDs are OpenRouter aliases for the latest model in a family.
+  const id = modelID.replace(/^~/, "")
+  if (id.startsWith("anthropic/")) return AUTO
+  if (id.startsWith("qwen/")) return { system: true, messages: { tail: 1 } }
+  return NONE
+}
+
 const makeHint = (ttlSeconds: number | undefined): CacheHint =>
   ttlSeconds !== undefined ? new CacheHint({ type: "ephemeral", ttlSeconds }) : new CacheHint({ type: "ephemeral" })
 
@@ -156,9 +167,10 @@ const countHints = (request: LLMRequest) =>
 
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
-  if (request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto"))
-    return request
-  const policy = resolve(request.cache)
+  const policy =
+    request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto")
+      ? openRouterPolicy(request.model.id)
+      : resolve(request.cache)
   if (!policy.tools && !policy.system && !policy.messages) return request
 
   const hint = makeHint(policy.ttlSeconds)

@@ -2,7 +2,12 @@ import type { SessionInfo } from "@opencode/client/promise"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
-import { ProjectAvatar } from "@opencode/ui/project-avatar"
+import {
+  displayName,
+  getProjectAvatarSource,
+  getProjectAvatarVariant,
+  ProjectAvatar,
+} from "@opencode/ui/project-avatar"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useNavigate } from "@solidjs/router"
@@ -12,8 +17,8 @@ import { useServer } from "@/runtime/server/current"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
-import { displayName, errorMessage, getProjectAvatarSource } from "@/shell/layout/helpers"
-import { getProjectAvatarVariant, useLayout, type LocalProject } from "@/shell/state/layout"
+import { errorMessage } from "@/shell/layout/helpers"
+import { useLayout, type LocalProject } from "@/shell/state/layout"
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import { useSettingsSurface } from "@/settings/surface"
 import { pathKey } from "@/workspaces/path-key"

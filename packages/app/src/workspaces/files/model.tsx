@@ -4,28 +4,23 @@ import { isFileNotFoundError } from "@opencode/client/promise"
 import { createSimpleContext } from "@opencode/ui/context"
 import { showToast } from "@/shell/notifications/toast"
 import { useParams } from "@solidjs/router"
-import { base64Encode } from "@opencode/util/encode"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useLayout } from "@/shell/state/layout"
+import { useExtensionAttachment } from "@/runtime/extension/services"
 import { createPathHelpers } from "./path"
 import { fileContentFromBytes } from "./artifact"
 import {
   approxBytes,
   evictContentLru,
-  getFileContentBytesTotal,
-  getFileContentEntryCount,
   hasFileContent,
   removeFileContentBytes,
   resetFileContentLru,
-  setFileContentBytes,
   touchFileContent,
 } from "./content-cache"
 import { createFileViewCache } from "./view-cache"
 import { useServerSDK } from "@/runtime/server/client"
 import { formatServerError } from "@/runtime/server/errors"
-import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 import { createFileTreeStore } from "./tree-store"
 import { invalidateFromWatcher } from "./watcher"
 import {
@@ -38,15 +33,6 @@ import {
 
 export type { FileSelection, SelectedLineRange, FileViewState, FileState }
 export { selectionFromLines }
-export {
-  evictContentLru,
-  getFileContentBytesTotal,
-  getFileContentEntryCount,
-  removeFileContentBytes,
-  resetFileContentLru,
-  setFileContentBytes,
-  touchFileContent,
-}
 
 export const { use: useFile, provider: FileProvider } = createSimpleContext({
   name: "File",
@@ -56,13 +42,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const params = useParams()
     const serverSDK = useServerSDK()
     const language = useLanguage()
-    const layout = useLayout()
+    const extensions = useExtensionAttachment()
 
     const scope = createMemo(() => sdk().directory)
     const path = createPathHelpers(scope)
-    const tabs = layout.tabs(() =>
-      SessionStateKey.from(serverSDK.scope, SessionRouteKey.fromRoute(base64Encode(sdk().directory), params.id)),
-    )
 
     const inflight = new Map<string, Promise<void>>()
     const [store, setStore] = createStore<{
@@ -240,7 +223,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
         invalidateFromWatcher(event, {
           normalize: path.normalize,
           hasFile: (file) => Boolean(store.file[file]),
-          isOpen: (file) => tabs.all().some((tab) => path.pathFromTab(tab) === file),
+          isOpen: (file) => extensions.files.opened().includes(file),
           loadFile: (file) => {
             void load(file, { force: true })
           },
@@ -286,8 +269,6 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       ready: () => view().ready(),
       normalize: path.normalize,
       absolute: path.absolute,
-      tab: path.tab,
-      pathFromTab: path.pathFromTab,
       tree: {
         list: tree.listDir,
         refresh: (input: string) => tree.listDir(input, { force: true }),
