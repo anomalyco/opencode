@@ -17,6 +17,20 @@ describe("acp lifecycle subprocess", () => {
     expect(await acp.close()).toBe(0)
   }, 60_000)
 
+  test("an incoming message over the size limit exits with an error", async () => {
+    await using fixture = await createAcpFixture()
+    const acp = fixture.spawn()
+    await initialize(acp)
+    const [code] = await Promise.all([
+      acp.exited,
+      // The agent stops reading partway through the line, so the write may fail.
+      acp.notify("opencode/oversized", { data: "a".repeat(32 * 1024 * 1024) }).catch(() => undefined),
+    ])
+    await acp[Symbol.asyncDispose]()
+    expect(code).toBe(1)
+    expect(acp.stderr()).toContain("opencode acp: incoming message exceeded the 32 MiB limit\n")
+  }, 60_000)
+
   test("close capability and close request", async () => {
     await using fixture = await createAcpFixture()
     const acp = fixture.spawn()
