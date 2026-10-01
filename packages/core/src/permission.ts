@@ -74,7 +74,13 @@ export class BlockedError extends Schema.TaggedError<BlockedError>()("Permission
   reason: Schema.String.pipe(Schema.optional),
 }) {
   override get message() {
-    return this.reason ?? `Permission denied: ${this.permission}`
+    if (this.reason !== undefined) return this.reason
+    const rule = this.resources
+      .map((resource) => evaluate(this.permission, resource, this.rules))
+      .find((rule) => rule.effect === "deny")
+    return rule
+      ? `Permission denied: ${this.permission} (denied by rule ${JSON.stringify(rule.resource)})`
+      : `Permission denied: ${this.permission}`
   }
 }
 

@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
@@ -144,9 +144,52 @@ describe("Permission", () => {
       yield* setRules([{ action: "read", resource: "*", effect: "deny" }])
       const blocked = yield* service.assert(assertion()).pipe(Effect.flip)
       expect(blocked).toBeInstanceOf(Permission.BlockedError)
+      expect(blocked.message).toBe('Permission denied: read (denied by rule "*")')
       expect(yield* service.list()).toEqual([])
     }),
   )
+
+  it.effect("reports the effective deny rule across requested resources", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "shell", resource: "*", effect: "allow" },
+        { action: "shell", resource: "npm *", effect: "deny" },
+        { action: "shell", resource: "npm install", effect: "allow" },
+        { action: "shell", resource: "git *", effect: "deny" },
+        { action: "shell", resource: "git push *", effect: "deny" },
+      ])
+      const service = yield* Permission.Service
+      const blocked = yield* service
+        .assert(assertion({ action: "shell", resources: ["npm install", "git push origin main"] }))
+        .pipe(Effect.flip)
+
+      expect(blocked.message).toBe('Permission denied: shell (denied by rule "git push *")')
+      expect(yield* service.list()).toEqual([])
+    }),
+  )
+
+  test.each(["Blocked by a plugin", ""])("preserves the custom denial reason %j", (reason) => {
+    const blocked = new Permission.BlockedError({
+      permission: "shell",
+      resources: ["npm install"],
+      rules: [{ action: "shell", resource: "npm *", effect: "deny" }],
+      reason,
+    })
+    expect(blocked.message).toBe(reason)
+  })
+
+  test("keeps the generic denial message when no deny rule matches", () => {
+    const blocked = new Permission.BlockedError({
+      permission: "shell",
+      resources: ["npm install"],
+      rules: [
+        { action: "shell", resource: "*", effect: "allow" },
+        { action: "shell", resource: "git *", effect: "deny" },
+        { action: "read", resource: "*", effect: "deny" },
+      ],
+    })
+    expect(blocked.message).toBe("Permission denied: shell")
+  })
 
   it.effect("allows managed output reads without granting external directory access", () =>
     Effect.gen(function* () {
