@@ -32,6 +32,7 @@ import * as Cache from "./utils/cache.js"
 import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
+import { AnthropicModel } from "./utils/anthropic-model.js"
 
 const ADAPTER = "anthropic-messages"
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
@@ -992,7 +993,7 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 const supportsEffortUpdates = (model: LLMRequest["model"]) => {
   const override = model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
-  const version = claudeVersion(model.id)
+  const version = AnthropicModel.version(model.id)
   if (version === undefined) return false
   if (version.family === "opus") return version.major >= 5
   if (version.family !== "fable" && version.family !== "mythos") return false
@@ -1001,7 +1002,7 @@ const supportsEffortUpdates = (model: LLMRequest["model"]) => {
 
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
   if (thinking?.type === "disabled") return thinking
-  if (!supportsThinkingBlockBinding(model)) return thinking
+  if (!AnthropicModel.supportsThinkingBlockBinding(model)) return thinking
   return {
     ...(thinking ?? { type: "adaptive" as const }),
     block_binding: {
