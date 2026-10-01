@@ -25,6 +25,16 @@ export async function serviceFixture() {
       processes.push(subprocess)
       return subprocess
     },
+    // The service's parent execs `sleep`, which never reaps it, so SIGKILL leaves a zombie that
+    // still answers `kill(pid, 0)`. Terminating the returned parent lets init reap the service.
+    spawnUnreaped(mode: string, ...args: string[]) {
+      const subprocess = Bun.spawn(["sh", "-c", '"$@" & exec sleep 60', "sh", ...command(mode, ...args)], {
+        stdout: "ignore",
+        stderr: "inherit",
+      })
+      processes.push(subprocess)
+      return subprocess
+    },
     // Service.ensure detaches contenders; track the elected process before asserting.
     track(pid: number) {
       pids.add(pid)
@@ -53,4 +63,9 @@ export async function serviceFixture() {
       ]).finally(() => rm(directory, { recursive: true, force: true }))
     },
   }
+}
+
+export async function expectPortAvailable(url: string) {
+  const server = Bun.serve({ port: Number(new URL(url).port), fetch: () => new Response() })
+  await server.stop(true)
 }
