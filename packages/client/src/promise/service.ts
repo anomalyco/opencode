@@ -87,6 +87,12 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           if (replacedFailure) throw new Error("Background service failed to start")
           replacedFailure = true
           console.warn("Background service failed to start; replacing it")
+          // A contender this call spawned exits when terminated; that exit is not a startup failure.
+          contenders.forEach((contender) => {
+            if (contender.child.pid !== service.info.pid) return
+            contender.release()
+            contenders.delete(contender)
+          })
           await terminate(service.info, options, timing)
           lastSpawn = 0
         }

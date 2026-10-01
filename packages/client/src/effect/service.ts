@@ -106,6 +106,12 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         if (replacedFailure) return yield* Effect.fail(new Error("Background service failed to start"))
         replacedFailure = true
         yield* Effect.logWarning("Background service failed to start; replacing it")
+        // A contender this call spawned exits when terminated; that exit is not a startup failure.
+        contenders.forEach((contender) => {
+          if (contender.child.pid !== service.info.pid) return
+          contender.release()
+          contenders.delete(contender)
+        })
         yield* terminate(service.info, options, timing)
         lastSpawn = 0
         return Option.none<LocalService>()

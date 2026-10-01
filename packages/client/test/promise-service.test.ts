@@ -111,9 +111,30 @@ test("replaces a failed registered service once", async () => {
   const replacement = await Bun.file(registration).json()
   fixture.track(replacement.pid)
 
-  expect(await failed.exited).toBe(0)
+  expect(await failed.exited).toBe(130)
   expect(replacement.pid).not.toBe(original.pid)
   expect(endpoint.url).toBe(replacement.url)
+})
+
+test("replaces a service it started when that boot fails", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+
+  const endpoint = await ensure({ file: registration, version: "test", command: fixture.command("failed-once") })
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+
+  expect(endpoint.url).toBe(replacement.url)
+})
+
+test("reports a failed service it started when the replacement also fails", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+
+  await expect(
+    ensure({ file: registration, version: "test", command: fixture.command("failed-owner") }),
+  ).rejects.toThrow("Background service failed to start")
+  fixture.track((await Bun.file(registration).json()).pid)
 })
 
 test("reports a failed registered service when its replacement also fails", async () => {

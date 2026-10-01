@@ -1,7 +1,15 @@
 import { appendFile, rename, writeFile } from "node:fs/promises"
 
-const [registration, mode, delay] = process.argv.slice(2)
-if (registration === undefined || mode === undefined) throw new Error("Missing service fixture arguments")
+const [registration, requested, delay] = process.argv.slice(2)
+if (registration === undefined || requested === undefined) throw new Error("Missing service fixture arguments")
+// "failed-once" fails its first boot only, like a transient startup error.
+const mode =
+  requested !== "failed-once"
+    ? requested
+    : await writeFile(registration + ".failed-once", "", { flag: "wx" }).then(
+        () => "failed-owner",
+        () => "graceful",
+      )
 if (mode === "failed") process.exit(1)
 if (mode === "stderr-failed") {
   process.stderr.write("x".repeat(16_384) + "\nactionable startup failure\n")
@@ -101,7 +109,8 @@ await rename(registration + ".tmp", registration)
 async function shutdown(signal?: NodeJS.Signals) {
   if (signal !== undefined) await writeFile(registration + ".signal", signal)
   server.stop(true)
-  process.exit()
+  // A real server whose boot failed exits non-zero when signaled.
+  process.exit(mode === "failed-owner" ? 130 : 0)
 }
 process.on("SIGTERM", () => void shutdown("SIGTERM"))
 process.on("SIGINT", () => void shutdown("SIGINT"))
