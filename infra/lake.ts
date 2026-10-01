@@ -59,6 +59,16 @@ const athenaResultsBucket = new aws.s3.Bucket(
   { retainOnDelete: false },
 )
 
+// Keep the archived delivery failures until their records have been reconciled.
+new aws.s3.Bucket(
+  "LakeFirehoseErrors",
+  {
+    bucket: `opencode-${$app.stage}-lake-firehose-errors`,
+    forceDestroy: true,
+  },
+  { retainOnDelete: false },
+)
+
 new aws.athena.Workgroup("LakeAthenaWorkgroup", {
   name: `opencode-${$app.stage}-lake-workgroup`,
   forceDestroy: true,
