@@ -1,5 +1,9 @@
 import { domain } from "./stage"
 
+// Retired in favor of the R2 lake and pending removal. Pulumi reads forceDestroy
+// and retainOnDelete from state at delete time, so these settings must deploy to
+// every stage before the resources are removed from code.
+
 const current = aws.getCallerIdentityOutput({})
 const partition = aws.getPartitionOutput({})
 const region = aws.getRegionOutput({})
@@ -15,7 +19,7 @@ const s3TablesBucketWildcardArn = $interpolate`arn:${partition.partition}:s3tabl
 
 export const tableBucket = new aws.s3tables.TableBucket("LakeTableBucket", {
   name: tableBucketName,
-  forceDestroy: $app.stage !== "production",
+  forceDestroy: true,
 })
 
 const s3TablesCatalog = new aws.cloudcontrol.Resource(
@@ -51,19 +55,27 @@ const s3TablesCatalog = new aws.cloudcontrol.Resource(
   { dependsOn: [tableBucket] },
 )
 
-const athenaResultsBucket = new aws.s3.Bucket("LakeAthenaResults", {
-  bucket: `opencode-${$app.stage}-lake-athena-results`,
-  forceDestroy: $app.stage !== "production",
-})
+const athenaResultsBucket = new aws.s3.Bucket(
+  "LakeAthenaResults",
+  {
+    bucket: `opencode-${$app.stage}-lake-athena-results`,
+    forceDestroy: true,
+  },
+  { retainOnDelete: false },
+)
 
-const firehoseErrorBucket = new aws.s3.Bucket("LakeFirehoseErrors", {
-  bucket: `opencode-${$app.stage}-lake-firehose-errors`,
-  forceDestroy: $app.stage !== "production",
-})
+const firehoseErrorBucket = new aws.s3.Bucket(
+  "LakeFirehoseErrors",
+  {
+    bucket: `opencode-${$app.stage}-lake-firehose-errors`,
+    forceDestroy: true,
+  },
+  { retainOnDelete: false },
+)
 
-const athenaWorkgroup = new aws.athena.Workgroup("LakeAthenaWorkgroup", {
+new aws.athena.Workgroup("LakeAthenaWorkgroup", {
   name: `opencode-${$app.stage}-lake-workgroup`,
-  forceDestroy: $app.stage !== "production",
+  forceDestroy: true,
   configuration: {
     enforceWorkgroupConfiguration: true,
     publishCloudwatchMetricsEnabled: true,
@@ -197,9 +209,6 @@ const firehose = new aws.kinesis.FirehoseDeliveryStream(
 
 export const lakeVpc = new sst.aws.Vpc("LakeVpc")
 export const lakeCluster = new sst.aws.Cluster("LakeCluster", { vpc: lakeVpc })
-export const lakeRegion = region.region
-export const lakeCatalog = $interpolate`${glueCatalogName}/${tableBucket.name}`
-export const lakeAthenaWorkgroup = athenaWorkgroup
 
 const ingestSecret = new random.RandomPassword("LakeIngestSecret", { length: 32 })
 export const ingestSecretSsm = new aws.ssm.Parameter("LakeIngestSecretSsm", {
@@ -277,55 +286,3 @@ export const lakeIngest = new sst.Linkable("LakeIngest", {
     secret: ingestSecret.result,
   },
 })
-
-export const lakeQueryPermissions = [
-  {
-    actions: ["athena:StartQueryExecution", "athena:GetQueryExecution", "athena:GetQueryResults"],
-    resources: [athenaWorkgroup.arn],
-  },
-  {
-    actions: [
-      "glue:GetCatalog",
-      "glue:GetCatalogs",
-      "glue:GetDatabase",
-      "glue:GetDatabases",
-      "glue:GetTable",
-      "glue:GetTables",
-      "glue:GetPartitions",
-    ],
-    resources: [
-      glueCatalogArn,
-      glueS3TablesCatalogArn,
-      $interpolate`${glueS3TablesCatalogArn}/*`,
-      glueS3TablesDatabaseWildcardArn,
-      glueS3TablesTableWildcardArn,
-      $interpolate`arn:${partition.partition}:glue:${region.region}:${current.accountId}:database/*`,
-      $interpolate`arn:${partition.partition}:glue:${region.region}:${current.accountId}:table/*/*`,
-      $interpolate`arn:${partition.partition}:glue:${region.region}:${current.accountId}:table/${glueCatalogName}/*`,
-    ],
-  },
-  {
-    actions: ["s3:GetBucketLocation", "s3:ListBucket"],
-    resources: [athenaResultsBucket.arn],
-  },
-  {
-    actions: ["s3:GetObject", "s3:PutObject", "s3:AbortMultipartUpload", "s3:ListBucketMultipartUploads"],
-    resources: [$interpolate`${athenaResultsBucket.arn}/*`],
-  },
-  {
-    actions: [
-      "s3tables:GetTableBucket",
-      "s3tables:GetNamespace",
-      "s3tables:GetTable",
-      "s3tables:GetTableData",
-      "s3tables:GetTableMetadataLocation",
-      "s3tables:ListNamespaces",
-      "s3tables:ListTables",
-    ],
-    resources: ["*"],
-  },
-  {
-    actions: ["lakeformation:GetDataAccess"],
-    resources: ["*"],
-  },
-]
