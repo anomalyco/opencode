@@ -3,7 +3,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { parsePatch } from "diff"
-import { Deferred, Effect, Layer } from "effect"
+import { Deferred, Effect, Layer, Result } from "effect"
 import fs from "fs/promises"
 import path from "path"
 import {
@@ -331,5 +331,29 @@ describe("Vcs diff", () => {
         )
       }),
     { git: true },
+  )
+
+  worktreeIt.live("diff('git') fails when the worktree repository becomes unreadable", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped({ git: true })
+      const wt = yield* tmpdirScoped()
+      const dir = path.join(wt, "feature")
+      yield* git(tmp, ["worktree", "add", "-b", "feature/test", dir, "HEAD"])
+      yield* write(path.join(dir, "draft.txt"), "wip\n")
+
+      // The instance attaches while the worktree is healthy; the repository
+      // turns unreadable afterwards (as when `git worktree prune` removes the
+      // admin dir: the pointer file stays, `git status` exits 128 with no
+      // output). diff must report that instead of an empty list.
+      const result = yield* Effect.gen(function* () {
+        const vcs = yield* init()
+        yield* FSUtil.Service.use((fs) =>
+          fs.remove(path.join(tmp, ".git", "worktrees", "feature"), { recursive: true, force: true }),
+        )
+        return yield* vcs.diff("git")
+      }).pipe(provideInstance(dir), Effect.result)
+
+      expect(Result.isFailure(result)).toBe(true)
+    }),
   )
 })

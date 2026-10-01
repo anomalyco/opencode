@@ -1,6 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppProcess } from "@opencode-ai/core/process"
-import { Effect, Layer, Context, Stream } from "effect"
+import { Effect, Layer, Context, Schema, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 
 const cfg = [
@@ -72,6 +72,15 @@ export interface Options {
   readonly stdin?: ChildProcess.CommandInput
 }
 
+// Listings (status/diff/stats) expect exit code 0 on every repository they can
+// read — including unborn ones. A non-zero exit means the repository itself is
+// unreadable (broken worktree, dubious ownership, missing git binary), which
+// must surface instead of reading as an empty listing (#50934).
+export class ListingError extends Schema.TaggedErrorClass<ListingError>()("GitListingError", {
+  operation: Schema.Literals(["status", "diff", "stats"]),
+  message: Schema.String,
+}) {}
+
 export interface Interface {
   readonly run: (args: string[], opts: Options) => Effect.Effect<Result>
   readonly branch: (cwd: string) => Effect.Effect<string | undefined>
@@ -80,9 +89,9 @@ export interface Interface {
   readonly hasHead: (cwd: string) => Effect.Effect<boolean>
   readonly mergeBase: (cwd: string, base: string, head?: string) => Effect.Effect<string | undefined>
   readonly show: (cwd: string, ref: string, file: string, prefix?: string) => Effect.Effect<string>
-  readonly status: (cwd: string) => Effect.Effect<Item[]>
-  readonly diff: (cwd: string, ref: string) => Effect.Effect<Item[]>
-  readonly stats: (cwd: string, ref: string) => Effect.Effect<Stat[]>
+  readonly status: (cwd: string) => Effect.Effect<Item[], ListingError>
+  readonly diff: (cwd: string, ref: string) => Effect.Effect<Item[], ListingError>
+  readonly stats: (cwd: string, ref: string) => Effect.Effect<Stat[], ListingError>
   readonly patch: (cwd: string, ref: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly patchAll: (cwd: string, ref: string, options?: PatchOptions) => Effect.Effect<Patch>
   readonly patchUntracked: (cwd: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
@@ -212,12 +221,32 @@ const layer = Layer.effect(
       return result.text()
     })
 
+    const listing = Effect.fn("Git.listing")(function* (
+      operation: ListingError["operation"],
+      cwd: string,
+      args: string[],
+    ) {
+      const result = yield* run(args, { cwd })
+      if (result.exitCode !== 0) {
+        return yield* new ListingError({
+          operation,
+          message: result.stderr.toString("utf8").trim() || `git ${operation} failed`,
+        })
+      }
+      return result
+    })
+
     const status = Effect.fn("Git.status")(function* (cwd: string) {
-      return nuls(
-        yield* text(["status", "--porcelain=v1", "--untracked-files=all", "--no-renames", "-z", "--", "."], {
-          cwd,
-        }),
-      ).flatMap((item) => {
+      const result = yield* listing("status", cwd, [
+        "status",
+        "--porcelain=v1",
+        "--untracked-files=all",
+        "--no-renames",
+        "-z",
+        "--",
+        ".",
+      ])
+      return nuls(result.text()).flatMap((item) => {
         const file = item.slice(3)
         if (!file) return []
         const code = item.slice(0, 2)
@@ -226,9 +255,17 @@ const layer = Layer.effect(
     })
 
     const diff = Effect.fn("Git.diff")(function* (cwd: string, ref: string) {
-      const list = nuls(
-        yield* text(["diff", "--no-ext-diff", "--no-renames", "--name-status", "-z", ref, "--", "."], { cwd }),
-      )
+      const result = yield* listing("diff", cwd, [
+        "diff",
+        "--no-ext-diff",
+        "--no-renames",
+        "--name-status",
+        "-z",
+        ref,
+        "--",
+        ".",
+      ])
+      const list = nuls(result.text())
       return list.flatMap((code, idx) => {
         if (idx % 2 !== 0) return []
         const file = list[idx + 1]
@@ -238,9 +275,17 @@ const layer = Layer.effect(
     })
 
     const stats = Effect.fn("Git.stats")(function* (cwd: string, ref: string) {
-      return nuls(
-        yield* text(["diff", "--no-ext-diff", "--no-renames", "--numstat", "-z", ref, "--", "."], { cwd }),
-      ).flatMap((item) => {
+      const result = yield* listing("stats", cwd, [
+        "diff",
+        "--no-ext-diff",
+        "--no-renames",
+        "--numstat",
+        "-z",
+        ref,
+        "--",
+        ".",
+      ])
+      return nuls(result.text()).flatMap((item) => {
         const a = item.indexOf("\t")
         const b = item.indexOf("\t", a + 1)
         if (a === -1 || b === -1) return []

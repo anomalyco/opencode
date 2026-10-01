@@ -51,11 +51,14 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
     const getVcsDiff = Effect.fn("InstanceHttpApi.vcsDiff")(function* (ctx: {
       query: { mode: Vcs.Mode; context?: number }
     }) {
-      return yield* vcs.diff(ctx.query.mode, { context: ctx.query.context })
+      // An unreadable repository surfaces as an internal error (500) rather
+      // than a silent empty diff (#50934); the endpoint keeps its declared
+      // success-only contract.
+      return yield* vcs.diff(ctx.query.mode, { context: ctx.query.context }).pipe(Effect.orDie)
     })
 
     const getVcsDiffRaw = Effect.fn("InstanceHttpApi.vcsDiffRaw")(function* () {
-      return yield* vcs.diffRaw()
+      return yield* vcs.diffRaw().pipe(Effect.orDie)
     })
 
     const applyVcs = Effect.fn("InstanceHttpApi.vcsApply")(function* (ctx: { payload: Vcs.ApplyInput }) {

@@ -283,8 +283,8 @@ export interface Interface {
   readonly branch: () => Effect.Effect<string | undefined>
   readonly defaultBranch: () => Effect.Effect<string | undefined>
   readonly status: () => Effect.Effect<FileStatus[]>
-  readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff[]>
-  readonly diffRaw: () => Effect.Effect<string>
+  readonly diff: (mode: Mode, options?: DiffOptions) => Effect.Effect<FileDiff[], Git.ListingError>
+  readonly diffRaw: () => Effect.Effect<string, Git.ListingError>
   readonly apply: (input: ApplyInput) => Effect.Effect<ApplyResult, PatchApplyError>
 }
 
@@ -349,10 +349,13 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
         const ctx = yield* InstanceState.context
         if (ctx.project.vcs !== "git") return []
         const ref = (yield* git.hasHead(ctx.directory)) ? "HEAD" : undefined
+        // /vcs/status has no error channel in the public API, so an unreadable
+        // repository keeps reading as "clean" here (#50934). Reporting
+        // unavailability is an API contract change; diff()/diffRaw() do report.
         const [list, stats] = yield* Effect.all(
-          [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([])],
+          [git.status(ctx.directory), ref ? git.stats(ctx.directory, ref) : Effect.succeed([] as Git.Stat[])],
           { concurrency: 2 },
-        )
+        ).pipe(Effect.catch(() => Effect.succeed([[], []] as [Git.Item[], Git.Stat[]])))
         const map = nums(stats)
         return yield* Effect.forEach(
           list.toSorted((a, b) => a.file.localeCompare(b.file)),
