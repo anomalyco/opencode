@@ -870,6 +870,8 @@ Transform and reload skills. Use the re-exported Effect schema constructors for 
 current editor entry, or `undefined` when the skill is absent.
 
 ```ts
+import { Skill } from "@opencode/plugin/effect"
+
 effect: (ctx) =>
   Effect.gen(function* () {
     const skill = ctx.skill
@@ -878,7 +880,7 @@ effect: (ctx) =>
         id: Skill.ID.make("review"),
         name: Skill.Name.make("Review"),
         description: "Review the current changes",
-        location: "/workspace/.opencode/skills/review.md",
+        path: Skill.Info.fields.path.make("/workspace/.opencode/skills/review.md"),
         content: "Review the current changes for correctness and missing tests.",
       }))
       const review = editor.get("review")
