@@ -204,12 +204,8 @@ const layer = Layer.effect(
       const tempfile = `${filepath}.${process.pid}.${Date.now()}.tmp`
       yield* fs.writeWithDirs(tempfile, text).pipe(
         Effect.andThen(fs.rename(tempfile, filepath)),
-        Effect.catch((error) =>
-          Effect.gen(function* () {
-            yield* fs.remove(tempfile, { force: true }).pipe(Effect.ignore)
-            return yield* Effect.fail(error)
-          }),
-        ),
+        // Also runs on interruption, e.g. a short-lived CLI exiting mid-refresh.
+        Effect.ensuring(fs.remove(tempfile, { force: true }).pipe(Effect.ignore)),
       )
       return text
     })
