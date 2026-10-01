@@ -47,6 +47,7 @@ export const ExtensionLayout = Schema.Struct({
   bounds: Schema.optionalKey(
     Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite }),
   ),
+  viewport: Schema.optionalKey(Schema.Struct({ width: Schema.Finite, height: Schema.Finite })),
   background: Schema.optionalKey(rgba),
   radius: Schema.optionalKey(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
   border: Schema.optionalKey(

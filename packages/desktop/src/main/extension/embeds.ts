@@ -20,23 +20,35 @@ type Entry = {
   readonly listeners: Set<(visible: boolean) => void>
 }
 
+// A box edge this close to the window edge follows it while the renderer's layout catches up.
+const WINDOW_GUTTER = 24
+
 /**
  * The web pages main extensions hand to the host. Each stays hidden until its window's renderer lays
  * it out and the extension shows it; the renderer's bounds already include the window zoom.
  */
 export function createEmbeds() {
   const entries = new Map<string, Entry>()
+  const resizing = new WeakSet<BrowserWindow>()
 
   const apply = (entry: Entry) => {
     if (entry.window.isDestroyed()) return
     const layout = entry.layout?.bounds
+    const viewport = entry.layout?.viewport
+    // The renderer measures a frame or more behind a window resize. Edges beside the window
+    // edge follow it now, so the view and its corner masks do not trail inside the panel.
+    const [width = 0, height = 0] = entry.window.getContentSize()
+    // A one-DIP difference is the renderer's rounding of its zoomed viewport, not a resize.
+    const follow = (inset: number, change: number) => (inset <= WINDOW_GUTTER && Math.abs(change) > 1 ? change : 0)
+    const dx = layout && viewport ? follow(viewport.width - layout.x - layout.width, width - viewport.width) : 0
+    const dy = layout && viewport ? follow(viewport.height - layout.y - layout.height, height - viewport.height) : 0
 
     // Renderer measurements are fractional; native views take whole DIPs.
     const bounds = layout && {
       x: Math.round(layout.x),
       y: Math.round(layout.y),
-      width: Math.round(layout.width),
-      height: Math.round(layout.height),
+      width: Math.round(layout.width + dx),
+      height: Math.round(layout.height + dy),
     }
 
     const placed = !!entry.layout?.visible && !!bounds && bounds.width > 0 && bounds.height > 0
@@ -106,6 +118,10 @@ export function createEmbeds() {
   return {
     create(owner: Instance, view: WebContentsView, window: BrowserWindow): Embed {
       const id = randomUUID()
+      if (!resizing.has(window)) {
+        resizing.add(window)
+        window.on("resize", () => entries.forEach((entry) => entry.window === window && apply(entry)))
+      }
       const corners = [new ImageView(), new ImageView()]
       view.setVisible(false)
       window.contentView.addChildView(view)

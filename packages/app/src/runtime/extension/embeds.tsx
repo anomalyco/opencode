@@ -146,8 +146,9 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
       props.background ??
       getComputedStyle(element.closest(".bg-v2-background-bg-deep") ?? document.documentElement).backgroundColor
     const ring = props.radius ? cardRing(element) : undefined
+    const viewport = { width: Math.round(window.innerWidth * zoom), height: Math.round(window.innerHeight * zoom) }
 
-    const next = `${id}:${visible}:${left}:${top}:${right}:${bottom}:${color}:${ring?.color}:${ring?.width}:${window.devicePixelRatio}`
+    const next = `${id}:${visible}:${left}:${top}:${right}:${bottom}:${viewport.width}:${viewport.height}:${color}:${ring?.color}:${ring?.width}:${window.devicePixelRatio}`
 
     if (next === layout) return
     layout = next
@@ -161,6 +162,7 @@ function EmbedView(props: EmbedProps & { input: Input; bridge: Bridge }) {
     props.bridge.embed(id, {
       visible,
       bounds: { x: left, y: top, width: Math.max(0, right - left), height: Math.max(0, bottom - top) },
+      viewport,
       ...(background ? { background } : {}),
       radius: Math.round((props.radius ?? 0) * zoom),
       ...(ring && border && border[3] > 0 ? { border: { color: border, width: ring.width * zoom } } : {}),
