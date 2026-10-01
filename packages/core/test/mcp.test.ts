@@ -1132,14 +1132,15 @@ test("reconnects and retries a tool call after the MCP session expires", async (
 })
 
 describe("MCP session termination", () => {
-  const terminations = (input: { hang?: boolean } = {}) => {
+  const terminations = (input: { hang?: boolean; status?: number } = {}) => {
     const deletes: Array<string | null> = []
     return {
       deletes,
       respond: (request: Request) => {
         if (request.method !== "DELETE") return undefined
         deletes.push(request.headers.get("mcp-session-id"))
-        return input.hang ? new Promise<undefined>(() => {}) : undefined
+        if (input.hang) return new Promise<undefined>(() => {})
+        return input.status ? new Response(null, { status: input.status }) : undefined
       },
     }
   }
@@ -1171,6 +1172,20 @@ describe("MCP session termination", () => {
           expect(recorded.deletes).toHaveLength(1)
           expect(elapsed).toBeGreaterThanOrEqual(900)
           expect(elapsed).toBeLessThan(3_000)
+        }),
+      ),
+    )
+  })
+
+  test("still closes the connection when termination is rejected", async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const recorded = terminations({ status: 500 })
+          const server = yield* resourceServer({ respond: recorded.respond })
+          const exit = yield* Effect.scoped(connect("resources", remote(server.url), import.meta.dir)).pipe(Effect.exit)
+          expect(Exit.isSuccess(exit)).toBe(true)
+          expect(recorded.deletes).toHaveLength(1)
         }),
       ),
     )

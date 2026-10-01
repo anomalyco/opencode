@@ -243,11 +243,17 @@ export const connect = Effect.fnUntraced(function* (
         // terminated explicitly. Terminate first: close aborts the signal the DELETE shares.
         const transport = session.transport
         if (transport?.sessionId !== undefined && !session.reported)
-          yield* Effect.promise(() => transport.terminateSession()).pipe(
-            Effect.timeout(TERMINATE_TIMEOUT),
+          yield* Effect.tryPromise({ try: () => transport.terminateSession(), catch: toError }).pipe(
+            Effect.timeoutOrElse({
+              duration: TERMINATE_TIMEOUT,
+              orElse: () => Effect.fail(new Error(`Timed out after ${TERMINATE_TIMEOUT}ms`)),
+            }),
+            Effect.tapError((error) =>
+              Effect.logWarning("failed to terminate MCP session", { server, error: error.message }),
+            ),
             Effect.ignore,
           )
-        yield* Effect.promise(() => client.close()).pipe(Effect.ignore)
+        yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
       }),
     )
     const catalog = { timeout: config.timeout?.catalog ?? DEFAULT_CATALOG_TIMEOUT }
