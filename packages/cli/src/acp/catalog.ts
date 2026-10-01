@@ -209,7 +209,8 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
     : models[0]
   if (!defaultModel) return yield* new NotReadyError({ reason: "models" })
   const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
-  const defaultAgent = agents.find((agent) => agent.mode === "primary") ?? agents[0]
+  // Core lists its resolved default agent first, the same one a new session runs.
+  const defaultAgent = agents[0]
   if (!defaultAgent) return yield* new NotReadyError({ reason: "agents" })
   return {
     providers: providers(models),

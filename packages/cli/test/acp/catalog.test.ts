@@ -65,6 +65,20 @@ describe("acp catalog and config options over the wire", () => {
     expect(currentValue(second, "mode")).toBe("copilot-build")
   })
 
+  test("defaults the mode to the first selectable agent the server lists", async () => {
+    const configured = { ...buildAgent, id: "review", name: "Review", mode: "all" as const }
+    await using acp = await startWire()
+    acp.server.catalog.agents = [configured, buildAgent, planAgent]
+    await acp.initialize()
+
+    const session = await acp.newSession()
+
+    expect(modeOption(session.configOptions ?? [])).toEqual({
+      currentValue: "review",
+      options: ["review", "build", "plan"],
+    })
+  })
+
   test("pushes config options on model.updated and commands on command.updated", async () => {
     await using acp = await startWire()
     acp.server.catalog.models = [testModel]
