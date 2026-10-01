@@ -1,4 +1,9 @@
 export const dict = {
+  "go.promo.spaceBunny": "Space Bunny Free, a new anonymous model, is available for a limited time",
+  "go.referral.ended.label": "Warning",
+  "go.referral.ended":
+    "The referral program has ended. Referral links no longer earn credit for you or the person who shared them.",
+  "go.graph.bonus": "{{count}}× usage",
   "nav.github": "GitHub",
   "nav.docs": "Docs",
   "nav.data": "Data",
@@ -225,6 +230,9 @@ export const dict = {
   "zen.faq.q8": "Can I use Zen with other coding agents?",
   "zen.faq.a8":
     "While Zen works great with OpenCode, you can use Zen with any agent. Follow the setup instructions in your preferred coding agent.",
+  "zen.faq.q9": "Can I get a refund?",
+  "zen.faq.a9":
+    "You may qualify for a refund if the charge was made within the last 14 days and you have not used the credits from that purchase. {{contact}} to request a refund.",
 
   "zen.cta.start": "Get started with Zen",
   "zen.pricing.title": "Add $20 Pay as you go balance",
@@ -253,9 +261,9 @@ export const dict = {
   "zen.privacy.exceptionsLink": "following exceptions",
 
   "go.title": "OpenCode Go | Low cost coding models for everyone",
-  "go.banner.text": "GLM-5.3-Flash gets 2× usage limits for a limited time",
   "go.meta.description": "Go costs $10/month, with generous usage limits and reliable access to leading coding models.",
   "go.hero.title": "Low cost coding models for everyone",
+  "go.hero.tagline": "Use with any agent. Top up credit if needed. Cancel any time.",
   "go.hero.body":
     "Go brings agentic coding to programmers around the world. Offering generous limits and reliable access to the most capable open-source models, so you can build with powerful agents without worrying about cost or availability.",
 
@@ -263,13 +271,33 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Subscribe to Go",
   "go.cta.price": "$10/month",
+  "go.plans.month": "per month",
+  "go.plans.plus.cta": "Subscribe to Go Plus",
+  "go.plans.plus.description": "Go Plus costs $40/month with higher limits.",
+  "go.plans.go.feature1": "Curated, affordable models",
+  "go.plans.go.feature2": "Tested for agentic coding",
+  "go.plans.go.feature3": "Generous limits and reliable access",
+  "go.plans.plus.feature1": "Everything included in Go",
+  "go.plans.plus.feature2": "Higher limits and fewer interruptions",
+  "go.plans.plus.feature3": "Built for larger, demanding projects",
+  "go.plans.limits": "Limits",
+  "go.plans.description": "Estimated requests per 5 hours and monthly usage limits by model",
+  "go.plans.legend": "Plans",
   "go.pricing.body": "Use with any agent. $10/month. Top up credit if needed. Cancel any time.",
   "go.graph.free": "Free",
   "go.graph.freePill": "Big Pickle and free models",
   "go.graph.go": "Go",
-  "go.graph.label": "Requests per 5 hour",
-  "go.graph.limitedRegions": "limited regions",
-  "go.graph.limitedTime": "limited time",
+  "go.graph.label": "Requests / 5 hours",
+  "go.graph.period": "Usage",
+  "go.graph.model": "Model",
+  "go.graph.requests": "Est. requests / 5h",
+  "go.graph.allowance": "Monthly usage",
+  "go.graph.new": "New",
+  "go.graph.scale": "Nonlinear request scale",
+  "go.graph.showAll": "View all {{count}} models",
+  "go.graph.showLess": "Show fewer models",
+  "go.graph.limitedRegions": "Limited Regions",
+  "go.graph.limitedTime": "Limited Time",
   "go.graph.tick": "{{n}}x",
   "go.graph.usageLimits": "Usage limits",
   "go.graph.aria": "Requests per 5h: {{free}} vs {{go}}",
@@ -352,7 +380,7 @@ export const dict = {
   "go.faq.a5.museRetention":
     "Heavily discounted token pricing in exchange for permission to use your prompts and completions to train future Meta models.",
   "go.faq.a5.deepseekRetention":
-    "ZDR agreement is renewed monthly. The current agreement is valid through August 31, 2026.",
+    "ZDR agreement is renewed monthly. The current agreement is valid through September 30, 2026.",
   "go.faq.a5.learnMore": "Learn more",
 
   "go.faq.a5.beforeExceptions":
@@ -367,7 +395,10 @@ export const dict = {
 
   "go.faq.q9": "What is the difference between free models and Go?",
   "go.faq.a9":
-    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go offers a curated model lineup with higher request quotas enforced across rolling windows (5-hour, weekly, and monthly), roughly equivalent to $12 per 5 hours, $30 per week, and $60 per month (actual request counts vary by model and usage).",
+    "Free models include Big Pickle plus promotional models available at the time, with a quota of 200 requests/day. Go offers a curated model lineup with higher request quotas enforced across rolling windows: 20% of the monthly allowance per 5 hours, 50% per week, and 100% per month. Model-specific allowances may differ (actual request counts vary by model and usage).",
+  "go.faq.q10": "Can I get a refund?",
+  "go.faq.a10":
+    "You may qualify for a refund if the charge was made within the last 14 days and you have not used your Go allowance during that billing period. {{contact}} to request a refund.",
 
   "zen.api.error.rateLimitExceeded": "Rate limit exceeded. Please try again later.",
   "zen.api.error.modelNotSupported": "Model {{model}} is not supported",
@@ -632,7 +663,6 @@ export const dict = {
   "workspace.payments.type.subscription": "subscription",
   "workspace.payments.view": "View",
 
-  "workspace.black.loading": "Loading...",
   "workspace.black.time.day": "day",
   "workspace.black.time.days": "days",
   "workspace.black.time.hour": "hour",
@@ -642,7 +672,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "a few seconds",
   "workspace.black.subscription.title": "Subscription",
   "workspace.black.subscription.message": "You are subscribed to OpenCode Black for ${{plan}} per month.",
-  "workspace.black.subscription.manage": "Manage Subscription",
+  "workspace.black.subscription.ending":
+    "OpenCode Black ends with your current billing period and won't renew. We'll move you to the new console.",
   "workspace.black.subscription.rollingUsage": "5-hour Usage",
   "workspace.black.subscription.weeklyUsage": "Weekly Usage",
   "workspace.black.subscription.resetsIn": "Resets in",

@@ -304,6 +304,7 @@ export namespace Billing {
     }),
     async (input) => {
       const user = Actor.assert("user")
+      throw new Error("Go subscriptions have moved to the new Console")
       const { successUrl, cancelUrl, method } = input
 
       const email = (await User.getAuthEmail(user.properties.userID))!
