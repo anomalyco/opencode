@@ -29,11 +29,26 @@ export const Output = Schema.Struct({
 })
 export type Output = typeof Output.Type
 
-export class CancelledError extends Schema.TaggedError<CancelledError>()("QuestionTool.CancelledError", {}) {
+export class CancelledError extends Schema.TaggedError<CancelledError>()(
+  "QuestionTool.CancelledError",
+  // Pre-composed truthful sentence for the declines message; absent = plain dismissal.
+  { detail: Schema.optional(Schema.String) },
+) {
   override get message() {
-    return "The user dismissed this question"
+    return this.detail ?? "The user dismissed this question"
   }
 }
+
+// Model-facing decline details must stay bounded.
+const DETAIL_CONTENT_CAP = 200
+
+function truncate(text: string, cap: number): string {
+  return text.length > cap ? `${text.slice(0, cap)}…` : text
+}
+
+// The pending content, quoted the way the answered path reports it (toModelContent).
+const renderPendingQuestions = (questions: ReadonlyArray<Question.Prompt>) =>
+  truncate(questions.map((question) => `"${question.header}"="${question.question}"`).join("; "), DETAIL_CONTENT_CAP)
 
 export const toModelContent = (questions: ReadonlyArray<Question.Prompt>, answers: ReadonlyArray<Question.Answer>) => {
   const formatted = questions
@@ -92,9 +107,23 @@ export const Plugin = {
                   // resurfaces as a typed failure at SessionModelRequest.executeTool.
                   // A dismissal with a message (e.g. from a non-interactive client) is ordinary
                   // model-facing feedback: the model continues instead of the step ending.
+                  // A cause-carrying cancellation is the close path ending the step; its detail
+                  // names the eviction and the pending content. The bare dismissal also carries
+                  // the pending content so the declines message is never content-free.
+                  if (state.status === "cancelled" && state.cause === "evicted")
+                    return Effect.die(
+                      new CancelledError({
+                        detail: `This question was not answered: the location was evicted for inactivity while it awaited a reply — ${renderPendingQuestions(input.questions)}`,
+                      }),
+                    )
                   if (state.status === "cancelled" && state.message !== undefined)
                     return Effect.fail(new ToolFailure({ message: state.message }))
-                  if (state.status === "cancelled") return Effect.die(new CancelledError())
+                  if (state.status === "cancelled")
+                    return Effect.die(
+                      new CancelledError({
+                        detail: `The user dismissed this question: ${renderPendingQuestions(input.questions)}`,
+                      }),
+                    )
                   const output = {
                     answers: input.questions.map((_, index): Question.Answer => {
                       const value = state.answer[`q${index}`]

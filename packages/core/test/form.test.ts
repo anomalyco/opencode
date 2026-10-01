@@ -354,4 +354,36 @@ describe("Form", () => {
       expect(yield* service.state(formID)).toEqual({ status: "answered", answer: { name: "Ava" } })
     }),
   )
+
+  it.effect("marks pending forms with the eviction cause and content when closed with a cause", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const pending = yield* service.create({
+        sessionID: SessionSchema.ID.make("ses_evicted"),
+        title: "Questions",
+        fields: [{ key: "runtime", title: "Runtime", description: "Which runtime?", type: "string" }],
+      })
+
+      yield* service.close({ cause: "evicted" })
+
+      const state = yield* service.state(pending.id)
+      expect(state).toMatchObject({ status: "cancelled", cause: "evicted" })
+      expect(state).toHaveProperty(
+        "message",
+        expect.stringContaining("The location was evicted for inactivity before this form received a reply"),
+      )
+      expect(state).toHaveProperty("message", expect.stringContaining('"Which runtime?"'))
+    }),
+  )
+
+  it.effect("cancels pending forms without a cause on a plain close", () =>
+    Effect.gen(function* () {
+      const service = yield* Form.Service
+      const pending = yield* service.create(input)
+
+      yield* service.close()
+
+      expect(yield* service.state(pending.id)).toEqual({ status: "cancelled" })
+    }),
+  )
 })

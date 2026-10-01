@@ -34,6 +34,7 @@ import { EventTable } from "@opencode/core/event/sql"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Form } from "@opencode/core/form"
+import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { Snapshot } from "@opencode/core/snapshot"
@@ -501,6 +502,16 @@ const layer = Layer.unwrap(
         LocationServiceMap.node.replace(promptLocationNode),
         Model.node.replace(promptModels),
         SessionExecution.node.replace(execution),
+        // Controllable closed-state: the runner reads isClosed at declines/settlement.
+        LocationLifecycle.node.replace(
+          Layer.succeed(
+            LocationLifecycle.Service,
+            LocationLifecycle.Service.of({
+              isClosed: () => harnessLocationClosed,
+              shutdown: () => Effect.void,
+            }),
+          ),
+        ),
       ],
     )
   }),
@@ -508,6 +519,9 @@ const layer = Layer.unwrap(
 const it = testEffect(layer)
 const sessionID = Session.ID.make("ses_runner_test")
 const otherSessionID = Session.ID.make("ses_runner_other")
+// Flipped by scenarios that need the runner to observe a closed location mid-step
+// (the real lifecycle never shuts down inside this harness); reset by setup.
+let harnessLocationClosed = false
 
 const insertSession = (id: Session.ID) =>
   Effect.gen(function* () {
@@ -528,6 +542,7 @@ const insertSession = (id: Session.ID) =>
   })
 
 const setup = Effect.gen(function* () {
+  harnessLocationClosed = false
   const { db } = yield* Database.Service
   const bus = yield* Bus.Service
   const sessionInbox = yield* SessionInbox.Service
@@ -5023,6 +5038,84 @@ describe("SessionRunnerLLM", () => {
         ),
       ]),
     ])
+  })
+
+  scenario("reports the question cancellation detail over the closed-location blanket", function* (s) {
+    const registry = yield* Tool.Service
+    yield* transformTools(
+      registry,
+      {
+        question: {
+          name: "question",
+          description: "Ask the user",
+          input: Schema.Struct({}),
+          output: Schema.Struct({}),
+          execute: () =>
+            Effect.sync(() => {
+              // The location closes while the question is parked; the decline settles closed.
+              harnessLocationClosed = true
+            }).pipe(Effect.andThen(Effect.die(new QuestionTool.CancelledError({ detail: "The question carried its content" })))),
+        },
+      },
+      { codemode: false },
+    )
+    yield* s.admit("Ask after close")
+    const failed = yield* Deferred.make<SessionEvent.Tool.Failed["data"]>()
+    const unsubscribe = yield* s.bus.listen((event) =>
+      event.type === SessionEvent.Tool.Failed.type
+        ? Deferred.succeed(failed, Schema.decodeUnknownSync(SessionEvent.Tool.Failed.data)(event.data))
+        : Effect.void,
+    )
+    yield* Effect.addFinalizer(() => unsubscribe)
+    yield* s.llm.push(TestLLM.tool("call-question", "question", {}))
+
+    // A decline on a closed location completes with needsContinuation; this harness's
+    // drain loop has no reload handoff, so the run is interrupted after the event lands.
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    const failure = yield* Deferred.await(failed)
+    yield* Fiber.interrupt(run)
+
+    expect(failure.id).toBe("call-question")
+    expect(failure.error).toEqual({ type: "aborted", message: "The question carried its content" })
+  })
+
+  scenario("keeps the closed-location blanket for permission declines", function* (s) {
+    const registry = yield* Tool.Service
+    yield* transformTools(
+      registry,
+      {
+        declined: {
+          name: "declined",
+          description: "Fail because the user declined approval",
+          input: Schema.Struct({}),
+          output: Schema.Struct({}),
+          execute: () =>
+            Effect.sync(() => {
+              harnessLocationClosed = true
+            }).pipe(Effect.andThen(Effect.die(new Permission.DeclinedError()))),
+        },
+      },
+      { codemode: false },
+    )
+    yield* s.admit("Reject permission after close")
+    const failed = yield* Deferred.make<SessionEvent.Tool.Failed["data"]>()
+    const unsubscribe = yield* s.bus.listen((event) =>
+      event.type === SessionEvent.Tool.Failed.type
+        ? Deferred.succeed(failed, Schema.decodeUnknownSync(SessionEvent.Tool.Failed.data)(event.data))
+        : Effect.void,
+    )
+    yield* Effect.addFinalizer(() => unsubscribe)
+    yield* s.llm.push(TestLLM.tool("call-declined", "declined", {}))
+
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    const failure = yield* Deferred.await(failed)
+    yield* Fiber.interrupt(run)
+
+    expect(failure.id).toBe("call-declined")
+    expect(failure.error).toEqual({
+      type: "aborted",
+      message: "Interaction cancelled because the location shut down",
+    })
   })
 
   scenario("awaits started local tools before surfacing provider stream failure", function* (s) {

@@ -1900,7 +1900,7 @@ export type FormField =
 export type FormState =
   | { status: "pending" }
   | { status: "answered"; answer: FormAnswer }
-  | { status: "cancelled"; message?: string }
+  | { status: "cancelled"; message?: string; cause?: "evicted" }
 
 export type CredentialKey = {
   type: "key"

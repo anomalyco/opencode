@@ -206,11 +206,14 @@ export const make = Effect.gen(function* () {
         for (const decline of tools.declines)
           yield* publisher.failTool(decline.call.id, {
             type: "aborted",
-            message: input.isLocationClosed()
-              ? "Interaction cancelled because the location shut down"
-              : decline.reason._tag === "QuestionTool.CancelledError"
+            // A question cancellation carries its own truthful message (with the pending
+            // content); it outranks the closed-location blanket. Other declines keep it.
+            message:
+              decline.reason._tag === "QuestionTool.CancelledError"
                 ? decline.reason.message
-                : "The user declined this tool call",
+                : input.isLocationClosed()
+                  ? "Interaction cancelled because the location shut down"
+                  : "The user declined this tool call",
           })
         const interrupted = tools.declines.length > 0 || streamInterrupted || tools.interrupted
         const toolFailure = interrupted

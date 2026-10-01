@@ -3,12 +3,16 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
 import { AbsolutePath } from "@opencode/schema/schema"
 import path from "path"
+import type { Form } from "./form.js"
 import { Location } from "./location.js"
 import type { Instance } from "./instance.js"
 
 export class Service extends Context.Service<
   Service,
-  LayerMap.LayerMap<Location.Ref, Instance.Services, Instance.Error>
+  LayerMap.LayerMap<Location.Ref, Instance.Services, Instance.Error> & {
+    /** Invalidate with an optional close cause, forwarded to the entry's close hook. */
+    readonly invalidate: (ref: Location.Ref, options?: Form.CloseOptions) => Effect.Effect<void>
+  }
 >()("@opencode/example/LocationServiceMap") {
   static get(ref: Location.Ref) {
     return Layer.unwrap(Effect.map(Service, (locations) => locations.get(ref)))
