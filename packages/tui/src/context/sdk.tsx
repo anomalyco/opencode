@@ -60,7 +60,13 @@ export const { use: useSDK, provider: SDKProvider } = createSimpleContext({
       // Batch all event emissions so all store updates result in a single render
       batch(() => {
         for (const event of events) {
-          emitter.emit("event", event)
+          // A throwing handler would otherwise end the event loop for good,
+          // leaving the client connected but never updating again.
+          try {
+            emitter.emit("event", event)
+          } catch (error) {
+            console.error("tui event handler failed", { type: event.payload.type, error })
+          }
         }
       })
     }
