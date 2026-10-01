@@ -51,8 +51,10 @@ function search<T>(items: T[], target: string, key: (item: T) => string) {
   return { found: false, index: left }
 }
 
-function compareMessage(a: Message, b: Message) {
-  return a.time.created - b.time.created || a.id.localeCompare(b.id)
+// Tie-break by code unit order to match storage (SQLite BINARY collation) and search() below;
+// localeCompare can order same-millisecond ids differently and treats some distinct ids as equal.
+export function compareMessage(a: Message, b: Message) {
+  return a.time.created - b.time.created || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)
 }
 
 const messageKey = (message: Message) => message.time.created + message.id
@@ -170,7 +172,7 @@ export const {
     function listSessions() {
       return sdk.client.session
         .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })
-        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+        .then((x) => (x.data ?? []).toSorted((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)))
     }
 
     event.subscribe((event, { directory, workspace }) => {
