@@ -195,8 +195,11 @@ export function make(input: {
     loadSession: Effect.fnUntraced(function* (params) {
       const session = yield* getSession(params.sessionId, params.cwd)
       const attached = yield* input.sessions.attach(session, session.location.directory, params.mcpServers)
-      yield* replay(attached)
-      return { configOptions: yield* currentOptions(attached) }
+      return yield* replay(attached).pipe(
+        Effect.andThen(currentOptions(attached)),
+        Effect.map((configOptions) => ({ configOptions })),
+        Effect.onError(() => input.sessions.detach(attached.id)),
+      )
     }),
     listSessions: Effect.fnUntraced(function* (params) {
       const page = yield* ACPPromise.promise(() =>
@@ -239,8 +242,10 @@ export function make(input: {
     forkSession: Effect.fnUntraced(function* (params) {
       const forked = yield* ACPPromise.promise(() => input.client.session.fork({ sessionID: params.sessionId }))
       const attached = yield* input.sessions.attach(forked, forked.location.directory, params.mcpServers ?? [])
-      yield* replay(attached)
-      return { sessionId: attached.id, configOptions: yield* currentOptions(attached) }
+      return yield* currentOptions(attached).pipe(
+        Effect.map((configOptions) => ({ sessionId: attached.id, configOptions })),
+        Effect.onError(() => input.sessions.detach(attached.id)),
+      )
     }),
     setSessionConfigOption: Effect.fnUntraced(function* (params) {
       const attached = yield* input.sessions.require(params.sessionId)

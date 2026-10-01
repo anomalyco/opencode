@@ -146,25 +146,22 @@ export const make = Effect.fnUntraced(function* (input: {
       // Updates wait for the response that hands the client this session. `changes` emits the latest catalog
       // first, so a reload since `current` is still pushed. One fold applies catalog and selection changes so
       // pushes leave the client on the latest pair.
-      yield* responded.pipe(
-        Effect.andThen(sendCommands(session.id, current)),
-        Effect.andThen(
-          Stream.merge(
-            input.catalog.changes(cwd).pipe(Stream.map((catalog) => ({ catalog, patch: {} }))),
-            Stream.fromQueue(entry.selected).pipe(Stream.map((patch) => ({ catalog: undefined, patch }))),
-          ).pipe(
-            Stream.runFoldEffect(
-              () => current,
-              (previous, step) => {
-                const next = step.catalog ?? previous
-                return changed(entry.attached, previous, next, step.patch).pipe(Effect.ignore, Effect.as(next))
-              },
-            ),
+      yield* Effect.gen(function* () {
+        yield* responded
+        yield* sendCommands(session.id, current)
+        yield* Stream.merge(
+          input.catalog.changes(cwd).pipe(Stream.map((catalog) => ({ catalog, patch: {} }))),
+          Stream.fromQueue(entry.selected).pipe(Stream.map((patch) => ({ catalog: undefined, patch }))),
+        ).pipe(
+          Stream.runFoldEffect(
+            () => current,
+            (previous, step) => {
+              const next = step.catalog ?? previous
+              return changed(entry.attached, previous, next, step.patch).pipe(Effect.ignore, Effect.as(next))
+            },
           ),
-        ),
-        Effect.ignore,
-        Effect.forkIn(entry.scope),
-      )
+        )
+      }).pipe(Effect.ignore, Effect.forkIn(entry.scope))
       return entry.attached
     }),
     detach: Effect.fn("cli.acp.sessions.detach")(function* (sessionID) {

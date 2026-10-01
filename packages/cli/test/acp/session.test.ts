@@ -86,7 +86,7 @@ describe("acp session lifecycle over the wire", () => {
     expect(acp.server.selections).toEqual([])
   })
 
-  test("loads and forks with paginated replay while resume does not replay", async () => {
+  test("loads with paginated replay while resume and fork do not replay", async () => {
     await using acp = await startWire()
     const history = Array.from({ length: 201 }, (_, index) => ({
       id: `msg_${index}`,
@@ -132,7 +132,7 @@ describe("acp session lifecycle over the wire", () => {
           : [],
       )
     expect(replayed("ses_loaded")).toEqual(history.map((message) => message.id))
-    expect(replayed(forked.sessionId)).toEqual(history.map((message) => message.id))
+    expect(replayed(forked.sessionId)).toEqual([])
     expect(replayed("ses_resume")).toEqual([])
     expect(
       acp.updates.find((item) => item.sessionId === "ses_loaded" && item.update.sessionUpdate === "user_message_chunk")
@@ -161,6 +161,10 @@ describe("acp session lifecycle over the wire", () => {
       "response",
       "available_commands_update",
     ])
+    expect(await untilCommands(acp, () => acp.request("session/fork", params))).toEqual([
+      "response",
+      "available_commands_update",
+    ])
   })
 
   test("does not publish commands for a session closed before its load responds", async () => {
@@ -181,6 +185,24 @@ describe("acp session lifecycle over the wire", () => {
     await acp.until(() => acp.updates.some(isCommands), "commands for the later session")
 
     expect(acp.updates.filter(isCommands).map((item) => item.sessionId)).toEqual([created.sessionId])
+  })
+
+  test("detaches a session whose load fails after attaching", async () => {
+    await using acp = await startWire({
+      fetch: (request) =>
+        request.path === "/api/session/ses_loaded/message" ? new Response(null, { status: 500 }) : undefined,
+    })
+    acp.server.sessions.set("ses_loaded", makeSession("ses_loaded"))
+    await acp.initialize()
+
+    expect(
+      await rpcError(acp.request("session/load", { cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })),
+    ).toMatchObject({ code: -32603 })
+    expect(
+      await rpcError(
+        acp.request("session/set_config_option", { sessionId: "ses_loaded", configId: "mode", value: "plan" }),
+      ),
+    ).toMatchObject({ code: -32602, data: { sessionId: "ses_loaded" } })
   })
 
   test("lists server-backed pages for the requested cwd", async () => {
