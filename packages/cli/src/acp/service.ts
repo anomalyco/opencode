@@ -359,9 +359,9 @@ export function make(input: {
         submit: (signal) => submitPrompt(input.client, state, prepared, signal),
         ...(childSessionUpdate ? { childSessionUpdate } : {}),
       })
-        .then(async (response) => {
-          await sendUsageUpdate(input.client, input.connection, state, response.usage?.totalTokens).catch(() => {})
-          return response
+        .then(async (result) => {
+          await sendUsageUpdate(input.client, input.connection, state, result.contextTokens).catch(() => {})
+          return result.response
         })
         .finally(() => {
           signal?.removeEventListener("abort", cancel)

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { StopReason } from "@agentclientprotocol/sdk"
 import type { OpenCodeEvent } from "@opencode/client/promise"
 import {
-  assistantMessage,
+  childCreated,
   delivered,
   durableEvent,
   failed,
@@ -32,7 +32,6 @@ describe("acp prompt turns over the wire", () => {
       onPrompt: ({ sessionID, id }) =>
         turn(sessionID, id, textDelta(sessionID, "msg_assistant", "hello"), stepEnded(sessionID, "msg_assistant")),
     })
-    acp.server.messages.set(acp.sessionId, [assistantMessage("msg_assistant")])
 
     const response = await acp.prompt(acp.sessionId, "hi")
 
@@ -114,7 +113,6 @@ describe("acp prompt turns over the wire", () => {
       value: "test/second-model",
     })
     acp.server.sessions.set(acp.sessionId, makeSession(acp.sessionId, { cost: 3.5 }))
-    acp.server.messages.set(acp.sessionId, [assistantMessage("msg_assistant", { tokens: assistantTokens })])
 
     const response = await acp.prompt(acp.sessionId, "hello")
 
@@ -145,7 +143,6 @@ describe("acp prompt turns over the wire", () => {
         return turn(sessionID, id, stepEnded(sessionID, "msg_assistant"))
       },
     })
-    acp.server.messages.set(acp.sessionId, [assistantMessage("msg_assistant")])
 
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
   })
@@ -191,14 +188,20 @@ describe("acp prompt turns over the wire", () => {
     expect(await rpcError(acp.prompt(acp.sessionId, "hello"))).toMatchObject({ code: -32000 })
   })
 
-  test("maps an assistant message auth error to auth required", async () => {
+  test("maps an assistant step auth error to auth required", async () => {
     await using acp = await startSession({
       onPrompt: ({ sessionID, id }) =>
-        turn(sessionID, id, textDelta(sessionID, "msg_auth", "partial"), stepEnded(sessionID, "msg_auth")),
+        turn(
+          sessionID,
+          id,
+          textDelta(sessionID, "msg_auth", "partial"),
+          durableEvent("session.step.failed", {
+            sessionID,
+            assistantMessageID: "msg_auth",
+            error: { type: "provider.auth", message: "expired" },
+          }),
+        ),
     })
-    acp.server.messages.set(acp.sessionId, [
-      assistantMessage("msg_auth", { error: { type: "provider.auth", message: "expired" } }),
-    ])
 
     expect(await rpcError(acp.prompt(acp.sessionId, "hello"))).toMatchObject({ code: -32000 })
   })
@@ -353,27 +356,74 @@ describe("acp prompt turns over the wire", () => {
     expect((await first).stopReason).toBe("cancelled")
   })
 
-  test.todo(
-    "reports usage summed across every step of the turn (https://github.com/anomalyco/opencode/issues/41660)",
-    async () => {
-      await using acp = await startSession({
-        onPrompt: ({ sessionID, id }) =>
-          turn(
-            sessionID,
-            id,
-            stepEnded(sessionID, "msg_step_1", { finish: "tool-calls", tokens: { ...tokens(), input: 10, output: 5 } }),
-            stepEnded(sessionID, "msg_step_2", { tokens: { ...tokens(), input: 20, output: 7 } }),
-          ),
-      })
-      acp.server.messages.set(acp.sessionId, [
-        assistantMessage("msg_step_2", { tokens: { ...tokens(), input: 20, output: 7 } }),
-      ])
+  test("reports usage summed across every step of the turn", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          stepEnded(sessionID, "msg_step_1", { finish: "tool-calls", tokens: { ...tokens(), input: 10, output: 5 } }),
+          stepEnded(sessionID, "msg_step_2", { tokens: { ...tokens(), input: 20, output: 7 } }),
+        ),
+    })
 
-      const response = await acp.prompt(acp.sessionId, "hello")
+    const response = await acp.prompt(acp.sessionId, "hello")
 
-      expect(response.usage).toEqual({ inputTokens: 30, outputTokens: 12, totalTokens: 42 })
-    },
-  )
+    expect(response.usage).toEqual({ inputTokens: 30, outputTokens: 12, totalTokens: 42 })
+  })
+
+  test("publishes the last step's context usage rather than the turn sum", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          stepEnded(sessionID, "msg_step_1", {
+            finish: "tool-calls",
+            tokens: { input: 100, output: 10, reasoning: 0, cache: { read: 0, write: 50 } },
+          }),
+          stepEnded(sessionID, "msg_step_2", {
+            tokens: { input: 20, output: 5, reasoning: 3, cache: { read: 150, write: 0 } },
+          }),
+        ),
+    })
+
+    const response = await acp.prompt(acp.sessionId, "hello")
+
+    expect(response.usage).toEqual({
+      inputTokens: 120,
+      outputTokens: 15,
+      thoughtTokens: 3,
+      cachedReadTokens: 150,
+      cachedWriteTokens: 50,
+      totalTokens: 338,
+    })
+    expect(await acp.waitForUpdate((item) => item.update.sessionUpdate === "usage_update")).toEqual({
+      sessionId: acp.sessionId,
+      update: { sessionUpdate: "usage_update", used: 178, size: 100_000, cost: { amount: 0, currency: "USD" } },
+    })
+  })
+
+  test("excludes child session steps from the turn usage", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          childCreated("ses_child", sessionID, "Explore"),
+          stepEnded("ses_child", "msg_child", { tokens: { ...tokens(), input: 500, output: 50 } }),
+          succeeded("ses_child"),
+          stepEnded(sessionID, "msg_root", { tokens: { ...tokens(), input: 20, output: 7 } }),
+        ),
+    })
+
+    const response = await acp.prompt(acp.sessionId, "hello")
+
+    expect(response.usage).toEqual({ inputTokens: 20, outputTokens: 7, totalTokens: 27 })
+    expect(await acp.waitForUpdate((item) => item.update.sessionUpdate === "usage_update")).toMatchObject({
+      update: { used: 27 },
+    })
+  })
 })
 
 // The server answered admission before streaming the chunk, and this request round-trips through the server after it,

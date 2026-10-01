@@ -5,6 +5,7 @@ import type {
   SessionMessageAssistant,
   SessionMessageInfo,
   SessionStructuredError,
+  TokenUsageInfo,
 } from "@opencode/client/promise"
 import type { ACPConnection } from "./connection"
 import { partsToContentChunks, type ReplayPart } from "./content"
@@ -91,7 +92,7 @@ export async function streamTurn(input: {
   readonly childSessionUpdate?: (update: ChildSessionUpdate) => Promise<void>
   readonly connectionSignal?: AbortSignal
   readonly sessionSignal?: AbortSignal
-}): Promise<PromptResponse> {
+}): Promise<{ readonly response: PromptResponse; readonly contextTokens?: number }> {
   const streamController = new AbortController()
   const connectionAbort = () => streamController.abort()
   input.connectionSignal?.addEventListener("abort", connectionAbort, { once: true })
@@ -104,6 +105,9 @@ export async function streamTurn(input: {
   let assistantMessageID: string | undefined
   let finish: SessionMessageAssistant["finish"]
   let executionError: { readonly type: string; readonly message: string } | undefined
+  let stepFailure: { readonly assistantMessageID: string; readonly error: SessionStructuredError } | undefined
+  let turnTokens: TokenUsageInfo | undefined
+  let stepTokens: TokenUsageInfo | undefined
   const tools = new Map<string, ToolState>()
   const retries = new Map<string, RetryStatus>()
   const children = new Map<string, ChildSession>()
@@ -328,6 +332,19 @@ export async function streamTurn(input: {
         if (!child) {
           assistantMessageID = event.data.assistantMessageID
           finish = event.data.finish
+          stepTokens = event.data.tokens
+          turnTokens = addTokens(turnTokens, event.data.tokens)
+        }
+        continue
+      }
+      if (event.type === "session.step.failed") {
+        if (!child) {
+          assistantMessageID = event.data.assistantMessageID
+          stepFailure = { assistantMessageID: event.data.assistantMessageID, error: event.data.error }
+          if (event.data.tokens) {
+            stepTokens = event.data.tokens
+            turnTokens = addTokens(turnTokens, event.data.tokens)
+          }
         }
         continue
       }
@@ -373,14 +390,14 @@ export async function streamTurn(input: {
     if (input.action) {
       streamController.abort()
       await completed.catch(() => {})
-      return response(undefined, undefined, "succeeded", control.cancelled, undefined)
+      return { response: response(undefined, undefined, "succeeded", control.cancelled, undefined) }
     }
     if (control.cancelled) {
       await input.client.session.interrupt({ sessionID: input.sessionID }).catch(() => {})
       if (!started) {
         streamController.abort()
         await completed.catch(() => {})
-        return response(undefined, undefined, "interrupted", true, undefined)
+        return { response: response(undefined, undefined, "interrupted", true, undefined) }
       }
     }
     const terminal = await completed
@@ -391,19 +408,19 @@ export async function streamTurn(input: {
         .catch(() => {})
         .finally(closeStream)
     }
-    const assistant = assistantMessageID
-      ? await input.client.session
-          .message.get({ sessionID: input.sessionID, messageID: assistantMessageID })
-          .catch(() => undefined)
-      : undefined
-    return response(
-      assistant?.type === "assistant" ? assistant : undefined,
-      executionError,
-      terminal,
-      control.cancelled,
-      finish,
-      retries.get(input.sessionID),
-    )
+    // Only the latest assistant message's step failure decides the turn, matching its projected error.
+    const stepError = stepFailure?.assistantMessageID === assistantMessageID ? stepFailure?.error : undefined
+    return {
+      response: response(
+        turnTokens,
+        stepError ?? executionError,
+        terminal,
+        control.cancelled,
+        finish,
+        retries.get(input.sessionID),
+      ),
+      ...(stepTokens ? { contextTokens: totalTokens(stepTokens) } : {}),
+    }
   } catch (error) {
     streamController.abort()
     await completed.catch(() => {})
@@ -577,14 +594,13 @@ function matchesStart(event: EventSubscribeOutput, start: TurnStart) {
 }
 
 function response(
-  assistant: SessionMessageAssistant | undefined,
-  executionError: { readonly type: string; readonly message: string } | undefined,
+  tokens: TokenUsageInfo | undefined,
+  error: { readonly type: string; readonly message: string } | undefined,
   terminal: "succeeded" | "failed" | "interrupted",
   cancelled: boolean,
   finish: SessionMessageAssistant["finish"],
   retry?: RetryStatus,
 ): PromptResponse {
-  const error = assistant?.error ?? executionError
   if (error?.type === "provider.auth") throw new ACPError.AuthRequiredError()
   if (error && error.type !== "aborted" && error.type !== "provider.content-filter") {
     throw new ACPError.ServiceFailureError({
@@ -593,12 +609,11 @@ function response(
       errorName: error.type,
     })
   }
-  const tokens = assistant?.tokens
   const usage = tokens
     ? {
         inputTokens: tokens.input,
         outputTokens: tokens.output,
-        totalTokens: tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write,
+        totalTokens: totalTokens(tokens),
         ...(tokens.reasoning > 0 ? { thoughtTokens: tokens.reasoning } : {}),
         ...(tokens.cache.read > 0 ? { cachedReadTokens: tokens.cache.read } : {}),
         ...(tokens.cache.write > 0 ? { cachedWriteTokens: tokens.cache.write } : {}),
@@ -619,6 +634,20 @@ function resolveStopReason(input: {
   if (input.finish === "length") return "max_tokens"
   if (input.finish === "content-filter" || input.error === "provider.content-filter") return "refusal"
   return "end_turn"
+}
+
+function totalTokens(tokens: TokenUsageInfo) {
+  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+}
+
+function addTokens(total: TokenUsageInfo | undefined, step: TokenUsageInfo): TokenUsageInfo {
+  if (!total) return step
+  return {
+    input: total.input + step.input,
+    output: total.output + step.output,
+    reasoning: total.reasoning + step.reasoning,
+    cache: { read: total.cache.read + step.cache.read, write: total.cache.write + step.cache.write },
+  }
 }
 
 export * as ACPEvent from "./event"
