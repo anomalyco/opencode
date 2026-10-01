@@ -1,25 +1,30 @@
-const WINDOW_MS = 2_000
+type Message = { id: string; role: string; parentID?: string }
+type Part = { type: string; text?: string }
+
+export type Submitted<T> = { sessionID: string; messageID: string; value: T }
 
 export function createQuickUndo<T>() {
-  let submitted: { messageID: string; value: T; time: number } | undefined
-  let escapedAt: number | undefined
+  let submitted: Submitted<T> | undefined
 
   return {
-    submitted(messageID: string, value: T, time = Date.now()) {
-      submitted = { messageID, value, time }
-      escapedAt = undefined
+    submitted(next: Submitted<T>) {
+      submitted = next
     },
-    escape(time = Date.now()) {
-      if (!submitted || time - submitted.time > WINDOW_MS) return
-      if (escapedAt === undefined || time - escapedAt > WINDOW_MS) {
-        escapedAt = time
-        return
-      }
-
-      const result = { messageID: submitted.messageID, value: submitted.value }
+    // A just-sent prompt can be undone until the reply shows the user any text or tool output.
+    candidate(sessionID: string, messages: readonly Message[], parts: (messageID: string) => readonly Part[]) {
+      if (!submitted || submitted.sessionID !== sessionID) return
+      const messageID = submitted.messageID
+      const replied = messages.some(
+        (message) =>
+          message.role === "assistant" &&
+          message.parentID === messageID &&
+          parts(message.id).some((part) => part.type === "tool" || (part.type === "text" && !!part.text?.trim())),
+      )
+      if (replied) return
+      return submitted
+    },
+    clear() {
       submitted = undefined
-      escapedAt = undefined
-      return result
     },
   }
 }

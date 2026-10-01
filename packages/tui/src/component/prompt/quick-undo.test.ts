@@ -1,31 +1,52 @@
 import { describe, expect, test } from "bun:test"
 import { createQuickUndo } from "./quick-undo"
 
+const noParts = () => []
+
 describe("quick undo", () => {
-  test("returns the submitted message on a second escape within two seconds", () => {
+  test("offers the submitted prompt before any reply exists", () => {
     const undo = createQuickUndo<string>()
-    undo.submitted("msg_1", "hello", 1_000)
+    undo.submitted({ sessionID: "ses_1", messageID: "msg_1", value: "hello" })
 
-    expect(undo.escape(1_500)).toBeUndefined()
-    expect(undo.escape(1_750)).toEqual({ messageID: "msg_1", value: "hello" })
-    expect(undo.escape(1_800)).toBeUndefined()
+    expect(undo.candidate("ses_1", [{ id: "msg_1", role: "user" }], noParts)?.value).toBe("hello")
   })
 
-  test("expires two seconds after submission", () => {
+  test("ignores other sessions", () => {
     const undo = createQuickUndo<string>()
-    undo.submitted("msg_1", "hello", 1_000)
+    undo.submitted({ sessionID: "ses_1", messageID: "msg_1", value: "hello" })
 
-    expect(undo.escape(2_500)).toBeUndefined()
-    expect(undo.escape(3_001)).toBeUndefined()
+    expect(undo.candidate("ses_2", [], noParts)).toBeUndefined()
   })
 
-  test("a new submission replaces the previous one", () => {
+  test("still offers undo while the reply only has reasoning or empty text", () => {
     const undo = createQuickUndo<string>()
-    undo.submitted("msg_1", "first", 1_000)
-    undo.escape(1_100)
-    undo.submitted("msg_2", "second", 1_200)
+    undo.submitted({ sessionID: "ses_1", messageID: "msg_1", value: "hello" })
+    const messages = [
+      { id: "msg_1", role: "user" },
+      { id: "msg_2", role: "assistant", parentID: "msg_1" },
+    ]
+    const parts = () => [{ type: "step-start" }, { type: "reasoning", text: "thinking" }, { type: "text", text: " " }]
 
-    expect(undo.escape(1_300)).toBeUndefined()
-    expect(undo.escape(1_400)).toEqual({ messageID: "msg_2", value: "second" })
+    expect(undo.candidate("ses_1", messages, parts)?.messageID).toBe("msg_1")
+  })
+
+  test("stops offering undo once the reply shows text or a tool call", () => {
+    const undo = createQuickUndo<string>()
+    undo.submitted({ sessionID: "ses_1", messageID: "msg_1", value: "hello" })
+    const messages = [
+      { id: "msg_1", role: "user" },
+      { id: "msg_2", role: "assistant", parentID: "msg_1" },
+    ]
+
+    expect(undo.candidate("ses_1", messages, () => [{ type: "text", text: "Sure" }])).toBeUndefined()
+    expect(undo.candidate("ses_1", messages, () => [{ type: "tool" }])).toBeUndefined()
+  })
+
+  test("clear drops the candidate", () => {
+    const undo = createQuickUndo<string>()
+    undo.submitted({ sessionID: "ses_1", messageID: "msg_1", value: "hello" })
+    undo.clear()
+
+    expect(undo.candidate("ses_1", [], noParts)).toBeUndefined()
   })
 })

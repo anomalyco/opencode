@@ -142,7 +142,7 @@ function formatEditorContext(selection: EditorSelection) {
 
 let stashed: { prompt: PromptInfo; cursor: number } | undefined
 // Module scope so a first prompt sent from the home route can still be undone from the session route.
-const quickUndo = createQuickUndo<{ sessionID: string; prompt: PromptInfo }>()
+const quickUndo = createQuickUndo<PromptInfo>()
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -290,6 +290,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    undo: boolean
     placeholder: number
   }>({
     placeholder: randomIndex(list().length),
@@ -300,6 +301,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    undo: false,
   })
   createEffect(
     on(
@@ -408,11 +410,22 @@ export function Prompt(props: PromptProps) {
           }
           if (!props.sessionID) return
 
-          const recent = store.prompt.input ? undefined : quickUndo.escape()
-          if (recent && recent.value.sessionID === props.sessionID) {
-            const sessionID = props.sessionID
+          const sessionID = props.sessionID
+          const recent = store.prompt.input
+            ? undefined
+            : quickUndo.candidate(sessionID, sync.data.message[sessionID] ?? [], (id) => sync.data.part[id] ?? [])
+
+          setStore("interrupt", store.interrupt + 1)
+          setStore("undo", !!recent)
+
+          setTimeout(() => {
             setStore("interrupt", 0)
-            ref.set(recent.value.prompt)
+          }, 5000)
+
+          if (store.interrupt >= 2 && recent) {
+            setStore("interrupt", 0)
+            quickUndo.clear()
+            ref.set(recent.value)
             input.focus()
             dialog.clear()
             // Abort can take seconds to settle, so the prompt is restored before waiting on it.
@@ -428,12 +441,6 @@ export function Prompt(props: PromptProps) {
               })
             return
           }
-
-          setStore("interrupt", store.interrupt + 1)
-
-          setTimeout(() => {
-            setStore("interrupt", 0)
-          }, 5000)
 
           if (store.interrupt >= 2) {
             void sdk.client.session.abort({
@@ -1115,9 +1122,10 @@ export function Prompt(props: PromptProps) {
       })
     } else {
       const messageID = Identifier.ascending("message")
-      quickUndo.submitted(messageID, {
+      quickUndo.submitted({
         sessionID,
-        prompt: {
+        messageID,
+        value: {
           input: store.prompt.input,
           parts: [...unwrap(store.prompt.parts)],
         },
@@ -1620,7 +1628,7 @@ export function Prompt(props: PromptProps) {
                 <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
                   esc{" "}
                   <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                    {store.interrupt > 0 ? (store.undo ? "again to undo" : "again to interrupt") : "interrupt"}
                   </span>
                 </text>
               </box>
