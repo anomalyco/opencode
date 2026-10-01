@@ -1,0 +1,16 @@
+export default {
+  "command.open": "Mở trình duyệt",
+  "command.reload": "Tải lại trang trình duyệt",
+  "tab.title": "Trình duyệt",
+  "address.label": "Địa chỉ trình duyệt",
+  "address.placeholder": "Nhập URL",
+  "action.stop": "Dừng",
+  replaced: "Điều khiển trình duyệt đã được chuyển sang cửa sổ máy tính để bàn khác.",
+  unsupported: "Ứng dụng máy tính để bàn này không hỗ trợ ngăn trình duyệt.",
+  suspended: "Trình duyệt bị tạm dừng. Tương tác với phiên này để kết nối lại.",
+  "empty.title": "Nhập URL",
+  "empty.description": 'Hoặc nhập lời nhắc "Mở trong trình duyệt của ứng dụng"',
+  "failed.title": "Không thể truy cập URL",
+  "failed.description": "Kiểm tra URL và kết nối, rồi thử lại.",
+  "action.reload": "Tải lại",
+}

@@ -41,16 +41,20 @@ const Body = Schema.Struct({
   user_id: Options.fields.userID,
 })
 
+// Tool streaming was introduced in GLM-4.6; later versions inherit support.
+const supportsToolStreaming = (modelID: string) => {
+  const match = /(?:^|\/)glm-(\d+)(?:\.(\d+))?(?:-|$)/i.exec(modelID)
+  return match !== null && (Number(match[1]) > 4 || (Number(match[1]) === 4 && Number(match[2] ?? 0) >= 6))
+}
+
 const fromRequest = Effect.fn("ZAIChat.fromRequest")(function* (request: LLMRequest) {
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(request.providerOptions ?? {})
   const body = yield* OpenAIChat.protocol.body.from(request)
   return {
     ...body,
     thinking: options.thinking,
-    // Tool streaming was introduced in GLM-4.6; older models must not receive the opt-in.
     tool_stream:
-      options.toolStream ??
-      (body.tools?.length && /^glm-(?:4\.[67]|5(?:[.-]|$))/i.test(request.model.id) ? true : undefined),
+      options.toolStream ?? (body.tools?.length && supportsToolStreaming(request.model.id) ? true : undefined),
     do_sample: options.doSample,
     response_format: options.responseFormat,
     request_id: options.requestID,

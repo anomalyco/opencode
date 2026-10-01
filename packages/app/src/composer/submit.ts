@@ -77,8 +77,8 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
       context: input.adapter.state.context
         .items()
         .map((item) =>
-          item.type === "browser"
-            ? { ...item, element: { ...item.element } }
+          item.type === "note"
+            ? { ...item, live: item.live ? { ...item.live } : undefined }
             : { ...item, selection: item.selection ? { ...item.selection } : undefined },
         ),
     })
@@ -202,14 +202,16 @@ function handoffMessage(value: ComposerSubmission): SessionMessageUser {
       comments: value.context.flatMap((item): PromptComment[] => {
         const comment = item.comment?.trim()
         if (!comment) return []
-        if (item.type === "browser")
+        if (item.type === "note")
           return [
             {
-              type: "browser",
-              tabID: item.tabID,
-              url: item.url,
-              ...(item.title ? { title: item.title } : {}),
-              element: { ...item.element },
+              type: "note",
+              origin: item.origin,
+              label: item.label,
+              icon: item.icon,
+              subject: item.subject,
+              ...(item.href ? { href: item.href } : {}),
+              ...(item.live ? { live: { ...item.live } } : {}),
               comment,
             },
           ]
@@ -303,13 +305,15 @@ function restoreSubmission(
     restored.context
       .filter((item) => !!item.comment?.trim())
       .map((item) =>
-        item.type === "browser"
+        item.type === "note"
           ? {
-              type: "browser",
-              tabID: item.tabID,
-              url: item.url,
-              title: item.title,
-              element: item.element,
+              type: "note",
+              origin: item.origin,
+              label: item.label,
+              icon: item.icon,
+              subject: item.subject,
+              href: item.href,
+              live: item.live,
               comment: item.comment,
               commentID: item.commentID,
             }

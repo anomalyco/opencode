@@ -29,12 +29,12 @@ export const useSessionLayout = () => {
     return findSessionTab(tabs.store, ServerConnection.key(serverSDK.server), params.id)
   })
   const panes = {
-    terminalOpened: () => tabs.pane(currentTab(), "terminal"),
-    setTerminalOpened: (opened: boolean) => tabs.setPane(currentTab(), "terminal", opened),
-    terminalHeight: () => tabs.paneSize(currentTab(), "terminalHeight"),
-    setTerminalHeight: (height: number) => tabs.setPaneSize(currentTab(), "terminalHeight", height),
-    reviewOpened: () => tabs.pane(currentTab(), "review"),
-    setReviewOpened: (opened: boolean) => tabs.setPane(currentTab(), "review", opened),
+    dockOpened: () => tabs.pane(currentTab(), "dock"),
+    setDockOpened: (opened: boolean) => tabs.setPane(currentTab(), "dock", opened),
+    dockHeight: () => tabs.paneSize(currentTab(), "dockHeight"),
+    setDockHeight: (height: number) => tabs.setPaneSize(currentTab(), "dockHeight", height),
+    sideOpened: () => tabs.pane(currentTab(), "side"),
+    setSideOpened: (opened: boolean) => tabs.setPane(currentTab(), "side", opened),
     sessionWidth: () => tabs.paneSize(currentTab(), "sessionWidth"),
     setSessionWidth: (width: number) => tabs.setPaneSize(currentTab(), "sessionWidth", width),
   }

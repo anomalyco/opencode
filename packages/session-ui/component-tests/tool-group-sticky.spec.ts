@@ -16,6 +16,11 @@ story("keeps the open Used header below the session title while scrolling", asyn
 
   // Nested file headers stack below the stuck Used header instead of covering it.
   const file = root.locator('[data-component="sticky-accordion-header"]').filter({ hasText: "model.ts" })
+  // Outside a timeline row the diff sizes itself only after it renders on screen (content-visibility: auto),
+  // and a header can stick only while its diff extends below it.
+  await expect
+    .poll(() => file.evaluate((node) => node.parentElement!.getBoundingClientRect().height))
+    .toBeGreaterThan(400)
   await file.evaluate((node) => {
     const scroller = node.closest<HTMLElement>('[data-story="sticky-header-scroll"]')!
     scroller.scrollTop += node.getBoundingClientRect().top - scroller.getBoundingClientRect().top + 60

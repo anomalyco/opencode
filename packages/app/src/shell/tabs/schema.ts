@@ -48,15 +48,16 @@ export const Info = Persistence.struct({
   directory: Schema.optional(Schema.String),
 })
 export const Infos = Schema.Record(Schema.String, Schema.mutableKey(Info))
+// The dock and side regions keep the names they were stored under before extensions.
 export const Panes = Schema.Record(
   Schema.String,
   Schema.mutableKey(
     Persistence.struct({
-      terminal: Schema.optional(Schema.Boolean),
-      review: Schema.optional(Schema.Boolean),
-      terminalHeight: Schema.optional(Schema.Finite),
+      dock: Schema.optional(Schema.Boolean),
+      side: Schema.optional(Schema.Boolean),
+      dockHeight: Schema.optional(Schema.Finite),
       sessionWidth: Schema.optional(Schema.Finite),
-    }),
+    }).pipe(Schema.encodeKeys({ dock: "terminal", side: "review", dockHeight: "terminalHeight" })),
   ),
 )
 export const ClosedTab = Schema.Struct({ tab: SessionCodec, index: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) })

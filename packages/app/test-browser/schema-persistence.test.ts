@@ -160,6 +160,71 @@ describe("schema-backed persistence", () => {
     }
   })
 
+  test("a full or failing storage scope stops writing without disabling other scopes", () => {
+    const full = Persist.workspace("/schema-storage-full", "state")
+    const failing = Persist.workspace("/schema-storage-failing", "state")
+    const healthy = Persist.workspace("/schema-storage-healthy", "state")
+    const direct = "schema-storage-direct"
+    const values = new Map<string, string>()
+    const attempts: string[] = []
+    const storage: Storage = {
+      get length() {
+        return values.size
+      },
+      key: (index) => [...values.keys()][index] ?? null,
+      clear: () => values.clear(),
+      getItem: (key) => values.get(key) ?? null,
+      setItem: (key, value) => {
+        attempts.push(key)
+        if (key.startsWith(`${full.storage}:`)) throw new DOMException("quota", "QuotaExceededError")
+        if (key.startsWith(`${failing.storage}:`)) throw new Error("storage set failed")
+        values.set(key, value)
+      },
+      removeItem: (key) => void values.delete(key),
+    }
+    const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage")!
+    Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true })
+    try {
+      createRoot((dispose) => {
+        const [, setFull] = persisted(full, Current, initial, web)
+        const [, setFailing] = persisted(failing, Current, initial, web)
+        const count = () => ({
+          full: attempts.filter((key) => key === `${full.storage}:${full.key}`).length,
+          failing: attempts.filter((key) => key === `${failing.storage}:${failing.key}`).length,
+        })
+        setFull("label", "full")
+        setFailing("label", "first")
+        flushPersisted()
+        const first = count()
+        expect(first.full).toBeGreaterThan(0)
+        expect(first.failing).toBeGreaterThan(0)
+        setFull("label", "full again")
+        setFailing("label", "second")
+        flushPersisted()
+        expect(count()).toEqual(first)
+
+        const [, setHealthy] = persisted(healthy, Current, initial, web)
+        const [, setDirect] = persisted(direct, Current, initial, web)
+        setHealthy("label", "healthy")
+        setDirect("label", "direct")
+        flushPersisted()
+        expect(values.get(`${healthy.storage}:${healthy.key}`)).toBe(
+          JSON.stringify({ enabled: true, label: "healthy" }),
+        )
+        expect(values.get(direct)).toBe(JSON.stringify({ enabled: true, label: "direct" }))
+        dispose()
+      })
+      expect(values.has(`${full.storage}:${full.key}`)).toBe(false)
+      createRoot((dispose) => {
+        const [state] = persisted(full, Current, initial, web)
+        expect(state).toEqual(initial)
+        dispose()
+      })
+    } finally {
+      Object.defineProperty(globalThis, "localStorage", original)
+    }
+  })
+
   test("cross-window updates use the same migration and validation boundary", async () => {
     const target = { ...Persist.global("schema-sync-channel"), sync: true }
     const channel = new BroadcastChannel(`opencode.persist:${target.storage}:${target.key}`)

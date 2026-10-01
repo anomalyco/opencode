@@ -3,7 +3,6 @@ export * as DesktopInitialization from "./desktop-initialization"
 import { app } from "electron"
 import { Context, Effect, Layer } from "effect"
 import { DesktopLogging } from "../native/logging"
-import { getStore } from "../storage/store"
 import { marks } from "./marks"
 import {
   loadProxyEnvironment,
@@ -14,7 +13,6 @@ import {
 
 export interface Interface {
   readonly version: string
-  readonly updaterStore: ReturnType<typeof getStore>
 }
 
 export class Service extends Context.Service<Service, Interface>()("opencode/desktop/DesktopInitialization") {}
@@ -34,7 +32,6 @@ export const layer = Layer.effect(
     marks.init = Date.now()
     return Service.of({
       version: app.getVersion(),
-      updaterStore: getStore("opencode.updater"),
     })
   }),
 )

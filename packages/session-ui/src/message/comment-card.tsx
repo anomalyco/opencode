@@ -5,10 +5,10 @@ import { getFilenameTruncated } from "@opencode/util/path"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { AttachmentCard } from "./attachment-card"
 
-/** What a comment is about: lines of a file, or an element picked in a browser page. */
+/** What a comment is about: lines of a file, or a labelled subject such as an element picked in a page. */
 export type CommentCardTarget =
   | { type: "file"; path: string; selection?: { startLine: number; endLine: number } }
-  | { type: "browser"; element: string }
+  | { type: "note"; label: string; icon: string }
 
 export function CommentCard(props: {
   comment: string
@@ -55,7 +55,7 @@ export function CommentCard(props: {
         onClick={props.onClick}
       >
         <Show
-          when={props.target.type === "browser" ? props.target : undefined}
+          when={props.target.type === "note" ? props.target : undefined}
           fallback={
             <Show when={props.target.type === "file" ? props.target : undefined}>
               {(file) => (
@@ -76,11 +76,11 @@ export function CommentCard(props: {
             </Show>
           }
         >
-          {(browser) => (
+          {(note) => (
             <>
-              <Icon name="select-element" data-slot="attachment-card-icon" />
-              <span data-slot="attachment-card-element" dir="ltr">
-                {browser().element}
+              <Icon name={note().icon} data-slot="attachment-card-icon" />
+              <span data-slot="attachment-card-label" dir="ltr">
+                {note().label}
               </span>
             </>
           )}

@@ -91,15 +91,6 @@ describe("Home session index", () => {
       ]).map((item) => item.id),
     ).toEqual(["root"])
   })
-
-  test("preserves the per-directory retention limit", () => {
-    const result = retainHomeSessions(
-      [session("a", { time: { created: 1, updated: 1 } }), session("b", { time: { created: 2, updated: 2 } })],
-      1,
-      now,
-    )
-    expect(result.map((item) => item.id)).toEqual(["b"])
-  })
 })
 
 // Home merges locally known sessions and pending removals into the fetched

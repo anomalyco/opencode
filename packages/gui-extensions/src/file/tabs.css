@@ -1,0 +1,21 @@
+/* File tabs and the Open file launcher: tighter close button, as the host strip styled them before extensions. */
+:root body #review-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"] [data-slot="tabs-list"] [data-slot="tabs-trigger-wrapper"]:is([data-value="file:open"], [data-value^="file://"])
+{
+  gap: 8px;
+  padding-inline-end: 4px;
+}
+
+:root body #review-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"] [data-slot="tabs-list"] [data-slot="tabs-trigger-wrapper"]:is([data-value="file:open"], [data-value^="file://"]) [data-slot="tabs-trigger-close-button"]
+{
+  margin-inline-start: 0;
+}
+
+/* The launcher reads as an action rather than a document, so its label stays muted while selected. */
+:root
+  body
+  #review-panel
+  [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"]
+  [data-slot="tabs-list"]
+  [data-slot="tabs-trigger"][data-value="file:open"][data-selected] {
+  color: var(--v2-text-text-muted);
+}
