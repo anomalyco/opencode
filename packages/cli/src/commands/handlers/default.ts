@@ -4,7 +4,7 @@ import { run } from "@opencode/tui"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
-import { Context, Effect, Fiber, FileSystem, Option, Queue } from "effect"
+import { Context, Effect, FileSystem, Option, Queue, Schedule, Semaphore } from "effect"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
@@ -64,7 +64,9 @@ export default Runtime.handler(Commands, (input) =>
     let latest: Updater.RunResult | undefined
     const installListeners = new Set<(version: string) => void>()
     const resultListeners = new Set<(result: Updater.RunResult) => void>()
-    const checkForUpdate = updater
+    // `/update` waits for a running background check so it can't offer an install that is already underway.
+    const checking = yield* Semaphore.make(1)
+    yield* updater
       .run((version) => {
         installing = version
         installListeners.forEach((notify) => notify(version))
@@ -78,12 +80,10 @@ export default Runtime.handler(Commands, (input) =>
             resultListeners.forEach((notify) => notify(result))
           }),
         ),
+        checking.withPermits(1),
+        Effect.repeat(Schedule.spaced("10 minutes")),
+        Effect.forkScoped({ startImmediately: true }),
       )
-    const startup = yield* checkForUpdate.pipe(Effect.forkScoped)
-    yield* Fiber.join(startup).pipe(
-      Effect.andThen(checkForUpdate.pipe(Effect.delay("10 minutes"), Effect.forever)),
-      Effect.forkScoped,
-    )
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
@@ -130,7 +130,7 @@ export default Runtime.handler(Commands, (input) =>
         check: (signal, notify) => {
           if (installing) notify(installing)
           installListeners.add(notify)
-          return runPromise(Fiber.join(startup).pipe(Effect.flatMap(() => updater.check())), { signal }).finally(() =>
+          return runPromise(checking.withPermits(1)(updater.check()), { signal }).finally(() =>
             installListeners.delete(notify),
           )
         },
