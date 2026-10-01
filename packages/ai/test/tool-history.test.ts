@@ -15,12 +15,47 @@ describe("tool history normalization", () => {
       Message.assistant(toolCall("trailing")),
     ])
 
-    expect(normalized.map((message) => message.role)).toEqual(["assistant", "tool", "tool", "user", "assistant"])
+    expect(normalized.map((message) => message.role)).toEqual([
+      "assistant",
+      "tool",
+      "tool",
+      "user",
+      "assistant",
+      "tool",
+    ])
     expect(normalized[1]?.content[0]).toMatchObject({ type: "tool-result", id: "first", name: "first" })
     expect(normalized[2]?.content).toEqual([
       { type: "tool-result", id: "second", name: "second", result: { type: "error", value: "Tool result missing" } },
     ])
     expect(normalized[4]?.content).toEqual([toolCall("trailing")])
+    expect(normalized[5]?.content).toEqual([
+      {
+        type: "tool-result",
+        id: "trailing",
+        name: "trailing",
+        result: { type: "error", value: "Tool result missing" },
+      },
+    ])
+  })
+
+  test("fills missing results for trailing calls without replacing available results", () => {
+    const calls = Message.assistant([toolCall("answered"), toolCall("unanswered")])
+    const answered = toolResult("answered", "done", "answered", "text")
+    const hosted = ToolCallPart.make({ id: "hosted", name: "web_search", input: {}, providerExecuted: true })
+
+    expect(normalizeToolHistory([calls, answered])).toEqual([
+      calls,
+      answered,
+      Message.tool(
+        ToolResultPart.make({
+          id: "unanswered",
+          name: "unanswered",
+          result: "Tool result missing",
+          resultType: "error",
+        }),
+      ),
+    ])
+    expect(normalizeToolHistory([Message.assistant(hosted)])).toEqual([Message.assistant(hosted)])
   })
 
   test("normalizes empty results without changing whitespace or media", () => {

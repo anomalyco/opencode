@@ -27,6 +27,7 @@ export function normalizeToolHistory(messages: ReadonlyArray<Message>) {
       if (part.type === "tool-call" && part.providerExecuted !== true) pending.set(part.id, part)
     }
   }
+  appendMissingResults()
 
   return normalized.length === messages.length && normalized.every((message, index) => message === messages[index])
     ? messages
