@@ -98,7 +98,11 @@ const OpenRouterDetailFields = {
 }
 const ReasoningDetail = Schema.Union([
   Schema.StructWithRest(
-    Schema.Struct({ type: Schema.Literal("reasoning.text"), text: Schema.optional(Schema.String), ...OpenRouterDetailFields }),
+    Schema.Struct({
+      type: Schema.Literal("reasoning.text"),
+      text: Schema.optional(Schema.String),
+      ...OpenRouterDetailFields,
+    }),
     [Schema.Record(Schema.String, Schema.Unknown)],
   ),
   Schema.StructWithRest(
@@ -365,7 +369,12 @@ const lowerToolCall = (
   extra_content: decodeExtraContent(part.providerMetadata?.[options.providerMetadataKey]?.extraContent),
 })
 
+const supportsMedia = (part: MediaPart) =>
+  part.media.mediaType.toLowerCase() === "application/pdf" || part.media.kind === "image"
+
 const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
+  if (!supportsMedia(part))
+    return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support media type ${part.media.mediaType}`)
   // Chat Completions accepts PDFs, and no other documents, as inline `file` parts; file URLs are not supported.
   if (part.media.mediaType.toLowerCase() === "application/pdf")
     return {
@@ -375,8 +384,6 @@ const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart
         file_data: (yield* ProviderShared.requireInlineMedia("OpenAI Chat", part.media)).dataUrl,
       },
     }
-  if (part.media.kind !== "image")
-    return yield* ProviderShared.invalidRequest(`OpenAI Chat does not support media type ${part.media.mediaType}`)
   const url =
     ProviderShared.mediaUrl(part.media) ?? (yield* ProviderShared.requireInlineMedia("OpenAI Chat", part.media)).dataUrl
   return { type: "image_url" as const, image_url: { url } }
@@ -520,12 +527,21 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
       continue
     }
     const content: ReadonlyArray<Tool.Content> = part.result.value
-    const text = content.filter((item) => item.type === "text").map((item) => item.text)
+    const files = content.filter((item) => item.type === "file").map(ProviderShared.toolFileMedia)
+    // Keep unsupported tool attachments visible without making stored history impossible to replay.
+    const text = [
+      ...content.filter((item) => item.type === "text").map((item) => item.text),
+      ...files
+        .filter((file) => !supportsMedia(file))
+        .map(
+          (file) =>
+            `[Attachment "${file.filename ?? "file"}" (${file.media.mediaType}) omitted: OpenAI Chat does not support this media type.]`,
+        ),
+    ]
     messages.push(
       toolMessage(options.toolCallID?.(part.id) ?? part.id, text.join("\n"), options.cacheControl?.(part.cache)),
     )
-    const files = content.filter((item) => item.type === "file")
-    attachments.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
+    attachments.push(...(yield* Effect.forEach(files.filter(supportsMedia), lowerMedia)))
   }
   return { messages, attachments }
 })
@@ -609,10 +625,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
       if (pendingAttachments.length > 0) {
         messages.push({
           role: "user",
-          content: [
-            ...pendingAttachments.splice(0),
-            { type: "text", text: part.text, cache_control: cacheControl },
-          ],
+          content: [...pendingAttachments.splice(0), { type: "text", text: part.text, cache_control: cacheControl }],
         })
         continue
       }
@@ -630,10 +643,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
       else if (previous?.role === "user" && Array.isArray(previous.content))
         messages[messages.length - 1] = {
           role: "user",
-          content: [
-            ...previous.content,
-            { type: "text", text: part.text, cache_control: cacheControl },
-          ],
+          content: [...previous.content, { type: "text", text: part.text, cache_control: cacheControl }],
         }
       else
         messages.push(
