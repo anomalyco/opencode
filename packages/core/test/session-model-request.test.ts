@@ -111,4 +111,59 @@ describe("SessionModelRequest.boundImages", () => {
       },
     })
   })
+
+  test("degrades tool results whose content value is not an array", () => {
+    // Malformed history (e.g. produced by an older build, a plugin hook, or a
+    // provider round-trip) must not crash SessionModelRequest.prepare — the
+    // whole session drain dies otherwise.
+    const malformed = {
+      type: "tool-result",
+      id: "call_1",
+      name: "read",
+      result: { type: "content", value: undefined },
+    }
+    // Plain object on purpose: the runtime path that produces these parts
+    // bypasses schema validation.
+    const messages = [{ id: "msg_1", role: "user", content: [malformed] } as never]
+
+    const replaced = {
+      type: "text",
+      value: "ERROR: Tool result was malformed and could not be included in the request.",
+    }
+    expect(unsupportedParts(messages, capabilities(["text"]))[0]?.content[0]).toMatchObject({
+      type: "tool-result",
+      result: replaced,
+    })
+    // boundImages early-returns below the image-byte trigger, but its size
+    // reduce still walks every tool result — that path must not throw either.
+    expect(() => boundImages(messages)).not.toThrow()
+  })
+
+  test("boundImages degrades malformed tool results while trimming images", () => {
+    const big = `data:image/png;base64,${"a".repeat(26 * 1024 * 1024)}`
+    const malformed = {
+      type: "tool-result",
+      id: "call_1",
+      name: "read",
+      result: { type: "content", value: undefined },
+    }
+    const withImage = {
+      type: "tool-result",
+      id: "call_2",
+      name: "read",
+      result: {
+        type: "content",
+        value: [{ type: "file", uri: big, mime: "image/png", name: "big.png" }],
+      },
+    }
+    const messages = [{ id: "msg_1", role: "user", content: [malformed, withImage] } as never]
+
+    const out = boundImages(messages)
+    expect(out[0]?.content[0]).toMatchObject({
+      type: "tool-result",
+      result: { type: "text", value: "ERROR: Tool result was malformed and could not be included in the request." },
+    })
+    // the oversized image is replaced per the normal trimming rules
+    expect(out[0]?.content[1]).toMatchObject({ type: "tool-result" })
+  })
 })
