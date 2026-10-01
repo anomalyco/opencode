@@ -45,7 +45,8 @@ export interface Interface {
 /** Routes execution from a Session ID to its selected instance's runner. */
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionExecution") {}
 
-type InterruptReason = "user" | "shutdown" | "inactivity"
+/** Causes the coordinator records for `interrupt`; published verbatim on the interrupted event. */
+export type InterruptReason = "user" | "shutdown" | "inactivity"
 
 export function terminal(exit: Exit.Exit<void, SessionRunner.RunError>, reason?: InterruptReason) {
   if (Exit.isSuccess(exit)) return { type: "succeeded" as const }
@@ -93,7 +94,13 @@ export const layer = Layer.effect(
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
       const result = yield* SessionRunner.Service.use((runner) =>
-        runner.drain({ sessionID, force, continuation, promotable }),
+        runner.drain({
+          sessionID,
+          force,
+          continuation,
+          promotable,
+          interruptionReason: coordinator.interruptionReason(sessionID),
+        }),
       ).pipe(
         instances.provide(session),
         Effect.tapCause((cause) =>
