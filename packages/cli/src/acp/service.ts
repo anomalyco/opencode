@@ -58,6 +58,9 @@ import { ACPError } from "./error"
 
 export const AuthMethodID = "opencode-login"
 
+// ACP runs these itself; they take precedence over server commands with the same name.
+const builtinCommands = new Map([["compact", { description: "Compact the session", start: "compaction" as const }]])
+
 // Model and mode are unset while the session follows the server defaults.
 type Attached = {
   readonly id: string
@@ -129,10 +132,12 @@ export function make(input: {
       sessionId: state.id,
       update: {
         sessionUpdate: "available_commands_update",
-        availableCommands: ACPCatalog.commands(state.catalog.current).map((command) => ({
-          name: command.name,
-          description: command.description ?? "",
-        })),
+        availableCommands: [
+          ...state.catalog.current.commands
+            .filter((command) => !builtinCommands.has(command.name))
+            .map((command) => ({ name: command.name, description: command.description ?? "" })),
+          ...Array.from(builtinCommands, ([name, command]) => ({ name, description: command.description })),
+        ],
       },
     })
 
@@ -389,7 +394,8 @@ function preparePrompt(catalog: Catalog, prompt: PromptRequest["prompt"], messag
   const text = visible.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
   const files = visible.flatMap((part) => (part.type === "file" ? [{ uri: part.url, name: part.filename }] : []))
   const slash = detectSlashCommand(text)
-  const command = slash ? catalog.commands.find((item) => item.name === slash.name) : undefined
+  const command =
+    slash && !builtinCommands.has(slash.name) ? catalog.commands.find((item) => item.name === slash.name) : undefined
   const start = turnStart(messageID, slash)
   return { start, text, files, synthetic, slash, command }
 }
@@ -424,7 +430,7 @@ async function submitPrompt(client: OpenCodeClient, session: Attached, prompt: P
 }
 
 function turnStart(messageID: string, slash: PreparedPrompt["slash"]): TurnStart {
-  if (slash?.name === "compact") return { type: "compaction", id: messageID }
+  if (slash && builtinCommands.get(slash.name)?.start === "compaction") return { type: "compaction", id: messageID }
   return { type: "input", id: messageID }
 }
 

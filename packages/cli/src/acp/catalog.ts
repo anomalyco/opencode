@@ -1,19 +1,6 @@
 import type { CommandInfo, ModelInfo, ModelRef, OpenCodeClient, OpenCodeEvent } from "@opencode/client/promise"
 import { FSUtil } from "@opencode/util/fs-util"
-import {
-  Context,
-  Deferred,
-  Effect,
-  Exit,
-  Layer,
-  Option,
-  Queue,
-  Schedule,
-  Schema,
-  Scope,
-  Stream,
-  SubscriptionRef,
-} from "effect"
+import { Context, Deferred, Effect, Exit, Schedule, Schema, Scope, Semaphore, Stream, SubscriptionRef } from "effect"
 import type { ConfigOptionProvider } from "./config-option"
 
 export type Catalog = {
@@ -25,11 +12,13 @@ export type Catalog = {
   readonly commands: CommandInfo[]
 }
 
-export type Change = { readonly previous: Catalog; readonly current: Catalog }
-
 export class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatalogNotReadyError", {
-  message: Schema.String,
-}) {}
+  reason: Schema.Literals(["models", "agents"]),
+}) {
+  override get message() {
+    return this.reason === "models" ? "No models are available" : "No primary agents are available"
+  }
+}
 
 export class LoadError extends Schema.TaggedError<LoadError>()("ACPCatalogLoadError", {
   cause: Schema.Defect(),
@@ -42,26 +31,49 @@ export interface Interface {
   readonly get: (cwd: string) => Effect.Effect<Catalog, Error>
   /** Resolves after a reload that started after the call. A failed reload keeps the previous catalog. */
   readonly reload: (cwd: string) => Effect.Effect<void, Error>
-  readonly changes: (cwd: string) => Stream.Stream<Change, Error>
+  /** Emits the current catalog, then each reloaded one. */
+  readonly changes: (cwd: string) => Stream.Stream<Catalog, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Catalog") {}
 
 type Entry = {
+  readonly cwd: string
   readonly catalog: SubscriptionRef.SubscriptionRef<Catalog>
-  readonly reloads: Queue.Queue<Deferred.Deferred<void>>
+  readonly lock: Semaphore.Semaphore
+  requested: number
+  loaded: number
 }
 
 // Provider, integration, and credential changes reach the catalog through model.updated.
 const reloadOn = new Set<OpenCodeEvent["type"]>(["model.updated", "agent.updated", "command.updated"])
 
-// The prompt handler routes `/compact` to session compaction instead of running it as a server command.
-const compact = { name: "compact", description: "Compact the session" } satisfies CommandInfo
-
 export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
   const scope = yield* Effect.scope
   const entries = new Map<string, Deferred.Deferred<Entry, Error>>()
   const connected = yield* Deferred.make<void>()
+
+  // A reload covers every request made before it starts, so requests queued behind a running reload share
+  // one more load. Typed load failures keep the previous catalog and still settle the requests they covered.
+  const reload = (entry: Entry) =>
+    Effect.suspend(() => {
+      const target = ++entry.requested
+      return entry.lock.withPermit(
+        Effect.suspend(() => {
+          if (entry.loaded >= target) return Effect.void
+          const generation = entry.requested
+          return load(client, entry.cwd).pipe(
+            Effect.flatMap((next) => SubscriptionRef.set(entry.catalog, next)),
+            Effect.ignore,
+            Effect.andThen(
+              Effect.sync(() => {
+                entry.loaded = generation
+              }),
+            ),
+          )
+        }),
+      )
+    })
 
   // Subscribe before the first read so an update between the read and the subscription is not lost.
   yield* Stream.fromAsyncIterable(client.event.subscribe(), (cause) => cause).pipe(
@@ -72,12 +84,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       const targets = directory === undefined ? [...entries.values()] : [entries.get(FSUtil.resolve(directory))]
       return Effect.forEach(
         targets.filter((entry) => entry !== undefined),
-        (entry) =>
-          Deferred.await(entry).pipe(
-            Effect.flatMap((loaded) => Queue.offer(loaded.reloads, Deferred.makeUnsafe<void>())),
-            Effect.ignore,
-            Effect.forkIn(scope),
-          ),
+        (entry) => Deferred.await(entry).pipe(Effect.flatMap(reload), Effect.ignore, Effect.forkIn(scope)),
         { discard: true },
       )
     }),
@@ -88,23 +95,13 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
 
   const create = Effect.fnUntraced(function* (cwd: string) {
     yield* Deferred.await(connected)
-    const entry: Entry = {
+    return {
+      cwd,
       catalog: yield* SubscriptionRef.make<Catalog>(yield* load(client, cwd)),
-      reloads: yield* Queue.unbounded<Deferred.Deferred<void>>(),
-    }
-    // Requests that arrive during a reload coalesce into the next one, so the latest request wins.
-    yield* Queue.takeAll(entry.reloads).pipe(
-      Effect.flatMap((waiters) =>
-        load(client, cwd).pipe(
-          Effect.flatMap((next) => SubscriptionRef.set(entry.catalog, next)),
-          Effect.ignore,
-          Effect.andThen(Effect.forEach(waiters, (done) => Deferred.succeed(done, undefined), { discard: true })),
-        ),
-      ),
-      Effect.forever,
-      Effect.forkIn(scope),
-    )
-    return entry
+      lock: Semaphore.makeUnsafe(1),
+      requested: 0,
+      loaded: 0,
+    } satisfies Entry
   })
 
   const entry = (cwd: string) =>
@@ -130,33 +127,15 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       return yield* SubscriptionRef.get(loaded.catalog)
     }),
     reload: Effect.fn("cli.acp.catalog.reload")(function* (cwd) {
-      const loaded = yield* entry(cwd)
-      const done = yield* Deferred.make<void>()
-      yield* Queue.offer(loaded.reloads, done)
-      yield* Deferred.await(done)
+      yield* reload(yield* entry(cwd))
     }),
-    changes: (cwd) =>
-      Stream.unwrap(entry(cwd).pipe(Effect.map((loaded) => SubscriptionRef.changes(loaded.catalog)))).pipe(
-        Stream.mapAccum(
-          () => Option.none<Catalog>(),
-          (previous, current) =>
-            [Option.some(current), Option.isSome(previous) ? [{ previous: previous.value, current }] : []] as const,
-        ),
-      ),
+    changes: (cwd) => Stream.unwrap(entry(cwd).pipe(Effect.map((loaded) => SubscriptionRef.changes(loaded.catalog)))),
   })
 })
 
-export const layer = (client: OpenCodeClient) => Layer.effect(Service, make(client))
-
-/** Server commands plus the built-in commands ACP handles itself. */
-export function commands(catalog: Catalog) {
-  if (catalog.commands.some((command) => command.name === compact.name)) return catalog.commands
-  return [...catalog.commands, compact]
-}
-
 export type Live = {
   readonly cwd: string
-  current: Catalog
+  readonly current: Catalog
 }
 
 /** Temporary adapter for the promise-based `ACPService` until sessions consume the service directly. */
@@ -166,31 +145,29 @@ export function promise(input: {
   readonly changed: (live: Live, previous: Catalog) => Promise<unknown>
 }) {
   const lives = new Map<string, Live>()
-  // Rejects with what the promise loader threw, so request errors stay unchanged.
-  const run = <A>(effect: Effect.Effect<A, Error, Scope.Scope>) =>
-    input.run(
-      effect.pipe(
-        Effect.mapError((error) =>
-          error._tag === "ACPCatalogLoadError" ? error.cause : new globalThis.Error(error.message),
-        ),
-      ),
-    )
   return {
     get: (cwd: string) =>
-      run(
+      input.run(
         Effect.gen(function* () {
           const current = yield* input.catalog.get(cwd)
           const key = FSUtil.resolve(cwd)
           const existing = lives.get(key)
           if (existing) return existing
-          const live: Live = { cwd, current }
+          const live: Live = {
+            cwd,
+            // A loaded entry's read never suspends.
+            get current() {
+              return Effect.runSync(input.catalog.get(cwd))
+            },
+          }
           lives.set(key, live)
           yield* input.catalog.changes(cwd).pipe(
-            Stream.runForEach((change) =>
-              Effect.promise(() => {
-                live.current = change.current
-                return input.changed(live, change.previous).catch(() => {})
-              }),
+            Stream.runFoldEffect(
+              () => current,
+              (previous, next) =>
+                next === previous
+                  ? Effect.succeed(previous)
+                  : Effect.promise(() => input.changed(live, previous).catch(() => {})).pipe(Effect.as(next)),
             ),
             Effect.ignore,
             Effect.forkScoped({ startImmediately: true }),
@@ -198,15 +175,7 @@ export function promise(input: {
           return live
         }),
       ),
-    reload: (live: Live) =>
-      run(
-        input.catalog.reload(live.cwd).pipe(
-          Effect.andThen(input.catalog.get(live.cwd)),
-          Effect.map((current) => {
-            live.current = current
-          }),
-        ),
-      ),
+    reload: (live: Live) => input.run(input.catalog.reload(live.cwd)),
   }
 }
 
@@ -238,10 +207,10 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   const defaultModel = preferred
     ? models.find((model) => model.providerID === preferred.providerID && model.id === preferred.id)
     : models[0]
-  if (!defaultModel) return yield* new NotReadyError({ message: "No models are available" })
+  if (!defaultModel) return yield* new NotReadyError({ reason: "models" })
   const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
   const defaultAgent = agents.find((agent) => agent.mode === "primary") ?? agents[0]
-  if (!defaultAgent) return yield* new NotReadyError({ message: "No primary agents are available" })
+  if (!defaultAgent) return yield* new NotReadyError({ reason: "agents" })
   return {
     providers: providers(models),
     models,

@@ -103,7 +103,11 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
 const spanName = (method: string) => `cli.acp.${method.replaceAll("/", ".")}`
 
 const promise = <A>(evaluate: () => Promise<A>) =>
-  Effect.tryPromise({ try: evaluate, catch: (cause) => cause }).pipe(
+  Effect.tryPromise({
+    try: evaluate,
+    // A catalog load failure is classified by the client error that caused it.
+    catch: (cause) => (cause instanceof ACPCatalog.LoadError ? cause.cause : cause),
+  }).pipe(
     Effect.catch((cause) => {
       if (cause instanceof RequestError || ACPError.is(cause)) return Effect.fail(cause)
       if (cause instanceof ClientError && cause.reason === "Transport")

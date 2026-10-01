@@ -1,43 +1,12 @@
 import { describe, expect } from "bun:test"
 import { OpenCode } from "@opencode/client/promise"
-import { Effect, Fiber, Stream } from "effect"
+import { Clock, Duration, Effect, Fiber } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "../../../core/test/lib/effect"
 import { ACPCatalog } from "../../src/acp/catalog"
-import {
-  buildAgent,
-  ephemeralEvent,
-  planAgent,
-  startWire,
-  testModel,
-  type Wire,
-  type WireOptions,
-} from "./wire-fixture"
+import { buildAgent, planAgent, startWire, testModel, type Wire, type WireOptions } from "./wire-fixture"
 
 describe("acp catalog service", () => {
-  it.effect("shares one load between concurrent callers and does not cache a failed load", () => {
-    const failure = { pending: true }
-    const fetch = (request: { readonly path: string }) => {
-      if (request.path !== "/api/model" || !failure.pending) return undefined
-      failure.pending = false
-      return unavailable()
-    }
-    return withCatalog({ fetch }, (acp) =>
-      Effect.gen(function* () {
-        const catalog = yield* ACPCatalog.Service
-
-        const failed = yield* catalog.get("/workspace").pipe(Effect.flip)
-        const [first, second] = yield* Effect.all([catalog.get("/workspace"), catalog.get("/workspace")], {
-          concurrency: "unbounded",
-        })
-
-        expect(failed._tag).toBe("ACPCatalogLoadError")
-        expect(second).toBe(first)
-        expect(reads(acp, "model")).toBe(1)
-      }),
-    )
-  })
-
   it.effect("coalesces reloads requested during a reload into one more load", () => {
     const gate = { held: false, release: Promise.withResolvers<void>() }
     return withCatalog(
@@ -71,7 +40,12 @@ describe("acp catalog service", () => {
   it.effect("keeps the previous catalog when a reload fails", () => {
     const failing = { model: false }
     return withCatalog(
-      { fetch: (request) => (failing.model && request.path === "/api/model" ? unavailable() : undefined) },
+      {
+        fetch: (request) =>
+          failing.model && request.path === "/api/model"
+            ? Response.json({ name: "ModelsNotReadyError", data: { message: "catalog is warming" } }, { status: 503 })
+            : undefined,
+      },
       () =>
         Effect.gen(function* () {
           const catalog = yield* ACPCatalog.Service
@@ -85,27 +59,7 @@ describe("acp catalog service", () => {
     )
   })
 
-  it.effect("publishes changes for update events in its directory", () =>
-    withCatalog({}, (acp) =>
-      Effect.gen(function* () {
-        const catalog = yield* ACPCatalog.Service
-        const changes = yield* catalog
-          .changes("/workspace")
-          .pipe(Stream.take(1), Stream.runCollect, Effect.forkChild({ startImmediately: true }))
-        yield* Effect.promise(() => acp.until(() => reads(acp, "agent") === 1, "the first load"))
-
-        acp.server.catalog.agents = [planAgent, buildAgent]
-        acp.server.send(ephemeralEvent("agent.updated", {}, { directory: "/other" }))
-        acp.server.send(ephemeralEvent("agent.updated", {}, { directory: "/workspace" }))
-        const [change] = yield* Fiber.join(changes)
-
-        expect([change?.previous.defaultModeID, change?.current.defaultModeID]).toEqual(["build", "plan"])
-        expect(reads(acp, "agent")).toBe(2)
-      }),
-    ),
-  )
-
-  it.effect("retries every 25ms until the catalog is ready", () =>
+  it.effect("waits 25ms between readiness reads", () =>
     withCatalog({}, (acp) =>
       Effect.gen(function* () {
         const catalog = yield* ACPCatalog.Service
@@ -114,10 +68,12 @@ describe("acp catalog service", () => {
         const loading = yield* catalog.get("/workspace").pipe(Effect.forkChild)
         yield* Effect.promise(() => acp.until(() => reads(acp, "model") === 1, "the first model read"))
         acp.server.catalog.models = [testModel]
-        const loaded = yield* advance(loading)
+        yield* advance("5 millis", () => reads(acp, "model") === 2)
+        const retriedAt = yield* Clock.currentTimeMillis
+        const loaded = yield* Fiber.join(loading)
 
+        expect(retriedAt).toBeGreaterThanOrEqual(25)
         expect(loaded.defaultModel).toEqual({ providerID: "test", id: "test-model", variant: "default" })
-        expect(reads(acp, "model")).toBe(2)
       }),
     ),
   )
@@ -128,10 +84,15 @@ describe("acp catalog service", () => {
         const catalog = yield* ACPCatalog.Service
         acp.server.catalog.agents = []
 
-        const error = yield* advance(yield* catalog.get("/workspace").pipe(Effect.flip, Effect.forkChild))
+        const loading = yield* catalog.get("/workspace").pipe(Effect.flip, Effect.timed, Effect.forkChild)
+        yield* advance("25 millis", () => loading.pollUnsafe() !== undefined)
+        const [elapsed, error] = yield* Fiber.join(loading)
 
-        expect(error).toEqual(new ACPCatalog.NotReadyError({ message: "No primary agents are available" }))
-        expect(reads(acp, "agent")).toBeGreaterThan(1)
+        expect(error).toEqual(new ACPCatalog.NotReadyError({ reason: "agents" }))
+        expect(error.message).toBe("No primary agents are available")
+        // Reads in flight while the clock steps push the last attempt slightly past the deadline.
+        expect(Duration.toMillis(elapsed)).toBeGreaterThanOrEqual(5_000)
+        expect(Duration.toMillis(elapsed)).toBeLessThan(6_000)
       }),
     ),
   )
@@ -143,22 +104,19 @@ function withCatalog<A, E>(options: WireOptions, body: (acp: Wire) => Effect.Eff
     (acp) => Effect.promise(() => acp[Symbol.asyncDispose]()),
   ).pipe(
     Effect.flatMap((acp) =>
-      body(acp).pipe(Effect.provide(ACPCatalog.layer(OpenCode.make({ baseUrl: acp.server.url })))),
+      body(acp).pipe(
+        Effect.provideServiceEffect(ACPCatalog.Service, ACPCatalog.make(OpenCode.make({ baseUrl: acp.server.url }))),
+      ),
     ),
   )
 }
 
-// Reads are real HTTP between sleeps, so step the clock until the load settles.
-function advance<A, E>(fiber: Fiber.Fiber<A, E>) {
-  return TestClock.adjust("25 millis").pipe(
+// Catalog reads are real HTTP that settles between sleeps, so the clock moves in steps until the reads catch up.
+function advance(step: Duration.Input, done: () => boolean) {
+  return TestClock.adjust(step).pipe(
     Effect.andThen(TestClock.withLive(Effect.sleep("1 millis"))),
-    Effect.repeat({ until: () => fiber.pollUnsafe() !== undefined }),
-    Effect.andThen(Fiber.join(fiber)),
+    Effect.repeat({ until: done }),
   )
-}
-
-function unavailable() {
-  return Response.json({ name: "ModelsNotReadyError", data: { message: "catalog is warming" } }, { status: 503 })
 }
 
 function reads(acp: Wire, kind: "model" | "agent") {

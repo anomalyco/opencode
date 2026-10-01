@@ -194,19 +194,26 @@ describe("acp catalog and config options over the wire", () => {
     })
   })
 
-  test("advertises the built-in compact command once (https://github.com/anomalyco/opencode/issues/37229)", async () => {
+  test("advertises and runs the built-in compact over a server command (https://github.com/anomalyco/opencode/issues/37229)", async () => {
     await using acp = await startSession()
     const advertised = await acp.waitForUpdate((item) => commandNames(item) !== undefined)
 
     acp.server.catalog.commands = [reviewCommand, { name: "compact", description: "Server compact" }]
     acp.server.send(ephemeralEvent("command.updated", {}, { directory: "/workspace" }))
     const replaced = await acp.waitForUpdate((item) => item !== advertised && commandNames(item) !== undefined)
+    const compacted = await acp.prompt(acp.sessionId, "/compact")
 
-    expect(commandNames(advertised)).toEqual(["review", "compact"])
-    expect(replaced.update.sessionUpdate === "available_commands_update" && replaced.update.availableCommands).toEqual([
-      { name: "review", description: "Review changes" },
-      { name: "compact", description: "Server compact" },
-    ])
+    expect([advertised, replaced].map((item) => item.update)).toEqual(
+      Array.from({ length: 2 }, () => ({
+        sessionUpdate: "available_commands_update",
+        availableCommands: [
+          { name: "review", description: "Review changes" },
+          { name: "compact", description: "Compact the session" },
+        ],
+      })),
+    )
+    expect(compacted.stopReason).toBe("end_turn")
+    expect(acp.server.submissions.map((item) => item.kind)).toEqual(["compact"])
   })
 })
 
