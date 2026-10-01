@@ -17,6 +17,7 @@ import { LspEvent } from "./lsp-event.js"
 import { LocationEvent } from "./location-event.js"
 import { McpEvent } from "./mcp-event.js"
 import { Model } from "./model.js"
+import { Monitor } from "./monitor.js"
 import { ModelsDev } from "./models-dev.js"
 import { Permission } from "./permission.js"
 import { PersistentPty } from "./persistent-pty.js"
@@ -64,6 +65,7 @@ const featureDefinitions = Event.inventory(
   ...Pty.Event.Definitions,
   ...PersistentPty.Event.Definitions,
   ...Shell.Event.Definitions,
+  ...Monitor.Event.Definitions,
   ...Form.Event.Definitions,
   ...WebSearch.Event.Definitions,
 )

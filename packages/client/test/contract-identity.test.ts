@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { Agent } from "@opencode/schema/agent"
 import { Config } from "@opencode/schema/config"
 import { Model } from "@opencode/schema/model"
+import { Monitor } from "@opencode/schema/monitor"
 import { Prompt } from "@opencode/schema/prompt"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -14,6 +15,7 @@ test("effect entrypoint exposes canonical Schema contracts", () => {
   expect(Client.Agent).toBe(Agent)
   expect(Client.Config).toBe(Config)
   expect(Client.Model).toBe(Model)
+  expect(Client.Monitor).toBe(Monitor)
   expect(Client.Session).toBe(Session)
   expect(Client.Vcs.Base).toBe(Vcs.Base)
 })

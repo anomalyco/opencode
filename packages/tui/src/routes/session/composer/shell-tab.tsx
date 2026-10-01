@@ -8,6 +8,7 @@ import { Keymap } from "../../../context/keymap"
 import { useComposerTab } from "./context"
 import { useDialog } from "../../../ui/dialog"
 import { DialogShellOutput } from "../../../component/dialog-shell-output"
+import { useToast } from "../../../ui/toast"
 
 export function ShellTab(props: { sessionID: string }) {
   const data = useData()
@@ -16,19 +17,40 @@ export function ShellTab(props: { sessionID: string }) {
   const composer = useComposerTab()
   const shortcuts = Keymap.useShortcuts()
   const dialog = useDialog()
+  const toast = useToast()
 
-  const entries = createMemo(() =>
-    data.shell.listBySession(props.sessionID).filter((shell) => shell.status === "running"),
-  )
+  const entries = createMemo(() => {
+    const monitors = data.monitor.list(props.sessionID)
+    return [
+      ...monitors.map((monitor) => ({ monitor, shell: data.shell.get(monitor.shellID) })),
+      ...data.shell
+        .listBySession(props.sessionID)
+        .filter((shell) => shell.status === "running" && !monitors.some((monitor) => monitor.shellID === shell.id))
+        .map((shell) => ({ monitor: undefined, shell })),
+    ]
+  })
 
-  const [store, setStore] = createStore({ selected: 0 })
+  createEffect(() => {
+    if (client.connection.status() !== "connected") return
+    void data.monitor.sync(props.sessionID).catch(() => undefined)
+  })
+
+  const [store, setStore] = createStore({ selected: 0, stopping: {} as Record<string, boolean | undefined> })
   let scroll: ScrollBoxRenderable | undefined
 
   const selectedEntry = createMemo(() => entries()[store.selected])
 
   const open = () => {
     const entry = selectedEntry()
-    if (entry) dialog.replace(() => <DialogShellOutput shell={entry} location={entry.location} />)
+    if (entry?.monitor) {
+      const monitor = entry.monitor
+      dialog.replace(() => <DialogShellOutput monitor={monitor} />)
+      return
+    }
+    if (entry?.shell) {
+      const shell = entry.shell
+      dialog.replace(() => <DialogShellOutput shell={shell} location={shell.location} />)
+    }
   }
 
   createEffect(() => {
@@ -49,14 +71,24 @@ export function ShellTab(props: { sessionID: string }) {
   onMount(() => {
     const cleanup = composer.register({
       id: "shell",
-      label: "Shell",
-      hints: () =>
-        selectedEntry()
-          ? [
-              { label: "output", shortcut: shortcuts.get("composer.shell.select") ?? "" },
-              { label: "kill", shortcut: shortcuts.get("composer.shell.kill") ?? "" },
-            ]
-          : [],
+      label: "Background",
+      hints: () => {
+        const entry = selectedEntry()
+        if (!entry) return []
+        return [
+          { label: "output", shortcut: shortcuts.get("composer.shell.select") ?? "" },
+          ...(entry.monitor?.status === "ended"
+            ? []
+            : [
+                {
+                  label: store.stopping[entry.monitor?.shellID ?? entry.shell!.id] ? "stopping…" : "stop",
+                  shortcut: store.stopping[entry.monitor?.shellID ?? entry.shell!.id]
+                    ? ""
+                    : (shortcuts.get("composer.shell.kill") ?? ""),
+                },
+              ]),
+        ]
+      },
     })
     onCleanup(cleanup)
   })
@@ -68,7 +100,7 @@ export function ShellTab(props: { sessionID: string }) {
     commands: [
       {
         id: "composer.shell.up",
-        title: "Previous shell",
+        title: "Previous background task",
         group: "Composer",
         run() {
           if (store.selected === 0) {
@@ -80,7 +112,7 @@ export function ShellTab(props: { sessionID: string }) {
       },
       {
         id: "composer.shell.down",
-        title: "Next shell",
+        title: "Next background task",
         group: "Composer",
         run() {
           const list = entries()
@@ -96,15 +128,21 @@ export function ShellTab(props: { sessionID: string }) {
       },
       {
         id: "composer.shell.kill",
-        title: "Kill shell command",
+        title: "Stop background task",
         group: "Composer",
         run() {
           const entry = selectedEntry()
-          if (!entry) return
-          void client.api.shell.remove({
-            id: entry.id,
-            location: { directory: entry.location.directory },
-          })
+          const id = entry?.monitor?.shellID ?? entry?.shell?.id
+          if (!entry || !id || entry.monitor?.status === "ended" || store.stopping[id]) return
+          setStore("stopping", id, true)
+          const request = entry.monitor
+            ? client.api.monitor.stop({ id: entry.monitor.id, sessionID: props.sessionID })
+            : client.api.shell.remove({ id, location: { directory: entry.shell!.location.directory } })
+          void request
+            .catch(() => {
+              toast.show({ message: "Could not stop background task. Try again.", variant: "error" })
+            })
+            .finally(() => setStore("stopping", id, undefined))
         },
       },
     ],
@@ -112,14 +150,15 @@ export function ShellTab(props: { sessionID: string }) {
 
   return (
     <Show when={composer.active("shell")}>
-      <scrollbox scrollbarOptions={{ visible: false }} maxHeight={5} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
-        <Show when={entries().length > 0} fallback={<text fg={theme.text.muted}> No shell commands</text>}>
+      <scrollbox scrollbarOptions={{ visible: false }} maxHeight={8} ref={(r: ScrollBoxRenderable) => (scroll = r)}>
+        <Show when={entries().length > 0} fallback={<text fg={theme.text.muted}> No background tasks</text>}>
           <For each={entries()}>
-            {(shell, index) => {
+            {(entry, index) => {
               const active = createMemo(() => index() === store.selected)
               return (
                 <box
-                  flexDirection="row"
+                  flexDirection="column"
+                  flexShrink={0}
                   paddingLeft={1}
                   paddingRight={1}
                   backgroundColor={
@@ -134,10 +173,28 @@ export function ShellTab(props: { sessionID: string }) {
                   <text
                     fg={active() ? theme.text.action.primary.focused : theme.text.action.primary.base}
                     attributes={active() ? TextAttributes.BOLD : undefined}
-                    wrapMode="none"
+                    wrapMode={entry.monitor ? "word" : "none"}
                   >
-                    {shell.command.split("\n", 1)[0]}
+                    {entry.monitor ? `Monitor · ${entry.monitor.description}` : entry.shell?.command.split("\n", 1)[0]}
                   </text>
+                  <Show when={entry.monitor}>
+                    {(monitor) => (
+                      <>
+                        <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="word">
+                          {monitor().eventCount} events ·{" "}
+                          {monitor().status === "running"
+                            ? store.stopping[monitor().shellID]
+                              ? "stopping…"
+                              : "running"
+                            : `ended: ${monitor().reason?.replaceAll("_", " ") ?? "unknown"}${monitor().exitCode === undefined ? "" : ` (exit ${monitor().exitCode})`}`}
+                        </text>
+                        <text fg={active() ? theme.text.action.primary.focused : theme.text.muted} wrapMode="word">
+                          started {new Date(monitor().startedAt).toLocaleTimeString()} · expires{" "}
+                          {new Date(monitor().expiresAt).toLocaleTimeString()}
+                        </text>
+                      </>
+                    )}
+                  </Show>
                 </box>
               )
             }}

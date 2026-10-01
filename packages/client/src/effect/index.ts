@@ -13,6 +13,7 @@ export type {
   EventApi,
   IntegrationApi,
   ModelApi,
+  MonitorApi,
   PluginApi,
   ProviderApi,
   ReferenceApi,
@@ -33,6 +34,7 @@ export { Form } from "@opencode/schema/form"
 export { Integration } from "@opencode/schema/integration"
 export { Location } from "@opencode/schema/location"
 export { Model } from "@opencode/schema/model"
+export { Monitor } from "@opencode/schema/monitor"
 export { Permission } from "@opencode/schema/permission"
 export { PermissionSaved } from "@opencode/schema/permission-saved"
 export { Project } from "@opencode/schema/project"

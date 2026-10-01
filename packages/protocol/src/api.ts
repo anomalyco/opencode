@@ -4,6 +4,7 @@ import { SchemaErrorMiddleware } from "./middleware/schema-error.js"
 import { GenerateGroup } from "./groups/generate.js"
 import { MessageGroup } from "./groups/message.js"
 import { ModelGroup } from "./groups/model.js"
+import { MonitorGroup } from "./groups/monitor.js"
 import { ProviderGroup } from "./groups/provider.js"
 import { makeSessionGroup } from "./groups/session.js"
 import { makePermissionGroup } from "./groups/permission.js"
@@ -61,6 +62,7 @@ type SessionGroups<
 > =
   | ReturnType<typeof makeSessionGroup<SessionLocationId, SessionLocationService, FormLocationId, FormLocationService>>
   | typeof MessageGroup
+  | typeof MonitorGroup
 
 type FormGroups<LocationId extends HttpApiMiddleware.AnyId, LocationService> = ReturnType<
   typeof makeFormGroup<LocationId, LocationService>
@@ -159,6 +161,7 @@ const makeApiFromGroup = <
     .add(PluginGroup.middleware(locationMiddleware))
     .add(makeSessionGroup(sessionLocationMiddleware, formLocationMiddleware))
     .add(MessageGroup)
+    .add(MonitorGroup)
     .add(ModelGroup.middleware(locationMiddleware))
     .add(GenerateGroup)
     .add(ProviderGroup.middleware(locationMiddleware))

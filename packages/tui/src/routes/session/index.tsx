@@ -1277,6 +1277,15 @@ export function Session(props: {
       },
     },
     {
+      title: "View background tasks",
+      id: "session.background_tasks",
+      group: "Session",
+      run: () => {
+        setComposer({ open: true, tab: "shell" })
+        dialog.clear()
+      },
+    },
+    {
       title: "View queued prompts",
       id: "session.queued_prompts",
       group: "Prompt",

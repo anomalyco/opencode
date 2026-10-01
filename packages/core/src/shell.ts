@@ -34,8 +34,18 @@ export const RETENTION = Duration.days(7)
 export const DIRECTORY = "shell"
 
 type Info = Shell.Info
-type CreateInput = Shell.CreateInput & {
+export type CreateInput = Shell.CreateInput & {
   shell?: string
+}
+
+export type Capture = {
+  // Installed before the output pump starts, including commands that exit before create returns.
+  stdout?: (chunk: Uint8Array) => void
+  maxBytes?: number
+  // Bounded watchers must not leave descendants alive when the group leader exits first.
+  forceKill?: boolean
+  // The caller owns log retention and deletion, independently of the shell inventory.
+  retainOutput?: boolean
 }
 
 type Active = {
@@ -44,11 +54,13 @@ type Active = {
   file: string
   size: number
   newlines: number
+  retainOutput?: boolean
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
   done: Deferred.Deferred<Info, NotFoundError>
   timeoutFiber?: Fiber.Fiber<void>
   timeout?: (duration: number) => Effect.Effect<void>
+  stop?: () => Effect.Effect<void>
 }
 
 /**
@@ -63,6 +75,7 @@ export interface Interface {
   readonly create: <E = never, R = never>(
     input: CreateInput,
     before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
+    capture?: Capture,
   ) => Effect.Effect<Shell.Info, E | AppProcess.AppProcessError, R>
   // Currently running commands only; exited shells are retained for get/output but excluded here.
   readonly list: () => Effect.Effect<Shell.Info[]>
@@ -74,6 +87,8 @@ export interface Interface {
   readonly result: (started: Shell.Info) => Effect.Effect<ShellResult.Result>
   // Replaces the running command's timeout from now; zero clears it.
   readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
+  // Kill the saved process group and preserve its terminal status and captured log.
+  readonly stop: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
 }
@@ -165,7 +180,7 @@ const layer = () =>
         if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
         // Unblock any wait still pending when the command is removed before it terminated.
         yield* Deferred.fail(command.done, new NotFoundError({ id }))
-        yield* Effect.promise(() => unlink(command.file).catch(() => {}))
+        if (!command.retainOutput) yield* Effect.promise(() => unlink(command.file).catch(() => {}))
         yield* bus.publish(Shell.Event.Deleted, { id })
       })
 
@@ -193,6 +208,12 @@ const layer = () =>
         if (command.info.status !== "running" || !command.timeout) return command.info
         yield* command.timeout(duration)
         return command.info
+      })
+
+      const stop = Effect.fn("Shell.stop")(function* (id: Shell.ID) {
+        const command = yield* require(id)
+        if (command.info.status === "running" && command.stop) yield* command.stop()
+        return yield* Deferred.await(command.done)
       })
 
       const output = Effect.fnUntraced(function* (id: Shell.ID, input?: Shell.OutputInput) {
@@ -254,6 +275,7 @@ const layer = () =>
       const create = Effect.fn("Shell.create")(function* <E = never, R = never>(
         input: CreateInput,
         before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
+        capture?: Capture,
       ) {
         const sessionID = input.metadata?.sessionID
         const sessionEnvironment =
@@ -276,7 +298,7 @@ const layer = () =>
 
         const id = Shell.ID.ascending()
         const args = ShellSelect.args(invocation.shell, invocation.command)
-        const file = path.join(outputDir, `${id}.out`)
+        const file = path.join(outputDir, `${capture?.retainOutput ? "monitor-" : ""}${id}.out`)
 
         const info: Info = {
           id,
@@ -304,6 +326,7 @@ const layer = () =>
                     stdin: "ignore",
                     detached: process.platform !== "win32",
                     forceKillAfter: Duration.seconds(3),
+                    ...(capture?.forceKill ? { killSignal: "SIGKILL" as const } : {}),
                   }),
                 )
                 .pipe(
@@ -316,15 +339,27 @@ const layer = () =>
                 file,
                 size: 0,
                 newlines: 0,
+                retainOutput: capture?.retainOutput,
                 done: Deferred.makeUnsafe<Info, NotFoundError>(),
               }
               commands.set(id, command)
 
               const stream = createWriteStream(file)
               const outputDone = Latch.makeUnsafe()
-              const pump = handle.all.pipe(
-                Stream.runForEach((chunk: Uint8Array) =>
+              const source = capture?.stdout
+                ? Stream.merge(
+                    handle.stdout.pipe(Stream.tap((chunk) => Effect.sync(() => capture.stdout?.(chunk)))),
+                    handle.stderr,
+                  )
+                : handle.all
+              const pump = source.pipe(
+                Stream.runForEach((data: Uint8Array) =>
                   Effect.sync(() => {
+                    const chunk =
+                      capture?.maxBytes === undefined
+                        ? data
+                        : data.subarray(0, Math.max(0, capture.maxBytes - command.size))
+                    if (chunk.length === 0) return
                     stream.write(chunk)
                     command.size += chunk.length
                     // Count while streaming so truncation notices never rescan the output file.
@@ -353,7 +388,15 @@ const layer = () =>
                   }),
               )
 
-              const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void, signal?: string) =>
+              const kill = handle
+                .kill(capture?.forceKill ? { killSignal: "SIGKILL" } : { forceKillAfter: Duration.seconds(3) })
+                .pipe(Effect.catch(() => Effect.void))
+              const finish = (
+                status: Info["status"],
+                exit?: number,
+                beforeWait = capture?.forceKill ? kill : Effect.void,
+                signal?: string,
+              ) =>
                 Effect.gen(function* () {
                   if (command.info.status !== "running") return
                   command.info = produce(command.info, (draft) => {
@@ -383,9 +426,12 @@ const layer = () =>
                   // Keep exited history data-only. Interrupt last because finish may run on the timeout fiber.
                   const timeoutFiber = command.timeoutFiber
                   command.timeout = undefined
+                  command.stop = undefined
                   command.timeoutFiber = undefined
                   if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
                 })
+
+              command.stop = () => finish("killed", undefined, kill)
 
               command.timeout = (duration) =>
                 Effect.gen(function* () {
@@ -394,13 +440,7 @@ const layer = () =>
                   if (duration === 0 || command.info.status !== "running") return
                   command.timeoutFiber = runFork(
                     Effect.sleep(Duration.millis(duration)).pipe(
-                      Effect.flatMap(() =>
-                        finish(
-                          "timeout",
-                          undefined,
-                          handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
-                        ),
-                      ),
+                      Effect.flatMap(() => finish("timeout", undefined, kill)),
                     ),
                   )
                 })
@@ -414,7 +454,7 @@ const layer = () =>
                     finish(
                       "exited",
                       undefined,
-                      Effect.void,
+                      capture?.forceKill ? kill : Effect.void,
                       error.cause instanceof CrossSpawnSpawner.KilledBySignal ? error.cause.signal : undefined,
                     ),
                   ),
@@ -434,7 +474,7 @@ const layer = () =>
         return command.info
       })
 
-      return Service.of({ create, list, get, wait, result, timeout, output, remove })
+      return Service.of({ create, list, get, wait, result, timeout, stop, output, remove })
     }),
   )
 

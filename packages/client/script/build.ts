@@ -15,6 +15,7 @@ import { Integration } from "@opencode/schema/integration"
 import { Location } from "@opencode/schema/location"
 import { Mcp } from "@opencode/schema/mcp"
 import { Model } from "@opencode/schema/model"
+import { Monitor } from "@opencode/schema/monitor"
 import { Permission } from "@opencode/schema/permission"
 import { PermissionSaved } from "@opencode/schema/permission-saved"
 import { Plugin } from "@opencode/schema/plugin"
@@ -56,6 +57,7 @@ const effectTypeReferences = [
   typeReference("Location.PublicInfo", "@opencode/schema/location", Location.PublicInfo),
   ...namespaceTypes("Mcp", "@opencode/schema/mcp", Mcp),
   ...namespaceTypes("Model", "@opencode/schema/model", Model),
+  ...namespaceTypes("Monitor", "@opencode/schema/monitor", Monitor),
   ...namespaceTypes("Permission", "@opencode/schema/permission", Permission),
   ...namespaceTypes("PermissionSaved", "@opencode/schema/permission-saved", PermissionSaved),
   ...namespaceTypes("Plugin", "@opencode/schema/plugin", Plugin),

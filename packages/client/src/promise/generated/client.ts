@@ -103,6 +103,12 @@ import type {
   SessionViewOutput,
   MessageListInput,
   MessageListOutput,
+  MonitorListInput,
+  MonitorListOutput,
+  MonitorOutputInput,
+  MonitorOutputOutput,
+  MonitorStopInput,
+  MonitorStopOutput,
   ModelListInput,
   ModelListOutput,
   ModelDefaultInput,
@@ -1101,6 +1107,42 @@ export function make(options: ClientOptions) {
             query: { limit: input["limit"], order: input["order"], cursor: input["cursor"], type: input["type"] },
             successStatus: 200,
             declaredStatuses: [400, 401, 404, 500],
+            empty: false,
+          },
+          requestOptions,
+        ),
+    },
+    monitor: {
+      list: (input: MonitorListInput, requestOptions?: RequestOptions) =>
+        request<MonitorListOutput>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/monitor`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      output: (input: MonitorOutputInput, requestOptions?: RequestOptions) =>
+        request<MonitorOutputOutput>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/monitor/${encodeURIComponent(input.id)}/output`,
+            query: { cursor: input["cursor"], limit: input["limit"] },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
+          requestOptions,
+        ),
+      stop: (input: MonitorStopInput, requestOptions?: RequestOptions) =>
+        request<MonitorStopOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/monitor/${encodeURIComponent(input.id)}/stop`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,

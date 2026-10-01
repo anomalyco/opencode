@@ -250,6 +250,12 @@ export class PtyNotFoundError extends Schema.TaggedError<PtyNotFoundError>()(
   { httpApiStatus: 404 },
 ) {}
 
+export class MonitorNotFoundError extends Schema.TaggedError<MonitorNotFoundError>()(
+  "MonitorNotFoundError",
+  { id: Schema.String, message: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
 export class ShellNotFoundError extends Schema.TaggedError<ShellNotFoundError>()(
   "ShellNotFoundError",
   {

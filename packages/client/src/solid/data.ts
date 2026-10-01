@@ -17,6 +17,7 @@ import type {
   McpServer,
   ModelInfo,
   ModelRef,
+  MonitorInfo,
   PermissionSavedInfo,
   PermissionRequest,
   PermissionReplyInput,
@@ -40,6 +41,7 @@ import type {
 } from "../promise"
 import { Worktree } from "@opencode/schema/worktree"
 import { SessionID } from "@opencode/schema/session-id"
+import { Monitor } from "@opencode/schema/monitor"
 import { SessionMessage } from "@opencode/schema/session-message"
 import {
   isFormAlreadySettledError,
@@ -115,6 +117,7 @@ type Store = {
     messageCursor: Record<string, string | undefined>
     messageLoading: Record<string, boolean>
     pending: Record<string, SessionInboxInfo[]>
+    monitor: Record<string, Record<string, MonitorInfo>>
     permission: Record<string, PermissionRequest[]>
     // Pending forms keyed by owner: a session ID or the temporary "global" elicitation sentinel.
     form: Record<string, FormWithLocation[]>
@@ -235,6 +238,7 @@ export function createData(config: CreateDataInput) {
       messageCursor: {},
       messageLoading: {},
       pending: {},
+      monitor: {},
       permission: {},
       form: {},
     },
@@ -253,6 +257,7 @@ export function createData(config: CreateDataInput) {
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
+  const monitorUpdates = new Map<string, Map<string, MonitorInfo>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -541,6 +546,8 @@ export function createData(config: CreateDataInput) {
     if (sessionOutbox.has(sessionID)) return
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
+    sync.invalidate(`session.monitor:${sessionID}`)
+    monitorUpdates.delete(sessionID)
     messageLoads.delete(sessionID)
     // Keep unacknowledged submissions until their echo or rollback settles them.
     const pending = store.session.pending[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
@@ -554,6 +561,7 @@ export function createData(config: CreateDataInput) {
         delete draft.messageCursor[sessionID]
         delete draft.messageLoading[sessionID]
         delete draft.pending[sessionID]
+        delete draft.monitor[sessionID]
         if (messages.length) draft.message[sessionID] = messages
         if (pending.length) draft.pending[sessionID] = pending
       }),
@@ -570,6 +578,8 @@ export function createData(config: CreateDataInput) {
     sync.invalidate(`session.message:${sessionID}`)
     sync.invalidate(`session.permission:${sessionID}`)
     sync.invalidate(`session.form:${sessionID}:`)
+    sync.invalidate(`session.monitor:${sessionID}`)
+    monitorUpdates.delete(sessionID)
     setStore(
       "session",
       produce((draft) => {
@@ -581,6 +591,7 @@ export function createData(config: CreateDataInput) {
         delete draft.pending[sessionID]
         delete draft.permission[sessionID]
         delete draft.form[sessionID]
+        delete draft.monitor[sessionID]
         for (const [rootID, family] of Object.entries(draft.family)) {
           const next = family.filter((id) => id !== sessionID)
           if (next.length === 0) delete draft.family[rootID]
@@ -592,6 +603,21 @@ export function createData(config: CreateDataInput) {
 
   function handleEvent(event: OpenCodeEvent) {
     switch (event.type) {
+      case "monitor.started":
+      case "monitor.event":
+      case "monitor.ended": {
+        const info = event.data.info
+        if (!store.session.monitor[info.sessionID] && !monitorUpdates.has(info.sessionID)) return
+        monitorUpdates.get(info.sessionID)?.set(info.id, info)
+        const retained = Monitor.retain(Object.values({ ...store.session.monitor[info.sessionID], [info.id]: info }))
+        setStore(
+          "session",
+          "monitor",
+          info.sessionID,
+          reconcile(Object.fromEntries(retained.map((item) => [item.id, item]))),
+        )
+        return
+      }
       case "server.connected": {
         const updates = new Map<string, DataSessionStatus | undefined>()
         activeUpdates = updates
@@ -1048,7 +1074,8 @@ export function createData(config: CreateDataInput) {
             (item) =>
               item.type === "assistant" &&
               item.content.some(
-                (part) => part.type === "tool" && (part.state.status === "streaming" || part.state.status === "running"),
+                (part) =>
+                  part.type === "tool" && (part.state.status === "streaming" || part.state.status === "running"),
               ),
           )
         ) {
@@ -1814,6 +1841,35 @@ export function createData(config: CreateDataInput) {
         invalidate(projectID: string) {
           sync.invalidate(`project.permission:${projectID}`)
         },
+      },
+    },
+    monitor: {
+      list(sessionID: string) {
+        return Object.values(store.session.monitor[sessionID] ?? {}).toSorted((a, b) => b.startedAt - a.startedAt)
+      },
+      sync(sessionID: string) {
+        return sync.run(`session.monitor:${sessionID}`, async () => {
+          const updates = new Map<string, MonitorInfo>()
+          monitorUpdates.set(sessionID, updates)
+          try {
+            const snapshot = await api().monitor.list({ sessionID })
+            if (disposed || monitorUpdates.get(sessionID) !== updates) return
+            // A progress or exit event can overtake the list response on remote clients.
+            const current = new Map(snapshot.map((info) => [info.id, info]))
+            updates.forEach((info, id) => current.set(id, info))
+            setStore(
+              "session",
+              "monitor",
+              sessionID,
+              reconcile(Object.fromEntries(Monitor.retain([...current.values()]).map((info) => [info.id, info]))),
+            )
+          } finally {
+            if (monitorUpdates.get(sessionID) === updates) monitorUpdates.delete(sessionID)
+          }
+        })
+      },
+      invalidate(sessionID: string) {
+        sync.invalidate(`session.monitor:${sessionID}`)
       },
     },
     shell: {

@@ -9,6 +9,7 @@ export type {
   EventApi,
   IntegrationApi,
   ModelApi,
+  MonitorApi,
   PluginApi,
   ProviderApi,
   ReferenceApi,

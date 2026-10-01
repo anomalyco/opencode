@@ -3,21 +3,15 @@ export * as ShellTool from "./shell.js"
 import { ToolFailure } from "@opencode/ai"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
-import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
-import type { Tool } from "@opencode/schema/tool"
 import { Deferred, Effect, Schema, Scope } from "effect"
-import { Config } from "../../config.js"
-import { Environment } from "../../environment/index.js"
 import { Job } from "../../job.js"
-import { FileAccess } from "../../file-access.js"
-import { Permission } from "../../permission.js"
 import { NonNegativeInt } from "../../schema.js"
 import { Session } from "../../session.js"
 import { SessionSchema } from "../../session/schema.js"
 import { Shell } from "../../shell.js"
-import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
+import { ShellPermission } from "../shell-permission.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -105,51 +99,10 @@ export const Plugin = {
     const sessions = yield* Session.Service
     const jobs = yield* Job.Service
     const scope = yield* Scope.Scope
-    const environment = yield* Environment.Service
-    const access = yield* FileAccess.Service
     const shell = yield* Shell.Service
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
-    const permission = yield* Permission.Service
-    const config = yield* Config.Service
-
-    const prepare = Effect.fn("ShellTool.prepare")(function* (invocation: ShellCreateBefore, context: Tool.Context) {
-      const source = {
-        type: "tool" as const,
-        messageID: context.messageID,
-        id: context.id,
-      }
-      const target = yield* access.resolve({ path: invocation.cwd, kind: "directory" })
-      invocation.cwd = target.absolute
-      const timeout = invocation.timeout
-      const portable = Config.latest(yield* config.entries(), "experimental")?.portable_shell_scanner === true
-      const parsed = yield* ShellParse.scan(invocation.command, invocation.shell, target.absolute, { portable })
-      const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-        access.resolve({
-          path: FileAccess.resolvePath(target.absolute, directory),
-          kind: "directory",
-        }),
-      )
-      yield* access.authorizeExternal([target, ...directories], context)
-      if (parsed.commands.length > 0)
-        yield* permission.assert({
-          action: name,
-          resources: parsed.commands.map((command) => command.resource),
-          save: parsed.commands.map((command) => command.save),
-          sessionID: context.sessionID,
-          agent: context.agent,
-          source,
-        })
-      // Approval can outlive the directory, so validate immediately before spawning.
-      const workdir = yield* Environment.typeFollowing(environment.files, target.absolute).pipe(
-        Effect.catchTag("Environment.NotFound", () =>
-          Effect.fail(new Error(`Working directory does not exist: ${target.absolute}`)),
-        ),
-      )
-      if (workdir !== "directory")
-        return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.absolute}`))
-      return timeout
-    })
+    const prepare = yield* ShellPermission.prepare
 
     const notifyWhenDone = Effect.fn("ShellTool.notifyWhenDone")(
       function* (
@@ -207,10 +160,6 @@ export const Plugin = {
                 },
                 (invocation) =>
                   Effect.gen(function* () {
-                    invocation.env.AGENT = "1"
-                    invocation.env.OPENCODE = "1"
-                    invocation.env.AI_AGENT ||= "opencode"
-                    invocation.env.OPENCODE_SESSION_ID = context.sessionID
                     finalTimeout = yield* prepare(invocation, context)
                   }),
               )

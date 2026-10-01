@@ -20,6 +20,7 @@ import { Instance } from "@opencode/core/instance/service"
 import { SessionTransfer } from "@opencode/core/session/transfer"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Job } from "@opencode/core/job"
+import { Monitor } from "@opencode/core/monitor"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Global } from "@opencode/util/global"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
@@ -56,6 +57,7 @@ const applicationServiceNodes = [
   EventLogger.node,
   httpClient,
   Job.node,
+  Monitor.node,
   Project.node,
   Worktree.node,
   Session.node,
@@ -158,6 +160,8 @@ function makeRoutes<AuthError, AuthServices>(
       )
     : build(overrides)
   return serviceLayer.pipe(
+    // Reconcile abandoned monitors before any host (including plain serve) accepts requests.
+    Layer.tap((context) => Context.get(context, Monitor.Service).recover),
     Layer.flatMap((context) => {
       const services = Layer.succeedContext(context)
       const requestServices = Layer.merge(

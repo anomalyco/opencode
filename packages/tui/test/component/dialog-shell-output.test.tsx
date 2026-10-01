@@ -152,7 +152,7 @@ test.each([40, 100])("shell output opens, follows, scrolls, and survives exit at
   expect(reads.every((request) => request.url.searchParams.has("location[workspace]") === false)).toBe(true)
 
   app.mockInput.pressEscape()
-  await app.waitForFrame((frame) => !frame.includes("Shell output") && frame.includes("No shell commands"))
+  await app.waitForFrame((frame) => !frame.includes("Shell output") && frame.includes("No background tasks"))
   const count = app.requests.length
   await Bun.sleep(1100)
   expect(app.requests).toHaveLength(count)

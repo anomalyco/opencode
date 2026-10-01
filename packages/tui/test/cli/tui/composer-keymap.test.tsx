@@ -1,7 +1,8 @@
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
-import { onMount } from "solid-js"
+import { onCleanup, onMount } from "solid-js"
+import type { MonitorInfo } from "@opencode/client"
 import { ConfigProvider } from "../../../src/config"
 import type { TuiKeybind } from "../../../src/config/keybind"
 import { ClientProvider } from "../../../src/context/client"
@@ -12,7 +13,7 @@ import { RouteProvider, useRoute } from "../../../src/context/route"
 import { ThemeProvider } from "../../../src/context/theme"
 import { Composer } from "../../../src/routes/session/composer"
 import { DialogProvider } from "../../../src/ui/dialog"
-import { ToastProvider } from "../../../src/ui/toast"
+import { Toast, ToastProvider } from "../../../src/ui/toast"
 import { createApi, createEventStream, createFetch, directory, json } from "../../fixture/tui-client"
 import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
@@ -29,16 +30,30 @@ async function renderComposer(
   defaultTab: "subagents" | "shell",
   keybinds: Partial<TuiKeybind.Keybinds>,
   focusedTextarea = false,
+  monitors: MonitorInfo[] = [],
+  onRemove?: (id: string) => Promise<Response>,
 ) {
   const events = createEventStream()
   const interrupted: string[] = []
   const removed: string[] = []
   const viewed: string[] = []
   const ready = Promise.withResolvers<void>()
+  const monitorEnded = Promise.withResolvers<void>()
+  const monitorReloaded = Promise.withResolvers<void>()
+  let monitorReads = 0
   let closed = 0
   let dispatch!: ReturnType<typeof Keymap.use>["dispatch"]
   let route!: ReturnType<typeof useRoute>
   const calls = createFetch((url, request) => {
+    if (url.pathname === "/api/session/parent/monitor") {
+      if (monitorReads++ > 0) monitorReloaded.resolve()
+      return json(monitors)
+    }
+    if (url.pathname.endsWith("/stop") && request.method === "POST") {
+      const monitor = monitors.find((item) => url.pathname.includes(item.id))!
+      removed.push(monitor.shellID)
+      return json({ ...monitor, status: "ended", reason: "cancelled" })
+    }
     if (url.pathname === "/api/session/active")
       return json({ data: { "child-a": { type: "running" }, "child-b": { type: "running" } } })
     const sessionID = url.pathname.match(/^\/api\/session\/([^/]+)$/)?.[1]
@@ -56,6 +71,11 @@ async function renderComposer(
       })
     }
     const shellID = url.pathname.match(/^\/api\/shell\/([^/]+)$/)?.[1]
+    if (/^\/api\/session\/parent\/monitor\/[^/]+\/output$/.test(url.pathname)) {
+      const output = "shard 2 failure\nstderr diagnostic\n"
+      const cursor = Math.min(Number(url.searchParams.get("cursor") ?? 0), output.length)
+      return json({ output: output.slice(cursor), cursor: output.length, size: output.length, truncated: false })
+    }
     if (shellID && request.method === "GET") {
       viewed.push(shellID)
       return json({ location: { directory }, data: shells.find((shell) => shell.id === shellID) })
@@ -65,6 +85,7 @@ async function renderComposer(
     }
     if (shellID && request.method === "DELETE") {
       removed.push(shellID)
+      if (onRemove) return onRemove(shellID)
       return new Response(null, { status: 204 })
     }
   }, events)
@@ -73,12 +94,14 @@ async function renderComposer(
     const data = useData()
     route = useRoute()
     dispatch = Keymap.use().dispatch
+    onCleanup(data.on("monitor.ended", () => monitorEnded.resolve()))
     onMount(() => {
       void Promise.all([
         data.session.sync("parent"),
         data.session.sync("child-a"),
         data.session.sync("child-b"),
         data.shell.sync(),
+        data.monitor.sync("parent"),
       ])
         .then(() => wait(() => data.session.status("child-a") === "running"))
         .then(() => ready.resolve(), ready.reject)
@@ -87,6 +110,7 @@ async function renderComposer(
       <>
         {focusedTextarea && <textarea focused={true} initialValue="draft" />}
         <Composer sessionID="parent" open={true} defaultTab={defaultTab} onClose={() => closed++} />
+        <Toast />
       </>
     )
   }
@@ -134,6 +158,9 @@ async function renderComposer(
     interrupted,
     removed,
     viewed,
+    events,
+    monitorEnded: monitorEnded.promise,
+    monitorReloaded: monitorReloaded.promise,
     route: () => route.data,
     dispatch: (command: string) => dispatch(command),
     closed: () => closed,
@@ -197,6 +224,103 @@ test("shell list shows one line per command", async () => {
     const frame = composer.app.captureCharFrame()
     expect(frame).toContain("python3 - <<'PY'")
     expect(frame).not.toContain("import json")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("stopping a background task shows progress, prevents duplicates, and reports failure", async () => {
+  const response = Promise.withResolvers<Response>()
+  const composer = await renderComposer("shell", {}, false, [], () => response.promise)
+  try {
+    composer.dispatch("composer.shell.kill")
+    composer.dispatch("composer.shell.kill")
+    await composer.app.waitForFrame((frame) => frame.includes("stopping…"))
+    expect(composer.removed).toEqual(["sh-a"])
+    response.resolve(new Response("Unavailable", { status: 503 }))
+    await composer.app.waitForFrame((frame) => frame.includes("Could not stop background task"), { maxPasses: 100 })
+    expect(composer.app.captureCharFrame()).toContain("stop ctrl+d")
+  } finally {
+    response.resolve(new Response(null, { status: 204 }))
+    composer.app.renderer.destroy()
+  }
+})
+
+test.each([48, 100])("background tasks show monitor progress and restart status at %s columns", async (width) => {
+  const monitor: MonitorInfo = {
+    id: "mon_ci",
+    sessionID: "parent",
+    shellID: "sh-a",
+    description: "CI jobs",
+    delivery: "steer",
+    log: "/tmp/ci.log",
+    startedAt: 1,
+    expiresAt: 300001,
+    eventCount: 2,
+    outputBytes: 30,
+    status: "running",
+  }
+  const composer = await renderComposer("shell", {}, false, [monitor])
+  try {
+    composer.app.resize(width, 20)
+    await composer.app.renderOnce()
+    const frame = composer.app.captureCharFrame()
+    expect(frame).toContain("Background")
+    expect(frame).toContain("Monitor · CI jobs")
+    expect(frame).toContain("2 events · running")
+    expect(frame).toContain("started")
+    expect(frame).toContain("expires")
+    expect(frame).not.toContain("bun test")
+    composer.dispatch("composer.shell.kill")
+    await composer.app.waitFor(() => composer.removed.length === 1)
+    expect(composer.removed).toEqual([monitor.shellID])
+    composer.events.emit({
+      id: "evt_monitor_end",
+      created: 4,
+      type: "monitor.ended",
+      data: { info: { ...monitor, status: "ended", reason: "server_restarted", eventCount: 3 } },
+    })
+    await composer.monitorEnded
+    await composer.app.waitForFrame((frame) => frame.includes("ended: server restarted"))
+    expect(composer.app.captureCharFrame()).toContain("3 events")
+    composer.events.emit({
+      id: "evt_shell_exit",
+      created: 5,
+      type: "shell.exited",
+      location: { directory },
+      data: { id: monitor.shellID, status: "exited", exit: 1 },
+    })
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toContain("output")
+    composer.dispatch("composer.shell.select")
+    await composer.app.waitForFrame((frame) => frame.includes("Monitor") && frame.includes("stderr diagnostic"))
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("reconnecting the TUI reloads monitors ended by a server restart", async () => {
+  const monitors: MonitorInfo[] = [
+    {
+      id: "mon_ci",
+      sessionID: "parent",
+      shellID: "sh-a",
+      description: "CI jobs",
+      delivery: "steer",
+      log: "/tmp/ci.log",
+      startedAt: 1,
+      expiresAt: 300001,
+      eventCount: 2,
+      outputBytes: 30,
+      status: "running",
+    },
+  ]
+  const composer = await renderComposer("shell", {}, false, monitors)
+  try {
+    monitors[0] = { ...monitors[0], status: "ended", reason: "server_restarted" }
+    composer.events.disconnect()
+    await composer.monitorReloaded
+    await composer.app.waitForFrame((frame) => frame.includes("ended: server restarted"))
   } finally {
     composer.app.renderer.destroy()
   }

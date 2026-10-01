@@ -42,6 +42,7 @@ export const groupNames = {
   "server.session": "session",
   "server.message": "message",
   "server.model": "model",
+  "server.monitor": "monitor",
   "server.generate": "generate",
   "server.provider": "provider",
   "server.integration": "integration",

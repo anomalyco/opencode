@@ -48,6 +48,7 @@ import { Image } from "../image.js"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Integration } from "../integration.js"
 import { Job } from "../job.js"
+import { Monitor } from "../monitor.js"
 import { KV } from "../kv.js"
 import { Location } from "../location.js"
 import { ManagedPolicy } from "../managed-policy.js"
@@ -77,6 +78,7 @@ import { QuestionTool } from "../tool/plugin/question.js"
 import { ReadToolFileSystem } from "../tool/read-filesystem.js"
 import { ReadTool } from "../tool/plugin/read.js"
 import { ShellTool } from "../tool/plugin/shell.js"
+import { MonitorTool } from "../tool/plugin/monitor.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
 import { Tool } from "../tool.js"
@@ -126,6 +128,7 @@ const services = [
   InstructionDiscovery.Service,
   Integration.Service,
   Job.Service,
+  Monitor.Service,
   KV.Service,
   LLMClient.Service,
   Location.Service,
@@ -179,6 +182,7 @@ export const requirements = LayerNode.group([
   InstructionDiscovery.node,
   Integration.node,
   Job.node,
+  Monitor.node,
   KV.node,
   llmClient,
   Location.node,
@@ -238,6 +242,7 @@ const pre = [
   QuestionTool.Plugin,
   ReadTool.Plugin,
   ShellTool.Plugin,
+  MonitorTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,
   WebFetchTool.Plugin,
