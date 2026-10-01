@@ -293,6 +293,20 @@ describe("acp prompt turns over the wire", () => {
     expect(acp.server.interrupts).toContain(acp.sessionId)
   })
 
+  test("session/cancel before admission returns interrupts the session exactly once", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ signal }) =>
+        new Promise<void>((resolve) => signal.addEventListener("abort", () => resolve(), { once: true })),
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await acp.until(() => acp.server.submissions.length === 1, "prompt submission")
+    await acp.notify("session/cancel", { sessionId: acp.sessionId })
+
+    expect(await prompt).toEqual({ stopReason: "cancelled", _meta: {} })
+    expect(acp.server.interrupts).toEqual([acp.sessionId])
+  })
+
   test("session/cancel mid-turn interrupts the session once, returns cancelled, and keeps it usable", async () => {
     await using acp = await startSession(held)
 

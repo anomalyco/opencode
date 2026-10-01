@@ -12,8 +12,6 @@ export type Attached = {
   readonly id: string
   readonly cwd: string
   readonly selection: Ref.Ref<Selection>
-  /** Aborted when the session detaches, for the promise-based turn. */
-  readonly signal: AbortSignal
 }
 
 export interface Interface {
@@ -30,6 +28,8 @@ export interface Interface {
   /** Closes the session scope. No-op when the session is not attached. */
   readonly detach: (sessionID: string) => Effect.Effect<void>
   readonly require: (sessionID: string) => Effect.Effect<Attached, ACPError.SessionNotFoundError>
+  /** Forks work into this attachment's scope, so it ends on detach or re-attach. Fails once the attachment is gone. */
+  readonly fork: (attached: Attached, effect: Effect.Effect<void>) => Effect.Effect<void, ACPError.SessionNotFoundError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Sessions") {}
@@ -99,13 +99,11 @@ export const make = Effect.fnUntraced(function* (input: {
   return Service.of({
     attach: Effect.fn("cli.acp.sessions.attach")(function* (session, cwd, mcpServers) {
       const current = yield* input.catalog.get(cwd)
-      const abort = new AbortController()
       const entry: Entry = {
         attached: {
           id: session.id,
           cwd,
           selection: yield* Ref.make<Selection>({ model: session.model, modeID: session.agent }),
-          signal: abort.signal,
         },
         scope: Scope.forkUnsafe(scope),
       }
@@ -113,10 +111,6 @@ export const make = Effect.fnUntraced(function* (input: {
       const replaced = sessions.get(session.id)
       sessions.set(session.id, entry)
       if (replaced) yield* Scope.close(replaced.scope, Exit.void)
-      yield* Scope.addFinalizer(
-        entry.scope,
-        Effect.sync(() => abort.abort()),
-      )
       yield* registerMcp(entry.attached, mcpServers).pipe(
         Effect.andThen(sendCommands(session.id, current)),
         Effect.onError(() => remove(session.id, entry)),
@@ -143,6 +137,11 @@ export const make = Effect.fnUntraced(function* (input: {
       const entry = sessions.get(sessionID)
       if (!entry) return yield* new ACPError.SessionNotFoundError({ sessionId: sessionID })
       return entry.attached
+    }),
+    fork: Effect.fn("cli.acp.sessions.fork")(function* (attached, effect) {
+      const entry = sessions.get(attached.id)
+      if (entry?.attached !== attached) return yield* new ACPError.SessionNotFoundError({ sessionId: attached.id })
+      yield* Effect.forkIn(effect, entry.scope)
     }),
   })
 })

@@ -235,6 +235,24 @@ describe("acp turn events over the wire", () => {
     expect(acp.childUpdates.some((item) => item.childSessionId === "ses_future")).toBe(false)
   })
 
+  test("stops following background children once the session closes", async () => {
+    await using acp = await startSession({
+      capabilities: { childSessionUpdates: true },
+      onPrompt: ({ sessionID, id, text }) =>
+        text === "hello"
+          ? turn(sessionID, id, childCreated("ses_background", sessionID, "Background research"))
+          : turn(sessionID, id),
+    })
+    const other = await acp.newSession()
+
+    expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
+    await acp.request("session/close", { sessionId: acp.sessionId })
+    acp.server.send(textDelta("ses_background", "msg_late", "after close"))
+
+    expect((await acp.prompt(other.sessionId, "later")).stopReason).toBe("end_turn")
+    expect(acp.childUpdates.map(childUpdateKind)).toEqual(["status:created"])
+  })
+
   test("streams tool pending, progress, success, and failure updates", async () => {
     await using acp = await startSession({
       onPrompt: ({ sessionID, id }) =>

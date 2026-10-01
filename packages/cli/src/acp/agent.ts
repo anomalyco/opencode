@@ -100,22 +100,26 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
   // `stopReason: "cancelled"`.
   request(
     "session/prompt",
-    handle((service, ctx) => ACPPromise.promise(() => service.prompt(ctx.params, ctx.signal))),
+    handle((service, ctx) => service.prompt(ctx.params, ctx.signal)),
   )
   notification(
     "session/cancel",
-    handle((service, ctx) => ACPPromise.promise(() => service.cancel(ctx.params))),
+    handle((service, ctx) => service.cancel(ctx.params)),
   )
-  const connection = app.connect(stream)
-  const promiseConnection = ACPConnection.promise(connection)
-  const sessions = yield* ACPSessions.make({ client, connection: ACPConnection.make(connection), catalog })
+  const agentConnection = app.connect(stream)
+  const connection = ACPConnection.make(agentConnection)
+  const sessions = yield* ACPSessions.make({ client, connection, catalog })
   const capabilities = yield* Ref.make({ childSessionUpdates: false })
-  const turn = ACPTurn.make({ client, connection: promiseConnection, sessions, catalog, capabilities, run })
-  yield* Deferred.succeed(
-    ready,
-    ACPService.make({ client, connection: promiseConnection, catalog, sessions, capabilities, turn }),
-  )
-  return connection
+  const turn = yield* ACPTurn.make({
+    client,
+    connection,
+    permissions: ACPConnection.promise(agentConnection),
+    sessions,
+    catalog,
+    capabilities,
+  })
+  yield* Deferred.succeed(ready, ACPService.make({ client, connection, catalog, sessions, capabilities, turn }))
+  return agentConnection
 })
 
 const spanName = (method: string) => `cli.acp.${method.replaceAll("/", ".")}`

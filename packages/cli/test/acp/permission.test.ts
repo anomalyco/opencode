@@ -132,6 +132,33 @@ describe("acp permissions over the wire", () => {
     expect(acp.server.replies).toEqual([{ sessionID: "ses_child", requestID: "perm_child", decision: "once" }])
   })
 
+  test("asks for a background child's permission after the parent turn ends without the child capability", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => turn(sessionID, id, childCreated("ses_background", sessionID, "Research")),
+      permission: allowOnce,
+    })
+
+    expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
+    acp.server.send(
+      durableEvent("session.execution.started", { sessionID: "ses_background" }),
+      permissionAsked("ses_background", "perm_background", {
+        action: "read",
+        metadata: { path: "/workspace/notes.md" },
+      }),
+    )
+    await acp.until(() => acp.server.replies.length === 1, "background permission reply")
+
+    expect(acp.permissions).toMatchObject([
+      {
+        sessionId: acp.sessionId,
+        toolCall: { toolCallId: "ses_background:perm_background", title: "Research: /workspace/notes.md" },
+      },
+    ])
+    expect(acp.server.replies).toEqual([
+      { sessionID: "ses_background", requestID: "perm_background", decision: "once" },
+    ])
+  })
+
   test("rejects explicit rejection, cancellation, and permission UI failure", async () => {
     await using acp = await startSession({
       onPrompt: ({ sessionID, id }) =>

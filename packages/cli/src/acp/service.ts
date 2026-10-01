@@ -1,6 +1,11 @@
-import { isSessionNotFoundError, type ModelRef, type OpenCodeClient } from "@opencode/client/promise"
+import {
+  isSessionNotFoundError,
+  type ModelRef,
+  type OpenCodeClient,
+  type SessionMessageInfo,
+} from "@opencode/client/promise"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Effect, Option, Ref, Stream } from "effect"
+import { Effect, Option, Ref, Result, Stream } from "effect"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import type {
   AuthenticateRequest,
@@ -35,10 +40,10 @@ import { OPENCODE_VERSION } from "../version"
 import type { ACPCatalog, Catalog } from "./catalog"
 import { configOptions, currentModel, DEFAULT_VARIANT_VALUE, parseModelSelection } from "./config-option"
 import type { ACPConnection } from "./connection"
-import { ChildSessionUpdatesCapability, replayMessages } from "./event"
 import { ACPError } from "./error"
 import { ACPPromise } from "./promise"
 import type { ACPSessions, Attached } from "./sessions"
+import { ACPTranslate } from "./translate"
 import type { ACPTurn } from "./turn"
 
 export const AuthMethodID = "opencode-login"
@@ -59,14 +64,13 @@ export interface Interface {
     input: SetSessionConfigOptionRequest,
   ) => Effect.Effect<SetSessionConfigOptionResponse, Failure>
   readonly setSessionMode: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, Failure>
-  prompt(input: PromptRequest, signal?: AbortSignal): Promise<PromptResponse>
-  cancel(input: CancelNotification): Promise<void>
+  readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, Failure>
+  readonly cancel: (input: CancelNotification) => Effect.Effect<void>
 }
 
 export function make(input: {
   readonly client: OpenCodeClient
-  /** Replay still writes through the promise view. */
-  readonly connection: ACPConnection.Connection
+  readonly connection: ACPConnection.Interface
   readonly catalog: ACPCatalog.Interface
   readonly sessions: ACPSessions.Interface
   readonly capabilities: Ref.Ref<{ readonly childSessionUpdates: boolean }>
@@ -130,17 +134,24 @@ export function make(input: {
           ? input.client.message.list({ sessionID: attached.id, limit: 200, cursor })
           : input.client.message.list({ sessionID: attached.id, limit: 200, order: "asc" }),
       ).pipe(Effect.map((page) => [page.data, Option.fromNullishOr(page.cursor.next)] as const)),
-    ).pipe(
-      Stream.runCollect,
-      Effect.flatMap((messages) =>
-        ACPPromise.promise(() => replayMessages(input.connection, attached.id, attached.cwd, messages)),
-      ),
-    )
+    ).pipe(Stream.runForEach((message) => replayMessage(attached, message)))
+
+  // A message that fails to translate keeps the updates before the failure and does not stop the replay.
+  const replayMessage = Effect.fnUntraced(function* (attached: Attached, message: SessionMessageInfo) {
+    const updates = ACPTranslate.replayMessage(message, attached.cwd)
+    while (true) {
+      const next = yield* Effect.result(Effect.try(() => updates.next()))
+      if (Result.isFailure(next))
+        return yield* Effect.logWarning("ACP replay skipped the rest of a message", message.id, next.failure.cause)
+      if (next.success.done) return
+      yield* input.connection.sessionUpdate({ sessionId: attached.id, update: next.success.value })
+    }
+  })
 
   return {
     initialize: Effect.fnUntraced(function* (params) {
       yield* Ref.set(input.capabilities, {
-        childSessionUpdates: params.clientCapabilities?._meta?.[ChildSessionUpdatesCapability] === true,
+        childSessionUpdates: params.clientCapabilities?._meta?.[ACPTranslate.ChildSessionUpdatesCapability] === true,
       })
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
@@ -159,7 +170,7 @@ export function make(input: {
           mcpCapabilities: { http: true, sse: false },
           promptCapabilities: { embeddedContext: true, image: true },
           sessionCapabilities: { close: {}, delete: {}, fork: {}, list: {}, resume: {} },
-          _meta: { [ChildSessionUpdatesCapability]: true },
+          _meta: { [ACPTranslate.ChildSessionUpdatesCapability]: true },
         },
         authMethods: [authMethod],
         agentInfo: { name: "OpenCode", version: OPENCODE_VERSION },
