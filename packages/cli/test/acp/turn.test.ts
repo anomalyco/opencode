@@ -364,6 +364,7 @@ describe("acp turn events over the wire", () => {
 
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
     expect(acp.server.cancelledForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_question" }])
+    expect(acp.elicitations).toEqual([])
   })
 
   test("reports locations for native edit, write, and patch tools (https://github.com/anomalyco/opencode/issues/49591)", async () => {

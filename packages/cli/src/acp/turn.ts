@@ -1,10 +1,4 @@
-import type {
-  CancelNotification,
-  ElicitationSchema,
-  PromptRequest,
-  PromptResponse,
-  RequestError,
-} from "@agentclientprotocol/sdk"
+import type { CancelNotification, PromptRequest, PromptResponse, RequestError } from "@agentclientprotocol/sdk"
 import {
   isSessionNotFoundError,
   type CommandInfo,
@@ -36,6 +30,7 @@ import { ACPElicitation } from "./elicitation"
 import { ACPError } from "./error"
 import { ACPPermission } from "./permission"
 import { ACPPromise } from "./promise"
+import type { ACPService } from "./service"
 import type { ACPSessions, Attached } from "./sessions"
 import { ACPTranslate } from "./translate"
 
@@ -73,16 +68,17 @@ type PreparedPrompt = {
 }
 
 type PermissionAsk = Extract<ACPTranslate.Output, { readonly _tag: "PermissionAsk" }>
-type FormAsk = Extract<ACPTranslate.Output, { readonly _tag: "FormAsk" }>
 
 /** A turn's event feed. It moves to the session scope when the turn ends with children still running. */
 type Subscription = {
   readonly scope: Scope.Closeable
   readonly events: Queue.Dequeue<OpenCodeEvent, unknown>
-  /** Runs permission replies one at a time in ask order, without holding back the rest of the stream. */
-  readonly permissions: Queue.Queue<Effect.Effect<void, ACPError.Error | RequestError>>
-  /** Completed when the turn is cancelled; pending and later asks are then rejected. */
+  /** Runs permission and form asks one at a time in ask order, without holding back the rest of the stream. */
+  readonly asks: Queue.Queue<Effect.Effect<void, ACPError.Error | RequestError>>
+  /** Completed when the turn is cancelled; pending and later asks then resolve without the client. */
   readonly cancelled: Deferred.Deferred<void>
+  /** Completed per asked form once the server reports it answered or cancelled. */
+  readonly forms: Map<string, Deferred.Deferred<void>>
 }
 
 export const make = Effect.fnUntraced(function* (input: {
@@ -90,7 +86,7 @@ export const make = Effect.fnUntraced(function* (input: {
   readonly connection: ACPConnection.Interface
   readonly sessions: ACPSessions.Interface
   readonly catalog: ACPCatalog.Interface
-  readonly capabilities: Ref.Ref<{ readonly childSessionUpdates: boolean; readonly formElicitation: boolean }>
+  readonly capabilities: Ref.Ref<ACPService.Capabilities>
 }) {
   const scope = yield* Effect.scope
   const drainTimeout = yield* CancelDrainTimeout
@@ -105,10 +101,11 @@ export const make = Effect.fnUntraced(function* (input: {
         Stream.toQueue({ capacity: "unbounded" }),
         Scope.provide(subscriptionScope),
       ),
-      permissions: yield* Queue.unbounded<Effect.Effect<void, ACPError.Error | RequestError>>(),
+      asks: yield* Queue.unbounded<Effect.Effect<void, ACPError.Error | RequestError>>(),
       cancelled: yield* Deferred.make<void>(),
+      forms: new Map(),
     }
-    yield* Queue.take(subscription.permissions).pipe(
+    yield* Queue.take(subscription.asks).pipe(
       Effect.flatten,
       Effect.catchCause((cause) =>
         Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP permission reply failed", cause),
@@ -126,10 +123,10 @@ export const make = Effect.fnUntraced(function* (input: {
       ),
     )
 
-  // A turn settles only after the permission asks it saw have been answered.
-  const permissionsSettled = Effect.fnUntraced(function* (subscription: Subscription) {
+  // A turn settles only after the asks it saw have been resolved.
+  const asksSettled = Effect.fnUntraced(function* (subscription: Subscription) {
     const settled = yield* Deferred.make<void>()
-    yield* Queue.offer(subscription.permissions, Deferred.succeed(settled, undefined).pipe(Effect.asVoid))
+    yield* Queue.offer(subscription.asks, Deferred.succeed(settled, undefined).pipe(Effect.asVoid))
     yield* Deferred.await(settled)
   })
 
@@ -157,51 +154,39 @@ export const make = Effect.fnUntraced(function* (input: {
           .extNotification(ACPTranslate.ChildSessionUpdateMethod, output.update)
           .pipe(Effect.ignoreCause)
       case "PermissionAsk":
-        return Queue.offer(subscription.permissions, reply(subscription, ctx, output)).pipe(Effect.asVoid)
+        return Queue.offer(subscription.asks, reply(subscription, ctx, output)).pipe(Effect.asVoid)
       case "FormAsk":
         return Effect.gen(function* () {
           const capabilities = yield* Ref.get(input.capabilities)
-          const requestedSchema = capabilities.formElicitation ? ACPElicitation.requestedSchema(output.form) : undefined
-          if (!requestedSchema) return yield* cancelForm(output.form)
-          yield* Queue.offer(subscription.permissions, elicit(subscription, ctx, output, requestedSchema))
+          const requestedSchema = ACPElicitation.requestedSchema(output.form, capabilities)
+          if (!requestedSchema) return yield* ACPElicitation.cancel(input.client, output.form)
+          const settled = yield* Deferred.make<void>()
+          subscription.forms.set(output.form.id, settled)
+          yield* Queue.offer(
+            subscription.asks,
+            ACPElicitation.reply(
+              {
+                client: input.client,
+                connection: input.connection,
+                form: output.form,
+                requestedSchema,
+                clientSessionID: ctx.sessionID,
+                child: output.child,
+                toolCallSent: output.toolCallSent,
+                settled: Deferred.await(settled),
+              },
+              Deferred.await(subscription.cancelled),
+            ),
+          )
+        })
+      case "FormSettled":
+        return Effect.suspend(() => {
+          const settled = subscription.forms.get(output.formID)
+          subscription.forms.delete(output.formID)
+          return settled ? Deferred.succeed(settled, undefined) : Effect.void
         })
     }
   }
-
-  const cancelForm = (form: ACPElicitation.Form) =>
-    Effect.tryPromise(() => input.client.session.form.cancel({ sessionID: form.sessionID, formID: form.id })).pipe(
-      Effect.catch(() => interruptServer(form.sessionID)),
-    )
-
-  // Anything but an accepted, valid answer cancels the form, including a cancelled turn or connection.
-  const elicit = (
-    subscription: Subscription,
-    ctx: ACPTranslate.Context,
-    ask: FormAsk,
-    requestedSchema: ElicitationSchema,
-  ) =>
-    Effect.gen(function* () {
-      if (yield* Deferred.isDone(subscription.cancelled)) return false
-      const toolCallID = ACPElicitation.toolCallID(ask.form)
-      const response = yield* input.connection.createElicitation({
-        mode: "form",
-        sessionId: ctx.sessionID,
-        ...(toolCallID ? { toolCallId: ask.child ? `${ask.child.id}:${toolCallID}` : toolCallID } : {}),
-        message: ask.child?.title ? `${ask.child.title}: ${ask.form.title}` : ask.form.title,
-        requestedSchema,
-      })
-      const answer = ACPElicitation.answer(ask.form, response)
-      if (!answer) return false
-      yield* ACPPromise.promise(() =>
-        input.client.session.form.reply({ sessionID: ask.form.sessionID, formID: ask.form.id, answer }),
-      )
-      return true
-    }).pipe(
-      Effect.catchCause((cause) => Effect.logWarning("ACP form elicitation failed", cause).pipe(Effect.as(false))),
-      Effect.raceFirst(Deferred.await(subscription.cancelled).pipe(Effect.as(false))),
-      Effect.onInterrupt(() => cancelForm(ask.form)),
-      Effect.flatMap((answered) => (answered ? Effect.void : cancelForm(ask.form))),
-    )
 
   const consume = Effect.fnUntraced(function* (
     subscription: Subscription,
@@ -214,7 +199,7 @@ export const make = Effect.fnUntraced(function* (input: {
       yield* Ref.set(state, next.state)
       yield* Effect.forEach(next.outputs, (output) => interpret(subscription, ctx, output), { discard: true })
       if (next.terminal) {
-        yield* permissionsSettled(subscription)
+        yield* asksSettled(subscription)
         return next.terminal
       }
     }

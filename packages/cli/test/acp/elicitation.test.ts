@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AnyRequest, CreateElicitationResponse } from "@agentclientprotocol/sdk"
+import type { AnyMessage, AnyRequest, CreateElicitationResponse } from "@agentclientprotocol/sdk"
 import { ACPElicitation } from "../../src/acp/elicitation"
 import {
   childCreated,
@@ -45,18 +45,30 @@ const questions = (sessionID: string, id = "frm_question", tool = "call_question
     },
   })
 
-const form = (fields: ACPElicitation.Form["fields"], metadata?: ACPElicitation.Form["metadata"]) => ({
-  id: "frm_test",
-  sessionID: "ses_test",
-  title: "Test",
-  ...(metadata ? { metadata } : {}),
-  fields,
-})
+const capable = { childSessionUpdates: false, formElicitation: true }
+
+const form = (
+  fields: ACPElicitation.AskedForm["fields"],
+  metadata: ACPElicitation.AskedForm["metadata"] = { kind: "question" },
+) => ({ id: "frm_test", sessionID: "ses_test", title: "Test", metadata, fields })
 
 const accept = (content: Record<string, string | number | boolean | string[]>): CreateElicitationResponse => ({
   action: "accept",
   content,
 })
+
+const pendingUntilAborted = (_request: unknown, signal: AbortSignal) =>
+  new Promise<CreateElicitationResponse>((resolve) => {
+    signal.addEventListener("abort", () => resolve({ action: "cancel" }), { once: true })
+  })
+
+const firstElicitationCancel = (received: readonly AnyMessage[]): AnyMessage => {
+  const asked = received.find(
+    (message): message is AnyRequest =>
+      "method" in message && "id" in message && message.method === "elicitation/create",
+  )
+  return { jsonrpc: "2.0", method: "$/cancel_request", params: { requestId: asked?.id } }
+}
 
 describe("acp elicitation mapping", () => {
   test("maps every representable field type", () => {
@@ -101,6 +113,7 @@ describe("acp elicitation mapping", () => {
           },
           { key: "server", type: "string", format: "uri", hidden: true, default: "https://example.com" },
         ]),
+        capable,
       ),
     ).toEqual({
       type: "object",
@@ -158,6 +171,7 @@ describe("acp elicitation mapping", () => {
           },
           { key: "q1", type: "multiselect", options: [{ value: "Fast", label: "Fast" }], custom: true },
         ]),
+        capable,
       )?.properties,
     ).toEqual({
       q0: { type: "string", title: "Runtime", oneOf: [{ const: "Bun", title: "Bun" }] },
@@ -167,14 +181,35 @@ describe("acp elicitation mapping", () => {
     })
   })
 
-  test("refuses forms it cannot represent faithfully", () => {
+  test("cancels forms from unsupported clients, unknown flows, and credential-looking fields", () => {
+    const fields: ACPElicitation.AskedForm["fields"] = [{ key: "name", type: "string" }]
+    expect(ACPElicitation.requestedSchema(form(fields), { ...capable, formElicitation: false })).toBeUndefined()
+    expect(ACPElicitation.requestedSchema(form(fields, { kind: "mcp-elicitation" }), capable)).toBeUndefined()
+    expect(ACPElicitation.requestedSchema(form(fields, {}), capable)).toBeUndefined()
+    expect(ACPElicitation.requestedSchema(form(fields, { kind: "websearch.provider" }), capable)).toBeDefined()
+    const credentials: Array<ACPElicitation.AskedForm["fields"]> = [
+      [{ key: "api_key", type: "string" }],
+      [{ key: "q0", title: "GitHub token", type: "string" }],
+      [{ key: "q0", title: "Password", type: "string", hidden: true, default: "" }],
+    ]
+    expect(credentials.map((fields) => ACPElicitation.requestedSchema(form(fields), capable))).toEqual(
+      credentials.map(() => undefined),
+    )
+  })
+
+  test("cancels forms it cannot represent faithfully", () => {
     const options = [{ value: "a", label: "A" }]
-    const unrepresentable: Array<ACPElicitation.Form["fields"]> = [
+    const unrepresentable: Array<ACPElicitation.AskedForm["fields"]> = [
       [
         { key: "mode", type: "boolean" },
         { key: "detail", type: "string", when: [{ key: "mode", op: "eq", value: true }] },
       ],
+      [
+        { key: "mode", type: "boolean" },
+        { key: "detail", type: "string", hidden: true, default: "x", when: [{ key: "mode", op: "eq", value: true }] },
+      ],
       [{ key: "login", type: "external", url: "https://example.com/login" }],
+      [{ key: "server", type: "string", hidden: true, required: true }],
       [{ key: "pick", type: "string", options, custom: true, required: true }],
       [{ key: "pick", type: "multiselect", options, custom: true, maxItems: 1 }],
       [{ key: "pick", type: "string", options, default: "b" }],
@@ -184,20 +219,29 @@ describe("acp elicitation mapping", () => {
         { key: "pick_custom", type: "string" },
       ],
     ]
-    expect(unrepresentable.map((fields) => ACPElicitation.requestedSchema(form(fields)))).toEqual(
+    expect(unrepresentable.map((fields) => ACPElicitation.requestedSchema(form(fields), capable))).toEqual(
       unrepresentable.map(() => undefined),
     )
+    expect(
+      ACPElicitation.requestedSchema(
+        form([
+          { key: "name", type: "string" },
+          { key: "pick", type: "string", options, default: "b", hidden: true },
+        ]),
+        capable,
+      )?.properties,
+    ).toEqual({ name: { type: "string" } })
   })
 
   test("maps an accepted response back to answers", () => {
     const options = [{ value: "a", label: "A" }]
-    const fields: ACPElicitation.Form["fields"] = [
+    const fields: ACPElicitation.AskedForm["fields"] = [
       { key: "single", type: "string", options, custom: true },
       { key: "multi", type: "multiselect", options, custom: true },
       { key: "blank", type: "string", options, custom: true },
       { key: "count", type: "integer" },
       { key: "server", type: "string", hidden: true, default: "https://example.com" },
-      { key: "token", type: "string", hidden: true },
+      { key: "region", type: "string", hidden: true },
     ]
     expect(
       ACPElicitation.answer(
@@ -229,17 +273,13 @@ describe("acp elicitation mapping", () => {
   })
 
   test("has no answer unless the user accepted valid content", () => {
-    const fields: ACPElicitation.Form["fields"] = [{ key: "name", type: "string" }]
+    const fields: ACPElicitation.AskedForm["fields"] = [{ key: "name", type: "string" }]
     expect(ACPElicitation.answer(form(fields), { action: "decline" })).toBeUndefined()
     expect(ACPElicitation.answer(form(fields), { action: "cancel" })).toBeUndefined()
     expect(ACPElicitation.answer(form(fields), { action: "_custom" })).toBeUndefined()
-  })
-
-  test("reads the asking tool call from form metadata", () => {
-    const fields: ACPElicitation.Form["fields"] = [{ key: "name", type: "string" }]
-    expect(ACPElicitation.toolCallID(form(fields, { tool: { messageID: "msg", id: "call_1" } }))).toBe("call_1")
-    expect(ACPElicitation.toolCallID(form(fields, { tool: "call_1" }))).toBeUndefined()
-    expect(ACPElicitation.toolCallID(form(fields))).toBeUndefined()
+    expect(
+      ACPElicitation.answer(form(fields), { action: "accept", content: { name: { nested: true } } }),
+    ).toBeUndefined()
   })
 })
 
@@ -262,36 +302,8 @@ describe("acp elicitation over the wire", () => {
     })
 
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
-    expect(acp.elicitations).toEqual([
-      {
-        mode: "form",
-        sessionId: acp.sessionId,
-        toolCallId: "call_question",
-        message: "Questions",
-        requestedSchema: {
-          type: "object",
-          properties: {
-            q0: {
-              type: "string",
-              title: "Runtime",
-              description: "Which runtime?",
-              oneOf: [
-                { const: "Bun", title: "Bun", description: "Fast" },
-                { const: "Node", title: "Node", description: "Stable" },
-              ],
-            },
-            q0_custom: { type: "string", title: "Runtime (other)", description: "Type your own answer" },
-            q1: {
-              type: "array",
-              title: "Goals",
-              description: "What matters?",
-              items: { anyOf: [{ const: "Fast", title: "Fast", description: "Speed" }] },
-            },
-            q1_custom: { type: "string", title: "Goals (other)", description: "Add your own answer" },
-          },
-          required: [],
-        },
-      },
+    expect(acp.elicitations).toMatchObject([
+      { mode: "form", sessionId: acp.sessionId, toolCallId: "call_question", message: "Questions" },
     ])
     expect(acp.server.repliedForms).toEqual([
       { sessionID: acp.sessionId, formID: "frm_question", answer: { q0: "Bun", q1: ["Fast", "Small"] } },
@@ -300,58 +312,42 @@ describe("acp elicitation over the wire", () => {
     expect(acp.updates.some((item) => item.update.sessionUpdate === "agent_message_chunk")).toBe(true)
   })
 
-  test("cancels the form when the client declines, cancels, or fails", async () => {
+  test("cancels the form when the client declines, cancels, fails, or sends a wrong value type", async () => {
     const responses: Array<() => CreateElicitationResponse> = [
       () => ({ action: "decline" }),
       () => ({ action: "cancel" }),
       () => {
         throw new Error("elicitation UI failed")
       },
+      () => ({ action: "accept", content: { q0: { nested: true } } }),
     ]
+    const ids = ["frm_decline", "frm_cancel", "frm_fail", "frm_invalid"]
     await using acp = await startSession({
       capabilities: { elicitation: true },
-      onPrompt: ({ sessionID, id }) => [
-        delivered(sessionID, id),
-        questions(sessionID, "frm_decline"),
-        questions(sessionID, "frm_cancel"),
-        questions(sessionID, "frm_fail"),
-      ],
+      onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), ...ids.map((form) => questions(sessionID, form))],
       elicitation: () => responses[acp.elicitations.length - 1](),
-      onFormCancel: ({ sessionID }) => (acp.server.cancelledForms.length === 3 ? [succeeded(sessionID)] : []),
+      onFormCancel: ({ sessionID }) => (acp.server.cancelledForms.length === ids.length ? [succeeded(sessionID)] : []),
     })
 
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
-    expect(acp.elicitations).toHaveLength(3)
-    expect(acp.server.cancelledForms.map((item) => item.formID)).toEqual(["frm_decline", "frm_cancel", "frm_fail"])
+    expect(acp.elicitations).toHaveLength(ids.length)
+    expect(acp.server.cancelledForms.map((item) => item.formID)).toEqual(ids)
     expect(acp.server.repliedForms).toEqual([])
     expect(acp.server.interrupts).toEqual([])
   })
 
-  test("auto-cancels forms when the client does not support form elicitation", async () => {
-    await using acp = await startSession({
-      onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), questions(sessionID)],
-      onFormCancel: ({ sessionID }) => [succeeded(sessionID)],
-    })
-
-    expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
-    expect(acp.elicitations).toEqual([])
-    expect(acp.server.cancelledForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_question" }])
-  })
-
-  test("auto-cancels forms that elicitation cannot represent", async () => {
+  test("cancels forms outside the allowed flows without asking", async () => {
     await using acp = await startSession({
       capabilities: { elicitation: true },
       onPrompt: ({ sessionID, id }) => [
         delivered(sessionID, id),
         ephemeralEvent("form.created", {
           form: {
-            id: "frm_conditional",
+            id: "frm_plugin",
             sessionID,
-            title: "Setup",
-            fields: [
-              { key: "custom", type: "boolean" },
-              { key: "path", type: "string", when: [{ key: "custom", op: "eq", value: true }] },
-            ],
+            title: "Plugin",
+            metadata: { kind: "plugin" },
+            fields: [{ key: "name", type: "string" }],
           },
         }),
       ],
@@ -360,18 +356,19 @@ describe("acp elicitation over the wire", () => {
 
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
     expect(acp.elicitations).toEqual([])
-    expect(acp.server.cancelledForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_conditional" }])
+    expect(acp.server.cancelledForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_plugin" }])
   })
 
-  test("cancelling the turn cancels its pending elicitation and the form", async () => {
+  test("cancelling the turn cancels its pending elicitation and the form, and never sends queued ones", async () => {
     await using acp = await startSession({
       capabilities: { elicitation: true },
-      onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), questions(sessionID)],
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        questions(sessionID, "frm_pending"),
+        questions(sessionID, "frm_queued"),
+      ],
       onInterrupt: ({ sessionID }) => [interrupted(sessionID)],
-      elicitation: (_request, signal) =>
-        new Promise((resolve) => {
-          signal.addEventListener("abort", () => resolve({ action: "cancel" }), { once: true })
-        }),
+      elicitation: pendingUntilAborted,
     })
 
     const prompt = acp.prompt(acp.sessionId, "hello")
@@ -379,21 +376,59 @@ describe("acp elicitation over the wire", () => {
     await acp.notify("session/cancel", { sessionId: acp.sessionId })
 
     expect(await prompt).toMatchObject({ stopReason: "cancelled" })
-    await acp.until(() => acp.server.cancelledForms.length === 1, "form cancellation")
-    expect(acp.server.cancelledForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_question" }])
+    await acp.until(() => acp.server.cancelledForms.length === 2, "form cancellation")
+    expect(acp.elicitations).toHaveLength(1)
+    expect(acp.server.cancelledForms.map((item) => item.formID)).toEqual(["frm_pending", "frm_queued"])
     expect(acp.server.repliedForms).toEqual([])
-    const asked = acp.received.find(
-      (message): message is AnyRequest =>
-        "method" in message && "id" in message && message.method === "elicitation/create",
-    )
-    expect(acp.received).toContainEqual({
-      jsonrpc: "2.0",
-      method: "$/cancel_request",
-      params: { requestId: asked?.id },
-    })
+    expect(acp.received).toContainEqual(firstElicitationCancel(acp.received))
   })
 
-  test("prefixes a child session form's tool call and message with the child", async () => {
+  test("withdraws an elicitation for a form settled elsewhere and moves on to the next ask", async () => {
+    await using acp = await startSession({
+      capabilities: { elicitation: true },
+      onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), questions(sessionID, "frm_elsewhere")],
+      elicitation: (request, signal) =>
+        acp.elicitations.length === 1 ? pendingUntilAborted(request, signal) : accept({ q0: "Node" }),
+      onFormReply: ({ sessionID }) => [succeeded(sessionID)],
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await acp.until(() => acp.elicitations.length === 1, "elicitation request")
+    acp.server.send(
+      ephemeralEvent("form.replied", { sessionID: acp.sessionId, id: "frm_elsewhere", answer: { q0: "Bun" } }),
+      questions(acp.sessionId, "frm_next"),
+    )
+
+    expect((await prompt).stopReason).toBe("end_turn")
+    expect(acp.received).toContainEqual(firstElicitationCancel(acp.received))
+    expect(acp.elicitations).toHaveLength(2)
+    expect(acp.server.repliedForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_next", answer: { q0: "Node" } }])
+    expect(acp.server.cancelledForms).toEqual([])
+    expect(acp.server.interrupts).toEqual([])
+  })
+
+  test("leaves the session alone when the user's answer arrives after the form settled", async () => {
+    await using acp = await startSession({
+      capabilities: { elicitation: true },
+      onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), questions(sessionID)],
+      elicitation: () => accept({ q0: "Bun" }),
+      fetch: (request) => {
+        if (!request.path.endsWith("/form/frm_question/reply")) return undefined
+        acp.server.send(succeeded(acp.sessionId))
+        return Response.json(
+          { _tag: "FormAlreadySettledError", id: "frm_question", message: "Form already settled: frm_question" },
+          { status: 409 },
+        )
+      },
+    })
+
+    expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
+    expect(acp.server.requests.filter((request) => request.path.endsWith("/reply"))).toHaveLength(1)
+    expect(acp.server.cancelledForms).toEqual([])
+    expect(acp.server.interrupts).toEqual([])
+  })
+
+  test("prefixes a foreground child form's tool call and message with the child", async () => {
     await using acp = await startSession({
       capabilities: { elicitation: true },
       onPrompt: ({ sessionID, id }) => [
@@ -411,5 +446,23 @@ describe("acp elicitation over the wire", () => {
       { sessionId: acp.sessionId, toolCallId: "ses_child:call_child", message: "Review code: Questions" },
     ])
     expect(acp.server.repliedForms).toEqual([{ sessionID: "ses_child", formID: "frm_child", answer: { q0: "Node" } }])
+  })
+
+  test("omits the tool call when the child's tool calls only reach the client as child updates", async () => {
+    await using acp = await startSession({
+      capabilities: { elicitation: true, childSessionUpdates: true },
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        childCreated("ses_child", sessionID, "Review code"),
+        questions("ses_child", "frm_child", "call_child"),
+      ],
+      elicitation: () => accept({ q0: "Node" }),
+      onFormReply: ({ sessionID }) => [succeeded(sessionID), succeeded(acp.sessionId)],
+    })
+
+    expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
+    expect(acp.elicitations).toHaveLength(1)
+    expect(acp.elicitations[0]).toMatchObject({ sessionId: acp.sessionId, message: "Review code: Questions" })
+    expect(acp.elicitations[0]).not.toHaveProperty("toolCallId")
   })
 })
