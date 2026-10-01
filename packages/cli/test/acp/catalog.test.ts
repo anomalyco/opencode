@@ -118,103 +118,70 @@ describe("acp catalog and config options over the wire", () => {
     const session = await acp.newSession()
     acp.server.catalog.models = [testModel, secondModel]
     acp.server.catalog.agents = [buildAgent, planAgent, configured]
+    const set = (configId: string, value: string) =>
+      acp.request("session/set_config_option", { sessionId: session.sessionId, configId, value })
+    const initialModelReads = modelReads(acp)
 
-    const model = await acp.request("session/set_config_option", {
-      sessionId: session.sessionId,
-      configId: "model",
-      value: "test/second-model",
-    })
+    const model = await set("model", "test/second-model")
+    const reloadedModelReads = modelReads(acp)
+    const missingModel = await rpcError(set("model", "test/missing-model"))
+    const missingModelReads = modelReads(acp)
     await acp.request("session/set_mode", { sessionId: session.sessionId, modeId: "copilot-build" })
     const reads = agentReads(acp)
-    const missing = await rpcError(
-      acp.request("session/set_config_option", { sessionId: session.sessionId, configId: "mode", value: "missing" }),
-    )
+    const missing = await rpcError(set("mode", "missing"))
 
     expect(currentValue(model, "model")).toBe("test/second-model")
+    expect([reloadedModelReads, missingModelReads]).toEqual([initialModelReads + 1, initialModelReads + 2])
+    expect(missingModel).toMatchObject({ code: -32602, data: { modelId: "test/missing-model" } })
     expect(acp.server.selections).toContainEqual({ sessionID: session.sessionId, agent: "copilot-build" })
     expect(missing).toMatchObject({ code: -32602, data: { mode: "missing" } })
     expect(agentReads(acp)).toBeGreaterThan(reads)
   })
 
-  test("reloads the catalog once for an unseen model and selects it", async () => {
+  test.each([
+    [
+      "a sibling session closes",
+      async (acp: Wire) => {
+        const closed = await acp.newSession()
+        const open = await acp.newSession()
+        await acp.request("session/close", { sessionId: closed.sessionId })
+        return open.sessionId
+      },
+    ],
+    ...(["session/load", "session/resume"] as const).map(
+      (method) =>
+        [
+          `${method} re-attaches the session`,
+          async (acp: Wire) => {
+            const session = await acp.newSession()
+            const params = { cwd: "/workspace", sessionId: session.sessionId, mcpServers: [] }
+            await acp.request(method, params)
+            await acp.request(method, params)
+            return session.sessionId
+          },
+        ] as const,
+    ),
+  ])("pushes exactly one update per catalog change after %s", async (_, setup) => {
     await using acp = await startWire()
     acp.server.catalog.models = [testModel]
     await acp.initialize()
-    const session = await acp.newSession()
-    acp.server.catalog.models = [testModel, secondModel]
-    const set = (value: string) =>
-      acp.request("session/set_config_option", { sessionId: session.sessionId, configId: "model", value })
-    const reads = modelReads(acp)
-
-    const selected = await set("test/second-model")
-    expect(modelReads(acp)).toBe(reads + 1)
-    expect(await rpcError(set("test/missing-model"))).toMatchObject({ code: -32602 })
-
-    expect(currentValue(selected, "model")).toBe("test/second-model")
-    expect(modelReads(acp)).toBe(reads + 2)
-    expect(acp.server.selections).toEqual([
-      { sessionID: session.sessionId, model: { providerID: "test", id: secondModel.id } },
-    ])
-  })
-
-  test("stops catalog updates for a closed session while other sessions in the cwd keep them", async () => {
-    await using acp = await startWire()
-    acp.server.catalog.models = [testModel]
-    await acp.initialize()
-    const closed = await acp.newSession()
-    const open = await acp.newSession()
-    await acp.request("session/close", { sessionId: closed.sessionId })
+    const sessionId = await setup(acp)
     const since = acp.updates.length
 
-    await change(acp, open.sessionId, "config_option_update", () => {
+    await change(acp, sessionId, "config_option_update", () => {
       acp.server.catalog.models = [testModel, secondModel]
       acp.server.send(ephemeralEvent("model.updated", {}))
     })
-    await change(acp, open.sessionId, "available_commands_update", () => {
+    await change(acp, sessionId, "available_commands_update", () => {
       acp.server.catalog.commands = [reviewCommand, { name: "ship", description: "Ship it" }]
       acp.server.send(ephemeralEvent("command.updated", {}, { directory: "/workspace" }))
     })
-    await change(acp, open.sessionId, "config_option_update", () => {
-      acp.server.catalog.agents = [buildAgent]
-      acp.server.send(ephemeralEvent("agent.updated", {}, { directory: "/workspace" }))
-    })
 
     expect(updateKinds(acp, since)).toEqual([
-      [open.sessionId, "config_option_update"],
-      [open.sessionId, "available_commands_update"],
-      [open.sessionId, "config_option_update"],
+      [sessionId, "config_option_update"],
+      [sessionId, "available_commands_update"],
     ])
   })
-
-  test.each(["session/load", "session/resume"] as const)(
-    "pushes one update per catalog change after %s re-attaches a session",
-    async (method) => {
-      await using acp = await startSession()
-      const params = { cwd: "/workspace", sessionId: acp.sessionId, mcpServers: [] }
-      await acp.request(method, params)
-      await acp.request(method, params)
-      const since = acp.updates.length
-
-      await change(acp, acp.sessionId, "config_option_update", () => {
-        acp.server.catalog.models = [testModel]
-        acp.server.send(ephemeralEvent("model.updated", {}))
-      })
-      await change(acp, acp.sessionId, "available_commands_update", () => {
-        acp.server.catalog.commands = [reviewCommand, { name: "ship", description: "Ship it" }]
-        acp.server.send(ephemeralEvent("command.updated", {}, { directory: "/workspace" }))
-      })
-      await change(acp, acp.sessionId, "config_option_update", () => {
-        acp.server.catalog.agents = [buildAgent]
-        acp.server.send(ephemeralEvent("agent.updated", {}, { directory: "/workspace" }))
-      })
-
-      expect(updateKinds(acp, since)).toEqual([
-        [acp.sessionId, "config_option_update"],
-        [acp.sessionId, "available_commands_update"],
-        [acp.sessionId, "config_option_update"],
-      ])
-    },
-  )
 
   test.each(["empty", "missing the default"])(
     "retries when the model list is %s but the default is ready",
@@ -292,20 +259,32 @@ describe("acp catalog and config options over the wire", () => {
     await using acp = await startSession()
     const advertised = await acp.waitForUpdate((item) => commandNames(item) !== undefined)
 
-    acp.server.catalog.commands = [reviewCommand, { name: "compact", description: "Server compact" }]
+    acp.server.catalog.commands = [
+      reviewCommand,
+      { name: "compact", description: "Server compact" },
+      { name: "ship", description: "Ship it" },
+    ]
     acp.server.send(ephemeralEvent("command.updated", {}, { directory: "/workspace" }))
     const replaced = await acp.waitForUpdate((item) => item !== advertised && commandNames(item) !== undefined)
     const compacted = await acp.prompt(acp.sessionId, "/compact")
 
-    expect([advertised, replaced].map((item) => item.update)).toEqual(
-      Array.from({ length: 2 }, () => ({
+    expect([advertised, replaced].map((item) => item.update)).toEqual([
+      {
         sessionUpdate: "available_commands_update",
         availableCommands: [
           { name: "review", description: "Review changes" },
           { name: "compact", description: "Compact the session" },
         ],
-      })),
-    )
+      },
+      {
+        sessionUpdate: "available_commands_update",
+        availableCommands: [
+          { name: "review", description: "Review changes" },
+          { name: "ship", description: "Ship it" },
+          { name: "compact", description: "Compact the session" },
+        ],
+      },
+    ])
     expect(compacted.stopReason).toBe("end_turn")
     expect(acp.server.submissions.map((item) => item.kind)).toEqual(["compact"])
   })

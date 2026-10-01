@@ -3,12 +3,18 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Context, Deferred, Effect, Exit, Schedule, Schema, Semaphore, Stream, SubscriptionRef } from "effect"
 import type { ConfigOptionProvider } from "./config-option"
 
+// ACP runs these itself; they take precedence over server commands with the same name.
+export const builtinCommands = new Map([
+  ["compact", { description: "Compact the session", start: "compaction" as const }],
+])
+
 export type Catalog = {
   readonly providers: ConfigOptionProvider[]
   readonly models: ModelInfo[]
   readonly defaultModel: ModelRef
   readonly modes: Array<{ id: string; name: string; description?: string }>
   readonly defaultModeID: string
+  /** Server commands, without those shadowed by a built-in. */
   readonly commands: CommandInfo[]
 }
 
@@ -176,7 +182,7 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
     },
     modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
     defaultModeID: defaultAgent.id,
-    commands: commandResult.data,
+    commands: commandResult.data.filter((command) => !builtinCommands.has(command.name)),
   } satisfies Catalog
 })
 

@@ -1,7 +1,5 @@
 import { RequestError } from "@agentclientprotocol/sdk"
-import { ClientError } from "@opencode/client/promise"
-import { Effect, Schema } from "effect"
-import { ACPCatalog } from "./catalog"
+import { Schema } from "effect"
 
 export class SessionNotFoundError extends Schema.TaggedError<SessionNotFoundError>()("ACPSessionNotFoundError", {
   sessionId: Schema.String,
@@ -101,18 +99,6 @@ export function toRequestError(error: Error): RequestError {
   }
   const exhaustive: never = error
   return exhaustive
-}
-
-/** Runs a promise, keeping ACP failures typed. Any other rejection is a defect. */
-export const promise = <A>(evaluate: (signal: AbortSignal) => Promise<A>) =>
-  Effect.tryPromise({ try: evaluate, catch: (cause) => cause }).pipe(Effect.catch(classify))
-
-export function classify(cause: unknown): Effect.Effect<never, Error | RequestError> {
-  // A catalog load failure is classified by the client error that caused it.
-  if (cause instanceof ACPCatalog.LoadError) return classify(cause.cause)
-  if (cause instanceof RequestError || is(cause)) return Effect.fail(cause)
-  if (cause instanceof ClientError && cause.reason === "Transport") return Effect.fail(new ServerUnavailableError())
-  return Effect.die(cause)
 }
 
 export function fromUnknown(error: unknown, service?: string) {

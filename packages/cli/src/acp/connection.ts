@@ -8,27 +8,19 @@ import {
   type SessionNotification,
 } from "@agentclientprotocol/sdk"
 import { Context, type Effect } from "effect"
-import { ACPError } from "./error"
-
-type Failure = ACPError.Error | RequestError
+import type { ACPError } from "./error"
+import { ACPPromise } from "./promise"
 
 export interface Interface {
-  readonly sessionUpdate: (params: SessionNotification) => Effect.Effect<void, Failure>
-  /** Interrupting the request cancels it on the client. */
-  readonly requestPermission: (params: RequestPermissionRequest) => Effect.Effect<RequestPermissionResponse, Failure>
-  readonly extNotification: (method: string, params: Record<string, unknown>) => Effect.Effect<void, Failure>
+  readonly sessionUpdate: (params: SessionNotification) => Effect.Effect<void, ACPError.Error | RequestError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Connection") {}
 
-export function service(connection: AgentConnection) {
+export function make(connection: AgentConnection) {
   return Service.of({
-    sessionUpdate: (params) => ACPError.promise(() => connection.client.notify(methods.client.session.update, params)),
-    requestPermission: (params) =>
-      ACPError.promise((signal) =>
-        connection.client.request(methods.client.session.requestPermission, params, { cancellationSignal: signal }),
-      ),
-    extNotification: (method, params) => ACPError.promise(() => connection.client.notify(method, params)),
+    sessionUpdate: (params) =>
+      ACPPromise.promise(() => connection.client.notify(methods.client.session.update, params)),
   })
 }
 
@@ -39,8 +31,8 @@ export type Connection = {
   extNotification?(method: string, params: Record<string, unknown>): Promise<void>
 }
 
-/** Promise view for the turn and permission code until they run as effects. */
-export function make(connection: AgentConnection): Connection {
+/** Promise view for the turn, permission, and replay code until they run as effects. */
+export function promise(connection: AgentConnection): Connection {
   return {
     signal: connection.signal,
     sessionUpdate: (params) => connection.client.notify(methods.client.session.update, params),

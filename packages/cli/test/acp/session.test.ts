@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { McpServer } from "@agentclientprotocol/sdk"
 import { currentValue } from "./select-options"
-import { makeSession, rpcError, secondModel, startSession, startWire } from "./wire-fixture"
+import { ephemeralEvent, makeSession, rpcError, secondModel, startSession, startWire, testModel } from "./wire-fixture"
 
 describe("acp session lifecycle over the wire", () => {
   test("initialize advertises capabilities and terminal auth only when the client asks", async () => {
@@ -225,5 +225,34 @@ describe("acp session lifecycle over the wire", () => {
       directory: "/workspace",
       config: { type: "remote", url: "https://example.com/mcp", headers: { Authorization: "Bearer x" }, oauth: false },
     })
+  })
+  test("leaves a session detached when re-attaching it fails", async () => {
+    const broken: McpServer = { name: "broken", command: "bun", args: [], env: [] }
+    await using acp = await startWire({
+      fetch: (request) =>
+        request.method === "PUT" && request.path === "/api/experimental/mcp/broken"
+          ? new Response(null, { status: 500 })
+          : undefined,
+    })
+    await acp.initialize()
+    const failed = await acp.newSession()
+    const other = await acp.newSession()
+
+    expect(
+      await rpcError(
+        acp.request("session/resume", { cwd: "/workspace", sessionId: failed.sessionId, mcpServers: [broken] }),
+      ),
+    ).toMatchObject({ code: -32603 })
+    const since = acp.updates.length
+    acp.server.catalog.models = [testModel]
+    acp.server.send(ephemeralEvent("model.updated", {}))
+    await acp.until(() => acp.updates.length > since, "config options for the attached session")
+
+    expect(acp.updates.slice(since).map((item) => item.sessionId)).toEqual([other.sessionId])
+    expect(
+      await rpcError(
+        acp.request("session/set_config_option", { sessionId: failed.sessionId, configId: "mode", value: "plan" }),
+      ),
+    ).toMatchObject({ code: -32602, data: { sessionId: failed.sessionId } })
   })
 })
