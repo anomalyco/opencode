@@ -800,6 +800,27 @@ describe("McpTool.usable", () => {
     expect(McpTool.usable("idalib", [rule("idalib_*", "deny"), rule("other_*", "allow")])).toBe(false)
     expect(McpTool.usable("idalib", [rule("idalib_*", "deny"), rule("*", "allow")])).toBe(true)
   })
+
+  test("demands exactly the servers the shipped agent rulesets allow", () => {
+    const orchestrator = [rule("playwright_*", "deny"), rule("idalib_*", "deny"), rule("lemmalog_*", "allow")]
+    const reverse = [rule("playwright_*", "deny"), rule("idalib_*", "allow"), rule("lemmalog_*", "deny")]
+    const browser = [rule("playwright_*", "allow"), rule("idalib_*", "deny"), rule("lemmalog_*", "deny")]
+    const none = [rule("playwright_*", "deny"), rule("idalib_*", "deny"), rule("lemmalog_*", "deny")]
+
+    expect(McpTool.usable("lemmalog", orchestrator)).toBe(true)
+    expect(McpTool.usable("idalib", orchestrator)).toBe(false)
+    expect(McpTool.usable("playwright", orchestrator)).toBe(false)
+
+    expect(McpTool.usable("idalib", reverse)).toBe(true)
+    expect(McpTool.usable("playwright", reverse)).toBe(false)
+    expect(McpTool.usable("lemmalog", reverse)).toBe(false)
+
+    expect(McpTool.usable("playwright", browser)).toBe(true)
+    expect(McpTool.usable("idalib", browser)).toBe(false)
+
+    expect(McpTool.usable("idalib", none)).toBe(false)
+    expect(McpTool.usable("lemmalog", none)).toBe(false)
+  })
 })
 
 test("rejects sends before the stdio transport is started", async () => {
