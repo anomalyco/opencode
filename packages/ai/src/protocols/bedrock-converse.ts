@@ -309,15 +309,25 @@ const lowerToolResult = Effect.fn("BedrockConverse.lowerToolResult")(function* (
   part: ToolResultPart,
   documentNames: Set<string>,
   normalizeID: (id: string) => string,
+  hoistImages: boolean,
 ) {
+  const content = yield* lowerToolResultContent(part, documentNames)
+  const images: BedrockMedia.ImageBlock[] = hoistImages ? content.filter((item) => "image" in item) : []
+  const resultContent = images.length > 0 ? content.filter((item) => !("image" in item)) : content
   return {
-    toolResult: {
-      toolUseId: normalizeID(part.id),
-      content: yield* lowerToolResultContent(part, documentNames),
-      status: part.result.type === "error" ? "error" : "success",
-    },
-  } satisfies BedrockToolResultBlock
+    block: {
+      toolResult: {
+        toolUseId: normalizeID(part.id),
+        content: images.length > 0 && resultContent.length === 0 ? [{ text: "See attached image." }] : resultContent,
+        status: part.result.type === "error" ? "error" : "success",
+      },
+    } satisfies BedrockToolResultBlock,
+    images,
+  }
 })
+
+// Bedrock validates tool-result image placement per model; keep the tested Claude, Nova, and Llama 4 families inline.
+const keepToolImagesInline = (id: string) => /(?:^|[./])(?:anthropic\.claude-|amazon\.nova-|meta\.llama4-)/i.test(id)
 
 const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
   request: LLMRequest,
@@ -328,8 +338,20 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
   // Mistral can reject replay IDs even when they satisfy Converse's broader ID syntax.
   const normalizeID = request.model.id.includes("mistral.") ? MistralToolID.normalizer(request) : (id: string) => id
   const providerMetadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const hoistImages = !keepToolImagesInline(request.model.id)
+  const pixtral = /(?:^|[./])mistral\.pixtral-/i.test(request.model.id)
+  // Bedrock expects parallel tool results before any images hoisted beside them.
+  const pendingImages: BedrockMedia.ImageBlock[] = []
+  const flushImages = () => {
+    if (pendingImages.length === 0) return
+    const previous = messages.at(-1)
+    if (previous?.role === "user")
+      messages[messages.length - 1] = { role: "user", content: [...previous.content, ...pendingImages] }
+    pendingImages.length = 0
+  }
 
   for (const message of request.messages) {
+    if (message.role !== "tool") flushImages()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Bedrock Converse", message)
       const content = textWithCache(breakpoints, part.text, part.cache)
@@ -403,7 +425,13 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("Bedrock Converse", "tool", ["tool-result"])
-      content.push(yield* lowerToolResult(part, documentNames, normalizeID))
+      const result = yield* lowerToolResult(part, documentNames, normalizeID, hoistImages)
+      if (pixtral && result.images.length > 0)
+        return yield* ProviderShared.invalidRequest(
+          "Bedrock Converse Pixtral does not support images returned by tools",
+        )
+      content.push(result.block)
+      pendingImages.push(...result.images)
       const cachePoint = BedrockCache.block(breakpoints, part.cache)
       if (cachePoint) content.push(cachePoint)
     }
@@ -413,6 +441,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
     else messages.push({ role: "user", content })
   }
 
+  flushImages()
   return messages
 })
 
