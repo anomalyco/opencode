@@ -1,10 +1,16 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, describe, expect, test } from "bun:test"
+import { createRoot } from "solid-js"
+import { OpenCode } from "@opencode/client/promise"
+import { createData } from "@opencode/client/solid"
 import type { ModelSelection } from "@/providers/models/selection"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { Skill } from "@opencode/schema/skill"
 import type { ActiveComposerAdapter, ComposerControls, ComposerSession, NewSessionComposerAdapter } from "./adapter"
 import { createMemoryComposerState } from "./state"
 import { createComposerSubmit } from "./submit"
+
+const disposers: Array<() => void> = []
+afterEach(() => disposers.splice(0).forEach((dispose) => dispose()))
 
 const selectedModel = {
   id: "model-1",
@@ -87,6 +93,33 @@ function session(input: {
   switchAgent?: ComposerSession["api"]["switchAgent"]
   switchModel?: ComposerSession["api"]["switchModel"]
 }): ComposerSession {
+  const api = OpenCode.make({ baseUrl: "http://opencode.test" })
+  const data = createRoot((dispose) => {
+    disposers.push(dispose)
+    return createData({
+      directory: "C:/repo",
+      event: { on: () => () => {}, listen: () => () => {} },
+      api: () => ({
+        ...api,
+        session: {
+          ...api.session,
+          prompt: async (value) => {
+            if (!value.id) throw new Error("Client admission must supply a message ID")
+            input.calls.push("prompt")
+            await input.prompt(value)
+            return {
+              id: value.id,
+              sessionID: value.sessionID,
+              time: { created: Date.now() },
+              type: "user",
+              delivery: value.delivery ?? "steer",
+              payload: { text: value.text },
+            }
+          },
+        },
+      }),
+    })
+  })
   return {
     id: "session-1",
     directory: "C:/repo",
@@ -111,10 +144,8 @@ function session(input: {
       location: { command: { list: () => [] } },
       session: {
         setStatus: (_sessionID, status) => input.statuses?.push(status),
-        prompt: async (value) => {
-          input.calls.push("prompt")
-          await input.prompt(value)
-        },
+        mutate: data.session.mutate,
+        prompt: data.session.prompt,
       },
     },
   }
@@ -350,6 +381,48 @@ describe("Composer submission", () => {
       model: { providerID: "provider-1", modelID: "model-1", variant: "balanced" },
     })
     expect(state.current()).toEqual([{ type: "text", content: "", start: 0, end: 0 }])
+  })
+
+  test.each([false, true])("reserves prompt admission before later session mutations (image: %s)", async (image) => {
+    const state = createMemoryComposerState({ prompt: "replace history" }).capture()
+    if (image)
+      state.set([
+        ...state.current(),
+        {
+          type: "image",
+          id: "attachment",
+          filename: "image.png",
+          mime: "image/png",
+          blob: { id: "attachment", url: "data:image/png;base64,YQ==" },
+        },
+      ])
+    const calls: string[] = []
+    const target = session({
+      calls,
+      current: () => ({ agent: "build", model: { id: "model-1", providerID: "provider-1", variant: "balanced" } }),
+      prompt: async (value) => {
+        expect(value.files?.length ?? 0).toBe(image ? 1 : 0)
+      },
+    })
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+
+    const submitted = submitInput(adapter).submit(new Event("submit"))
+    const redo = target.data.session.mutate(target.id, async () => {
+      calls.push("redo")
+    })
+    await Promise.all([submitted, redo])
+
+    expect(calls).toEqual(["switch-model", "prompt", "redo"])
   })
 
   test("starts and promotes a New Session once before admitting its first prompt", async () => {
@@ -608,6 +681,57 @@ describe("Composer submission", () => {
     expect(state.current()).toMatchObject([{ type: "text", content: text }])
     // The restored prompt is the draft again, so history does not also keep it (and its attachments).
     expect(history).toEqual([`add:${text}`, `remove:${text}`, `add:${text}`, `remove:${text}`])
+  })
+
+  test("preserves browser comments through failed admission and same-ID retry", async () => {
+    const state = createMemoryComposerState({ prompt: "Update this button" }).capture()
+    const comment = {
+      type: "browser" as const,
+      tabID: "tab_00000000-0000-4000-8000-000000000000",
+      url: "http://localhost:5173/",
+      element: { selector: "#save", label: "button#save" },
+      comment: "Rename this",
+    }
+    state.context.add({ ...comment, commentID: "browser-comment" })
+    const requests: Parameters<ComposerSession["data"]["session"]["prompt"]>[0][] = []
+    const failed = Promise.withResolvers<void>()
+    const accepted = Promise.withResolvers<void>()
+    const target = session({
+      calls: [],
+      prompt: async (value) => {
+        requests.push(value)
+        if (requests.length <= 2) throw new Error("network unavailable")
+        accepted.resolve()
+      },
+    })
+    const adapter: ActiveComposerAdapter = {
+      kind: "active-session",
+      state,
+      ready: () => true,
+      controls,
+      working: () => false,
+      session: () => target,
+      interrupt: async () => undefined,
+      submitted() {},
+      setEditor() {},
+    }
+    const submission = submitInput(adapter, { missingSelection() {}, failed: () => failed.resolve() })
+
+    await submission.submit(new Event("submit"))
+    await failed.promise
+    expect(state.current()).toMatchObject([{ type: "text", content: "Update this button" }])
+    expect(state.context.items()).toMatchObject([{ ...comment, commentID: "browser-comment" }])
+
+    await submission.submit(new Event("submit"))
+    await accepted.promise
+    expect(requests).toHaveLength(3)
+    expect(new Set(requests.map((request) => request.id)).size).toBe(1)
+    requests.forEach((request) => {
+      expect(request.metadata?.comments).toEqual([comment])
+      expect(request.text).toContain('selector "#save"')
+      expect(request.text).toContain("Rename this")
+    })
+    expect(state.context.items()).toEqual([])
   })
 
   test("forwards structured mentions to custom commands", async () => {
