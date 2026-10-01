@@ -1,7 +1,20 @@
 import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
-import { Context, Duration, Effect, FileSystem, Layer, Option, Ref, Schema } from "effect"
+import {
+  Context,
+  Deferred,
+  Duration,
+  Effect,
+  FileSystem,
+  Layer,
+  Option,
+  Ref,
+  Schedule,
+  Schema,
+  Stream,
+  SubscriptionRef,
+} from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
@@ -105,6 +118,25 @@ export interface Interface {
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
+
+export const poll = Effect.fnUntraced(function* (run: Effect.Effect<RunResult | undefined>, interval: Duration.Input) {
+  const latest = yield* SubscriptionRef.make<RunResult | undefined>(undefined)
+  const checked = yield* Deferred.make<void>()
+  yield* run.pipe(
+    Effect.flatMap((result) => (result ? SubscriptionRef.set(latest, result) : Effect.void)),
+    Effect.ensuring(Deferred.succeed(checked, undefined)),
+    Effect.repeat(Schedule.spaced(interval)),
+    Effect.forkScoped,
+  )
+  return {
+    checked: Deferred.await(checked),
+    // Repeated checks report the same pending update until a newer release appears.
+    changes: SubscriptionRef.changes(latest).pipe(
+      Stream.filter((result) => result !== undefined),
+      Stream.changesWith((a, b) => a.type === b.type && a.version === b.version),
+    ),
+  }
+})
 
 export function decodePolicy(text: string): Policy | undefined {
   // The CLI only projects this host-level preference instead of initializing

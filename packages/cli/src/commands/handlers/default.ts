@@ -4,7 +4,7 @@ import { run } from "@opencode/tui"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
-import { Context, Effect, Fiber, FileSystem, Option, Queue } from "effect"
+import { Context, Effect, FileSystem, Option, Queue, Stream } from "effect"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
@@ -62,12 +62,15 @@ export default Runtime.handler(Commands, (input) =>
     const updater = yield* Updater.Service
     let installing: string | undefined
     const updateListeners = new Set<(version: string) => void>()
-    const update = yield* updater
-      .run((version) => {
-        installing = version
-        updateListeners.forEach((notify) => notify(version))
-      })
-      .pipe(Effect.ensuring(Effect.sync(() => (installing = undefined))), Effect.forkScoped)
+    const updates = yield* Updater.poll(
+      updater
+        .run((version) => {
+          installing = version
+          updateListeners.forEach((notify) => notify(version))
+        })
+        .pipe(Effect.ensuring(Effect.sync(() => (installing = undefined)))),
+      "10 minutes",
+    )
     preflight.loading()
     const config = yield* Config.Service
     const npm = yield* Npm.Service
@@ -107,16 +110,13 @@ export default Runtime.handler(Commands, (input) =>
       updater: {
         remote: requestedServer !== undefined,
         subscribe: (notify, signal) =>
-          runPromise(
-            Fiber.join(update).pipe(
-              Effect.flatMap((result) => (result === undefined ? Effect.void : Effect.sync(() => notify(result)))),
-            ),
-            { signal },
-          ),
+          runPromise(updates.changes.pipe(Stream.runForEach((result) => Effect.sync(() => notify(result)))), {
+            signal,
+          }),
         check: (signal, notify) => {
           if (installing) notify(installing)
           updateListeners.add(notify)
-          return runPromise(Fiber.join(update).pipe(Effect.flatMap(() => updater.check())), { signal }).finally(() =>
+          return runPromise(updates.checked.pipe(Effect.andThen(updater.check())), { signal }).finally(() =>
             updateListeners.delete(notify),
           )
         },
