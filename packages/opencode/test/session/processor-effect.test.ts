@@ -467,6 +467,102 @@ it.live("session.processor effect tests capture reasoning from http mock", () =>
   ),
 )
 
+for (const calls of [[], null, undefined]) {
+  for (const boundary of ["text", "tool"] as const) {
+    it.live(`compatible reasoning stays contiguous with ${JSON.stringify(calls)} tool calls before ${boundary}`, () =>
+      provideTmpdirServer(
+        ({ dir, llm }) =>
+          Effect.gen(function* () {
+            const { processors, session, provider } = yield* boot()
+            yield* llm.push(
+              raw({
+                chunks: [
+                  ...Array.from({ length: 128 }, () => ({
+                    id: "reasoning-fixture",
+                    choices: [{ index: 0, delta: { reasoning_content: "r", content: "", tool_calls: calls } }],
+                  })),
+                  {
+                    id: "reasoning-fixture",
+                    choices: [
+                      {
+                        index: 0,
+                        delta:
+                          boundary === "text"
+                            ? { content: "done" }
+                            : {
+                                tool_calls: [
+                                  {
+                                    index: 0,
+                                    id: "call-1",
+                                    type: "function",
+                                    function: { name: "lookup", arguments: '{"query":"weather"}' },
+                                  },
+                                ],
+                              },
+                      },
+                    ],
+                  },
+                  {
+                    id: "reasoning-fixture",
+                    choices: [{ index: 0, delta: {}, finish_reason: boundary === "text" ? "stop" : "tool_calls" }],
+                  },
+                ],
+              }),
+            )
+            const chat = yield* session.create({})
+            const parent = yield* user(chat.id, "reason")
+            const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+            const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+            const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+            yield* handle.process({
+              user: {
+                id: parent.id,
+                sessionID: chat.id,
+                role: "user",
+                time: parent.time,
+                agent: parent.agent,
+                model: ref,
+              },
+              sessionID: chat.id,
+              model: mdl,
+              agent: agent(),
+              system: [],
+              messages: [{ role: "user", content: "reason" }],
+              tools: {
+                lookup: tool({
+                  inputSchema: z.object({ query: z.string() }),
+                  execute: async (input) => ({ title: "Lookup", output: input.query, metadata: {} }),
+                }),
+              },
+            })
+            const parts = yield* MessageV2.parts(msg.id)
+            const reasoning = parts.filter((part) => part.type === "reasoning")
+            expect(yield* llm.calls).toBe(1)
+            expect(reasoning).toHaveLength(1)
+            expect(reasoning[0]).toMatchObject({
+              text: "r".repeat(128),
+              time: { start: expect.any(Number), end: expect.any(Number) },
+            })
+            const tools = parts.filter((part) => part.type === "tool")
+            expect(tools).toHaveLength(boundary === "tool" ? 1 : 0)
+            if (boundary === "tool")
+              expect(tools[0]).toMatchObject({
+                callID: "call-1",
+                state: { status: "completed", input: { query: "weather" }, output: "weather" },
+              })
+            expect(
+              parts
+                .filter((part) => part.type === "text")
+                .map((part) => part.text)
+                .join(""),
+            ).toBe(boundary === "text" ? "done" : "")
+          }),
+        { config: (url) => providerCfg(url) },
+      ),
+    )
+  }
+}
+
 it.live("session.processor effect tests reset reasoning state across retries", () =>
   provideTmpdirServer(
     ({ dir, llm }) =>
