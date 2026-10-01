@@ -1,6 +1,33 @@
 import { expect, story } from "../../storybook/playwright/story"
 
-story("renders the line comment cancel action as a ghost button", async ({ mount }) => {
+story("renders the line comment content editor and compact actions", async ({ mount }) => {
   const root = await mount("ui-line-comment--editor-filled")
-  await expect(root.getByRole("button", { name: "Cancel" })).toHaveAttribute("data-variant", "ghost")
+  const editor = root.getByRole("textbox")
+  expect(await editor.evaluate((element) => element.tagName)).toBe("TEXTAREA")
+  await editor.fill("Updated comment\nwith context")
+  await expect(editor).toHaveValue("Updated comment\nwith context")
+  await editor.fill("x")
+  await editor.press("Backspace")
+  await expect(editor).toHaveValue("")
+  expect(await editor.evaluate((element) => element.matches(":placeholder-shown"))).toBe(true)
+  await expect(root.locator("textarea")).toHaveCount(1)
+  await expect(root.locator('[data-slot="line-comment-v2-label"]')).toHaveCount(0)
+  await expect(root.locator('[data-slot="line-comment-v2-footer-meta"]')).toHaveCount(0)
+  await expect(root.locator('[data-slot="line-comment-v2-shell"]')).toHaveCSS("padding", "0px")
+  await expect(editor).toHaveCSS("border-top-width", "0px")
+  await expect(editor).toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
+  await expect(editor).toHaveCSS("padding", "12px")
+  await expect(root.getByRole("button", { name: "Cancel" })).toHaveAttribute("data-variant", "ghost-muted")
+  await expect(root.getByRole("button", { name: "Cancel" })).toHaveAttribute("data-size", "small")
+  await expect(root.getByRole("button", { name: "Comment" })).toHaveAttribute("data-variant", "submit")
+  await expect(root.getByRole("button", { name: "Comment" })).toHaveAttribute("data-size", "small")
+})
+
+story("preserves native undo in the line comment editor", async ({ mount }) => {
+  const root = await mount("ui-line-comment--editor")
+  const editor = root.getByRole("textbox")
+  await editor.pressSequentially("undo me")
+  await editor.press("Meta+z")
+  await expect(editor).toHaveValue("")
+  expect(await editor.evaluate((element) => element.matches(":placeholder-shown"))).toBe(true)
 })

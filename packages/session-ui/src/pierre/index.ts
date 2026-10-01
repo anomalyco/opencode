@@ -135,6 +135,12 @@ const unsafeCSS = `
   color: var(--diffs-selection-number-fg);
 }
 
+[data-gutter-utility-slot] {
+  left: unset;
+  right: 0;
+  justify-content: flex-end;
+}
+
 [data-diff] [data-column-number][data-line-type='context'][data-selected-line],
 [data-diff] [data-column-number][data-line-type='context-expanded'][data-selected-line],
 [data-diff] [data-column-number][data-line-type='change-addition'][data-selected-line],

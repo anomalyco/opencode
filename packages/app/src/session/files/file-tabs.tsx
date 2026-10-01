@@ -415,6 +415,7 @@ export function SessionFileView(props: SessionFileViewProps) {
         }}
         enableLineSelection
         enableGutterUtility
+        textSelectionAction={{ label: language.t("ui.lineComment.add") }}
         selectedLines={activeSelection()}
         commentedLines={commentedLines()}
         onRendered={() => {

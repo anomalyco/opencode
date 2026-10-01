@@ -3,6 +3,9 @@ export type HoverCommentLine = {
   side?: "additions" | "deletions"
 }
 
+export const LINE_COMMENT_ACTION_GAP = 8
+const LINE_COMMENT_ACTION_SIZE = 20
+
 export function createHoverCommentUtility(props: {
   label: string
   getHoveredLine: () => HoverCommentLine | undefined
@@ -14,21 +17,22 @@ export function createHoverCommentUtility(props: {
   button.type = "button"
   button.ariaLabel = props.label
   button.textContent = "+"
-  button.style.width = "20px"
-  button.style.height = "20px"
+  button.style.width = `${LINE_COMMENT_ACTION_SIZE}px`
+  button.style.height = `${LINE_COMMENT_ACTION_SIZE}px`
   button.style.display = "flex"
   button.style.alignItems = "center"
   button.style.justifyContent = "center"
   button.style.border = "none"
   button.style.borderRadius = "var(--radius-md)"
-  button.style.background = "var(--icon-interactive-base)"
-  button.style.color = "var(--white)"
+  button.style.background = "var(--v2-background-bg-inverse)"
+  button.style.color = "var(--v2-icon-icon-inverse)"
   button.style.boxShadow = "var(--shadow-xs)"
   button.style.fontSize = "14px"
   button.style.lineHeight = "1"
   button.style.cursor = "pointer"
   button.style.position = "relative"
-  button.style.left = "30px"
+  button.style.zIndex = "110"
+  button.style.left = "-4px"
   button.style.top = "calc((var(--diffs-line-height, 24px) - 20px) / 2)"
 
   let line: HoverCommentLine | undefined
@@ -59,6 +63,29 @@ export function createHoverCommentUtility(props: {
     props.onSelect(next)
   }
 
+  const startLineSelection = (event: PointerEvent) => {
+    const number = button.parentElement?.assignedSlot?.parentElement?.parentElement
+    if (!(number instanceof HTMLElement)) return
+    number.dispatchEvent(
+      new PointerEvent("pointerdown", {
+        bubbles: true,
+        cancelable: true,
+        composed: true,
+        pointerId: event.pointerId,
+        pointerType: event.pointerType,
+        isPrimary: event.isPrimary,
+        button: event.button,
+        buttons: event.buttons,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        ctrlKey: event.ctrlKey,
+        metaKey: event.metaKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+      }),
+    )
+  }
+
   document.addEventListener("pointermove", onHoverInvalidated, { passive: true })
   document.addEventListener("scroll", onHoverInvalidated, { passive: true, capture: true })
   button.addEventListener("mouseenter", sync)
@@ -67,6 +94,7 @@ export function createHoverCommentUtility(props: {
     event.preventDefault()
     event.stopPropagation()
     sync()
+    startLineSelection(event)
   })
   button.addEventListener("mousedown", (event) => {
     event.preventDefault()

@@ -21,10 +21,13 @@ import { type PreloadFileDiffResult, type PreloadMultiFileDiffResult } from "@pi
 import { createMediaQuery } from "@solid-primitives/media"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { ComponentProps, createEffect, createMemo, createSignal, onCleanup, onMount, Show, splitProps } from "solid-js"
+import { Portal } from "solid-js/web"
+import { Button } from "@opencode/ui/button"
 import { createDefaultOptions, styleVariables } from "../pierre"
 import { markCommentedDiffLines, markCommentedFileLines } from "../pierre/commented-lines"
 import { fixDiffSelection, findDiffSide, type DiffSelectionSide } from "../pierre/diff-selection"
 import { createFileFind } from "../pierre/file-find"
+import { LINE_COMMENT_ACTION_GAP } from "../pierre/comment-hover"
 import {
   applyViewerScheme,
   clearReadyWatcher,
@@ -48,6 +51,8 @@ import { FileMedia, type FileMediaOptions } from "./file-media"
 import { FileSearchBar } from "./file-search"
 
 const VIRTUALIZE_BYTES = 500_000
+const TEXT_SELECTION_ACTION_HEIGHT = 24
+const TEXT_SELECTION_ACTION_GAP = 8
 
 const codeMetrics = {
   ...DEFAULT_VIRTUAL_FILE_METRICS,
@@ -65,6 +70,9 @@ type SharedProps<T> = {
   classList?: ComponentProps<"div">["classList"]
   media?: FileMediaOptions
   search?: FileSearchControl
+  textSelectionAction?: {
+    label: string
+  }
 }
 
 export type FileSearchHandle = {
@@ -123,6 +131,7 @@ const sharedKeys = [
   "onLineNumberSelectionEnd",
   "onRendered",
   "preloadedDiff",
+  "textSelectionAction",
 ] as const
 
 const textKeys = ["file", ...sharedKeys] as const
@@ -140,6 +149,7 @@ type MouseHit = {
 
 type ViewerConfig = {
   enableLineSelection: () => boolean
+  textSelectionAction: () => { label: string } | undefined
   selectedLines: () => SelectedLineRange | null | undefined
   commentedLines: () => SelectedLineRange[]
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
@@ -148,6 +158,14 @@ type ViewerConfig = {
   lineFromMouseEvent: (event: MouseEvent) => MouseHit
   setSelectedLines: (range: SelectedLineRange | null, preserve?: { root: ShadowRoot; text: Range }) => void
   updateSelection: (preserveTextSelection: boolean) => void
+  readTextSelection: () =>
+    | {
+        range: SelectedLineRange
+        text: Range
+        direction: "up" | "down" | "same"
+        gutterRight?: number
+      }
+    | undefined
   buildDragSelection: () => SelectedLineRange | undefined
   buildClickSelection: () => SelectedLineRange | undefined
   onDragStart: (hit: MouseHit) => void
@@ -162,6 +180,7 @@ function useFileViewer(config: ViewerConfig) {
   let overlay!: HTMLDivElement
   let selectionFrame: number | undefined
   let dragFrame: number | undefined
+  let textSelectionFrame: number | undefined
   let dragStart: number | undefined
   let dragEnd: number | undefined
   let dragMoved = false
@@ -171,6 +190,14 @@ function useFileViewer(config: ViewerConfig) {
   const ready = createReadyWatcher()
   const bridge = createLineNumberSelectionBridge()
   const [rendered, setRendered] = createSignal(0)
+  const [textSelection, setTextSelection] = createSignal<{
+    range: SelectedLineRange
+    rect: DOMRect
+    label: string
+    below: boolean
+    gutterEdge: number
+  }>()
+  const hasTextSelection = createMemo(() => textSelection() !== undefined)
 
   const getRoot = () => getViewerRoot(container)
   const getHost = () => getViewerHost(container)
@@ -204,6 +231,54 @@ function useFileViewer(config: ViewerConfig) {
     })
   }
 
+  const updateTextSelection = () => {
+    textSelectionFrame = undefined
+    const action = config.textSelectionAction()
+    if (!action) {
+      setTextSelection(undefined)
+      return
+    }
+    const selected = config.readTextSelection()
+    if (!selected) {
+      setTextSelection(undefined)
+      return
+    }
+
+    const rect = selected.text.getBoundingClientRect()
+    if (rect.width === 0 && rect.height === 0) {
+      setTextSelection(undefined)
+      return
+    }
+    const roomBelow = rect.bottom + TEXT_SELECTION_ACTION_HEIGHT + TEXT_SELECTION_ACTION_GAP <= window.innerHeight
+    const roomAbove = rect.top - TEXT_SELECTION_ACTION_HEIGHT - TEXT_SELECTION_ACTION_GAP >= 0
+    const preferBelow = selected.direction !== "up"
+    const below = preferBelow ? roomBelow || !roomAbove : !roomAbove && roomBelow
+    const gutterEdge = selected.gutterRight ?? wrapper.getBoundingClientRect().left
+    setTextSelection({ range: selected.range, rect, label: action.label, below, gutterEdge })
+  }
+
+  const scheduleTextSelectionUpdate = () => {
+    if (textSelectionFrame !== undefined) return
+    textSelectionFrame = requestAnimationFrame(updateTextSelection)
+  }
+
+  const clearTextSelection = () => {
+    setTextSelection(undefined)
+    const root = getRoot()
+    const selection =
+      (root as unknown as { getSelection?: () => Selection | null } | undefined)?.getSelection?.() ??
+      window.getSelection()
+    selection?.removeAllRanges()
+  }
+
+  const activateTextSelection = () => {
+    const selected = textSelection()
+    if (!selected) return
+    clearTextSelection()
+    config.setSelectedLines(selected.range)
+    config.onLineSelectionEnd(selected.range)
+  }
+
   // -- mouse handlers --
 
   const handleMouseDown = (event: MouseEvent) => {
@@ -218,6 +293,11 @@ function useFileViewer(config: ViewerConfig) {
     if (hit.line === undefined) return
 
     bridge.begin(false, hit.line)
+    if (config.textSelectionAction()) {
+      setTextSelection(undefined)
+      if (lastSelection) config.setSelectedLines(null)
+      return
+    }
     dragStart = hit.line
     dragEnd = hit.line
     dragMoved = false
@@ -250,6 +330,10 @@ function useFileViewer(config: ViewerConfig) {
   const handleMouseUp = () => {
     if (!config.enableLineSelection()) return
     if (bridge.finish() === "numbers") return
+    if (config.textSelectionAction()) {
+      scheduleTextSelectionUpdate()
+      return
+    }
     if (dragStart === undefined) return
 
     if (!dragMoved) {
@@ -284,6 +368,10 @@ function useFileViewer(config: ViewerConfig) {
 
   const handleSelectionChange = () => {
     if (!config.enableLineSelection()) return
+    if (config.textSelectionAction()) {
+      scheduleTextSelectionUpdate()
+      return
+    }
     if (dragStart === undefined) return
     const selection = window.getSelection()
     if (!selection || selection.isCollapsed) return
@@ -326,7 +414,9 @@ function useFileViewer(config: ViewerConfig) {
   })
 
   createEffect(() => {
-    config.setSelectedLines(config.selectedLines() ?? null)
+    const selected = config.selectedLines() ?? null
+    if (selected && config.textSelectionAction()) clearTextSelection()
+    config.setSelectedLines(selected)
   })
 
   createEffect(() => {
@@ -338,14 +428,26 @@ function useFileViewer(config: ViewerConfig) {
     makeEventListener(document, "selectionchange", handleSelectionChange)
   })
 
+  createEffect(() => {
+    if (!config.enableLineSelection() || !config.textSelectionAction() || !hasTextSelection()) return
+    makeEventListener(document, "scroll", scheduleTextSelectionUpdate, true)
+    makeEventListener(window, "resize", scheduleTextSelectionUpdate)
+    makeEventListener(document, "keydown", (event) => {
+      if (event.key !== "Escape") return
+      clearTextSelection()
+    })
+  })
+
   onCleanup(() => {
     clearReadyWatcher(ready)
 
     if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame)
     if (dragFrame !== undefined) cancelAnimationFrame(dragFrame)
+    if (textSelectionFrame !== undefined) cancelAnimationFrame(textSelectionFrame)
 
     selectionFrame = undefined
     dragFrame = undefined
+    textSelectionFrame = undefined
     dragStart = undefined
     dragEnd = undefined
     dragMoved = false
@@ -393,15 +495,21 @@ function useFileViewer(config: ViewerConfig) {
     getHost,
     find,
     scheduleSelectionUpdate,
+    textSelection,
+    activateTextSelection,
   }
 }
 
 type Viewer = ReturnType<typeof useFileViewer>
 
-type ModeAdapter = Omit<ViewerConfig, "enableLineSelection" | "selectedLines" | "commentedLines" | "onLineSelectionEnd">
+type ModeAdapter = Omit<
+  ViewerConfig,
+  "enableLineSelection" | "textSelectionAction" | "selectedLines" | "commentedLines" | "onLineSelectionEnd"
+>
 
 type ModeConfig = {
   enableLineSelection: () => boolean
+  textSelectionAction: () => { label: string } | undefined
   selectedLines: () => SelectedLineRange | null | undefined
   commentedLines: () => SelectedLineRange[] | undefined
   onLineSelectionEnd: (range: SelectedLineRange | null) => void
@@ -424,6 +532,7 @@ type VirtualStrategy = {
 function useModeViewer(config: ModeConfig, adapter: ModeAdapter) {
   return useFileViewer({
     enableLineSelection: config.enableLineSelection,
+    textSelectionAction: config.textSelectionAction,
     selectedLines: config.selectedLines,
     commentedLines: () => config.commentedLines() ?? [],
     onLineSelectionEnd: config.onLineSelectionEnd,
@@ -728,6 +837,38 @@ function ViewerShell(props: {
       </Show>
       <div ref={(el) => (props.viewer.container = el)} />
       <div ref={(el) => (props.viewer.overlay = el)} class="pointer-events-none absolute inset-0 z-0" />
+      <Show when={props.viewer.textSelection()}>
+        {(selection) => (
+          <Portal>
+            <Button
+              data-slot="file-text-selection-action"
+              data-placement={selection().below ? "bottom" : "top"}
+              size="small"
+              variant="submit"
+              class="z-[110] whitespace-nowrap motion-safe:transition-transform duration-100 ease-out motion-reduce:transition-none"
+              style={{
+                position: "fixed",
+                left: `${selection().gutterEdge + LINE_COMMENT_ACTION_GAP}px`,
+                top: `${selection().below ? selection().rect.bottom : selection().rect.top}px`,
+                transform: selection().below
+                  ? `translateY(${TEXT_SELECTION_ACTION_GAP}px)`
+                  : `translateY(calc(-100% - ${TEXT_SELECTION_ACTION_GAP}px))`,
+              }}
+              onPointerDown={(event: PointerEvent) => {
+                event.preventDefault()
+                event.stopPropagation()
+              }}
+              onMouseDown={(event: MouseEvent) => {
+                event.preventDefault()
+                event.stopPropagation()
+              }}
+              onClick={props.viewer.activateTextSelection}
+            >
+              {selection().label}
+            </Button>
+          </Portal>
+        )}
+      </Show>
     </div>
   )
 }
@@ -845,6 +986,23 @@ function TextViewer<T>(props: TextFileProps<T>) {
       if (!preserveTextSelection || !selected.text) return
       restoreShadowTextSelection(root, selected.text)
     },
+    readTextSelection: () => {
+      const root = viewer.getRoot()
+      if (!root) return
+      const selected = readShadowLineSelection({
+        root,
+        lineForNode: findFileLineNumber,
+        sideForNode: findCodeSelectionSide,
+        preserveTextSelection: true,
+      })
+      if (!selected?.text) return
+      return {
+        range: selected.range,
+        text: selected.text,
+        direction: selected.direction,
+        gutterRight: selected.gutterRight,
+      }
+    },
     buildDragSelection: () => {
       if (viewer.dragStart === undefined || viewer.dragEnd === undefined) return
       return { start: Math.min(viewer.dragStart, viewer.dragEnd), end: Math.max(viewer.dragStart, viewer.dragEnd) }
@@ -862,6 +1020,7 @@ function TextViewer<T>(props: TextFileProps<T>) {
   viewer = useModeViewer(
     {
       enableLineSelection: () => props.enableLineSelection === true,
+      textSelectionAction: () => local.textSelectionAction,
       selectedLines: () => local.selectedLines,
       commentedLines: () => local.commentedLines,
       onLineSelectionEnd: (range) => local.onLineSelectionEnd?.(range),
@@ -1008,6 +1167,20 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
 
       setSelectedLines(selected.range)
     },
+    readTextSelection: () => {
+      const root = viewer.getRoot()
+      if (!root) return
+      const selected = readShadowLineSelection({
+        root,
+        lineForNode: findDiffLineNumber,
+        sideForNode: diffSelectionSide,
+        preserveTextSelection: true,
+      })
+      if (!selected?.text) return
+      const range = fixDiffSelection(root, selected.range)
+      if (!range) return
+      return { range, text: selected.text, direction: selected.direction, gutterRight: selected.gutterRight }
+    },
     buildDragSelection: () => {
       if (viewer.dragStart === undefined || viewer.dragEnd === undefined) return
       const selected: SelectedLineRange = { start: viewer.dragStart, end: viewer.dragEnd }
@@ -1038,6 +1211,7 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   viewer = useModeViewer(
     {
       enableLineSelection: () => props.enableLineSelection === true,
+      textSelectionAction: () => local.textSelectionAction,
       selectedLines: () => local.selectedLines,
       commentedLines: () => local.commentedLines,
       onLineSelectionEnd: (range) => local.onLineSelectionEnd?.(range),

@@ -61,7 +61,7 @@ export type LineCommentEditorMention = {
 }
 
 export interface LineCommentEditorProps extends Omit<ComponentProps<"div">, "children" | "onInput" | "onSubmit"> {
-  /** Visible field label above the textarea (default: “Comment”). */
+  /** Accessible editor label (default: “Comment”). */
   heading?: JSX.Element | string
   value: string
   onInput: (value: string) => void
@@ -108,7 +108,6 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
     "classList",
   ])
 
-  const heading = () => local.heading ?? i18n.t("ui.lineComment.submit")
   const canSubmit = () => local.value.trim().length > 0
 
   const closeMention = () => {
@@ -206,19 +205,19 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
     >
       <div data-slot="line-comment-v2-shell">
         <div data-slot="line-comment-v2-field">
-          <div data-slot="line-comment-v2-label">{heading()}</div>
           <textarea
             ref={(el) => {
               textareaRef = el
             }}
             data-slot="line-comment-v2-textarea"
+            aria-label={typeof local.heading === "string" ? local.heading : i18n.t("ui.lineComment.submit")}
             dir="auto"
             rows={local.rows ?? 3}
             placeholder={local.placeholder ?? i18n.t("ui.lineComment.contextPlaceholder")}
             value={local.value}
             style={{ "unicode-bidi": "plaintext", "text-align": "start" }}
-            onInput={(e) => {
-              local.onInput(e.currentTarget.value)
+            onInput={(event) => {
+              local.onInput(event.currentTarget.value)
               syncMention()
             }}
             onClick={() => syncMention()}
@@ -292,12 +291,11 @@ export function LineCommentEditor(props: LineCommentEditorProps) {
           </Show>
         </div>
         <div data-slot="line-comment-v2-footer">
-          <div data-slot="line-comment-v2-footer-meta">{local.selection}</div>
           <div data-slot="line-comment-v2-footer-actions">
-            <Button type="button" size="normal" variant="ghost" onClick={() => local.onCancel()}>
+            <Button type="button" size="small" variant="ghost-muted" onClick={() => local.onCancel()}>
               {local.cancelLabel ?? i18n.t("ui.lineComment.cancel")}
             </Button>
-            <Button type="button" size="normal" variant="contrast" disabled={!canSubmit()} onClick={submit}>
+            <Button type="button" size="small" variant="submit" disabled={!canSubmit()} onClick={submit}>
               {local.submitLabel ?? i18n.t("ui.lineComment.submit")}
             </Button>
           </div>
