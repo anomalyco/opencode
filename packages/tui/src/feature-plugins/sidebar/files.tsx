@@ -2,6 +2,7 @@ import type { TuiPlugin, TuiPluginApi } from "@opencode-ai/plugin/tui"
 import type { BuiltinTuiPlugin } from "../builtins"
 import { createMemo, For, Show, createSignal } from "solid-js"
 import { Locale } from "../../util/locale"
+import { useTuiConfig } from "../../config"
 
 const id = "internal:sidebar-files"
 
@@ -13,6 +14,7 @@ function changeCountWidth(item: { additions: number; deletions: number }) {
 
 function View(props: { api: TuiPluginApi; session_id: string }) {
   const [open, setOpen] = createSignal(true)
+  const tuiConfig = useTuiConfig()
   const theme = () => props.api.theme.current
   const list = createMemo(() => props.api.state.session.diff(props.session_id))
 
@@ -32,7 +34,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
             {(item) => (
               <box flexDirection="row" gap={1} justifyContent="space-between">
                 <text fg={theme().textMuted} wrapMode="none">
-                  {Locale.truncateLeft(item.file, Math.max(2, 36 - changeCountWidth(item)))}
+                  {Locale.truncateLeft(item.file, Math.max(2, tuiConfig.sidebar_width - 6 - changeCountWidth(item)))}
                 </text>
                 <box flexDirection="row" gap={1} flexShrink={0}>
                   <Show when={item.additions}>
