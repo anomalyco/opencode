@@ -81,15 +81,19 @@ export const dict = {
   "chart.leaderboardAria": "모델 토큰 리더보드",
   "chart.scrollableLeaderboardAria": "스크롤 가능한 모델 토큰 리더보드",
   "chart.byAuthor": "{{author}} 제공",
+  "chart.vsPreviousWeek": "지난주 대비",
+  "chart.date": "날짜",
   "home.updated": "업데이트됨",
   "home.noRows": "아직 행이 없습니다",
   "home.justNow": "방금 전",
   "home.heroCopy":
     "실제 사용량에서 어떤 모델이 앞서고 있는지, 사용 구성이 어떻게 바뀌는지, 그것이 비용에 어떤 의미인지 확인하세요.",
+  "home.summary":
+    "{{date}} 기준, 지난 7일간 OpenCode Go 및 무료 모델 전반의 사용량 1위는 {{first}}({{firstTokens}} 토큰)이며, 그 뒤로 {{second}}({{secondTokens}}), {{third}}({{thirdTokens}}) 순입니다.",
   "home.loadingTitle": "데이터 로딩 중",
   "home.loadingDescription": "모델 집계를 읽는 중입니다.",
   "home.usageTitle": "사용량",
-  "home.topModelsDescription": "OpenCode 전반의 모델 사용량입니다.",
+  "home.topModelsDescription": "OpenCode Go 및 무료 모델 사용량.",
   "home.noUsageTitle": "사용 데이터 없음",
   "home.noUsageDescription": "이 제품과 범위에 맞는 모델 행이 없습니다.",
   "home.noLeaderboardTitle": "리더보드 데이터 없음",
@@ -131,6 +135,8 @@ export const dict = {
   "lab.title": "{{lab}} AI 모델 사용량 및 순위 | OpenCode 데이터",
   "lab.description":
     "OpenCode에서 사용되는 {{lab}} 모델을 토큰 사용량, 모델 순위, 컨텍스트 창, 출시일, 비용, 모델별 데이터까지 비교하세요.",
+  "lab.summary":
+    "지난 두 달 동안 {{lab}} 모델은 OpenCode Go 및 무료 모델 전반에서 {{tokens}} 토큰을 처리해 전체 사용량의 {{share}}를 차지했습니다. 가장 많이 사용된 {{lab}} 모델은 {{model}}입니다.",
   "lab.loadingTitle": "모델 랩",
   "lab.loadingDescription": "모델 가용성과 최근 OpenCode 사용량을 읽는 중입니다.",
   "lab.notFound": "이 랩과 일치하는 모델이 없습니다.",
@@ -157,6 +163,10 @@ export const dict = {
   "model.title": "{{model}} 사용량, 비용 및 순위 | OpenCode 데이터",
   "model.description":
     "{{model}}의 OpenCode 사용 데이터를 토큰 볼륨, 주간 순위, 토큰 구성, 비용, 캐시 비율, 세션, 지역별 분포, 비슷한 모델까지 확인하세요.",
+  "model.summary":
+    "{{model}}의 지난주 OpenCode Go 및 무료 모델 전반 토큰 순위는 #{{rank}}위이며, 지난 두 달간 토큰 점유율은 {{share}}입니다.",
+  "model.summaryUnranked": "{{model}}의 지난 두 달간 OpenCode Go 및 무료 모델 전반 토큰 점유율은 {{share}}입니다.",
+  "model.summaryPrice": "{{model}}의 가격은 입력 토큰 1M당 {{input}}, 출력 토큰 1M당 {{output}}입니다.",
   "model.loadingTitle": "모델 데이터",
   "model.loadingDescription": "모델 집계를 읽는 중입니다.",
   "model.loadingProfile": "모델 프로필을 읽는 중입니다.",
@@ -229,4 +239,23 @@ export const dict = {
   "model.pdf": "PDF",
   "format.users": "사용자",
   "format.tokens": "토큰",
+  "methodology.title": "방법론",
+  "methodology.description": "이 데이터를 수집하는 방법입니다.",
+  "methodology.sourceLabel": "출처",
+  "methodology.source":
+    "OpenCode Go 구독자와 무료 모델의 OpenCode Zen 요청입니다. 직접 설정한 제공자 API 키로 보낸 요청은 포함되지 않습니다.",
+  "methodology.updatesLabel": "업데이트",
+  "methodology.updates": "매시간 집계됩니다. 일과 주는 UTC 기준입니다.",
+  "methodology.tokensLabel": "토큰",
+  "methodology.tokens": "각 요청의 입력, 출력, 추론, 캐시된 토큰입니다.",
+  "methodology.usersLabel": "사용자 및 세션",
+  "methodology.users": "순 사용자 수와 OpenCode 세션 수의 근사치입니다.",
+  "methodology.costLabel": "비용",
+  "methodology.cost":
+    "세션 비용은 세션당 평균 OpenCode Zen 비용입니다. 토큰 가격은 OpenCode 모델 카탈로그의 정가입니다.",
+  "methodology.retentionLabel": "유지율",
+  "methodology.retention": "한 주에 모델을 사용한 OpenCode Go 사용자 중 다음 주에 다시 사용한 사용자의 비율입니다.",
+  "methodology.citeLabel": "인용",
+  "methodology.cite":
+    "인용할 때는 OpenCode Data(opencode.ai/data)와 페이지 상단에 표시된 업데이트 시간을 함께 표기해 주세요.",
 } satisfies Record<Key, string>

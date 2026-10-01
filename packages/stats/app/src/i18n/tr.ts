@@ -79,15 +79,19 @@ export const dict = {
   "chart.leaderboardAria": "Model token sıralaması",
   "chart.scrollableLeaderboardAria": "Kaydırılabilir model token sıralaması",
   "chart.byAuthor": "{{author}} tarafından",
+  "chart.vsPreviousWeek": "önceki haftaya göre",
+  "chart.date": "Tarih",
   "home.updated": "Güncellendi",
   "home.noRows": "Henüz satır yok",
   "home.justNow": "az önce",
   "home.heroCopy":
     "Gerçek kullanımda hangi modellerin öne geçtiğini, karışımın nasıl değiştiğini ve bunun maliyet için ne anlama geldiğini görün.",
+  "home.summary":
+    "{{date}} itibarıyla son 7 günde OpenCode Go ve ücretsiz modeller genelindeki kullanımda {{firstTokens}} token ile {{first}} lider oldu; onu {{second}} ({{secondTokens}}) ve {{third}} ({{thirdTokens}}) izledi.",
   "home.loadingTitle": "Veriler yükleniyor",
   "home.loadingDescription": "Model toplamları okunuyor.",
   "home.usageTitle": "Kullanım",
-  "home.topModelsDescription": "OpenCode genelinde model kullanımı.",
+  "home.topModelsDescription": "OpenCode Go ve ücretsiz modeller.",
   "home.noUsageTitle": "Kullanım verisi yok",
   "home.noUsageDescription": "Bu ürün ve aralıkla eşleşen model satırı yok.",
   "home.noLeaderboardTitle": "Sıralama verisi yok",
@@ -129,6 +133,8 @@ export const dict = {
   "lab.title": "{{lab}} Yapay Zeka Model Kullanımı ve Sıralamaları | OpenCode Data",
   "lab.description":
     "OpenCode'da kullanılan {{lab}} modellerini karşılaştırın: token kullanımı, model sıralamaları, bağlam pencereleri, yayın tarihleri, maliyetler ve modele özel veriler.",
+  "lab.summary":
+    "{{lab}} modelleri son iki ayda OpenCode Go ve ücretsiz modeller genelinde {{tokens}} token işleyerek tüm kullanımın {{share}} kadarını oluşturdu. En çok kullanılan {{lab}} modeli {{model}} oldu.",
   "lab.loadingTitle": "Model Laboratuvarı",
   "lab.loadingDescription": "Model kullanılabilirliği ve son OpenCode kullanımı okunuyor.",
   "lab.notFound": "Bu laboratuvarla eşleşen model yok.",
@@ -156,6 +162,12 @@ export const dict = {
   "model.title": "{{model}} Kullanımı, Maliyeti ve Sırası | OpenCode Data",
   "model.description":
     "{{model}} için OpenCode kullanım verilerini görüntüleyin: token hacmi, haftalık sıra, token karışımı, maliyetler, önbellek oranı, oturumlar, coğrafi dağılımlar ve benzer modeller.",
+  "model.summary":
+    "{{model}}, geçen hafta OpenCode Go ve ücretsiz modeller genelinde token bazında #{{rank}} sırada yer aldı; son iki aydaki token payı {{share}} oldu.",
+  "model.summaryUnranked":
+    "Son iki ayda {{model}} modelinin OpenCode Go ve ücretsiz modeller genelindeki token payı {{share}} oldu.",
+  "model.summaryPrice":
+    "{{model}} modelinin maliyeti 1M giriş tokenı başına {{input}}, 1M çıktı tokenı başına {{output}}.",
   "model.loadingTitle": "Model Verileri",
   "model.loadingDescription": "Model toplamları okunuyor.",
   "model.loadingProfile": "Model profili okunuyor.",
@@ -229,4 +241,24 @@ export const dict = {
   "model.pdf": "PDF",
   "format.users": "kullanıcı",
   "format.tokens": "token",
+  "methodology.title": "Metodoloji",
+  "methodology.description": "Bu verilerin toplanma yöntemi.",
+  "methodology.sourceLabel": "Kaynak",
+  "methodology.source":
+    "OpenCode Go abonelerinden ve ücretsiz modellerden gelen OpenCode Zen istekleri. Kendi sağlayıcı API anahtarlarınızla yapılan istekler dahil değildir.",
+  "methodology.updatesLabel": "Güncellemeler",
+  "methodology.updates": "Veriler saatte bir toplanır. Günler ve haftalar UTC saat dilimine göre hesaplanır.",
+  "methodology.tokensLabel": "Tokenlar",
+  "methodology.tokens": "Her istek için girdi, çıktı, akıl yürütme ve önbellekteki tokenlar.",
+  "methodology.usersLabel": "Kullanıcılar ve oturumlar",
+  "methodology.users": "Benzersiz kullanıcı ve OpenCode oturumu sayılarının yaklaşık değerleri.",
+  "methodology.costLabel": "Maliyet",
+  "methodology.cost":
+    "Oturum maliyeti, oturum başına ortalama OpenCode Zen maliyetidir. Token fiyatları, OpenCode model kataloğundaki liste fiyatlarıdır.",
+  "methodology.retentionLabel": "Elde tutma",
+  "methodology.retention":
+    "Bir modelin bir haftadaki OpenCode Go kullanıcılarından sonraki hafta onu yeniden kullananların payı.",
+  "methodology.citeLabel": "Kaynak gösterme",
+  "methodology.cite":
+    "Kaynak olarak OpenCode Data (opencode.ai/data) ile sayfanın üst kısmında gösterilen güncelleme zamanını belirtin.",
 } as const

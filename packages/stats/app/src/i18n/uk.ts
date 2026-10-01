@@ -79,15 +79,19 @@ export const dict = {
   "chart.leaderboardAria": "Рейтинг моделей за токенами",
   "chart.scrollableLeaderboardAria": "Прокручуваний рейтинг моделей за токенами",
   "chart.byAuthor": "автор: {{author}}",
+  "chart.vsPreviousWeek": "до попереднього тижня",
+  "chart.date": "Дата",
   "home.updated": "Оновлено",
   "home.noRows": "Рядків поки немає",
   "home.justNow": "щойно",
   "home.heroCopy":
     "Подивіться, які моделі перемагають у реальному використанні, як змінюється мікс і що це означає для вартості.",
+  "home.summary":
+    "Станом на {{date}} за останні 7 днів лідером за використанням в OpenCode Go та безкоштовних моделях була модель {{first}} з {{firstTokens}} токенів, далі йдуть {{second}} ({{secondTokens}}) і {{third}} ({{thirdTokens}}).",
   "home.loadingTitle": "Завантаження даних",
   "home.loadingDescription": "Читаємо агрегати моделей.",
   "home.usageTitle": "Використання",
-  "home.topModelsDescription": "Використання моделей в OpenCode.",
+  "home.topModelsDescription": "OpenCode Go і безоплатні моделі.",
   "home.noUsageTitle": "Немає даних використання",
   "home.noUsageDescription": "Жодні рядки моделей не відповідали цьому продукту й діапазону.",
   "home.noLeaderboardTitle": "Немає даних рейтингу",
@@ -129,6 +133,8 @@ export const dict = {
   "lab.title": "Використання та рейтинги моделей ШІ {{lab}} | OpenCode Data",
   "lab.description":
     "Порівняйте моделі {{lab}}, які використовуються в OpenCode, зокрема використання токенів, рейтинги моделей, контекстні вікна, дати релізів, вартість і дані конкретних моделей.",
+  "lab.summary":
+    "За останні два місяці моделі {{lab}} обробили {{tokens}} токенів в OpenCode Go та безкоштовних моделях — {{share}} усього використання. Найчастіше використовуваною моделлю {{lab}} була {{model}}.",
   "lab.loadingTitle": "Лабораторія моделей",
   "lab.loadingDescription": "Читаємо доступність моделей і нещодавнє використання OpenCode.",
   "lab.notFound": "Жодна модель не відповідала цій лабораторії.",
@@ -156,6 +162,11 @@ export const dict = {
   "model.title": "Використання, вартість і ранг {{model}} | OpenCode Data",
   "model.description":
     "Перегляньте дані використання {{model}} в OpenCode, зокрема обсяг токенів, тижневий ранг, мікс токенів, вартість, частку кешу, сеанси, географічні розрізи та схожі моделі.",
+  "model.summary":
+    "Минулого тижня модель {{model}} посіла #{{rank}} місце за токенами в OpenCode Go та безкоштовних моделях; за останні два місяці на неї припало {{share}} токенів.",
+  "model.summaryUnranked":
+    "За останні два місяці на модель {{model}} припало {{share}} токенів в OpenCode Go та безкоштовних моделях.",
+  "model.summaryPrice": "{{model}} коштує {{input}} за 1M вхідних токенів і {{output}} за 1M вихідних токенів.",
   "model.loadingTitle": "Дані моделі",
   "model.loadingDescription": "Читаємо агрегати моделі.",
   "model.loadingProfile": "Читаємо профіль моделі.",
@@ -229,4 +240,24 @@ export const dict = {
   "model.pdf": "PDF",
   "format.users": "користувачі",
   "format.tokens": "токени",
+  "methodology.title": "Методологія",
+  "methodology.description": "Як збираються ці дані.",
+  "methodology.sourceLabel": "Джерело",
+  "methodology.source":
+    "Запити до OpenCode Zen від передплатників OpenCode Go та до безкоштовних моделей. Запити з вашими власними API-ключами провайдерів не враховуються.",
+  "methodology.updatesLabel": "Оновлення",
+  "methodology.updates": "Дані агрегуються щогодини. Дні й тижні рахуються за UTC.",
+  "methodology.tokensLabel": "Токени",
+  "methodology.tokens": "Вхідні та вихідні токени, токени міркувань і кешовані токени кожного запиту.",
+  "methodology.usersLabel": "Користувачі та сеанси",
+  "methodology.users": "Приблизна кількість унікальних користувачів і сеансів OpenCode.",
+  "methodology.costLabel": "Вартість",
+  "methodology.cost":
+    "Вартість сеансу — це середня вартість OpenCode Zen за сеанс. Ціни токенів — офіційні ціни з каталогу моделей OpenCode.",
+  "methodology.retentionLabel": "Утримання",
+  "methodology.retention":
+    "Частка користувачів OpenCode Go, які працювали з моделлю за тиждень і знову користуються нею наступного тижня.",
+  "methodology.citeLabel": "Цитування",
+  "methodology.cite":
+    "Під час цитування вказуйте OpenCode Data (opencode.ai/data) і час оновлення, показаний угорі сторінки.",
 } as const

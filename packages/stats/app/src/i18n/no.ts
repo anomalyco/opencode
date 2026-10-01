@@ -79,15 +79,19 @@ export const dict = {
   "chart.leaderboardAria": "Rangering av modelltokens",
   "chart.scrollableLeaderboardAria": "Rullbar rangering av modelltokens",
   "chart.byAuthor": "av {{author}}",
+  "chart.vsPreviousWeek": "mot forrige uke",
+  "chart.date": "Dato",
   "home.updated": "Oppdatert",
   "home.noRows": "Ingen rader ennå",
   "home.justNow": "akkurat nå",
   "home.heroCopy":
     "Se hvilke modeller som vinner reell bruk, hvordan miksen endrer seg, og hva det betyr for kostnadene.",
+  "home.summary":
+    "Per {{date}} lå {{first}} øverst i bruken på tvers av OpenCode Go og gratis modeller de siste 7 dagene med {{firstTokens}} tokens, fulgt av {{second}} ({{secondTokens}}) og {{third}} ({{thirdTokens}}).",
   "home.loadingTitle": "Laster data",
   "home.loadingDescription": "Leser modellaggregater.",
   "home.usageTitle": "Bruk",
-  "home.topModelsDescription": "Bruk av modeller på tvers av OpenCode.",
+  "home.topModelsDescription": "Bruk i OpenCode Go og gratis modeller.",
   "home.noUsageTitle": "Ingen bruksdata",
   "home.noUsageDescription": "Ingen modellrader matchet dette produktet og intervallet.",
   "home.noLeaderboardTitle": "Ingen rangeringsdata",
@@ -129,6 +133,8 @@ export const dict = {
   "lab.title": "{{lab}} AI-modellbruk og rangeringer | OpenCode Data",
   "lab.description":
     "Sammenlign {{lab}}-modeller brukt i OpenCode, inkludert tokenbruk, modellrangeringer, kontekstvinduer, utgivelsesdatoer, kostnader og modellspesifikke data.",
+  "lab.summary":
+    "{{lab}}-modeller behandlet {{tokens}} tokens på tvers av OpenCode Go og gratis modeller de siste to månedene, tilsvarende {{share}} av all bruk. {{model}} var den mest brukte {{lab}}-modellen.",
   "lab.loadingTitle": "Modellab",
   "lab.loadingDescription": "Leser modelltilgjengelighet og nylig OpenCode-bruk.",
   "lab.notFound": "Ingen modeller matchet dette laben.",
@@ -155,6 +161,11 @@ export const dict = {
   "model.title": "{{model}} bruk, kostnad og rangering | OpenCode Data",
   "model.description":
     "Se OpenCode-bruksdata for {{model}}, inkludert tokenvolum, ukentlig rangering, tokenmiks, kostnader, cacheandel, økter, geografiske fordelinger og lignende modeller.",
+  "model.summary":
+    "{{model}} ble rangert #{{rank}} etter tokens på tvers av OpenCode Go og gratis modeller forrige uke, med en tokenandel på {{share}} de siste to månedene.",
+  "model.summaryUnranked":
+    "{{model}} hadde en tokenandel på {{share}} på tvers av OpenCode Go og gratis modeller de siste to månedene.",
+  "model.summaryPrice": "{{model}} koster {{input}} per 1M inndata-tokens og {{output}} per 1M utdata-tokens.",
   "model.loadingTitle": "Modelldata",
   "model.loadingDescription": "Leser modellaggregater.",
   "model.loadingProfile": "Leser modellprofilen.",
@@ -228,4 +239,23 @@ export const dict = {
   "model.pdf": "PDF",
   "format.users": "brukere",
   "format.tokens": "tokens",
+  "methodology.title": "Metode",
+  "methodology.description": "Slik samles disse dataene inn.",
+  "methodology.sourceLabel": "Kilde",
+  "methodology.source":
+    "OpenCode Zen-forespørsler fra OpenCode Go-abonnenter og gratis modeller. Forespørsler gjort med dine egne API-nøkler fra leverandører er ikke inkludert.",
+  "methodology.updatesLabel": "Oppdateringer",
+  "methodology.updates": "Aggregeres hver time. Dager og uker følger UTC.",
+  "methodology.tokensLabel": "Tokens",
+  "methodology.tokens": "Inndata-, utdata-, resonnerings- og bufrede tokens for hver forespørsel.",
+  "methodology.usersLabel": "Brukere og økter",
+  "methodology.users": "Omtrentlig antall unike brukere og OpenCode-økter.",
+  "methodology.costLabel": "Kostnad",
+  "methodology.cost":
+    "Øktkostnad er gjennomsnittlig OpenCode Zen-kostnad per økt. Tokenpriser er listepriser fra OpenCode-modellkatalogen.",
+  "methodology.retentionLabel": "Retensjon",
+  "methodology.retention": "Andelen av en modells OpenCode Go-brukere i én uke som bruker den igjen uken etter.",
+  "methodology.citeLabel": "Kildehenvisning",
+  "methodology.cite":
+    "Oppgi OpenCode Data (opencode.ai/data) som kilde sammen med oppdateringstidspunktet som vises øverst på siden.",
 } as const

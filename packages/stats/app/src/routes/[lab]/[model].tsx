@@ -2,32 +2,29 @@ import { Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
 import { scaleSqrt } from "d3-scale"
 import countryCodesSource from "i18n-iso-countries/codes.json?raw"
-import {
-  getStatsModelData,
-  type CountryEntry,
-  type ModelPeerEntry,
-  type ModelUsagePoint,
-  type StatsModelData,
-} from "@opencode-ai/stats-core/domain/home"
+import { type CountryEntry, type ModelUsagePoint } from "@opencode-ai/stats-core/domain/home"
 import { statModel } from "@opencode-ai/stats-core/domain/model-normalization"
 import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
+import { breadcrumbList, FormatLinks, JsonLd, LastModified } from "../../component/agent-meta"
+import { ChartDataTable } from "../../component/chart-data-table"
 import { LocaleLinks } from "../../component/locale-links"
 import { NotFoundMeta } from "../../component/not-found-meta"
 import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
+import { fromFirstUsage } from "../../lib/format"
 import { localizedUrl } from "../../lib/language"
+import { loadModelPage, type ModelPageData } from "../../lib/page-data"
+import { modelSummary } from "../../lib/summaries"
 import {
+  catalogLabPath,
   catalogModelPath,
-  findModelCatalogEntry,
   formatCatalogLabName,
   isKnownCatalogLab,
-  loadModelCatalog,
   type ModelCatalogEntry,
 } from "../model-catalog"
 import { SectionHeading } from "../section-heading"
-import { runStatsEffect } from "../../stats-runtime"
 import { setStatsPageCacheHeaders } from "../stats-cache"
 import {
   ComparisonCardsSection,
@@ -49,19 +46,14 @@ import {
 } from "../stats-shell"
 
 const statsUnfurlPath = "banner.png"
-const glmFlashPath = "/data/zhipuai/glm-5-3-flash"
 const glmFlashModel = "glm-5.3-flash"
 const shortMonths = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
 type IsoCountryCode = readonly [string, string, string]
-type ModelCatalogOption = Pick<ModelCatalogEntry, "id" | "lab" | "slug" | "name">
-type ModelPageCatalog = {
-  entry: ModelCatalogEntry | null
-  labs: { id: string; name: string }[]
-  labModels: ModelCatalogOption[]
-}
-type StatsModelPageData = StatsModelData
-type ModelPageData = { catalog: ModelPageCatalog; stats: StatsModelPageData | null }
+type ModelPageCatalog = ModelPageData["catalog"]
+type ModelCatalogOption = ModelPageCatalog["labModels"][number]
+type StatsModelPageData = NonNullable<ModelPageData["stats"]>
+type ModelPeerEntry = StatsModelPageData["peers"][number]
 
 const countryNumericIds = new Map(
   (JSON.parse(countryCodesSource) as IsoCountryCode[]).map((country) => [country[0], country[2]] as const),
@@ -69,22 +61,7 @@ const countryNumericIds = new Map(
 
 const getModelPageData = query(async (labParam: string, modelParam: string) => {
   "use server"
-  const catalog = await loadModelCatalog()
-  const entry = findModelCatalogEntry(catalog, modelParam, labParam) ?? null
-  const lab = entry?.lab ?? labParam
-  const model = entry?.slug ?? modelParam
-  const stats = lab && model ? await runStatsEffect(getStatsModelData(model, lab)) : null
-  return {
-    catalog: {
-      entry,
-      labs: catalog.labs.map((item) => ({ id: item.id, name: item.name })),
-      labModels:
-        catalog.labs
-          .find((item) => item.id === (entry?.lab ?? providerSlug(labParam)))
-          ?.models.map((item) => ({ id: item.id, lab: item.lab, slug: item.slug, name: item.name })) ?? [],
-    },
-    stats,
-  } satisfies ModelPageData
+  return loadModelPage(labParam, modelParam)
 }, "getStatsModelPageData")
 
 export default function StatsModel() {
@@ -111,12 +88,11 @@ export default function StatsModel() {
   const searchModelName = createMemo(() => (formerName() ? `${modelName()} (formerly ${formerName()})` : modelName()))
   const modelTitle = createMemo(() => i18n.t("model.title", { model: searchModelName() }))
   const modelDescription = createMemo(() => i18n.t("model.description", { model: searchModelName() }))
-  const modelPath = createMemo(() => {
-    const entry = catalogEntry()
-    if (entry) return catalogModelPath(entry)
-    if (formerName()) return glmFlashPath
-    return `/data/${providerSlug(labParam())}/${stats()?.slug ?? providerSlug(canonicalModel())}`
+  const modelMetaDescription = createMemo(() => {
+    const data = page()
+    return (data && modelSummary(language.locale(), data, modelName())) ?? modelDescription()
   })
+  const modelPath = createMemo(() => page()?.path ?? `/data/${providerSlug(labParam())}/${providerSlug(modelParam())}`)
   const modelUrl = createMemo(() => localizedUrl(language.locale(), modelPath()))
   const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
   const modelHeaderLinks = createMemo<readonly HeaderLink[]>(() => [
@@ -136,6 +112,7 @@ export default function StatsModel() {
     { href: `${import.meta.env.BASE_URL}#cache-ratio`, label: i18n.t("nav.cacheRatio") },
     { href: `${import.meta.env.BASE_URL}#market-share`, label: i18n.t("nav.marketShare") },
     { href: `${import.meta.env.BASE_URL}#geo-breakdown`, label: i18n.t("nav.geoBreakdown") },
+    { href: `${import.meta.env.BASE_URL}#methodology`, label: i18n.t("methodology.title") },
   ])
   const updateThemePreference = (preference: ThemePreference) => {
     applyThemePreference(preference)
@@ -157,12 +134,14 @@ export default function StatsModel() {
       {/* Server-rendered head tags are never removed, so render them once data has loaded. */}
       <Show when={page()}>
         <Title>{modelTitle()}</Title>
-        <Meta name="description" content={modelDescription()} />
+        <Meta name="description" content={modelMetaDescription()} />
         <Show
           when={catalogEntry() || stats()}
           fallback={<NotFoundMeta unavailable={page()?.catalog.labs.length === 0} />}
         >
           <LocaleLinks path={modelPath()} />
+          <FormatLinks path={modelPath()} />
+          <LastModified value={stats()?.updatedAt} />
           <Meta property="og:type" content="website" />
           <Meta property="og:site_name" content="OpenCode" />
           <Meta property="og:title" content={modelTitle()} />
@@ -178,6 +157,33 @@ export default function StatsModel() {
           <Meta name="twitter:description" content={modelDescription()} />
           <Meta name="twitter:image" content={statsUnfurlUrl} />
           <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+          <JsonLd
+            data={{
+              "@context": "https://schema.org",
+              "@type": "WebPage",
+              name: modelTitle(),
+              description: modelMetaDescription(),
+              url: modelUrl(),
+              ...(stats()?.updatedAt ? { dateModified: stats()?.updatedAt } : {}),
+              about: {
+                "@type": "SoftwareApplication",
+                name: modelName(),
+                applicationCategory: "AI model",
+                ...(labName() ? { creator: { "@type": "Organization", name: labName() } } : {}),
+                ...(catalogEntry()?.releaseDate ? { datePublished: catalogEntry()?.releaseDate } : {}),
+                ...(catalogEntry()?.weights.length
+                  ? { sameAs: catalogEntry()?.weights.map((weight) => weight.url) }
+                  : {}),
+              },
+              breadcrumb: breadcrumbList([
+                { name: "Data", url: localizedUrl(language.locale(), "/data/") },
+                ...(labName()
+                  ? [{ name: labName() ?? "", url: localizedUrl(language.locale(), catalogLabPath(lab())) }]
+                  : []),
+                { name: modelName(), url: modelUrl() },
+              ]),
+            }}
+          />
         </Show>
       </Show>
       <Header
@@ -298,7 +304,8 @@ function ModelHero(props: {
   const modelName = () => props.catalog?.name ?? props.data?.model ?? i18n.t("model.fallback")
   const weights = () => props.catalog?.weights[0]
   const labs = () => props.catalogData?.labs ?? []
-  const labModels = () => props.catalogData?.labModels ?? (props.catalog ? [props.catalog] : [])
+  const labModels = () =>
+    props.catalogData?.labModels ?? (props.catalog ? [{ ...props.catalog, path: catalogModelPath(props.catalog) }] : [])
   return (
     <section id="overview" data-section="model-hero">
       <nav data-component="model-hero-breadcrumb" aria-label="Data breadcrumb">
@@ -335,7 +342,7 @@ function ModelHero(props: {
             current
             label={modelName()}
             options={labModels().map((model) => ({
-              href: language.route(catalogModelPath(model)),
+              href: language.route(model.path),
               label: model.name,
               value: model.id,
             }))}
@@ -386,7 +393,7 @@ function ModelHero(props: {
             <span>usage with</span>
             <span data-slot="model-hero-pill">{formatPercent(data().tokenShare)}</span>
             <span>of observed</span>
-            <span data-slot="model-hero-pill">2M</span>
+            <span data-slot="model-hero-pill">2-month</span>
             <span>volume.</span>
           </p>
         )}
@@ -639,6 +646,7 @@ function ModelTrendSection(props: {
   highlightBars?: boolean
   area?: boolean
 }) {
+  const i18n = useI18n()
   const activeLineClipId = createUniqueId()
   const activeLineMaskId = createUniqueId()
   const areaGradientId = createUniqueId()
@@ -872,6 +880,11 @@ function ModelTrendSection(props: {
             </For>
           </div>
         </div>
+        <ChartDataTable
+          caption={props.ariaLabel}
+          headers={[i18n.t("chart.date"), props.rowLabel]}
+          rows={fromFirstUsage(usage()).map((point) => [point.date, props.formatValue(props.value(point))])}
+        />
       </Show>
     </section>
   )
@@ -1033,17 +1046,23 @@ function MetricCard(props: { label: string; value: string; detail?: string; stat
 }
 
 function PeerRow(props: { peer: ModelPeerEntry; active: boolean; catalogLabs: readonly string[] }) {
+  const i18n = useI18n()
   const language = useLanguage()
   const hasProvider = () => isKnownCatalogLab(props.peer.provider, props.catalogLabs)
   return (
     <li>
       <a
-        href={language.route(`${import.meta.env.BASE_URL}${providerSlug(props.peer.provider)}/${props.peer.slug}`)}
+        href={language.route(props.peer.path)}
         data-active={props.active ? "true" : undefined}
         data-providerless={!hasProvider() ? "true" : undefined}
       >
         <span data-slot="model-peer-rank" aria-label={props.active ? `Rank ${props.peer.rank}` : undefined}>
-          <Show when={!props.active}>{String(props.peer.rank).padStart(2, "0")}</Show>
+          <Show
+            when={!props.active}
+            fallback={<span data-slot="visually-hidden">{String(props.peer.rank).padStart(2, "0")}</span>}
+          >
+            {String(props.peer.rank).padStart(2, "0")}
+          </Show>
         </span>
         <Show when={hasProvider()}>
           <span data-slot="model-peer-avatar">
@@ -1053,10 +1072,13 @@ function PeerRow(props: { peer: ModelPeerEntry; active: boolean; catalogLabs: re
         <span data-slot="model-peer-copy">
           <strong>{props.peer.model}</strong>
           <Show when={hasProvider()}>
-            <em>{props.peer.author}</em>
+            <em>{formatCatalogLabName(props.peer.provider)}</em>
           </Show>
         </span>
-        <b>{formatTokens(props.peer.tokens)}</b>
+        <b>
+          {formatTokens(props.peer.tokens)}
+          <span data-slot="visually-hidden"> {i18n.t("format.tokens")}</span>
+        </b>
       </a>
     </li>
   )

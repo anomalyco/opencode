@@ -231,6 +231,7 @@ export function Footer(props: {
     { href: "#cache-ratio", label: i18n.t("nav.cacheRatio") },
     { href: "#market-share", label: i18n.t("nav.marketShare") },
     { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
+    { href: "#methodology", label: i18n.t("methodology.title") },
   ]
   const legal = [
     { href: "https://opencode.ai/legal/terms-of-service", label: i18n.t("footer.terms") },
