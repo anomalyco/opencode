@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import type { McpServer } from "@agentclientprotocol/sdk"
+import type { McpServer, SessionNotification } from "@agentclientprotocol/sdk"
+import { Schema } from "effect"
 import { currentValue } from "./select-options"
-import { ephemeralEvent, makeSession, rpcError, secondModel, startSession, startWire, testModel } from "./wire-fixture"
+import {
+  ephemeralEvent,
+  makeSession,
+  rpcError,
+  secondModel,
+  startSession,
+  startWire,
+  testModel,
+  type Wire,
+} from "./wire-fixture"
 
 describe("acp session lifecycle over the wire", () => {
   test("initialize advertises capabilities and terminal auth only when the client asks", async () => {
@@ -134,6 +144,45 @@ describe("acp session lifecycle over the wire", () => {
     })
   })
 
+  test("publishes a session's commands after the response that attaches it", async () => {
+    await using acp = await startWire()
+    acp.server.sessions.set("ses_loaded", makeSession("ses_loaded"))
+    acp.server.messages.set("ses_loaded", [{ id: "msg_0", type: "user", text: "hello", time: { created: 0 } }])
+    await acp.initialize()
+    const params = { cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }
+
+    expect(await untilCommands(acp, () => acp.newSession())).toEqual(["response", "available_commands_update"])
+    expect(await untilCommands(acp, () => acp.request("session/load", params))).toEqual([
+      "user_message_chunk",
+      "response",
+      "available_commands_update",
+    ])
+    expect(await untilCommands(acp, () => acp.request("session/resume", params))).toEqual([
+      "response",
+      "available_commands_update",
+    ])
+  })
+
+  test("does not publish commands for a session closed before its load responds", async () => {
+    const held = Promise.withResolvers<undefined>()
+    await using acp = await startWire({
+      fetch: (request) => (request.path === "/api/session/ses_loaded/message" ? held.promise : undefined),
+    })
+    acp.server.sessions.set("ses_loaded", makeSession("ses_loaded"))
+    await acp.initialize()
+
+    const loaded = acp.request("session/load", { cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })
+    await acp.until(() => acp.server.requests.some((item) => item.path === "/api/session/ses_loaded/message"))
+    await acp.request("session/close", { sessionId: "ses_loaded" })
+    held.resolve(undefined)
+    await loaded
+    // A later session's commands follow the load response, giving a stray update time to arrive.
+    const created = await acp.newSession()
+    await acp.until(() => acp.updates.some(isCommands), "commands for the later session")
+
+    expect(acp.updates.filter(isCommands).map((item) => item.sessionId)).toEqual([created.sessionId])
+  })
+
   test("lists server-backed pages for the requested cwd", async () => {
     await using acp = await startWire()
     Array.from({ length: 101 }, (_, index) =>
@@ -237,6 +286,7 @@ describe("acp session lifecycle over the wire", () => {
     await acp.initialize()
     const failed = await acp.newSession()
     const other = await acp.newSession()
+    await acp.until(() => acp.updates.filter(isCommands).length === 2, "initial commands")
 
     expect(
       await rpcError(
@@ -256,3 +306,27 @@ describe("acp session lifecycle over the wire", () => {
     ).toMatchObject({ code: -32602, data: { sessionId: failed.sessionId } })
   })
 })
+
+const isSessionUpdate = Schema.is(
+  Schema.Struct({
+    method: Schema.Literal("session/update"),
+    params: Schema.Struct({ update: Schema.Struct({ sessionUpdate: Schema.String }) }),
+  }),
+)
+
+function isCommands(item: SessionNotification) {
+  return item.update.sessionUpdate === "available_commands_update"
+}
+
+// Labels what the agent sends from the request until the commands that follow it, in wire order.
+async function untilCommands(acp: Wire, send: () => Promise<unknown>) {
+  const start = acp.received.length
+  await send()
+  return acp.until(() => {
+    const labels = acp.received.slice(start).map((message) => {
+      if (isSessionUpdate(message)) return message.params.update.sessionUpdate
+      return "method" in message ? message.method : "response"
+    })
+    return labels.includes("available_commands_update") && labels
+  }, "available commands")
+}

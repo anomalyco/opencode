@@ -145,6 +145,7 @@ describe("acp catalog and config options over the wire", () => {
         const closed = await acp.newSession()
         const open = await acp.newSession()
         await acp.request("session/close", { sessionId: closed.sessionId })
+        await initialCommands(acp, open.sessionId, 1)
         return open.sessionId
       },
     ],
@@ -157,6 +158,7 @@ describe("acp catalog and config options over the wire", () => {
             const params = { cwd: "/workspace", sessionId: session.sessionId, mcpServers: [] }
             await acp.request(method, params)
             await acp.request(method, params)
+            await initialCommands(acp, session.sessionId, 3)
             return session.sessionId
           },
         ] as const,
@@ -298,6 +300,14 @@ async function change(acp: Wire, sessionId: string, kind: string, trigger: () =>
     () =>
       acp.updates.filter((item) => item.sessionId === sessionId && item.update.sessionUpdate === kind).length > seen,
     kind,
+  )
+}
+
+// Each attach sends its commands after the response, so later counts start once every attach has sent them.
+function initialCommands(acp: Wire, sessionId: string, attaches: number) {
+  return acp.until(
+    () => acp.updates.filter((item) => item.sessionId === sessionId && commandNames(item)).length === attaches,
+    "initial commands",
   )
 }
 

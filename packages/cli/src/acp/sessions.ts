@@ -4,7 +4,7 @@ import type { OpenCodeClient, OpenCodeEvent, SessionInfo } from "@opencode/clien
 import { Context, Deferred, Effect, Exit, Queue, Ref, Scope, Stream } from "effect"
 import type { ACPCatalog, Catalog } from "./catalog"
 import { availableCommands, configOptions, type Selection } from "./config-option"
-import type { ACPConnection } from "./connection"
+import { ACPConnection } from "./connection"
 import { ACPError } from "./error"
 import { ACPPromise } from "./promise"
 
@@ -16,9 +16,9 @@ export type Attached = {
 
 export interface Interface {
   /**
-   * Attaches a session in its own scope, closing any previous attachment of the same ID. The scope follows the
-   * cwd's catalog and pushes config option and command updates while it is open. A failed attach leaves the
-   * session detached.
+   * Attaches a session in its own scope, closing any previous attachment of the same ID. Once the attaching request
+   * has responded, the scope follows the cwd's catalog and pushes config option and command updates while it is
+   * open. A failed attach leaves the session detached.
    */
   readonly attach: (
     session: SessionInfo,
@@ -141,22 +141,26 @@ export const make = Effect.fnUntraced(function* (input: {
       const replaced = sessions.get(session.id)
       sessions.set(session.id, entry)
       if (replaced) yield* Scope.close(replaced.scope, Exit.void)
-      yield* registerMcp(entry.attached, mcpServers).pipe(
+      yield* registerMcp(entry.attached, mcpServers).pipe(Effect.onError(() => remove(session.id, entry)))
+      const responded = yield* ACPConnection.Responded
+      // Updates wait for the response that hands the client this session. `changes` emits the latest catalog
+      // first, so a reload since `current` is still pushed. One fold applies catalog and selection changes so
+      // pushes leave the client on the latest pair.
+      yield* responded.pipe(
         Effect.andThen(sendCommands(session.id, current)),
-        Effect.onError(() => remove(session.id, entry)),
-      )
-      // `changes` emits the latest catalog first, so a reload since `current` is still pushed. One fold applies
-      // catalog and selection changes so pushes leave the client on the latest pair.
-      yield* Stream.merge(
-        input.catalog.changes(cwd).pipe(Stream.map((catalog) => ({ catalog, patch: {} }))),
-        Stream.fromQueue(entry.selected).pipe(Stream.map((patch) => ({ catalog: undefined, patch }))),
-      ).pipe(
-        Stream.runFoldEffect(
-          () => current,
-          (previous, step) => {
-            const next = step.catalog ?? previous
-            return changed(entry.attached, previous, next, step.patch).pipe(Effect.ignore, Effect.as(next))
-          },
+        Effect.andThen(
+          Stream.merge(
+            input.catalog.changes(cwd).pipe(Stream.map((catalog) => ({ catalog, patch: {} }))),
+            Stream.fromQueue(entry.selected).pipe(Stream.map((patch) => ({ catalog: undefined, patch }))),
+          ).pipe(
+            Stream.runFoldEffect(
+              () => current,
+              (previous, step) => {
+                const next = step.catalog ?? previous
+                return changed(entry.attached, previous, next, step.patch).pipe(Effect.ignore, Effect.as(next))
+              },
+            ),
+          ),
         ),
         Effect.ignore,
         Effect.forkIn(entry.scope),

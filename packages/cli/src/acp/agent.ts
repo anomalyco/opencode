@@ -6,6 +6,8 @@ import {
   type AgentNotificationMethod,
   type AgentRequestHandlersByMethod,
   type AgentRequestMethod,
+  type AnyMessage,
+  type JsonRpcId,
   type Stream,
 } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient } from "@opencode/client/promise"
@@ -24,6 +26,21 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
   const catalog = yield* ACPCatalog.make(client)
   // Requests can dispatch once the stream's read loop yields, which may be before the service below is built.
   const ready = yield* Deferred.make<ACPService.Interface>()
+  // Settled as each response is written to the stream, which serializes every outgoing message.
+  const responses = new Map<JsonRpcId, Deferred.Deferred<void>>()
+  const writer = stream.writable.getWriter()
+  const writable = new WritableStream<AnyMessage>({
+    write: async (message) => {
+      await writer.write(message)
+      if ("method" in message) return
+      const responded = responses.get(message.id)
+      if (!responded) return
+      responses.delete(message.id)
+      Deferred.doneUnsafe(responded, "result" in message ? Effect.void : Effect.interrupt)
+    },
+    close: () => writer.close(),
+    abort: (reason) => writer.abort(reason),
+  })
   const handle =
     <Params, A>(
       call: (service: ACPService.Interface, ctx: AgentHandlerContext<Params>) => Effect.Effect<A, ACPService.Failure>,
@@ -40,7 +57,12 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
         Effect.tapCauseIf(Cause.hasDies, (cause) => Effect.logError("ACP request failed", cause)),
         Effect.catchDefect((defect) => Effect.fail(ACPError.toRequestError(ACPError.fromUnknown(defect)))),
       )
-      return (ctx: AgentHandlerContext<Params>) => run(handler(ctx))
+      return (ctx: AgentHandlerContext<Params> & { readonly requestId?: JsonRpcId }) => {
+        if (ctx.requestId === undefined) return run(handler(ctx))
+        const responded = Deferred.makeUnsafe<void>()
+        responses.set(ctx.requestId, responded)
+        return run(handler(ctx).pipe(Effect.provideService(ACPConnection.Responded, Deferred.await(responded))))
+      }
     }
   const app = agent({ name: "opencode" })
   const request = <Method extends AgentRequestMethod>(
@@ -106,7 +128,7 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
     "session/cancel",
     handle((service, ctx) => service.cancel(ctx.params)),
   )
-  const agentConnection = app.connect(stream)
+  const agentConnection = app.connect({ readable: stream.readable, writable })
   const connection = ACPConnection.make(agentConnection)
   const sessions = yield* ACPSessions.make({ client, connection, catalog })
   const capabilities = yield* Ref.make({ childSessionUpdates: false })

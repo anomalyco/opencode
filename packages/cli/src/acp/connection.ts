@@ -6,9 +6,17 @@ import {
   type RequestPermissionResponse,
   type SessionNotification,
 } from "@agentclientprotocol/sdk"
-import { Context, type Effect } from "effect"
+import { Context, Effect } from "effect"
 import type { ACPError } from "./error"
 import { ACPPromise } from "./promise"
+
+/**
+ * Completes once the response to the request being handled is written, so messages sent afterwards follow it.
+ * Interrupts when the request fails. Outside a request it completes immediately.
+ */
+export const Responded = Context.Reference<Effect.Effect<void>>("@opencode/cli/acp/Connection/Responded", {
+  defaultValue: () => Effect.void,
+})
 
 export interface Interface {
   readonly sessionUpdate: (params: SessionNotification) => Effect.Effect<void, ACPError.Error | RequestError>
