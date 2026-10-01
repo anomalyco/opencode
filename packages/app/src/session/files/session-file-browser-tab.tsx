@@ -3,7 +3,7 @@ import { createStore } from "solid-js/store"
 import { createQuery, keepPreviousData } from "@tanstack/solid-query"
 import { Icon } from "@opencode/ui/icon"
 import { SessionFilePanelV2, SessionFilePanelV2Empty } from "@opencode/session-ui/v2/session-file-panel-v2"
-import { SessionReviewV2Sidebar } from "@opencode/session-ui/v2/session-review-v2"
+import { SessionReviewV2Sidebar, SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
 import FileTreeV2, { type Kind } from "@/session/files/file-tree-v2"
 import { useFile } from "@/workspaces/files/model"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -101,12 +101,24 @@ export function SessionFileBrowserTab(props: {
   // unmounts the whole panel on every file-tab switch and resets sidebar scroll.
   return (
     <SessionFilePanelV2
-      toolbar={false}
+      toolbar={!props.mobile && !props.placeholder && !sidebarOpened()}
+      toolbarStart={<span class="truncate font-[530]">{title()}</span>}
+      sidebarCollapsed={!sidebarOpened()}
+      sidebarToggleGap={10}
+      sidebarToggle={
+        !props.mobile && (
+          <SessionReviewV2SidebarToggle
+            opened={sidebarOpened()}
+            disabled={props.placeholder}
+            onToggle={props.state.toggleSidebar}
+          />
+        )
+      }
       sidebar={
         <SessionReviewV2Sidebar
           open={sidebarOpened()}
           transition={props.state.sidebarTransition()}
-          title={<span class="truncate">{title()}</span>}
+          title={<span class="truncate font-[530]">{title()}</span>}
           filter={filter()}
           onFilterChange={setFilter}
           onFilterKeyDown={onFilterKeyDown}

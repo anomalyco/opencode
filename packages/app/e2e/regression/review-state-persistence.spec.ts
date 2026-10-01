@@ -23,7 +23,7 @@ test("restores review mode and selected file per session", async ({ page }) => {
 
   await switchSession(page, titleB)
   await page.getByRole("button", { name: "Toggle review" }).click()
-  await expect(page.getByRole("button", { name: "Git changes" })).toBeVisible()
+  await expect(page.locator("#review-panel").getByText("Git changes", { exact: true })).toBeVisible()
   await selectFile(page, "gamma.ts")
 
   await switchSession(page, titleA)
@@ -31,12 +31,71 @@ test("restores review mode and selected file per session", async ({ page }) => {
 
   await page.reload()
   await expectSessionTitle(page, titleA)
-  await expect(page.getByRole("button", { name: "Git changes" })).toBeVisible()
+  await expect(page.locator("#review-panel").getByText("Git changes", { exact: true })).toBeVisible()
   await expectSelectedFile(page, "alpha.ts")
 
   await switchSession(page, titleB)
-  await expect(page.getByRole("button", { name: "Git changes" })).toBeVisible()
+  await expect(page.locator("#review-panel").getByText("Git changes", { exact: true })).toBeVisible()
   await expectSelectedFile(page, "gamma.ts")
+})
+
+test("shows a non-interactive change source when Git changes is the only option", async ({ page }) => {
+  await setup(page)
+  await page.goto(sessionHref(sessionA))
+  await expectSessionTitle(page, titleA)
+  await page.getByRole("button", { name: "Toggle review" }).click()
+
+  const panel = page.locator("#review-panel")
+  const label = panel.locator('[data-slot="session-review-source-label"]')
+  await expect(label).toHaveText("Git changes")
+  await expect(label).toBeVisible()
+  await expect(panel.getByRole("button", { name: "Git changes" })).toHaveCount(0)
+  await expect(panel.locator('[data-slot="select-v2-chevron"]')).toHaveCount(0)
+  await label.click()
+  await expect(page.getByRole("listbox")).toHaveCount(0)
+})
+
+test("keeps the change-source selector on a non-default branch", async ({ page }) => {
+  await setup(page, "feature")
+  await page.goto(sessionHref(sessionA))
+  await expectSessionTitle(page, titleA)
+  await page.getByRole("button", { name: "Toggle review" }).click()
+
+  const panel = page.locator("#review-panel")
+  await expect(panel.getByRole("button", { name: "Git changes" })).toBeVisible()
+  await expect(panel.locator('[data-slot="session-review-source-label"]')).toHaveCount(0)
+  await panel.getByRole("button", { name: "Git changes" }).click()
+  await page.getByRole("option", { name: "Branch changes" }).click()
+  await expect(panel.getByRole("button", { name: "Branch changes" })).toBeVisible()
+  await expect(panel.getByRole("button", { name: "beta.ts" })).toBeVisible()
+  await expect(panel.getByRole("button", { name: "gamma.ts" })).toHaveCount(0)
+  await panel.getByRole("button", { name: "Branch changes" }).click()
+  await page.getByRole("option", { name: "Git changes" }).click()
+  await expect(panel.getByRole("button", { name: "Git changes" })).toBeVisible()
+  await expect(panel.getByRole("button", { name: "gamma.ts" })).toBeVisible()
+})
+
+test("keeps the review header at 48px with the file tree open or closed", async ({ page }) => {
+  await setup(page)
+  await page.goto(sessionHref(sessionA))
+  await expectSessionTitle(page, titleA)
+  await page.getByRole("button", { name: "Toggle review" }).click()
+
+  const panel = page.locator("#review-panel")
+  const toggle = panel.getByRole("button", { name: "Toggle file tree" })
+  const toolbar = panel.locator('[data-slot="session-review-v2-toolbar"]')
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(panel.locator('[data-slot="session-review-v2-sidebar-header"]')).toHaveCSS("height", "48px")
+  await expect(toolbar).toHaveCSS("height", "48px")
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(toolbar).toHaveCSS("height", "48px")
+
+  await toggle.click()
+  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(panel.locator('[data-slot="session-review-v2-sidebar-header"]')).toHaveCSS("height", "48px")
+  await expect(toolbar).toHaveCSS("height", "48px")
 })
 
 for (const tab of ["Context", "Open file", "README.md"]) {
@@ -98,7 +157,7 @@ async function switchSession(page: Page, title: string) {
   await expectSessionTitle(page, title)
 }
 
-async function setup(page: Page) {
+async function setup(page: Page, branch = "dev") {
   await mockOpenCodeServer(page, {
     directory,
     project: {
@@ -133,7 +192,7 @@ async function setup(page: Page) {
       contentType: "application/json",
       body: JSON.stringify({
         location: { directory, project: { id: projectID, directory, canonical: directory } },
-        data: { branch: "feature", defaultBranch: "dev" },
+        data: { branch: { current: branch, default: "dev" } },
       }),
     }),
   )

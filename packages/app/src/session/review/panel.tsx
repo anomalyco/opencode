@@ -5,6 +5,7 @@ import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
   SessionReviewV2,
   SessionReviewV2Sidebar,
+  SessionReviewV2SidebarToggle,
 } from "@opencode/session-ui/v2/session-review-v2"
 import { SessionReviewFilePreviewV2 } from "@opencode/session-ui/v2/session-review-file-preview-v2"
 import { DiffChanges } from "@opencode/ui/diff-changes"
@@ -31,11 +32,14 @@ import {
 } from "@/session/review/review-diff-kinds"
 import type { ReviewPanelState } from "@/session/review/panel-state"
 import { applyFileListKeyDown, SessionFileList } from "@/session/files/list"
+import { OpenInAppButton } from "@/session/files/open-in-app-button"
+import type { OpenInAppState } from "@/session/files/open-in-app"
 
 type ReviewDiff = FileDiffInfo
 
 export type ReviewPanelProps = {
   title?: JSX.Element
+  collapsedTitle?: JSX.Element
   empty?: JSX.Element
   diffs: ReviewDiff[]
   diffsReady: boolean
@@ -56,7 +60,7 @@ export type ReviewPanelProps = {
   fileList?: "tree" | "flat"
 }
 
-export function ReviewPanel(props: ReviewPanelProps) {
+export function ReviewPanel(props: ReviewPanelProps & { openInApp: OpenInAppState }) {
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const readFile = async (path: string) =>
@@ -68,12 +72,19 @@ export function ReviewPanel(props: ReviewPanelProps) {
         return undefined
       })
 
-  return <ReviewPanelView {...props} readFile={readFile} />
+  return (
+    <ReviewPanelView
+      {...props}
+      readFile={readFile}
+      toolbarAction={<OpenInAppButton directory={() => sdk().directory} state={props.openInApp} />}
+    />
+  )
 }
 
 export function ReviewPanelView(
   props: ReviewPanelProps & {
     readFile?: (path: string) => Promise<{ type: "text"; content: string } | undefined>
+    toolbarAction?: JSX.Element
   },
 ) {
   const diffs = createMemo(() => props.diffs.filter(filterRenderableDiff))
@@ -124,10 +135,16 @@ export function ReviewPanelView(
 
   return (
     <SessionReviewV2
-      title={props.title}
+      title={props.collapsedTitle ?? props.title}
       stats={<DiffChanges changes={diffs()} />}
       empty={props.empty}
       sidebarOpen={props.state.sidebarOpened()}
+      sidebarToggle={
+        <SessionReviewV2SidebarToggle
+          opened={props.state.sidebarOpened()}
+          onToggle={props.state.toggleSidebar}
+        />
+      }
       sidebar={
         // Always mounted: the sidebar header hosts the changes-mode dropdown,
         // which must stay reachable when the current mode has zero diffs.
@@ -148,6 +165,7 @@ export function ReviewPanelView(
       files={navigationFiles()}
       onSelectFile={props.onSelectFile}
       diffStyle={props.diffStyle}
+      toolbarAction={props.toolbarAction}
       onDiffStyleChange={props.onDiffStyleChange}
       expandMode={props.state.expandMode()}
       onExpandModeChange={props.state.setExpandMode}
