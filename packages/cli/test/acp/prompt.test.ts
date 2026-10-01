@@ -404,6 +404,42 @@ describe("acp prompt turns over the wire", () => {
     })
   })
 
+  test("counts a failed step's tokens and clears its error when the next step starts", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          durableEvent("session.step.failed", {
+            sessionID,
+            assistantMessageID: "msg_1",
+            error: { type: "provider.stream", message: "stream interrupted" },
+            cost: 0,
+            tokens: { ...tokens(), input: 40, output: 4 },
+          }),
+          durableEvent("session.step.started", {
+            sessionID,
+            assistantMessageID: "msg_2",
+            agent: "build",
+            model: { providerID: "test", id: "test-model" },
+            started: 0,
+          }),
+          stepEnded(sessionID, "msg_2", { tokens: { ...tokens(), input: 20, output: 7 } }),
+        ),
+    })
+
+    const response = await acp.prompt(acp.sessionId, "hello")
+
+    expect(response).toEqual({
+      stopReason: "end_turn",
+      usage: { inputTokens: 60, outputTokens: 11, totalTokens: 71 },
+      _meta: {},
+    })
+    expect(await acp.waitForUpdate((item) => item.update.sessionUpdate === "usage_update")).toMatchObject({
+      update: { used: 27 },
+    })
+  })
+
   test("excludes child session steps from the turn usage", async () => {
     await using acp = await startSession({
       onPrompt: ({ sessionID, id }) =>
