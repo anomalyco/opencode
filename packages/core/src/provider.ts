@@ -147,12 +147,15 @@ export function modelSettings(settings: Settings | undefined) {
 
 const decodeTimeout = Schema.decodeUnknownOption(HttpTimeout)
 
-/** Request timeouts from provider settings; invalid values are dropped so the transport default applies. */
+/** Applied to `headerTimeout` and `chunkTimeout` when provider settings leave them unset or invalid. */
+export const DEFAULT_TIMEOUT_MS = 300_000
+
+/** Request timeouts from provider settings, resolved for every route. `timeout` has no default. */
 export function timeouts(settings: Readonly<Record<string, unknown>>) {
   return {
     timeout: Option.getOrUndefined(decodeTimeout(settings.timeout)),
-    headerTimeout: Option.getOrUndefined(decodeTimeout(settings.headerTimeout)),
-    chunkTimeout: Option.getOrUndefined(decodeTimeout(settings.chunkTimeout)),
+    headerTimeout: Option.getOrElse(decodeTimeout(settings.headerTimeout), () => DEFAULT_TIMEOUT_MS),
+    chunkTimeout: Option.getOrElse(decodeTimeout(settings.chunkTimeout), () => DEFAULT_TIMEOUT_MS),
   }
 }
 

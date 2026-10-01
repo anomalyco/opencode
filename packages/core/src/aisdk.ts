@@ -16,7 +16,6 @@ import type {
   SharedV3ProviderOptions,
 } from "@ai-sdk/provider"
 import {
-  DEFAULT_HTTP_TIMEOUT_MS,
   FinishReason,
   LLMEvent,
   AIError,
@@ -130,8 +129,6 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
 
   const customFetch = options.fetch
   const timeouts = Provider.timeouts(options)
-  const headerTimeout = timeouts.headerTimeout ?? DEFAULT_HTTP_TIMEOUT_MS
-  const chunkTimeout = timeouts.chunkTimeout ?? DEFAULT_HTTP_TIMEOUT_MS
   delete options.headerTimeout
   delete options.chunkTimeout
   delete options.compaction
@@ -141,9 +138,9 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
     const ctl = new AbortController()
     // Covers only the wait for response headers; wrapSSE takes over once the body streams.
     const headerTimer =
-      headerTimeout === false
+      timeouts.headerTimeout === false
         ? undefined
-        : setTimeout(() => ctl.abort(new Error(HEADER_TIMEOUT_MESSAGE)), headerTimeout)
+        : setTimeout(() => ctl.abort(new Error(HEADER_TIMEOUT_MESSAGE)), timeouts.headerTimeout)
     opts.signal = AbortSignal.any(
       [opts.signal, ctl.signal, timeouts.timeout ? AbortSignal.timeout(timeouts.timeout) : undefined].filter(
         (item): item is AbortSignal => item !== undefined && item !== null,
@@ -164,8 +161,8 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
         ? throughMiddleware(middleware, send, input, { ...opts, timeout: false })
         : send(input, { ...opts, timeout: false })
     ).finally(() => clearTimeout(headerTimer))
-    if (chunkTimeout === false) return res
-    return wrapSSE(res, chunkTimeout, ctl)
+    if (timeouts.chunkTimeout === false) return res
+    return wrapSSE(res, timeouts.chunkTimeout, ctl)
   }
 
   return options

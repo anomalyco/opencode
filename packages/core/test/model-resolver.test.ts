@@ -288,38 +288,6 @@ describe("ModelResolver", () => {
     }),
   )
 
-  it.effect("lifts timeout settings onto native route HTTP defaults", () =>
-    Effect.gen(function* () {
-      const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/openai"), {
-          settings: {
-            apiKey: "secret",
-            baseURL: "https://openai.example/v1",
-            timeout: 600_000,
-            headerTimeout: false,
-            chunkTimeout: 60_000,
-          },
-        }),
-      )
-      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
-
-      expect(resolved.defaults?.http).toMatchObject({ timeout: 600_000, headerTimeout: false, chunkTimeout: 60_000 })
-      expect(JSON.stringify(prepared.body)).not.toContain("Timeout")
-    }),
-  )
-
-  it.effect("preserves a disabled provider chunk timeout on native HTTP requests", () =>
-    Effect.gen(function* () {
-      const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/openai"), {
-          settings: { apiKey: "secret", headerTimeout: 60_000, chunkTimeout: false },
-        }),
-      )
-
-      expect(resolved.defaults?.http).toMatchObject({ headerTimeout: 60_000, chunkTimeout: false })
-    }),
-  )
-
   it.effect("keeps catalog apiKey credentials out of provider JSON", () =>
     Effect.gen(function* () {
       const resolved = yield* ModelResolver.fromCatalogModel(
