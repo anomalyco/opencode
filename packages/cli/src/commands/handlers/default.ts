@@ -4,7 +4,7 @@ import { run } from "@opencode/tui"
 import { Commands } from "../commands"
 import { Runtime } from "../../framework/runtime"
 import { Config } from "../../config"
-import { Context, Effect, FileSystem, Option, Queue, Stream } from "effect"
+import { Context, Effect, Fiber, FileSystem, Option, Queue } from "effect"
 import { ServerConnection } from "../../services/server-connection"
 import { Updater } from "../../services/updater"
 import { UpdatePreflight } from "../../services/update-preflight"
@@ -61,15 +61,28 @@ export default Runtime.handler(Commands, (input) =>
       })) !== undefined
     const updater = yield* Updater.Service
     let installing: string | undefined
-    const updateListeners = new Set<(version: string) => void>()
-    const updates = yield* Updater.poll(
-      updater
-        .run((version) => {
-          installing = version
-          updateListeners.forEach((notify) => notify(version))
-        })
-        .pipe(Effect.ensuring(Effect.sync(() => (installing = undefined)))),
-      "10 minutes",
+    let latest: Updater.RunResult | undefined
+    const installListeners = new Set<(version: string) => void>()
+    const resultListeners = new Set<(result: Updater.RunResult) => void>()
+    const checkForUpdate = updater
+      .run((version) => {
+        installing = version
+        installListeners.forEach((notify) => notify(version))
+      })
+      .pipe(
+        Effect.ensuring(Effect.sync(() => (installing = undefined))),
+        Effect.tap((result) =>
+          Effect.sync(() => {
+            if (!result || (result.type === latest?.type && result.version === latest.version)) return
+            latest = result
+            resultListeners.forEach((notify) => notify(result))
+          }),
+        ),
+      )
+    const startup = yield* checkForUpdate.pipe(Effect.forkScoped)
+    yield* Fiber.join(startup).pipe(
+      Effect.andThen(checkForUpdate.pipe(Effect.delay("10 minutes"), Effect.forever)),
+      Effect.forkScoped,
     )
     preflight.loading()
     const config = yield* Config.Service
@@ -109,15 +122,16 @@ export default Runtime.handler(Commands, (input) =>
       },
       updater: {
         remote: requestedServer !== undefined,
-        subscribe: (notify, signal) =>
-          runPromise(updates.changes.pipe(Stream.runForEach((result) => Effect.sync(() => notify(result)))), {
-            signal,
-          }),
+        subscribe: (notify) => {
+          if (latest) notify(latest)
+          resultListeners.add(notify)
+          return () => resultListeners.delete(notify)
+        },
         check: (signal, notify) => {
           if (installing) notify(installing)
-          updateListeners.add(notify)
-          return runPromise(updates.checked.pipe(Effect.andThen(updater.check())), { signal }).finally(() =>
-            updateListeners.delete(notify),
+          installListeners.add(notify)
+          return runPromise(Fiber.join(startup).pipe(Effect.flatMap(() => updater.check())), { signal }).finally(() =>
+            installListeners.delete(notify),
           )
         },
         apply: (version) => runPromise(updater.apply(version)),
