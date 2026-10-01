@@ -1,6 +1,6 @@
 import { isDeepStrictEqual } from "node:util"
 import type { McpServer, RequestError } from "@agentclientprotocol/sdk"
-import type { OpenCodeClient, SessionInfo } from "@opencode/client/promise"
+import type { OpenCodeClient, OpenCodeEvent, SessionInfo } from "@opencode/client/promise"
 import { Context, Effect, Exit, Ref, Scope, Stream } from "effect"
 import type { ACPCatalog, Catalog } from "./catalog"
 import { availableCommands, configOptions, type Selection } from "./config-option"
@@ -62,6 +62,21 @@ export const make = Effect.fnUntraced(function* (input: {
       })
     }
     if (!isDeepStrictEqual(next.commands, previous.commands)) yield* sendCommands(attached.id, next)
+  })
+
+  // Follows switches from other clients. ACP's own switches update the selection first, so their echo is a no-op.
+  const selected = Effect.fnUntraced(function* (attached: Attached, event: OpenCodeEvent) {
+    if (event.type !== "session.model.selected" && event.type !== "session.agent.selected") return
+    if (event.data.sessionID !== attached.id) return
+    const catalog = yield* input.catalog.get(attached.cwd)
+    const patch = event.type === "session.model.selected" ? { model: event.data.model } : { modeID: event.data.agent }
+    const previous = yield* Ref.getAndUpdate(attached.selection, (current) => ({ ...current, ...patch }))
+    const options = configOptions(catalog, { ...previous, ...patch })
+    if (isDeepStrictEqual(options, configOptions(catalog, previous))) return
+    yield* input.connection.sessionUpdate({
+      sessionId: attached.id,
+      update: { sessionUpdate: "config_option_update", configOptions: options },
+    })
   })
 
   const registerMcp = (attached: Attached, servers: readonly McpServer[]) =>
@@ -130,6 +145,11 @@ export const make = Effect.fnUntraced(function* (input: {
               ? Effect.succeed(previous)
               : changed(entry.attached, previous, next).pipe(Effect.ignore, Effect.as(next)),
         ),
+        Effect.ignore,
+        Effect.forkIn(entry.scope),
+      )
+      yield* Stream.fromAsyncIterable(input.client.event.subscribe(), (cause) => cause).pipe(
+        Stream.runForEach((event) => selected(entry.attached, event).pipe(Effect.ignore)),
         Effect.ignore,
         Effect.forkIn(entry.scope),
       )
