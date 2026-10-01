@@ -594,7 +594,9 @@ const layer = Layer.effect(
           input.copyChanges && current?.workspaceID
             ? yield* runInWorkspace({
                 workspaceID: current?.workspaceID ?? undefined,
-                local: () => vcs.diffRaw(),
+                // diffRaw fails on an unreadable repository now (#50934); warping
+                // proceeds without copied changes, as the fallback already does.
+                local: () => vcs.diffRaw().pipe(Effect.catch(() => Effect.succeed(""))),
                 remote: ({ target }) =>
                   HttpClientRequest.get(route(target.url, "/vcs/diff/raw"), {
                     headers: new Headers(target.headers),

@@ -3,7 +3,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Effect, Result } from "effect"
 import { Git } from "../../src/git"
 import { tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -16,6 +16,17 @@ const scopedTmpdir = (options?: Parameters<typeof tmpdir>[0]) =>
     Effect.promise(() => tmpdir(options)),
     (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
   )
+
+// A linked worktree whose admin directory is gone (as after `git worktree
+// prune`): every listing exits 128 with empty stdout instead of working.
+const brokenWorktree = Effect.fn("GitTest.brokenWorktree")(function* () {
+  const tmp = yield* scopedTmpdir({ git: true })
+  const dir = path.join(tmp.path, "unreadable")
+  yield* Effect.promise(() => $`git worktree add --detach ${dir} HEAD`.cwd(tmp.path).quiet())
+  yield* Effect.promise(() => fs.writeFile(path.join(dir, "draft.txt"), "wip\n", "utf-8"))
+  yield* Effect.promise(() => fs.rm(path.join(tmp.path, ".git", "worktrees", "unreadable"), { recursive: true }))
+  return dir
+})
 
 describe("Git", () => {
   it.live("branch() returns current branch name", () =>
@@ -174,6 +185,52 @@ describe("Git", () => {
       const git = yield* Git.Service
       const text = yield* git.show(tmp.path, "HEAD", "bin.dat")
       expect(text).toBe("")
+    }),
+  )
+
+  it.live("status() fails when the repository is unreadable", () =>
+    Effect.gen(function* () {
+      const dir = yield* brokenWorktree()
+      const git = yield* Git.Service
+
+      const result = yield* Effect.result(git.status(dir))
+
+      expect(Result.isFailure(result)).toBe(true)
+    }),
+  )
+
+  it.live("diff() fails when the repository is unreadable", () =>
+    Effect.gen(function* () {
+      const dir = yield* brokenWorktree()
+      const git = yield* Git.Service
+
+      const result = yield* Effect.result(git.diff(dir, "HEAD"))
+
+      expect(Result.isFailure(result)).toBe(true)
+    }),
+  )
+
+  it.live("stats() fails when the repository is unreadable", () =>
+    Effect.gen(function* () {
+      const dir = yield* brokenWorktree()
+      const git = yield* Git.Service
+
+      const result = yield* Effect.result(git.stats(dir, "HEAD"))
+
+      expect(Result.isFailure(result)).toBe(true)
+    }),
+  )
+
+  it.live("status() keeps reporting untracked files for an unborn repository", () =>
+    Effect.gen(function* () {
+      const tmp = yield* scopedTmpdir()
+      const git = yield* Git.Service
+      yield* git.run(["init"], { cwd: tmp.path })
+      yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "new.txt"), "hello\n", "utf-8"))
+
+      const items = yield* git.status(tmp.path)
+
+      expect(items.map((item) => item.file)).toContain("new.txt")
     }),
   )
 })
