@@ -13,6 +13,7 @@ export type WorkspaceLastUsed = Settings["workspaces"]["lastUsed"][string]
 export type TerminalPlacement = Settings["general"]["terminalPlacement"]
 export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
 export type TabLayout = Settings["appearance"]["tabLayout"]
+export type VerticalTabPosition = Settings["appearance"]["verticalTabPosition"]
 export type NotificationSettings = Settings["notifications"]
 export type SoundSettings = Settings["sounds"]
 
@@ -101,6 +102,7 @@ const appearanceSchema = Persistence.struct({
   sans: Schema.String,
   terminal: Schema.String,
   tabLayout: Schema.Literals(["horizontal", "vertical"]),
+  verticalTabPosition: Schema.Literals(["top", "bottom"]),
 })
 
 const permissionsSchema = Persistence.struct({
@@ -249,7 +251,14 @@ export const defaultSettings: Settings = {
     followUpBehavior: "steer",
   },
   sessionSummary: { projectExpanded: true, serverExpanded: true },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
+  appearance: {
+    fontSize: 14,
+    mono: "",
+    sans: "",
+    terminal: "",
+    tabLayout: "horizontal",
+    verticalTabPosition: "bottom",
+  },
   keybinds: {},
   permissions: { autoApprove: false },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -390,6 +399,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
           setStore("appearance", "terminal", value.trim() ? value : "")
         },
         tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
+        verticalTabPosition: withFallback(
+          () => store.appearance?.verticalTabPosition,
+          defaultSettings.appearance.verticalTabPosition,
+        ),
+        setVerticalTabPosition(value: VerticalTabPosition) {
+          setStore("appearance", "verticalTabPosition", value)
+        },
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
         },
