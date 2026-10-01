@@ -12,10 +12,12 @@ import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import { LocaleLinks } from "../../component/locale-links"
+import { NotFoundMeta } from "../../component/not-found-meta"
 import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
 import { localizedUrl } from "../../lib/language"
 import {
+  catalogModelPath,
   catalogSlug,
   findModelCatalogLab,
   formatCatalogLabName,
@@ -124,24 +126,29 @@ export default function StatsLab() {
 
   return (
     <main data-page="stats" data-theme={themePreference()}>
-      <Title>{labTitle()}</Title>
-      <Meta name="description" content={labDescription()} />
-      <LocaleLinks path={labPath()} />
-      <Meta property="og:type" content="website" />
-      <Meta property="og:site_name" content="OpenCode" />
-      <Meta property="og:title" content={labTitle()} />
-      <Meta property="og:description" content={labDescription()} />
-      <Meta property="og:url" content={labUrl()} />
-      <Meta property="og:image" content={statsUnfurlUrl} />
-      <Meta property="og:image:type" content="image/png" />
-      <Meta property="og:image:width" content="1200" />
-      <Meta property="og:image:height" content="630" />
-      <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
-      <Meta name="twitter:card" content="summary_large_image" />
-      <Meta name="twitter:title" content={labTitle()} />
-      <Meta name="twitter:description" content={labDescription()} />
-      <Meta name="twitter:image" content={statsUnfurlUrl} />
-      <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+      {/* Server-rendered head tags are never removed, so render them once data has loaded. */}
+      <Show when={page()}>
+        <Title>{labTitle()}</Title>
+        <Meta name="description" content={labDescription()} />
+        <Show when={lab()} fallback={<NotFoundMeta unavailable={page()?.labs.length === 0} />}>
+          <LocaleLinks path={labPath()} />
+          <Meta property="og:type" content="website" />
+          <Meta property="og:site_name" content="OpenCode" />
+          <Meta property="og:title" content={labTitle()} />
+          <Meta property="og:description" content={labDescription()} />
+          <Meta property="og:url" content={labUrl()} />
+          <Meta property="og:image" content={statsUnfurlUrl} />
+          <Meta property="og:image:type" content="image/png" />
+          <Meta property="og:image:width" content="1200" />
+          <Meta property="og:image:height" content="630" />
+          <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
+          <Meta name="twitter:card" content="summary_large_image" />
+          <Meta name="twitter:title" content={labTitle()} />
+          <Meta name="twitter:description" content={labDescription()} />
+          <Meta name="twitter:image" content={statsUnfurlUrl} />
+          <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+        </Show>
+      </Show>
       <Header
         githubStars={githubStars() ?? githubLink.fallbackStars}
         links={labHeaderLinks()}
@@ -595,7 +602,7 @@ function LabModelRow(props: {
   return (
     <a
       data-component="lab-model-row"
-      href={language.route(`${import.meta.env.BASE_URL}${props.model.id}`)}
+      href={language.route(catalogModelPath(props.model))}
       role="row"
       aria-label={props.model.name}
       onBlur={() => props.onTooltipChange(undefined)}

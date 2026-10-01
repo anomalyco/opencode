@@ -48,6 +48,7 @@ import {
 } from "../lib/comparison-pages"
 import { baseUrl } from "../lib/language"
 import { runStatsEffect } from "../stats-runtime"
+import { NotFoundMeta } from "./not-found-meta"
 
 const compareHeaderLinks: readonly HeaderLink[] = [
   { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
@@ -235,20 +236,28 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
 
   return (
     <main data-page="stats" data-layout="compare-detail" data-theme={themePreference()}>
-      <Show when={catalog() !== undefined}>
+      {/* Server-rendered head tags are never removed, so render them once all data has loaded. */}
+      <Show when={catalog() !== undefined && stats() !== undefined}>
         <Title>{title()}</Title>
         <Meta name="description" content={description()} />
-        <Meta name="robots" content={models().length > 2 ? "noindex,follow" : "index,follow"} />
-        <Link rel="canonical" href={canonicalUrl()} />
-        <Meta property="og:type" content="website" />
-        <Meta property="og:site_name" content="OpenCode" />
-        <Meta property="og:title" content={title()} />
-        <Meta property="og:description" content={description()} />
-        <Meta property="og:url" content={canonicalUrl()} />
-        <Meta name="twitter:card" content="summary" />
-        <Meta name="twitter:title" content={title()} />
-        <Meta name="twitter:description" content={description()} />
-        <script type="application/ld+json">{structuredData()}</script>
+        <Show
+          when={models()
+            .slice(0, 2)
+            .every((model) => model.catalog || model.stats)}
+          fallback={<NotFoundMeta unavailable={catalog()?.models.length === 0} />}
+        >
+          <Meta name="robots" content={models().length > 2 ? "noindex,follow" : "index,follow"} />
+          <Link rel="canonical" href={canonicalUrl()} />
+          <Meta property="og:type" content="website" />
+          <Meta property="og:site_name" content="OpenCode" />
+          <Meta property="og:title" content={title()} />
+          <Meta property="og:description" content={description()} />
+          <Meta property="og:url" content={canonicalUrl()} />
+          <Meta name="twitter:card" content="summary" />
+          <Meta name="twitter:title" content={title()} />
+          <Meta name="twitter:description" content={description()} />
+          <script type="application/ld+json">{structuredData()}</script>
+        </Show>
       </Show>
       <Header
         githubStars={githubStars() ?? githubLink.fallbackStars}

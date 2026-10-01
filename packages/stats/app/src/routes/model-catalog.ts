@@ -91,6 +91,10 @@ export function findModelCatalogLab(catalog: ModelCatalog, lab: string) {
   return catalog.labs.find((entry) => entry.id === id)
 }
 
+export function catalogModelPath(entry: Pick<ModelCatalogEntry, "lab" | "slug">) {
+  return `/data/${entry.lab}/${entry.slug}`
+}
+
 export function formatCatalogLabName(lab: string) {
   const known: Record<string, string> = {
     alibaba: "Alibaba",

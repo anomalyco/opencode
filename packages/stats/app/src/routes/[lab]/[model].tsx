@@ -14,10 +14,12 @@ import { createAsync, query, useParams } from "@solidjs/router"
 import { createMemo, createSignal, createUniqueId, For, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
 import { LocaleLinks } from "../../component/locale-links"
+import { NotFoundMeta } from "../../component/not-found-meta"
 import { useI18n } from "../../context/i18n"
 import { useLanguage } from "../../context/language"
 import { localizedUrl } from "../../lib/language"
 import {
+  catalogModelPath,
   findModelCatalogEntry,
   formatCatalogLabName,
   isKnownCatalogLab,
@@ -47,7 +49,7 @@ import {
 } from "../stats-shell"
 
 const statsUnfurlPath = "banner.png"
-const glmFlashCatalogId = "zhipuai/glm-5.3-flash"
+const glmFlashPath = "/data/zhipuai/glm-5-3-flash"
 const glmFlashModel = "glm-5.3-flash"
 const shortMonths = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"] as const
 
@@ -110,10 +112,10 @@ export default function StatsModel() {
   const modelTitle = createMemo(() => i18n.t("model.title", { model: searchModelName() }))
   const modelDescription = createMemo(() => i18n.t("model.description", { model: searchModelName() }))
   const modelPath = createMemo(() => {
-    const fallback = formerName()
-      ? glmFlashCatalogId
-      : [labParam(), stats()?.slug ?? canonicalModel()].filter((part) => part.length > 0).join("/")
-    return `/data/${catalogEntry()?.id ?? fallback}`
+    const entry = catalogEntry()
+    if (entry) return catalogModelPath(entry)
+    if (formerName()) return glmFlashPath
+    return `/data/${providerSlug(labParam())}/${stats()?.slug ?? providerSlug(canonicalModel())}`
   })
   const modelUrl = createMemo(() => localizedUrl(language.locale(), modelPath()))
   const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
@@ -152,24 +154,32 @@ export default function StatsModel() {
 
   return (
     <main data-page="stats" data-theme={themePreference()}>
-      <Title>{modelTitle()}</Title>
-      <Meta name="description" content={modelDescription()} />
-      <LocaleLinks path={modelPath()} />
-      <Meta property="og:type" content="website" />
-      <Meta property="og:site_name" content="OpenCode" />
-      <Meta property="og:title" content={modelTitle()} />
-      <Meta property="og:description" content={modelDescription()} />
-      <Meta property="og:url" content={modelUrl()} />
-      <Meta property="og:image" content={statsUnfurlUrl} />
-      <Meta property="og:image:type" content="image/png" />
-      <Meta property="og:image:width" content="1200" />
-      <Meta property="og:image:height" content="630" />
-      <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
-      <Meta name="twitter:card" content="summary_large_image" />
-      <Meta name="twitter:title" content={modelTitle()} />
-      <Meta name="twitter:description" content={modelDescription()} />
-      <Meta name="twitter:image" content={statsUnfurlUrl} />
-      <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+      {/* Server-rendered head tags are never removed, so render them once data has loaded. */}
+      <Show when={page()}>
+        <Title>{modelTitle()}</Title>
+        <Meta name="description" content={modelDescription()} />
+        <Show
+          when={catalogEntry() || stats()}
+          fallback={<NotFoundMeta unavailable={page()?.catalog.labs.length === 0} />}
+        >
+          <LocaleLinks path={modelPath()} />
+          <Meta property="og:type" content="website" />
+          <Meta property="og:site_name" content="OpenCode" />
+          <Meta property="og:title" content={modelTitle()} />
+          <Meta property="og:description" content={modelDescription()} />
+          <Meta property="og:url" content={modelUrl()} />
+          <Meta property="og:image" content={statsUnfurlUrl} />
+          <Meta property="og:image:type" content="image/png" />
+          <Meta property="og:image:width" content="1200" />
+          <Meta property="og:image:height" content="630" />
+          <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
+          <Meta name="twitter:card" content="summary_large_image" />
+          <Meta name="twitter:title" content={modelTitle()} />
+          <Meta name="twitter:description" content={modelDescription()} />
+          <Meta name="twitter:image" content={statsUnfurlUrl} />
+          <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+        </Show>
+      </Show>
       <Header
         githubStars={githubStars() ?? githubLink.fallbackStars}
         links={modelHeaderLinks()}
@@ -325,7 +335,7 @@ function ModelHero(props: {
             current
             label={modelName()}
             options={labModels().map((model) => ({
-              href: language.route(`${import.meta.env.BASE_URL}${model.id}`),
+              href: language.route(catalogModelPath(model)),
               label: model.name,
               value: model.id,
             }))}

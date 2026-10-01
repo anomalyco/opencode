@@ -124,24 +124,27 @@ export default function StatsHome() {
 
   return (
     <main data-page="stats" data-theme={themePreference()}>
-      <Title>{i18n.t("app.title")}</Title>
-      <Meta name="description" content={i18n.t("app.description")} />
-      <LocaleLinks path="/data/" />
-      <Meta property="og:type" content="website" />
-      <Meta property="og:site_name" content="OpenCode" />
-      <Meta property="og:title" content={i18n.t("app.title")} />
-      <Meta property="og:description" content={i18n.t("app.description")} />
-      <Meta property="og:url" content={statsHomeUrl} />
-      <Meta property="og:image" content={statsUnfurlUrl} />
-      <Meta property="og:image:type" content="image/jpeg" />
-      <Meta property="og:image:width" content="1200" />
-      <Meta property="og:image:height" content="630" />
-      <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
-      <Meta name="twitter:card" content="summary_large_image" />
-      <Meta name="twitter:title" content={i18n.t("app.title")} />
-      <Meta name="twitter:description" content={i18n.t("app.description")} />
-      <Meta name="twitter:image" content={statsUnfurlUrl} />
-      <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+      {/* Server-rendered head tags are never removed, so render them once data has loaded. */}
+      <Show when={data()}>
+        <Title>{i18n.t("app.title")}</Title>
+        <Meta name="description" content={i18n.t("app.description")} />
+        <LocaleLinks path="/data/" />
+        <Meta property="og:type" content="website" />
+        <Meta property="og:site_name" content="OpenCode" />
+        <Meta property="og:title" content={i18n.t("app.title")} />
+        <Meta property="og:description" content={i18n.t("app.description")} />
+        <Meta property="og:url" content={statsHomeUrl} />
+        <Meta property="og:image" content={statsUnfurlUrl} />
+        <Meta property="og:image:type" content="image/jpeg" />
+        <Meta property="og:image:width" content="1200" />
+        <Meta property="og:image:height" content="630" />
+        <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
+        <Meta name="twitter:card" content="summary_large_image" />
+        <Meta name="twitter:title" content={i18n.t("app.title")} />
+        <Meta name="twitter:description" content={i18n.t("app.description")} />
+        <Meta name="twitter:image" content={statsUnfurlUrl} />
+        <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+      </Show>
       <Header githubStars={githubStars() ?? githubLink.fallbackStars} />
       <div data-component="container">
         <div data-component="content">
