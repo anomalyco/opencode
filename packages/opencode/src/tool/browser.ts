@@ -421,13 +421,29 @@ async function elementCenter(browser: Browser, selector: string) {
   return point
 }
 
+async function captureScreenshot(browser: Browser, fullPage: boolean) {
+  try {
+    return await page<{ data: string }>(browser, "Page.captureScreenshot", {
+      format: "jpeg",
+      quality: 80,
+      fromSurface: true,
+      captureBeyondViewport: fullPage,
+    })
+  } catch (error) {
+    // A tab whose view is not composited (e.g. hidden on Windows) has no
+    // surface to capture; fall back to the renderer and drop the viewport flag.
+    if (!(error instanceof Error) || !error.message.includes("visible")) throw error
+    return page<{ data: string }>(browser, "Page.captureScreenshot", {
+      format: "jpeg",
+      quality: 80,
+      fromSurface: false,
+      captureBeyondViewport: false,
+    })
+  }
+}
+
 async function screenshot(browser: Browser, note: string, fullPage = false): Promise<Tool.ExecuteResult> {
-  const shot = await page<{ data: string }>(browser, "Page.captureScreenshot", {
-    format: "jpeg",
-    quality: 80,
-    fromSurface: true,
-    captureBeyondViewport: fullPage,
-  })
+  const shot = await captureScreenshot(browser, fullPage)
   const info = await evaluate<{ url: string; title: string }>(
     browser,
     "({ url: location.href, title: document.title })",
