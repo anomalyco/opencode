@@ -34,7 +34,7 @@ import type { ACPConnection } from "./connection"
 import { promptContentToParts } from "./content"
 import { ACPElicitation } from "./elicitation"
 import { ACPError } from "./error"
-import { replyPermission } from "./permission"
+import { ACPPermission } from "./permission"
 import { ACPPromise } from "./promise"
 import type { ACPSessions, Attached } from "./sessions"
 import { ACPTranslate } from "./translate"
@@ -80,7 +80,7 @@ type Subscription = {
   readonly scope: Scope.Closeable
   readonly events: Queue.Dequeue<OpenCodeEvent, unknown>
   /** Runs permission replies one at a time in ask order, without holding back the rest of the stream. */
-  readonly permissions: Queue.Queue<Effect.Effect<void>>
+  readonly permissions: Queue.Queue<Effect.Effect<void, ACPError.Error | RequestError>>
   /** Completed when the turn is cancelled; pending and later asks are then rejected. */
   readonly cancelled: Deferred.Deferred<void>
 }
@@ -88,8 +88,6 @@ type Subscription = {
 export const make = Effect.fnUntraced(function* (input: {
   readonly client: OpenCodeClient
   readonly connection: ACPConnection.Interface
-  /** Permission asks still run through the promise view. */
-  readonly permissions: ACPConnection.Connection
   readonly sessions: ACPSessions.Interface
   readonly catalog: ACPCatalog.Interface
   readonly capabilities: Ref.Ref<{ readonly childSessionUpdates: boolean; readonly formElicitation: boolean }>
@@ -107,10 +105,17 @@ export const make = Effect.fnUntraced(function* (input: {
         Stream.toQueue({ capacity: "unbounded" }),
         Scope.provide(subscriptionScope),
       ),
-      permissions: yield* Queue.unbounded<Effect.Effect<void>>(),
+      permissions: yield* Queue.unbounded<Effect.Effect<void, ACPError.Error | RequestError>>(),
       cancelled: yield* Deferred.make<void>(),
     }
-    yield* Queue.take(subscription.permissions).pipe(Effect.flatten, Effect.forever, Effect.forkIn(subscriptionScope))
+    yield* Queue.take(subscription.permissions).pipe(
+      Effect.flatten,
+      Effect.catchCause((cause) =>
+        Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP permission reply failed", cause),
+      ),
+      Effect.forever,
+      Effect.forkIn(subscriptionScope),
+    )
     return subscription
   })
 
@@ -128,25 +133,20 @@ export const make = Effect.fnUntraced(function* (input: {
     yield* Deferred.await(settled)
   })
 
-  // Interruption cancels the client's permission request; the server still gets the resulting rejection.
   const reply = (subscription: Subscription, ctx: ACPTranslate.Context, ask: PermissionAsk) =>
-    Effect.callback<void>((resume, signal) => {
-      const replied = replyPermission({
+    ACPPermission.reply(
+      {
         client: input.client,
-        connection: input.permissions,
+        connection: input.connection,
         event: ask.event,
         sessionID: ask.event.data.sessionID,
         clientSessionID: ctx.sessionID,
         cwd: ctx.cwd,
         tool: ask.tool,
-        signal,
         ...(ask.child ? { toolCallPrefix: ask.child.id, titlePrefix: ask.child.title } : {}),
-      }).then(
-        () => resume(Effect.void),
-        (cause) => resume(Effect.logWarning("ACP permission reply failed", cause)),
-      )
-      return Effect.promise(() => replied)
-    }).pipe(Effect.raceFirst(Deferred.await(subscription.cancelled)))
+      },
+      Deferred.await(subscription.cancelled),
+    )
 
   const interpret = (subscription: Subscription, ctx: ACPTranslate.Context, output: ACPTranslate.Output) => {
     switch (output._tag) {
