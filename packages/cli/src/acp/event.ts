@@ -44,11 +44,19 @@ export type TurnStart =
 export const ChildSessionUpdatesCapability = "opencode/child-session-updates"
 export const ChildSessionUpdateMethod = "opencode/session/child_update"
 const RetryMeta = "opencode/retry"
+const CompactionMeta = "opencode/compaction"
 
 type RetryStatus = {
   readonly attempt: number
   readonly nextRetryAt: string
   readonly error: SessionStructuredError
+}
+
+type CompactionMarker = {
+  readonly status: "started" | "completed" | "failed"
+  readonly messageId: string
+  readonly reason: "auto" | "manual"
+  readonly error?: { readonly type: string; readonly message: string }
 }
 
 type ChildSessionUpdateBase = {
@@ -108,6 +116,7 @@ export async function streamTurn(input: {
   let usage: { readonly turn: TokenUsageInfo; readonly last: TokenUsageInfo } | undefined
   const tools = new Map<string, ToolState>()
   const retries = new Map<string, RetryStatus>()
+  const compactions = new Map<string, string>()
   const children = new Map<string, ChildSession>()
   const openChildren = new Set<string>()
   let handedOff = false
@@ -226,6 +235,32 @@ export async function streamTurn(input: {
         }
         retries.set(eventSessionID, retry)
         await send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: retry } })
+        continue
+      }
+      // Message IDs follow the compaction message projection, so live markers match replayed ones.
+      if (event.type === "session.compaction.started") {
+        const messageId = event.data.inputID ?? messageIDFromEvent(event.id)
+        compactions.set(eventSessionID, messageId)
+        await send(compactionUpdate({ status: "started", messageId, reason: event.data.reason }))
+        continue
+      }
+      if (event.type === "session.compaction.ended") {
+        const messageId = compactions.get(eventSessionID) ?? messageIDFromEvent(event.id)
+        compactions.delete(eventSessionID)
+        await send(compactionUpdate({ status: "completed", messageId, reason: event.data.reason }))
+        continue
+      }
+      if (event.type === "session.compaction.failed") {
+        const messageId = compactions.get(eventSessionID) ?? event.data.inputID ?? messageIDFromEvent(event.id)
+        compactions.delete(eventSessionID)
+        await send(
+          compactionUpdate({
+            status: "failed",
+            messageId,
+            reason: event.data.reason,
+            error: { type: event.data.error.type, message: event.data.error.message },
+          }),
+        )
         continue
       }
       if (event.type === "session.text.delta") {
@@ -435,6 +470,14 @@ function toolKey(sessionID: string, id: string) {
   return `${sessionID}:${id}`
 }
 
+function messageIDFromEvent(eventID: string) {
+  return eventID.replace(/^evt_/, "msg_")
+}
+
+function compactionUpdate(marker: CompactionMarker): SessionUpdate {
+  return { sessionUpdate: "session_info_update", _meta: { [CompactionMeta]: marker } }
+}
+
 function projectChildUpdate(update: SessionUpdate, child: ChildSession) {
   const projected = { ...update }
   projected._meta = {
@@ -489,6 +532,19 @@ async function replayMessage(
         update: { sessionUpdate: "user_message_chunk", messageId: message.id, ...chunk },
       })
     }
+    return
+  }
+  // A running compaction has no live turn on this connection to settle it, so replay only settled ones.
+  if (message.type === "compaction" && message.status !== "running") {
+    await connection.sessionUpdate({
+      sessionId: sessionID,
+      update: compactionUpdate({
+        status: message.status,
+        messageId: message.id,
+        reason: message.reason,
+        ...(message.status === "failed" ? { error: { type: message.error.type, message: message.error.message } } : {}),
+      }),
+    })
     return
   }
   if (message.type !== "assistant") return
