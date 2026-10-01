@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { AIError, HttpContext, InvalidRequestError, TransportError } from "@opencode/ai"
+import { AIError, HttpContext, InvalidProviderOutputError, InvalidRequestError, TransportError } from "@opencode/ai"
 import type {
   ChannelObservation,
   WebSocketChannelExchange,
@@ -634,6 +634,50 @@ describe("SessionModelTransport", () => {
     )
   })
 
+  test("keeps the Session on HTTP after repeated idle timeouts", async () => {
+    const sent = queue<void>()
+    let opens = 0
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.gen(function* () {
+          opens++
+          const messages = yield* Queue.unbounded<string | Uint8Array, AIError>()
+          return {
+            sendText: () =>
+              Queue.offer(sent, undefined).pipe(
+                Effect.andThen(opens > 5 ? Queue.offer(messages, "completed") : Effect.void),
+                Effect.asVoid,
+              ),
+            messages: Stream.fromQueue(messages),
+            close: Queue.shutdown(messages).pipe(Effect.asVoid),
+          }
+        }),
+    }
+
+    await runWithTestClock(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session, undefined, 1_000)
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const running = yield* collect(executor, exchange(`attempt-${attempt}`)).pipe(
+            Effect.result,
+            Effect.forkChild({ startImmediately: true }),
+          )
+          yield* Queue.take(sent)
+          yield* TestClock.adjust("1 second")
+          expect(yield* Fiber.join(running)).toMatchObject({
+            _tag: "Failure",
+            failure: { reason: { _tag: "Transport", code: "idle-timeout" } },
+          })
+        }
+
+        expect(yield* collect(executor, exchange("sixth"))).toEqual(["fallback:sixth"])
+        expect(opens).toBe(5)
+      }),
+    )
+  })
+
   test("closes a newly opened connection when request creation is interrupted", async () => {
     const opened = Deferred.makeUnsafe<void>()
     const messages = queue<string | Uint8Array, AIError>()
@@ -761,6 +805,72 @@ describe("SessionModelTransport", () => {
         expect(opens).toBe(5)
         expect(yield* collect(executor, exchange("sixth"))).toEqual(["fallback:sixth"])
         expect(opens).toBe(5)
+      }),
+    )
+  })
+
+  test("keeps the Session on HTTP after repeated response parser failures", async () => {
+    const fixture = automatic()
+    const item = (id: string): WebSocketChannelExchange => ({
+      ...exchange(id),
+      driver: {
+        create: () => Effect.succeed({ message: id, mode: "full" }),
+        observe: () =>
+          Effect.fail(new AIError({ reason: new InvalidProviderOutputError({ message: "Invalid response frame" }) })),
+      },
+    })
+
+    await run(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const result = yield* Effect.result(collect(executor, item(`attempt-${attempt}`)))
+          expect(result._tag).toBe("Failure")
+        }
+        expect(fixture.connections).toHaveLength(5)
+        expect(yield* collect(executor, exchange("sixth"))).toEqual(["fallback:sixth"])
+        expect(fixture.connections).toHaveLength(5)
+      }),
+    )
+  })
+
+  test("does not count interrupted exchanges as stream failures", async () => {
+    const sent = queue<string>()
+    let opens = 0
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.gen(function* () {
+          opens++
+          const messages = yield* Queue.unbounded<string | Uint8Array, AIError>()
+          return {
+            sendText: (message) =>
+              Queue.offer(sent, message).pipe(
+                Effect.andThen(message === "sixth" ? Queue.offer(messages, `completed:${message}`) : Effect.void),
+                Effect.asVoid,
+              ),
+            messages: Stream.fromQueue(messages),
+            close: Queue.shutdown(messages).pipe(Effect.asVoid),
+          }
+        }),
+    }
+
+    await run(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        for (let attempt = 0; attempt < 5; attempt++) {
+          const running = yield* collect(executor, exchange(`attempt-${attempt}`)).pipe(
+            Effect.forkChild({ startImmediately: true }),
+          )
+          expect(yield* Queue.take(sent)).toBe(`attempt-${attempt}`)
+          yield* Fiber.interrupt(running)
+        }
+
+        expect(yield* collect(executor, exchange("sixth"))).toEqual(["completed:sixth"])
+        expect(opens).toBe(6)
       }),
     )
   })

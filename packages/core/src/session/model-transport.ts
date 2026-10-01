@@ -166,6 +166,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
         owner: State,
         channel: Channel,
         error: AIError,
+        countFailure: boolean,
       ) {
         if (owner.channel === channel) owner.channel = undefined
         if (channel.closing) return
@@ -175,16 +176,14 @@ export const makeLayer = (connector: WebSocketConnector) =>
           code: error.reason._tag === "Transport" ? error.reason.code : error.reason._tag,
           active: channel.active !== undefined,
         })
-        if (channel.active) {
-          Queue.failCauseUnsafe(channel.active.queue, Cause.fail(error))
-          yield* streamFailure(owner)
-        }
+        if (channel.active) Queue.failCauseUnsafe(channel.active.queue, Cause.fail(error))
+        if (countFailure) yield* streamFailure(owner)
         yield* metric("protocol_failure")
         yield* channel.connection.close
       })
 
-      // A socket that keeps dying mid-exchange costs a retry every step; after enough consecutive
-      // losses the Session stays on HTTP.
+      // A WebSocket exchange that keeps failing before a terminal event costs a retry every step;
+      // after enough consecutive losses the Session stays on HTTP.
       const streamFailure = Effect.fn("SessionModelTransport.streamFailure")(function* (owner: State) {
         owner.streamFailures++
         if (owner.streamFailures < MAX_STREAM_FAILURES) return
@@ -273,6 +272,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                               ? "rejected"
                               : "ambiguous",
                       }),
+                      channel.active !== undefined,
                     ),
               ),
               Effect.forkIn(scope, { startImmediately: true }),
@@ -441,12 +441,12 @@ export const makeLayer = (connector: WebSocketConnector) =>
           ),
           Stream.takeUntil(observationTerminal),
           Stream.mapEffect(observationFrame),
-          Stream.ensuring(
+          Stream.onExit((exit) =>
             Effect.gen(function* () {
-              if (channel.active === active) channel.active = undefined
               const pending = yield* Queue.size(active.queue)
               yield* Queue.shutdown(active.queue)
               if (terminal && pending === 0) {
+                if (channel.active === active) channel.active = undefined
                 owner.streamFailures = 0
                 yield* metric("terminal", { type: terminal.type })
                 if (terminal.type === "rejected") yield* metric("rejection", { recovery: terminal.recovery })
@@ -456,7 +456,9 @@ export const makeLayer = (connector: WebSocketConnector) =>
                 if (terminal.type !== "completed" && terminal.type !== "incomplete") yield* closeChannel(owner, channel)
                 return
               }
-              yield* metric("cancellation")
+              const failed = exit._tag === "Failure" && !Cause.hasInterruptsOnly(exit.cause)
+              if (channel.active === active) channel.active = undefined
+              if (!failed) yield* metric("cancellation")
               channel.checkpoint = undefined
               channel.pending = undefined
               const error = terminal
@@ -474,7 +476,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
                     phase: "receive",
                     delivery: active.delivery === "provider-observed" ? "accepted" : "ambiguous",
                   })
-              yield* poison(owner, channel, error)
+              yield* poison(owner, channel, error, failed)
             }),
           ),
           Stream.catch((error) => {
