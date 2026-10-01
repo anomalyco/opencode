@@ -546,6 +546,17 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
           yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" })
           return
         }
+        // A `length` finish with no streamed output is a degenerate completion: the provider
+        // reported truncation but delivered nothing. Settling it would look like a successful
+        // empty answer, so fail the Step with a model-visible error the user can act on.
+        if (event.reason.normalized === "length" && !outputStarted) {
+          providerFailed = true
+          yield* failAssistant({
+            type: "provider.incomplete",
+            message: "The model returned no content (finish reason: length)",
+          })
+          return
+        }
         return
       case "finish":
         return

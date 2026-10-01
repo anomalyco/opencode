@@ -5302,6 +5302,26 @@ describe("SessionRunnerLLM", () => {
     expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.ended.1")
   })
 
+  scenario("projects an empty length finish as a visible terminal failure", function* (s) {
+    yield* s.llm.push(TestLLM.complete({ reason: { normalized: "length" } }))
+
+    expect((yield* s.runPrompt("Truncated response").pipe(Effect.flip)).message).toBe(
+      "The model returned no content (finish reason: length)",
+    )
+    expect(yield* s.context).toMatchObject([
+      { type: "user" },
+      {
+        type: "assistant",
+        error: {
+          type: "provider.incomplete",
+          message: "The model returned no content (finish reason: length)",
+        },
+        content: [],
+      },
+    ])
+    expect(yield* recordedEventTypes(sessionID)).not.toContain("session.step.ended.1")
+  })
+
   scenario("settles a local tool before one content-filter step failure", function* (s) {
     yield* s.admit("Tool before blocked response")
     const tools = yield* s.blockTools()

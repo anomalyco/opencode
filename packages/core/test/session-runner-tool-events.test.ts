@@ -667,3 +667,50 @@ test("content-filter finish preserves partial streamed text and never ends the s
     error: { type: "provider.content-filter" },
   })
 })
+
+test("empty length finish fails the step instead of settling it successfully", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: { normalized: "length" } })))
+  await Effect.runPromise(publisher.publishStepFailure())
+
+  expect(publisher.record().failure).toMatchObject({
+    type: "provider.incomplete",
+    message: "The model returned no content (finish reason: length)",
+  })
+  expect(published.some((event) => event.type === "session.step.ended.1")).toBe(false)
+  expect(published.find((event) => event.type === "session.step.failed.1")?.data).toMatchObject({
+    error: { type: "provider.incomplete", message: "The model returned no content (finish reason: length)" },
+  })
+})
+
+test("length finish with streamed text keeps the normal settlement", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(
+    Effect.forEach(
+      [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.textStart({ id: "text" }),
+        LLMEvent.textDelta({ id: "text", text: "Partial" }),
+        LLMEvent.stepFinish({ index: 0, reason: { normalized: "length" } }),
+      ],
+      (event) => publisher.publish(event),
+      { discard: true },
+    ),
+  )
+  await Effect.runPromise(publisher.publishStepFailure())
+
+  expect(publisher.record().failure).toBeUndefined()
+  expect(publisher.record().finish).toMatchObject({ finish: "length" })
+  expect(published.some((event) => event.type === "session.step.failed.1")).toBe(false)
+})
+
+test("length finish with a tool call keeps continuation", async () => {
+  const { publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(publisher.publish(LLMEvent.toolCall({ id: "call-1", name: "echo", input: { text: "hi" } })))
+  await Effect.runPromise(publisher.publish(LLMEvent.stepFinish({ index: 0, reason: { normalized: "length" } })))
+
+  expect(publisher.record().failure).toBeUndefined()
+  expect(publisher.record().needsContinuation).toBe(true)
+})
