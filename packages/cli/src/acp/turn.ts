@@ -1,4 +1,10 @@
-import type { CancelNotification, PromptRequest, PromptResponse, RequestError } from "@agentclientprotocol/sdk"
+import type {
+  CancelNotification,
+  ElicitationSchema,
+  PromptRequest,
+  PromptResponse,
+  RequestError,
+} from "@agentclientprotocol/sdk"
 import {
   isSessionNotFoundError,
   type CommandInfo,
@@ -26,6 +32,7 @@ import { builtinCommands, type ACPCatalog, type Catalog } from "./catalog"
 import { currentModel } from "./config-option"
 import type { ACPConnection } from "./connection"
 import { promptContentToParts } from "./content"
+import { ACPElicitation } from "./elicitation"
 import { ACPError } from "./error"
 import { replyPermission } from "./permission"
 import { ACPPromise } from "./promise"
@@ -66,6 +73,7 @@ type PreparedPrompt = {
 }
 
 type PermissionAsk = Extract<ACPTranslate.Output, { readonly _tag: "PermissionAsk" }>
+type FormAsk = Extract<ACPTranslate.Output, { readonly _tag: "FormAsk" }>
 
 /** A turn's event feed. It moves to the session scope when the turn ends with children still running. */
 type Subscription = {
@@ -84,7 +92,7 @@ export const make = Effect.fnUntraced(function* (input: {
   readonly permissions: ACPConnection.Connection
   readonly sessions: ACPSessions.Interface
   readonly catalog: ACPCatalog.Interface
-  readonly capabilities: Ref.Ref<{ readonly childSessionUpdates: boolean }>
+  readonly capabilities: Ref.Ref<{ readonly childSessionUpdates: boolean; readonly formElicitation: boolean }>
 }) {
   const scope = yield* Effect.scope
   const drainTimeout = yield* CancelDrainTimeout
@@ -150,12 +158,50 @@ export const make = Effect.fnUntraced(function* (input: {
           .pipe(Effect.ignoreCause)
       case "PermissionAsk":
         return Queue.offer(subscription.permissions, reply(subscription, ctx, output)).pipe(Effect.asVoid)
-      case "FormCancel":
-        return Effect.tryPromise(() =>
-          input.client.session.form.cancel({ sessionID: output.sessionID, formID: output.formID }),
-        ).pipe(Effect.catch(() => interruptServer(output.sessionID)))
+      case "FormAsk":
+        return Effect.gen(function* () {
+          const capabilities = yield* Ref.get(input.capabilities)
+          const requestedSchema = capabilities.formElicitation ? ACPElicitation.requestedSchema(output.form) : undefined
+          if (!requestedSchema) return yield* cancelForm(output.form)
+          yield* Queue.offer(subscription.permissions, elicit(subscription, ctx, output, requestedSchema))
+        })
     }
   }
+
+  const cancelForm = (form: ACPElicitation.Form) =>
+    Effect.tryPromise(() => input.client.session.form.cancel({ sessionID: form.sessionID, formID: form.id })).pipe(
+      Effect.catch(() => interruptServer(form.sessionID)),
+    )
+
+  // Anything but an accepted, valid answer cancels the form, including a cancelled turn or connection.
+  const elicit = (
+    subscription: Subscription,
+    ctx: ACPTranslate.Context,
+    ask: FormAsk,
+    requestedSchema: ElicitationSchema,
+  ) =>
+    Effect.gen(function* () {
+      if (yield* Deferred.isDone(subscription.cancelled)) return false
+      const toolCallID = ACPElicitation.toolCallID(ask.form)
+      const response = yield* input.connection.createElicitation({
+        mode: "form",
+        sessionId: ctx.sessionID,
+        ...(toolCallID ? { toolCallId: ask.child ? `${ask.child.id}:${toolCallID}` : toolCallID } : {}),
+        message: ask.child?.title ? `${ask.child.title}: ${ask.form.title}` : ask.form.title,
+        requestedSchema,
+      })
+      const answer = ACPElicitation.answer(ask.form, response)
+      if (!answer) return false
+      yield* ACPPromise.promise(() =>
+        input.client.session.form.reply({ sessionID: ask.form.sessionID, formID: ask.form.id, answer }),
+      )
+      return true
+    }).pipe(
+      Effect.catchCause((cause) => Effect.logWarning("ACP form elicitation failed", cause).pipe(Effect.as(false))),
+      Effect.raceFirst(Deferred.await(subscription.cancelled).pipe(Effect.as(false))),
+      Effect.onInterrupt(() => cancelForm(ask.form)),
+      Effect.flatMap((answered) => (answered ? Effect.void : cancelForm(ask.form))),
+    )
 
   const consume = Effect.fnUntraced(function* (
     subscription: Subscription,

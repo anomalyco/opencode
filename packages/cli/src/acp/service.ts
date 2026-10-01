@@ -73,7 +73,7 @@ export function make(input: {
   readonly connection: ACPConnection.Interface
   readonly catalog: ACPCatalog.Interface
   readonly sessions: ACPSessions.Interface
-  readonly capabilities: Ref.Ref<{ readonly childSessionUpdates: boolean }>
+  readonly capabilities: Ref.Ref<{ readonly childSessionUpdates: boolean; readonly formElicitation: boolean }>
   readonly turn: ACPTurn.Interface
 }): Interface {
   const currentOptions = Effect.fnUntraced(function* (attached: Attached) {
@@ -153,6 +153,7 @@ export function make(input: {
     initialize: Effect.fnUntraced(function* (params) {
       yield* Ref.set(input.capabilities, {
         childSessionUpdates: params.clientCapabilities?._meta?.[ACPTranslate.ChildSessionUpdatesCapability] === true,
+        formElicitation: Boolean(params.clientCapabilities?.elicitation?.form),
       })
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",

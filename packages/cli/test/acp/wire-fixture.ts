@@ -9,6 +9,8 @@ import {
   type AgentRequestResponsesByMethod,
   type AnyMessage,
   type ContentBlock,
+  type CreateElicitationRequest,
+  type CreateElicitationResponse,
   type McpServer,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
@@ -27,6 +29,7 @@ import {
   type SessionMessageInfo,
   type TokenUsageInfo,
 } from "@opencode/client/promise"
+import { Form } from "@opencode/schema/form"
 import type { BunRequest } from "bun"
 import { Duration, Effect, Exit, Logger, Option, Schema, Scope } from "effect"
 import { ACP } from "../../src/acp/agent"
@@ -64,6 +67,7 @@ const ModelBody = Schema.Struct({
 })
 const AgentBody = Schema.Struct({ agent: Schema.String })
 const ReplyBody = Schema.Struct({ decision: Schema.Literals(["once", "always", "reject"]) })
+const FormReplyBody = Schema.Struct({ answer: Form.Answer })
 const McpBody = Schema.Struct({ config: Schema.Unknown })
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
@@ -118,11 +122,22 @@ export type WireOptions = {
     readonly decision: string
   }>
   readonly onFormCancel?: Hook<{ readonly sessionID: string; readonly formID: string }>
+  readonly onFormReply?: Hook<FormReply>
   readonly permission?: (
     request: RequestPermissionRequest,
     signal: AbortSignal,
   ) => RequestPermissionResponse | Promise<RequestPermissionResponse>
+  readonly elicitation?: (
+    request: CreateElicitationRequest,
+    signal: AbortSignal,
+  ) => CreateElicitationResponse | Promise<CreateElicitationResponse>
   readonly cancelDrainTimeout?: Duration.Input
+}
+
+type FormReply = {
+  readonly sessionID: string
+  readonly formID: string
+  readonly answer: typeof FormReplyBody.Type.answer
 }
 
 type CatalogKind = "model" | "default" | "agent" | "command"
@@ -139,6 +154,7 @@ export type InitializeOptions = {
   readonly writeTextFile?: boolean
   readonly childSessionUpdates?: boolean
   readonly terminalAuth?: boolean
+  readonly elicitation?: boolean
 }
 
 export const testModel = {
@@ -369,6 +385,7 @@ export async function startWire(options: WireOptions = {}) {
   const permissions: RequestPermissionRequest[] = []
   const writes: WriteTextFileRequest[] = []
   const childUpdates: ChildUpdate[] = []
+  const elicitations: CreateElicitationRequest[] = []
   // Client handlers record SDK-validated params; responses wait until they have seen every earlier agent message.
   const counts = { sent: 0, handled: 0 }
   const handled = <Value>(list: Value[], value: Value) => {
@@ -403,6 +420,10 @@ export async function startWire(options: WireOptions = {}) {
     .onRequest("session/request_permission", (ctx) => {
       handled(permissions, ctx.params)
       return options.permission?.(ctx.params, ctx.signal) ?? { outcome: { outcome: "cancelled" } }
+    })
+    .onRequest("elicitation/create", (ctx) => {
+      handled(elicitations, ctx.params)
+      return options.elicitation?.(ctx.params, ctx.signal) ?? { action: "cancel" }
     })
     .onRequest("fs/write_text_file", (ctx) => {
       handled(writes, ctx.params)
@@ -459,6 +480,7 @@ export async function startWire(options: WireOptions = {}) {
       protocolVersion: 1,
       clientCapabilities: {
         ...(capabilities.writeTextFile ? { fs: { writeTextFile: true, readTextFile: false } } : {}),
+        ...(capabilities.elicitation ? { elicitation: { form: {} } } : {}),
         _meta: {
           ...(capabilities.childSessionUpdates ? { "opencode/child-session-updates": true } : {}),
           ...(capabilities.terminalAuth ? { "terminal-auth": true } : {}),
@@ -475,6 +497,7 @@ export async function startWire(options: WireOptions = {}) {
     permissions,
     writes,
     childUpdates,
+    elicitations,
     request,
     until,
     initialize,
@@ -534,6 +557,7 @@ function startServer(options: WireOptions, changed: () => void) {
   const interrupts: string[] = []
   const replies: Array<{ readonly sessionID: string; readonly requestID: string; readonly decision: string }> = []
   const cancelledForms: Array<{ readonly sessionID: string; readonly formID: string }> = []
+  const repliedForms: FormReply[] = []
   const mcp: Array<{ readonly name: string; readonly directory?: string; readonly config: unknown }> = []
   const fake = {
     requests,
@@ -549,6 +573,7 @@ function startServer(options: WireOptions, changed: () => void) {
     interrupts,
     replies,
     cancelledForms,
+    repliedForms,
     mcp,
     send(...events: ReadonlyArray<OpenCodeEvent>) {
       events.forEach((event) => {
@@ -769,6 +794,14 @@ function startServer(options: WireOptions, changed: () => void) {
           const form = { sessionID: req.params.sessionID, formID: req.params.formID }
           fake.cancelledForms.push(form)
           await emit(options.onFormCancel?.(form))
+          return noContent()
+        }),
+      },
+      "/api/session/:sessionID/form/:formID/reply": {
+        POST: body(FormReplyBody, async (req, input) => {
+          const reply = { sessionID: req.params.sessionID, formID: req.params.formID, answer: input.answer }
+          fake.repliedForms.push(reply)
+          await emit(options.onFormReply?.(reply))
           return noContent()
         }),
       },

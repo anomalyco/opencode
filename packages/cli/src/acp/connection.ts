@@ -1,6 +1,8 @@
 import {
   methods,
   type AgentConnection,
+  type CreateElicitationRequest,
+  type CreateElicitationResponse,
   type RequestError,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
@@ -17,6 +19,10 @@ export interface Interface {
     method: string,
     params: Record<string, unknown>,
   ) => Effect.Effect<void, ACPError.Error | RequestError>
+  /** Interruption cancels the client's request. */
+  readonly createElicitation: (
+    params: CreateElicitationRequest,
+  ) => Effect.Effect<CreateElicitationResponse, ACPError.Error | RequestError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Connection") {}
@@ -26,6 +32,10 @@ export function make(connection: AgentConnection) {
     sessionUpdate: (params) =>
       ACPPromise.promise(() => connection.client.notify(methods.client.session.update, params)),
     extNotification: (method, params) => ACPPromise.promise(() => connection.client.notify(method, params)),
+    createElicitation: (params) =>
+      ACPPromise.promise((signal) =>
+        connection.client.request(methods.client.elicitation.create, params, { cancellationSignal: signal }),
+      ),
   })
 }
 

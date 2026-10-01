@@ -10,6 +10,7 @@ import { Event } from "@opencode/schema/event"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import { partsToContentChunks, type ReplayPart } from "./content"
+import type { Form } from "./elicitation"
 import { ACPError } from "./error"
 import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate, type ToolInput } from "./tool"
 
@@ -92,7 +93,7 @@ export type Output =
       readonly tool?: Tool
       readonly child?: ChildSession
     }
-  | { readonly _tag: "FormCancel"; readonly sessionID: string; readonly formID: string }
+  | { readonly _tag: "FormAsk"; readonly form: Form; readonly child?: ChildSession }
 
 export type Step = {
   readonly state: TurnState
@@ -150,10 +151,7 @@ export function step(state: TurnState, event: EventSubscribeOutput, ctx: Context
     return { state, outputs: [{ _tag: "PermissionAsk", event, tool, child }] }
   }
   if (event.type === "form.created" && (event.data.form.sessionID === ctx.sessionID || child)) {
-    return {
-      state,
-      outputs: [{ _tag: "FormCancel", sessionID: event.data.form.sessionID, formID: event.data.form.id }],
-    }
+    return { state, outputs: [{ _tag: "FormAsk", form: event.data.form, child }] }
   }
   if (!eventSessionID || (eventSessionID !== ctx.sessionID && !child)) return { state, outputs: [] }
   if (matchesStart(event, ctx.start)) return { state: { ...state, started: true }, outputs: [] }
