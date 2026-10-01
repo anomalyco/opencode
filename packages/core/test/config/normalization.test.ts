@@ -488,6 +488,12 @@ describe("ConfigNormalize", () => {
           models: {
             anthropic: { options: { thinking: { type: "adaptive", blockBinding: false }, effort: "high" } },
             bedrock: { options: { reasoningConfig: { blockBinding: false } } },
+            both: {
+              options: {
+                thinking: { type: "adaptive", blockBinding: false },
+                reasoningConfig: { type: "adaptive", blockBinding: false },
+              },
+            },
             untouched: { options: { thinking: { type: "adaptive" } } },
           },
         },
@@ -501,11 +507,24 @@ describe("ConfigNormalize", () => {
             settings: { thinking: { type: "adaptive" }, effort: "high" },
           },
           bedrock: { compatibility: { supportsThinkingBlockBinding: false }, settings: {} },
+          both: {
+            compatibility: { supportsThinkingBlockBinding: false },
+            settings: { thinking: { type: "adaptive" }, reasoningConfig: { type: "adaptive" } },
+          },
           untouched: { settings: { thinking: { type: "adaptive" } } },
         },
       },
     })
     expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "bedrock", "settings", "reasoningConfig"])
+    expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "both", "settings", "thinking", "blockBinding"])
+    expect(result.encoded.providers).not.toHaveProperty([
+      "gateway",
+      "models",
+      "both",
+      "settings",
+      "reasoningConfig",
+      "blockBinding",
+    ])
     expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "untouched", "compatibility"])
   })
 
