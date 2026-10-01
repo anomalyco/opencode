@@ -46,6 +46,37 @@ describe("acp tools", () => {
     expect(toLocations("read", { path: "/tmp/missing-file-path.ts" })).toEqual([{ path: "/tmp/missing-file-path.ts" }])
   })
 
+  test("extracts file locations from native edit, write, and patch input", () => {
+    expect(toLocations("edit", { path: "/tmp/b.ts", oldString: "a", newString: "b" })).toEqual([{ path: "/tmp/b.ts" }])
+    expect(toLocations("write", { path: "/tmp/c.ts", content: "c" })).toEqual([{ path: "/tmp/c.ts" }])
+    expect(
+      toLocations(
+        "patch",
+        {
+          patchText: [
+            "*** Begin Patch",
+            "*** Add File: src/new.ts",
+            "+export {}",
+            "*** Update File: src/old.ts",
+            "*** Move to: src/moved.ts",
+            "@@",
+            "-a",
+            "+b",
+            "*** Delete File: /abs/gone.ts",
+            "*** End Patch",
+          ].join("\n"),
+        },
+        "/workspace",
+      ),
+    ).toEqual([
+      { path: resolve("/workspace", "src/new.ts") },
+      { path: resolve("/workspace", "src/old.ts") },
+      { path: resolve("/workspace", "src/moved.ts") },
+      { path: "/abs/gone.ts" },
+    ])
+    expect(toLocations("patch", { patchText: "not a patch" }, "/workspace")).toEqual([])
+  })
+
   test("builds completed content with text and image attachments", () => {
     const image = Buffer.from("image-data").toString("base64")
 

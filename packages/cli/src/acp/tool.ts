@@ -1,5 +1,7 @@
 import { isAbsolute, resolve } from "node:path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
+import { Patch } from "@opencode/util/patch"
+import { Result } from "effect"
 import { readDisplayText } from "@opencode/tui/mini/tool"
 
 export type ToolInput = Record<string, unknown>
@@ -47,9 +49,10 @@ export function toLocations(toolName: string, input: ToolInput, cwd?: string): T
       return locationFrom(input.path)
     case "edit":
     case "write":
+      return locationFrom(input.path ?? input.filePath ?? input.filepath)
     case "patch":
     case "apply_patch":
-      return locationFrom(input.filePath ?? input.filepath)
+      return locationFrom(input.filePath ?? input.filepath, patchPaths(input.patchText, cwd))
     case "external_directory":
       return locationFrom(input.filePath ?? input.filepath, input.parentDir, input.directories)
     case "grep":
@@ -189,6 +192,16 @@ function shellWorkdir(input: ToolInput, cwd?: string) {
 function isShell(toolName: string) {
   const tool = toolName.toLocaleLowerCase()
   return tool === "bash" || tool === "shell"
+}
+
+function patchPaths(patchText: unknown, cwd?: string) {
+  const text = stringValue(patchText)
+  if (!text) return []
+  const parsed = Patch.parse(text)
+  if (Result.isFailure(parsed)) return []
+  return parsed.success
+    .flatMap((hunk) => (hunk.type === "update" && hunk.movePath ? [hunk.path, hunk.movePath] : [hunk.path]))
+    .map((path) => (cwd && !isAbsolute(path) ? resolve(cwd, path) : path))
 }
 
 function locationFrom(...values: unknown[]): ToolCallLocation[] {
