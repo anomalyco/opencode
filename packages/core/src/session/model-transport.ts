@@ -21,8 +21,14 @@ import { webSocketConstructor } from "../effect/app-node-platform.js"
 
 const ROTATE_AFTER_MS = 55 * 60 * 1000
 const CONNECT_TIMEOUT = "15 seconds"
-// Reasoning models can stream nothing for several minutes while still working.
-const IDLE_TIMEOUT = "30 minutes"
+/**
+ * Default per-frame idle bound for a channel exchange. Was 5 minutes, which
+ * killed long reasoning and any tool that awaits user input (the Question
+ * tool is the canonical example). Interactive exchanges are now expected to
+ * set `connect.idleTimeoutMs` per provider, but the default stays generous
+ * so the WebSocket survives a normal user think-time.
+ */
+const DEFAULT_IDLE_TIMEOUT = "30 minutes"
 /** Consecutive exchanges lost to the socket before the Session stays on HTTP. */
 const MAX_STREAM_FAILURES = 5
 const events = Metric.counter("opencode_session_websocket_events_total", {
@@ -73,11 +79,7 @@ export interface Interceptor {
 }
 
 export interface Interface {
-  readonly bind: (
-    sessionID: SessionSchema.ID,
-    interceptor?: Interceptor,
-    idleTimeout?: number,
-  ) => WebSocketChannelExecutor
+  readonly bind: (sessionID: SessionSchema.ID, interceptor?: Interceptor) => WebSocketChannelExecutor
   readonly close: (sessionID: SessionSchema.ID) => Effect.Effect<void>
   readonly closeAll: Effect.Effect<void>
 }
@@ -296,7 +298,6 @@ export const makeLayer = (connector: WebSocketConnector) =>
         owner: State,
         input: WebSocketChannelExchange,
         interceptor?: Interceptor,
-        idleTimeout?: number,
       ) {
         if (owner.closed)
           return yield* transportError("Session WebSocket owner is closed", {
@@ -413,9 +414,10 @@ export const makeLayer = (connector: WebSocketConnector) =>
 
         let terminal: ChannelObservation | undefined
         const token = {}
+        const idleTimeoutMs = exchange.connect.idleTimeoutMs
         const frames = Stream.fromQueue(active.queue).pipe(
           Stream.timeoutOrElse({
-            duration: idleTimeout ?? IDLE_TIMEOUT,
+            duration: idleTimeoutMs !== undefined ? `${idleTimeoutMs} millis` : DEFAULT_IDLE_TIMEOUT,
             orElse: () =>
               Stream.fail(
                 transportError("Timed out waiting for WebSocket data", {
@@ -506,11 +508,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
         return { frames, complete, http: channel.connection.http }
       })
 
-      const bind = (
-        sessionID: SessionSchema.ID,
-        interceptor?: Interceptor,
-        idleTimeout?: number,
-      ): WebSocketChannelExecutor => ({
+      const bind = (sessionID: SessionSchema.ID, interceptor?: Interceptor): WebSocketChannelExecutor => ({
         execute: (exchange) => {
           const owner = state(sessionID)
           let execution: WebSocketChannelExecution | undefined
@@ -520,7 +518,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
             },
             frames: Stream.unwrap(
               Effect.acquireRelease(owner.lock.take(1), () => owner.lock.release(1), { interruptible: true }).pipe(
-                Effect.andThen(start(owner, exchange, interceptor, idleTimeout)),
+                Effect.andThen(start(owner, exchange, interceptor)),
                 Effect.tap((started) =>
                   Effect.sync(() => {
                     execution = started

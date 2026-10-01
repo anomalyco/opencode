@@ -22,6 +22,14 @@ export interface WebSocketChannelExchange {
     readonly headers: Headers.Headers
     /** Provider-safe connection age after which the channel executor should reconnect before sending. */
     readonly rotateAfterMs?: number
+    /**
+     * Per-frame idle bound for the exchange. The stream from queue raises
+     * `idle-timeout` when no frame arrives in this window. Defaults to a
+     * longer value than the v1 default to keep interactive tools (Question
+     * tool, long reasoning) from being killed while waiting for user input
+     * or model progress. Providers can lower it if they want strict liveness.
+     */
+    readonly idleTimeoutMs?: number
   }
   readonly fallback: () => Stream.Stream<string, AIError>
   readonly driver: WebSocketChannelDriver
