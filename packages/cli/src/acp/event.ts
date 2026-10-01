@@ -305,6 +305,7 @@ export async function streamTurn(input: {
             input: current.input,
             metadata: event.data.metadata,
             content: event.data.content,
+            cwd: input.cwd,
           }),
         })
         continue
@@ -540,6 +541,7 @@ async function replayMessage(
               input: part.state.input,
               metadata: part.state.metadata,
               content: part.state.content,
+              cwd,
             }),
           },
         })

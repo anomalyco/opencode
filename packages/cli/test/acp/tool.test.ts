@@ -29,11 +29,23 @@ describe("acp tools", () => {
 
   test("extracts file locations from tool input", () => {
     expect(toLocations("read", { path: "/tmp/a.ts" })).toEqual([{ path: "/tmp/a.ts" }])
-    expect(toLocations("edit", { filePath: "/tmp/b.ts" })).toEqual([{ path: "/tmp/b.ts" }])
-    expect(toLocations("write", { filePath: "/tmp/c.ts" })).toEqual([{ path: "/tmp/c.ts" }])
+    expect(toLocations("edit", { path: "/tmp/b.ts", oldString: "a", newString: "b" })).toEqual([{ path: "/tmp/b.ts" }])
+    expect(toLocations("write", { path: "/tmp/c.ts", content: "c" })).toEqual([{ path: "/tmp/c.ts" }])
+    expect(toLocations("read", { filePath: "/tmp/v1.ts" })).toEqual([{ path: "/tmp/v1.ts" }])
+    expect(toLocations("edit", { path: "src/b.ts" }, "/workspace")).toEqual([
+      { path: resolve("/workspace", "src/b.ts") },
+    ])
     expect(toLocations("grep", { path: "/repo/src" })).toEqual([{ path: "/repo/src" }])
     expect(toLocations("glob", { path: "/repo/test" })).toEqual([{ path: "/repo/test" }])
+    expect(toLocations("grep", { pattern: "x", path: "src" }, "/workspace")).toEqual([
+      { path: resolve("/workspace", "src") },
+    ])
+    expect(toLocations("glob", { pattern: "*.ts" }, "/workspace")).toEqual([])
     expect(toLocations("context7_get_library_docs", { path: "/docs" })).toEqual([{ path: "/docs" }])
+    expect(toLocations("external_directory", { filepath: "/tmp/outside/a.ts", parentDir: "/tmp/outside" })).toEqual([
+      { path: "/tmp/outside/a.ts" },
+      { path: "/tmp/outside" },
+    ])
     expect(toLocations("external_directory", { directories: ["/tmp/outside"], patterns: ["/tmp/outside/*"] })).toEqual([
       { path: "/tmp/outside" },
     ])
@@ -46,6 +58,78 @@ describe("acp tools", () => {
     expect(toLocations("read", { path: "/tmp/missing-file-path.ts" })).toEqual([{ path: "/tmp/missing-file-path.ts" }])
   })
 
+  test("extracts patch locations from every hunk in the patch body", () => {
+    const patchText = [
+      "*** Begin Patch",
+      "*** Add File: src/new.ts",
+      "+created",
+      "*** Update File: /abs/old.ts",
+      "*** Move to: src/moved.ts",
+      "@@",
+      "-one",
+      "+two",
+      "*** Update File: src/same.ts",
+      "@@",
+      "-a",
+      "+b",
+      "*** Delete File: src/gone.ts",
+      "*** Update File: src/new.ts",
+      "@@",
+      "-created",
+      "+changed",
+      "*** End Patch",
+    ].join("\n")
+
+    expect(toLocations("patch", { patchText }, "/workspace")).toEqual([
+      { path: resolve("/workspace", "src/new.ts") },
+      { path: "/abs/old.ts" },
+      { path: resolve("/workspace", "src/moved.ts") },
+      { path: resolve("/workspace", "src/same.ts") },
+      { path: resolve("/workspace", "src/gone.ts") },
+    ])
+    expect(toLocations("apply_patch", { patchText }, "/workspace")).toHaveLength(5)
+  })
+
+  test("returns no patch locations when the patch body cannot be parsed", () => {
+    expect(toLocations("patch", { patchText: "*** Update File: src/a.ts\n-a\n+b" }, "/workspace")).toEqual([])
+    expect(toLocations("patch", { patchText: "*** Begin Patch\nnot a hunk\n*** End Patch" }, "/workspace")).toEqual([])
+    expect(toLocations("patch", {}, "/workspace")).toEqual([])
+  })
+
+  test("reports resolved locations on completed and failed updates", () => {
+    const patchText = ["*** Begin Patch", "*** Add File: src/a.ts", "+a", "*** End Patch"].join("\n")
+    expect(
+      completedToolUpdate({
+        toolCallId: "call",
+        toolName: "patch",
+        input: { patchText },
+        content: [{ type: "text", text: "patched" }],
+        cwd: "/workspace",
+      }).locations,
+    ).toEqual([{ path: resolve("/workspace", "src/a.ts") }])
+    expect(
+      completedToolUpdate({
+        toolCallId: "call",
+        toolName: "edit",
+        input: { path: "src/b.ts", oldString: "before", newString: "after" },
+        content: [],
+        cwd: "/workspace",
+      }),
+    ).toMatchObject({
+      locations: [{ path: resolve("/workspace", "src/b.ts") }],
+      content: [{ type: "diff", path: resolve("/workspace", "src/b.ts"), oldText: "before", newText: "after" }],
+    })
+    expect(
+      errorToolUpdate({
+        toolCallId: "call",
+        toolName: "write",
+        input: { path: "src/c.ts", content: "c" },
+        error: "denied",
+        cwd: "/workspace",
+      }).locations,
+    ).toEqual([{ path: resolve("/workspace", "src/c.ts") }])
+  })
+
   test("builds completed content with text and image attachments", () => {
     const image = Buffer.from("image-data").toString("base64")
 
@@ -54,7 +138,7 @@ describe("acp tools", () => {
         toolCallId: "tool-1",
         toolName: "edit",
         input: {
-          filePath: "/tmp/file.ts",
+          path: "/tmp/file.ts",
           oldString: "before",
           newString: "after",
         },
@@ -89,7 +173,7 @@ describe("acp tools", () => {
         toolCallId: "tool-1",
         toolName: "write",
         input: {
-          filePath: "/tmp/file.ts",
+          path: "/tmp/file.ts",
           content: "created",
         },
         content: [{ type: "text", text: "wrote /tmp/file.ts" }],
@@ -149,7 +233,7 @@ describe("acp tools", () => {
         toolName: "edit",
         state: {
           input: {
-            filePath: "/tmp/file.ts",
+            path: "/tmp/file.ts",
             oldString: "before",
             newString: "after",
           },
@@ -161,7 +245,7 @@ describe("acp tools", () => {
       kind: "edit",
       locations: [{ path: "/tmp/file.ts" }],
       rawInput: {
-        filePath: "/tmp/file.ts",
+        path: "/tmp/file.ts",
         oldString: "before",
         newString: "after",
       },
@@ -172,7 +256,7 @@ describe("acp tools", () => {
         toolCallId: "tool-1",
         toolName: "edit",
         input: {
-          filePath: "/tmp/file.ts",
+          path: "/tmp/file.ts",
           oldString: "before",
           newString: "after",
         },
@@ -182,6 +266,7 @@ describe("acp tools", () => {
     ).toEqual({
       toolCallId: "tool-1",
       status: "completed",
+      locations: [{ path: "/tmp/file.ts" }],
       content: [
         {
           type: "content",

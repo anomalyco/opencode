@@ -1,6 +1,8 @@
 import { isAbsolute, resolve } from "node:path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
 import { readDisplayText } from "@opencode/tui/mini/tool"
+import { Patch } from "@opencode/util/patch"
+import { Result } from "effect"
 
 export type ToolInput = Record<string, unknown>
 export type ToolContent = ReadonlyArray<
@@ -44,20 +46,27 @@ export function toLocations(toolName: string, input: ToolInput, cwd?: string): T
       return workdir ? [{ path: workdir }] : []
     }
     case "read":
-      return locationFrom(input.path)
     case "edit":
     case "write":
+      // Sessions migrated from V1 keep their original `filePath` tool inputs.
+      return locationFrom(cwd, input.path ?? input.filePath)
     case "patch":
-    case "apply_patch":
-      return locationFrom(input.filePath ?? input.filepath)
+    case "apply_patch": {
+      const parsed = Patch.parse(stringValue(input.patchText) ?? "")
+      if (Result.isFailure(parsed)) return []
+      return locationFrom(
+        cwd,
+        ...parsed.success.flatMap((hunk) => [hunk.path, hunk.type === "update" ? hunk.movePath : undefined]),
+      )
+    }
     case "external_directory":
-      return locationFrom(input.filePath ?? input.filepath, input.parentDir, input.directories)
+      return locationFrom(cwd, input.filepath, input.parentDir, input.directories)
     case "grep":
     case "glob":
     case "context":
     case "context7_resolve_library_id":
     case "context7_get_library_docs":
-      return locationFrom(input.path)
+      return locationFrom(cwd, input.path)
     default:
       return []
   }
@@ -103,7 +112,9 @@ export function completedToolUpdate(input: {
   readonly input: ToolInput
   readonly content: ToolContent
   readonly metadata?: Readonly<Record<string, unknown>>
+  readonly cwd?: string
 }): ToolCallUpdate {
+  const locations = toLocations(input.toolName, input.input, input.cwd)
   const normalized = toolContent(input.content)
   // Read's model content is a JSON page envelope; show the clean text instead.
   const firstText = input.content.find((part) => part.type === "text")
@@ -115,20 +126,15 @@ export function completedToolUpdate(input: {
       : [{ type: "content" as const, content: { type: "text" as const, text: read } }]
   const oldText = stringValue(input.input.oldString)
   const newText = stringValue(input.input.newString)
+  const path = locations[0]?.path
   const diff: ToolCallContent[] =
-    oldText === undefined || newText === undefined
+    oldText === undefined || newText === undefined || path === undefined
       ? []
-      : [
-          {
-            type: "diff",
-            path: stringValue(input.input.path) ?? stringValue(input.input.filePath) ?? "",
-            oldText,
-            newText,
-          },
-        ]
+      : [{ type: "diff", path, oldText, newText }]
   return {
     toolCallId: input.toolCallId,
     status: "completed",
+    locations,
     content: [...primary, ...diff, ...images],
     rawOutput: {
       ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
@@ -182,8 +188,7 @@ function rawInput(toolName: string, input: ToolInput, cwd?: string): ToolInput {
 
 function shellWorkdir(input: ToolInput, cwd?: string) {
   const explicit = stringValue(input.workdir) ?? stringValue(input.cwd)
-  if (!explicit) return cwd
-  return isAbsolute(explicit) ? explicit : resolve(cwd ?? process.cwd(), explicit)
+  return explicit ? absolutePath(explicit, cwd) : cwd
 }
 
 function isShell(toolName: string) {
@@ -191,18 +196,15 @@ function isShell(toolName: string) {
   return tool === "bash" || tool === "shell"
 }
 
-function locationFrom(...values: unknown[]): ToolCallLocation[] {
+function locationFrom(cwd: string | undefined, ...values: unknown[]): ToolCallLocation[] {
   return Array.from(
-    new Set(
-      values.flatMap((value): string[] => {
-        if (Array.isArray(value))
-          return value.filter((item): item is string => typeof item === "string" && item.length > 0)
-        const path = stringValue(value)
-        return path ? [path] : []
-      }),
-    ),
+    new Set(values.flat().flatMap((value) => (typeof value === "string" && value ? [absolutePath(value, cwd)] : []))),
     (path) => ({ path }),
   )
+}
+
+function absolutePath(path: string, cwd?: string) {
+  return isAbsolute(path) ? path : resolve(cwd ?? process.cwd(), path)
 }
 
 export function stringValue(value: unknown) {

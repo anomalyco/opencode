@@ -317,53 +317,50 @@ describe("acp turn events over the wire", () => {
     expect(acp.server.cancelledForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_question" }])
   })
 
-  test.todo(
-    "reports locations for native edit, write, and patch tools (https://github.com/anomalyco/opencode/issues/49591)",
-    async () => {
-      const patchText = [
-        "*** Begin Patch",
-        "*** Update File: /workspace/src/c.ts",
-        "@@",
-        "-one",
-        "+two",
-        "*** End Patch",
-      ].join("\n")
-      await using acp = await startSession({
-        onPrompt: ({ sessionID, id }) =>
-          turn(
-            sessionID,
-            id,
-            toolStarted(sessionID, "call_edit", "edit"),
-            toolCalled(sessionID, "call_edit", { path: "/workspace/src/a.ts", oldString: "a", newString: "b" }),
-            toolSucceeded(sessionID, "call_edit", {}, "edited"),
-            toolStarted(sessionID, "call_write", "write"),
-            toolCalled(sessionID, "call_write", { path: "/workspace/src/b.ts", content: "b" }),
-            toolSucceeded(sessionID, "call_write", {}, "written"),
-            toolStarted(sessionID, "call_patch", "patch"),
-            toolCalled(sessionID, "call_patch", { patchText }),
-            toolSucceeded(sessionID, "call_patch", {}, "patched"),
-          ),
-      })
+  test("reports locations for native edit, write, and patch tools (https://github.com/anomalyco/opencode/issues/49591)", async () => {
+    const patchText = [
+      "*** Begin Patch",
+      "*** Update File: /workspace/src/c.ts",
+      "@@",
+      "-one",
+      "+two",
+      "*** End Patch",
+    ].join("\n")
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          toolStarted(sessionID, "call_edit", "edit"),
+          toolCalled(sessionID, "call_edit", { path: "/workspace/src/a.ts", oldString: "a", newString: "b" }),
+          toolSucceeded(sessionID, "call_edit", {}, "edited"),
+          toolStarted(sessionID, "call_write", "write"),
+          toolCalled(sessionID, "call_write", { path: "/workspace/src/b.ts", content: "b" }),
+          toolSucceeded(sessionID, "call_write", {}, "written"),
+          toolStarted(sessionID, "call_patch", "patch"),
+          toolCalled(sessionID, "call_patch", { patchText }),
+          toolSucceeded(sessionID, "call_patch", {}, "patched"),
+        ),
+    })
 
-      await acp.prompt(acp.sessionId, "hello")
+    await acp.prompt(acp.sessionId, "hello")
 
-      const locations = turnUpdates(acp.updates)
-        .filter((item) => item.update.sessionUpdate === "tool_call_update")
-        .map((item) => [
-          toolCallID(item),
-          toolStatus(item),
-          "locations" in item.update ? item.update.locations : undefined,
-        ])
-      expect(locations).toEqual([
-        ["call_edit", "in_progress", [{ path: "/workspace/src/a.ts" }]],
-        ["call_edit", "completed", [{ path: "/workspace/src/a.ts" }]],
-        ["call_write", "in_progress", [{ path: "/workspace/src/b.ts" }]],
-        ["call_write", "completed", [{ path: "/workspace/src/b.ts" }]],
-        ["call_patch", "in_progress", [{ path: "/workspace/src/c.ts" }]],
-        ["call_patch", "completed", [{ path: "/workspace/src/c.ts" }]],
+    const locations = turnUpdates(acp.updates)
+      .filter((item) => item.update.sessionUpdate === "tool_call_update")
+      .map((item) => [
+        toolCallID(item),
+        toolStatus(item),
+        "locations" in item.update ? item.update.locations : undefined,
       ])
-    },
-  )
+    expect(locations).toEqual([
+      ["call_edit", "in_progress", [{ path: "/workspace/src/a.ts" }]],
+      ["call_edit", "completed", [{ path: "/workspace/src/a.ts" }]],
+      ["call_write", "in_progress", [{ path: "/workspace/src/b.ts" }]],
+      ["call_write", "completed", [{ path: "/workspace/src/b.ts" }]],
+      ["call_patch", "in_progress", [{ path: "/workspace/src/c.ts" }]],
+      ["call_patch", "completed", [{ path: "/workspace/src/c.ts" }]],
+    ])
+  })
 })
 
 function turnUpdates(updates: readonly SessionNotification[]) {
