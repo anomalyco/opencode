@@ -2,7 +2,6 @@ import { expect, test } from "bun:test"
 import { EmbeddedTerminalRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
-import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Global } from "@opencode/util/global"
 import path from "node:path"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
@@ -216,6 +215,7 @@ test.each(["dismissed", "refreshing"])(
 )
 
 test("SIGHUP clears title and disposes scoped resources once", async () => {
+  await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const titles: string[] = []
   let started!: () => void
@@ -243,7 +243,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: {},
         log: () => {},
-      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
     await ready
     process.emit("SIGHUP")
@@ -259,6 +259,7 @@ test("SIGHUP clears title and disposes scoped resources once", async () => {
 })
 
 test("session lifecycle updates the terminal title and prints the epilogue after cleanup", async () => {
+  await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   let initialTitle!: () => void
   const initialTitleSet = new Promise<void>((resolve) => {
@@ -319,7 +320,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
-      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
 
     await initialTitleSet
@@ -345,6 +346,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
 })
 
 test("session title generated while an untitled session is loading remains visible", async () => {
+  await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const titles: string[] = []
   const setTitle = setup.renderer.setTerminalTitle.bind(setup.renderer)
@@ -393,7 +395,7 @@ test("session title generated while an untitled session is loading remains visib
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy" },
         log: () => {},
-      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
 
     await sessionRequested.promise
@@ -802,6 +804,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
 })
 
 test("session startup prompt is submitted exactly once", async () => {
+  await using state = await tmpdir()
   const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
   const events = createEventStream()
   const cwd = process.cwd()
@@ -855,7 +858,7 @@ test("session startup prompt is submitted exactly once", async () => {
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
         args: { sessionID: "dummy", prompt: "RESUME_READY" },
         log: () => {},
-      }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
 
     await Promise.race([
@@ -1344,6 +1347,7 @@ test("ctrl+c dismisses autocomplete and shell mode before exiting", async () => 
 test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
   "selection copy and pane management respect %s mode in the prompt and terminal pane",
   async (copy) => {
+    await using state = await tmpdir()
     const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
     setup.renderer.start()
     const ready = Promise.withResolvers<void>()
@@ -1426,7 +1430,7 @@ test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
           args: { sessionID: session.id },
           terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
           log: () => {},
-        }).pipe(Effect.provide(AppNodeBuilder.build(Global.node)), Effect.provide(FileSystem.layerNoop({}))),
+        }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
       )
 
       await ready.promise
