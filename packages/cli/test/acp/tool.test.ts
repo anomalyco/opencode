@@ -28,34 +28,33 @@ describe("acp tools", () => {
   })
 
   test("extracts file locations from tool input", () => {
-    expect(toLocations("read", { path: "/tmp/a.ts" })).toEqual([{ path: "/tmp/a.ts" }])
-    expect(toLocations("edit", { path: "/tmp/b.ts", oldString: "a", newString: "b" })).toEqual([{ path: "/tmp/b.ts" }])
-    expect(toLocations("write", { path: "/tmp/c.ts", content: "c" })).toEqual([{ path: "/tmp/c.ts" }])
-    expect(toLocations("read", { filePath: "/tmp/v1.ts" })).toEqual([{ path: "/tmp/v1.ts" }])
+    expect(toLocations("read", { path: "/tmp/a.ts" }, "/workspace")).toEqual([{ path: "/tmp/a.ts" }])
+    expect(toLocations("edit", { path: "/tmp/b.ts", oldString: "a", newString: "b" }, "/workspace")).toEqual([
+      { path: "/tmp/b.ts" },
+    ])
+    expect(toLocations("write", { path: "/tmp/c.ts", content: "c" }, "/workspace")).toEqual([{ path: "/tmp/c.ts" }])
+    expect(toLocations("read", { filePath: "/tmp/v1.ts" }, "/workspace")).toEqual([{ path: "/tmp/v1.ts" }])
     expect(toLocations("edit", { path: "src/b.ts" }, "/workspace")).toEqual([
       { path: resolve("/workspace", "src/b.ts") },
     ])
-    expect(toLocations("grep", { path: "/repo/src" })).toEqual([{ path: "/repo/src" }])
-    expect(toLocations("glob", { path: "/repo/test" })).toEqual([{ path: "/repo/test" }])
+    expect(toLocations("grep", { path: "/repo/src" }, "/workspace")).toEqual([{ path: "/repo/src" }])
+    expect(toLocations("glob", { path: "/repo/test" }, "/workspace")).toEqual([{ path: "/repo/test" }])
     expect(toLocations("grep", { pattern: "x", path: "src" }, "/workspace")).toEqual([
       { path: resolve("/workspace", "src") },
     ])
     expect(toLocations("glob", { pattern: "*.ts" }, "/workspace")).toEqual([])
-    expect(toLocations("context7_get_library_docs", { path: "/docs" })).toEqual([{ path: "/docs" }])
-    expect(toLocations("external_directory", { filepath: "/tmp/outside/a.ts", parentDir: "/tmp/outside" })).toEqual([
-      { path: "/tmp/outside/a.ts" },
-      { path: "/tmp/outside" },
-    ])
-    expect(toLocations("external_directory", { directories: ["/tmp/outside"], patterns: ["/tmp/outside/*"] })).toEqual([
-      { path: "/tmp/outside" },
-    ])
+    expect(toLocations("context7_get_library_docs", { path: "/docs" }, "/workspace")).toEqual([{ path: "/docs" }])
+    expect(
+      toLocations("external_directory", { filepath: "/tmp/outside/a.ts", parentDir: "/tmp/outside" }, "/workspace"),
+    ).toEqual([{ path: "/tmp/outside/a.ts" }])
     expect(toLocations("bash", { cmd: "pwd" }, "/workspace")).toEqual([{ path: "/workspace" }])
     expect(toLocations("bash", { command: "pwd", workdir: "subdir" }, "/workspace")).toEqual([
       { path: resolve("/workspace", "subdir") },
     ])
     expect(toLocations("bash", { command: "pwd", workdir: "/abs/dir" }, "/workspace")).toEqual([{ path: "/abs/dir" }])
-    expect(toLocations("bash", { command: "printf hello" })).toEqual([])
-    expect(toLocations("read", { path: "/tmp/missing-file-path.ts" })).toEqual([{ path: "/tmp/missing-file-path.ts" }])
+    expect(toLocations("read", { path: "/tmp/missing-file-path.ts" }, "/workspace")).toEqual([
+      { path: "/tmp/missing-file-path.ts" },
+    ])
   })
 
   test("extracts patch locations from every hunk in the patch body", () => {
@@ -136,6 +135,7 @@ describe("acp tools", () => {
     expect(
       completedToolUpdate({
         toolCallId: "tool-1",
+        cwd: "/workspace",
         toolName: "edit",
         input: {
           path: "/tmp/file.ts",
@@ -171,6 +171,7 @@ describe("acp tools", () => {
     expect(
       completedToolUpdate({
         toolCallId: "tool-1",
+        cwd: "/workspace",
         toolName: "write",
         input: {
           path: "/tmp/file.ts",
@@ -191,6 +192,7 @@ describe("acp tools", () => {
     expect(
       completedToolUpdate({
         toolCallId: "tool-read",
+        cwd: "/workspace",
         toolName: "read",
         input: { path: "/tmp/file.ts" },
         content: [
@@ -209,6 +211,7 @@ describe("acp tools", () => {
     expect(
       completedToolUpdate({
         toolCallId: "tool-list",
+        cwd: "/workspace",
         toolName: "read",
         input: { path: "/tmp" },
         content: [
@@ -230,6 +233,7 @@ describe("acp tools", () => {
     expect(
       pendingToolCall({
         toolCallId: "tool-1",
+        cwd: "/workspace",
         toolName: "edit",
         state: {
           input: {
@@ -254,6 +258,7 @@ describe("acp tools", () => {
     expect(
       completedToolUpdate({
         toolCallId: "tool-1",
+        cwd: "/workspace",
         toolName: "edit",
         input: {
           path: "/tmp/file.ts",
@@ -289,6 +294,7 @@ describe("acp tools", () => {
     expect(
       runningToolUpdate({
         toolCallId: "call",
+        cwd: "/workspace",
         toolName: "read",
         state: { input: { path: "/tmp/a" } },
         content: [{ type: "text", text: "done" }],
@@ -314,6 +320,7 @@ describe("acp tools", () => {
     expect(
       completedToolUpdate({
         toolCallId: "call",
+        cwd: "/workspace",
         toolName: "read",
         input: {},
         content: [],
@@ -326,6 +333,7 @@ describe("acp tools", () => {
     expect(
       completedToolUpdate({
         toolCallId: "call",
+        cwd: "/workspace",
         toolName: "read",
         input: {},
         content: [],
@@ -337,6 +345,7 @@ describe("acp tools", () => {
     expect(
       completedToolUpdate({
         toolCallId: "call",
+        cwd: "/workspace",
         toolName: "read",
         input: {},
         content: [
@@ -358,6 +367,7 @@ describe("acp tools", () => {
     expect(
       errorToolUpdate({
         toolCallId: "call",
+        cwd: "/workspace",
         toolName: "read",
         input: { path: "/tmp/a" },
         content: [{ type: "text", text: "partial output" }],

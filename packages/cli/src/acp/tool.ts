@@ -38,29 +38,23 @@ export function toToolKind(toolName: string): ToolKind {
   }
 }
 
-export function toLocations(toolName: string, input: ToolInput, cwd?: string): ToolCallLocation[] {
+export function toLocations(toolName: string, input: ToolInput, cwd: string): ToolCallLocation[] {
   switch (toolName.toLocaleLowerCase()) {
     case "bash":
-    case "shell": {
-      const workdir = shellWorkdir(input, cwd)
-      return workdir ? [{ path: workdir }] : []
-    }
+    case "shell":
+      return locationFrom(cwd, stringValue(input.workdir) ?? stringValue(input.cwd) ?? cwd)
     case "read":
     case "edit":
     case "write":
-      // Sessions migrated from V1 keep their original `filePath` tool inputs.
-      return locationFrom(cwd, input.path ?? input.filePath)
+      return locationFrom(cwd, filePath(input))
     case "patch":
-    case "apply_patch": {
-      const parsed = Patch.parse(stringValue(input.patchText) ?? "")
-      if (Result.isFailure(parsed)) return []
+    case "apply_patch":
       return locationFrom(
         cwd,
-        ...parsed.success.flatMap((hunk) => [hunk.path, hunk.type === "update" ? hunk.movePath : undefined]),
+        ...patchHunks(input).flatMap((hunk) => [hunk.path, hunk.type === "update" ? hunk.movePath : undefined]),
       )
-    }
     case "external_directory":
-      return locationFrom(cwd, input.filepath, input.parentDir, input.directories)
+      return locationFrom(cwd, input.filepath)
     case "grep":
     case "glob":
     case "context":
@@ -76,7 +70,7 @@ export function pendingToolCall(input: {
   readonly toolCallId: string
   readonly toolName: string
   readonly state: { readonly input: ToolInput; readonly title?: string }
-  readonly cwd?: string
+  readonly cwd: string
 }): ToolCall {
   return {
     toolCallId: input.toolCallId,
@@ -93,7 +87,7 @@ export function runningToolUpdate(input: {
   readonly toolName: string
   readonly state: { readonly input: ToolInput; readonly title?: string }
   readonly content?: ToolContent
-  readonly cwd?: string
+  readonly cwd: string
 }): ToolCallUpdate {
   return {
     toolCallId: input.toolCallId,
@@ -112,9 +106,8 @@ export function completedToolUpdate(input: {
   readonly input: ToolInput
   readonly content: ToolContent
   readonly metadata?: Readonly<Record<string, unknown>>
-  readonly cwd?: string
+  readonly cwd: string
 }): ToolCallUpdate {
-  const locations = toLocations(input.toolName, input.input, input.cwd)
   const normalized = toolContent(input.content)
   // Read's model content is a JSON page envelope; show the clean text instead.
   const firstText = input.content.find((part) => part.type === "text")
@@ -126,15 +119,15 @@ export function completedToolUpdate(input: {
       : [{ type: "content" as const, content: { type: "text" as const, text: read } }]
   const oldText = stringValue(input.input.oldString)
   const newText = stringValue(input.input.newString)
-  const path = locations[0]?.path
+  const path = filePath(input.input)
   const diff: ToolCallContent[] =
     oldText === undefined || newText === undefined || path === undefined
       ? []
-      : [{ type: "diff", path, oldText, newText }]
+      : [{ type: "diff", path: absolutePath(path, input.cwd), oldText, newText }]
   return {
     toolCallId: input.toolCallId,
     status: "completed",
-    locations,
+    locations: toLocations(input.toolName, input.input, input.cwd),
     content: [...primary, ...diff, ...images],
     rawOutput: {
       ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
@@ -149,7 +142,7 @@ export function errorToolUpdate(input: {
   readonly content?: ToolContent
   readonly metadata?: Readonly<Record<string, unknown>>
   readonly error: string
-  readonly cwd?: string
+  readonly cwd: string
 }): ToolCallUpdate {
   return {
     toolCallId: input.toolCallId,
@@ -180,15 +173,9 @@ function toolTitle(toolName: string, input: ToolInput, fallback: string | undefi
   return fallback || toolName
 }
 
-function rawInput(toolName: string, input: ToolInput, cwd?: string): ToolInput {
+function rawInput(toolName: string, input: ToolInput, cwd: string): ToolInput {
   if (!isShell(toolName) || input.cwd || input.workdir) return input
-  const workdir = shellWorkdir(input, cwd)
-  return workdir ? { ...input, cwd: workdir } : input
-}
-
-function shellWorkdir(input: ToolInput, cwd?: string) {
-  const explicit = stringValue(input.workdir) ?? stringValue(input.cwd)
-  return explicit ? absolutePath(explicit, cwd) : cwd
+  return { ...input, cwd }
 }
 
 function isShell(toolName: string) {
@@ -196,15 +183,27 @@ function isShell(toolName: string) {
   return tool === "bash" || tool === "shell"
 }
 
-function locationFrom(cwd: string | undefined, ...values: unknown[]): ToolCallLocation[] {
+function locationFrom(cwd: string, ...values: unknown[]): ToolCallLocation[] {
   return Array.from(
-    new Set(values.flat().flatMap((value) => (typeof value === "string" && value ? [absolutePath(value, cwd)] : []))),
+    new Set(values.flatMap((value) => (typeof value === "string" && value ? [absolutePath(value, cwd)] : []))),
     (path) => ({ path }),
   )
 }
 
-function absolutePath(path: string, cwd?: string) {
-  return isAbsolute(path) ? path : resolve(cwd ?? process.cwd(), path)
+// Sessions migrated from V1 keep their original `filePath` tool inputs.
+export function filePath(input: ToolInput) {
+  return stringValue(input.path) ?? stringValue(input.filePath)
+}
+
+export function patchHunks(input: ToolInput) {
+  const patchText = stringValue(input.patchText)
+  if (!patchText) return []
+  const parsed = Patch.parse(patchText)
+  return Result.isSuccess(parsed) ? parsed.success : []
+}
+
+export function absolutePath(path: string, cwd: string) {
+  return isAbsolute(path) ? path : resolve(cwd, path)
 }
 
 export function stringValue(value: unknown) {
