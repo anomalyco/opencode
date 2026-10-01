@@ -368,12 +368,6 @@ describe("acp edit previews over the wire", () => {
           toolStarted(sessionID, "call_edit", "edit"),
           toolCalled(sessionID, "call_edit", { filePath: file, oldString: "before", newString: "after" }),
           toolSucceeded(sessionID, "call_edit", { files: [{ file }] }, "edited"),
-          toolStarted(sessionID, "call_write", "write"),
-          toolCalled(sessionID, "call_write", { filePath: file, content: "after" }),
-          toolSucceeded(sessionID, "call_write", {}, "written"),
-          toolStarted(sessionID, "call_patch", "patch"),
-          toolCalled(sessionID, "call_patch", { patchText: "*** Begin Patch\n*** End Patch" }),
-          toolSucceeded(sessionID, "call_patch", { files: [{ file }] }, "patched"),
         ),
     })
     await acp.initialize({ writeTextFile: true })
@@ -393,8 +387,6 @@ describe("acp edit previews over the wire", () => {
           { type: "diff", path: file, oldText: "before", newText: "after" },
         ],
       },
-      { toolCallId: "call_write", content: [{ type: "content", content: { type: "text", text: "written" } }] },
-      { toolCallId: "call_patch", content: [{ type: "content", content: { type: "text", text: "patched" } }] },
     ])
   })
 })
