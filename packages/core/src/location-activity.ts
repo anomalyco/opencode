@@ -75,20 +75,18 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
             if (Schema.is(SessionSchema.ID)(sessionID)) clearWait(sessionID, event.data.id)
             return
           }
-          if (!isSessionEvent(event)) return
+          if (!isSessionEvent(event) || event.type === SessionEvent.Viewed.type) return
           const sessionID = event.data.sessionID
-          if (event.type !== SessionEvent.Viewed.type) {
-            if (event.type === SessionEvent.Execution.Started.type || progress.has(sessionID))
-              progress.set(sessionID, clock.currentTimeMillisUnsafe() + timeToLive)
-            // Parentage alone also includes background jobs; only a blocking chain carries progress.
-            for (
-              let child = sessionID, parent = parents.get(child);
-              parent;
-              child = parent, parent = parents.get(child)
-            ) {
-              if (!progress.has(parent) || !(yield* jobs.isBlocking({ id: child, sessionID: parent }))) break
-              progress.set(parent, clock.currentTimeMillisUnsafe() + timeToLive)
-            }
+          if (event.type === SessionEvent.Execution.Started.type || progress.has(sessionID))
+            progress.set(sessionID, clock.currentTimeMillisUnsafe() + timeToLive)
+          // Parentage alone also includes background jobs; only a blocking chain carries progress.
+          for (
+            let child = sessionID, parent = parents.get(child);
+            parent;
+            child = parent, parent = parents.get(child)
+          ) {
+            if (!progress.has(parent) || !(yield* jobs.isBlocking({ id: child, sessionID: parent }))) break
+            progress.set(parent, clock.currentTimeMillisUnsafe() + timeToLive)
           }
           if (
             event.type === SessionEvent.Execution.Succeeded.type ||
@@ -99,8 +97,9 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
             parents.delete(sessionID)
             waits.delete(sessionID)
           }
-          if (!event.durable) return
-          const location = event.location
+          // Automatic cleanup must not renew other pending requests in this location.
+          if (event.type === SessionEvent.Execution.Interrupted.type && event.data.reason === "inactivity") return
+          const location = event.location ?? (yield* sessions.get(sessionID))?.location
           if (location && (yield* RcMap.has(locations.rcMap, location))) yield* touch(location)
         }),
       )
@@ -132,15 +131,21 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         )
         yield* Effect.forEach(
           activeIDs,
-          (sessionID) => {
-            if (!progress.has(sessionID)) progress.set(sessionID, now + timeToLive)
-            const waiting = Array.from(waits.get(sessionID)?.values() ?? []).reduce<number | undefined>(
-              (earliest, wait) => (earliest === undefined || wait < earliest ? wait : earliest),
-              undefined,
-            )
-            if ((waiting ?? progress.get(sessionID) ?? 0) > now) return Effect.void
-            return execution.interrupt(sessionID, { reason: "inactivity" }).pipe(Effect.asVoid)
-          },
+          (sessionID) =>
+            Effect.gen(function* () {
+              if (!progress.has(sessionID)) progress.set(sessionID, now + timeToLive)
+              const session = waits.has(sessionID) ? yield* sessions.get(sessionID) : undefined
+              const waiting = waits.get(sessionID)
+              // Pending input follows location inactivity; other stalled work keeps its own deadline.
+              const deadline = waiting
+                ? Math.max(
+                    Math.min(...waiting.values()),
+                    session ? (entries.get(key(session.location))?.expiresAt ?? 0) : 0,
+                  )
+                : (progress.get(sessionID) ?? 0)
+              if (deadline > now) return
+              yield* execution.interrupt(sessionID, { reason: "inactivity" })
+            }),
           { discard: true, concurrency: "unbounded" },
         )
         const expired = Array.from(entries.values()).filter((entry) => entry.expiresAt <= now)
@@ -151,8 +156,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
             Effect.gen(function* () {
               // Invalidation detaches the graph while borrowers still hold it. Active
               // executions retain their Location until they settle, even after its idle deadline.
-              const currentIDs = yield* execution.active
-              const remaining = yield* Effect.forEach(currentIDs, (sessionID) => sessions.get(sessionID))
+              const remaining = yield* Effect.forEach(yield* execution.active, (sessionID) => sessions.get(sessionID))
               if (remaining.some((session) => session && key(session.location) === key(entry.ref))) return
               if ((entries.get(key(entry.ref))?.expiresAt ?? 0) > now) return
               entries.delete(key(entry.ref))

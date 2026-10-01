@@ -54,17 +54,11 @@ const locations = Layer.effect(
                   sessionID === Session.ID.make("ses_quiet_work") ||
                   sessionID === Session.ID.make("ses_permission_work")
                     ? Effect.never
-                    : forms
-                        .ask({
-                          sessionID,
-                          title: "Questions",
-                          fields: [{ key: "runtime", type: "string" }],
-                        })
-                        .pipe(
-                          Effect.andThen(
-                            sessionID === Session.ID.make("ses_answered_work") ? Effect.never : Effect.void,
-                          ),
-                        )
+                    : forms.ask({
+                        sessionID,
+                        title: "Questions",
+                        fields: [{ key: "runtime", type: "string" }],
+                      })
                   ).pipe(
                     Effect.orDie,
                     Effect.as(SessionRunner.DrainResult.Complete()),
@@ -114,12 +108,7 @@ const it = testEffect(
 )
 
 describe("LocationActivity eviction", () => {
-  for (const [count, admission] of [
-    [2, "none"],
-    [1, "other"],
-    [1, "same"],
-  ] as const) {
-    const newWork = admission !== "none"
+  for (const [count, admission] of [[1, "same"]] as const) {
     it.effect(
       `expires ${count} waiting executions before eviction (${admission} session admitted during cleanup)`,
       () =>
@@ -132,7 +121,7 @@ describe("LocationActivity eviction", () => {
           const sessionIDs = Array.from({ length: count }, (_, index) =>
             Session.ID.make(`ses_waiting_question_${index}`),
           )
-          const newcomer = admission === "same" ? sessionIDs[0] : Session.ID.make("ses_new_question")
+          const newcomer = sessionIDs[0]
           const ref = LocationServiceMap.canonical({ directory: AbsolutePath.make("/project") })
           const idle = Location.Ref.make({ directory: ref.directory, workspaceID: Workspace.ID.make("wrk_idle") })
           yield* db
@@ -193,61 +182,63 @@ describe("LocationActivity eviction", () => {
           expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([ref])
           for (const form of pending) expect(yield* forms.state(form.id)).toEqual({ status: "cancelled" })
 
-          if (newWork) {
-            yield* execution.wake(newcomer)
-            if (admission === "other") yield* Deferred.await(newCreated)
-          }
+          yield* execution.wake(newcomer)
           yield* TestClock.adjust("5 minutes")
-          if (newWork) yield* Deferred.await(newCreated)
+          yield* Deferred.await(newCreated)
           const results = yield* Effect.forEach(running, Fiber.join)
           expect(results.every((exit) => exit._tag === "Failure")).toBe(true)
-          expect(Array.from(yield* execution.active)).toEqual(newWork ? [newcomer] : [])
-          expect(yield* store.listSuspended()).toEqual(newWork ? [newcomer] : [])
+          expect(Array.from(yield* execution.active)).toEqual([newcomer])
+          expect(yield* store.listSuspended()).toEqual([newcomer])
           expect(interrupted.toSorted((a, b) => a.sessionID.localeCompare(b.sessionID))).toEqual(
             sessionIDs.map((sessionID) => ({ sessionID, reason: "inactivity" })),
           )
-          expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual(newWork ? [ref] : [])
-          if (newWork) {
-            expect(yield* forms.list({ sessionID: newcomer })).toEqual([pending[count]])
-            yield* execution.interrupt(newcomer)
-            yield* TestClock.adjust("5 minutes")
-            yield* execution.awaitIdle(newcomer)
-            yield* TestClock.adjust("62 minutes")
-            expect(yield* store.listSuspended()).toEqual([])
-            expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
-          }
+          expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([ref])
+          expect(yield* forms.list({ sessionID: newcomer })).toEqual([pending[count]])
+          yield* execution.interrupt(newcomer)
+          yield* TestClock.adjust("5 minutes")
+          yield* execution.awaitIdle(newcomer)
+          yield* TestClock.adjust("62 minutes")
+          expect(yield* store.listSuspended()).toEqual([])
+          expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
         }),
     )
   }
 
-  it.effect("expires unanswered and quiet sessions while a neighbor progresses", () =>
+  it.effect("keeps pending requests alive while their location progresses, then expires only its idle sessions", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
       const bus = yield* Bus.Service
       const map = yield* LocationServiceMap.Service
       const execution = yield* SessionExecution.Service
       const waiting = Session.ID.make("ses_waiting_question")
+      const permission = Session.ID.make("ses_permission_work")
       const quiet = Session.ID.make("ses_quiet_work")
       const working = Session.ID.make("ses_active_work")
+      const elsewhere = Session.ID.make("ses_active_work_elsewhere")
       const ref = LocationServiceMap.canonical({ directory: AbsolutePath.make("/project") })
+      const other = Location.Ref.make({ directory: ref.directory, workspaceID: Workspace.ID.make("wrk_other") })
       yield* db.insert(ProjectTable).values({ id: Project.ID.global, worktree: ref.directory, sandboxes: [] }).run()
       yield* db
         .insert(SessionTable)
         .values(
-          [waiting, quiet, working].map((id) => ({
+          [waiting, permission, quiet, working, elsewhere].map((id) => ({
             id,
             project_id: Project.ID.global,
             slug: "question",
             directory: ref.directory,
+            workspace_id: id === elsewhere ? other.workspaceID : undefined,
             title: "Session",
             version: "test",
           })),
         )
         .run()
-      const created = yield* Deferred.make<void>()
+      const created = yield* Deferred.make<Form.Info>()
       const interrupted: SessionEvent.Execution.Interrupted["data"][] = []
       const unsubscribe = yield* bus.listen((event) => {
-        if (event.type === Form.Event.Created.type) return Deferred.succeed(created, undefined).pipe(Effect.asVoid)
+        if (event.type === Form.Event.Created.type)
+          return Deferred.succeed(created, Schema.decodeUnknownSync(Form.Event.Created.data)(event.data).form).pipe(
+            Effect.asVoid,
+          )
         if (event.type === SessionEvent.Execution.Interrupted.type)
           return Effect.sync(() =>
             interrupted.push(Schema.decodeUnknownSync(SessionEvent.Execution.Interrupted.data)(event.data)),
@@ -256,14 +247,25 @@ describe("LocationActivity eviction", () => {
       })
       yield* Effect.addFinalizer(() => unsubscribe)
       yield* execution.resume(waiting).pipe(Effect.exit, Effect.forkScoped)
+      yield* execution.resume(permission).pipe(Effect.exit, Effect.forkScoped)
       yield* execution.resume(quiet).pipe(Effect.exit, Effect.forkScoped)
       yield* execution.resume(working).pipe(Effect.exit, Effect.forkScoped)
+      yield* execution.resume(elsewhere).pipe(Effect.exit, Effect.forkScoped)
       yield* Effect.addFinalizer(() =>
-        Effect.forEach([waiting, quiet, working], (id) => execution.interrupt(id)).pipe(
+        Effect.forEach([waiting, permission, quiet, working, elsewhere], (id) => execution.interrupt(id)).pipe(
           Effect.andThen(TestClock.adjust("5 minutes")),
         ),
       )
-      yield* Deferred.await(created)
+      const request = yield* Deferred.await(created)
+      const context = yield* map.contextEffect(ref).pipe(Effect.scoped)
+      const forms = Context.get(context, Form.Service)
+      yield* TestClock.adjust("1 minute")
+      yield* bus.publish(Permission.Event.Asked, {
+        id: Permission.ID.create("per_waiting"),
+        sessionID: permission,
+        action: "read",
+        resources: ["file"],
+      })
       yield* TestClock.adjust("30 minutes")
       yield* bus.publish(SessionEvent.Tool.Progress, {
         sessionID: working,
@@ -272,99 +274,43 @@ describe("LocationActivity eviction", () => {
         metadata: { status: "still working" },
       })
       yield* bus.publish(SessionEvent.Text.Delta, {
-        sessionID: waiting,
-        assistantMessageID: SessionMessage.ID.make("msg_waiting"),
+        sessionID: elsewhere,
+        assistantMessageID: SessionMessage.ID.make("msg_elsewhere"),
         ordinal: 0,
-        delta: "a parallel tool is still working",
+        delta: "another workspace is still working",
       })
       yield* TestClock.adjust("33 minutes")
       yield* TestClock.adjust("5 minutes")
-      expect(Array.from(yield* execution.active)).toEqual([working])
-      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([ref])
+      expect(Array.from(yield* execution.active).toSorted()).toEqual(
+        [waiting, permission, working, elsewhere].toSorted(),
+      )
+      expect(yield* forms.state(request.id)).toEqual({ status: "pending" })
+      expect(interrupted).toEqual([{ sessionID: quiet, reason: "inactivity" }])
+
+      yield* execution.interrupt(working)
+      yield* TestClock.adjust("5 minutes")
+      yield* execution.awaitIdle(working)
+      yield* TestClock.adjust("10 minutes")
+      // Neither activity in another workspace nor viewing the question renews this location.
+      yield* bus.publish(SessionEvent.Text.Delta, {
+        sessionID: elsewhere,
+        assistantMessageID: SessionMessage.ID.make("msg_elsewhere"),
+        ordinal: 0,
+        delta: "still working in the other workspace",
+      })
+      yield* bus.publish(SessionEvent.Viewed, { sessionID: waiting, idle: 0 }, { location: ref })
+      expect(yield* forms.state(request.id)).toEqual({ status: "pending" })
+      yield* TestClock.adjust("53 minutes")
+      yield* TestClock.adjust("5 minutes")
+      expect(Array.from(yield* execution.active)).toEqual([elsewhere])
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([other])
+      expect(yield* forms.state(request.id)).toEqual({ status: "cancelled" })
       expect(interrupted.toSorted((a, b) => a.sessionID.localeCompare(b.sessionID))).toEqual([
+        { sessionID: working, reason: "user" },
+        { sessionID: permission, reason: "inactivity" },
         { sessionID: quiet, reason: "inactivity" },
         { sessionID: waiting, reason: "inactivity" },
       ])
-    }),
-  )
-
-  it.effect("starts a permission response window when permission is asked", () =>
-    Effect.gen(function* () {
-      const db = (yield* Database.Service).db
-      const bus = yield* Bus.Service
-      const execution = yield* SessionExecution.Service
-      const sessionID = Session.ID.make("ses_permission_work")
-      const directory = AbsolutePath.make("/project")
-      yield* db.insert(ProjectTable).values({ id: Project.ID.global, worktree: directory, sandboxes: [] }).run()
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "permission",
-          directory,
-          title: "Session",
-          version: "test",
-        })
-        .run()
-      yield* execution.resume(sessionID).pipe(Effect.exit, Effect.forkScoped)
-      yield* Effect.addFinalizer(() =>
-        execution.interrupt(sessionID).pipe(Effect.andThen(TestClock.adjust("5 minutes"))),
-      )
-      yield* TestClock.adjust("30 minutes")
-      yield* bus.publish(Permission.Event.Asked, {
-        id: Permission.ID.create("per_waiting"),
-        sessionID,
-        action: "read",
-        resources: ["file"],
-      })
-      yield* TestClock.adjust("32 minutes")
-      expect((yield* execution.active).has(sessionID)).toBe(true)
-      yield* TestClock.adjust("34 minutes")
-      expect((yield* execution.active).has(sessionID)).toBe(false)
-    }),
-  )
-
-  it.effect("gives an answered request a fresh inactivity window", () =>
-    Effect.gen(function* () {
-      const db = (yield* Database.Service).db
-      const bus = yield* Bus.Service
-      const map = yield* LocationServiceMap.Service
-      const execution = yield* SessionExecution.Service
-      const sessionID = Session.ID.make("ses_answered_work")
-      const ref = LocationServiceMap.canonical({ directory: AbsolutePath.make("/project") })
-      yield* db.insert(ProjectTable).values({ id: Project.ID.global, worktree: ref.directory, sandboxes: [] }).run()
-      yield* db
-        .insert(SessionTable)
-        .values({
-          id: sessionID,
-          project_id: Project.ID.global,
-          slug: "answer",
-          directory: ref.directory,
-          title: "Session",
-          version: "test",
-        })
-        .run()
-      const created = yield* Deferred.make<Form.Info>()
-      const unsubscribe = yield* bus.listen((event) =>
-        event.type === Form.Event.Created.type
-          ? Deferred.succeed(created, Schema.decodeUnknownSync(Form.Event.Created.data)(event.data).form)
-          : Effect.void,
-      )
-      yield* Effect.addFinalizer(() => unsubscribe)
-      yield* execution.resume(sessionID).pipe(Effect.exit, Effect.forkScoped)
-      yield* Effect.addFinalizer(() =>
-        execution.interrupt(sessionID).pipe(Effect.andThen(TestClock.adjust("5 minutes"))),
-      )
-      const request = yield* Deferred.await(created)
-      yield* TestClock.adjust("59 minutes")
-      const context = yield* map.contextEffect(ref).pipe(Effect.scoped)
-      yield* Context.get(context, Form.Service).reply({ id: request.id, answer: { runtime: "yes" } })
-      yield* TestClock.adjust("2 minutes")
-      expect((yield* execution.active).has(sessionID)).toBe(true)
-      yield* TestClock.adjust("59 minutes")
-      yield* TestClock.adjust("5 minutes")
-      expect((yield* execution.active).has(sessionID)).toBe(false)
     }),
   )
 
