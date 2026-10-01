@@ -410,12 +410,22 @@ export function Prompt(props: PromptProps) {
 
           const recent = store.prompt.input ? undefined : quickUndo.escape()
           if (recent && recent.value.sessionID === props.sessionID) {
+            const sessionID = props.sessionID
             setStore("interrupt", 0)
-            await sdk.client.session.abort({ sessionID: props.sessionID }).catch(() => {})
-            await sdk.client.session.revert({ sessionID: props.sessionID, messageID: recent.messageID })
             ref.set(recent.value.prompt)
             input.focus()
             dialog.clear()
+            // Abort can take seconds to settle, so the prompt is restored before waiting on it.
+            await sdk.client.session.abort({ sessionID }).catch(() => {})
+            await sdk.client.session
+              .revert({ sessionID, messageID: recent.messageID }, { throwOnError: true })
+              .catch((error) => {
+                toast.show({
+                  title: "Failed to undo prompt",
+                  message: errorMessage(error),
+                  variant: "error",
+                })
+              })
             return
           }
 
