@@ -226,6 +226,38 @@ const fragmentFailureLLM = Layer.succeed(
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
 
+let retryReasoningCalls = 0
+const retryReasoningLLM = Layer.mock(LLM.Service, {
+  stream: () => {
+    retryReasoningCalls += 1
+    if (retryReasoningCalls === 1) {
+      return Stream.concat(
+        Stream.make(
+          LLMEvent.stepStart({ index: 0 }),
+          LLMEvent.reasoningStart({ id: "reasoning-before-retry" }),
+          LLMEvent.reasoningDelta({ id: "reasoning-before-retry", text: "before retry" }),
+          LLMEvent.textStart({ id: "text-before-retry" }),
+          LLMEvent.textDelta({ id: "text-before-retry", text: "partial before retry" }),
+        ),
+        Stream.fail(new Error("socket connection was closed unexpectedly")),
+      )
+    }
+    return Stream.make(
+      LLMEvent.stepStart({ index: 0 }),
+      LLMEvent.reasoningStart({ id: "reasoning-after-retry" }),
+      LLMEvent.reasoningDelta({ id: "reasoning-after-retry", text: "after retry" }),
+      LLMEvent.reasoningEnd({ id: "reasoning-after-retry" }),
+      LLMEvent.textStart({ id: "text-1" }),
+      LLMEvent.textDelta({ id: "text-1", text: "done" }),
+      LLMEvent.textEnd({ id: "text-1" }),
+      LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+      LLMEvent.finish({ reason: "stop" }),
+    )
+  },
+})
+const retryReasoningEnv = LayerNode.compile(root, [...replacements, [LLM.node, retryReasoningLLM]])
+const itRetryReasoning = testEffect(retryReasoningEnv)
+
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
   const session = yield* Session.Service
@@ -509,8 +541,57 @@ it.live("session.processor effect tests reset reasoning state across retries", (
         expect(yield* llm.calls).toBe(2)
         expect(reasoning.some((part) => part.text === "two")).toBe(true)
         expect(reasoning.some((part) => part.text === "onetwo")).toBe(false)
+        expect(reasoning.every((part) => part.time.end !== undefined)).toBe(true)
       }),
     { config: (url) => providerCfg(url) },
+  ),
+)
+
+itRetryReasoning.live("session.processor effect tests finalize reasoning from a failed stream before retry", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { processors, session, provider } = yield* boot()
+
+        const chat = yield* session.create({})
+        const parent = yield* user(chat.id, "retry incomplete reasoning")
+        const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+        const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+        const handle = yield* processors.create({
+          assistantMessage: msg,
+          sessionID: chat.id,
+          model: mdl,
+        })
+
+        const value = yield* handle.process({
+          user: {
+            id: parent.id,
+            sessionID: chat.id,
+            role: "user",
+            time: parent.time,
+            agent: parent.agent,
+            model: { providerID: ref.providerID, modelID: ref.modelID },
+          } satisfies SessionV1.User,
+          sessionID: chat.id,
+          model: mdl,
+          agent: agent(),
+          system: [],
+          messages: [{ role: "user", content: "retry incomplete reasoning" }],
+          tools: {},
+        })
+
+        const parts = yield* MessageV2.parts(msg.id)
+        const reasoning = parts.filter((part): part is SessionV1.ReasoningPart => part.type === "reasoning")
+        const text = parts.filter((part): part is SessionV1.TextPart => part.type === "text")
+
+        expect(value).toBe("continue")
+        expect(retryReasoningCalls).toBe(2)
+        expect(reasoning.every((part) => part.time.end !== undefined)).toBe(true)
+        expect(reasoning.map((part) => part.text)).toEqual(["before retry", "after retry"])
+        expect(text.map((part) => part.text)).toEqual(["partial before retry", "done"])
+        expect(text.every((part) => part.time?.end !== undefined)).toBe(true)
+      }),
+    { config: cfg },
   ),
 )
 

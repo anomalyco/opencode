@@ -213,6 +213,14 @@ const layer = Layer.effect(
         delete ctx.reasoningMap[reasoningID]
       })
 
+      const finishCurrentText = Effect.fn("SessionProcessor.finishCurrentText")(function* () {
+        if (!ctx.currentText) return
+        const end = Date.now()
+        ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
+        yield* session.updatePart(ctx.currentText)
+        ctx.currentText = undefined
+      })
+
       const ensureToolCall = Effect.fn("SessionProcessor.ensureToolCall")(function* (input: {
         id: string
         name: string
@@ -566,12 +574,7 @@ const layer = Layer.effect(
           ctx.snapshot = undefined
         }
 
-        if (ctx.currentText) {
-          const end = Date.now()
-          ctx.currentText.time = { start: ctx.currentText.time?.start ?? end, end }
-          yield* session.updatePart(ctx.currentText)
-          ctx.currentText = undefined
-        }
+        yield* finishCurrentText()
 
         for (const part of Object.values(ctx.reasoningMap)) {
           const end = Date.now()
@@ -648,7 +651,9 @@ const layer = Layer.effect(
 
         return yield* Effect.gen(function* () {
           yield* Effect.gen(function* () {
-            ctx.currentText = undefined
+            // Failed streams may omit end events, so persist active parts before clearing retry state.
+            yield* finishCurrentText()
+            yield* Effect.forEach(Object.keys(ctx.reasoningMap), finishReasoning)
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
             const stream = llm.stream(streamInput)
