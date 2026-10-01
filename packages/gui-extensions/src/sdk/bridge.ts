@@ -49,6 +49,8 @@ export interface BridgeLayout {
   readonly background?: readonly [number, number, number, number]
   /** Radius of the bottom corners. */
   readonly radius?: number
+  /** The rounded card's hairline ring, which the corner masks would otherwise paint over. */
+  readonly border?: { readonly color: readonly [number, number, number, number]; readonly width: number }
 }
 
 /** An extension as the extension manager lists it. */

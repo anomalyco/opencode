@@ -51,11 +51,15 @@ export function createEmbeds() {
       )
 
       const background = entry.layout?.background
+      const border = entry.layout?.border
       const scale = screen.getDisplayMatching(entry.window.getBounds()).scaleFactor
-      const key = background && size > 0 ? `${background}:${size}:${scale}` : ""
+      const key =
+        background && size > 0 ? `${background}:${size}:${scale}:${border?.color ?? ""}:${border?.width ?? ""}` : ""
 
       if (background && key && key !== entry.cornerKey)
-        createCornerImages(background, size, scale).forEach((image, index) => entry.corners[index]?.setImage(image))
+        createCornerImages(background, size, scale, border).forEach((image, index) =>
+          entry.corners[index]?.setImage(image),
+        )
       entry.cornerKey = key
       entry.corners.forEach((corner, index) =>
         // A composited layer is required above a WebContentsView; a zero-duration update creates it.
