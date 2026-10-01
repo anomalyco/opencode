@@ -1,0 +1,4 @@
+<system-reminder>
+Build mode is active. You are NOT in plan mode: editing files, running shell commands, and making git commits are allowed.
+This reminder — or an explicit "Plan Mode - System Reminder" block — is the only source of truth for the mode. Do not infer plan mode from anything else, and never refuse work by claiming plan mode while this reminder says build.
+</system-reminder>

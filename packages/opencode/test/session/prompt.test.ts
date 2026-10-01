@@ -1492,7 +1492,21 @@ it.instance("prompt submitted during an active run is included in the next LLM i
     expect(inputs).toHaveLength(2)
     const messages = inputs.at(-1)?.messages
     if (!Array.isArray(messages)) throw new Error("expected LLM messages")
-    expect(messages.at(-1)).toEqual({ role: "user", content: "second" })
+    const lastInput = messages.at(-1) as { role?: string; content?: unknown } | undefined
+    expect(lastInput?.role).toBe("user")
+    // The queued prompt must arrive as the last user message, ahead of everything else in the
+    // request. Build sessions additionally carry a standing mode reminder as a synthetic text
+    // part (#52444), so `content` is either the bare string or a list of text blocks — read it
+    // shape-agnostically instead of pinning one of the two shapes.
+    const content = lastInput?.content
+    const text =
+      typeof content === "string"
+        ? content
+        : Array.isArray(content)
+          ? content.map((block) => (typeof block === "string" ? block : ((block as { text?: string })?.text ?? ""))).join("")
+          : ""
+    expect(text.startsWith("second")).toBe(true)
+    expect(text).not.toContain("first")
   }),
 )
 
