@@ -5,7 +5,6 @@ import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { Directory, Document, type Entry, Info } from "@opencode/schema/config"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
-import { ConfigCompatibilityPlugin } from "@opencode/core/config/plugin/compatibility"
 import { SkillFile } from "@opencode/core/config/plugin/skill-file"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Watcher } from "@opencode/core/filesystem/watcher"
@@ -61,12 +60,7 @@ const startEntries = Effect.fnUntraced(function* (
       reload: service.reload,
     },
   })
-  yield* ConfigCompatibilityPlugin.Plugin.effect(pluginHost).pipe(
-    Effect.provide(Config.testLayer(entries, compatibility)),
-  )
-  yield* ConfigSkillPlugin.Plugin.effect(
-    pluginHost,
-  ).pipe(
+  yield* ConfigSkillPlugin.Plugin.effect(pluginHost).pipe(
     Effect.provide(Config.testLayer(entries, compatibility)),
     Effect.provideService(SkillDiscovery.Service, discovery),
     Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
@@ -391,18 +385,22 @@ describe("ConfigSkillPlugin.Plugin", () => {
     ),
   )
 
-  it.live("follows missing source directories as their parents appear", () =>
+  it.live("follows missing compatibility skill directories as their parents appear", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
         Effect.gen(function* () {
-          const source = path.join(tmp.path, "generated", "skills")
-          const skill = yield* start([source], tmp.path)
+          const root = path.join(tmp.path, "generated")
+          const source = path.join(root, "skills")
+          const skill = yield* startEntries([], tmp.path, tmp.path, emptyDiscovery, {
+            claude: [AbsolutePath.make(root)],
+            agents: [],
+          })
           const watcher = yield* Watcher.Test
           expect(yield* skill.list()).toEqual([])
-          expect(yield* watcher.subscriptions()).toEqual([{ path: path.join(tmp.path, "generated"), type: "file" }])
+          expect(yield* watcher.subscriptions()).toEqual([{ path: root, type: "file" }])
 
-          yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "generated")))
-          yield* emitAndWait({ type: "create", path: path.join(tmp.path, "generated") })
+          yield* Effect.promise(() => fs.mkdir(root))
+          yield* emitAndWait({ type: "create", path: root })
           yield* Effect.promise(async () => {
             await fs.mkdir(path.join(source, "deploy"), { recursive: true })
             await write(source, "deploy", "Deploy")

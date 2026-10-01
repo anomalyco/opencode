@@ -27,7 +27,7 @@ export function latest<K extends keyof Info>(entries: readonly Entry[], key: K):
 export interface Interface {
   /** Returns location config documents and discovery sources from lowest to highest priority. */
   readonly entries: () => Effect.Effect<Entry[]>
-  /** Compatibility roots consumed by internal compatibility plugins. */
+  /** Compatibility roots consumed by the skill config plugin. */
   readonly compatibility?: () => Effect.Effect<{
     readonly claude: readonly AbsolutePath[]
     readonly agents: readonly AbsolutePath[]
@@ -237,8 +237,15 @@ export const layer = (options?: Options) =>
         ]
       })
 
+      const loadCompatibility = Effect.fnUntraced(function* (sources: ConfigDiscovery.Sources) {
+        return yield* Effect.all({
+          claude: Effect.filter(sources.claude, fs.isDir),
+          agents: Effect.filter(sources.agents, fs.isDir),
+        })
+      })
+
       const initial = yield* ConfigDiscovery.discover(options)
-      let sources = initial
+      let compatibility = yield* loadCompatibility(initial)
       let configs = yield* load(initial)
       const updates = yield* PubSub.unbounded<Watcher.Update>()
       const reloads = yield* PubSub.sliding<void>(1)
@@ -266,12 +273,10 @@ export const layer = (options?: Options) =>
         function* () {
           const discovered = yield* ConfigDiscovery.discover(options)
           const next = yield* load(discovered)
+          const nextCompatibility = yield* loadCompatibility(discovered)
           yield* reconcile(discovered)
-          const compatibilityChanged =
-            !isDeepStrictEqual(sources.claude, discovered.claude) ||
-            !isDeepStrictEqual(sources.agents, discovered.agents)
-          if (isDeepStrictEqual(configs, next) && !compatibilityChanged) return
-          sources = discovered
+          if (isDeepStrictEqual(configs, next) && isDeepStrictEqual(compatibility, nextCompatibility)) return
+          compatibility = nextCompatibility
           configs = next
           yield* bus.publish(Event.Updated, {})
         },
@@ -352,11 +357,7 @@ export const layer = (options?: Options) =>
         entries: Effect.fnUntraced(function* () {
           return configs
         }),
-        compatibility: () =>
-          Effect.all({
-            claude: Effect.filter(sources.claude, fs.isDir),
-            agents: Effect.filter(sources.agents, fs.isDir),
-          }),
+        compatibility: () => Effect.succeed(compatibility),
         changes: () => Stream.fromPubSub(updates),
         update,
       })
