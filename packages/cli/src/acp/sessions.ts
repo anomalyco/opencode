@@ -141,7 +141,7 @@ export const make = Effect.fnUntraced(function* (input: {
     fork: Effect.fn("cli.acp.sessions.fork")(function* (attached, effect) {
       const entry = sessions.get(attached.id)
       if (entry?.attached !== attached) return yield* new ACPError.SessionNotFoundError({ sessionId: attached.id })
-      yield* Effect.forkIn(effect, entry.scope)
+      yield* Effect.forkIn(effect, entry.scope, { startImmediately: true })
     }),
   })
 })

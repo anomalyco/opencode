@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { StopReason } from "@agentclientprotocol/sdk"
 import type { OpenCodeEvent } from "@opencode/client/promise"
+import { Schema } from "effect"
 import {
   childCreated,
   delivered,
@@ -14,6 +15,9 @@ import {
   succeeded,
   textDelta,
   tokens,
+  toolCalled,
+  toolFailed,
+  toolStarted,
   turn,
   type Wire,
   type WireOptions,
@@ -319,6 +323,91 @@ describe("acp prompt turns over the wire", () => {
     expect((await acp.prompt(acp.sessionId, "again")).stopReason).toBe("end_turn")
   })
 
+  test("session/cancel forwards the server's wind-down before resolving cancelled", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        toolStarted(sessionID, "call_sleep", "shell"),
+        toolCalled(sessionID, "call_sleep", { command: "sleep 60" }),
+        textDelta(sessionID, "msg_held", "working"),
+      ],
+      onInterrupt: ({ sessionID }) => [
+        toolFailed(sessionID, "call_sleep", { error: { type: "aborted", message: "interrupted" } }),
+        durableEvent("session.step.failed", {
+          sessionID,
+          assistantMessageID: "msg_held",
+          error: { type: "aborted", message: "interrupted" },
+          cost: 0,
+          tokens: { ...tokens(), input: 30, output: 3 },
+        }),
+        interrupted(sessionID),
+      ],
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await admitted(acp, acp.sessionId)
+    await acp.notify("session/cancel", { sessionId: acp.sessionId })
+
+    expect(await prompt).toEqual({
+      stopReason: "cancelled",
+      usage: { inputTokens: 30, outputTokens: 3, totalTokens: 33 },
+      _meta: {},
+    })
+    expect(receivedBeforeResponse(acp)).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ sessionUpdate: "tool_call_update", toolCallId: "call_sleep", status: "failed" }),
+        expect.objectContaining({ sessionUpdate: "usage_update", used: 33 }),
+      ]),
+    )
+    expect(acp.server.interrupts).toEqual([acp.sessionId])
+  })
+
+  test("stops waiting for a wind-down that never ends and fails the tools left running", async () => {
+    await using acp = await startSession({
+      cancelDrainTimeout: "50 millis",
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        toolStarted(sessionID, "call_stuck", "shell"),
+        toolCalled(sessionID, "call_stuck", { command: "sleep 60" }),
+        textDelta(sessionID, "msg_held", "working"),
+      ],
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await admitted(acp, acp.sessionId)
+    await acp.notify("session/cancel", { sessionId: acp.sessionId })
+
+    expect(await prompt).toEqual({ stopReason: "cancelled", _meta: {} })
+    expect(receivedBeforeResponse(acp)).toContainEqual(
+      expect.objectContaining({
+        sessionUpdate: "tool_call_update",
+        toolCallId: "call_stuck",
+        status: "failed",
+        rawOutput: expect.objectContaining({ error: "Cancelled" }),
+      }),
+    )
+  })
+
+  test("session/close interrupts a slash command still running after its prompt ended", async () => {
+    await using acp = await startSession()
+
+    expect((await acp.prompt(acp.sessionId, "/review now")).stopReason).toBe("end_turn")
+    expect(acp.server.interrupts).toEqual([])
+    await acp.request("session/close", { sessionId: acp.sessionId })
+
+    expect(acp.server.interrupts).toEqual([acp.sessionId])
+  })
+
+  test("fails the prompt as server unavailable when the event stream ends mid-turn", async () => {
+    await using acp = await startSession(held)
+
+    const prompt = acp.prompt(acp.sessionId, "hold")
+    await admitted(acp, acp.sessionId)
+    acp.server.closeEvents()
+
+    expect(await rpcError(prompt)).toMatchObject({ code: -32603, data: { errorName: "ServerUnavailable" } })
+  })
+
   test("$/cancel_request on the prompt request cancels the turn like session/cancel", async () => {
     await using acp = await startSession(held)
     const controller = new AbortController()
@@ -481,6 +570,20 @@ describe("acp prompt turns over the wire", () => {
 async function admitted(acp: Wire, sessionId: string) {
   await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
   await acp.request("session/set_mode", { sessionId, modeId: "build" })
+}
+
+const isCancelledResponse = Schema.is(
+  Schema.Struct({ result: Schema.Struct({ stopReason: Schema.Literal("cancelled") }) }),
+)
+
+// Session updates the client received before the cancelled prompt response.
+function receivedBeforeResponse(acp: Wire) {
+  const response = acp.received.findIndex(isCancelledResponse)
+  expect(response).toBeGreaterThan(-1)
+  const count = acp.received
+    .slice(0, response)
+    .filter((message) => "method" in message && message.method === "session/update").length
+  return acp.updates.slice(0, count).map((item) => item.update)
 }
 
 function retryScheduled(sessionID: string, attempt: number, at: number) {

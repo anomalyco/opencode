@@ -28,8 +28,9 @@ import {
   type TokenUsageInfo,
 } from "@opencode/client/promise"
 import type { BunRequest } from "bun"
-import { Effect, Exit, Logger, Option, Schema, Scope } from "effect"
+import { Duration, Effect, Exit, Logger, Option, Schema, Scope } from "effect"
 import { ACP } from "../../src/acp/agent"
+import { ACPTurn } from "../../src/acp/turn"
 
 type DurableEvent = Extract<OpenCodeEvent, { durable: unknown }>
 type EphemeralEvent = Exclude<OpenCodeEvent, DurableEvent>
@@ -121,6 +122,7 @@ export type WireOptions = {
     request: RequestPermissionRequest,
     signal: AbortSignal,
   ) => RequestPermissionResponse | Promise<RequestPermissionResponse>
+  readonly cancelDrainTimeout?: Duration.Input
 }
 
 type CatalogKind = "model" | "default" | "agent" | "command"
@@ -385,6 +387,10 @@ export async function startWire(options: WireOptions = {}) {
       ndJsonStream(agentToClient.writable, clientToAgent.readable),
     ).pipe(
       Scope.provide(agentScope),
+      (effect) =>
+        options.cancelDrainTimeout === undefined
+          ? effect
+          : Effect.provideService(effect, ACPTurn.CancelDrainTimeout, options.cancelDrainTimeout),
       Effect.provide(Logger.layer([Logger.make((log) => logs.push({ message: log.message, cause: log.cause }))])),
     ),
   )
@@ -777,6 +783,11 @@ function startServer(options: WireOptions, changed: () => void) {
 
   return Object.assign(fake, {
     url: http.url.toString(),
+    /** Ends every open event stream while the server keeps answering requests. */
+    closeEvents() {
+      streams.forEach((stream) => stream.close())
+      streams.clear()
+    },
     async stop() {
       streams.forEach((stream) => stream.close())
       streams.clear()

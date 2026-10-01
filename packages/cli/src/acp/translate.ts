@@ -18,10 +18,7 @@ export const ChildSessionUpdateMethod = "opencode/session/child_update"
 const RetryMeta = "opencode/retry"
 const CompactionMeta = "opencode/compaction"
 
-export type TurnStart =
-  | { readonly type: "input"; readonly id: string }
-  | { readonly type: "skill"; readonly id: string }
-  | { readonly type: "compaction"; readonly id: string }
+export type TurnStart = { readonly type: "input" | "compaction"; readonly id: string }
 
 export type Terminal = "succeeded" | "failed" | "interrupted"
 
@@ -34,7 +31,13 @@ export type Context = {
   readonly mode: "turn" | "background"
 }
 
-type Tool = { readonly name: string; readonly input: ToolInput; readonly metadata: Record<string, unknown> }
+type Tool = {
+  readonly sessionID: string
+  readonly id: string
+  readonly name: string
+  readonly input: ToolInput
+  readonly metadata: Record<string, unknown>
+}
 
 type RetryStatus = {
   readonly attempt: number
@@ -209,11 +212,10 @@ export function step(state: TurnState, event: EventSubscribeOutput, ctx: Context
       return {
         state: {
           ...state,
-          tools: new Map(state.tools).set(toolKey(event.data.sessionID, event.data.id), {
-            name: event.data.name,
-            input: {},
-            metadata: {},
-          }),
+          tools: new Map(state.tools).set(
+            toolKey(event.data.sessionID, event.data.id),
+            newTool(event.data.sessionID, event.data.id, event.data.name),
+          ),
         },
         outputs: send({
           sessionUpdate: "tool_call",
@@ -227,7 +229,10 @@ export function step(state: TurnState, event: EventSubscribeOutput, ctx: Context
       }
     case "session.tool.called": {
       const key = toolKey(event.data.sessionID, event.data.id)
-      const tool = { ...(state.tools.get(key) ?? emptyTool), input: event.data.input }
+      const tool = {
+        ...(state.tools.get(key) ?? newTool(event.data.sessionID, event.data.id)),
+        input: event.data.input,
+      }
       return {
         state: { ...state, tools: new Map(state.tools).set(key, tool) },
         outputs: send({
@@ -260,7 +265,7 @@ export function step(state: TurnState, event: EventSubscribeOutput, ctx: Context
     }
     case "session.tool.success": {
       const key = toolKey(event.data.sessionID, event.data.id)
-      const tool = state.tools.get(key) ?? emptyTool
+      const tool = state.tools.get(key) ?? newTool(event.data.sessionID, event.data.id)
       return {
         state: { ...state, tools: without(state.tools, key) },
         outputs: send({
@@ -278,7 +283,7 @@ export function step(state: TurnState, event: EventSubscribeOutput, ctx: Context
     }
     case "session.tool.failed": {
       const key = toolKey(event.data.sessionID, event.data.id)
-      const tool = state.tools.get(key) ?? emptyTool
+      const tool = state.tools.get(key) ?? newTool(event.data.sessionID, event.data.id)
       return {
         state: { ...state, tools: without(state.tools, key) },
         outputs: send({
@@ -331,7 +336,7 @@ export function failure(state: TurnState) {
   return undefined
 }
 
-export function response(state: TurnState, sessionID: string, terminal: Terminal, cancelled: boolean): PromptResponse {
+export function response(state: TurnState, sessionID: string, terminal: Terminal): PromptResponse {
   const tokens = state.usage?.turn
   const usage = tokens
     ? {
@@ -344,10 +349,31 @@ export function response(state: TurnState, sessionID: string, terminal: Terminal
       }
     : undefined
   const error = (state.stepError ?? state.executionError)?.type
-  const stopReason = resolveStopReason({ terminal, cancelled, finish: state.finish, error })
+  const stopReason = resolveStopReason({ terminal, finish: state.finish, error })
   // Only an interrupt during backoff leaves a retry pending. Interruption clears the projected retry, so report it here.
   const retry = state.retries.get(sessionID)
   return { stopReason, ...(usage ? { usage } : {}), _meta: retry ? { [RetryMeta]: retry } : {} }
+}
+
+/** Fails the tools a cancelled turn left open, for when the server's wind-down never reports them. */
+export function abandonTools(state: TurnState, ctx: Context): Step {
+  return {
+    state: { ...state, tools: new Map() },
+    outputs: [...state.tools.values()].flatMap((tool) =>
+      route(ctx, state.children.get(tool.sessionID), {
+        sessionUpdate: "tool_call_update",
+        ...errorToolUpdate({
+          toolCallId: tool.id,
+          toolName: tool.name,
+          input: tool.input,
+          metadata: tool.metadata,
+          content: [],
+          error: "Cancelled",
+          cwd: ctx.cwd,
+        }),
+      }),
+    ),
+  }
 }
 
 /** Lazy, so a message that fails to translate part way still replays the updates before the failure. */
@@ -439,7 +465,9 @@ export function* replayMessage(message: SessionMessageInfo, cwd: string): Genera
   }
 }
 
-const emptyTool: Tool = { name: "tool", input: {}, metadata: {} }
+function newTool(sessionID: string, id: string, name = "tool"): Tool {
+  return { sessionID, id, name, input: {}, metadata: {} }
+}
 
 function route(ctx: Context, child: ChildSession | undefined, update: SessionUpdate): Output[] {
   if (!child) return ctx.mode === "turn" ? [{ _tag: "SessionUpdate", update }] : []
@@ -565,18 +593,15 @@ function projectChildUpdate(update: SessionUpdate, child: ChildSession) {
 }
 
 function matchesStart(event: EventSubscribeOutput, start: TurnStart) {
-  if (start.type === "input") return event.type === "session.inbox.delivered" && event.data.inboxID === start.id
-  if (start.type === "compaction") return event.type === "session.inbox.delivered" && event.data.inboxID === start.id
-  return event.type === "session.skill.activated" && event.id === start.id.replace(/^msg_/, "evt_")
+  return event.type === "session.inbox.delivered" && event.data.inboxID === start.id
 }
 
 function resolveStopReason(input: {
   readonly terminal: Terminal
-  readonly cancelled: boolean
   readonly finish: SessionMessageAssistant["finish"]
   readonly error?: string
 }): PromptResponse["stopReason"] {
-  if (input.cancelled || input.terminal === "interrupted" || input.error === "aborted") return "cancelled"
+  if (input.terminal === "interrupted" || input.error === "aborted") return "cancelled"
   if (input.finish === "length") return "max_tokens"
   if (input.finish === "content-filter" || input.error === "provider.content-filter") return "refusal"
   return "end_turn"

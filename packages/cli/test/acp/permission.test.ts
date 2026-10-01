@@ -212,6 +212,34 @@ describe("acp permissions over the wire", () => {
     ])
   })
 
+  test("keeps streaming other children while one child's permission is pending", async () => {
+    const release = Promise.withResolvers<RequestPermissionResponse>()
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          childCreated("ses_a", sessionID, "A"),
+          childCreated("ses_b", sessionID, "B"),
+          permissionAsked("ses_a", "perm_a"),
+          textDelta("ses_b", "msg_b", "still streaming"),
+          succeeded("ses_b"),
+          succeeded("ses_a"),
+        ),
+      permission: () => release.promise,
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk", "child B's chunk")
+    await acp.until(() => acp.permissions.length === 1, "child A's permission")
+
+    expect(acp.permissions.map((request) => request.toolCall.toolCallId)).toEqual(["ses_a:perm_a"])
+    expect(acp.server.replies).toEqual([])
+    release.resolve({ outcome: { outcome: "selected", optionId: "once" } })
+    expect((await prompt).stopReason).toBe("end_turn")
+    expect(decisions(acp)).toEqual([["perm_a", "once"]])
+  })
+
   test("does not let one session's blocked permission stall another session", async () => {
     const releaseBlocked = Promise.withResolvers<RequestPermissionResponse>()
     await using acp = await startWire({ onPrompt: () => undefined, permission: () => releaseBlocked.promise })

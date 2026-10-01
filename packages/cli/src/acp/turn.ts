@@ -1,8 +1,27 @@
 import type { CancelNotification, PromptRequest, PromptResponse, RequestError } from "@agentclientprotocol/sdk"
-import type { CommandInfo, OpenCodeClient, OpenCodeEvent } from "@opencode/client/promise"
+import {
+  isSessionNotFoundError,
+  type CommandInfo,
+  type OpenCodeClient,
+  type OpenCodeEvent,
+} from "@opencode/client/promise"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberMap, Option, Queue, Ref, Scope, Stream } from "effect"
+import {
+  Cause,
+  Context,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  FiberMap,
+  Option,
+  Queue,
+  Ref,
+  Scope,
+  Stream,
+} from "effect"
 import { builtinCommands, type ACPCatalog, type Catalog } from "./catalog"
 import { currentModel } from "./config-option"
 import type { ACPConnection } from "./connection"
@@ -21,13 +40,21 @@ export interface Interface {
    * interrupts the turn and still resolves with `stopReason: "cancelled"`.
    */
   readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, Failure>
-  /** Interrupts the session's active turn. No-op when the session is idle. */
+  /** Interrupts the session's active turn and waits for it to settle. No-op when the session is idle. */
   readonly cancel: (input: CancelNotification) => Effect.Effect<void>
-  /** Interrupts the session's active turn and waits for it to settle. */
-  readonly close: (sessionID: string) => Effect.Effect<void>
+  /** Like `cancel`, but an idle session is still interrupted, since server work can outlive its turn. */
+  readonly close: (sessionID: string) => Effect.Effect<void, ACPError.Error | RequestError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Turn") {}
+
+/**
+ * How long a cancelled turn keeps forwarding the server's wind-down. Core acknowledges an interrupt before its
+ * cleanup settles, and its shell tool waits 3 seconds before escalating to SIGKILL.
+ */
+export const CancelDrainTimeout = Context.Reference<Duration.Input>("@opencode/cli/acp/Turn/CancelDrainTimeout", {
+  defaultValue: () => "5 seconds",
+})
 
 type PreparedPrompt = {
   readonly start: ACPTranslate.TurnStart
@@ -43,10 +70,11 @@ type PermissionAsk = Extract<ACPTranslate.Output, { readonly _tag: "PermissionAs
 /** A turn's event feed. It moves to the session scope when the turn ends with children still running. */
 type Subscription = {
   readonly scope: Scope.Closeable
-  readonly connected: Deferred.Deferred<void, Failure>
-  readonly events: Queue.Queue<OpenCodeEvent, Failure>
+  readonly events: Queue.Dequeue<OpenCodeEvent, unknown>
   /** Runs permission replies one at a time in ask order, without holding back the rest of the stream. */
   readonly permissions: Queue.Queue<Effect.Effect<void>>
+  /** Completed when the turn is cancelled; pending and later asks are then rejected. */
+  readonly cancelled: Deferred.Deferred<void>
 }
 
 export const make = Effect.fnUntraced(function* (input: {
@@ -58,33 +86,32 @@ export const make = Effect.fnUntraced(function* (input: {
   readonly catalog: ACPCatalog.Interface
   readonly capabilities: Ref.Ref<{ readonly childSessionUpdates: boolean }>
 }) {
-  const turns = yield* FiberMap.make<string>()
+  const scope = yield* Effect.scope
+  const drainTimeout = yield* CancelDrainTimeout
+  const turns = yield* FiberMap.make<string, PromptResponse, Failure>()
 
   const subscribe = Effect.fnUntraced(function* () {
+    // Parented, so it still closes when the session scope it is handed to is already gone.
+    const subscriptionScope = yield* Scope.fork(scope)
     const subscription: Subscription = {
-      scope: yield* Scope.make(),
-      connected: yield* Deferred.make<void, Failure>(),
-      events: yield* Queue.unbounded<OpenCodeEvent, Failure>(),
+      scope: subscriptionScope,
+      events: yield* Stream.fromAsyncIterable(input.client.event.subscribe(), (cause) => cause).pipe(
+        Stream.toQueue({ capacity: "unbounded" }),
+        Scope.provide(subscriptionScope),
+      ),
       permissions: yield* Queue.unbounded<Effect.Effect<void>>(),
+      cancelled: yield* Deferred.make<void>(),
     }
-    yield* Stream.fromAsyncIterable(input.client.event.subscribe(), (cause) => cause).pipe(
-      Stream.runForEach((event) =>
-        event.type === "server.connected"
-          ? Deferred.succeed(subscription.connected, undefined)
-          : Queue.offer(subscription.events, event),
-      ),
-      Effect.catch(ACPPromise.classify),
-      Effect.andThen(Effect.fail(new ACPError.ServerUnavailableError())),
-      Effect.onError((cause) =>
-        Deferred.failCause(subscription.connected, cause).pipe(
-          Effect.andThen(Queue.failCause(subscription.events, cause)),
-        ),
-      ),
-      Effect.forkIn(subscription.scope),
-    )
-    yield* Queue.take(subscription.permissions).pipe(Effect.flatten, Effect.forever, Effect.forkIn(subscription.scope))
+    yield* Queue.take(subscription.permissions).pipe(Effect.flatten, Effect.forever, Effect.forkIn(subscriptionScope))
     return subscription
   })
+
+  const take = (subscription: Subscription) =>
+    Queue.take(subscription.events).pipe(
+      Effect.catch((error) =>
+        Cause.isDone(error) ? Effect.fail(new ACPError.ServerUnavailableError()) : ACPPromise.classify(error),
+      ),
+    )
 
   // A turn settles only after the permission asks it saw have been answered.
   const permissionsSettled = Effect.fnUntraced(function* (subscription: Subscription) {
@@ -94,7 +121,7 @@ export const make = Effect.fnUntraced(function* (input: {
   })
 
   // Interruption cancels the client's permission request; the server still gets the resulting rejection.
-  const reply = (ctx: ACPTranslate.Context, ask: PermissionAsk) =>
+  const reply = (subscription: Subscription, ctx: ACPTranslate.Context, ask: PermissionAsk) =>
     Effect.callback<void>((resume, signal) => {
       const replied = replyPermission({
         client: input.client,
@@ -111,7 +138,7 @@ export const make = Effect.fnUntraced(function* (input: {
         (cause) => resume(Effect.logWarning("ACP permission reply failed", cause)),
       )
       return Effect.promise(() => replied)
-    })
+    }).pipe(Effect.raceFirst(Deferred.await(subscription.cancelled)))
 
   const interpret = (subscription: Subscription, ctx: ACPTranslate.Context, output: ACPTranslate.Output) => {
     switch (output._tag) {
@@ -122,13 +149,11 @@ export const make = Effect.fnUntraced(function* (input: {
           .extNotification(ACPTranslate.ChildSessionUpdateMethod, output.update)
           .pipe(Effect.ignoreCause)
       case "PermissionAsk":
-        return Queue.offer(subscription.permissions, reply(ctx, output)).pipe(Effect.asVoid)
+        return Queue.offer(subscription.permissions, reply(subscription, ctx, output)).pipe(Effect.asVoid)
       case "FormCancel":
-        return Effect.promise(() =>
-          input.client.session.form
-            .cancel({ sessionID: output.sessionID, formID: output.formID })
-            .catch(() => input.client.session.interrupt({ sessionID: output.sessionID }).catch(() => {})),
-        ).pipe(Effect.asVoid)
+        return Effect.tryPromise(() =>
+          input.client.session.form.cancel({ sessionID: output.sessionID, formID: output.formID }),
+        ).pipe(Effect.catch(() => interruptServer(output.sessionID)))
     }
   }
 
@@ -138,7 +163,7 @@ export const make = Effect.fnUntraced(function* (input: {
     state: Ref.Ref<ACPTranslate.TurnState>,
   ) {
     while (true) {
-      const event = yield* Queue.take(subscription.events)
+      const event = yield* take(subscription)
       const next = ACPTranslate.step(yield* Ref.get(state), event, ctx)
       yield* Ref.set(state, next.state)
       yield* Effect.forEach(next.outputs, (output) => interpret(subscription, ctx, output), { discard: true })
@@ -189,9 +214,28 @@ export const make = Effect.fnUntraced(function* (input: {
     )
   })
 
-  // A cancelled turn interrupts the server here, once, whichever way it was cancelled.
   const interruptServer = (sessionID: string) =>
     ACPPromise.promise(() => input.client.session.interrupt({ sessionID })).pipe(Effect.ignoreCause)
+
+  // Rejects pending asks, interrupts the server once, then forwards its wind-down until the terminal event or the
+  // timeout. Tools still open at the timeout are reported failed so the client never shows them running.
+  const windDown = Effect.fnUntraced(function* (
+    subscription: Subscription,
+    ctx: ACPTranslate.Context,
+    state: Ref.Ref<ACPTranslate.TurnState>,
+    events: Fiber.Fiber<ACPTranslate.Terminal, Failure>,
+  ) {
+    yield* Deferred.succeed(subscription.cancelled, undefined)
+    yield* interruptServer(ctx.sessionID)
+    if (!(yield* Ref.get(state)).started) return
+    if (Option.isSome(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)))) return
+    yield* Fiber.interrupt(events)
+    const abandoned = ACPTranslate.abandonTools(yield* Ref.get(state), ctx)
+    yield* Ref.set(state, abandoned.state)
+    yield* Effect.forEach(abandoned.outputs, (output) => interpret(subscription, ctx, output), { discard: true }).pipe(
+      Effect.ignore,
+    )
+  })
 
   const execute = (
     attached: Attached,
@@ -203,16 +247,17 @@ export const make = Effect.fnUntraced(function* (input: {
       subscribe(),
       (subscription) =>
         Effect.gen(function* () {
+          // The feed opens with `server.connected`, so every event the submission causes comes after it.
+          const connected = yield* take(subscription)
+          if (connected.type !== "server.connected")
+            return yield* Effect.die(new Error(`expected server.connected, got ${connected.type}`))
           const events = yield* consume(subscription, ctx, state).pipe(Effect.forkScoped)
-          // Waiting for `server.connected` means the subscription sees every event the submission causes.
-          yield* Deferred.await(subscription.connected)
-          yield* submit(attached, prompt)
-          if (prompt.command) return "succeeded" as const
-          return yield* Fiber.join(events)
-        }).pipe(
-          Effect.onInterrupt(() => interruptServer(attached.id)),
-          Effect.scoped,
-        ),
+          return yield* Effect.gen(function* () {
+            yield* submit(attached, prompt)
+            if (prompt.command) return "succeeded" as const
+            return yield* Fiber.join(events)
+          }).pipe(Effect.onInterrupt(() => windDown(subscription, ctx, state, events)))
+        }).pipe(Effect.scoped),
       (subscription, exit) => handoff(attached, subscription, ctx, state, exit),
     )
 
@@ -224,8 +269,11 @@ export const make = Effect.fnUntraced(function* (input: {
     exit: Exit.Exit<ACPTranslate.Terminal, Failure>,
   ) {
     const close = Scope.close(subscription.scope, Exit.void)
-    if (Exit.isFailure(exit) || (yield* Ref.get(state)).openChildren.size === 0) return yield* close
-    const background = consume(subscription, { ...ctx, mode: "background" }, state).pipe(
+    if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) return yield* close
+    if ((yield* Ref.get(state)).openChildren.size === 0) return yield* close
+    // Children that outlive a cancelled turn were not cancelled, so their asks still go to the client.
+    const cancelled = yield* Deferred.make<void>()
+    const background = consume({ ...subscription, cancelled }, { ...ctx, mode: "background" }, state).pipe(
       Effect.ignore,
       Effect.ensuring(close),
       Effect.withSpan("cli.acp.turn.background"),
@@ -243,12 +291,7 @@ export const make = Effect.fnUntraced(function* (input: {
     const failure = ACPTranslate.failure(current)
     if (failure) return yield* failure
     yield* sendUsageUpdate(attached, current)
-    return ACPTranslate.response(
-      current,
-      attached.id,
-      Exit.isSuccess(exit) ? exit.value : "interrupted",
-      Exit.isFailure(exit),
-    )
+    return ACPTranslate.response(current, attached.id, Exit.isSuccess(exit) ? exit.value : "interrupted")
   })
 
   const sendUsageUpdate = Effect.fn("cli.acp.turn.usage")(
@@ -275,41 +318,23 @@ export const make = Effect.fnUntraced(function* (input: {
     (effect) => Effect.ignoreCause(effect),
   )
 
-  // The settled response goes to the prompt before the fiber exits, so the prompt resolves before `close` does.
-  const run = Effect.fn("cli.acp.turn.run")(
-    function* (
-      attached: Attached,
-      prompt: PreparedPrompt,
-      childUpdates: boolean,
-      done: Deferred.Deferred<PromptResponse, Failure>,
-    ) {
-      const state = yield* Ref.make(ACPTranslate.initial)
-      const ctx: ACPTranslate.Context = {
-        sessionID: attached.id,
-        cwd: attached.cwd,
-        start: prompt.start,
-        childUpdates,
-        mode: "turn",
-      }
-      yield* execute(attached, prompt, ctx, state).pipe(
-        Effect.interruptible,
-        Effect.onExit((exit) =>
-          settle(attached, state, exit).pipe(
-            Effect.exit,
-            Effect.flatMap((settled) => Deferred.done(done, settled)),
-          ),
-        ),
-      )
-    },
-    Effect.exit,
-    Effect.asVoid,
-  )
-
-  const interrupt = (sessionID: string) =>
-    Effect.suspend(() => {
-      const turn = FiberMap.getUnsafe(turns, sessionID)
-      return Option.isSome(turn) ? Fiber.interrupt(turn.value) : Effect.void
-    })
+  // Forked uninterruptible: interruption reaches only `execute`, so the fiber still settles with a response.
+  const run = Effect.fn("cli.acp.turn.run")(function* (
+    attached: Attached,
+    prompt: PreparedPrompt,
+    childUpdates: boolean,
+  ) {
+    const state = yield* Ref.make(ACPTranslate.initial)
+    const ctx: ACPTranslate.Context = {
+      sessionID: attached.id,
+      cwd: attached.cwd,
+      start: prompt.start,
+      childUpdates,
+      mode: "turn",
+    }
+    const exit = yield* Effect.exit(Effect.interruptible(execute(attached, prompt, ctx, state)))
+    return yield* settle(attached, state, exit)
+  })
 
   return Service.of({
     prompt: Effect.fn("cli.acp.turn.prompt")(function* (params, signal) {
@@ -317,9 +342,7 @@ export const make = Effect.fnUntraced(function* (input: {
       const catalog = yield* input.catalog.get(attached.cwd)
       const childUpdates = (yield* Ref.get(input.capabilities)).childSessionUpdates
       const prompt = preparePrompt(catalog, params.prompt, SessionMessage.ID.create())
-      const done = yield* Deferred.make<PromptResponse, Failure>()
-      // Check and register in one synchronous step. The turn starts uninterruptible so an early cancel cannot skip
-      // the hook that settles `done`; it becomes interruptible once that hook is in place.
+      // Check and register in one synchronous step.
       const turn = yield* Effect.withFiber((fiber) => {
         if (FiberMap.hasUnsafe(turns, attached.id)) {
           return Effect.fail(
@@ -329,21 +352,24 @@ export const make = Effect.fnUntraced(function* (input: {
             }),
           )
         }
-        const forked = Effect.runForkWith(fiber.context)(run(attached, prompt, childUpdates, done), {
-          uninterruptible: true,
-        })
+        const forked = Effect.runForkWith(fiber.context)(run(attached, prompt, childUpdates), { uninterruptible: true })
         FiberMap.setUnsafe(turns, attached.id, forked)
         return Effect.succeed(forked)
       })
       // A `$/cancel_request` for this prompt cancels its turn like `session/cancel`, rather than failing the request.
       yield* aborted(signal).pipe(Effect.andThen(Fiber.interrupt(turn)), Effect.forkChild)
-      return yield* Deferred.await(done)
+      return yield* Fiber.join(turn)
     }),
     cancel: Effect.fn("cli.acp.turn.cancel")(function* (params) {
-      yield* interrupt(params.sessionId)
+      yield* FiberMap.remove(turns, params.sessionId)
     }),
     close: Effect.fn("cli.acp.turn.close")(function* (sessionID) {
-      yield* interrupt(sessionID)
+      if (FiberMap.hasUnsafe(turns, sessionID)) return yield* FiberMap.remove(turns, sessionID)
+      yield* ACPPromise.promise(() =>
+        input.client.session.interrupt({ sessionID }).catch((error) => {
+          if (!isSessionNotFoundError(error)) throw error
+        }),
+      )
     }),
   })
 })

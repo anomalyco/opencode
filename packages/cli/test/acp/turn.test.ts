@@ -8,6 +8,8 @@ import {
   durableEvent,
   ephemeralEvent,
   failed,
+  interrupted,
+  permissionAsked,
   reasoningDelta,
   startSession,
   stepEnded,
@@ -233,6 +235,35 @@ describe("acp turn events over the wire", () => {
       update: { toolCallId: "ses_background:call_shell" },
     })
     expect(acp.childUpdates.some((item) => item.childSessionId === "ses_future")).toBe(false)
+  })
+
+  test("keeps following open children after a cancelled turn", async () => {
+    await using acp = await startSession({
+      capabilities: { childSessionUpdates: true },
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        childCreated("ses_background", sessionID, "Background research"),
+        textDelta(sessionID, "msg_root", "working"),
+      ],
+      onInterrupt: ({ sessionID }) => [interrupted(sessionID)],
+      permission: () => ({ outcome: { outcome: "selected", optionId: "once" } }),
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
+    await acp.notify("session/cancel", { sessionId: acp.sessionId })
+    expect((await prompt).stopReason).toBe("cancelled")
+    acp.server.send(permissionAsked("ses_background", "perm_background"), interrupted("ses_background"))
+
+    await acp.until(
+      () => acp.childUpdates.some((item) => item.type === "status" && item.status === "interrupted"),
+      "background child interruption",
+    )
+    await acp.until(() => acp.server.replies.length === 1, "background permission reply")
+    expect(acp.childUpdates.map(childUpdateKind)).toEqual(["status:created", "status:interrupted"])
+    expect(acp.server.replies).toEqual([
+      { sessionID: "ses_background", requestID: "perm_background", decision: "once" },
+    ])
   })
 
   test("stops following background children once the session closes", async () => {
