@@ -1673,6 +1673,40 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("carries a refusal's category and explanation on the content-filter finish", () =>
+    Effect.gen(function* () {
+      const refusal = (stop_details: unknown) =>
+        LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                { type: "message_start", message: { usage: { input_tokens: 5 } } },
+                { type: "message_delta", delta: { stop_reason: "refusal", stop_details }, usage: { output_tokens: 0 } },
+                { type: "message_stop" },
+              ),
+            ),
+          ),
+        )
+
+      expect(
+        (yield* refusal({
+          type: "refusal",
+          category: "cyber",
+          explanation: "This request was declined because it could enable cyber harm.",
+        })).finishReason,
+      ).toEqual({
+        normalized: "content-filter",
+        raw: "refusal",
+        category: "cyber",
+        explanation: "This request was declined because it could enable cyber harm.",
+      })
+      expect((yield* refusal({ type: "refusal", category: null, explanation: null })).finishReason).toEqual({
+        normalized: "content-filter",
+        raw: "refusal",
+      })
+    }),
+  )
+
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
       const body = sseEvents(
