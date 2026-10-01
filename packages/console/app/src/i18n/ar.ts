@@ -3,7 +3,9 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.deepseek": "يحصل DeepSeek V4.1 Flash على حدود استخدام مضاعفة 4 مرات لفترة محدودة",
+  "go.promo.spaceBunny": "يتوفر Space Bunny Free، وهو نموذج مجهول جديد، لفترة محدودة",
+  "go.referral.ended.label": "تحذير",
+  "go.referral.ended": "انتهى برنامج الإحالة. لم تعد روابط الإحالة تمنح رصيدًا لك أو للشخص الذي شاركها.",
   "go.graph.bonus": "استخدام مضاعف {{count}} مرات",
   "nav.github": "GitHub",
   "nav.docs": "الوثائق",
@@ -260,6 +262,7 @@ export const dict = {
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
   "go.meta.description": "يبلغ سعر Go ‏$10/شهر، مع حدود استخدام سخية ووصول موثوق إلى نماذج البرمجة الرائدة.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
+  "go.hero.tagline": "استخدمه مع أي وكيل. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
   "go.hero.body":
     "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
 
@@ -267,6 +270,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "اشترك في Go",
   "go.cta.price": "$10/شهر",
+  "go.plans.month": "شهريًا",
+  "go.plans.plus.cta": "الاشتراك في Go Plus",
+  "go.plans.plus.description": "تبلغ تكلفة Go Plus ‏$40/شهر مع حدود استخدام أعلى.",
+  "go.plans.go.feature1": "نماذج مختارة بأسعار معقولة",
+  "go.plans.go.feature2": "مختبرة للبرمجة باستخدام الوكلاء",
+  "go.plans.go.feature3": "حدود سخية ووصول موثوق",
+  "go.plans.plus.feature1": "يشمل كل مزايا Go",
+  "go.plans.plus.feature2": "حدود أعلى لجلسات برمجة أطول وأكثر تركيزًا",
+  "go.plans.plus.feature3": "للمشاريع الأكبر والأكثر تطلبًا",
+  "go.plans.limits": "الحدود",
+  "go.plans.description": "الطلبات المقدرة لكل 5 ساعات وحدود الاستخدام الشهرية لكل نموذج",
+  "go.plans.legend": "الخطط",
   "go.pricing.body": "استخدمه مع أي وكيل. $10/شهر. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
   "go.graph.free": "مجاني",
   "go.graph.freePill": "Big Pickle ونماذج مجانية",
@@ -375,7 +390,7 @@ export const dict = {
 
   "go.faq.q9": "ما الفرق بين النماذج المجانية وGo؟",
   "go.faq.a9":
-    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة قدرها 200 طلب/يوم. يقدّم Go مجموعة منسقة من النماذج مع حصص طلبات أعلى مطبقة عبر نوافذ متجددة (5 ساعات، وأسبوعية، وشهرية)، تعادل الحصص الأساسية فيها تقريبًا $12 لكل 5 ساعات و$30 في الأسبوع و$60 في الشهر؛ وقد تختلف الحصص حسب النموذج (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
+    "تشمل النماذج المجانية Big Pickle بالإضافة إلى النماذج الترويجية المتاحة في ذلك الوقت، مع حصة قدرها 200 طلب/يوم. يقدّم Go مجموعة منسقة من النماذج مع حصص طلبات أعلى عبر نوافذ متجددة: 20% من الحصة الشهرية لكل 5 ساعات، و50% لكل أسبوع، و100% لكل شهر. وقد تختلف الحصص حسب النموذج (تختلف أعداد الطلبات الفعلية حسب النموذج والاستخدام).",
   "go.faq.q10": "هل يمكنني استرداد أموالي؟",
   "go.faq.a10":
     "قد تكون مؤهلًا لاسترداد أموالك إذا تم الخصم خلال آخر 14 يومًا ولم تستخدم مخصصات Go خلال فترة الفوترة تلك. {{contact}} لطلب استرداد الأموال.",
@@ -641,7 +656,6 @@ export const dict = {
   "workspace.payments.type.subscription": "اشتراك",
   "workspace.payments.view": "عرض",
 
-  "workspace.black.loading": "جارٍ التحميل...",
   "workspace.black.time.day": "يوم",
   "workspace.black.time.days": "أيام",
   "workspace.black.time.hour": "ساعة",
@@ -651,7 +665,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "بضع ثوان",
   "workspace.black.subscription.title": "الاشتراك",
   "workspace.black.subscription.message": "أنت مشترك في OpenCode Black مقابل ${{plan}} شهريًا.",
-  "workspace.black.subscription.manage": "إدارة الاشتراك",
+  "workspace.black.subscription.ending":
+    "ينتهي OpenCode Black بنهاية فترة الفوترة الحالية ولن يتم تجديده. سننقلك إلى وحدة التحكم الجديدة.",
   "workspace.black.subscription.rollingUsage": "استخدام لمدة 5 ساعات",
   "workspace.black.subscription.weeklyUsage": "الاستخدام الأسبوعي",
   "workspace.black.subscription.resetsIn": "إعادة تعيين في",
