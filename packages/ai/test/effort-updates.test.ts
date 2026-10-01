@@ -147,7 +147,7 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
-  it.effect("accepts a marker between a tool call and its result", () =>
+  it.effect("moves a marker between a tool call and its result after the result", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -166,8 +166,8 @@ describe("Anthropic Messages effort updates", () => {
       expect(prepared.body.messages).toEqual([
         { role: "user", content: [{ type: "text", text: "Weather?" }] },
         { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
-        { role: "system", content: [], output_config: { effort: "low" } },
         { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: '{"temp":72}' }] },
+        { role: "system", content: [], output_config: { effort: "low" } },
       ])
     }),
   )

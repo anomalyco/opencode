@@ -144,13 +144,19 @@ describe("tool history normalization", () => {
     ])
   })
 
-  test("leaves settled updates and effort markers in place", () => {
+  test("moves effort updates after the results of pending calls", () => {
+    const call = Message.assistant(toolCall("first"))
+    const result = toolResult("first", "one", "first", "text")
+    const effort = Message.effort({ effort: "low", previous: "high" })
+
+    expect(normalizeToolHistory([call, effort, result])).toEqual([call, result, effort])
+  })
+
+  test("keeps system updates in place when no call is pending", () => {
     const history = [Message.assistant(toolCall("first")), toolResult("first", "one", "first", "text")]
     const update = Message.system("Update.")
     const input = [Message.user("Start."), update, ...history, update, Message.user("Continue.")]
-    const effort = [history[0]!, Message.effort({ effort: "low", previous: "high" }), history[1]!]
 
     expect(normalizeToolHistory(input)).toBe(input)
-    expect(normalizeToolHistory(effort)).toBe(effort)
   })
 })
