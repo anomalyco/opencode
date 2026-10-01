@@ -7,12 +7,16 @@ export class Service extends Context.Service<
   {
     readonly urls: () => ReadonlyArray<string>
     readonly app: NonNullable<ServerOptions["app"]>
-    readonly paths: { readonly tmp: string }
+    readonly paths: { readonly tmp: string; readonly home: string }
   }
 >()("@opencode/server/ServerInfo") {}
 
-export function layer(urls: () => ReadonlyArray<string>, tmp: string, app: ServerOptions["app"] = {}) {
-  return Layer.succeed(Service, Service.of({ urls, app, paths: { tmp } }))
+export function layer(
+  urls: () => ReadonlyArray<string>,
+  paths: { readonly tmp: string; readonly home: string },
+  app: ServerOptions["app"] = {},
+) {
+  return Layer.succeed(Service, Service.of({ urls, app, paths }))
 }
 
 export function connectionURLs(value: string, requestedHostname?: string) {

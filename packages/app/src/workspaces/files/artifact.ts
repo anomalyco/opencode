@@ -195,7 +195,7 @@ export function blobUrlFromContent(content: FileContent) {
  */
 export function resolveArtifactPath(base: string, href: string) {
   const target = href.replaceAll("\\", "/")
-  if (target.startsWith("/")) return undefined
+  if (target.startsWith("/") || target === "~" || target.startsWith("~/")) return undefined
   const dir = base.replaceAll("\\", "/")
   const segments = [...dir.split("/").filter(Boolean)]
   for (const segment of target.split("/")) {

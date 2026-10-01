@@ -1,5 +1,6 @@
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
+import { useQuery } from "@tanstack/solid-query"
 import { isFileNotFoundError } from "@opencode/client/promise"
 import { createSimpleContext } from "@opencode/ui/context"
 import { showToast } from "@/shell/notifications/toast"
@@ -59,7 +60,14 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     const layout = useLayout()
 
     const scope = createMemo(() => sdk().directory)
-    const path = createPathHelpers(scope)
+    const info = useQuery(() => ({
+      queryKey: [serverSDK.scope, "server", "info"],
+      queryFn: () => serverSDK.api.server.info(),
+      staleTime: Infinity,
+    }))
+    // Read during render so Suspense waits for home before file links can be clicked.
+    const home = createMemo(() => info.data?.paths.home)
+    const path = createPathHelpers(scope, home)
     const tabs = layout.tabs(() =>
       SessionStateKey.from(serverSDK.scope, SessionRouteKey.fromRoute(base64Encode(sdk().directory), params.id)),
     )

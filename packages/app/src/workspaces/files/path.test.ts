@@ -39,6 +39,34 @@ describe("file path helpers", () => {
     expect(windows.pathFromTab("file:///C:/repo/src/app.ts")).toBe("src/app.ts")
   })
 
+  test.each([
+    ["/repo", "/home/remote", "~/.config/opencode/opencode.jsonc", "/home/remote/.config/opencode/opencode.jsonc"],
+    ["/home/remote", "/home/remote/", "~/docs/readme.md", "docs/readme.md"],
+    ["C:\\repo", "C:\\Users\\remote\\", "~\\notes.txt", "C:\\Users\\remote\\notes.txt"],
+  ])("expands home paths for workspace %s", (root, home, input, expected) => {
+    const path = createPathHelpers(
+      () => root,
+      () => home,
+    )
+    expect(path.normalize(input)).toBe(expected)
+    expect(path.tab(input)).toBe(path.tab(expected))
+    expect(path.pathFromTab(path.tab(input))).toBe(path.normalize(path.tab(expected)))
+  })
+
+  test("uses the current server home and leaves named homes literal", () => {
+    let home: string | undefined
+    const path = createPathHelpers(
+      () => "/repo",
+      () => home,
+    )
+    expect(path.normalize("~/notes.txt")).toBe("~/notes.txt")
+    home = "/home/remote"
+    expect(path.normalize("~")).toBe("/home/remote")
+    expect(path.normalize("~/notes.txt")).toBe("/home/remote/notes.txt")
+    expect(path.normalize("~someone/notes.txt")).toBe("~someone/notes.txt")
+    expect(path.normalize("docs/~/notes.txt")).toBe("docs/~/notes.txt")
+  })
+
   test("normalizes Windows directory separators", () => {
     const path = createPathHelpers(() => "C:\\repo")
     expect(path.normalizeDir("frontend\\")).toBe("frontend")

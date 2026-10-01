@@ -5,6 +5,7 @@ import path from "node:path"
 import { Agent } from "@opencode/schema/agent"
 import { Integration } from "@opencode/schema/integration"
 import { ServerInfo } from "@opencode/protocol/groups/server"
+import { Global } from "@opencode/util/global"
 import { Effect, Schedule, Schema } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
@@ -92,7 +93,10 @@ const connectOpenAI = (handler: Handler) =>
 
 it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
   Effect.gen(function* () {
-    const handler = yield* ServerFetch.make({ ...options, password: "secret" })
+    const handler = yield* ServerFetch.make(
+      { ...options, password: "secret" },
+      { overrides: [Global.node.replace(Global.layerWith({ home: "/server/home" }))] },
+    )
 
     const denied = yield* Effect.promise(() => handler(new Request("http://opencode.local/api/info")))
     expect(denied.status).toBe(401)
@@ -105,9 +109,12 @@ it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
       ),
     )
     expect(response.status).toBe(200)
-    const body = yield* Effect.promise(() => response.json()).pipe(Effect.flatMap(Schema.decodeUnknownEffect(ServerInfo)))
+    const body = yield* Effect.promise(() => response.json()).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(ServerInfo)),
+    )
     expect(body.version).toBe("test-version")
     expect(body.paths.tmp).toEndWith("opencode")
+    expect(body.paths.home).toBe("/server/home")
   }),
 )
 
