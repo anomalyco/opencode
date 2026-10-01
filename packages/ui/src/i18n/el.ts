@@ -249,4 +249,12 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "Ενημερώσεις",
   "ui.promptInput.cancelUpload": "Ακύρωση μεταφόρτωσης",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.lineComment.label": "Σχόλιο στο {{selection}}",
+  "ui.lineComment.editorLabel": "Σχολιασμός του {{selection}}",
+  "ui.list.emptyWithFilter": "Δεν υπάρχουν αποτελέσματα για {{query}}",
+  "ui.common.questionCount.one": "{{count}} ερώτηση",
+  "ui.common.questionCount.other": "{{count}} ερωτήσεις",
+  "ui.question.subtitle.answeredCount.one": "Απαντημένες: {{count}}",
+  "ui.question.subtitle.answeredCount.other": "Απαντημένες: {{count}}",
+  "ui.fileMedia.audioLabel": "Ήχος: {{filename}}",
 }

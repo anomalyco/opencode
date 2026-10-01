@@ -250,4 +250,12 @@ export const dict: Record<string, string> = {
   "ui.tool.browser": "Pelayar",
   "ui.common.fileCount.one": "{{count}} fail",
   "ui.common.fileCount.other": "{{count}} fail",
+  "ui.lineComment.label": "Komen pada {{selection}}",
+  "ui.lineComment.editorLabel": "Sedang mengulas {{selection}}",
+  "ui.list.emptyWithFilter": "Tiada hasil untuk {{query}}",
+  "ui.common.questionCount.one": "{{count}} soalan",
+  "ui.common.questionCount.other": "{{count}} soalan",
+  "ui.question.subtitle.answeredCount.one": "{{count}} telah dijawab",
+  "ui.question.subtitle.answeredCount.other": "{{count}} telah dijawab",
+  "ui.fileMedia.audioLabel": "Audio: {{filename}}",
 }

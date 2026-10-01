@@ -269,4 +269,12 @@ export const dict = {
   "ui.tool.browser": "ブラウザー",
   "ui.common.fileCount.one": "{{count}} ファイル",
   "ui.common.fileCount.other": "{{count}} ファイル",
+  "ui.lineComment.label": "{{selection}} にコメント",
+  "ui.lineComment.editorLabel": "{{selection}} にコメントしています",
+  "ui.list.emptyWithFilter": "{{query}} の結果はありません",
+  "ui.common.questionCount.one": "{{count}} 件の質問",
+  "ui.common.questionCount.other": "{{count}} 件の質問",
+  "ui.question.subtitle.answeredCount.one": "{{count}} 件に回答済み",
+  "ui.question.subtitle.answeredCount.other": "{{count}} 件に回答済み",
+  "ui.fileMedia.audioLabel": "音声: {{filename}}",
 }

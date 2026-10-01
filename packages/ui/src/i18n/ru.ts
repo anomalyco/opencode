@@ -44,10 +44,13 @@ export const dict = {
   "ui.fileMedia.binary.title": "Двоичный файл",
   "ui.fileMedia.binary.description.path": "Невозможно отобразить {{path}}, так как это двоичный файл.",
   "ui.fileMedia.binary.description.default": "Невозможно отобразить этот файл, так как он двоичный.",
+  "ui.fileMedia.audioLabel": "Аудио: {{filename}}",
   "ui.lineComment.label.prefix": "Комментарий к ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Комментирование: ",
   "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Прокомментировать {{selection}}",
+  "ui.lineComment.editorLabel": "Комментирование: {{selection}}",
   "ui.lineComment.placeholder": "Добавить комментарий",
   "ui.lineComment.contextPlaceholder": "Добавить контекст для этого изменения",
   "ui.lineComment.submit": "Добавить комментарий",
@@ -119,6 +122,7 @@ export const dict = {
   "ui.list.clearFilter": "Очистить фильтр",
   "ui.list.emptyWithFilter.prefix": "Нет результатов для",
   "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Нет результатов для {{query}}",
 
   "ui.messageNav.newMessage": "Новое сообщение",
 
@@ -167,6 +171,10 @@ export const dict = {
   "ui.common.file.other": "файлов",
   "ui.common.question.one": "вопрос",
   "ui.common.question.other": "вопросов",
+  "ui.common.questionCount.one": "{{count}} вопрос",
+  "ui.common.questionCount.few": "{{count}} вопроса",
+  "ui.common.questionCount.many": "{{count}} вопросов",
+  "ui.common.questionCount.other": "{{count}} вопроса",
 
   "ui.common.add": "Добавить",
   "ui.common.back": "Назад",
@@ -202,6 +210,10 @@ export const dict = {
   "ui.patch.action.patched": "Изменено",
 
   "ui.question.subtitle.answered": "Получено ответов: {{count}}",
+  "ui.question.subtitle.answeredCount.one": "Получено ответов: {{count}}",
+  "ui.question.subtitle.answeredCount.few": "Получено ответов: {{count}}",
+  "ui.question.subtitle.answeredCount.many": "Получено ответов: {{count}}",
+  "ui.question.subtitle.answeredCount.other": "Получено ответов: {{count}}",
   "ui.question.answer.none": "(нет ответа)",
   "ui.question.review.notAnswered": "(не отвечено)",
   "ui.question.multiHint": "Выберите все подходящие",

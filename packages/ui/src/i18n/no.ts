@@ -274,4 +274,12 @@ export const dict: Record<Keys, string> = {
   "ui.messagePart.context.updates": "Oppdateringer",
   "ui.promptInput.cancelUpload": "Avbryt opplasting",
   "ui.promptInput.uploading": "{{percent}} %",
+  "ui.lineComment.label": "Legg inn kommentar til {{selection}}",
+  "ui.lineComment.editorLabel": "Kommentar til {{selection}}",
+  "ui.list.emptyWithFilter": "Ingen resultater for {{query}}",
+  "ui.common.questionCount.one": "{{count}} spørsmål",
+  "ui.common.questionCount.other": "{{count}} spørsmål",
+  "ui.question.subtitle.answeredCount.one": "{{count}} besvart",
+  "ui.question.subtitle.answeredCount.other": "{{count}} besvart",
+  "ui.fileMedia.audioLabel": "Lyd: {{filename}}",
 }

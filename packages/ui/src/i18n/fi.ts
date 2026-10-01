@@ -250,4 +250,12 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "Päivitykset",
   "ui.promptInput.cancelUpload": "Peruuta lähetys",
   "ui.promptInput.uploading": "{{percent}} %",
+  "ui.lineComment.label": "Kommentoi {{selection}}",
+  "ui.lineComment.editorLabel": "Kommentoit kohdetta {{selection}}",
+  "ui.list.emptyWithFilter": "Ei tuloksia haulle {{query}}",
+  "ui.common.questionCount.one": "{{count}} kysymys",
+  "ui.common.questionCount.other": "{{count}} kysymystä",
+  "ui.question.subtitle.answeredCount.one": "Vastatut kysymykset: {{count}}",
+  "ui.question.subtitle.answeredCount.other": "Vastatut kysymykset: {{count}}",
+  "ui.fileMedia.audioLabel": "Ääni: {{filename}}",
 }

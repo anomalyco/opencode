@@ -269,4 +269,12 @@ export const dict = {
   "ui.messagePart.context.updates": "Opdateringer",
   "ui.promptInput.cancelUpload": "Annuller upload",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.lineComment.label": "Skriv en kommentar til {{selection}}",
+  "ui.lineComment.editorLabel": "Skriver en kommentar til {{selection}}",
+  "ui.list.emptyWithFilter": "Ingen resultater for {{query}}",
+  "ui.common.questionCount.one": "{{count}} spørgsmål",
+  "ui.common.questionCount.other": "{{count}} spørgsmål",
+  "ui.question.subtitle.answeredCount.one": "{{count}} besvaret",
+  "ui.question.subtitle.answeredCount.other": "{{count}} besvaret",
+  "ui.fileMedia.audioLabel": "Lyd: {{filename}}",
 }

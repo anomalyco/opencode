@@ -47,11 +47,14 @@ export const dict = {
   "ui.fileMedia.binary.title": "Binarna datoteka",
   "ui.fileMedia.binary.description.path": "{{path}} je binarna datoteka.",
   "ui.fileMedia.binary.description.default": "Binarni sadržaj",
+  "ui.fileMedia.audioLabel": "Audio: {{filename}}",
 
   "ui.lineComment.label.prefix": "Komentar na ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Komentarišeš ",
   "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Komentariši {{selection}}",
+  "ui.lineComment.editorLabel": "Komentarisanje: {{selection}}",
   "ui.lineComment.placeholder": "Dodaj komentar",
   "ui.lineComment.contextPlaceholder": "Dodaj kontekst za ovu izmjenu",
   "ui.lineComment.submit": "Komentariši",
@@ -120,6 +123,7 @@ export const dict = {
   "ui.list.clearFilter": "Očisti filter",
   "ui.list.emptyWithFilter.prefix": "Nema rezultata za",
   "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Nema rezultata za {{query}}",
 
   "ui.messageNav.newMessage": "Nova poruka",
 
@@ -168,6 +172,9 @@ export const dict = {
   "ui.common.file.other": "datoteke",
   "ui.common.question.one": "pitanje",
   "ui.common.question.other": "pitanja",
+  "ui.common.questionCount.one": "{{count}} pitanje",
+  "ui.common.questionCount.few": "{{count}} pitanja",
+  "ui.common.questionCount.other": "{{count}} pitanja",
 
   "ui.common.add": "Dodaj",
   "ui.common.clear": "Očisti",
@@ -203,6 +210,9 @@ export const dict = {
   "ui.patch.action.patched": "Primijenjeno",
 
   "ui.question.subtitle.answered": "Odgovoreno: {{count}}",
+  "ui.question.subtitle.answeredCount.one": "Odgovoreno: {{count}}",
+  "ui.question.subtitle.answeredCount.few": "Odgovoreno: {{count}}",
+  "ui.question.subtitle.answeredCount.other": "Odgovoreno: {{count}}",
   "ui.question.answer.none": "(nema odgovora)",
   "ui.question.review.notAnswered": "(nije odgovoreno)",
   "ui.question.multiHint": "Odaberi sve primjenjive odgovore",

@@ -253,4 +253,12 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "དུས་མཐུན་ཚུ།",
   "ui.promptInput.cancelUpload": "སྐྱེལ་བཙུགས་ཆ་མེད་བཏང་།",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.lineComment.label": "བསམ་འཆར། {{selection}}",
+  "ui.lineComment.editorLabel": "བསམ་འཆར་བཀོད་དོན། {{selection}}",
+  "ui.list.emptyWithFilter": "འཚོལ་ཞིབ་ {{query}} ལུ་གྲུབ་འབྲས་མེད།",
+  "ui.common.questionCount.one": "{{count}} དྲི་བ་",
+  "ui.common.questionCount.other": "{{count}} དྲི་བ།",
+  "ui.question.subtitle.answeredCount.one": "{{count}} ལན་བཏབ།",
+  "ui.question.subtitle.answeredCount.other": "{{count}} ལན་བཏབ།",
+  "ui.fileMedia.audioLabel": "སྒྲ་: {{filename}}",
 }

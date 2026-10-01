@@ -253,4 +253,13 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "යාවත්කාලීන",
   "ui.promptInput.cancelUpload": "උඩුගත කිරීම අවලංගු කරන්න",
   "ui.promptInput.uploading": "{{percent}}%",
+
+  "ui.lineComment.label": "{{selection}} සඳහා අදහස් දක්වන්න",
+  "ui.lineComment.editorLabel": "{{selection}} සඳහා අදහස් දක්වමින්",
+  "ui.list.emptyWithFilter": "{{query}} සඳහා ප්‍රතිඵල නැත",
+  "ui.common.questionCount.one": "ප්‍රශ්න {{count}}ක්",
+  "ui.common.questionCount.other": "ප්‍රශ්න {{count}}ක්",
+  "ui.question.subtitle.answeredCount.one": "{{count}}කට පිළිතුරු දී ඇත",
+  "ui.question.subtitle.answeredCount.other": "{{count}}කට පිළිතුරු දී ඇත",
+  "ui.fileMedia.audioLabel": "ශ්‍රව්‍යය: {{filename}}",
 }

@@ -250,4 +250,12 @@ export const dict: Record<string, string> = {
   "ui.tool.browser": "Trình duyệt",
   "ui.common.fileCount.one": "{{count}} tệp",
   "ui.common.fileCount.other": "{{count}} tệp",
+  "ui.lineComment.label": "Bình luận về {{selection}}",
+  "ui.lineComment.editorLabel": "Đang bình luận về {{selection}}",
+  "ui.list.emptyWithFilter": "Không có kết quả cho {{query}}",
+  "ui.common.questionCount.one": "{{count}} câu hỏi",
+  "ui.common.questionCount.other": "{{count}} câu hỏi",
+  "ui.question.subtitle.answeredCount.one": "Đã trả lời {{count}} câu",
+  "ui.question.subtitle.answeredCount.other": "Đã trả lời {{count}} câu",
+  "ui.fileMedia.audioLabel": "Âm thanh: {{filename}}",
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { createUiI18n, localizedListSeparator, pluralCategory, type UiI18nSource } from "./i18n"
+import { createUiI18n, localizedListSeparator, pluralCategory, richTemplateParts, type UiI18nSource } from "./i18n"
 
 const i18n = (locale: string, translated: string) => {
   const source: UiI18nSource = {
@@ -60,5 +60,13 @@ describe("localizedListSeparator", () => {
     expect(i18n("en-US", "").list(["Read", "Search"])).toBe("Read, Search")
     expect(i18n("en", "").listSeparator(2, 3)).toBe(",")
     expect(i18n("de", "").list(["Lesen", "Suchen"])).toBe("Lesen und Suchen")
+  })
+})
+
+describe("richTemplateParts", () => {
+  test("lets each locale position a rich slot", () => {
+    const selection = "SELECTION"
+    expect(richTemplateParts("Comment on {{selection}}", { selection })).toEqual(["Comment on ", selection])
+    expect(richTemplateParts("{{selection}}에 댓글", { selection })).toEqual([selection, "에 댓글"])
   })
 })

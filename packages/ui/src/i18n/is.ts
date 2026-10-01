@@ -250,4 +250,12 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "Uppfærslur",
   "ui.promptInput.cancelUpload": "Hætta við upphleðslu",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.lineComment.label": "Athugasemdir við {{selection}}",
+  "ui.lineComment.editorLabel": "Gerir athugasemdir við {{selection}}",
+  "ui.list.emptyWithFilter": "Engar niðurstöður fyrir {{query}}",
+  "ui.common.questionCount.one": "{{count}} spurning",
+  "ui.common.questionCount.other": "{{count}} spurningar",
+  "ui.question.subtitle.answeredCount.one": "Svarað: {{count}}",
+  "ui.question.subtitle.answeredCount.other": "Svarað: {{count}}",
+  "ui.fileMedia.audioLabel": "Hljóð: {{filename}}",
 }

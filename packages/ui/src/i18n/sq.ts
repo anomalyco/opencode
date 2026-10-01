@@ -249,4 +249,12 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "Përditësime",
   "ui.promptInput.cancelUpload": "Anulo ngarkimin",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.lineComment.label": "Komentoni {{selection}}",
+  "ui.lineComment.editorLabel": "Duke komentuar {{selection}}",
+  "ui.list.emptyWithFilter": "Nuk ka rezultate për {{query}}",
+  "ui.common.questionCount.one": "{{count}} pyetje",
+  "ui.common.questionCount.other": "{{count}} pyetje",
+  "ui.question.subtitle.answeredCount.one": "Të përgjigjura: {{count}}",
+  "ui.question.subtitle.answeredCount.other": "Të përgjigjura: {{count}}",
+  "ui.fileMedia.audioLabel": "Audio: {{filename}}",
 }

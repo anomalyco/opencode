@@ -274,4 +274,12 @@ export const dict = {
   "ui.messagePart.context.updates": "Aktualisierungen",
   "ui.promptInput.cancelUpload": "Upload abbrechen",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.lineComment.label": "Kommentar zu {{selection}}",
+  "ui.lineComment.editorLabel": "Kommentiere {{selection}}",
+  "ui.list.emptyWithFilter": "Keine Ergebnisse für {{query}}",
+  "ui.common.questionCount.one": "{{count}} Frage",
+  "ui.common.questionCount.other": "{{count}} Fragen",
+  "ui.question.subtitle.answeredCount.one": "{{count}} beantwortet",
+  "ui.question.subtitle.answeredCount.other": "{{count}} beantwortet",
+  "ui.fileMedia.audioLabel": "Audio: {{filename}}",
 } satisfies Partial<Record<Keys, string>>

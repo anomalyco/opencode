@@ -264,4 +264,15 @@ export const dict = {
   "ui.messagePart.context.updates": "עדכונים",
   "ui.promptInput.cancelUpload": "ביטול ההעלאה",
   "ui.promptInput.uploading": "\u2068{{percent}}\u2069%",
+
+  "ui.lineComment.label": "הוסף הערה על \u2068{{selection}}\u2069",
+  "ui.lineComment.editorLabel": "כותב הערה על \u2068{{selection}}\u2069",
+  "ui.list.emptyWithFilter": "אין תוצאות עבור \u2068{{query}}\u2069",
+  "ui.common.questionCount.one": "שאלה אחת (\u2068{{count}}\u2069)",
+  "ui.common.questionCount.other": "\u2068{{count}}\u2069 שאלות",
+  "ui.question.subtitle.answeredCount.one": "נענתה שאלה אחת (\u2068{{count}}\u2069)",
+  "ui.question.subtitle.answeredCount.other": "\u2068{{count}}\u2069 נענו",
+  "ui.fileMedia.audioLabel": "שמע: \u2068{{filename}}\u2069",
+  "ui.common.questionCount.two": "\u2068{{count}}\u2069 שאלות",
+  "ui.question.subtitle.answeredCount.two": "\u2068{{count}}\u2069 נענו",
 }

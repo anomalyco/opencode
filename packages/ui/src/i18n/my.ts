@@ -251,4 +251,12 @@ export const dict = {
   "ui.tool.browser": "ဘရောက်ဇာ",
   "ui.common.fileCount.one": "{{count}} ဖိုင်",
   "ui.common.fileCount.other": "{{count}} ဖိုင်",
+  "ui.lineComment.label": "{{selection}} တွင် မှတ်ချက်ပေးရန်",
+  "ui.lineComment.editorLabel": "{{selection}} တွင် မှတ်ချက်ရေးနေသည်",
+  "ui.list.emptyWithFilter": "{{query}} အတွက် ရလဒ်မရှိပါ",
+  "ui.common.questionCount.one": "မေးခွန်း {{count}} ခု",
+  "ui.common.questionCount.other": "မေးခွန်း {{count}} ခု",
+  "ui.question.subtitle.answeredCount.one": "{{count}} ခု ဖြေပြီး",
+  "ui.question.subtitle.answeredCount.other": "{{count}} ခု ဖြေပြီး",
+  "ui.fileMedia.audioLabel": "အသံ: {{filename}}",
 }

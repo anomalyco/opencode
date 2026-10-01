@@ -271,4 +271,12 @@ export const dict = {
   "ui.tool.browser": "브라우저",
   "ui.common.fileCount.one": "파일 {{count}}개",
   "ui.common.fileCount.other": "파일 {{count}}개",
+  "ui.lineComment.label": "{{selection}}에 댓글 달기",
+  "ui.lineComment.editorLabel": "{{selection}}에 댓글 작성 중",
+  "ui.list.emptyWithFilter": "{{query}}에 대한 결과 없음",
+  "ui.common.questionCount.one": "질문 {{count}}개",
+  "ui.common.questionCount.other": "질문 {{count}}개",
+  "ui.question.subtitle.answeredCount.one": "{{count}}개 답변 완료",
+  "ui.question.subtitle.answeredCount.other": "{{count}}개 답변 완료",
+  "ui.fileMedia.audioLabel": "오디오: {{filename}}",
 }

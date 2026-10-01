@@ -319,6 +319,7 @@ export function UiI18nBridge(props: { children?: JSX.Element }) {
         t: language.t as UiI18n["t"],
         plural: language.plural,
         pluralForm: language.pluralForm,
+        rich: language.rich as UiI18n["rich"],
       }}
     >
       {props.children}

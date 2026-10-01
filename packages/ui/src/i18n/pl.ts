@@ -44,10 +44,13 @@ export const dict = {
   "ui.fileMedia.binary.title": "Plik binarny",
   "ui.fileMedia.binary.description.path": "Nie można wyświetlić pliku {{path}}, ponieważ jest to plik binarny.",
   "ui.fileMedia.binary.description.default": "Nie można wyświetlić tego pliku, ponieważ jest to plik binarny.",
+  "ui.fileMedia.audioLabel": "Dźwięk: {{filename}}",
   "ui.lineComment.label.prefix": "Komentarz do ",
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Komentowanie: ",
   "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Skomentuj {{selection}}",
+  "ui.lineComment.editorLabel": "Komentowanie: {{selection}}",
   "ui.lineComment.placeholder": "Dodaj komentarz",
   "ui.lineComment.contextPlaceholder": "Dodaj kontekst tej zmiany",
   "ui.lineComment.submit": "Skomentuj",
@@ -119,6 +122,7 @@ export const dict = {
   "ui.list.clearFilter": "Wyczyść filtr",
   "ui.list.emptyWithFilter.prefix": "Brak wyników dla",
   "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "Brak wyników dla {{query}}",
 
   "ui.messageNav.newMessage": "Nowa wiadomość",
 
@@ -168,6 +172,10 @@ export const dict = {
   "ui.common.file.other": "pliki",
   "ui.common.question.one": "pytanie",
   "ui.common.question.other": "pytania",
+  "ui.common.questionCount.one": "{{count}} pytanie",
+  "ui.common.questionCount.few": "{{count}} pytania",
+  "ui.common.questionCount.many": "{{count}} pytań",
+  "ui.common.questionCount.other": "{{count}} pytania",
 
   "ui.common.add": "Dodaj",
   "ui.common.back": "Wstecz",
@@ -203,6 +211,10 @@ export const dict = {
   "ui.patch.action.patched": "Załatano",
 
   "ui.question.subtitle.answered": "Liczba odpowiedzi: {{count}}",
+  "ui.question.subtitle.answeredCount.one": "Odpowiedziano: {{count}}",
+  "ui.question.subtitle.answeredCount.few": "Odpowiedziano: {{count}}",
+  "ui.question.subtitle.answeredCount.many": "Odpowiedziano: {{count}}",
+  "ui.question.subtitle.answeredCount.other": "Odpowiedziano: {{count}}",
   "ui.question.answer.none": "(brak odpowiedzi)",
   "ui.question.review.notAnswered": "(bez odpowiedzi)",
   "ui.question.multiHint": "Zaznacz wszystkie pasujące",

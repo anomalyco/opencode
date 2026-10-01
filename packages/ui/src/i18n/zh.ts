@@ -272,4 +272,12 @@ export const dict = {
   "ui.tool.browser": "浏览器",
   "ui.common.fileCount.one": "{{count}} 个文件",
   "ui.common.fileCount.other": "{{count}} 个文件",
+  "ui.lineComment.label": "评论 {{selection}}",
+  "ui.lineComment.editorLabel": "正在评论 {{selection}}",
+  "ui.list.emptyWithFilter": "没有关于 {{query}} 的结果",
+  "ui.common.questionCount.one": "{{count}} 个问题",
+  "ui.common.questionCount.other": "{{count}} 个问题",
+  "ui.question.subtitle.answeredCount.one": "已回答 {{count}} 个",
+  "ui.question.subtitle.answeredCount.other": "已回答 {{count}} 个",
+  "ui.fileMedia.audioLabel": "音频：{{filename}}",
 } satisfies Partial<Record<Keys, string>>

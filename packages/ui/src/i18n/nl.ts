@@ -250,4 +250,12 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "Updates",
   "ui.promptInput.cancelUpload": "Upload annuleren",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.lineComment.label": "Opmerking bij {{selection}}",
+  "ui.lineComment.editorLabel": "Opmerking bij {{selection}}",
+  "ui.list.emptyWithFilter": "Geen resultaten voor {{query}}",
+  "ui.common.questionCount.one": "{{count}} vraag",
+  "ui.common.questionCount.other": "{{count}} vragen",
+  "ui.question.subtitle.answeredCount.one": "{{count}} beantwoord",
+  "ui.question.subtitle.answeredCount.other": "{{count}} beantwoord",
+  "ui.fileMedia.audioLabel": "Audio: {{filename}}",
 }

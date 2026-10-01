@@ -270,4 +270,12 @@ export const dict = {
   "ui.tool.browser": "เบราว์เซอร์",
   "ui.common.fileCount.one": "{{count}} ไฟล์",
   "ui.common.fileCount.other": "{{count}} ไฟล์",
+  "ui.lineComment.label": "แสดงความคิดเห็นใน {{selection}}",
+  "ui.lineComment.editorLabel": "กำลังแสดงความคิดเห็นใน {{selection}}",
+  "ui.list.emptyWithFilter": "ไม่พบผลลัพธ์สำหรับ {{query}}",
+  "ui.common.questionCount.one": "คำถาม {{count}} ข้อ",
+  "ui.common.questionCount.other": "คำถาม {{count}} ข้อ",
+  "ui.question.subtitle.answeredCount.one": "ตอบแล้ว {{count}} ข้อ",
+  "ui.question.subtitle.answeredCount.other": "ตอบแล้ว {{count}} ข้อ",
+  "ui.fileMedia.audioLabel": "เสียง: {{filename}}",
 }

@@ -266,6 +266,7 @@ function ArtifactImage(props: MediaProps) {
 }
 
 function ArtifactVideo(props: MediaProps) {
+  const language = useLanguage()
   const url = createBlobUrl(() => props.content)
   return (
     <div data-slot="artifact-stage" data-zoom="fit" class="relative min-h-0 flex-1 overflow-hidden">
@@ -274,6 +275,7 @@ function ArtifactVideo(props: MediaProps) {
           data-slot="artifact-media"
           class="w-full bg-black"
           controls
+          aria-label={language.t("file.view.videoLabel", { filename: getFilename(props.path) })}
           preload="metadata"
           playsinline
           onError={() => props.onError()}
@@ -289,6 +291,7 @@ function ArtifactVideo(props: MediaProps) {
 }
 
 function ArtifactAudio(props: MediaProps) {
+  const language = useLanguage()
   const url = createBlobUrl(() => props.content)
   return (
     <div data-slot="artifact-stage" class="relative min-h-0 flex-1 overflow-auto">
@@ -302,6 +305,7 @@ function ArtifactAudio(props: MediaProps) {
             class="w-full"
             onError={() => props.onError()}
             controls
+            aria-label={language.t("file.view.audioLabel", { filename: getFilename(props.path) })}
             preload="metadata"
             src={url()}
             onLoadedMetadata={(event) => props.onInfo({ duration: event.currentTarget.duration })}

@@ -255,4 +255,13 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "अपडेटहरू",
   "ui.promptInput.cancelUpload": "अपलोड रद्द गर्नुहोस्",
   "ui.promptInput.uploading": "{{percent}}%",
+
+  "ui.lineComment.label": "{{selection}} मा टिप्पणी गर्नुहोस्",
+  "ui.lineComment.editorLabel": "{{selection}} मा टिप्पणी गर्दै",
+  "ui.list.emptyWithFilter": "{{query}} का लागि कुनै नतिजा छैन",
+  "ui.common.questionCount.one": "{{count}} प्रश्न",
+  "ui.common.questionCount.other": "{{count}} प्रश्नहरू",
+  "ui.question.subtitle.answeredCount.one": "{{count}} को उत्तर दिइयो",
+  "ui.question.subtitle.answeredCount.other": "{{count}} का उत्तर दिइए",
+  "ui.fileMedia.audioLabel": "अडियो: {{filename}}",
 }

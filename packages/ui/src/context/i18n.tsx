@@ -1,4 +1,4 @@
-import { createContext, useContext, type Accessor, type ParentProps } from "solid-js"
+import { createContext, useContext, type Accessor, type JSX, type ParentProps } from "solid-js"
 import { I18nProvider } from "@kobalte/core/i18n"
 import { dict as en } from "../i18n/en"
 import type { Key, LocaleKey, PluralCategory, PluralKey, PluralLookupKey } from "../i18n/en"
@@ -20,6 +20,7 @@ export type UiI18nSource = {
   t: UiTranslate
   plural: (key: UiI18nPluralKey, count: number, params?: UiI18nParams) => string
   pluralForm?: (key: UiI18nPluralKey, category: UiPluralCategory, params?: UiI18nParams) => string
+  rich?: (key: UiI18nOrdinaryKey, params: Record<string, JSX.Element>) => JSX.Element[]
 }
 
 export type UiI18n = UiI18nSource & {
@@ -27,6 +28,7 @@ export type UiI18n = UiI18nSource & {
   tDynamic: (key: UiI18nOrdinaryKey, source: string, params?: UiI18nParams) => string
   list: (items: readonly string[]) => string
   listSeparator: (index: number, count: number) => string
+  rich: (key: UiI18nOrdinaryKey, params: Record<string, JSX.Element>) => JSX.Element[]
 }
 
 const rules = new Map<string, Intl.PluralRules>()
@@ -68,6 +70,17 @@ function resolveTemplate(text: string, params?: UiI18nParams) {
   })
 }
 
+export function richTemplateParts(template: string, params: Record<string, JSX.Element>) {
+  return template
+    .split(/({{\s*[^}]+?\s*}})/g)
+    .filter(Boolean)
+    .map((part) => {
+      const match = part.match(/^{{\s*([^}]+?)\s*}}$/)
+      if (!match) return part
+      return params[match[1]] ?? ""
+    })
+}
+
 export function createUiI18n(source: UiI18nSource): UiI18n {
   return {
     ...source,
@@ -84,6 +97,7 @@ export function createUiI18n(source: UiI18nSource): UiI18n {
           ? ","
           : ""
         : localizedListSeparator(source.locale(), index, count),
+    rich: source.rich ?? ((key, params) => richTemplateParts(source.t(key), params)),
   }
 }
 

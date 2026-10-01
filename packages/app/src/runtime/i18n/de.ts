@@ -1593,4 +1593,121 @@ export const dict = {
   "settings.updates.migration.title": "Von Beta zu Stabil wechseln",
   "settings.updates.migration.description":
     "OpenCode Beta wird vorerst zu OpenCode Stabil verschoben. Laden Sie Version {{version}} herunter und installieren Sie OpenCode anschließend über das Disk-Image, um weiterhin Updates zu erhalten.",
+  "command.provider.connect.description":
+    "Melden Sie sich bei OpenCode Go, OpenCode Console oder einem anderen Modellanbieter an",
+  "command.session.btw": "Stellen Sie eine Nebenfrage",
+  "command.session.btw.description": "Erhalten Sie eine einmalige Antwort, ohne sie der Unterhaltung hinzuzufügen",
+  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.freeName": "OpenCode Free",
+  "provider.connect.console.title": "Verbindung mit OpenCode Console wird hergestellt",
+  "provider.connect.console.instructions":
+    "Fahren Sie in Ihrem Browser fort. Bestätigen Sie, dass der dort angezeigte Code mit dem unten angezeigten übereinstimmt.",
+  "provider.connect.console.deviceCode": "Gerätecode",
+  "provider.connect.console.deviceCode.label": "Gerätecode: {{code}}",
+  "provider.connect.console.waiting": "Warten auf Bestätigung…",
+  "provider.connect.console.browserHint": "Browser wurde nicht geöffnet?",
+  "provider.connect.console.copyLink": "Anmeldelink kopieren",
+  "provider.connect.console.linkCopied": "Anmeldelink kopiert",
+  "provider.connect.console.copyFailed":
+    "Der Anmeldelink konnte nicht kopiert werden. Öffnen Sie die Konsole erneut, um fortzufahren.",
+  "provider.connect.console.openAgain": "Konsole erneut öffnen",
+  "provider.connect.console.browserFailed":
+    "Wir konnten Ihren Browser nicht öffnen. Versuchen Sie es erneut oder kopieren Sie den Anmeldelink, um fortzufahren.",
+  "provider.connect.console.expired":
+    "Diese Anmeldeanforderung ist abgelaufen. Beginnen Sie erneut, um einen neuen Gerätecode zu erhalten.",
+  "provider.connect.console.denied":
+    "Der Zugriff in der Konsole wurde verweigert. Versuchen Sie es erneut, wenn Sie bereit sind, eine Verbindung herzustellen.",
+  "provider.connect.console.statusFailed":
+    "Autorisierung konnte nicht überprüft werden. Überprüfen Sie Ihre Serververbindung und versuchen Sie es erneut.",
+  "provider.connect.console.startFailed":
+    "Die Anmeldung konnte nicht gestartet werden. Überprüfen Sie Ihre Serververbindung und versuchen Sie es erneut.",
+  "provider.connect.models.title": "Verbunden mit {{provider}}",
+  "provider.connect.models.description": "Wählen Sie zunächst ein Modell. Sie können jederzeit das Modell wechseln.",
+  "provider.connect.models.available": "Verfügbare Modelle",
+  "provider.connect.models.list": "Von {{provider}} verfügbare Modelle",
+  "provider.connect.console.refreshFailed":
+    "Ihr Konto ist verbunden, aber wir konnten Ihre Modelle nicht laden. Versuchen Sie erneut, sie zu aktualisieren.",
+  "provider.connect.console.connected": "OpenCode verbunden",
+  "provider.connect.console.noModels":
+    "Ihr Konto ist verbunden, aber in diesem Konsolenarbeitsbereich sind keine Modelle verfügbar. Überprüfen Sie die Einrichtung in der Konsole und aktualisieren Sie sie dann.",
+  "provider.connect.console.modelsLoading": "Ihre Modelle werden noch geladen. Aktualisieren Sie, um erneut zu prüfen.",
+  "provider.connect.console.refresh": "Modelle aktualisieren",
+  "provider.connect.console.openingBrowser": "Browser wird geöffnet…",
+  "provider.connect.console.serviceAccount": "Dienstkonto?",
+  "provider.connect.console.useApiKey": "API-Schlüssel verwenden",
+  "provider.connect.remote.title": "Verbindung über „{{server}}“",
+  "provider.connect.remote.description":
+    "Ihre OpenCode-Anmeldeinformationen werden auf diesem Server gespeichert. Modelle werden über diesen Server verfügbar sein.",
+  "provider.connect.form.unsupported": "Dieses Authentifizierungsformular enthält nicht unterstützte Felder",
+  "provider.connect.oauth.auto.confirmationCode.description":
+    "Überprüfen Sie vor der Autorisierung, ob Ihr Browser denselben Code anzeigt.",
+  "provider.connect.oauth.auto.description":
+    "Ihr Browser wird geöffnet, sodass Sie sich bei {{provider}} anmelden können. Kommen Sie hierher zurück, wenn Sie fertig sind.",
+  "provider.connect.oauth.code.description":
+    "Ihr Browser wird geöffnet, sodass Sie sich bei {{provider}} anmelden können. Fügen Sie den Autorisierungscode ein, den Sie unten erhalten.",
+  "provider.connect.oauth.openBrowser": "Browser öffnen",
+  "provider.connect.oauth.expired": "Autorisierung abgelaufen",
+  "provider.connect.console.apiKey.description":
+    "Fügen Sie einen API-Schlüssel für ein Dienstkonto ein. Dienstkonten erstellen Sie im OpenCode Console unter Schlüssel.",
+  "provider.connect.console.apiKey.link": "Öffnen Sie die Konsole",
+  "common.retry": "Versuchen Sie es erneut",
+  "server.connect.link.expired":
+    "Dieser Pairing-Link ist abgelaufen oder wurde bereits verwendet. Führen Sie opencode pair aus, um ein neues zu erhalten.",
+  "command.server.pair": "Gerät koppeln",
+  "settings.pairing.title": "Kopplung",
+  "settings.pairing.connection": "Lokales Netzwerk",
+  "pair.local.description":
+    "Verbindungsdetails und einen QR-Code anzeigen, um ein Gerät im selben Netzwerk zu verbinden.",
+  "pair.local.open": "Details anzeigen",
+  "pair.screenActive.title": "Bildschirm aktiv halten",
+  "pair.screenActive.description":
+    "Verhindern Sie, dass die Anzeige dieses Computers in den Ruhezustand wechselt, während OpenCode ausgeführt wird.",
+  "pair.screenActive.error":
+    "Die Einstellung für die Bildschirmaktivität konnte nicht aktualisiert werden. Versuchen Sie es erneut.",
+  "pair.description": "Verbinden Sie ein anderes Gerät mit dem OpenCode-Server dieser Maschine.",
+  "pair.qr": "QR-Code zur Kopplung",
+  "pair.copy": "Details kopieren",
+  "pair.copy.error": "Kopplungsdetails konnten nicht kopiert werden. Versuchen Sie es erneut.",
+  "pair.error": "Kopplungsdetails konnten nicht aktualisiert werden. Versuchen Sie es erneut.",
+  "file.view.preview": "Vorschau",
+  "file.view.source": "Quelle",
+  "file.view.openInBrowser": "Im Browser öffnen",
+  "file.view.binary": "Binärdatei · {{size}}",
+  "file.view.table.rows.one": "{{count}} Zeile",
+  "file.view.table.rows.other": "{{count}} Zeilen",
+  "file.view.table.columns.one": "{{count}} Spalte",
+  "file.view.table.columns.other": "{{count}} Spalten",
+  "file.view.table.truncated": "Die ersten {{shown}} von {{total}} Zeilen werden angezeigt.",
+  "file.view.fontSample": "Sphinx aus schwarzem Quarz, beurteile mein Gelübde.",
+  "home.project.missing.title": "Projektordner nicht gefunden",
+  "home.project.missing.description": "Der Ordner für {{name}} existiert nicht mehr.",
+  "session.tab.btw": "/btw",
+  "session.queue.undo": "Rückgängig machen",
+  "session.queue.undoShell":
+    "Verlassen Sie den Shell-Modus, bevor Sie eine Eingabeaufforderung in der Warteschlange rückgängig machen",
+  "session.queue.undoUnavailable":
+    "Bearbeiten Sie diese Eingabeaufforderung in der Warteschlange, um ihren Dateikontext beizubehalten",
+  "session.btw.questionRequired": "Fügen Sie nach /btw eine Frage hinzu",
+  "session.btw.error": "Diese Frage konnte nicht beantwortet werden",
+  "session.btw.retry": "Wiederholen",
+  "session.btw.copy": "Antwort kopieren",
+  "settings.projects.empty.title": "Noch keine Projekte",
+  "settings.projects.empty.description": "Fügen Sie ein Projekt hinzu, um loszulegen",
+  "settings.providers.account.manage": "{{provider}}-Konten verwalten",
+  "settings.providers.account.group": "Konten",
+  "settings.providers.account.add": "Konto hinzufügen",
+  "settings.providers.account.remove": "Konto entfernen…",
+  "settings.providers.account.active": "Aktiv",
+  "settings.providers.account.switched.title": "{{provider}}-Konto gewechselt",
+  "settings.providers.account.switched.description": "Jetzt mit {{account}}.",
+  "settings.providers.account.removed.title": "{{account}} entfernt",
+  "settings.providers.account.removed.description": "{{provider}} wird dieses Konto nicht mehr verwenden.",
+  "settings.providers.console.available.one": "{{count}} Anbieter verfügbar",
+  "settings.providers.console.available.other": "{{count}}-Anbieter verfügbar",
+  "settings.providers.tag.account": "Konto",
+  "settings.models.enableAll": "Alle Modelle aktivieren",
+  "settings.models.disableAll": "Alle Modelle deaktivieren",
+  "provider.custom.description": "Konfigurieren Sie einen OpenAI-kompatiblen Anbieter. Siehe die {{link}}.",
+  "file.view.videoLabel": "Video: {{filename}}",
+  "file.view.audioLabel": "Audio: {{filename}}",
 } satisfies Partial<Record<Keys, string>>

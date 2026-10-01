@@ -257,4 +257,13 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "އަޕްޑޭޓްތައް",
   "ui.promptInput.cancelUpload": "އަޕްލޯޑް ކެންސަލް ކުރަން",
   "ui.promptInput.uploading": "\u2068{{percent}}\u2069%",
+
+  "ui.lineComment.label": "\u2068{{selection}}\u2069 އަށް ކޮމެންޓެއް ކުރާށެވެ",
+  "ui.lineComment.editorLabel": "\u2068{{selection}}\u2069 އަށް ކޮމެންޓް ކުރަނީ",
+  "ui.list.emptyWithFilter": "\u2068{{query}}\u2069 އަށް ނަތީޖާއެއް ނެތް",
+  "ui.common.questionCount.one": "\u2068{{count}}\u2069 ސުވާލު",
+  "ui.common.questionCount.other": "\u2068{{count}}\u2069 ސުވާލުތައް",
+  "ui.question.subtitle.answeredCount.one": "\u2068{{count}}\u2069 އަށް ޖަވާބު ދެވިއްޖެ",
+  "ui.question.subtitle.answeredCount.other": "\u2068{{count}}\u2069 އަށް ޖަވާބު ދެވިއްޖެ",
+  "ui.fileMedia.audioLabel": "އޯޑިއޯ: \u2068{{filename}}\u2069",
 }

@@ -272,4 +272,12 @@ export const dict = {
   "ui.tool.browser": "瀏覽器",
   "ui.common.fileCount.one": "{{count}} 個檔案",
   "ui.common.fileCount.other": "{{count}} 個檔案",
+  "ui.lineComment.label": "評論 {{selection}}",
+  "ui.lineComment.editorLabel": "正在評論 {{selection}}",
+  "ui.list.emptyWithFilter": "找不到關於 {{query}} 的結果",
+  "ui.common.questionCount.one": "{{count}} 個問題",
+  "ui.common.questionCount.other": "{{count}} 個問題",
+  "ui.question.subtitle.answeredCount.one": "已回答 {{count}} 個",
+  "ui.question.subtitle.answeredCount.other": "已回答 {{count}} 個",
+  "ui.fileMedia.audioLabel": "音訊：{{filename}}",
 } satisfies Partial<Record<Keys, string>>

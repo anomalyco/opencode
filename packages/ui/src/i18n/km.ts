@@ -251,4 +251,12 @@ export const dict = {
   "ui.tool.browser": "ម៉ាស៊ីនរកមើល",
   "ui.common.fileCount.one": "{{count}} ឯកសារ",
   "ui.common.fileCount.other": "{{count}} ឯកសារ",
+  "ui.lineComment.label": "ផ្តល់មតិលើ {{selection}}",
+  "ui.lineComment.editorLabel": "កំពុងផ្តល់មតិលើ {{selection}}",
+  "ui.list.emptyWithFilter": "គ្មានលទ្ធផលសម្រាប់ {{query}}",
+  "ui.common.questionCount.one": "{{count}} សំណួរ",
+  "ui.common.questionCount.other": "{{count}} សំណួរ",
+  "ui.question.subtitle.answeredCount.one": "បានឆ្លើយ {{count}}",
+  "ui.question.subtitle.answeredCount.other": "បានឆ្លើយ {{count}}",
+  "ui.fileMedia.audioLabel": "អូឌីយ៉ូ៖ {{filename}}",
 }

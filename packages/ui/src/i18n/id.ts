@@ -272,4 +272,12 @@ export const dict: Record<string, string> = {
   "ui.tool.browser": "Peramban",
   "ui.common.fileCount.one": "{{count}} berkas",
   "ui.common.fileCount.other": "{{count}} berkas",
+  "ui.lineComment.label": "Komentari {{selection}}",
+  "ui.lineComment.editorLabel": "Mengomentari {{selection}}",
+  "ui.list.emptyWithFilter": "Tidak ada hasil untuk {{query}}",
+  "ui.common.questionCount.one": "{{count}} pertanyaan",
+  "ui.common.questionCount.other": "{{count}} pertanyaan",
+  "ui.question.subtitle.answeredCount.one": "{{count}} terjawab",
+  "ui.question.subtitle.answeredCount.other": "{{count}} terjawab",
+  "ui.fileMedia.audioLabel": "Audio: {{filename}}",
 }

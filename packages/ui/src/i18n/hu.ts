@@ -251,4 +251,12 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "Frissítések",
   "ui.promptInput.cancelUpload": "Feltöltés megszakítása",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.lineComment.label": "Megjegyzés ehhez: {{selection}}",
+  "ui.lineComment.editorLabel": "Megjegyzés írása ehhez: {{selection}}",
+  "ui.list.emptyWithFilter": "Nincs találat erre: {{query}}",
+  "ui.common.questionCount.one": "{{count}} kérdés",
+  "ui.common.questionCount.other": "{{count}} kérdés",
+  "ui.question.subtitle.answeredCount.one": "Megválaszolva: {{count}}",
+  "ui.question.subtitle.answeredCount.other": "Megválaszolva: {{count}}",
+  "ui.fileMedia.audioLabel": "Hang: {{filename}}",
 }

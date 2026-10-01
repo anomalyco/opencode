@@ -50,6 +50,8 @@ const source = {
   "ui.lineComment.label.suffix": "",
   "ui.lineComment.editorLabel.prefix": "Commenting on ",
   "ui.lineComment.editorLabel.suffix": "",
+  "ui.lineComment.label": "Comment on {{selection}}",
+  "ui.lineComment.editorLabel": "Commenting on {{selection}}",
   "ui.lineComment.placeholder": "Add comment",
   "ui.lineComment.contextPlaceholder": "Add context for this change",
   "ui.lineComment.submit": "Comment",
@@ -135,6 +137,7 @@ const source = {
   "ui.list.clearFilter": "Clear filter",
   "ui.list.emptyWithFilter.prefix": "No results for",
   "ui.list.emptyWithFilter.suffix": "",
+  "ui.list.emptyWithFilter": "No results for {{query}}",
 
   "ui.fileSearch.placeholder": "Find",
   "ui.fileSearch.previousMatch": "Previous match",
@@ -217,6 +220,8 @@ const source = {
   "ui.common.fileCount.other": "{{count}} files",
   "ui.common.question.one": "question",
   "ui.common.question.other": "questions",
+  "ui.common.questionCount.one": "{{count}} question",
+  "ui.common.questionCount.other": "{{count}} questions",
 
   "ui.common.add": "Add",
   "ui.common.clear": "Clear",
@@ -267,6 +272,9 @@ const source = {
   "ui.patch.action.patched": "Patched",
 
   "ui.question.subtitle.answered": "{{count}} answered",
+  "ui.question.subtitle.answeredCount.one": "{{count}} answered",
+  "ui.question.subtitle.answeredCount.other": "{{count}} answered",
+  "ui.fileMedia.audioLabel": "Audio: {{filename}}",
   "ui.question.answer.none": "(no answer)",
   "ui.question.review.notAnswered": "(not answered)",
   "ui.question.multiHint": "Select all answers that apply",

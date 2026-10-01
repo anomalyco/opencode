@@ -251,4 +251,13 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "به‌روزرسانی‌ها",
   "ui.promptInput.cancelUpload": "لغو بارگذاری",
   "ui.promptInput.uploading": "\u2068{{percent}}\u2069٪",
+
+  "ui.lineComment.label": "نظر دربارهٔ \u2068{{selection}}\u2069",
+  "ui.lineComment.editorLabel": "در حال نوشتن نظر دربارهٔ \u2068{{selection}}\u2069",
+  "ui.list.emptyWithFilter": "نتیجه‌ای برای \u2068{{query}}\u2069 پیدا نشد",
+  "ui.common.questionCount.one": "\u2068{{count}}\u2069 پرسش",
+  "ui.common.questionCount.other": "\u2068{{count}}\u2069 پرسش",
+  "ui.question.subtitle.answeredCount.one": "به \u2068{{count}}\u2069 مورد پاسخ داده شد",
+  "ui.question.subtitle.answeredCount.other": "به \u2068{{count}}\u2069 مورد پاسخ داده شد",
+  "ui.fileMedia.audioLabel": "صدا: \u2068{{filename}}\u2069",
 }

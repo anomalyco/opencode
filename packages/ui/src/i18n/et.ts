@@ -249,4 +249,12 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "Uuendused",
   "ui.promptInput.cancelUpload": "Tühista üleslaadimine",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.lineComment.label": "kommenteerida {{selection}}",
+  "ui.lineComment.editorLabel": "Kommenteerides {{selection}}",
+  "ui.list.emptyWithFilter": "Päringule „{{query}}” pole tulemusi",
+  "ui.common.questionCount.one": "{{count}} küsimus",
+  "ui.common.questionCount.other": "{{count}} küsimusi",
+  "ui.question.subtitle.answeredCount.one": "Vastatud: {{count}}",
+  "ui.question.subtitle.answeredCount.other": "Vastatud: {{count}}",
+  "ui.fileMedia.audioLabel": "Heli: {{filename}}",
 }

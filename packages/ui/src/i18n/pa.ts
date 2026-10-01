@@ -256,4 +256,13 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "اپ ڈیٹاں",
   "ui.promptInput.cancelUpload": "اپ لوڈ منسوخ کرو",
   "ui.promptInput.uploading": "\u2068{{percent}}\u2069%",
+
+  "ui.lineComment.label": "\u2068{{selection}}\u2069 اُتے تبصرہ کرو",
+  "ui.lineComment.editorLabel": "\u2068{{selection}}\u2069 اُتے تبصرہ کر رئے آں",
+  "ui.list.emptyWithFilter": "\u2068{{query}}\u2069 لئی کوئی نتیجہ نئیں",
+  "ui.common.questionCount.one": "\u2068{{count}}\u2069 سوال",
+  "ui.common.questionCount.other": "\u2068{{count}}\u2069 سوال",
+  "ui.question.subtitle.answeredCount.one": "\u2068{{count}}\u2069 دا جواب دتا گیا",
+  "ui.question.subtitle.answeredCount.other": "\u2068{{count}}\u2069 دے جواب دتے گئے",
+  "ui.fileMedia.audioLabel": "آڈیو: \u2068{{filename}}\u2069",
 }

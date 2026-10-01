@@ -107,8 +107,11 @@ export const DialogServer: Component<{
         >
           <div class="flex w-full min-w-0 flex-col gap-6">
             <div class="flex w-full min-w-0 flex-col gap-2">
-              <label class="settings-server-dialog-label">{language.t("dialog.server.add.url")}</label>
+              <label for="dialog-server-url" class="settings-server-dialog-label">
+                {language.t("dialog.server.add.url")}
+              </label>
               <TextInput
+                id="dialog-server-url"
                 type="text"
                 appearance="large"
                 class="!w-full self-stretch"
@@ -128,8 +131,11 @@ export const DialogServer: Component<{
               </Show>
             </div>
             <div class="flex w-full min-w-0 flex-col gap-2">
-              <label class="settings-server-dialog-label">{language.t("dialog.server.add.name")}</label>
+              <label for="dialog-server-name" class="settings-server-dialog-label">
+                {language.t("dialog.server.add.name")}
+              </label>
               <TextInput
+                id="dialog-server-name"
                 type="text"
                 appearance="large"
                 class="!w-full self-stretch"
@@ -141,8 +147,11 @@ export const DialogServer: Component<{
               />
             </div>
             <div class="flex w-full min-w-0 flex-col gap-2">
-              <label class="settings-server-dialog-label">{language.t("dialog.server.add.password")}</label>
+              <label for="dialog-server-password" class="settings-server-dialog-label">
+                {language.t("dialog.server.add.password")}
+              </label>
               <TextInput
+                id="dialog-server-password"
                 type="password"
                 appearance="large"
                 class="!w-full self-stretch"

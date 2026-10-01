@@ -275,4 +275,12 @@ export const dict = {
   "ui.messagePart.context.updates": "Güncellemeler",
   "ui.promptInput.cancelUpload": "Yüklemeyi iptal et",
   "ui.promptInput.uploading": "%{{percent}}",
+  "ui.lineComment.label": "Yorum: {{selection}}",
+  "ui.lineComment.editorLabel": "Yorum yapılıyor: {{selection}}",
+  "ui.list.emptyWithFilter": "Sonuç bulunamadı: {{query}}",
+  "ui.common.questionCount.one": "{{count}} soru",
+  "ui.common.questionCount.other": "{{count}} soru",
+  "ui.question.subtitle.answeredCount.one": "{{count}} yanıtlandı",
+  "ui.question.subtitle.answeredCount.other": "{{count}} yanıtlandı",
+  "ui.fileMedia.audioLabel": "Ses: {{filename}}",
 } satisfies Partial<Record<Keys, string>>

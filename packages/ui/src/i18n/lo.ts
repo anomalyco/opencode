@@ -250,4 +250,12 @@ export const dict = {
   "ui.tool.browser": "ເບຣາວເຊີ",
   "ui.common.fileCount.one": "{{count}} ໄຟລ໌",
   "ui.common.fileCount.other": "{{count}} ໄຟລ໌",
+  "ui.lineComment.label": "ສະແດງຄຳເຫັນຕໍ່ {{selection}}",
+  "ui.lineComment.editorLabel": "ກຳລັງສະແດງຄຳເຫັນຕໍ່ {{selection}}",
+  "ui.list.emptyWithFilter": "ບໍ່ມີຜົນລັບສຳລັບ {{query}}",
+  "ui.common.questionCount.one": "{{count}} ຄຳຖາມ",
+  "ui.common.questionCount.other": "{{count}} ຄຳຖາມ",
+  "ui.question.subtitle.answeredCount.one": "ຕອບແລ້ວ {{count}}",
+  "ui.question.subtitle.answeredCount.other": "ຕອບແລ້ວ {{count}}",
+  "ui.fileMedia.audioLabel": "ສຽງ: {{filename}}",
 }

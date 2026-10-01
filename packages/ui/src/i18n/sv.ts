@@ -250,4 +250,12 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "Uppdateringar",
   "ui.promptInput.cancelUpload": "Avbryt uppladdning",
   "ui.promptInput.uploading": "{{percent}} %",
+  "ui.lineComment.label": "Kommentera {{selection}}",
+  "ui.lineComment.editorLabel": "Kommenterar {{selection}}",
+  "ui.list.emptyWithFilter": "Inga resultat för {{query}}",
+  "ui.common.questionCount.one": "{{count}} fråga",
+  "ui.common.questionCount.other": "{{count}} frågor",
+  "ui.question.subtitle.answeredCount.one": "{{count}} besvarade",
+  "ui.question.subtitle.answeredCount.other": "{{count}} besvarade",
+  "ui.fileMedia.audioLabel": "Ljud: {{filename}}",
 }
