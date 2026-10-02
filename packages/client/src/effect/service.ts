@@ -84,7 +84,9 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         info,
         count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
       }
-      if (timeouts.count >= 3) {
+      // Require sustained unresponsiveness before evicting: transient Windows probe stalls must
+      // reconnect, never kill a healthy service and abort its sessions.
+      if (timeouts.count >= 5) {
         yield* announce("missing")
         yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
         yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
@@ -121,8 +123,10 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     }
     finished.forEach((item) => contenders.delete(item))
     if (failure !== undefined && contenders.size === 0) return yield* Effect.fail(failure)
-    // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
-    if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
+    // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery. While health
+    // probes against the registered service keep timing out, wait for eviction instead: a contender
+    // that registers first would take over and leak the hung process terminate() no longer matches.
+    if (timeouts === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
       yield* announce("missing")
       contenders.add(yield* spawnContender)
       lastSpawn = Date.now()
