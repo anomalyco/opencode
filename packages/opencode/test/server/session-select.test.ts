@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
+import { GlobalBus, type GlobalEvent } from "@/bus/global"
 import { Session } from "@/session/session"
 import { TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
@@ -25,6 +26,31 @@ describe("tui.selectSession endpoint", () => {
         expect(response.status).toBe(200)
         const body = yield* response.json
         expect(body).toBe(true)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "should publish the target client with the select event",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const session = yield* Session.use.create({})
+        const seen: unknown[] = []
+        const on = (event: GlobalEvent) => {
+          if (event.payload.type === "tui.session.select") seen.push(event.payload.properties)
+        }
+        GlobalBus.on("event", on)
+        yield* Effect.addFinalizer(() => Effect.sync(() => GlobalBus.off("event", on)))
+
+        const response = yield* requestInDirectory("/tui/select-session", tmp.directory, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ sessionID: session.id, client: "pane-2" }),
+        })
+
+        expect(response.status).toBe(200)
+        expect(seen).toEqual([{ sessionID: session.id, client: "pane-2" }])
       }),
     { git: true },
   )
