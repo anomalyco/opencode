@@ -2,11 +2,7 @@ import type { ClientCapabilities } from "@agentclientprotocol/sdk"
 
 export const ChildSessionUpdates = "opencode/child-session-updates"
 
-export type Capabilities = {
-  readonly childSessionUpdates: boolean
-  readonly formElicitation: boolean
-  readonly compaction: boolean
-}
+export type Capabilities = ReturnType<typeof parse>
 
 export function parse(client: ClientCapabilities | undefined) {
   const elicitation = client?.elicitation

@@ -62,7 +62,7 @@ const ask = Effect.fnUntraced(function* (input: Input) {
   const toolCall = pendingToolCall({
     toolCallId: ACPChild.toolCallID(input.child, input.tool?.id ?? input.event.data.id),
     toolName,
-    state: { input: toolInput, title: title ? ACPChild.title(input.child, title) : input.child?.title },
+    state: { input: toolInput, title: title ? ACPChild.prefixTitle(input.child, title) : input.child?.title },
     cwd: input.cwd,
   })
   const result = yield* input.connection.requestPermission({

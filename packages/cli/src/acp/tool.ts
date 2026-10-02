@@ -89,7 +89,7 @@ export function runningToolUpdate(input: {
     toolCallId: input.toolCallId,
     status: "in_progress",
     kind: toToolKind(input.toolName),
-    title: toolTitle(input.toolName, input.state.input, undefined),
+    title: toolTitle(input.toolName, input.state.input),
     locations: toLocations(input.toolName, input.state.input, input.cwd),
     rawInput: rawInput(input.toolName, input.state.input, input.cwd),
   }
@@ -142,7 +142,7 @@ export function errorToolUpdate(input: {
     toolCallId: input.toolCallId,
     status: "failed",
     kind: toToolKind(input.toolName),
-    title: toolTitle(input.toolName, input.input, undefined),
+    title: toolTitle(input.toolName, input.input),
     locations: toLocations(input.toolName, input.input, input.cwd),
     rawInput: rawInput(input.toolName, input.input, input.cwd),
     content: [...toolContent(input.content ?? []), { type: "content", content: { type: "text", text: input.error } }],
@@ -162,7 +162,7 @@ function toolContent(content: ReadonlyArray<Tool.Content>): ToolCallContent[] {
   })
 }
 
-function toolTitle(toolName: string, input: ToolInput, fallback: string | undefined) {
+function toolTitle(toolName: string, input: ToolInput, fallback?: string) {
   if (isShell(toolName)) return stringValue(input.command) ?? stringValue(input.cmd) ?? fallback ?? toolName
   return fallback || toolName
 }

@@ -8,6 +8,7 @@ import { ACPCompaction } from "./compaction"
 import type { ACPConnection } from "./connection"
 import { partsToContentChunks } from "./content"
 import type { Attached } from "./sessions"
+import { ACPTranslate } from "./translate"
 import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate } from "./tool"
 
 export function history(
@@ -54,9 +55,7 @@ export function updates(message: SessionMessage.Info, cwd: string, capabilities:
   }
   if (message.type !== "assistant") return []
   // Live reasoning ordinals count only reasoning parts, not the mixed content array.
-  const reasoningOrdinals = new Map(
-    message.content.filter((part) => part.type === "reasoning").map((part, ordinal) => [part, ordinal]),
-  )
+  const reasoning = message.content.filter((part) => part.type === "reasoning")
   return message.content.flatMap((part): SessionUpdate[] => {
     if (part.type === "text")
       return [
@@ -66,7 +65,7 @@ export function updates(message: SessionMessage.Info, cwd: string, capabilities:
       return [
         {
           sessionUpdate: "agent_thought_chunk",
-          messageId: `${message.id}:reasoning:${reasoningOrdinals.get(part)}`,
+          messageId: ACPTranslate.reasoningMessageID(message.id, reasoning.indexOf(part)),
           content: { type: "text", text: part.text },
         },
       ]

@@ -203,7 +203,7 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
         state,
         outputs: send({
           sessionUpdate: "agent_thought_chunk",
-          messageId: `${event.data.assistantMessageID}:reasoning:${event.data.ordinal}`,
+          messageId: reasoningMessageID(event.data.assistantMessageID, event.data.ordinal),
           content: { type: "text", text: event.data.delta },
         }),
       }
@@ -347,14 +347,7 @@ export function response(state: TurnState, sessionID: string, terminal: Terminal
       }
     : undefined
   const error = (state.stepError ?? state.executionError)?.type
-  const stopReason =
-    terminal === "interrupted" || error === "aborted"
-      ? "cancelled"
-      : state.finish === "length"
-        ? "max_tokens"
-        : state.finish === "content-filter" || error === "provider.content-filter"
-          ? "refusal"
-          : "end_turn"
+  const stopReason = resolveStopReason({ terminal, finish: state.finish, error })
   // Interruption clears the projected retry, so a retry pending at interrupt is reported here.
   const retry = state.retries.get(sessionID)
   return { stopReason, ...(usage ? { usage } : {}), _meta: retry ? { [RetryMeta]: retry } : {} }
@@ -385,6 +378,10 @@ export function abandon(state: TurnState, ctx: Context): Step {
         : []),
     ],
   }
+}
+
+export function reasoningMessageID(messageID: string, ordinal: number) {
+  return `${messageID}:reasoning:${ordinal}`
 }
 
 function newTool(sessionID: string, id: string, name = "tool"): Tool {
@@ -451,6 +448,17 @@ function sessionIDFromEvent(event: OpenCodeEvent) {
 
 function toolKey(sessionID: string, id: string) {
   return `${sessionID}:${id}`
+}
+
+function resolveStopReason(input: {
+  readonly terminal: Terminal
+  readonly finish: SessionMessage.Assistant["finish"]
+  readonly error?: string
+}): PromptResponse["stopReason"] {
+  if (input.terminal === "interrupted" || input.error === "aborted") return "cancelled"
+  if (input.finish === "length") return "max_tokens"
+  if (input.finish === "content-filter" || input.error === "provider.content-filter") return "refusal"
+  return "end_turn"
 }
 
 export * as ACPTranslate from "./translate"

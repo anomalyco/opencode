@@ -254,8 +254,7 @@ export const make = Effect.fnUntraced(function* (input: {
           Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP server interrupt failed", cause),
         ),
       )
-    const before = yield* Ref.get(state)
-    if (!before.started) return
+    if (!(yield* Ref.get(state)).started) return
     if (Option.exists(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)), Exit.isSuccess)) return
     yield* Fiber.interrupt(events)
     const abandoned = ACPTranslate.abandon(yield* Ref.get(state), ctx)
@@ -298,8 +297,7 @@ export const make = Effect.fnUntraced(function* (input: {
   ) {
     const close = Scope.close(subscription.scope, Exit.void)
     if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) return yield* close
-    const current = yield* Ref.get(state)
-    if (current.openChildren.size === 0) return yield* close
+    if ((yield* Ref.get(state)).openChildren.size === 0) return yield* close
     // Children outlive a cancelled turn, so their asks still reach the client.
     const cancelled = yield* Deferred.make<void>()
     const background = consume({ ...subscription, cancelled }, { ...ctx, mode: "background" }, state).pipe(

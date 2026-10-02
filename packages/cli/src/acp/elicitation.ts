@@ -110,7 +110,7 @@ const ask = Effect.fnUntraced(function* (input: Input) {
     mode: "form",
     sessionId: input.clientSessionID,
     ...(toolCallID ? { toolCallId: ACPChild.toolCallID(input.child, toolCallID) } : {}),
-    message: ACPChild.title(input.child, input.form.title),
+    message: ACPChild.prefixTitle(input.child, input.form.title),
     requestedSchema: input.requestedSchema,
   })
   return answer(input.form, response) ?? "cancel"

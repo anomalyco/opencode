@@ -36,12 +36,12 @@ export function update(rootSessionID: string, child: Session, event: Event): Upd
   }
 }
 
-export function project(update: SessionUpdate, child: Session) {
-  const projected = { ...update }
+export function project(sessionUpdate: SessionUpdate, child: Session) {
+  const projected = { ...sessionUpdate }
   projected._meta = { ...projected._meta, ...meta(child) }
   if (projected.sessionUpdate === "tool_call" || projected.sessionUpdate === "tool_call_update") {
     projected.toolCallId = toolCallID(child, projected.toolCallId)
-    if (projected.title) projected.title = title(child, projected.title)
+    if (projected.title) projected.title = prefixTitle(child, projected.title)
   }
   return projected
 }
@@ -61,7 +61,7 @@ export function toolCallID(child: Session | undefined, id: string) {
   return child ? `${child.id}:${id}` : id
 }
 
-export function title(child: Session | undefined, value: string) {
+export function prefixTitle(child: Session | undefined, value: string) {
   return child?.title ? `${child.title}: ${value}` : value
 }
 
