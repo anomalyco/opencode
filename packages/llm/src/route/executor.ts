@@ -22,7 +22,7 @@ import {
   TransportReason,
   UnknownProviderReason,
 } from "../schema"
-import { isContextOverflow } from "../provider-error"
+import { isContextOverflow, isQuotaExceeded, isUpstreamTransient } from "../provider-error"
 
 export interface Interface {
   readonly execute: (
@@ -233,10 +233,39 @@ const statusReason = (input: {
   if (/content[-_\s]?policy|content_filter|safety/i.test(body)) {
     return new ContentPolicyReason({ message: input.message, http: input.http })
   }
+  // Quota errors must surface with their actionable message (e.g. OpenCode Go
+  // "Weekly usage limit reached... enable usage from your available balance")
+  // instead of being misclassified as auth failures or generic upstream JSON
+  // errors. Check before status-specific branches so a quota body on any
+  // status (401/403/429/...) maps to non-retryable QuotaExceeded.
+  if (isQuotaExceeded(body)) {
+    return new QuotaExceededReason({ message: input.message, http: input.http })
+  }
   if (input.status === 401) {
+    if (isUpstreamTransient(body)) {
+      return new ProviderInternalReason({
+        message: input.message,
+        status: input.status,
+        retryAfterMs: input.retryAfterMs,
+        http: input.http,
+      })
+    }
     return new AuthenticationReason({ message: input.message, kind: "invalid", http: input.http })
   }
   if (input.status === 403) {
+    // OpenCode Go gateways surface upstream provider failures as 403 with an
+    // upstream marker in the body (e.g. "Upstream request failed:
+    // [server_error] Upstream response was not valid JSON"). Those are
+    // transient provider failures, not permission errors, so mark them
+    // retryable instead of failing permanently as Authentication.
+    if (isUpstreamTransient(body)) {
+      return new ProviderInternalReason({
+        message: input.message,
+        status: input.status,
+        retryAfterMs: input.retryAfterMs,
+        http: input.http,
+      })
+    }
     return new AuthenticationReason({ message: input.message, kind: "insufficient-permissions", http: input.http })
   }
   if (input.status === 429) {

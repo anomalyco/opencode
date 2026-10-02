@@ -4,6 +4,22 @@ import { iife } from "@/util/iife"
 import type { ProviderV2 } from "@opencode-ai/core/provider"
 import { isContextOverflow } from "@opencode-ai/llm"
 
+const quotaPatterns = [
+  /insufficient[-_\s]?quota/i,
+  /quota[-_\s]?exceeded/i,
+  /subscription[-_\s]?quota[-_\s]?exceeded/i,
+  /usage[-_\s]?limit/i,
+  /goSubscription(Rolling|Weekly|Monthly)LimitExceeded/i,
+  /GoUsageLimitError/i,
+  /FreeUsageLimitError/i,
+  /BlackUsageLimitError/i,
+  /enable usage from your available balance/i,
+]
+
+function isQuotaExceeded(message: string) {
+  return quotaPatterns.some((pattern) => pattern.test(message))
+}
+
 export class HeaderTimeoutError extends Error {
   public override readonly name = "ProviderHeaderTimeoutError"
 
@@ -47,9 +63,15 @@ function message(providerID: ProviderV2.ID, e: APICallError) {
 
     try {
       const body = JSON.parse(e.responseBody)
-      // try to extract common error message fields
-      const errMsg = body.message || body.error || body.error?.message
-      if (errMsg && typeof errMsg === "string") {
+      // Prefer nested provider messages (e.g. Console Go
+      // `{"type":"error","error":{"type":"GoUsageLimitError","message":"Weekly usage limit reached..."}}`)
+      // over the raw envelope object so quota errors surface their actionable
+      // text instead of a JSON dump.
+      const nested = typeof body?.error?.message === "string" ? body.error.message : undefined
+      const flat = typeof body?.error === "string" ? body.error : undefined
+      const top = typeof body?.message === "string" ? body.message : undefined
+      const errMsg = nested ?? flat ?? top
+      if (errMsg) {
         return `${msg}: ${errMsg}`
       }
     } catch {}
@@ -106,6 +128,16 @@ export function parseStreamError(input: unknown): ParsedStreamError | undefined 
 
   const responseBody = JSON.stringify(body)
   if (body.type !== "error") return
+
+  const streamMessage = typeof body?.error?.message === "string" ? body.error.message : undefined
+  if (streamMessage && isQuotaExceeded(streamMessage)) {
+    return {
+      type: "api_error",
+      message: streamMessage,
+      isRetryable: false,
+      responseBody,
+    }
+  }
 
   switch (body?.error?.code) {
     case "context_length_exceeded":
@@ -177,6 +209,22 @@ export function parseAPICallError(input: { providerID: ProviderV2.ID; error: API
       type: "context_overflow",
       message: m,
       responseBody: input.error.responseBody,
+    }
+  }
+
+  // Surface OpenCode Go quota errors (e.g. "Weekly usage limit reached...
+  // enable usage from your available balance") with their actionable message
+  // as non-retryable instead of generic auth/JSON failures.
+  if (isQuotaExceeded(m) || (typeof input.error.responseBody === "string" && isQuotaExceeded(input.error.responseBody))) {
+    const metadata = input.error.url ? { url: input.error.url } : undefined
+    return {
+      type: "api_error",
+      message: m,
+      statusCode: input.error.statusCode,
+      isRetryable: false,
+      responseHeaders: input.error.responseHeaders,
+      responseBody: input.error.responseBody,
+      metadata,
     }
   }
 

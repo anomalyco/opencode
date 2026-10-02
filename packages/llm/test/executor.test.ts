@@ -315,6 +315,88 @@ describe("RequestExecutor", () => {
     ),
   )
 
+  it.effect("classifies weekly usage limit as non-retryable quota exceeded", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "QuotaExceeded" })
+      expect(error.retryable).toBe(false)
+      expect(error.message).toContain("Weekly usage limit reached")
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response(
+            "Weekly usage limit reached. Resets in 1hr 13min. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_123/go",
+            { status: 429 },
+          ),
+        ]),
+      ),
+    ),
+  )
+
+  it.effect("classifies quota bodies on 401/403 as quota instead of authentication", () =>
+    Effect.gen(function* () {
+      const body =
+        "Weekly usage limit reached. Resets in 1hr 13min. To continue using this model now, enable usage from your available balance: https://opencode.ai/workspace/wrk_123/go"
+      for (const status of [401, 403]) {
+        const error = yield* Effect.gen(function* () {
+          const executor = yield* RequestExecutor.Service
+          return yield* executor.execute(request).pipe(Effect.flip)
+        }).pipe(Effect.provide(responsesLayer([new Response(body, { status })])))
+
+        expectLLMError(error)
+        expect(error.reason).toMatchObject({ _tag: "QuotaExceeded" })
+        expect(error.retryable).toBe(false)
+        expect(error.message).toContain("Weekly usage limit reached")
+      }
+    }),
+  )
+
+  it.effect("classifies gateway upstream 403 as retryable provider-internal", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status: 403 })
+      expect(error.retryable).toBe(true)
+      expect(errorHttp(error)?.body).toContain("Upstream response was not valid JSON")
+    }).pipe(
+      Effect.provide(
+        responsesLayer(
+          Array.from(
+            { length: 3 },
+            () =>
+              new Response("Upstream request failed: [server_error] Upstream response was not valid JSON", {
+                status: 403,
+                headers: { "retry-after-ms": "0" },
+              }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("keeps genuine 403 permission errors non-retryable", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "Authentication" })
+      expect(error.retryable).toBe(false)
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response("Forbidden: insufficient permissions", { status: 403 }),
+          new Response("should not retry", { status: 200 }),
+        ]),
+      ),
+    ),
+  )
+
   it.effect("redacts common secret fields in response bodies", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
