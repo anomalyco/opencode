@@ -215,7 +215,10 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
     hostedOnly = false,
   ) {
     for (const [callID, tool] of tools) {
-      if (tool.settled || (hostedOnly && !tool.providerExecuted)) continue
+      if (tool.settled) continue
+      // An uncalled tool was never executed by provider or local host, so always fail it
+      // even when hostedOnly skips called local tools awaiting fiber settlement.
+      if (hostedOnly && tool.called && !tool.providerExecuted) continue
       tool.settled = true
       yield* events.publish(SessionEvent.Tool.Failed, {
         sessionID: input.sessionID,

@@ -456,7 +456,9 @@ const fragmentFixture = (kind: FragmentKind, id: string, chunks: readonly string
         LLMEvent.toolInputStart({ id, name: "echo" }),
         ...chunks.map((text) => LLMEvent.toolInputDelta({ id, name: "echo", text })),
       ]
-      const expectedContent = { type: "tool", id, state: { status: "pending", input: text } }
+      // A started-but-uncalled tool never executes locally or via provider, so the runner
+      // must durably fail it instead of persisting pending input that strands clients.
+      const expectedContent = { type: "tool", id, state: { status: "error" } }
       return {
         delta: SessionEvent.Tool.Input.Delta,
         partialEvents,
@@ -3470,6 +3472,95 @@ describe("SessionRunnerLLM", () => {
       expect(yield* session.resume(sessionID).pipe(Effect.catchDefect(Effect.succeed))).toBe(
         "Tool input delta before start: call-1",
       )
+    }),
+  )
+
+  it.effect("durably fails truncated local tool input when stream finishes with length", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Truncated tool" }), resume: false })
+
+      requests.length = 0
+      executions.length = 0
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputStart({ id: "call-truncated", name: "echo" }),
+        LLMEvent.toolInputDelta({ id: "call-truncated", name: "echo", text: '{"text":"hel' }),
+        LLMEvent.stepFinish({ index: 0, reason: "length" }),
+        LLMEvent.finish({ reason: "length" }),
+      ]
+
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      expect(executions).toEqual([])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Truncated tool" },
+        {
+          type: "assistant",
+          finish: "length",
+          content: [
+            {
+              type: "tool",
+              id: "call-truncated",
+              state: { status: "error", error: { message: "Tool call incomplete or truncated" } },
+            },
+          ],
+        },
+      ])
+
+      yield* replaySessionProjection(sessionID)
+
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Truncated tool" },
+        {
+          type: "assistant",
+          finish: "length",
+          content: [{ type: "tool", id: "call-truncated", state: { status: "error" } }],
+        },
+      ])
+
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Continue after truncation" }), resume: false })
+      response = []
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(2)
+      expect(requests[1]?.messages.map((message) => message.role)).toEqual(["user", "assistant", "tool", "user"])
+    }),
+  )
+
+  it.effect("durably fails truncated local tool input at normal provider EOF", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      yield* session.prompt({ sessionID, prompt: Prompt.make({ text: "Truncated at EOF" }), resume: false })
+
+      requests.length = 0
+      executions.length = 0
+      response = [
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolInputStart({ id: "call-truncated-eof", name: "echo" }),
+        LLMEvent.toolInputDelta({ id: "call-truncated-eof", name: "echo", text: '{"text":"partial' }),
+      ]
+
+      yield* session.resume(sessionID)
+      yield* replaySessionProjection(sessionID)
+
+      expect(executions).toEqual([])
+      expect(yield* session.context(sessionID)).toMatchObject([
+        { type: "user", text: "Truncated at EOF" },
+        {
+          type: "assistant",
+          content: [
+            {
+              type: "tool",
+              id: "call-truncated-eof",
+              state: { status: "error", error: { message: "Tool call incomplete or truncated" } },
+            },
+          ],
+        },
+      ])
     }),
   )
 })

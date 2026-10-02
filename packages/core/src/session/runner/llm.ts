@@ -323,6 +323,12 @@ const layer = Layer.effect(
             yield* withPublication(publisher.failUnsettledTools(`Tool execution failed: ${message}`))
           }
           const stepSettlement = publisher.stepSettlement()
+          // Fail truncated tool inputs before Step.Ended so Tool.Failed precedes the step boundary.
+          // A stream that finishes (e.g. finish length) mid tool-input leaves started-but-uncalled
+          // tools unsettled; they must not persist as pending or strand the client in streaming.
+          // Covers both Success EOF and raw Failure before step-finish.
+          if (!publisher.hasProviderError())
+            yield* withPublication(publisher.failUnsettledTools("Tool call incomplete or truncated", true))
           if (stepSettlement && !publisher.hasProviderError()) {
             const endSnapshot = yield* snapshots.capture()
             const files =
@@ -346,8 +352,6 @@ const layer = Layer.effect(
           }
           if (publisher.hasProviderError())
             yield* withPublication(publisher.failUnsettledTools("Tool execution interrupted"))
-          if (stream._tag === "Success" && !publisher.hasProviderError())
-            yield* withPublication(publisher.failUnsettledTools("Provider did not return a tool result", true))
           if (stream._tag === "Failure") return yield* Effect.failCause(stream.cause)
           if (settled._tag === "Failure" && Cause.hasInterrupts(settled.cause))
             return yield* Effect.failCause(settled.cause)
