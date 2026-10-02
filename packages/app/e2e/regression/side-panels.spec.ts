@@ -200,9 +200,11 @@ test("terminal stacks under review by default and spans the bottom when configur
   await expect
     .poll(() =>
       page.evaluate(() => {
-        const review = document.querySelector("#review-panel")!.getBoundingClientRect()
-        const terminal = document.querySelector("#terminal-panel")!.getBoundingClientRect()
-        const sidebar = document.querySelector('#review-panel [data-slot="session-review-v2-sidebar"]')!
+        const review = document.querySelector("#review-panel")?.getBoundingClientRect()
+        const terminal = document.querySelector("#terminal-panel")?.getBoundingClientRect()
+        const sidebar = document.querySelector('#review-panel [data-slot="session-review-v2-sidebar"]')
+        // The side region appears before its lazy review content after reload.
+        if (!review || !terminal || !sidebar) return false
         const gap = terminal.top - review.bottom
         return (
           terminal.left <= 9 &&
