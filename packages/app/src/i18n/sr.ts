@@ -784,6 +784,8 @@ export const dict = {
   "session.header.reveal.finder": "Откриј у Финдер-у",
   "session.header.reveal.fileExplorer": "Откриј у File Explorer",
   "session.header.reveal.containingFolder": "Отворите фасциклу која садржи",
+  "session.file.openInApp": "Отвори у {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

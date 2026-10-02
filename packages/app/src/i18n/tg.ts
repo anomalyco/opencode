@@ -783,6 +783,8 @@ export const dict = {
   "session.header.reveal.finder": "Дар Finder ошкор кунед",
   "session.header.reveal.fileExplorer": "Дар File Explorer ошкор кунед",
   "session.header.reveal.containingFolder": "Папкаи дорои ҷузвдонро кушоед",
+  "session.file.openInApp": "Кушодан дар {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",

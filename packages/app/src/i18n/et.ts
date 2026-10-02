@@ -776,6 +776,8 @@ export const dict = {
   "session.header.reveal.finder": "Avalda Finder",
   "session.header.reveal.fileExplorer": "Avalda File Explorer",
   "session.header.reveal.containingFolder": "Ava sisaldav kaust",
+  "session.file.openInApp": "Avatud kohas {{app}}",
+
   "session.header.open.app.vscode": "VS Code",
   "session.header.open.app.cursor": "Cursor",
   "session.header.open.app.zed": "Zed",
