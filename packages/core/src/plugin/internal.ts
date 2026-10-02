@@ -61,6 +61,7 @@ import { Ripgrep } from "../ripgrep.js"
 import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
 import { SessionInstructions } from "../session/instructions.js"
+import { SessionSchedule } from "../session/schedule.js"
 import { Shell } from "../shell.js"
 import { ShellSelect } from "../shell/select.js"
 import { Snapshot } from "../snapshot.js"
@@ -102,6 +103,7 @@ import { OptimizePlugin } from "./optimize.js"
 import { VcsGitPlugin } from "./vcs/git.js"
 import { VerbosityPlugin } from "./verbosity.js"
 import { WarmingPlugin } from "./warming.js"
+import { SchedulePlugin } from "./schedule.js"
 import { WellKnownPlugin } from "../wellknown/plugin.js"
 
 const services = [
@@ -142,6 +144,7 @@ const services = [
   Session.Service,
   SessionCompaction.Service,
   SessionInstructions.Service,
+  SessionSchedule.Service,
   Shell.Service,
   ShellSelect.Service,
   Snapshot.Service,
@@ -195,6 +198,7 @@ export const requirements = LayerNode.group([
   Session.node,
   SessionCompaction.node,
   SessionInstructions.node,
+  SessionSchedule.node,
   Shell.node,
   ShellSelect.node,
   Snapshot.node,
@@ -244,6 +248,7 @@ const pre = [
   WebSearchTool.Plugin,
   WriteTool.Plugin,
   WarmingPlugin.Plugin,
+  SchedulePlugin.Plugin,
 ] as const satisfies readonly InternalPlugin[]
 
 const post = [
