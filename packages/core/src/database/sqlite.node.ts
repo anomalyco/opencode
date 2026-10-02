@@ -55,36 +55,28 @@ const make = (options: Config) =>
 
     const run = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<Array<Record<string, unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
-        statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
         try {
+          const statement = native.prepare(query)
+          statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
           return Effect.succeed(statement.all(...(params as SQLInputValue[])) as Array<Record<string, unknown>>)
         } catch (cause) {
-          return Effect.fail(
-            new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
-            }),
-          )
+          return Effect.fail(Sqlite.statementError(cause))
         }
-      })
+      }).pipe(Sqlite.retryLocked)
 
     const runValues = (query: string, params: ReadonlyArray<unknown> = []) =>
       Effect.withFiber<ReadonlyArray<ReadonlyArray<unknown>>, SqlError>((fiber) => {
-        const statement = native.prepare(query)
-        statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
-        statement.setReturnArrays(true)
         try {
+          const statement = native.prepare(query)
+          statement.setReadBigInts(Context.get(fiber.context, Client.SafeIntegers))
+          statement.setReturnArrays(true)
           return Effect.succeed(
             statement.all(...(params as SQLInputValue[])) as unknown as ReadonlyArray<ReadonlyArray<unknown>>,
           )
         } catch (cause) {
-          return Effect.fail(
-            new SqlError({
-              reason: classifySqliteError(cause, { message: "Failed to execute statement", operation: "execute" }),
-            }),
-          )
+          return Effect.fail(Sqlite.statementError(cause))
         }
-      })
+      }).pipe(Sqlite.retryLocked)
 
     const connection = identity<SqliteConnection>({
       execute(query, params, transformRows) {
