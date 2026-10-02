@@ -674,7 +674,7 @@ body {
 [data-page="stats"] [data-slot="footer-pattern"] {
   height: 16px;
   overflow: hidden;
-  background: var(--stats-hero-pattern);
+  background-color: var(--stats-hero-pattern);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -883,13 +883,18 @@ body {
   display: none;
 }
 
+/* Ripple layer drawn by PatternRipple. Pattern rules set only background-color so this layer survives. */
+[data-page="stats"] [data-slot$="-pattern"] {
+  background-image: var(--dot-ripple, none);
+}
+
 [data-page="stats"] [data-slot="hero-pattern"] {
   order: 2;
   flex: 0 0 auto;
   width: 100%;
   height: 16px;
   overflow: hidden;
-  background: var(--stats-hero-pattern);
+  background-color: var(--stats-hero-pattern);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-repeat: repeat;
   mask-size: 6px 6px;
@@ -1241,6 +1246,11 @@ body {
   -webkit-mask-position: left top;
   -webkit-mask-repeat: repeat;
   -webkit-mask-size: calc((100% - 2px) / 2) var(--top-models-dot-size);
+  transition: background-color 120ms ease;
+}
+
+[data-page="stats"] [data-slot="top-models-bar"]:is(:hover, [data-active="true"])::before {
+  background: color-mix(in srgb, var(--stats-dot), var(--stats-text) 25%);
 }
 
 [data-page="stats"] [data-slot="top-models-stack"] {
@@ -1867,7 +1877,7 @@ body {
   height: 16px;
   margin: 16px 0;
   overflow: hidden;
-  background: var(--stats-hero-pattern);
+  background-color: var(--stats-hero-pattern);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -2868,7 +2878,7 @@ body {
   width: 100%;
   height: 18px;
   overflow: hidden;
-  background: var(--stats-hero-pattern);
+  background-color: var(--stats-hero-pattern);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-repeat: repeat;
   mask-size: 6px 6px;
@@ -3008,7 +3018,7 @@ body {
   min-width: 64px;
   height: 64px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  background-color: color-mix(in srgb, var(--stats-text) 10%, transparent);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -3325,7 +3335,7 @@ body {
   width: 100%;
   height: 16px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  background-color: color-mix(in srgb, var(--stats-text) 10%, transparent);
   mask-position: center top;
   -webkit-mask-position: center top;
 }
@@ -3472,7 +3482,7 @@ body {
   width: 100%;
   height: 16px;
   overflow: hidden;
-  background: var(--stats-line);
+  background-color: var(--stats-line);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -3946,7 +3956,7 @@ body {
   height: 16px;
   margin-bottom: 40px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  background-color: color-mix(in srgb, var(--stats-text) 10%, transparent);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -4071,7 +4081,7 @@ body {
   height: 16px;
   margin-bottom: 40px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  background-color: color-mix(in srgb, var(--stats-text) 10%, transparent);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
@@ -4612,6 +4622,11 @@ body {
   -webkit-mask-position: left top;
   -webkit-mask-repeat: repeat;
   -webkit-mask-size: calc((100% - 2px) / 2) var(--model-usage-dot-size);
+  transition: background-color 120ms ease;
+}
+
+[data-page="stats"] [data-slot="model-usage-column"]:is(:hover, [data-active="true"])::before {
+  background: color-mix(in srgb, var(--stats-dot), var(--stats-text) 25%);
 }
 
 [data-page="stats"] [data-slot="model-usage-bar"] {
@@ -5674,7 +5689,7 @@ body {
   height: 16px;
   margin-inline: -40px;
   overflow: hidden;
-  background: color-mix(in srgb, var(--stats-text) 10%, transparent);
+  background-color: color-mix(in srgb, var(--stats-text) 10%, transparent);
   mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
   mask-position: center top;
   mask-repeat: repeat;
