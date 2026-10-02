@@ -3,14 +3,14 @@ import type { McpServer, RequestError, SessionConfigOption } from "@agentclientp
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import { Mcp } from "@opencode/schema/mcp"
 import type { Session } from "@opencode/schema/session"
-import { Context, Deferred, Effect, Exit, Queue, Ref, Scope, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Queue, Ref, Scope, Stream } from "effect"
 import type { ACPCatalog, Catalog } from "./catalog"
 import { ACPClient } from "./client"
 import { availableCommands, configOptions, type Selection } from "./config-option"
 import { ACPConnection } from "./connection"
 import { ACPError } from "./error"
 
-export type SupportedMcpServer = Exclude<McpServer, { readonly type: "acp" }>
+export type SupportedMcpServer = Exclude<McpServer, { readonly type: "acp" | "sse" }>
 
 export type Attached = {
   readonly id: Session.ID
@@ -28,7 +28,6 @@ export interface Interface {
     ACPError.Error | RequestError | ACPCatalog.Error
   >
   readonly detach: (sessionID: string) => Effect.Effect<void>
-  /** Closes this attachment. No-op once the session has been re-attached or detached. */
   readonly release: (attached: Attached) => Effect.Effect<void>
   readonly require: (sessionID: string) => Effect.Effect<Attached, ACPError.SessionNotFoundError>
   readonly fork: (attached: Attached, effect: Effect.Effect<void>) => Effect.Effect<void, ACPError.SessionNotFoundError>
@@ -70,7 +69,9 @@ export const make = Effect.fnUntraced(function* (input: {
         event.type === "session.model.selected" ? { model: event.data.model } : { modeID: event.data.agent },
       )
     }),
-    Effect.ignoreCause({ log: true, message: "ACP selection event stream ended" }),
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP selection event stream failed", cause),
+    ),
     Effect.ensuring(Deferred.succeed(connected, undefined)),
     Effect.forkScoped,
   )

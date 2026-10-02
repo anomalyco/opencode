@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { StopReason } from "@agentclientprotocol/sdk"
 import type { OpenCodeEventEncoded } from "@opencode/protocol/groups/event"
-import { Cause, Schema } from "effect"
+import { Schema } from "effect"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -491,7 +491,10 @@ describe("acp prompt turns over the wire", () => {
     acp.server.dropEvents()
 
     expect(await rpcError(prompt)).toMatchObject({ code: -32603, data: { errorName: "ServerUnavailable" } })
-    expect(acp.logs.filter((log) => Cause.hasDies(log.cause))).toEqual([])
+    expect(acp.logs.map((log) => String(log.message)).toSorted()).toEqual([
+      "ACP catalog event stream failed",
+      "ACP selection event stream failed",
+    ])
   })
 
   test("$/cancel_request on the prompt request cancels the turn like session/cancel", async () => {

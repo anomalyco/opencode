@@ -303,19 +303,21 @@ describe("acp session lifecycle over the wire", () => {
     expect(acp.logs).toEqual([])
   })
 
-  test("rejects MCP-over-ACP servers before creating or loading a session", async () => {
+  test("rejects MCP-over-ACP and SSE servers before creating or loading a session", async () => {
     await using acp = await startWire()
     acp.server.sessions.set("ses_saved", makeSession("ses_saved"))
     await acp.initialize()
     const existing = new Set(acp.server.sessions.keys())
     const mcpServers: McpServer[] = [{ type: "acp", name: "client", serverId: "mcp_client" }]
+    const sse: McpServer[] = [{ type: "sse", name: "events", url: "https://example.com/sse", headers: [] }]
     const invalid = {
       code: -32602,
-      message: "Invalid params: MCP-over-ACP is not supported",
+      message: "Invalid params: Only stdio and HTTP MCP servers are supported",
       data: { field: "mcpServers" },
     }
 
     expect(await rpcError(acp.newSession("/workspace", mcpServers))).toEqual(invalid)
+    expect(await rpcError(acp.newSession("/workspace", sse))).toEqual(invalid)
     expect(
       await rpcError(acp.request("session/load", { cwd: "/workspace", sessionId: "ses_saved", mcpServers })),
     ).toEqual(invalid)

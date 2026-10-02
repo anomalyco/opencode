@@ -110,6 +110,9 @@ describe("acp error boundary over the wire", () => {
       message: "Internal error: OpenCode server is unavailable",
       data: { errorName: "ServerUnavailable" },
     })
-    expect(acp.logs.filter((log) => Cause.hasDies(log.cause))).toEqual([])
+    expect(acp.logs.map((log) => String(log.message)).toSorted()).toEqual([
+      "ACP catalog event stream failed",
+      "ACP selection event stream failed",
+    ])
   })
 })

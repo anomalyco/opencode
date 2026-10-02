@@ -72,9 +72,7 @@ export type TurnState = {
   readonly compactions: ACPCompaction.Tracked
   readonly children: ReadonlyMap<string, ChildSession>
   readonly openChildren: ReadonlySet<string>
-  readonly forms: ReadonlySet<string>
-  /** Permissions asked of the client that the server has not yet reported replied. */
-  readonly permissions: ReadonlySet<string>
+  readonly asks: ReadonlySet<string>
   readonly finish?: SessionMessage.Assistant["finish"]
   readonly usage?: { readonly turn: TokenUsage.Info; readonly last: TokenUsage.Info }
   readonly stepError?: SessionError.Error
@@ -99,8 +97,7 @@ export type Output =
       readonly child?: ChildSession
       readonly toolCallSent: boolean
     }
-  | { readonly _tag: "FormSettled"; readonly formID: string }
-  | { readonly _tag: "PermissionSettled"; readonly requestID: string }
+  | { readonly _tag: "AskSettled"; readonly id: string }
 
 export type Step = {
   readonly state: TurnState
@@ -115,8 +112,7 @@ export const initial: TurnState = {
   compactions: new Map(),
   children: new Map(),
   openChildren: new Set(),
-  forms: new Set(),
-  permissions: new Set(),
+  asks: new Set(),
 }
 
 export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step {
@@ -146,21 +142,13 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
       ? state.tools.get(toolKey(event.data.sessionID, event.data.source.id))
       : undefined
     return {
-      state: { ...state, permissions: new Set(state.permissions).add(event.data.id) },
+      state: { ...state, asks: new Set(state.asks).add(event.data.id) },
       outputs: [{ _tag: "PermissionAsk", event, tool, child }],
-    }
-  }
-  if (event.type === "permission.replied" && state.permissions.has(event.data.requestID)) {
-    const permissions = new Set(state.permissions)
-    permissions.delete(event.data.requestID)
-    return {
-      state: { ...state, permissions },
-      outputs: [{ _tag: "PermissionSettled", requestID: event.data.requestID }],
     }
   }
   if (event.type === "form.created" && (event.data.form.sessionID === ctx.sessionID || child)) {
     return {
-      state: { ...state, forms: new Set(state.forms).add(event.data.form.id) },
+      state: { ...state, asks: new Set(state.asks).add(event.data.form.id) },
       outputs: [
         {
           _tag: "FormAsk",
@@ -171,10 +159,16 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
       ],
     }
   }
-  if ((event.type === "form.replied" || event.type === "form.cancelled") && state.forms.has(event.data.id)) {
-    const forms = new Set(state.forms)
-    forms.delete(event.data.id)
-    return { state: { ...state, forms }, outputs: [{ _tag: "FormSettled", formID: event.data.id }] }
+  const settledID =
+    event.type === "permission.replied"
+      ? event.data.requestID
+      : event.type === "form.replied" || event.type === "form.cancelled"
+        ? event.data.id
+        : undefined
+  if (settledID && state.asks.has(settledID)) {
+    const asks = new Set(state.asks)
+    asks.delete(settledID)
+    return { state: { ...state, asks }, outputs: [{ _tag: "AskSettled", id: settledID }] }
   }
   if (!eventSessionID || (eventSessionID !== ctx.sessionID && !child)) return { state, outputs: [] }
   if (matchesStart(event, ctx.start)) return { state: { ...state, started: true }, outputs: [] }

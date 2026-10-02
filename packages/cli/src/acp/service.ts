@@ -290,10 +290,13 @@ export function make(input: {
 
 const supportedMcpServers = Effect.fnUntraced(function* (servers: readonly McpServer[] = []) {
   const supported = servers.filter(
-    (server): server is SupportedMcpServer => !("type" in server) || server.type !== "acp",
+    (server): server is SupportedMcpServer => !("type" in server) || server.type === "http",
   )
   if (supported.length < servers.length)
-    return yield* new ACPError.InvalidRequestError({ message: "MCP-over-ACP is not supported", field: "mcpServers" })
+    return yield* new ACPError.InvalidRequestError({
+      message: "Only stdio and HTTP MCP servers are supported",
+      field: "mcpServers",
+    })
   return supported
 })
 

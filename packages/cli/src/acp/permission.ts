@@ -24,7 +24,6 @@ type Input = {
   readonly cwd: string
   readonly tool?: Tool
   readonly child?: ACPTranslate.ChildSession
-  /** Completes once the server reports the permission replied. */
   readonly settled: Effect.Effect<void>
 }
 
@@ -86,9 +85,10 @@ const ask = Effect.fnUntraced(function* (input: Input) {
 
 function respond(input: Input, decision: Permission.Reply | "settled") {
   if (decision === "settled") return Effect.void
-  return input.client.permission
-    .reply({ sessionID: input.sessionID, requestID: input.event.data.id, decision })
-    .pipe(Effect.catch(ACPClient.classify))
+  return input.client.permission.reply({ sessionID: input.sessionID, requestID: input.event.data.id, decision }).pipe(
+    Effect.catchTag("PermissionNotFoundError", () => Effect.void),
+    Effect.catch(ACPClient.classify),
+  )
 }
 
 function prefixedTitle(prefix: string | undefined, title: string | undefined) {

@@ -66,9 +66,7 @@ type Subscription = {
   /** Asks run serially off the event stream. */
   readonly asks: Queue.Queue<Effect.Effect<void, ACPError.Error | RequestError>>
   readonly cancelled: Deferred.Deferred<void>
-  readonly forms: Map<string, Deferred.Deferred<void>>
-  /** Completed per asked permission once the server reports it replied. */
-  readonly permissions: Map<string, Deferred.Deferred<void>>
+  readonly settled: Map<string, Deferred.Deferred<void>>
 }
 
 export const make = Effect.fnUntraced(function* (input: {
@@ -92,8 +90,7 @@ export const make = Effect.fnUntraced(function* (input: {
         .pipe(Stream.toQueue({ capacity: "unbounded" }), Scope.provide(subscriptionScope)),
       asks: yield* Queue.unbounded<Effect.Effect<void, ACPError.Error | RequestError>>(),
       cancelled: yield* Deferred.make<void>(),
-      forms: new Map(),
-      permissions: new Map(),
+      settled: new Map(),
     }
     yield* Queue.take(subscription.asks).pipe(
       Effect.flatten,
@@ -147,11 +144,17 @@ export const make = Effect.fnUntraced(function* (input: {
       case "ChildUpdate":
         return input.connection
           .extNotification(ACPTranslate.ChildSessionUpdateMethod, output.update)
-          .pipe(Effect.ignoreCause({ log: true }))
+          .pipe(
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.void
+                : Effect.logWarning("ACP child session update failed", cause),
+            ),
+          )
       case "PermissionAsk":
         return Effect.gen(function* () {
           const settled = yield* Deferred.make<void>()
-          subscription.permissions.set(output.event.data.id, settled)
+          subscription.settled.set(output.event.data.id, settled)
           yield* Queue.offer(subscription.asks, reply(subscription, ctx, output, settled))
         })
       case "FormAsk":
@@ -160,7 +163,7 @@ export const make = Effect.fnUntraced(function* (input: {
           const requestedSchema = ACPElicitation.requestedSchema(output.form, capabilities)
           if (!requestedSchema) return yield* ACPElicitation.cancelUnshown(input.client, output.form)
           const settled = yield* Deferred.make<void>()
-          subscription.forms.set(output.form.id, settled)
+          subscription.settled.set(output.form.id, settled)
           yield* Queue.offer(
             subscription.asks,
             ACPElicitation.reply(
@@ -178,16 +181,10 @@ export const make = Effect.fnUntraced(function* (input: {
             ),
           )
         })
-      case "FormSettled":
+      case "AskSettled":
         return Effect.suspend(() => {
-          const settled = subscription.forms.get(output.formID)
-          subscription.forms.delete(output.formID)
-          return settled ? Deferred.succeed(settled, undefined) : Effect.void
-        })
-      case "PermissionSettled":
-        return Effect.suspend(() => {
-          const settled = subscription.permissions.get(output.requestID)
-          subscription.permissions.delete(output.requestID)
+          const settled = subscription.settled.get(output.id)
+          subscription.settled.delete(output.id)
           return settled ? Deferred.succeed(settled, undefined) : Effect.void
         })
     }
@@ -248,7 +245,13 @@ export const make = Effect.fnUntraced(function* (input: {
   })
 
   const interruptServer = (sessionID: Session.ID) =>
-    input.client.session.interrupt({ sessionID }).pipe(Effect.ignoreCause({ log: true }))
+    input.client.session
+      .interrupt({ sessionID })
+      .pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP server interrupt failed", cause),
+        ),
+      )
 
   const windDown = Effect.fnUntraced(function* (
     subscription: Subscription,
@@ -344,7 +347,9 @@ export const make = Effect.fnUntraced(function* (input: {
         },
       })
     },
-    (effect) => Effect.ignoreCause(effect, { log: true }),
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP usage update failed", cause),
+    ),
   )
 
   // Forked uninterruptible: interruption reaches only `execute`, so the fiber still settles with a response.
