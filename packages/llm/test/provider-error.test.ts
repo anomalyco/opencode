@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isContextOverflow } from "../src"
+import { isContextOverflow, isUpstreamTransient } from "../src"
 
 describe("provider error classification", () => {
   test("classifies provider token limit messages as context overflow", () => {
@@ -26,5 +26,33 @@ describe("provider error classification", () => {
     ]
 
     expect(messages.some(isContextOverflow)).toBe(false)
+  })
+
+  test("classifies OpenCode Go upstream gateway failures as transient", () => {
+    const messages = [
+      "Upstream request failed: [server_error] Upstream response was not valid JSON",
+      "Provider request failed with HTTP 403: Upstream request failed: [server_error] Upstream response was not valid JSON",
+      "upstream_response_status_not_200",
+      "server_error: Upstream model unavailable",
+    ]
+
+    expect(messages.every(isUpstreamTransient)).toBe(true)
+  })
+
+  test("does not classify auth failures as upstream transient", () => {
+    const messages = [
+      "Provider request failed with HTTP 403: Forbidden",
+      "Unauthorized: invalid api key",
+      "insufficient permissions for model",
+    ]
+
+    expect(messages.some(isUpstreamTransient)).toBe(false)
+  })
+
+  test("does not classify upstream gateway failures as context overflow", () => {
+    const message = "Upstream request failed: [server_error] Upstream response was not valid JSON"
+
+    expect(isContextOverflow(message)).toBe(false)
+    expect(isUpstreamTransient(message)).toBe(true)
   })
 })

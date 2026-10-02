@@ -33,6 +33,19 @@ const patterns = [
 
 const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, /too many requests/i]
 
+const upstreamTransientPatterns = [
+  /upstream request failed/i,
+  /upstream response was not valid JSON/i,
+  /upstream_response_status_not_200/i,
+  // Gateway-wrapped upstream 5xx marker (e.g. "[server_error]"). Matched
+  // broadly: a 401/403 carrying server_error is a proxied provider failure,
+  // not an auth failure.
+  /server_error/i,
+]
+
+export const isUpstreamTransient = (message: string) =>
+  upstreamTransientPatterns.some((pattern) => pattern.test(message))
+
 export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&
   (patterns.some((pattern) => pattern.test(message)) || /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message))

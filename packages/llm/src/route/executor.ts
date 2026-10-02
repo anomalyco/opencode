@@ -22,7 +22,7 @@ import {
   TransportReason,
   UnknownProviderReason,
 } from "../schema"
-import { isContextOverflow } from "../provider-error"
+import { isContextOverflow, isUpstreamTransient } from "../provider-error"
 
 export interface Interface {
   readonly execute: (
@@ -234,9 +234,30 @@ const statusReason = (input: {
     return new ContentPolicyReason({ message: input.message, http: input.http })
   }
   if (input.status === 401) {
+    if (isUpstreamTransient(body)) {
+      return new ProviderInternalReason({
+        message: input.message,
+        status: input.status,
+        retryAfterMs: input.retryAfterMs,
+        http: input.http,
+      })
+    }
     return new AuthenticationReason({ message: input.message, kind: "invalid", http: input.http })
   }
   if (input.status === 403) {
+    // OpenCode Go gateways surface upstream DeepSeek failures as 403 with an
+    // upstream marker in the body (e.g. "Upstream request failed:
+    // [server_error] Upstream response was not valid JSON"). Those are
+    // transient provider failures, not permission errors, so mark them
+    // retryable instead of failing permanently as Authentication.
+    if (isUpstreamTransient(body)) {
+      return new ProviderInternalReason({
+        message: input.message,
+        status: input.status,
+        retryAfterMs: input.retryAfterMs,
+        http: input.http,
+      })
+    }
     return new AuthenticationReason({ message: input.message, kind: "insufficient-permissions", http: input.http })
   }
   if (input.status === 429) {
