@@ -128,7 +128,7 @@ describe("SkillFile.parse", () => {
       SkillFile.parse("/repo/skills", "/repo/skills/deploy/SKILL.md", `---\n${frontmatter}\n---\n# deploy`)
     expect(parse("disable-model-invocation: true")).toMatchObject({ skill: { autoinvoke: false } })
     expect(parse("disable-model-invocation: yes")).toMatchObject({ skill: { autoinvoke: false } })
-    expect(parse("disable-model-invocation: false")).toMatchObject({ skill: { autoinvoke: true } })
+    expect(parse("disable-model-invocation: false")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
     expect(parse("disable-model-invocation: maybe")).not.toMatchObject({ skill: { autoinvoke: expect.anything() } })
     expect(
       parse("disable-model-invocation: true\nmetadata:\n  opencode/autoinvoke: true"),

@@ -46,10 +46,9 @@ export function parse(directory: string, filepath: string, content: string): Par
     path.dirname(filepath) === directory && path.basename(filepath) !== "SKILL.md"
       ? path.basename(filepath, ".md")
       : path.basename(path.dirname(filepath))
+  const opencodeAutoinvoke = metadataBoolean(frontmatter.metadata, "opencode/autoinvoke")
   const disableModelInvocation = booleanValue(frontmatter["disable-model-invocation"])
-  const autoinvoke =
-    metadataBoolean(frontmatter.metadata, "opencode/autoinvoke") ??
-    (disableModelInvocation === undefined ? undefined : !disableModelInvocation)
+  const autoinvoke = opencodeAutoinvoke ?? (disableModelInvocation ? false : undefined)
   return {
     _tag: "Parsed",
     skill: {
