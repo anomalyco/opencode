@@ -742,6 +742,15 @@ await ctx.permission.rules({
 
 ### Sessions
 
+List sessions with the same filters and cursor pagination as the server API. The cursor preserves the filters and order;
+pass `cursor.next` to load the next page. `active()` returns the sessions currently running in this server process.
+
+```ts
+const page = await ctx.session.list({ directory: ctx.location.directory, limit: 20, order: "desc" })
+const next = page.cursor.next ? await ctx.session.list({ cursor: page.cursor.next, limit: 20 }) : undefined
+const active = await ctx.session.active()
+```
+
 Create or read a session.
 
 ```ts
@@ -794,6 +803,8 @@ Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-M
 
 ```ts
 interface SessionContext {
+  list(input?: SessionListInput, requestOptions?: RequestOptions): Promise<SessionListOutput>
+  active(requestOptions?: RequestOptions): Promise<SessionActiveOutput>
   create(input?: SessionCreateInput, requestOptions?: RequestOptions): Promise<SessionInfo>
   get(input: SessionGetInput, requestOptions?: RequestOptions): Promise<SessionInfo>
   remove(input: SessionRemoveInput, requestOptions?: RequestOptions): Promise<void>

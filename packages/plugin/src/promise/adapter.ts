@@ -581,6 +581,8 @@ export function fromPromise(plugin: Plugin) {
               register(
                 host.session.hook(name, (event) => Effect.promise(() => Promise.resolve(callback(event))), options),
               ),
+            list: adaptApiMethod(SessionEndpoints["session.list"], host.session.list),
+            active: adaptApiMethod(SessionEndpoints["session.active"], host.session.active),
             create: adaptApiMethod(SessionEndpoints["session.create"], host.session.create),
             get: adaptApiMethod(SessionEndpoints["session.get"], host.session.get),
             remove: adaptApiMethod(SessionEndpoints["session.remove"], host.session.remove),

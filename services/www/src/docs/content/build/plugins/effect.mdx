@@ -785,6 +785,18 @@ interface ReferenceDomain extends ReferenceApi<unknown> {
 
 ### Sessions
 
+List sessions with server-style filters and cursor pagination. `active()` reports the sessions running in this server
+process.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const page = yield* ctx.session.list({ directory: ctx.location.directory, limit: 20, order: "desc" })
+    const next = page.cursor.next ? yield* ctx.session.list({ cursor: page.cursor.next, limit: 20 }) : undefined
+    const active = yield* ctx.session.active()
+  }),
+```
+
 Create or read a session, then select the agent and model used by later work.
 
 ```ts
@@ -849,6 +861,8 @@ Schemas: [`Session.Info`](/api#schema-Session.Info), [`Model.Ref`](/api#schema-M
 ```ts
 type SessionDomain = Pick<
   SessionApi<unknown>,
+  | "list"
+  | "active"
   | "create"
   | "get"
   | "remove"

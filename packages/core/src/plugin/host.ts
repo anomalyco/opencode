@@ -1,12 +1,13 @@
 export * as PluginHost from "./host.js"
 
 import { Plugin } from "@opencode/plugin/effect"
+import { SessionList } from "@opencode/schema/session-list"
 import type { IntegrationMethodRegistration } from "@opencode/plugin/effect/integration"
 import { EventManifest } from "@opencode/schema/event-manifest"
 import type { Event } from "@opencode/schema/event"
 import { ServerConfig } from "@opencode/schema/mcp"
 import { App } from "../app.js"
-import { Effect, Schema, Stream } from "effect"
+import { DateTime, Effect, Schema, Stream } from "effect"
 import { Agent } from "../agent.js"
 import { AISDK } from "../aisdk.js"
 import { Command } from "../command.js"
@@ -526,6 +527,39 @@ export const make = Effect.fn("PluginHost.make")(function* (
     },
     session: {
       hook: (name, callback, options) => hooks.register("session", name, callback, options),
+      list: (input) =>
+        Effect.gen(function* () {
+          const query =
+            input?.cursor === undefined
+              ? (input ?? {})
+              : yield* SessionList.Cursor.parse(input.cursor).pipe(Effect.mapError(() => new Error("Invalid cursor")))
+          const page = yield* sessions.list({ ...query, limit: input?.limit ?? 50 })
+          const first = page.data[0]
+          const last = page.data.at(-1)
+          return {
+            data: page.data,
+            cursor: {
+              previous: first
+                ? SessionList.Cursor.make({
+                    ...query,
+                    anchor: { id: first.id, time: DateTime.toEpochMillis(first.time.updated), direction: "previous" },
+                  })
+                : undefined,
+              next: last
+                ? SessionList.Cursor.make({
+                    ...query,
+                    anchor: { id: last.id, time: DateTime.toEpochMillis(last.time.updated), direction: "next" },
+                  })
+                : undefined,
+            },
+          }
+        }),
+      active: () =>
+        sessions.active.pipe(
+          Effect.map((active) =>
+            Object.fromEntries(Array.from(active, (sessionID) => [sessionID, { type: "running" as const }])),
+          ),
+        ),
       create: (input) =>
         sessions.create({
           id: input?.id,

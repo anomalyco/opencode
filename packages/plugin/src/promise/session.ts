@@ -152,6 +152,8 @@ export interface SessionHooks {
 
 export type SessionDomain = Pick<
   SessionApi,
+  | "list"
+  | "active"
   | "create"
   | "get"
   | "remove"
