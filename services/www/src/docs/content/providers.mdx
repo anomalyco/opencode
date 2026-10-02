@@ -131,6 +131,41 @@ Both fields can also be set on a model or variant when only part of a provider's
 }
 ```
 
+## Prompt caching
+
+Use `settings.promptCache` to choose whether a provider uses implicit caching or explicit inline cache markers.
+Set it on the provider for all its models, or on a model to override that provider setting. An omitted setting
+keeps the package's existing behavior: Anthropic Messages and Bedrock Converse emit native markers, while OpenAI
+Chat and Responses use provider-managed caching without inline markers.
+
+For an OpenAI-compatible endpoint that accepts Anthropic-style `cache_control` fields:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "gateway": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": {
+        "baseURL": "https://gateway.example.com/v1",
+        "promptCache": { "mode": "explicit", "format": "anthropic" },
+      },
+      "models": {
+        "claude": {},
+        "implicitly-cached": { "settings": { "promptCache": { "mode": "implicit" } } },
+      },
+    },
+  },
+}
+```
+
+Explicit `"anthropic"` uses up to four `cache_control: { "type": "ephemeral" }` markers on tools, system
+parts, and the conversation tail; the request's cache policy controls placement and optional one-hour TTL.
+`"bedrock"` is available for the Bedrock Converse route and emits its native `cachePoint` blocks. A format
+not supported by the selected route fails model resolution rather than silently doing nothing. `"implicit"`
+omits all inline markers, including manually placed ones, but does not disable a provider's automatic caching.
+This is separate from OpenAI Responses' `prompt_cache_options.mode: "explicit"`, which is not an inline-marker format.
+
 ## Timeouts
 
 HTTP requests wait up to five minutes for response headers and up to five minutes between streamed response chunks.

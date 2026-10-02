@@ -40,6 +40,13 @@ export const Compaction = Schema.Union([
   .annotate({ identifier: "Provider.Compaction" })
 export type Compaction = typeof Compaction.Type
 
+/** Select implicit provider caching or the wire format for explicit markers. */
+export const PromptCache = Schema.Union([
+  Schema.Struct({ mode: Schema.Literal("implicit") }),
+  Schema.Struct({ mode: Schema.Literal("explicit"), format: Schema.Literals(["anthropic", "bedrock"]) }),
+]).annotate({ identifier: "Provider.PromptCache" })
+export type PromptCache = typeof PromptCache.Type
+
 /** "websocket" on a route without a WebSocket channel warns and falls back to HTTP. */
 export const Transport = Schema.Literals(["http", "websocket"]).annotate({ identifier: "Provider.Transport" })
 export type Transport = typeof Transport.Type
@@ -50,6 +57,7 @@ export const Settings = Schema.StructWithRest(
     headerTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
     chunkTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
     compaction: Compaction.pipe(optional),
+    promptCache: PromptCache.pipe(optional),
     transport: Transport.pipe(optional),
   }),
   [Schema.Record(Schema.String, Schema.Any)],

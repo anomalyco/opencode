@@ -34,6 +34,41 @@ function required<T>(value: T | undefined): T {
 const decode = Schema.decodeUnknownSync(Info)
 
 describe("ConfigProviderPlugin.Plugin", () => {
+  it.effect("inherits prompt cache mode from provider settings and overrides it per model", () =>
+    Effect.gen(function* () {
+      const models = yield* Model.Service
+      yield* addPlugin([
+        new Document({
+          type: "document",
+          info: decode({
+            providers: {
+              custom: {
+                package: "@opencode/ai/providers/openai-compatible",
+                settings: { baseURL: "https://example.test/v1", promptCache: { mode: "explicit", format: "anthropic" } },
+                models: {
+                  marked: { variants: [{ id: "implicit", settings: { promptCache: { mode: "implicit" } } }] },
+                  implicit: { settings: { promptCache: { mode: "implicit" } } },
+                  unsupported: { package: "@opencode/ai/providers/openai/responses" },
+                },
+              },
+            },
+          }),
+        }),
+      ])
+      const marked = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("marked")))
+      const implicit = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("implicit")))
+      expect((yield* ModelResolver.fromCatalogModel(marked)).promptCache).toEqual({ mode: "explicit", format: "anthropic" })
+      const variant = yield* ModelResolver.withVariant(marked, Model.VariantID.make("implicit"))
+      expect((yield* ModelResolver.fromCatalogModel(variant)).promptCache).toEqual({ mode: "implicit" })
+      expect((yield* ModelResolver.fromCatalogModel(implicit)).promptCache).toEqual({ mode: "implicit" })
+      const unsupported = required(yield* models.get(Provider.ID.make("custom"), Model.ID.make("unsupported")))
+      expect(yield* ModelResolver.fromCatalogModel(unsupported).pipe(Effect.flip)).toMatchObject({
+        _tag: "SessionRunnerModel.ModelConfigurationError",
+        detail: "promptCache format anthropic is not supported by openai-responses",
+      })
+    }),
+  )
+
   it.effect("inherits the provider compaction setting with model overrides and rejects unsupported routes", () =>
     Effect.gen(function* () {
       const models = yield* Model.Service

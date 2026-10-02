@@ -13,6 +13,7 @@
 import { CacheHint, type CachePolicy, type CachePolicyObject } from "./schema/options.js"
 import { LLMRequest, Message, ToolDefinition, type ContentPart, type ToolEntry } from "./schema/messages.js"
 import { effortUpdate } from "./effort-updates.js"
+import { BedrockCache } from "./protocols/utils/bedrock-cache.js"
 
 const AUTO: CachePolicyObject = {
   tools: true,
@@ -52,6 +53,40 @@ const RESPECTS_INLINE_HINTS = new Set([
   "openrouter",
   "digitalocean",
 ])
+
+const CHAT_MARKER_ROUTES = new Set(["openai-chat", "openai-compatible-chat"])
+const ANTHROPIC_MARKER_ROUTES = new Set([...RESPECTS_INLINE_HINTS].filter((id) => id !== "bedrock-converse"))
+
+export const supportsPromptCache = (routeID: string, format: "anthropic" | "bedrock", modelID: string) =>
+  format === "bedrock"
+    ? routeID === "bedrock-converse" && BedrockCache.breakpoints(modelID).supported
+    : ANTHROPIC_MARKER_ROUTES.has(routeID) || CHAT_MARKER_ROUTES.has(routeID)
+
+// An implicit cache policy must not send even manually attached inline markers.
+const removeHints = (request: LLMRequest): LLMRequest => {
+  if (countHints(request) === 0) return request
+  const tools = (entries: LLMRequest["tools"]): LLMRequest["tools"] =>
+    entries.map((entry) =>
+      entry.type === "namespace"
+        ? { ...entry, tools: tools(entry.tools) }
+        : entry.cache === undefined
+          ? entry
+          : new ToolDefinition({ ...entry, cache: undefined }),
+    )
+  return LLMRequest.update(request, {
+    tools: tools(request.tools),
+    system: request.system.map((part) => (part.cache === undefined ? part : { ...part, cache: undefined })),
+    messages: request.messages.map(
+      (message) =>
+        new Message({
+          ...message,
+          content: message.content.map((part) =>
+            "cache" in part && part.cache !== undefined ? ({ ...part, cache: undefined } as ContentPart) : part,
+          ),
+        }),
+    ),
+  })
+}
 
 // OpenRouter upstreams other than Anthropic and Alibaba Qwen cache without breakpoints. Gemini uses only the last
 // breakpoint, so a conversation-tail breakpoint writes a new cache every step and costs more than none. Qwen ignores
@@ -169,15 +204,30 @@ const countHints = (request: LLMRequest) =>
   )
 
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
-  if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
-  const policy =
-    request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto")
+  if (request.model.promptCache?.mode === "implicit") return removeHints(request)
+  if (
+    !RESPECTS_INLINE_HINTS.has(request.model.route.id) &&
+    !(
+      request.model.promptCache?.mode === "explicit" &&
+      request.model.promptCache.format === "anthropic" &&
+      CHAT_MARKER_ROUTES.has(request.model.route.id)
+    )
+  )
+    return request
+  const routeDefault =
+    request.model.route.id === "openrouter"
       ? openRouterPolicy(request.model.id)
-      : request.model.route.id === "alibaba-chat" && (request.cache === undefined || request.cache === "auto")
+      : request.model.route.id === "alibaba-chat"
         ? request.model.id.toLowerCase().startsWith("qwen")
           ? QWEN
           : NONE
-        : resolve(request.cache)
+        : AUTO
+  const policy =
+    request.cache === undefined || request.cache === "auto"
+      ? routeDefault === NONE && request.model.promptCache?.mode === "explicit"
+        ? AUTO
+        : routeDefault
+      : resolve(request.cache)
   if (!policy.tools && !policy.system && !policy.messages) return request
 
   const hint = makeHint(policy.ttlSeconds)

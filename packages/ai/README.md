@@ -1153,6 +1153,12 @@ Provider references: [OpenAI](https://developers.openai.com/api/docs/guides/comp
 
 Prompt caching is **on by default**. Every `LLMRequest` resolves to `cache: "auto"` unless the caller opts out with `cache: "none"`. Each protocol translates `CacheHint`s to its wire format (`cache_control` on Anthropic, `cachePoint` on Bedrock; OpenAI and Gemini do implicit caching server-side and don't need inline markers — auto is a no-op there).
 
+The selected model may carry `promptCache: { mode: "implicit" }` to suppress inline markers, including manually placed
+ones, or `promptCache: { mode: "explicit", format: "anthropic" | "bedrock" }` to request a supported wire format.
+For OpenAI-compatible Chat, `"anthropic"` enables `cache_control` on text parts and tool definitions; without it,
+the route does not emit markers. This model-level mechanism is separate from the request's `cache` placement policy.
+Unsupported explicit formats are rejected by OpenCode's model resolver.
+
 ### Auto placement
 
 `"auto"` places up to four breakpoints — the last tool definition, the first system part, the last system part when distinct, and the final message boundary. These expose successively larger reusable prefixes for tool definitions, system instructions, and the active conversation. The rolling final-message boundary advances on every request so recent conversation prefixes remain reusable during tool loops.
@@ -1205,6 +1211,7 @@ LLM.request({
 | Bedrock Converse        | emits up to 4 `cachePoint` blocks (4-breakpoint cap enforced)             |
 | OpenRouter              | emits up to 4 `cache_control` markers                                     |
 | OpenAI Chat / Responses | no-op (implicit caching above 1024 tokens)                                |
+| Configured compatible Chat | `format: "anthropic"` emits `cache_control` on content and tools      |
 | Gemini                  | no-op (implicit caching on 2.5+; explicit `CachedContent` is out-of-band) |
 
 Normalized cache usage is read back into `response.usage.cacheReadInputTokens` and `cacheWriteInputTokens` across every provider.

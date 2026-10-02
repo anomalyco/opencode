@@ -59,6 +59,7 @@ export type MaxTokensField = typeof MaxTokensField.Type
 export const Settings = Schema.StructWithRest(
   Schema.Struct({
     compaction: Provider.Compaction.pipe(optional),
+    promptCache: Provider.PromptCache.pipe(optional),
   }),
   // Provider packages may define arbitrary model-level options beyond OpenCode's shared compaction policy.
   [Schema.Record(Schema.String, Schema.Any)],

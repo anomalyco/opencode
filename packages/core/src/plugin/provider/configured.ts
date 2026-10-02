@@ -14,5 +14,5 @@ export const configuredSettings = Effect.fn("ProviderPlugin.configuredSettings")
 export function foldSettings(entries: readonly Entry[], id: string, initial: Provider.Settings | undefined) {
   return entries
     .filter((entry): entry is Document => entry.type === "document")
-    .reduce((settings, entry) => Provider.mergeOverlay(settings, entry.info.providers?.[id]?.settings), initial)
+    .reduce((settings, entry) => Provider.mergeSettings(settings, entry.info.providers?.[id]?.settings), initial)
 }

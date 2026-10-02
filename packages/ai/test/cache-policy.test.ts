@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { CacheHint, LLM, Message } from "../src/index.js"
+import { CacheHint, LanguageModel, LLM, Message } from "../src/index.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import {
@@ -10,6 +10,8 @@ import {
   CloudflareAIGateway,
   DigitalOcean,
   GoogleVertexMessages,
+  OpenAICompatible,
+  OpenRouter,
   Meta,
   MiniMax,
   Moonshot,
@@ -41,6 +43,84 @@ const geminiModel = Gemini.route
   .model({ id: "gemini-2.5-flash" })
 
 describe("applyCachePolicy", () => {
+  it.effect("leaves compatible Chat unmarked without an explicit cache format", () =>
+    Effect.gen(function* () {
+      const model = OpenAICompatible.configure({ baseURL: "https://example.test/v1", apiKey: "test" }).model("claude")
+      const prepared = yield* compileRequest(LLM.request({ model, system: "System", prompt: "hello" }))
+      expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
+    }),
+  )
+
+  it.effect("explicit format overrides OpenRouter's inferred non-Anthropic default", () =>
+    Effect.gen(function* () {
+      const model = LanguageModel.update(OpenRouter.configure({ apiKey: "test" }).model("custom/claude"), {
+        promptCache: { mode: "explicit", format: "anthropic" },
+      })
+      const prepared = yield* compileRequest(LLM.request({ model, system: "System", prompt: "hello" }))
+      expect(prepared.body.messages).toMatchObject([
+        { role: "system", content: [{ cache_control: { type: "ephemeral" } }] },
+        { role: "user", content: [{ cache_control: { type: "ephemeral" } }] },
+      ])
+    }),
+  )
+
+  it.effect("explicit format retains OpenRouter Qwen's system-only tool-prefix policy", () =>
+    Effect.gen(function* () {
+      const model = LanguageModel.update(OpenRouter.configure({ apiKey: "test" }).model("qwen/qwen3"), {
+        promptCache: { mode: "explicit", format: "anthropic" },
+      })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          system: "System",
+          tools: [{ name: "lookup", description: "lookup", inputSchema: { type: "object" } }],
+          prompt: "hello",
+        }),
+      )
+      expect(prepared.body.tools?.[0]?.cache_control).toBeUndefined()
+      expect(prepared.body.messages).toMatchObject([
+        { role: "system", content: [{ cache_control: { type: "ephemeral" } }] },
+        { role: "user", content: [{ cache_control: { type: "ephemeral" } }] },
+      ])
+    }),
+  )
+
+  it.effect("configured Anthropic markers work on an OpenAI-compatible endpoint", () =>
+    Effect.gen(function* () {
+      const model = LanguageModel.update(OpenAICompatible.configure({ baseURL: "https://example.test/v1", apiKey: "test" }).model("claude"), {
+        promptCache: { mode: "explicit", format: "anthropic" },
+      })
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          system: "Reusable system",
+          tools: [{ name: "lookup", description: "lookup", inputSchema: { type: "object" } }],
+          prompt: "hello",
+          cache: { tools: true, system: true, messages: { tail: 1 }, ttlSeconds: 3600 },
+        }),
+      )
+      expect(prepared.body).toMatchObject({
+        tools: [{ cache_control: { type: "ephemeral", ttl: "1h" } }],
+        messages: [
+          { role: "system", content: [{ text: "Reusable system", cache_control: { type: "ephemeral", ttl: "1h" } }] },
+          { role: "user", content: [{ text: "hello", cache_control: { type: "ephemeral", ttl: "1h" } }] },
+        ],
+      })
+    }),
+  )
+
+  it.effect("implicit mode suppresses automatic and manual markers on explicit-marker routes", () =>
+    Effect.gen(function* () {
+      const model = LanguageModel.update(anthropicModel, { promptCache: { mode: "implicit" } })
+      const prepared = yield* compileRequest(
+        LLM.request({ model, system: [{ type: "text", text: "System", cache: { type: "ephemeral" } }], prompt: "hello" }),
+      )
+      expect(prepared.body.system).toEqual([{ type: "text", text: "System" }])
+      expect(prepared.body.messages).toMatchObject([{ role: "user", content: [{ text: "hello" }] }])
+      expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
+    }),
+  )
+
   it.effect("undefined cache resolves to 'auto' (the recommended default)", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

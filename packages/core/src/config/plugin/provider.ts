@@ -68,7 +68,7 @@ export const Plugin = define({
           if (item.canonical !== undefined) provider.canonical = item.canonical
           if (item.name !== undefined) provider.name = item.name
           if (item.package !== undefined) provider.package = item.package
-          if (item.settings !== undefined) provider.settings = Provider.mergeOverlay(provider.settings, item.settings)
+          if (item.settings !== undefined) provider.settings = Provider.mergeSettings(provider.settings, item.settings)
           if (item.headers !== undefined) provider.headers = Provider.mergeHeaders(provider.headers, item.headers)
           if (item.body !== undefined) provider.body = Provider.mergeOverlay(provider.body, item.body)
         })
@@ -114,7 +114,7 @@ export const Plugin = define({
             if (config.compatibility !== undefined)
               model.compatibility = { ...model.compatibility, ...config.compatibility }
             if (config.package !== undefined) model.package = config.package
-            if (config.settings !== undefined) model.settings = Provider.mergeOverlay(model.settings, config.settings)
+            if (config.settings !== undefined) model.settings = Provider.mergeSettings(model.settings, config.settings)
             if (config.headers !== undefined) model.headers = Provider.mergeHeaders(model.headers, config.headers)
             if (config.body !== undefined) model.body = Provider.mergeOverlay(model.body, config.body)
             if (config.capabilities !== undefined)
@@ -128,7 +128,7 @@ export const Plugin = define({
                   model.variants.push(existing)
                 }
                 if (variant.settings !== undefined)
-                  existing.settings = Provider.mergeOverlay(existing.settings, variant.settings)
+                  existing.settings = Provider.mergeSettings(existing.settings, variant.settings)
                 if (variant.headers !== undefined)
                   existing.headers = Provider.mergeHeaders(existing.headers, variant.headers)
                 if (variant.body !== undefined) existing.body = Provider.mergeOverlay(existing.body, variant.body)

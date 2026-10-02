@@ -201,7 +201,7 @@ const layer = Layer.effect(
                     ...model,
                     ...(provider?.canonical === undefined ? {} : { canonical: provider.canonical }),
                     package: model.package ?? provider?.package,
-                    settings: Provider.mergeOverlay(
+                    settings: Provider.mergeSettings(
                       Provider.modelSettings(provider?.settings),
                       Provider.modelSettings(model.settings),
                     ),

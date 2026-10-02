@@ -2,6 +2,7 @@ export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { HttpOptions, LanguageModel, mergeHttpOptions, ProviderConfigurationError } from "@opencode/ai"
+import { supportsPromptCache } from "@opencode/ai/cache-policy"
 import { Auth } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
@@ -152,7 +153,7 @@ export const withVariant = (
     variant
       ? {
           ...model,
-          settings: Provider.mergeOverlay(model.settings, Provider.modelSettings(variant.settings)),
+          settings: Provider.mergeSettings(model.settings, Provider.modelSettings(variant.settings)),
           headers: Provider.mergeHeaders(model.headers, variant.headers),
           body: Provider.mergeOverlay(model.body, variant.body),
         }
@@ -179,6 +180,19 @@ export const fromCatalogModel = (
 > =>
   resolveCatalogModel(model, credential, dependencies).pipe(
     Effect.flatMap((resolved) => validateProviderVariables(model, resolved)),
+    Effect.flatMap((resolved) => {
+      const cache = model.settings?.promptCache
+      return cache?.mode === "explicit" && !supportsPromptCache(resolved.route.id, cache.format, resolved.id)
+        ? Effect.fail(
+          new ModelConfigurationError({
+            providerID: model.providerID,
+            modelID: model.id,
+            package: model.package ?? "unknown",
+            detail: `promptCache format ${cache.format} is not supported by ${resolved.route.id}`,
+          }),
+        )
+        : Effect.succeed(resolved)
+    }),
     Effect.flatMap((resolved) => {
       // Reject provider compaction policies up front so the misconfiguration surfaces before any step runs.
       if (
@@ -234,6 +248,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
+        promptCache: resolved.settings?.promptCache,
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, resolved.compatibility)
           : runtime.compatibility,
@@ -370,7 +385,7 @@ export const layer = Layer.effect(
       const selectedVariant = yield* withVariant(selected, variant)
       const runtimeInfo: RuntimeInfo = {
         ...selectedVariant,
-        settings: Provider.mergeOverlay(provider?.settings, Provider.modelSettings(selectedVariant.settings)),
+        settings: Provider.mergeSettings(provider?.settings, Provider.modelSettings(selectedVariant.settings)),
       }
       const model = yield* fromCatalogModel(runtimeInfo, credential, {
         loadPackage: (specifier) => Provider.loadPackage(specifier, npm),

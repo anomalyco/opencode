@@ -134,7 +134,7 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
 })
 
 /** opencode settings consumed in Core; native packages never receive them. */
-const CORE_KEYS = ["chunkTimeout", "compaction", "fetch", "headerTimeout", "timeout", "transport"] as const
+const CORE_KEYS = ["chunkTimeout", "compaction", "fetch", "headerTimeout", "promptCache", "timeout", "transport"] as const
 const PROVIDER_ONLY_KEYS = ["chunkTimeout", "headerTimeout", "timeout", "transport"] as const
 
 export function nativeSettings(settings: Settings): Settings {
@@ -181,6 +181,15 @@ export function mergeOverlay(
       }),
     ),
   )
+}
+
+/** A cache mode switch replaces its format; unlike arbitrary provider options it is not a deep merge. */
+export function mergeSettings(
+  base: Settings | undefined,
+  overlay: Settings | undefined,
+): ReturnType<typeof mergeOverlay> {
+  const merged = mergeOverlay(base, overlay)
+  return overlay?.promptCache === undefined ? merged : { ...merged, promptCache: overlay.promptCache }
 }
 
 export function mergeHeaders(

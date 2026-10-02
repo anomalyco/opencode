@@ -1,4 +1,6 @@
 import { Schema } from "effect"
+import { PromptCache } from "@opencode/schema/provider"
+export { PromptCache } from "@opencode/schema/provider"
 import { ModelID, ProviderID } from "./ids.js"
 import type { AnyRoute, CompactionOperations } from "../route/client.js"
 import { isRecord } from "../utils/record.js"
@@ -228,6 +230,7 @@ export class LanguageModel<
   readonly route: AnyRoute<Compact>
   readonly defaults?: LanguageModelDefaults
   readonly compatibility?: LanguageModelCompatibility
+  readonly promptCache?: PromptCache
 
   constructor(input: LanguageModel.ConstructorInput<Compact>) {
     this.id = input.id
@@ -235,6 +238,7 @@ export class LanguageModel<
     this.route = input.route
     this.defaults = input.defaults
     this.compatibility = input.compatibility
+    this.promptCache = input.promptCache
   }
 
   static make<
@@ -248,6 +252,7 @@ export class LanguageModel<
       defaults: input.defaults === undefined ? undefined : LanguageModelDefaults.make(input.defaults),
       compatibility:
         input.compatibility === undefined ? undefined : LanguageModelCompatibility.make(input.compatibility),
+      promptCache: input.promptCache,
     })
   }
 
@@ -260,6 +265,7 @@ export class LanguageModel<
       route: model.route,
       defaults: model.defaults,
       compatibility: model.compatibility,
+      promptCache: model.promptCache,
     }
   }
 
@@ -292,6 +298,7 @@ export namespace LanguageModel {
     readonly route: AnyRoute<Compact>
     readonly defaults?: LanguageModelDefaults
     readonly compatibility?: LanguageModelCompatibility
+    readonly promptCache?: PromptCache
   }
 
   export type Input<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = Omit<
