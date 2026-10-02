@@ -12,7 +12,7 @@ The first search asks you to allow web search and select a provider. OpenCode re
 
 ## Providers
 
-OpenCode includes four search providers:
+OpenCode includes five search providers:
 
 | Provider | ID | Environment variable |
 | --- | --- | --- |
@@ -20,8 +20,9 @@ OpenCode includes four search providers:
 | Firecrawl | `firecrawl` | `FIRECRAWL_API_KEY` |
 | Parallel | `parallel` | `PARALLEL_API_KEY` |
 | Tavily | `tavily` | `TAVILY_API_KEY` |
+| TinyFish | `tinyfish` | `TINYFISH_API_KEY` (optional) |
 
-Connect an account from the TUI with `/connect`, or set the provider's environment variable before starting OpenCode.
+Connect an account from the TUI with `/connect`, or set the provider's environment variable before starting OpenCode. TinyFish also supports keyless searches.
 
 ```bash
 $ TAVILY_API_KEY=your-key opencode
