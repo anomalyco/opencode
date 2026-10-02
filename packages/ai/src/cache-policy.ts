@@ -174,7 +174,9 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
     request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto")
       ? openRouterPolicy(request.model.id)
       : request.model.route.id === "alibaba-chat" && (request.cache === undefined || request.cache === "auto")
-        ? QWEN
+        ? request.model.id.toLowerCase().startsWith("qwen")
+          ? QWEN
+          : NONE
         : resolve(request.cache)
   if (!policy.tools && !policy.system && !policy.messages) return request
 

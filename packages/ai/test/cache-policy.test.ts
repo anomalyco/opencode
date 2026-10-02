@@ -185,6 +185,19 @@ describe("applyCachePolicy", () => {
     }),
   )
 
+  it.effect("Alibaba chat does not assume non-Qwen models support cache markers", () =>
+    Effect.gen(function* () {
+      const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" })
+      for (const modelID of ["kimi-k3", "glm-5.2", "deepseek-v4-flash-0731", "MiniMax-M2.5"]) {
+        const prepared = yield* compileRequest(
+          LLM.request({ model: alibaba.chat(modelID), system: "You are concise.", prompt: "hi" }),
+        )
+
+        expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
+      }
+    }),
+  )
+
   it.effect("'auto' emits Anthropic cache markers on Anthropic-compatible routes", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
