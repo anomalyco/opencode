@@ -26,7 +26,5 @@ VercelAIGateway.configure({
     upstream: { google: { thinkingConfig: { includeThoughts: true, thinkingBudget: 1024 } } },
   },
 })
-// @ts-expect-error Gateway caching has one supported mode.
-VercelAIGateway.configure({ providerOptions: { gateway: { caching: "forever" } } })
 // @ts-expect-error A thinking budget is numeric.
 VercelAIGateway.configure({ providerOptions: { thinking: { type: "enabled", budgetTokens: "many" } } })

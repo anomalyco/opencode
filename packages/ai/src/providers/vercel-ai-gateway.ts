@@ -8,33 +8,33 @@ import {
   EvaluationResponse,
   EvaluationRounding,
 } from "../experimental/evaluation.js"
+import { AnthropicMessages } from "../protocols/anthropic-messages.js"
+import { MetaResponses } from "../protocols/meta-responses.js"
+import { OpenAIChat } from "../protocols/openai-chat.js"
+import { OpenAIResponses } from "../protocols/openai-responses.js"
+import { OpenResponses } from "../protocols/open-responses.js"
+import { ProviderShared } from "../protocols/shared.js"
+import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
+import { XAIResponses } from "../protocols/xai-responses.js"
+import type { ProviderPackage } from "../provider-package.js"
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { AnthropicMessages } from "../protocols/anthropic-messages.js"
-import { OpenAIResponses } from "../protocols/openai-responses.js"
-import { MetaResponses } from "../protocols/meta-responses.js"
-import { XAIResponses } from "../protocols/xai-responses.js"
-import { OpenResponses } from "../protocols/open-responses.js"
-import { OpenAIChat } from "../protocols/openai-chat.js"
-import { cacheControl } from "../protocols/utils/cache.js"
-import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
-import { VercelAIGatewayOptions, type ProviderOptionsInput } from "./vercel-ai-gateway-options.js"
-import { ProviderShared } from "../protocols/shared.js"
-import type { ProviderPackage } from "../provider-package.js"
+import { Framing } from "../route/framing.js"
 import {
   AIError,
   HttpContext,
   HttpOptions,
   InvalidProviderOutputError,
   InvalidRequestError,
+  LLMRequest,
   ModelID,
   ProviderID,
   ProviderMetadata,
   Usage,
-  LLMRequest,
 } from "../schema/index.js"
+import { VercelAIGatewayOptions, type ProviderOptionsInput } from "./vercel-ai-gateway-options.js"
 
 export type { GatewayOptions, ProviderOptionsInput } from "./vercel-ai-gateway-options.js"
 
@@ -59,173 +59,128 @@ export type Options = Omit<RouteDefaultsInput, "providerOptions"> &
 export type Settings = ProviderPackage.Settings & ProviderOptionsInput & { readonly apiKey?: string }
 
 const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(VercelAIGatewayOptions.Options))
-
-const lower = Effect.fn("VercelAIGateway.lower")(function* (
-  request: LLMRequest,
-  api: "messages" | "responses" | "chat",
-) {
-  const options = yield* decodeOptions(request.providerOptions ?? {})
-  if (api !== "responses" && (options.cacheTTL !== undefined || options.cacheAnchorItems !== undefined))
-    return yield* ProviderShared.invalidRequest("cacheTTL and cacheAnchorItems require the Gateway Responses API")
-  if (api === "responses" && request.providerOptions?.thinking !== undefined)
-    return yield* ProviderShared.invalidRequest(
-      "Responses uses reasoningEffort; put native thinking settings under upstream",
-    )
-  const chatReasoning =
-    api === "chat" && request.providerOptions?.thinking !== undefined
-      ? yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(ChatThinking))(request.providerOptions.thinking)
-      : undefined
-  const effective = options.reasoningEffort ?? options.effort
-  const normalized = LLMRequest.update(request, {
-    providerOptions: {
-      ...request.providerOptions,
-      ...(effective === undefined ? {} : { reasoningEffort: effective }),
-      ...(api === "messages" && effective !== undefined
-        ? {
-            effort: effective === "none" ? undefined : effective,
-            thinking:
-              request.providerOptions?.thinking ?? (effective === "none" ? { type: "disabled" } : { type: "adaptive" }),
-          }
-        : {}),
-    },
-  })
-  const body = yield* api === "messages"
-    ? AnthropicMessages.protocol.body
-        .from(normalized)
-        .pipe(
-          Effect.flatMap(
-            ProviderShared.validateWith(Schema.decodeUnknownEffect(AnthropicMessages.protocol.body.schema)),
-          ),
-        )
-    : api === "chat"
-      ? OpenAIChat.fromRequest(normalized, { cacheControl: cacheControl() }).pipe(
-          Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIChat.protocol.body.schema))),
-        )
-      : request.model.id.startsWith("meta/muse-")
-        ? MetaResponses.protocol.body.from(normalized)
-        : request.model.id.startsWith("xai/grok-")
-          ? XAIResponses.protocol.body.from(normalized)
-          : request.model.id.startsWith("openai/")
-            ? OpenAIResponses.protocol.body.from(normalized)
-            : OpenResponses.protocol.body.from(normalized)
-  const caching = request.cache === undefined || request.cache === "auto" ? "auto" : undefined
-  return {
-    ...body,
-    ...(chatReasoning !== undefined
-      ? {
-          reasoning: {
-            enabled: chatReasoning.type !== "disabled",
-            ...(chatReasoning.type === "enabled" ? { max_tokens: chatReasoning.budgetTokens } : {}),
-          },
-        }
-      : {}),
-    providerOptions: {
-      ...options.upstream,
-      gateway: { ...(caching === undefined ? {} : { caching }), ...options.gateway },
-    },
-    ...(api === "responses" && options.cacheTTL !== undefined ? { cache_ttl: options.cacheTTL } : {}),
-    ...(api === "responses" && options.cacheAnchorItems !== undefined
-      ? { cache_anchor_items: options.cacheAnchorItems }
-      : {}),
-  }
-})
-
 const ChatThinking = Schema.Union([
-  Schema.Struct({ type: Schema.Literal("disabled") }),
-  Schema.Struct({ type: Schema.Literal("adaptive") }),
-  Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Int.check(Schema.isGreaterThan(0)) }),
+  Schema.Struct({ type: Schema.Literals(["adaptive", "disabled"]) }),
+  Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Number }),
 ])
+const decodeChatThinking = ProviderShared.validateWith(Schema.decodeUnknownEffect(ChatThinking))
 
-const messagesProtocol = gatewayProtocol(AnthropicMessages.protocol, {
-  id: "vercel-ai-gateway-messages",
-  from: (request) => lower(request, "messages"),
-})
-const responsesProtocol = gatewayProtocol(OpenAIResponses.protocol, {
-  id: "vercel-ai-gateway-responses",
-  from: (request) => lower(request, "responses"),
-})
-const openResponsesProtocol = gatewayProtocol(OpenResponses.protocol, {
-  id: "vercel-ai-gateway-openresponses",
-  from: (request) => lower(request, "responses"),
-})
-const metaProtocol = gatewayProtocol(MetaResponses.protocol, {
-  id: "vercel-ai-gateway-meta-responses",
-  from: (request) => lower(request, "responses"),
-})
-const xaiProtocol = gatewayProtocol(XAIResponses.protocol, {
-  id: "vercel-ai-gateway-xai-responses",
-  from: (request) => lower(request, "responses"),
-})
-const chatProtocol = gatewayProtocol(OpenAIChat.protocol, {
-  id: "vercel-ai-gateway-chat",
-  from: (request) => lower(request, "chat"),
-})
+const prepare = (api: "messages" | "responses" | "chat") =>
+  Effect.fn("VercelAIGateway.prepare")(function* (request: LLMRequest) {
+    const options = yield* decodeOptions(request.providerOptions ?? {})
+    const thinking =
+      api === "chat" && request.providerOptions?.thinking !== undefined
+        ? yield* decodeChatThinking(request.providerOptions.thinking)
+        : undefined
+    const effort = options.reasoningEffort
+    const providerOptions =
+      api === "messages" && effort !== undefined
+        ? {
+            ...request.providerOptions,
+            effort: effort === "none" ? undefined : effort,
+            thinking: request.providerOptions?.thinking ?? { type: effort === "none" ? "disabled" : "adaptive" },
+          }
+        : request.providerOptions
+    return {
+      request: LLMRequest.update(request, { providerOptions }),
+      body: {
+        ...(thinking === undefined
+          ? {}
+          : {
+              reasoning: {
+                enabled: thinking.type !== "disabled",
+                ...(thinking.type === "enabled" ? { max_tokens: thinking.budgetTokens } : {}),
+              },
+            }),
+        providerOptions: {
+          ...options.upstream,
+          gateway: { ...(request.cache === "none" ? {} : { caching: "auto" }), ...options.gateway },
+        },
+        ...(api === "responses" && options.cacheTTL !== undefined ? { cache_ttl: options.cacheTTL } : {}),
+        ...(api === "responses" && options.cacheAnchorItems !== undefined
+          ? { cache_anchor_items: options.cacheAnchorItems }
+          : {}),
+      },
+    }
+  })
 
-const messagesRoute = Route.make({
+const route = <Body, Event, State>(input: {
+  readonly id: string
+  readonly protocol: Parameters<typeof gatewayProtocol<Body, Event, State>>[0]
+  readonly api: "messages" | "responses" | "chat"
+  readonly path: string
+  readonly framing: typeof Framing.sse | typeof AnthropicMessages.framing | typeof OpenAIChat.framing
+  readonly defaults?: RouteDefaultsInput
+}) =>
+  Route.make({
+    id: input.id,
+    provider: id,
+    providerMetadataKey: id,
+    protocol: gatewayProtocol(input.protocol, { id: input.id, prepare: prepare(input.api) }),
+    endpoint: Endpoint.path(input.path, { baseURL }),
+    framing: input.framing,
+    headers: ({ request }): Record<string, string> =>
+      request.promptCacheKey ? { "x-session-affinity": request.promptCacheKey } : {},
+    defaults: input.defaults,
+  })
+
+const responsesDefaults = { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } }
+const messagesRoute = route({
   id: "vercel-ai-gateway-messages",
-  provider: id,
-  providerMetadataKey: "vercel-ai-gateway",
-  protocol: messagesProtocol,
-  endpoint: Endpoint.path("/messages", { baseURL }),
+  protocol: AnthropicMessages.protocol,
+  api: "messages",
+  path: "/messages",
   framing: AnthropicMessages.framing,
   defaults: { headers: { "anthropic-version": "2023-06-01" } },
-  headers: affinity,
 })
-const responsesRoute = Route.make({
-  id: "vercel-ai-gateway-responses",
-  provider: id,
-  providerMetadataKey: "vercel-ai-gateway",
-  protocol: responsesProtocol,
-  endpoint: Endpoint.path("/responses", { baseURL }),
-  framing: OpenAIChat.framing,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
-  headers: affinity,
+const openAIResponsesRoute = route({
+  id: "vercel-ai-gateway-openai-responses",
+  protocol: OpenAIResponses.protocol,
+  api: "responses",
+  path: "/responses",
+  framing: Framing.sse,
+  defaults: responsesDefaults,
 })
-const metaRoute = Route.make({
+const metaResponsesRoute = route({
   id: "vercel-ai-gateway-meta-responses",
-  provider: id,
-  providerMetadataKey: "vercel-ai-gateway",
-  protocol: metaProtocol,
-  endpoint: Endpoint.path("/responses", { baseURL }),
-  framing: OpenAIChat.framing,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
-  headers: affinity,
+  protocol: MetaResponses.protocol,
+  api: "responses",
+  path: "/responses",
+  framing: Framing.sse,
+  defaults: responsesDefaults,
 })
-const openResponsesRoute = Route.make({
-  id: "vercel-ai-gateway-openresponses",
-  provider: id,
-  providerMetadataKey: "vercel-ai-gateway",
-  protocol: openResponsesProtocol,
-  endpoint: Endpoint.path("/responses", { baseURL }),
-  framing: OpenAIChat.framing,
-  defaults: { providerOptions: { store: false } },
-  headers: affinity,
-})
-const xaiRoute = Route.make({
+const xaiResponsesRoute = route({
   id: "vercel-ai-gateway-xai-responses",
-  provider: id,
-  providerMetadataKey: "vercel-ai-gateway",
-  protocol: xaiProtocol,
-  endpoint: Endpoint.path("/responses", { baseURL }),
-  framing: OpenAIChat.framing,
-  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
-  headers: affinity,
+  protocol: XAIResponses.protocol,
+  api: "responses",
+  path: "/responses",
+  framing: Framing.sse,
+  defaults: responsesDefaults,
 })
-const chatRoute = Route.make({
+const responsesRoute = route({
+  id: "vercel-ai-gateway-responses",
+  protocol: OpenResponses.protocol,
+  api: "responses",
+  path: "/responses",
+  framing: Framing.sse,
+  defaults: { providerOptions: { store: false } },
+})
+const chatRoute = route({
   id: "vercel-ai-gateway-chat",
-  provider: id,
-  providerMetadataKey: "vercel-ai-gateway",
-  protocol: chatProtocol,
-  endpoint: Endpoint.path("/chat/completions", { baseURL }),
+  protocol: OpenAIChat.protocol,
+  api: "chat",
+  path: "/chat/completions",
   framing: OpenAIChat.framing,
-  headers: affinity,
 })
 
-function affinity({ request }: { readonly request: LLMRequest }): Record<string, string> {
-  return request.promptCacheKey && request.cache !== "none" ? { "x-session-affinity": request.promptCacheKey } : {}
-}
-
-export const routes = [messagesRoute, responsesRoute, openResponsesRoute, metaRoute, xaiRoute, chatRoute]
+export const routes = [
+  messagesRoute,
+  openAIResponsesRoute,
+  metaResponsesRoute,
+  xaiResponsesRoute,
+  responsesRoute,
+  chatRoute,
+]
 
 const Request = Schema.StructWithRest(
   Schema.Struct({
@@ -253,30 +208,29 @@ export const configure = (input: Options = {}) => {
   const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
   const configured = {
     ...defaults,
-    endpoint: { baseURL: (endpoint ?? baseURL).replace(/\/$/, "").replace(/\/v1$/, "") + "/v1" },
+    endpoint: { baseURL: endpoint ?? baseURL },
     auth: AuthOptions.bearer(input, ["AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN"]),
   }
   const messages = (modelID: string | ModelID) =>
     messagesRoute.with(configured).model<ProviderOptionsInput>({
       id: modelID,
+      // Recorded Gateway translations for non-Claude models return thinking with empty signatures.
       compatibility: { requireSignature: modelID.startsWith("anthropic/") },
     })
-  const responses = (modelID: string | ModelID) =>
-    (modelID.startsWith("meta/muse-")
-      ? metaRoute
-      : modelID.startsWith("xai/grok-")
-        ? xaiRoute
-        : modelID.startsWith("openai/")
-          ? responsesRoute
-          : openResponsesRoute
-    )
-      .with(configured)
-      .model<ProviderOptionsInput>({ id: modelID })
+  const responses = (modelID: string | ModelID) => {
+    const selected = modelID.startsWith("openai/")
+      ? openAIResponsesRoute
+      : modelID.startsWith("meta/")
+        ? metaResponsesRoute
+        : modelID.startsWith("xai/")
+          ? xaiResponsesRoute
+          : responsesRoute
+    return selected.with(configured).model<ProviderOptionsInput>({ id: modelID })
+  }
   const chat = (modelID: string | ModelID) =>
-    chatRoute.with(configured).model<ProviderOptionsInput>({
-      id: modelID,
-      compatibility: { supportsPromptCacheKey: true, supportsStore: false, reasoningField: "reasoning" },
-    })
+    chatRoute
+      .with(configured)
+      .model<ProviderOptionsInput>({ id: modelID, compatibility: { reasoningField: "reasoning" } })
   const model = (modelID: string | ModelID) =>
     /^(openai\/gpt-|meta\/muse-|xai\/grok-)/.test(modelID) ? responses(modelID) : messages(modelID)
   const evaluation = (modelID: string | ModelID) =>

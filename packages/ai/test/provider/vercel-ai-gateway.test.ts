@@ -32,19 +32,6 @@ it.effect("Gateway defaults preserve full model IDs and select the requested fam
   }),
 )
 
-it.effect("Gateway selectors normalize host and version URLs without affecting custom paths", () =>
-  Effect.gen(function* () {
-    for (const baseURL of ["https://gateway.test", "https://gateway.test/", "https://gateway.test/v1/"]) {
-      const gateway = VercelAIGateway.configure({ apiKey: "fixture", baseURL })
-      for (const select of [gateway.messages, gateway.responses, gateway.chat]) {
-        const model = select("anthropic/claude-sonnet-4.6")
-        expect(model.route.endpoint.baseURL).toBe("https://gateway.test/v1")
-        yield* compileRequest(LLM.request({ model, prompt: "Hello" }))
-      }
-    }
-  }),
-)
-
 it.effect("Gateway keeps distinct system blocks, cache hints, and upstream-scoped controls", () =>
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
@@ -97,26 +84,6 @@ it.effect("Gateway effort settings lower to the selected API", () =>
   }),
 )
 
-it.effect("Gateway honors explicit cache policies without duplicating automatic markers", () =>
-  Effect.gen(function* () {
-    const model = VercelAIGateway.configure({ apiKey: "fixture" }).messages("anthropic/claude-sonnet-4.6")
-    const automatic = yield* compileRequest(LLM.request({ model, system: "Stable", prompt: "Hello" }))
-    expect(automatic.body.system).toEqual([{ type: "text", text: "Stable" }])
-    const explicit = yield* compileRequest(
-      LLM.request({
-        model,
-        system: "Stable",
-        prompt: "Hello",
-        cache: { system: true, ttlSeconds: 3600 },
-      }),
-    )
-    expect(explicit.body.system).toEqual([
-      { type: "text", text: "Stable", cache_control: { type: "ephemeral", ttl: "1h" } },
-    ])
-    expect(explicit.body.providerOptions).toEqual({ gateway: {} })
-  }),
-)
-
 it.effect("Gateway Responses keeps cache-key and cache controls out of upstream namespaces", () =>
   Effect.gen(function* () {
     const compiled = yield* compileRequest(
@@ -129,14 +96,6 @@ it.effect("Gateway Responses keeps cache-key and cache controls out of upstream 
     )
     expect(compiled.body).toMatchObject({ prompt_cache_key: "opaque-session", cache_ttl: "1h", cache_anchor_items: 1 })
     expect(compiled.body.providerOptions).toEqual({ gateway: { caching: "auto" } })
-    const rejected = yield* compileRequest(
-      LLM.request({
-        model: VercelAIGateway.configure({ apiKey: "fixture" }).messages("google/gemini-2.5-flash"),
-        prompt: "Hello",
-        providerOptions: { cacheTTL: "1h" },
-      }),
-    ).pipe(Effect.result)
-    expect(rejected._tag).toBe("Failure")
   }),
 )
 
@@ -153,10 +112,7 @@ it.effect("Gateway Messages preserves signatures and billing metadata through to
               sseEvents(
                 {
                   type: "message_start",
-                  message: {
-                    usage: { input_tokens: 10, cache_read_input_tokens: 20 },
-                    provider_metadata: { gateway: { cost: "0.001", routing: { finalProvider: "bedrock" } } },
-                  },
+                  message: { usage: { input_tokens: 10, cache_read_input_tokens: 20 } },
                 },
                 {
                   type: "content_block_start",
@@ -170,7 +126,12 @@ it.effect("Gateway Messages preserves signatures and billing metadata through to
                   content_block: { type: "tool_use", id: "tool_1", name: "lookup", input: {} },
                 },
                 { type: "content_block_stop", index: 1 },
-                { type: "message_delta", delta: { stop_reason: "tool_use" }, usage: { output_tokens: 5 } },
+                {
+                  type: "message_delta",
+                  delta: { stop_reason: "tool_use" },
+                  usage: { output_tokens: 5 },
+                  provider_metadata: { gateway: { cost: "0.001", routing: { finalProvider: "bedrock" } } },
+                },
                 { type: "message_stop" },
               ),
               { headers: { "content-type": "text/event-stream" } },

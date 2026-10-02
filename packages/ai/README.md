@@ -1311,7 +1311,7 @@ gateway.messages("openai/gpt-5-nano") // Explicit Messages override
 
 Default routing sends `openai/gpt-*`, `meta/muse-*`, and `xai/grok-*` to Responses; everything else uses Messages. Full Gateway model IDs stay unchanged. Package entrypoints are also available at `@opencode/ai/providers/vercel-ai-gateway/{messages,responses,chat}` with flat `model(id, settings)` inputs.
 
-Set request `providerOptions.reasoningEffort` for named effort. Messages lowers it to `thinking` plus `output_config.effort`, Responses to `reasoning.effort`, and Chat to `reasoning_effort`. Choose values the selected model supports; the Gateway may translate effort across upstreams. Older Claude models may require budget-based thinking instead of adaptive thinking.
+Set `providerOptions.reasoningEffort` for named effort. Messages lowers it to `thinking` plus `output_config.effort`, Responses to `reasoning.effort`, and Chat to `reasoning_effort`.
 
 ```ts
 LLM.request({
@@ -1322,13 +1322,11 @@ LLM.request({
 })
 ```
 
-Messages and Chat expose `thinking` for on/off or token-budget controls. Responses uses `reasoningEffort` and `reasoningSummary`; native upstream controls can be passed as `upstream: { google: { thinkingConfig: ... } }`, etc. A budget translated by Gateway is **not** necessarily a hard reasoning-token cap. Explicit upstream options may override shared settings.
+Messages and Chat accept `thinking` for on/off or token-budget controls. Native upstream settings go under `upstream`, for example `upstream: { google: { thinkingConfig: ... } }`.
 
-Gateway controls live under `providerOptions.gateway`: routing `only`/`order`/`sort`, fallback `models`, `byok`, `providerTimeouts`, `zeroDataRetention`, regional inference, and usage tags/user. Upstream options live under `providerOptions.upstream` and lower into the original provider namespaces on the wire.
+Gateway controls go under `providerOptions.gateway`. Gateway caching is enabled unless the request uses `cache: "none"`. Responses also accepts `cacheTTL` and `cacheAnchorItems`. `promptCacheKey` is sent as `x-session-affinity`.
 
-Automatic Gateway caching is enabled by default. Request `cache: "none"` suppresses that default, but does not disable upstream implicit caching or manually placed cache hints. Messages preserves distinct system blocks and explicit hints. Responses additionally exposes `cacheTTL` and `cacheAnchorItems` (wire input-item count, not canonical message count). `promptCacheKey` supplies session affinity and the supported OpenAI-style cache-key field.
-
-Gateway routing, cost, and warnings are retained on terminal events' `providerMetadata.gateway`. Reasoning signatures and encrypted state remain on the corresponding content parts for replay. Existing experimental evaluation remains available. These language-model routes currently use HTTP/SSE; Gateway WebSocket, native compaction, and additional media modalities are not exposed by this facade yet.
+Gateway metadata from `provider_metadata.gateway` is retained on the finish event's `providerMetadata.gateway`. Existing experimental evaluation remains available.
 
 Each named provider owns its module, endpoint, authentication, and route setup. Providers with the same wire format compose the shared protocol directly:
 
