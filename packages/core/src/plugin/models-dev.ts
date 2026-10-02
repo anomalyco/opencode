@@ -82,7 +82,7 @@ function applyModel(
     readonly request?: NonNullable<NonNullable<ModelsDev.Model["experimental"]>["modes"]>[string]["provider"]
   } = {},
 ) {
-  draft.name = input.name ?? model.name
+  draft.name = input.name ?? model.name ?? model.id
   draft.family = model.family
   draft.api = model.provider?.npm
     ? {
@@ -108,9 +108,9 @@ function applyModel(
   draft.status = model.status ?? "active"
   draft.enabled = true
   draft.limit = {
-    context: model.limit.context,
-    input: model.limit.input,
-    output: model.limit.output,
+    context: model.limit?.context ?? 0,
+    input: model.limit?.input,
+    output: model.limit?.output ?? 0,
   }
   Object.assign(draft.request.headers, input.request?.headers ?? {})
   Object.assign(draft.request.body, input.request?.body ?? {})
