@@ -207,7 +207,7 @@ describe("OpenAI Chat route", () => {
           { role: "user", content: "What is the weather?" },
           {
             role: "assistant",
-            content: null,
+            content: "",
             tool_calls: [
               {
                 id: "call_1",
@@ -270,7 +270,7 @@ describe("OpenAI Chat route", () => {
       expect(prepared.body.messages).toEqual([
         {
           role: "assistant",
-          content: null,
+          content: "",
           tool_calls: [
             {
               id: "call_image",
@@ -472,9 +472,93 @@ describe("OpenAI Chat route", () => {
         }),
       )
 
-      expect(prepared.body.messages).toEqual([{ role: "assistant", content: null, reasoning_content: "hidden" }])
+      expect(prepared.body.messages).toEqual([{ role: "assistant", content: "", reasoning_content: "hidden" }])
     }),
   )
+
+  it.effect("lowers empty assistant history with string content", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [Message.assistant([]), Message.assistant("")],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: "" },
+        { role: "assistant", content: "" },
+      ])
+    }),
+  )
+
+  it.effect("preserves native reasoning metadata on empty assistant history", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [
+            Message.make({
+              role: "assistant",
+              content: [],
+              native: { openaiCompatible: { reasoning_content: "hidden" } },
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([{ role: "assistant", content: "", reasoning_content: "hidden" }])
+    }),
+  )
+
+  for (const reasoning of ["", "hidden"]) {
+    it.effect(`replays a streamed ${reasoning ? "reasoning-only" : "empty"} turn to a strict Chat endpoint`, () =>
+      Effect.gen(function* () {
+        const first = yield* LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                deltaChunk({ role: "assistant", content: "", ...(reasoning ? { reasoning_content: reasoning } : {}) }),
+                deltaChunk({}, "length"),
+              ),
+            ),
+          ),
+        )
+        expect(first.text).toBe("")
+        expect(first.reasoning).toBe(reasoning)
+        const followUp = LLM.updateRequest(request, {
+          messages: [...request.messages, first.message, Message.user("Continue.")],
+        })
+        const response = yield* LLMClient.generate(followUp).pipe(
+          Effect.provide(
+            dynamicResponse((input) =>
+              Effect.sync(() => {
+                const body = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct(OpenAIChat.bodyFields)))(
+                  input.text,
+                )
+                const assistant = body.messages.find((message) => message.role === "assistant")
+                if (assistant?.content === null)
+                  return input.respond(encodeJson({ error: { message: "invalid message content type: <nil>" } }), {
+                    status: 400,
+                    headers: { "content-type": "application/json" },
+                  })
+                expect(assistant).toEqual({
+                  role: "assistant",
+                  content: "",
+                  ...(reasoning ? { reasoning_content: reasoning } : {}),
+                })
+                return input.respond(sseEvents(deltaChunk({ content: "OK" }), deltaChunk({}, "stop")), {
+                  headers: { "content-type": "text/event-stream" },
+                })
+              }),
+            ),
+          ),
+        )
+        expect(response.text).toBe("OK")
+        expect(response.finishReason).toBe("stop")
+      }),
+    )
+  }
 
   it.effect("parses text and usage stream fixtures", () =>
     Effect.gen(function* () {

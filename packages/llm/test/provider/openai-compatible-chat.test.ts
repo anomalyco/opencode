@@ -171,7 +171,7 @@ describe("OpenAI-compatible Chat route", () => {
           { role: "user", content: "What is the weather?" },
           {
             role: "assistant",
-            content: null,
+            content: "",
             tool_calls: [
               {
                 id: "call_1",
