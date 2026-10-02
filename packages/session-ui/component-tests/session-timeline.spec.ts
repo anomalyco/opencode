@@ -60,6 +60,27 @@ story("aligns the retry icon with the error label", async ({ mount }) => {
   expect(iconY).toBe(labelY)
 })
 
+story("aligns provider error icons with the first line at narrow widths", async ({ mount, page }) => {
+  await page.setViewportSize({ width: 540, height: 800 })
+  const timeline = await mount("current-session-timeline-rows--provider-errors")
+  const cards = timeline.locator('[data-kind="session-error-card"]')
+  await expect(cards).toHaveCount(2)
+
+  for (const card of await cards.all()) {
+    const icon = card.locator('[data-slot="icon-svg"]')
+    const text = card.locator("strong")
+    await expect(icon).toBeVisible()
+    await expect(icon).toHaveAttribute("height", "14")
+    await expect(text).toBeVisible()
+    const [iconY, textY] = await Promise.all([
+      icon.evaluate((element) => element.getBoundingClientRect().y),
+      text.evaluate((element) => element.getBoundingClientRect().y),
+    ])
+    expect(Math.abs(iconY - textY)).toBeLessThanOrEqual(1)
+  }
+  await expect(cards.nth(1)).toHaveCSS("line-height", "16px")
+})
+
 // Moved from packages/app/e2e/regression/session-timeline-context-state.spec.ts
 story("preserves a collapsed context group through count and status updates", async ({ mount }) => {
   const timeline = await mount("current-session-research-agents--agent-research", { args: { scenario: "exploration" } })
