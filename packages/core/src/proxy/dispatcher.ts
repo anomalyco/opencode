@@ -9,6 +9,7 @@ import { Readable } from "node:stream"
 import type { ProxySettings } from "./resolve"
 import { selectProviders, type ProxyAuthContext, type ProxyAuthProvider } from "./auth/provider"
 import { ProxyAuthError } from "./error"
+import { load as loadNative } from "./native"
 
 export const MAX_AUTH_ROUNDS = 3
 
@@ -78,7 +79,8 @@ export function makeAuthHeader(
   return async (challenges, target) => {
     if (!proxy) return undefined
     const ctx: ProxyAuthContext = { proxy, target, username: settings.username, password: settings.password }
-    const selected = deps.providers ?? selectProviders(settings.auth, challenges)
+    const native = await loadNative()
+    const selected = deps.providers ?? selectProviders(settings.auth, challenges, native)
     for (const provider of selected) {
       const value = await provider.step(ctx, challenges.join(", "))
       if (value) return value
