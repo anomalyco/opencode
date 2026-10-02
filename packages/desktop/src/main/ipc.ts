@@ -5,37 +5,31 @@ import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/unstable/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
 import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
+import { Extensions } from "./extension"
 import { DesktopFiles, openExternalURL } from "./files"
 import { appHandlers } from "./ipc-handlers/app"
 import { eventHandlers } from "./ipc-handlers/events"
+import { extensionHandlers } from "./ipc-handlers/extensions"
 import { fileHandlers } from "./ipc-handlers/files"
 import { menuHandlers } from "./ipc-handlers/menu"
 import { storageHandlers } from "./ipc-handlers/storage"
-import { updaterHandlers } from "./ipc-handlers/updater"
 import { windowHandlers } from "./ipc-handlers/window"
-import { wslHandlers } from "./ipc-handlers/wsl"
-import { sshHandlers } from "./ipc-handlers/ssh"
-import { Ssh } from "./ssh/service"
 import { IpcPortHandoff, IpcServerProtocolLive } from "./ipc-transport"
 import { ApplicationLifecycle } from "./lifecycle"
 import { showCliInstaller } from "./native/install-cli"
 import { createMenu, sendMenuCommand } from "./native/menu"
 import { DesktopCli } from "./service/desktop-cli"
-import { Updater } from "./updater"
 import { getLastFocusedWindow } from "./windows"
-import { Wsl } from "./wsl/start"
 
-const services = Layer.mergeAll(DesktopFiles.layer, Wsl.layer, Ssh.layer)
+const services = Layer.mergeAll(DesktopFiles.layer, Extensions.layer)
 const handlers = Layer.mergeAll(
   appHandlers,
   storageHandlers,
   fileHandlers,
   windowHandlers,
   menuHandlers,
-  updaterHandlers,
-  wslHandlers,
-  sshHandlers,
   eventHandlers,
+  extensionHandlers,
 )
 export const layer = RpcServer.layer(DesktopRpcs, { disableFatalDefects: true }).pipe(
   Layer.provide(handlers),
@@ -47,14 +41,12 @@ export const registerIpcHandlers = Effect.gen(function* () {
   const handoff = yield* IpcPortHandoff
   const lifecycle = yield* ApplicationLifecycle.Service
   const desktopCli = yield* DesktopCli.Service
-  const updater = yield* Updater.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
   const menu = {
     trigger: (id: string) => {
       const win = getLastFocusedWindow()
       if (win) sendMenuCommand(win, id)
     },
-    checkForUpdates: () => runFork(updater.show),
     installCli: () => runFork(showCliInstaller(desktopCli)),
     createWindow: lifecycle.createWindow,
     openExternal: (url: string) => runFork(openExternalURL(url)),

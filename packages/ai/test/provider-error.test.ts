@@ -1,18 +1,21 @@
 import { describe, expect, test } from "bun:test"
 import { isContextOverflow } from "../src/index.js"
-import { classifyProviderFailure } from "../src/provider-error.js"
+import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
   test("classifies provider token limit messages as context overflow", () => {
     const messages = [
       "tokens in request more than max tokens allowed",
       "Requested token count exceeds the model's maximum context length of 131072 tokens.",
+      "Requested input length 600010 exceeds maximum input length 131071",
       "Input length (265330) exceeds model's maximum context length (262144).",
       "Input length 131393 exceeds the maximum allowed input length of 131040 tokens.",
       "The input (516368 tokens) is longer than the model's context length (262144 tokens).",
+      "The input is longer than the model's context length trace_id: 39d8c3a5c6c91dbc8dd9055f0b37e084",
       "Prompt has 5,958,968 tokens, but the configured context size is 256,000 tokens",
       "Range of input length should be [1, 129024]",
       "Too many tokens",
+      "Input validation error: `inputs` tokens + `max_new_tokens` must be <= 131073. Given: 600035 `inputs` tokens and 16 `max_new_tokens`",
       "Token limit exceeded",
     ]
 
@@ -282,6 +285,82 @@ describe("provider error classification", () => {
     ).toEqual(Array(6).fill("QuotaExceeded"))
   })
 
+  test("classifies Z.ai plan and balance limits as quota rather than throttling", () => {
+    const zai = (code: string, message: string) => ({ error: { code, message } })
+    const cases = [
+      zai("1113", "Insufficient balance or no resource package. Please recharge."),
+      zai("1308", "Usage limit reached for 5 hours. Your limit will reset at 2026-10-01 00:00:00"),
+      zai(
+        "1309",
+        "Your GLM Coding Plan package has expired and is temporarily unavailable. You can resume using it after renewing the subscription on the official website.",
+      ),
+      zai("1310", "Weekly/Monthly Limit Exhausted. Your limit will reset at 2026-10-01 00:00:00"),
+      zai("1311", "Your current subscription plan does not yet include access to glm-5"),
+      zai("1314", "Your enterprise package has expired. Please contact your enterprise administrator."),
+      // Z.ai's Anthropic-compatible endpoint wraps the code and request ID into the message.
+      {
+        type: "error",
+        error: {
+          type: "rate_limit_error",
+          code: "1309",
+          message:
+            "[1309][Your GLM Coding Plan package has expired and is temporarily unavailable. You can resume using it after renewing the subscription on the official website.][20260929132151e73af01340d54b58]",
+        },
+      },
+    ]
+    expect(
+      cases.map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 429, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(Array(cases.length).fill("QuotaExceeded"))
+  })
+
+  test("classifies Z.ai prompt length rejections as context overflow", () => {
+    const cases = [
+      { error: { code: "1261", message: "Prompt 超长" } },
+      { error: { code: "1261", message: "Prompt too long" } },
+      {
+        type: "error",
+        error: { type: "invalid_request_error", code: "1261", message: "[1261][Prompt too long][2026092913]" },
+      },
+    ]
+    expect(
+      cases.map((body) => {
+        const reason = classifyProviderFailure({
+          message: body.error.message,
+          status: 400,
+          rawBody: JSON.stringify(body),
+        })
+        return reason._tag === "InvalidRequest" ? reason.classification : reason._tag
+      }),
+    ).toEqual(["context-overflow", "context-overflow", "context-overflow"])
+  })
+
+  test("classifies Z.ai sensitive content rejections as content policy", () => {
+    const message =
+      "System detected potentially unsafe or sensitive content in input or generation. Please avoid using prompts that may generate sensitive content. Thank you for your cooperation."
+    expect(
+      classifyProviderFailure({
+        message,
+        status: 400,
+        rawBody: JSON.stringify({ error: { code: "1301", message } }),
+      })._tag,
+    ).toBe("ContentPolicy")
+  })
+
+  test("keeps Z.ai throttling and overload retryable", () => {
+    expect(
+      [
+        { error: { code: "1302", message: "Rate limit reached for requests" } },
+        { error: { code: "1305", message: "The service may be temporarily overloaded, please try again later" } },
+      ].map(
+        (body) =>
+          classifyProviderFailure({ message: body.error.message, status: 429, rawBody: JSON.stringify(body) })._tag,
+      ),
+    ).toEqual(["RateLimit", "RateLimit"])
+  })
+
   test("does not let substituted server codes make a 4xx retryable", () => {
     const openai = { error: { type: "server_error", message: "Upstream request failed: Model is unavailable." } }
     const anthropic = {
@@ -355,7 +434,35 @@ describe("provider error rawBody classification", () => {
     }
   })
 
-  test("classifies Google invalid API keys as authentication failures", () => {
+  test("classifies Workers AI context window rejections as context overflow despite HTTP 413", () => {
+    const message =
+      "AiError: Ai: The estimated number of input and maximum output tokens (900047) exceeded this model context window limit (32000). (17851589-f2e6-405d-b67c-5550e52ee1c1)"
+    const reason = classifyProviderFailure({
+      message,
+      status: 413,
+      rawBody: JSON.stringify({ errors: [{ message, code: 5021 }], success: false, result: {}, messages: [] }),
+    })
+    expect(reason._tag === "InvalidRequest" ? reason.classification : reason._tag).toBe("context-overflow")
+  })
+
+  test("classifies Amazon Nova input token rejections as context overflow", () => {
+    const message =
+      "The model returned the following errors: Input Tokens Exceeded: Number of input tokens exceeds maximum length. Please update the input to try again."
+    const reason = classifyProviderFailure({
+      message,
+      rawBody: JSON.stringify({
+        headers: {
+          ":exception-type": { type: "string", value: "validationException" },
+          ":content-type": { type: "string", value: "application/json" },
+          ":message-type": { type: "string", value: "exception" },
+        },
+        body: JSON.stringify({ message }),
+      }),
+    })
+    expect(reason._tag === "InvalidRequest" ? reason.classification : reason._tag).toBe("context-overflow")
+  })
+
+  test("classifies invalid API keys reported as HTTP 400 as authentication failures", () => {
     const rawBody = JSON.stringify({
       error: {
         code: 400,
@@ -379,6 +486,14 @@ describe("provider error rawBody classification", () => {
       classifyProviderFailure({ message: "API key not valid. Please pass a valid API key.", status: 400, rawBody })
         ._tag,
     ).toBe("Authentication")
+    // xAI
+    expect(
+      classifyProviderFailure({
+        message: "Incorrect API key provided. You can obtain an API key from https://console.x.ai.",
+        status: 400,
+        rawBody: '{"code":"invalid-argument","error":"Incorrect API key provided."}',
+      })._tag,
+    ).toBe("Authentication")
   })
 
   test("classifies overflow signals buried in the raw payload when the summary is vague", () => {
@@ -394,5 +509,57 @@ describe("provider error rawBody classification", () => {
     expect(
       classifyProviderFailure({ message: "Request failed", rawBody: '{"error":{"code":"insufficient_quota"}}' })._tag,
     ).toBe("QuotaExceeded")
+    // Z.ai Responses stream rejections
+    expect(
+      classifyProviderFailure({
+        message: "Unknown Model, please check the model code.",
+        rawBody: '{"type":"response.failed","response":{"error":{"code":"model_not_found"}}}',
+      })._tag,
+    ).toBe("InvalidRequest")
+    expect(
+      classifyProviderFailure({
+        message: "Your GLM Coding Plan package has expired and is temporarily unavailable.",
+        rawBody: '{"type":"response.failed","response":{"error":{"code":"permission_denied"}}}',
+      })._tag,
+    ).toBe("Authentication")
+  })
+})
+
+describe("provider error messages", () => {
+  test("reads messages from common error body layouts", () => {
+    expect(
+      [
+        '{"error":{"message":"Invalid API Key","type":"invalid_request_error"}}',
+        '{"code":"invalid-argument","error":"Incorrect API key provided."}',
+        '{"message":"1 validation error detected"}',
+        '{"Message":"Invalid API Key format: Must start with pre-defined prefix"}',
+        '{"type":"about:blank","title":"Gone","status":410,"detail":"The model has reached its end of life"}',
+        '{"result":null,"success":false,"errors":[{"code":10000,"message":"Authentication error"}]}',
+      ].map(providerErrorMessage),
+    ).toEqual([
+      "Invalid API Key",
+      "Incorrect API key provided.",
+      "1 validation error detected",
+      "Invalid API Key format: Must start with pre-defined prefix",
+      "The model has reached its end of life",
+      "Authentication error",
+    ])
+  })
+
+  test("prefers the nested error message over a top-level message", () => {
+    expect(providerErrorMessage('{"message":"Bad Request","error":{"message":"model not found"}}')).toBe(
+      "model not found",
+    )
+  })
+
+  test("ignores blank, non-string, and non-JSON messages", () => {
+    expect(
+      [
+        '{"error":{"message":"  "}}',
+        '{"message":{"detail":[{"msg":"too high"}]}}',
+        '{"errors":[]}',
+        "invalid parameter",
+      ].map(providerErrorMessage),
+    ).toEqual([undefined, undefined, undefined, undefined])
   })
 })

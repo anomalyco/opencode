@@ -543,7 +543,15 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         }
         if (event.reason.normalized === "content-filter") {
           providerFailed = true
-          yield* failAssistant({ type: "provider.content-filter", message: "Provider blocked the response" })
+          yield* failAssistant({
+            type: "provider.content-filter",
+            message: [
+              `Provider blocked the response${event.reason.category === undefined ? "" : ` (${event.reason.category})`}`,
+              event.reason.explanation,
+            ]
+              .filter(Boolean)
+              .join(": "),
+          })
           return
         }
         return

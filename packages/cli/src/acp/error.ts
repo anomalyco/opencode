@@ -28,10 +28,20 @@ export class InvalidModeError extends Schema.TaggedError<InvalidModeError>()("AC
   mode: Schema.String,
 }) {}
 
+export class InvalidAdditionalDirectoryError extends Schema.TaggedError<InvalidAdditionalDirectoryError>()(
+  "ACPInvalidAdditionalDirectoryError",
+  { directory: Schema.String },
+) {}
+
 export class AuthRequiredError extends Schema.TaggedError<AuthRequiredError>()("ACPAuthRequiredError", {}) {}
 
 export class UnknownAuthMethodError extends Schema.TaggedError<UnknownAuthMethodError>()("ACPUnknownAuthMethodError", {
   methodId: Schema.String,
+}) {}
+
+export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()("ACPInvalidRequestError", {
+  message: Schema.String,
+  field: Schema.optional(Schema.String),
 }) {}
 
 export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>()("ACPServiceFailureError", {
@@ -40,16 +50,29 @@ export class ServiceFailureError extends Schema.TaggedError<ServiceFailureError>
   errorName: Schema.optional(Schema.String),
 }) {}
 
-export type Error =
-  | SessionNotFoundError
-  | SessionDirectoryMismatchError
-  | InvalidConfigOptionError
-  | InvalidModelError
-  | InvalidEffortError
-  | InvalidModeError
-  | AuthRequiredError
-  | UnknownAuthMethodError
-  | ServiceFailureError
+export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailableError>()(
+  "ACPServerUnavailableError",
+  {},
+) {}
+
+const Errors = Schema.Union([
+  SessionNotFoundError,
+  SessionDirectoryMismatchError,
+  InvalidConfigOptionError,
+  InvalidModelError,
+  InvalidEffortError,
+  InvalidModeError,
+  InvalidAdditionalDirectoryError,
+  AuthRequiredError,
+  UnknownAuthMethodError,
+  InvalidRequestError,
+  ServiceFailureError,
+  ServerUnavailableError,
+])
+
+export type Error = typeof Errors.Type
+
+export const is = Schema.is(Errors)
 
 export function toRequestError(error: Error): RequestError {
   switch (error._tag) {
@@ -71,10 +94,17 @@ export function toRequestError(error: Error): RequestError {
       return RequestError.invalidParams({ effort: error.effort }, `effort not found: ${error.effort}`)
     case "ACPInvalidModeError":
       return RequestError.invalidParams({ mode: error.mode }, `mode not found: ${error.mode}`)
+    case "ACPInvalidAdditionalDirectoryError":
+      return RequestError.invalidParams(
+        { additionalDirectory: error.directory },
+        `additional directory must be an absolute path without glob characters: ${error.directory}`,
+      )
     case "ACPAuthRequiredError":
       return RequestError.authRequired({}, "provider authentication required")
     case "ACPUnknownAuthMethodError":
       return RequestError.invalidParams({ methodId: error.methodId }, `unknown auth method: ${error.methodId}`)
+    case "ACPInvalidRequestError":
+      return RequestError.invalidParams(error.field ? { field: error.field } : {}, error.message)
     case "ACPServiceFailureError":
       return RequestError.internalError(
         {
@@ -83,6 +113,8 @@ export function toRequestError(error: Error): RequestError {
         },
         error.safeMessage,
       )
+    case "ACPServerUnavailableError":
+      return RequestError.internalError({ errorName: "ServerUnavailable" }, "OpenCode server is unavailable")
   }
   const exhaustive: never = error
   return exhaustive

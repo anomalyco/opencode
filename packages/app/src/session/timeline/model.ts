@@ -6,11 +6,6 @@ import type { SessionModel } from "../model"
 const leadingTurnPageDelay = 200
 const leadingTurnPageLimit = 3
 
-export {
-  selectSessionUserMessages as selectUserMessages,
-  selectVisibleSessionUserMessages as selectVisibleUserMessages,
-} from "../session-domain"
-
 export function createTimelineModel(input: { session: Pick<SessionModel, "identity" | "history" | "ownership"> }) {
   const data = useData()
 
@@ -87,7 +82,7 @@ export async function enrichLeadingTurn(input: {
   return load(0)
 }
 
-export function leadingTurnNeedsParent(messages: SessionMessageInfo[]) {
+function leadingTurnNeedsParent(messages: SessionMessageInfo[]) {
   const assistant = messages.findIndex((message) => message.type === "assistant")
   if (assistant === -1) return false
   const boundary = messages.findIndex((message) => message.type === "user" || message.type === "shell")

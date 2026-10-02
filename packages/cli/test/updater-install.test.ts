@@ -1,8 +1,10 @@
 import { NodeServices } from "@effect/platform-node"
+import { EffectFlock } from "@opencode/util/effect-flock"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
 import { expect, spyOn, test } from "bun:test"
-import { Effect, FileSystem, PlatformError, Stream } from "effect"
+import { Effect, FileSystem, Layer, PlatformError, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import path from "node:path"
@@ -59,6 +61,11 @@ function fixture(
     const commands: string[][] = []
     const updater = yield* Updater.Service.pipe(
       Effect.provide(Updater.layer),
+      Effect.provide(
+        LayerNode.compile(EffectFlock.node, {
+          replacements: [Global.node.replace(Layer.succeed(Global.Service, global))],
+        }),
+      ),
       Effect.provideService(Global.Service, global),
       Effect.provideService(FileSystem.FileSystem, {
         ...fs,

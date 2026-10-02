@@ -1,5 +1,6 @@
 import type { ConnectionInfo } from "@opencode/client"
 import type { IntegrationApi } from "@opencode/client/effect/api"
+import { Connection } from "@opencode/schema/connection"
 import { Credential } from "@opencode/schema/credential"
 import { Form } from "@opencode/schema/form"
 import type { Effect, Scope } from "effect"
@@ -92,5 +93,11 @@ export interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellkn
   readonly connection: {
     readonly active: (integrationID: string) => Effect.Effect<ConnectionInfo | undefined>
     readonly resolve: (connection: ConnectionInfo) => Effect.Effect<Credential.Value | undefined, unknown>
+    /** Reports a problem with a connection, such as a required sign-in; `undefined` clears it. */
+    readonly status: (input: {
+      readonly integrationID: string
+      readonly connection: ConnectionInfo
+      readonly status: Connection.Status | undefined
+    }) => Effect.Effect<void>
   }
 }

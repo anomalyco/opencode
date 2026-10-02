@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { AsyncStorage, PersistenceSyncAPI, PersistenceSyncCallback, SyncStorage } from "@solid-primitives/storage"
+import type { PersistenceSyncAPI, PersistenceSyncCallback, SyncStorage } from "@solid-primitives/storage"
 import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import { flushPersisted, persistStore } from "./persist"
@@ -8,7 +8,7 @@ const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
 type State = { count: number; label: string }
 
-function setup(input: { initial?: string | null | Promise<string | null>; delay?: number; sync?: PersistenceSyncAPI }) {
+function setup(input: { initial?: string | null; delay?: number; sync?: PersistenceSyncAPI }) {
   const writes: string[] = []
   return createRoot((dispose) => {
     const [store, setStore] = createStore<State>({ count: 0, label: "" })
@@ -16,14 +16,13 @@ function setup(input: { initial?: string | null | Promise<string | null>; delay?
       store,
       setStore,
       name: "state",
-      // One fixture serves both the sync and the async storage shape.
       storage: {
         getItem: () => input.initial ?? null,
         setItem: (_key: string, value: string) => {
           writes.push(value)
         },
         removeItem: () => {},
-      } as SyncStorage | AsyncStorage,
+      } satisfies SyncStorage,
       serialize: JSON.stringify,
       deserialize: JSON.parse,
       sync: input.sync,
@@ -61,16 +60,6 @@ describe("persistStore", () => {
     expect(value.store).toEqual({ count: 5, label: "saved" })
     value.persist.flush()
     expect(value.writes).toEqual([])
-    value.dispose()
-  })
-
-  test("a set made while async storage loads wins over the loaded value", async () => {
-    const loading = Promise.withResolvers<string | null>()
-    const value = setup({ initial: loading.promise, delay: 10_000 })
-    value.set("count", 9)
-    loading.resolve(JSON.stringify({ count: 1, label: "old" }))
-    await loading.promise
-    expect(value.store.count).toBe(9)
     value.dispose()
   })
 

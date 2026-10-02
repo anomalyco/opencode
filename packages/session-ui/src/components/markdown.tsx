@@ -40,6 +40,7 @@ import { createMarkdownRenderer } from "./markdown-solid"
 import { useMarkdown, type OpenMarkdownLocalFile, type ReadMarkdownImage } from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
+import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -599,6 +600,7 @@ export function Markdown(
   let copyCleanup: (() => void) | undefined
   let linkCleanup: (() => void) | undefined
   let faviconCleanup: (() => void) | undefined
+  let sessionLinkCleanup: (() => void) | undefined
   let readImage: ReadMarkdownImage | undefined
   let images: ReturnType<typeof createMarkdownImages> | undefined
 
@@ -634,7 +636,7 @@ export function Markdown(
     })
     activeCodeKeys.clear()
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
-    content.forEach((block, index) => updateBlock(container, index, block, labels))
+    content.forEach((block, index) => updateBlock(container, index, block, labels, !!markdown?.openSession))
     while (container.children.length > content.length) {
       const child = container.lastElementChild
       if (!child) break
@@ -656,6 +658,7 @@ export function Markdown(
         copied: i18n.t("ui.message.copied"),
       }))
     if (!linkCleanup) linkCleanup = setupLocalLinks(container, () => markdown?.openLocalFile)
+    if (!sessionLinkCleanup) sessionLinkCleanup = setupSessionLinks(container, () => markdown?.openSession)
     if (!faviconCleanup) faviconCleanup = setupExternalLinkFavicons(container)
     container.toggleAttribute("data-local-links", !!markdown?.openLocalFile)
     if (result?.ready && result.text === local.text) container.dataset.markdownReady = ""
@@ -666,6 +669,7 @@ export function Markdown(
     images?.dispose()
     if (copyCleanup) copyCleanup()
     if (linkCleanup) linkCleanup()
+    if (sessionLinkCleanup) sessionLinkCleanup()
     if (faviconCleanup) faviconCleanup()
     const container = root()
     if (container) disposeRenderedMarkdown(container)
@@ -723,7 +727,13 @@ function disposeCode(key: string) {
   disposeStreamingCode(key)
 }
 
-function updateBlock(container: HTMLDivElement, index: number, block: RenderedBlock, labels: CopyLabels) {
+function updateBlock(
+  container: HTMLDivElement,
+  index: number,
+  block: RenderedBlock,
+  labels: CopyLabels,
+  sessionLinks: boolean,
+) {
   const current = container.children[index]
   if (block.mode === "code") {
     updateCodeBlock(container, current, block, labels)
@@ -747,6 +757,7 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   source.innerHTML = block.html
   markInlineCode(source)
   markCodeLinks(source)
+  if (sessionLinks) markSessionLinks(source)
   markExternalLinkFavicons(source)
 
   if (rendered) {

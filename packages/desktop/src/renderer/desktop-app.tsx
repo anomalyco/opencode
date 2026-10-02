@@ -11,11 +11,9 @@ import {
   useCommand,
   useCurrentRoute,
   useLanguage,
+  useExtensionServers,
   useTabs,
-  useWslServers,
-  useSsh,
   type LayoutRoute,
-  type UpdaterPlatform,
 } from "@opencode/app/desktop"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
@@ -30,12 +28,10 @@ import { preloadStoredLocale } from "./startup/locale"
 import { LoadingSplash } from "./startup/splash"
 import { getLastActiveUrl } from "./window/route-storage"
 import { DesktopMemoryRouter } from "./window/router"
-import { availableStartupServer, readyWslConnections } from "./wsl/connections"
-import { createSshConnections } from "./ssh/connections"
 
 const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
 
-export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; version: string }) {
+export function DesktopApp(props: { api: ElectronAPI; version: string }) {
   const windowState = { id: props.api.getWindowID(), version: props.version }
   const initialUrl = getLastActiveUrl(windowState.id)
   const url = new URL(initialUrl, "http://localhost")
@@ -59,7 +55,7 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
           return false
         }),
   )
-  const platform = createDesktopPlatform(props.api, windowState, props.updater)
+  const platform = createDesktopPlatform(props.api, windowState)
   const [sidecar, { mutate: setSidecar }] = createResource(() => props.api.awaitInitialization())
   const [defaultServer] = createResource(async () => {
     if (bootstrap.defaultServerUrl === undefined) return platform.getDefaultServer?.()
@@ -82,18 +78,10 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
   })
 
   function ReadyApp() {
-    const wslServers = useWslServers()
-    const ssh = useSsh()
-    const sshConnections = createSshConnections(props.api.sshServers)
+    const extensions = useExtensionServers()
     const language = useLanguage()
     const ready = createMemo(
-      () =>
-        !firstLaunch.loading &&
-        !defaultServer.loading &&
-        !sidecar.loading &&
-        !locale.loading &&
-        !wslServers.isLoading &&
-        !ssh.loading,
+      () => !firstLaunch.loading && !defaultServer.loading && !sidecar.loading && !locale.loading && extensions.ready(),
     )
     const servers = createMemo(() => {
       const data = initializationData(sidecar)
@@ -107,17 +95,24 @@ export function DesktopApp(props: { api: ElectronAPI; updater: UpdaterPlatform; 
           reconnect: createSidecarResolver({ api: props.api, current: sidecar, update: setSidecar }),
         })
       }
-      list.push(...readyWslConnections(wslServers.data, language.t("wsl.server.label")))
-      list.push(...sshConnections({ servers: ssh.servers }, language.t("ssh.label")))
+      list.push(...extensions.list())
       return list
     })
-    const effectiveDefaultServer = createMemo(() =>
-      ServerConnection.Key.make(availableStartupServer(defaultServer.latest, wslServers.data)),
-    )
+    // Resolved once, when the window first becomes ready, so the app's lifetime never follows live server
+    // availability: an extension reloading its server would otherwise remount the whole app. A default that
+    // disappears later reads like any unavailable server.
+    const startupServer = createMemo<ServerConnection.Key | undefined>((resolved) => {
+      if (resolved || !ready()) return resolved
+      const key = defaultServer.latest ?? "sidecar"
+      // An extension's server that is not listed yet (e.g. a WSL distro still starting) cannot open the window.
+      if (key === "sidecar" || /^https?:\/\//.test(key) || extensions.list().some((conn) => conn.key === key))
+        return ServerConnection.Key.make(key)
+      return ServerConnection.Key.make("sidecar")
+    })
 
     return (
       <Show when={ready()}>
-        <Show when={effectiveDefaultServer()} keyed>
+        <Show when={startupServer()} keyed>
           {(key) => (
             <AppInterface defaultServer={key} servers={servers()} router={router}>
               <DesktopStartupReady

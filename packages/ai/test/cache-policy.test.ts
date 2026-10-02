@@ -3,7 +3,18 @@ import { Effect } from "effect"
 import { CacheHint, LLM, Message } from "../src/index.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
-import { AmazonBedrock, AnthropicCompatible, GoogleVertexMessages } from "../src/providers.js"
+import {
+  Alibaba,
+  AmazonBedrock,
+  AnthropicCompatible,
+  CloudflareAIGateway,
+  DigitalOcean,
+  GoogleVertexMessages,
+  Meta,
+  MiniMax,
+  Moonshot,
+  ZAICodingPlan,
+} from "../src/providers.js"
 import * as AnthropicMessages from "../src/protocols/anthropic-messages.js"
 import * as Gemini from "../src/protocols/gemini.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
@@ -107,6 +118,86 @@ describe("applyCachePolicy", () => {
     }),
   )
 
+  it.effect("'auto' emits cache_control markers on DigitalOcean", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: DigitalOcean.configure({ apiKey: "test" }).model("anthropic-claude-fable-5.1"),
+          system: "You are concise.",
+          tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }],
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ type: "function", function: { name: "lookup" }, cache_control: { type: "ephemeral" } }],
+        messages: [
+          {
+            role: "system",
+            content: [{ text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
+          {
+            role: "user",
+            content: [{ text: "hi", cache_control: { type: "ephemeral" } }],
+          },
+        ],
+      })
+    }),
+  )
+
+  it.effect("Alibaba chat caches the system and conversation tail without marking tools", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
+          system: "You are concise.",
+          tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }],
+          prompt: "hi",
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({
+        tools: [{ type: "function", function: { name: "lookup" } }],
+        messages: [
+          {
+            role: "system",
+            content: [{ text: "You are concise.", cache_control: { type: "ephemeral" } }],
+          },
+          { role: "user", content: [{ text: "hi", cache_control: { type: "ephemeral" } }] },
+        ],
+      })
+      expect(prepared.body.tools?.[0]?.cache_control).toBeUndefined()
+    }),
+  )
+
+  it.effect("Alibaba chat omits automatic cache markers when cache is none", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).chat("qwen3.8-max"),
+          system: "You are concise.",
+          prompt: "hi",
+          cache: "none",
+        }),
+      )
+
+      expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
+    }),
+  )
+
+  it.effect("Alibaba chat does not assume non-Qwen models support cache markers", () =>
+    Effect.gen(function* () {
+      const alibaba = Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" })
+      for (const modelID of ["kimi-k3", "glm-5.2", "deepseek-v4-flash-0731", "MiniMax-M2.5"]) {
+        const prepared = yield* compileRequest(
+          LLM.request({ model: alibaba.chat(modelID), system: "You are concise.", prompt: "hi" }),
+        )
+
+        expect(JSON.stringify(prepared.body)).not.toContain("cache_control")
+      }
+    }),
+  )
+
   it.effect("'auto' emits Anthropic cache markers on Anthropic-compatible routes", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
@@ -125,6 +216,34 @@ describe("applyCachePolicy", () => {
         messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
       })
     }),
+  )
+
+  const messagesModels = [
+    ["alibaba-messages", Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).messages("qwen3.8-max")],
+    [
+      "cloudflare-ai-gateway-messages",
+      CloudflareAIGateway.configure({ accountId: "test", gatewayId: "test", apiKey: "test" }).model(
+        "anthropic/claude-sonnet-4-6",
+      ),
+    ],
+    ["meta-messages", Meta.configure({ apiKey: "test" }).messages("muse-spark-1.3")],
+    ["minimax-messages", MiniMax.configure({ apiKey: "test" }).model("MiniMax-M3")],
+    ["moonshot-messages", Moonshot.configure({ apiKey: "test" }).messages("kimi-k3")],
+    ["zai-coding-messages", ZAICodingPlan.configure({ apiKey: "test" }).messages("glm-5.3")],
+  ] as const
+
+  messagesModels.forEach(([route, model]) =>
+    it.effect(`'auto' emits cache markers on ${route}`, () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(LLM.request({ model, system: "Sys", prompt: "hi" }))
+
+        expect(prepared.route).toBe(route)
+        expect(prepared.body).toMatchObject({
+          system: [{ type: "text", text: "Sys", cache_control: { type: "ephemeral" } }],
+          messages: [{ role: "user", content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }] }],
+        })
+      }),
+    ),
   )
 
   it.effect("'auto' is a no-op on OpenAI (implicit caching protocol)", () =>

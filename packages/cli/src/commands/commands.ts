@@ -183,6 +183,26 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
             ),
           },
         }),
+        Spec.make("export", {
+          description: "print stored credentials, including secrets, as JSON",
+          params: {
+            ...ServerParams,
+            target: Argument.string("target").pipe(
+              Argument.withDescription("Integration ID or name (exports every integration when omitted)"),
+              Argument.optional,
+            ),
+          },
+        }),
+        Spec.make("import", {
+          description: "import credentials exported by auth export",
+          params: {
+            ...ServerParams,
+            file: Argument.string("file").pipe(
+              Argument.withDescription("JSON file to import (reads stdin when omitted)"),
+              Argument.optional,
+            ),
+          },
+        }),
         Spec.make("switch", {
           description: "switch the active account for an integration",
           params: {

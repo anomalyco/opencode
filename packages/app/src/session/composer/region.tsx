@@ -20,7 +20,7 @@ import { useComposerCommands } from "@/composer/commands"
 import { useSessionCommands } from "../commands/use-session-commands"
 import type { SessionModel } from "../model"
 import type { SessionScreenLayout } from "../screen-layout"
-import { syncPromptModel, syncSessionModel } from "../session-model-helpers"
+import { syncPromptModel } from "../session-model-helpers"
 import type { SessionTimelineInteraction } from "../timeline/interaction"
 import { createSessionRevert } from "../revert"
 import { SessionComposerRegion } from "./session-composer-region"
@@ -28,11 +28,13 @@ import { createSessionComposerController, type SessionComposerController } from 
 import { SessionQueuePanel } from "./queue-panel"
 import { resolveSessionComposerSelection } from "./selection"
 import { createSessionRequestModel } from "../requests/model"
+import type { Region } from "@/runtime/extension/panels"
 
 export function createActiveSessionRegion(input: {
   session: SessionModel
   screen: SessionScreenLayout
   timeline: SessionTimelineInteraction
+  region: Region
   visible: Accessor<boolean>
 }) {
   const command = useCommand()
@@ -44,9 +46,7 @@ export function createActiveSessionRegion(input: {
   const platform = usePlatform()
   const prompt = useComposerState()
   const state = createSessionRequestModel()
-  const controls = createComposerControls({
-    sessionKey: input.session.identity.sessionKey,
-  })
+  const controls = createComposerControls()
   let promptRef: HTMLDivElement | undefined
 
   createEffect(
@@ -57,7 +57,7 @@ export function createActiveSessionRegion(input: {
         const info = input.session.data.info()
         const selection = resolveSessionComposerSelection(info, message?.metadata)
         if (info && selection.agent && selection.model) {
-          syncSessionModel(local, { sessionID: info.id, agent: selection.agent, model: selection.model })
+          local.session.restore({ sessionID: info.id, agent: selection.agent, model: selection.model })
         }
       },
     ),
@@ -156,6 +156,7 @@ export function createActiveSessionRegion(input: {
   useComposerCommands()
   useSessionCommands({
     session: input.session,
+    region: input.region,
     background: {
       blocking: () => state.background.blocking().length > 0,
       move: state.background.move,
@@ -207,7 +208,6 @@ export function createActiveSessionRegion(input: {
       } satisfies SessionUserActions,
     },
     requests: state,
-    workspaceMoveEligible: () => true,
   }
 }
 

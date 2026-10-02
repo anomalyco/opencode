@@ -1,4 +1,5 @@
 import fuzzysort from "fuzzysort"
+import type { IconProps } from "@opencode/ui/icon"
 import type { SettingsView } from "./surface"
 import type { LocalProject } from "@/shell/state/layout"
 
@@ -15,6 +16,8 @@ export type SettingsSearchResult = {
   projectInfo?: LocalProject
   entity?: boolean
   topLevel?: boolean
+  /** The page icon a top-level result shows. */
+  icon?: IconProps["name"]
   view: SettingsView
 }
 

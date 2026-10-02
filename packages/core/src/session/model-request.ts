@@ -276,6 +276,8 @@ export const layer = Layer.effect(
         model: model.model,
         http: {
           headers: {
+            "x-opencode-session-id": session.id,
+            ...(session.parentID ? { "x-opencode-parent-session-id": session.parentID } : {}),
             "x-session-affinity": affinity,
             "X-Session-Id": affinity,
             ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
@@ -308,9 +310,8 @@ export const layer = Layer.effect(
       const request = LLMRequest.update(base, {
         model: route === base.model.route ? base.model : LanguageModel.update(base.model, { route }),
         http: new HttpOptions({
-          body: base.http?.body,
+          ...base.http,
           headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
-          query: base.http?.query,
         }),
       })
       // History selects native windows against the catalog route before hooks run. A newly installed

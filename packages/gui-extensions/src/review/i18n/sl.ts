@@ -1,0 +1,17 @@
+export default {
+  "tab.title": "Pregled",
+  "tab.count.one": "{{count}} datoteka spremenjena",
+  "tab.count.two": "{{count}} datoteki spremenjeni",
+  "tab.count.few": "{{count}} datoteke spremenjene",
+  "tab.count.other": "{{count}} datotek spremenjenih",
+  "mobile.title.one": "spremeniti",
+  "mobile.title.two": "Spremembi",
+  "mobile.title.few": "Spremembe",
+  "mobile.title.other": "Spremembe",
+  "empty.git": "Ni še nepotrjenih sprememb",
+  "empty.branch": "Ni še nobenih sprememb veje",
+  "git.title": "Ustvarite repozitorij Git",
+  "git.description": "Sledite, pregledujte in razveljavite spremembe v tem projektu",
+  loadingChanges: "Nalaganje sprememb …",
+  noChanges: "Brez sprememb",
+}

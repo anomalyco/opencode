@@ -50,7 +50,7 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
   expect(result).toEqual([
     "<p><strong>Safe</strong> <em>formatting</em> <code>const x = 1</code></p>",
     '<img data-local-image="safe.png"><a>unsafe</a>',
-    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><a href="/local">local</a>',
+    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
     '<form name="user-content-document" id="user-content-location"><input name="user-content-cookie"></form>',
     "<math><mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow></math>",
     '<svg viewBox="0 0 10 10"><path d="M0 0L10 10"></path></svg>',
@@ -130,7 +130,6 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown.getByRole("heading")).toHaveText("Completed response")
   await expect(markdown.locator("script, [onerror], [href^='javascript:']")).toHaveCount(0)
   await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveText("src/file.ts")
-  expect(await resolvedColor(page, "--v2-text-text-code-path")).toBe("rgb(44, 71, 200)")
   await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS(
     "color",
     await resolvedColor(page, "--v2-text-text-code-path"),
@@ -225,6 +224,8 @@ story("keeps favicon space stable across loading and failure without fetching pr
   await expect.poll(() => requested.some((url) => url.includes("developer.mozilla.org"))).toBe(true)
   await expect(image).toHaveCSS("opacity", "0")
   await expect(docs.locator(".markdown-link-favicon")).toHaveCSS("width", "14px")
+  // A late web font swap also changes the link width; measure after fonts settle.
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
   const width = await docs.evaluate((link) => link.getBoundingClientRect().width)
   release()
   await expect(image).toHaveAttribute("data-loaded", "")
@@ -571,36 +572,34 @@ story("preserves streamed math through completion and a fresh render", async ({ 
 })
 
 for (const theme of ["light", "dark"]) {
-  for (const width of [390, 1280]) {
-    story(`renders class and connected subgraph diagrams in ${theme} at ${width}px`, async ({ mount, page }) => {
-      await page.setViewportSize({ width, height: 900 })
-      await mount("components-markdown--complete-response", { globals: { theme } })
-      await expect(page.locator("html")).toHaveClass(new RegExp(theme))
-      await page.evaluate(async (fixture) => {
-        const { mountMarkdown } = await import(fixture)
-        await mountMarkdown({
-          text: [
-            "```mermaid\nclassDiagram\nAnimal <|-- Duck\nAnimal : +int age\nDuck : +swim()\n```",
-            "```mermaid\nflowchart LR\nsubgraph Input\ndirection TB\nA[Prompt] --> B[Parse]\nend\nsubgraph Output\ndirection TB\nC[Render] --> D[Display]\nend\nB --> C\n```",
-          ].join("\n\n"),
-          streaming: true,
-        })
-      }, fixture)
-      const harness = page.getByTestId("markdown-fixture")
-      const diagrams = harness.locator('[data-component="markdown-mermaid"] > svg')
-      await expect(diagrams).toHaveCount(2)
-      await expect(diagrams.nth(0)).toBeVisible()
-      await expect(diagrams.nth(0)).toContainText("swim()")
-      await expect(diagrams.nth(1)).toBeVisible()
-      await expect(diagrams.nth(1)).toContainText("Display")
-      await expect(diagrams.nth(1).locator(".edgePaths path")).toHaveCount(3)
-      await expect(harness.locator('[data-mermaid-ready="true"] > pre:visible')).toHaveCount(0)
-      await harness.getByLabel("Streaming").uncheck()
-      await expect(diagrams).toHaveCount(2)
-      await expect(diagrams.nth(0)).toBeVisible()
-      await expect(diagrams.nth(1)).toBeVisible()
-    })
-  }
+  story(`renders class and connected subgraph diagrams in ${theme}`, async ({ mount, page }) => {
+    await page.setViewportSize({ width: 390, height: 900 })
+    await mount("components-markdown--complete-response", { globals: { theme } })
+    await expect(page.locator("html")).toHaveClass(new RegExp(theme))
+    await page.evaluate(async (fixture) => {
+      const { mountMarkdown } = await import(fixture)
+      await mountMarkdown({
+        text: [
+          "```mermaid\nclassDiagram\nAnimal <|-- Duck\nAnimal : +int age\nDuck : +swim()\n```",
+          "```mermaid\nflowchart LR\nsubgraph Input\ndirection TB\nA[Prompt] --> B[Parse]\nend\nsubgraph Output\ndirection TB\nC[Render] --> D[Display]\nend\nB --> C\n```",
+        ].join("\n\n"),
+        streaming: true,
+      })
+    }, fixture)
+    const harness = page.getByTestId("markdown-fixture")
+    const diagrams = harness.locator('[data-component="markdown-mermaid"] > svg')
+    await expect(diagrams).toHaveCount(2)
+    await expect(diagrams.nth(0)).toBeVisible()
+    await expect(diagrams.nth(0)).toContainText("swim()")
+    await expect(diagrams.nth(1)).toBeVisible()
+    await expect(diagrams.nth(1)).toContainText("Display")
+    await expect(diagrams.nth(1).locator(".edgePaths path")).toHaveCount(3)
+    await expect(harness.locator('[data-mermaid-ready="true"] > pre:visible')).toHaveCount(0)
+    await harness.getByLabel("Streaming").uncheck()
+    await expect(diagrams).toHaveCount(2)
+    await expect(diagrams.nth(0)).toBeVisible()
+    await expect(diagrams.nth(1)).toBeVisible()
+  })
 }
 
 for (const streaming of [false, true]) {

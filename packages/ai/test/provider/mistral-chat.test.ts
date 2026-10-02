@@ -215,13 +215,11 @@ describe("Mistral Chat", () => {
           ],
         }),
       )
-      expect(prepared.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: "",
-          tool_calls: [{ id: "Ab12Cd34E", type: "function", function: { name: "lookup", arguments: "{}" } }],
-        },
-      ])
+      expect(prepared.body.messages[0]).toEqual({
+        role: "assistant",
+        content: "",
+        tool_calls: [{ id: "Ab12Cd34E", type: "function", function: { name: "lookup", arguments: "{}" } }],
+      })
     }),
   )
 
@@ -303,7 +301,8 @@ describe("Mistral Chat", () => {
           fixedResponse(
             sseEvents(
               chunk({ content: [{ type: "thinking", thinking: [], marker: "empty" }] }),
-              chunk({ content: [{ type: "thinking", thinking: [{ type: "text", text: "Consider" }] }] }),
+              chunk({ content: [{ type: "thinking", thinking: [{ type: "text", text: "Con" }] }] }),
+              chunk({ content: [{ type: "thinking", thinking: [{ type: "text", text: "sider" }], closed: true }] }),
               chunk({ content: [{ type: "text", text: "Answer" }] }),
               chunk({}, "stop"),
             ),
@@ -313,6 +312,13 @@ describe("Mistral Chat", () => {
 
       expect(response.reasoning).toBe("Consider")
       expect(response.text).toBe("Answer")
+      expect(response.events.find(LLMEvent.is.reasoningStart)?.providerMetadata).toBeUndefined()
+      expect(
+        response.events.filter(LLMEvent.is.reasoningDelta).map((event) => [event.text, event.providerMetadata]),
+      ).toEqual([
+        ["Con", undefined],
+        ["sider", undefined],
+      ])
       expect(response.message.content).toEqual([
         {
           type: "reasoning",
@@ -321,8 +327,12 @@ describe("Mistral Chat", () => {
             mistral: {
               thinking: {
                 type: "thinking",
-                thinking: [{ type: "text", text: "Consider" }],
+                thinking: [
+                  { type: "text", text: "Con" },
+                  { type: "text", text: "sider" },
+                ],
                 marker: "empty",
+                closed: true,
               },
             },
           },
@@ -337,8 +347,12 @@ describe("Mistral Chat", () => {
           content: [
             {
               type: "thinking",
-              thinking: [{ type: "text", text: "Consider" }],
+              thinking: [
+                { type: "text", text: "Con" },
+                { type: "text", text: "sider" },
+              ],
               marker: "empty",
+              closed: true,
             },
             { type: "text", text: "Answer" },
           ],
@@ -357,6 +371,8 @@ describe("Mistral Chat", () => {
           ),
         ),
       )
+      expect(response.events.find(LLMEvent.is.reasoningStart)?.providerMetadata).toBeUndefined()
+      expect(response.events.filter(LLMEvent.is.reasoningDelta)).toEqual([])
       expect(response.message.content).toEqual([
         {
           type: "reasoning",

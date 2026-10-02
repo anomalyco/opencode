@@ -80,6 +80,12 @@ describe("acp content conversion", () => {
     ])
   })
 
+  test("resource_link to another scheme becomes a markdown link", () => {
+    expect(contentBlockToParts({ type: "resource_link", uri: "https://example.com/spec", name: "spec" })).toEqual([
+      { type: "text", text: "[spec](https://example.com/spec)" },
+    ])
+  })
+
   test("resource_link zed path becomes a file URL part", () => {
     expect(
       contentBlockToParts({

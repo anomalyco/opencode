@@ -78,6 +78,12 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       ensureServerCtx(conn: ServerConnection.Any) {
         return ensureServerCtx(conn)
       },
+      /** The live controller of a server, or undefined while it is unlisted or rejects our credentials. Reactive. */
+      serverCtx(key: ServerConnection.Key) {
+        const conn = server.list.find((item) => ServerConnection.key(item) === key)
+        if (!conn || serverHealth[key]?.unauthorized) return
+        return ensureServerCtx(conn)
+      },
     }
   },
 })

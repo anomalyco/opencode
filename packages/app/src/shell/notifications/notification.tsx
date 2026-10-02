@@ -228,7 +228,8 @@ export function createServerNotificationState(input: {
       if (!session) return
       if (session.parentID) return
 
-      if (sessionIDHasOpenTab(tabs.store, input.key, sessionID) && settings.sounds.agentEnabled()) {
+      const hasOpenTab = sessionIDHasOpenTab(tabs.store, input.key, sessionID)
+      if (hasOpenTab && settings.sounds.agentEnabled()) {
         void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.agent()))
       }
 
@@ -240,7 +241,7 @@ export function createServerNotificationState(input: {
         session: sessionID,
       })
 
-      if (settings.notifications.agent()) {
+      if (hasOpenTab && settings.notifications.agent()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
           platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
             openNotificationSession(tabs, input.key, sessionID),
@@ -255,7 +256,8 @@ export function createServerNotificationState(input: {
       if (meta.disposed) return
       if (session?.parentID) return
 
-      if (sessionIDHasOpenTab(tabs.store, input.key, sessionID) && settings.sounds.errorsEnabled()) {
+      const hasOpenTab = sessionIDHasOpenTab(tabs.store, input.key, sessionID)
+      if (hasOpenTab && settings.sounds.errorsEnabled()) {
         void input.coordinator.sound(`${input.key}\0${eventID}`, () => playSoundById(settings.sounds.errors()))
       }
 
@@ -270,7 +272,7 @@ export function createServerNotificationState(input: {
       const description =
         session?.title ??
         (typeof error === "string" ? error : language.t("notification.session.error.fallbackDescription"))
-      if (settings.notifications.errors()) {
+      if (hasOpenTab && settings.notifications.errors()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
           platform.notify(language.t("notification.session.error.title"), description, () =>
             openNotificationSession(tabs, input.key, sessionID),

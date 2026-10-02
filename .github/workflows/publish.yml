@@ -662,7 +662,7 @@ jobs:
     needs:
       - version
       - publish
-    if: github.repository == 'anomalyco/opencode' && github.ref_name == 'v2' && needs.version.outputs.release && needs.publish.result == 'success'
+    if: ${{ !cancelled() && github.repository == 'anomalyco/opencode' && github.ref_name == 'v2' && needs.version.outputs.release && needs.publish.result == 'success' }}
     runs-on: blacksmith-4vcpu-ubuntu-2404
     steps:
       # Unlike dev, V2 publishes a tag rather than a GitHub Release event.

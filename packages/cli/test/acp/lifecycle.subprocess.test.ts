@@ -6,7 +6,8 @@ import type {
   ResumeSessionResponse,
 } from "@agentclientprotocol/sdk"
 import { describe, expect, test } from "bun:test"
-import { createAcpFixture, expectOk, initialize, newSession, selectConfigOption } from "./subprocess"
+import { selectConfigOption } from "./select-options"
+import { createAcpFixture, expectOk, initialize, newSession } from "./subprocess"
 
 describe("acp lifecycle subprocess", () => {
   test("stdin EOF exits cleanly", async () => {
@@ -14,6 +15,20 @@ describe("acp lifecycle subprocess", () => {
     const acp = fixture.spawn()
     await initialize(acp)
     expect(await acp.close()).toBe(0)
+  }, 60_000)
+
+  test("an incoming message over the size limit exits with an error", async () => {
+    await using fixture = await createAcpFixture()
+    const acp = fixture.spawn()
+    await initialize(acp)
+    const [code] = await Promise.all([
+      acp.exited,
+      // The agent stops reading partway through the line, so the write may fail.
+      acp.notify("opencode/oversized", { data: "a".repeat(32 * 1024 * 1024) }).catch(() => undefined),
+    ])
+    await acp[Symbol.asyncDispose]()
+    expect(code).toBe(1)
+    expect(acp.stderr()).toContain("opencode acp: incoming message exceeded the 32 MiB limit\n")
   }, 60_000)
 
   test("close capability and close request", async () => {
@@ -98,4 +113,32 @@ describe("acp lifecycle subprocess", () => {
 
     expect(selectConfigOption(resumed.configOptions, "model")?.category).toBe("model")
   }, 60_000)
+
+  // The private server is found with `pgrep`, which Windows lacks.
+  const testOutsideWindows = process.platform === "win32" ? test.skip : test
+  testOutsideWindows(
+    "exits when the private server process dies (https://github.com/anomalyco/opencode/issues/51716)",
+    async () => {
+      await using fixture = await createAcpFixture()
+      const acp = fixture.spawn()
+      await initialize(acp)
+      await newSession(acp, fixture.home)
+      const servers = Bun.spawnSync(["pgrep", "-P", String(acp.pid)])
+        .stdout.toString()
+        .split("\n")
+        .filter(Boolean)
+        .map(Number)
+      expect(servers).toHaveLength(1)
+
+      process.kill(servers[0], "SIGKILL")
+
+      const timeout = Promise.withResolvers<"running">()
+      const timer = setTimeout(() => timeout.resolve("running"), 10_000)
+      const exited = await Promise.race([acp.exited, timeout.promise]).finally(() => clearTimeout(timer))
+      expect(exited).toBe(1)
+      await acp[Symbol.asyncDispose]()
+      expect(acp.stderr()).toContain("opencode acp: server exited unexpectedly (signal SIGKILL)")
+    },
+    60_000,
+  )
 })

@@ -37,6 +37,8 @@ describe("session routes", () => {
       parent: { id: "parent", parentID: "child" },
     }
 
-    expect(rootSession(sessions.child, async (id) => sessions[id]!)).rejects.toThrow("Session parent cycle: child")
+    await expect(rootSession(sessions.child, async (id) => sessions[id]!)).rejects.toThrow(
+      "Session parent cycle: child",
+    )
   })
 })

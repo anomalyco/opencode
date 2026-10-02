@@ -4566,7 +4566,7 @@
             }
           }
         },
-        "description": "Cancel a pending form.",
+        "description": "Cancel a pending form, optionally telling the asker why it was not answered.",
         "summary": "Cancel form"
       }
     },
@@ -4591,6 +4591,21 @@
               "pattern": "^frm_"
             },
             "required": true
+          },
+          {
+            "name": "message",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -14170,6 +14185,9 @@
               "status": {
                 "type": "string",
                 "enum": ["cancelled"]
+              },
+              "message": {
+                "type": "string"
               }
             },
             "required": ["status"],
