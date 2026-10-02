@@ -222,7 +222,7 @@ export const configure = (input: Options = {}) => {
       ? openAIResponsesRoute
       : modelID.startsWith("meta/")
         ? metaResponsesRoute
-        : modelID.startsWith("xai/")
+        : /^(xai|spacexai)\//.test(modelID)
           ? xaiResponsesRoute
           : responsesRoute
     return selected.with(configured).model<ProviderOptionsInput>({ id: modelID })
@@ -232,7 +232,7 @@ export const configure = (input: Options = {}) => {
       .with(configured)
       .model<ProviderOptionsInput>({ id: modelID, compatibility: { reasoningField: "reasoning" } })
   const model = (modelID: string | ModelID) =>
-    /^(openai\/gpt-|meta\/muse-|xai\/grok-)/.test(modelID) ? responses(modelID) : messages(modelID)
+    /^(openai\/gpt-|meta\/muse-|(xai|spacexai)\/grok-)/.test(modelID) ? responses(modelID) : messages(modelID)
   const evaluation = (modelID: string | ModelID) =>
     EvaluationModel.make<EvaluationOptions>({
       id: modelID,

@@ -1300,22 +1300,22 @@ const gateway = VercelAIGateway.configure({
   },
 })
 
-gateway.model("anthropic/claude-sonnet-4.6") // Messages
-gateway.model("openai/gpt-5-nano") // Responses
+gateway.model("anthropic/claude-sonnet-5.5") // Messages
+gateway.model("openai/gpt-6-luna") // Responses
 gateway.model("meta/muse-spark-1.3") // Responses
-gateway.model("xai/grok-4.1-fast-reasoning") // Responses
-gateway.chat("anthropic/claude-sonnet-4.6") // Explicit Chat override
-gateway.responses("google/gemini-2.5-flash") // Explicit Responses override
-gateway.messages("openai/gpt-5-nano") // Explicit Messages override
+gateway.model("spacexai/grok-4.7") // Responses
+gateway.chat("anthropic/claude-sonnet-5.5") // Explicit Chat override
+gateway.responses("google/gemini-3.8-flash") // Explicit Responses override
+gateway.messages("openai/gpt-6-luna") // Explicit Messages override
 ```
 
-Default routing sends `openai/gpt-*`, `meta/muse-*`, and `xai/grok-*` to Responses; everything else uses Messages. Full Gateway model IDs stay unchanged. Package entrypoints are also available at `@opencode/ai/providers/vercel-ai-gateway/{messages,responses,chat}` with flat `model(id, settings)` inputs.
+Default routing sends `openai/gpt-*`, `meta/muse-*`, and `xai/grok-*` / `spacexai/grok-*` to Responses; everything else uses Messages. Full Gateway model IDs stay unchanged. Package entrypoints are also available at `@opencode/ai/providers/vercel-ai-gateway/{messages,responses,chat}` with flat `model(id, settings)` inputs.
 
 Set `providerOptions.reasoningEffort` for named effort. Messages lowers it to `thinking` plus `output_config.effort`, Responses to `reasoning.effort`, and Chat to `reasoning_effort`.
 
 ```ts
 LLM.request({
-  model: gateway.messages("anthropic/claude-sonnet-4.6"),
+  model: gateway.messages("anthropic/claude-sonnet-5.5"),
   prompt: "Review this algorithm.",
   generation: { maxTokens: 4096 },
   providerOptions: { thinking: { type: "enabled", budgetTokens: 2048 } },

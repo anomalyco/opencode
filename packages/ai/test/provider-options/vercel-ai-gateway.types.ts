@@ -11,12 +11,12 @@ LLM.request({
   providerOptions: { reasoningEffort: "max" },
 })
 LLM.request({
-  model: gateway.messages("anthropic/claude-sonnet-4.6"),
+  model: gateway.messages("anthropic/claude-sonnet-5.5"),
   prompt: "Hello",
   providerOptions: { thinking: { type: "enabled", budgetTokens: 2048 } },
 })
 LLM.request({
-  model: gateway.responses("openai/gpt-5-nano"),
+  model: gateway.responses("openai/gpt-6-luna"),
   prompt: "Hello",
   providerOptions: { reasoningSummary: "detailed", cacheTTL: "1h" },
 })

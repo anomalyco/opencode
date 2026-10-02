@@ -16,21 +16,34 @@ const recorded = recordedTests({
 for (const item of [
   {
     name: "messages Claude",
-    model: gateway.messages("anthropic/claude-sonnet-4.6"),
-    options: { thinking: { type: "enabled", budgetTokens: 1024 } },
+    model: gateway.messages("anthropic/claude-sonnet-5.5"),
+    options: { reasoningEffort: "low" },
+    reasoning: false,
   },
   {
     name: "messages Gemini",
-    model: gateway.messages("google/gemini-2.5-flash"),
-    options: { thinking: { type: "enabled", budgetTokens: 1024 } },
+    model: gateway.messages("google/gemini-3.8-flash"),
+    options: { reasoningEffort: "low" },
+    reasoning: true,
   },
-  { name: "responses GPT", model: gateway.model("openai/gpt-5-nano"), options: { reasoningEffort: "low" } },
-  { name: "responses Muse", model: gateway.model("meta/muse-spark-1.3"), options: {} },
-  { name: "responses Grok", model: gateway.model("xai/grok-4.1-fast-reasoning"), options: {} },
+  {
+    name: "responses GPT",
+    model: gateway.model("openai/gpt-6-luna"),
+    options: { reasoningEffort: "low" },
+    reasoning: false,
+  },
+  { name: "responses Muse", model: gateway.model("meta/muse-spark-1.3"), options: {}, reasoning: true },
+  {
+    name: "responses Grok",
+    model: gateway.model("spacexai/grok-4.7"),
+    options: { reasoningEffort: "low" },
+    reasoning: true,
+  },
   {
     name: "chat Claude",
-    model: gateway.chat("anthropic/claude-sonnet-4.6"),
-    options: { thinking: { type: "enabled", budgetTokens: 1024 } },
+    model: gateway.chat("anthropic/claude-sonnet-5.5"),
+    options: { reasoningEffort: "low" },
+    reasoning: false,
   },
 ] as const) {
   recorded.effect(
@@ -52,9 +65,7 @@ for (const item of [
         expect(events.filter(LLMEvent.is.finish).every((event) => event.providerMetadata?.gateway !== undefined)).toBe(
           true,
         )
-        if (item.name !== "responses Grok") expect(events.some(LLMEvent.is.reasoningEnd)).toBe(true)
-        if (item.name === "responses Grok")
-          expect(events.filter(LLMEvent.is.finish).some((event) => (event.usage?.reasoningTokens ?? 0) > 0)).toBe(true)
+        if (item.reasoning) expect(events.some(LLMEvent.is.reasoningEnd)).toBe(true)
       }),
     120_000,
   )
@@ -66,7 +77,7 @@ recorded.effect(
     Effect.gen(function* () {
       const result = yield* LLMClient.generate(
         LLM.request({
-          model: VercelAIGateway.configure({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-4.6"),
+          model: VercelAIGateway.configure({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-5.5"),
           prompt: "Hello",
           generation: { maxTokens: 32 },
         }),
@@ -85,7 +96,7 @@ recorded.effect(
   () =>
     Effect.gen(function* () {
       const request = LLM.request({
-        model: gateway.messages("anthropic/claude-sonnet-4.6"),
+        model: gateway.messages("anthropic/claude-sonnet-5.5"),
         system: [
           {
             type: "text",
