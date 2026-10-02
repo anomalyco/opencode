@@ -172,7 +172,17 @@ export type ParsedAPICallError =
 export function parseAPICallError(input: { providerID: ProviderV2.ID; error: APICallError }): ParsedAPICallError {
   const m = message(input.providerID, input.error)
   const body = json(input.error.responseBody)
-  if (isContextOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
+  const responseBodyText = typeof input.error.responseBody === "string" ? input.error.responseBody : ""
+  // message() drops the provider body for generic SDK messages such as
+  // "Provider request failed with HTTP 400", so check the raw body too.
+  // Otherwise overflow details in the body never reach the classifier and
+  // the documented compact-and-retry recovery is skipped.
+  if (
+    isContextOverflow(m) ||
+    isContextOverflow(responseBodyText) ||
+    input.error.statusCode === 413 ||
+    body?.error?.code === "context_length_exceeded"
+  ) {
     return {
       type: "context_overflow",
       message: m,
