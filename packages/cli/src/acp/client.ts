@@ -1,6 +1,7 @@
 import { ClientError } from "@opencode/client/effect"
 import { InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
-import { Effect } from "effect"
+import { Session } from "@opencode/schema/session"
+import { Effect, Schema } from "effect"
 import { HttpClientError } from "effect/unstable/http"
 import { ACPError } from "./error"
 
@@ -9,7 +10,7 @@ export function classify(error: unknown): Effect.Effect<never, ACPError.Error> {
   if (
     error instanceof ClientError &&
     HttpClientError.isHttpClientError(error.cause) &&
-    error.cause.reason._tag === "TransportError"
+    isConnectionFailure(error.cause)
   )
     return Effect.fail(new ACPError.ServerUnavailableError())
   if (error instanceof SessionNotFoundError)
@@ -17,6 +18,22 @@ export function classify(error: unknown): Effect.Effect<never, ACPError.Error> {
   if (error instanceof InvalidRequestError)
     return Effect.fail(new ACPError.InvalidRequestError({ message: error.message, field: error.field }))
   return Effect.die(error)
+}
+
+// The client reads every body through the response stream or buffer, which report a failed read as a `DecodeError`
+// carrying the read's cause. Its other `DecodeError`s, for an undeclared status or content type, have no cause, and
+// a body that fails to parse or decode fails with a `SchemaError` instead.
+function isConnectionFailure(error: HttpClientError.HttpClientError) {
+  return (
+    error.reason._tag === "TransportError" || (error.reason._tag === "DecodeError" && error.reason.cause !== undefined)
+  )
+}
+
+/** The client rejects a malformed ID before sending it, so it is rejected here as the server would. */
+export function decodeSessionID(value: string) {
+  return Schema.decodeUnknownEffect(Session.ID)(value).pipe(
+    Effect.mapError(() => new ACPError.InvalidRequestError({ message: "Invalid session ID", field: "sessionID" })),
+  )
 }
 
 export * as ACPClient from "./client"

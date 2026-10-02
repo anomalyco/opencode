@@ -1,5 +1,6 @@
 import type { PromptResponse, SessionUpdate } from "@agentclientprotocol/sdk"
 import type { OpenCodeEvent } from "@opencode/client/effect"
+import type { Session } from "@opencode/schema/session"
 import type { SessionError } from "@opencode/schema/session-error"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
@@ -18,7 +19,7 @@ export type TurnStart = { readonly type: "input" | "compaction"; readonly id: Se
 export type Terminal = "succeeded" | "failed" | "interrupted"
 
 export type Context = {
-  readonly sessionID: string
+  readonly sessionID: Session.ID
   readonly cwd: string
   readonly start: TurnStart
   readonly childUpdates: boolean
@@ -402,7 +403,7 @@ export function abandon(state: TurnState, ctx: Context): Step {
   }
 }
 
-/** Lazy, so a message that fails to translate part way still replays the updates before the failure. */
+/** The updates that replay a stored message. */
 export function* replayMessage(
   message: SessionMessage.Info,
   cwd: string,

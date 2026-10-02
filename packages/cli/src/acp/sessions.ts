@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util"
-import type { McpServer, RequestError } from "@agentclientprotocol/sdk"
+import type { McpServer, RequestError, SessionConfigOption } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import { Mcp } from "@opencode/schema/mcp"
 import type { Session } from "@opencode/schema/session"
@@ -20,13 +20,16 @@ export interface Interface {
   /**
    * Attaches a session in its own scope, closing any previous attachment of the same ID. Once the attaching request
    * has responded, the scope follows the cwd's catalog and pushes config option and command updates while it is
-   * open. A failed attach leaves the session detached.
+   * open. A failed attach leaves the session detached. Returns the session's config options as of the attach.
    */
   readonly attach: (
     session: Session.Info,
     cwd: string,
     mcpServers: readonly McpServer[],
-  ) => Effect.Effect<Attached, ACPError.Error | RequestError | ACPCatalog.Error>
+  ) => Effect.Effect<
+    { readonly attached: Attached; readonly configOptions: SessionConfigOption[] },
+    ACPError.Error | RequestError | ACPCatalog.Error
+  >
   /** Closes the session scope. No-op when the session is not attached. */
   readonly detach: (sessionID: string) => Effect.Effect<void>
   readonly require: (sessionID: string) => Effect.Effect<Attached, ACPError.SessionNotFoundError>
@@ -163,7 +166,10 @@ export const make = Effect.fnUntraced(function* (input: {
           ),
         )
       }).pipe(Effect.ignore, Effect.forkIn(entry.scope))
-      return entry.attached
+      return {
+        attached: entry.attached,
+        configOptions: configOptions(current, yield* Ref.get(entry.attached.selection)),
+      }
     }),
     detach: Effect.fn("cli.acp.sessions.detach")(function* (sessionID) {
       const entry = sessions.get(sessionID)

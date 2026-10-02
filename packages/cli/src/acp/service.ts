@@ -2,10 +2,8 @@ import type { OpenCodeClient } from "@opencode/client/effect"
 import { SessionsCursor } from "@opencode/protocol/groups/session"
 import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
-import { Session } from "@opencode/schema/session"
-import type { SessionMessage } from "@opencode/schema/session-message"
 import { FSUtil } from "@opencode/util/fs-util"
-import { DateTime, Effect, Option, Ref, Result, Schema, Stream } from "effect"
+import { DateTime, Effect, Option, Ref, Schema, Stream } from "effect"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import type {
   AuthenticateRequest,
@@ -128,7 +126,7 @@ export function make(input: {
   })
 
   const getSession = Effect.fnUntraced(function* (sessionId: string, cwd: string) {
-    const sessionID = yield* decodeSessionID(sessionId)
+    const sessionID = yield* ACPClient.decodeSessionID(sessionId)
     const session = yield* input.client.session.get({ sessionID }).pipe(Effect.catch(ACPClient.classify))
     if (FSUtil.resolve(cwd) !== FSUtil.resolve(session.location.directory))
       return yield* new ACPError.SessionDirectoryMismatchError({ sessionId, cwd })
@@ -145,23 +143,15 @@ export function make(input: {
         Effect.catch(ACPClient.classify),
         Effect.map((page) => [page.data, Option.fromNullishOr(page.cursor.next)] as const),
       ),
-    ).pipe(Stream.runForEach((message) => replayMessage(attached, message, capabilities)))
-  })
-
-  // A message that fails to translate keeps the updates before the failure and does not stop the replay.
-  const replayMessage = Effect.fnUntraced(function* (
-    attached: Attached,
-    message: SessionMessage.Info,
-    capabilities: Capabilities,
-  ) {
-    const updates = ACPTranslate.replayMessage(message, attached.cwd, capabilities)
-    while (true) {
-      const next = yield* Effect.result(Effect.try(() => updates.next()))
-      if (Result.isFailure(next))
-        return yield* Effect.logWarning("ACP replay skipped the rest of a message", message.id, next.failure.cause)
-      if (next.success.done) return
-      yield* input.connection.sessionUpdate({ sessionId: attached.id, update: next.success.value })
-    }
+    ).pipe(
+      Stream.runForEach((message) =>
+        Effect.forEach(
+          ACPTranslate.replayMessage(message, attached.cwd, capabilities),
+          (update) => input.connection.sessionUpdate({ sessionId: attached.id, update }),
+          { discard: true },
+        ),
+      ),
+    )
   })
 
   return {
@@ -209,17 +199,14 @@ export function make(input: {
       const created = yield* input.client.session
         .create({ location: { directory: AbsolutePath.make(params.cwd) }, ...ACPDirectories.grant(directories) })
         .pipe(Effect.catch(ACPClient.classify))
-      const attached = yield* input.sessions.attach(created, params.cwd, params.mcpServers)
-      return yield* currentOptions(attached).pipe(
-        Effect.map((configOptions) => ({ sessionId: attached.id, configOptions })),
-        Effect.onError(() => input.sessions.detach(attached.id)),
-      )
+      const attachment = yield* input.sessions.attach(created, params.cwd, params.mcpServers)
+      return { sessionId: attachment.attached.id, configOptions: attachment.configOptions }
     }),
     loadSession: Effect.fnUntraced(function* (params) {
       const directories = yield* ACPDirectories.parse(params.cwd, params.additionalDirectories)
       const session = yield* getSession(params.sessionId, params.cwd)
       yield* ACPDirectories.activate(input.client, session, directories)
-      const attached = yield* input.sessions.attach(session, session.location.directory, params.mcpServers)
+      const attached = (yield* input.sessions.attach(session, session.location.directory, params.mcpServers)).attached
       return yield* replay(attached).pipe(
         Effect.andThen(currentOptions(attached)),
         Effect.map((configOptions) => ({ configOptions })),
@@ -253,13 +240,11 @@ export function make(input: {
       }
     }),
     deleteSession: Effect.fnUntraced(function* (params) {
-      // A malformed ID names no session.
-      const sessionID = Schema.decodeUnknownOption(Session.ID)(params.sessionId)
-      if (Option.isSome(sessionID))
-        yield* input.client.session.remove({ sessionID: sessionID.value }).pipe(
-          Effect.catchTag("SessionNotFoundError", () => Effect.void),
-          Effect.catch(ACPClient.classify),
-        )
+      yield* ACPClient.decodeSessionID(params.sessionId).pipe(
+        Effect.flatMap((sessionID) => input.client.session.remove({ sessionID })),
+        Effect.catchTag(["ACPInvalidRequestError", "SessionNotFoundError"], () => Effect.void),
+        Effect.catch(ACPClient.classify),
+      )
       yield* input.sessions.detach(params.sessionId)
       return {}
     }),
@@ -267,11 +252,8 @@ export function make(input: {
       const directories = yield* ACPDirectories.parse(params.cwd, params.additionalDirectories)
       const session = yield* getSession(params.sessionId, params.cwd)
       yield* ACPDirectories.activate(input.client, session, directories)
-      const attached = yield* input.sessions.attach(session, session.location.directory, params.mcpServers ?? [])
-      return yield* currentOptions(attached).pipe(
-        Effect.map((configOptions) => ({ configOptions })),
-        Effect.onError(() => input.sessions.detach(attached.id)),
-      )
+      const attachment = yield* input.sessions.attach(session, session.location.directory, params.mcpServers ?? [])
+      return { configOptions: attachment.configOptions }
     }),
     closeSession: Effect.fnUntraced(function* (params) {
       yield* input.turn.close(params.sessionId)
@@ -280,15 +262,12 @@ export function make(input: {
     }),
     forkSession: Effect.fnUntraced(function* (params) {
       const directories = yield* ACPDirectories.parse(params.cwd, params.additionalDirectories)
-      const sessionID = yield* decodeSessionID(params.sessionId)
+      const sessionID = yield* ACPClient.decodeSessionID(params.sessionId)
       const forked = yield* input.client.session.fork({ sessionID }).pipe(Effect.catch(ACPClient.classify))
       // Forks copy the source session's rules, so the request list replaces any inherited grants.
       yield* ACPDirectories.activate(input.client, forked, directories)
-      const attached = yield* input.sessions.attach(forked, forked.location.directory, params.mcpServers ?? [])
-      return yield* currentOptions(attached).pipe(
-        Effect.map((configOptions) => ({ sessionId: attached.id, configOptions })),
-        Effect.onError(() => input.sessions.detach(attached.id)),
-      )
+      const attachment = yield* input.sessions.attach(forked, forked.location.directory, params.mcpServers ?? [])
+      return { sessionId: attachment.attached.id, configOptions: attachment.configOptions }
     }),
     setSessionConfigOption: Effect.fnUntraced(function* (params) {
       const attached = yield* input.sessions.require(params.sessionId)
@@ -305,13 +284,6 @@ export function make(input: {
     prompt: input.turn.prompt,
     cancel: input.turn.cancel,
   }
-}
-
-// The client rejects a malformed ID before sending it, so it is rejected here as the server would.
-function decodeSessionID(sessionId: string) {
-  return Schema.decodeUnknownEffect(Session.ID)(sessionId).pipe(
-    Effect.mapError((error) => new ACPError.InvalidRequestError({ message: error.message })),
-  )
 }
 
 const requireModel = Effect.fnUntraced(function* (catalog: Catalog, modelID: string, current: Model.Ref) {

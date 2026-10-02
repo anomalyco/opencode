@@ -205,8 +205,8 @@ describe("acp session lifecycle over the wire", () => {
     ).toMatchObject({ code: -32602, data: { sessionId: "ses_loaded" } })
   })
 
-  test("leaves nothing attached when new or resume fails on an undecodable catalog", async () => {
-    // The client rejects a model without a name, so the catalog fails to load before anything attaches.
+  test("fails new and resume before attaching when the catalog does not decode", async () => {
+    // The client rejects a model without a name, so the catalog fails to load.
     await using acp = await startWire({
       fetch: (request) =>
         request.path === "/api/model"
@@ -220,16 +220,18 @@ describe("acp session lifecycle over the wire", () => {
     await acp.initialize()
     const existing = new Set(acp.server.sessions.keys())
 
-    expect(await rpcError(acp.newSession())).toMatchObject({ code: -32603 })
+    expect(await rpcError(acp.newSession())).toMatchObject({ code: -32603, data: { errorName: "ClientError" } })
     expect(new Set(acp.server.sessions.keys())).toEqual(existing)
+
     expect(
       await rpcError(acp.request("session/resume", { cwd: "/workspace", sessionId: "ses_resumed", mcpServers: [] })),
-    ).toMatchObject({ code: -32603 })
+    ).toMatchObject({ code: -32603, data: { errorName: "ClientError" } })
     expect(
       await rpcError(
         acp.request("session/set_config_option", { sessionId: "ses_resumed", configId: "mode", value: "plan" }),
       ),
     ).toMatchObject({ code: -32602, data: { sessionId: "ses_resumed" } })
+    expect(acp.updates).toEqual([])
   })
 
   test("lists server-backed pages for the requested cwd", async () => {
@@ -292,16 +294,12 @@ describe("acp session lifecycle over the wire", () => {
     await acp.initialize()
     const params = { cwd: "/workspace", sessionId: "never-created", mcpServers: [] }
 
-    expect(await rpcError(acp.request("session/load", params))).toEqual({
-      code: -32602,
-      message: 'Invalid params: Expected a string starting with "ses"',
-      data: {},
-    })
-    expect(await rpcError(acp.request("session/fork", params))).toEqual({
-      code: -32602,
-      message: 'Invalid params: Expected a string starting with "ses"',
-      data: {},
-    })
+    const invalid = { code: -32602, message: "Invalid params: Invalid session ID", data: { field: "sessionID" } }
+
+    expect(await rpcError(acp.request("session/load", params))).toEqual(invalid)
+    expect(await rpcError(acp.request("session/resume", params))).toEqual(invalid)
+    expect(await rpcError(acp.request("session/fork", params))).toEqual(invalid)
+    expect(acp.server.requests.filter((request) => request.path.includes("never-created"))).toEqual([])
     expect(acp.logs).toEqual([])
   })
 

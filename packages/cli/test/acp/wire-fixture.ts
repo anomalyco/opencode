@@ -19,24 +19,31 @@ import {
   type WriteTextFileRequest,
 } from "@agentclientprotocol/sdk"
 import { OpenCode } from "@opencode/client/effect"
-import type {
-  AgentInfo,
-  CommandInfo,
-  LocationRef,
-  ModelInfo,
-  ModelRef,
-  OpenCodeEvent,
-  SessionInfo,
-  SessionMessageInfo,
-  TokenUsageInfo,
-} from "@opencode/client/promise"
+import type { OpenCodeEventEncoded } from "@opencode/protocol/groups/event"
+import type { Agent } from "@opencode/schema/agent"
+import type { Command } from "@opencode/schema/command"
 import { Form } from "@opencode/schema/form"
+import type { Location } from "@opencode/schema/location"
+import type { Model } from "@opencode/schema/model"
+import type { Session } from "@opencode/schema/session"
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { BunRequest } from "bun"
 import { Duration, Effect, Exit, Logger, Option, Schema, Scope } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { ACP } from "../../src/acp/agent"
 import { ACPTurn } from "../../src/acp/turn"
 
+// The fake server sends and stores the wire form of each value.
+type OpenCodeEvent = OpenCodeEventEncoded
+type AgentInfo = typeof Agent.Info.Encoded
+type CommandInfo = typeof Command.Info.Encoded
+type LocationRef = typeof Location.PublicRef.Encoded
+type ModelInfo = typeof Model.Info.Encoded
+type ModelRef = typeof Model.Ref.Encoded
+type SessionInfo = typeof Session.Info.Encoded
+type SessionMessageInfo = typeof SessionMessage.Info.Encoded
+type TokenUsageInfo = typeof TokenUsage.Info.Encoded
 type DurableEvent = Extract<OpenCodeEvent, { durable: unknown }>
 type EphemeralEvent = Exclude<OpenCodeEvent, DurableEvent>
 type EventData<Type extends OpenCodeEvent["type"]> = Extract<OpenCodeEvent, { type: Type }>["data"]
@@ -262,12 +269,16 @@ export function tokens(value = 1): TokenUsageInfo {
   return { input: value, output: value, reasoning: 0, cache: { read: 0, write: 0 } }
 }
 
-// The fake server stamps ids and sequence numbers when it sends an event.
-function durable<Version extends DurableEvent["durable"]["version"]>(version: Version) {
-  return <Type extends Extract<DurableEvent, { durable: { version: Version } }>["type"]>(
-    type: Type,
-    data: EventData<Type>,
-  ) => ({ id: "", created: 0, type, durable: { aggregateID: "test", seq: 0, version }, data })
+// The fake server stamps ids and sequence numbers when it sends an event. The wire form types every version as a
+// number, so the client's decode is what rejects an event sent under the wrong version.
+function durable(version: number) {
+  return <Type extends DurableEvent["type"]>(type: Type, data: EventData<Type>) => ({
+    id: "",
+    created: 0,
+    type,
+    durable: { aggregateID: "test", seq: 0, version },
+    data,
+  })
 }
 
 export const durableEvent = durable(1)
@@ -758,8 +769,11 @@ function startServer(options: WireOptions, changed: () => void) {
         PATCH: body(UpdateBody, (req, input) => {
           const session = fake.sessions.get(req.params.sessionID)
           if (!session) return notFound(req.params.sessionID)
-          if (input.permissions) session.permissions = [...input.permissions]
-          if (input.metadata) session.metadata = input.metadata
+          fake.sessions.set(session.id, {
+            ...session,
+            ...(input.permissions ? { permissions: input.permissions } : {}),
+            ...(input.metadata ? { metadata: input.metadata } : {}),
+          })
           return noContent()
         }),
       },
@@ -869,6 +883,11 @@ function startServer(options: WireOptions, changed: () => void) {
     /** Ends every open event stream while the server keeps answering requests. */
     closeEvents() {
       streams.forEach((stream) => stream.close())
+      streams.clear()
+    },
+    /** Drops the connection of every open event stream while the server keeps answering requests. */
+    dropEvents() {
+      streams.forEach((stream) => stream.error())
       streams.clear()
     },
     async stop() {

@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { OpenCodeEvent, type OpenCodeEventEncoded } from "@opencode/protocol/groups/event"
+import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Schema } from "effect"
 import { ACPTranslate } from "../../src/acp/translate"
@@ -18,7 +19,7 @@ import {
   toolStarted,
 } from "./wire-fixture"
 
-const root = "ses_root"
+const root = Session.ID.make("ses_root")
 const ctx: ACPTranslate.Context = {
   sessionID: root,
   cwd: "/workspace",

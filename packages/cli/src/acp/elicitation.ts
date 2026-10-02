@@ -105,7 +105,9 @@ export function requestedSchema(form: AskedForm, capabilities: ACPService.Capabi
  * to the model, so the turn continues instead of ending as interrupted; other forms are cancelled silently.
  */
 export function cancelUnshown(client: OpenCodeClient, form: Form.Info) {
-  return cancel(client, form, form.metadata?.kind === QuestionKind ? UnshownQuestionMessage : undefined)
+  return cancel(client, form, form.metadata?.kind === QuestionKind ? UnshownQuestionMessage : undefined).pipe(
+    Effect.uninterruptible,
+  )
 }
 
 /** The answer for an accepted response, or undefined when the user declined, cancelled, or sent invalid content. */

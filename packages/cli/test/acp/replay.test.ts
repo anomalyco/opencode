@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessage } from "@opencode/schema/session-message"
 import { assistantMessage, makeSession, rpcError, startWire } from "./wire-fixture"
 
 describe("acp session replay over the wire", () => {
@@ -103,7 +103,7 @@ function replayToolMessage(id: string, state: Record<string, unknown>) {
   }
 }
 
-function replayFixtureMessages(): SessionMessageInfo[] {
+function replayFixtureMessages(): Array<typeof SessionMessage.Info.Encoded> {
   return [
     {
       id: "msg_user",

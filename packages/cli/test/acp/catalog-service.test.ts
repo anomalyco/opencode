@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { Agent } from "@opencode/schema/agent"
 import { Clock, Duration, Effect, Fiber } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "../../../core/test/lib/effect"
@@ -31,7 +32,7 @@ describe("acp catalog service", () => {
           yield* Fiber.joinAll(queued)
 
           expect(reads(acp, "agent")).toBe(3)
-          expect<string>((yield* catalog.get("/workspace")).defaultModeID).toBe("plan")
+          expect((yield* catalog.get("/workspace")).defaultModeID).toBe(Agent.ID.make("plan"))
         }),
     )
   })
@@ -72,7 +73,7 @@ describe("acp catalog service", () => {
         const loaded = yield* Fiber.join(loading)
 
         expect(retriedAt).toBeGreaterThanOrEqual(25)
-        expect<unknown>(loaded.defaultModel).toEqual({ providerID: "test", id: "test-model", variant: "default" })
+        expect(loaded.defaultModel).toMatchObject({ providerID: "test", id: "test-model", variant: "default" })
       }),
     ),
   )

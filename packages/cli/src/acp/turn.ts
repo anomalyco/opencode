@@ -1,7 +1,7 @@
 import type { CancelNotification, PromptRequest, PromptResponse, RequestError } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import type { Command } from "@opencode/schema/command"
-import { Session } from "@opencode/schema/session"
+import type { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import {
@@ -16,7 +16,6 @@ import {
   Option,
   Queue,
   Ref,
-  Schema,
   Scope,
   Stream,
 } from "effect"
@@ -245,14 +244,13 @@ export const make = Effect.fnUntraced(function* (input: {
   // Rejects pending asks, interrupts the server once, then forwards its wind-down until the terminal event or the
   // timeout. Tools and a compaction still open at the timeout are settled so the client never shows them running.
   const windDown = Effect.fnUntraced(function* (
-    attached: Attached,
     subscription: Subscription,
     ctx: ACPTranslate.Context,
     state: Ref.Ref<ACPTranslate.TurnState>,
     events: Fiber.Fiber<ACPTranslate.Terminal, Failure>,
   ) {
     yield* Deferred.succeed(subscription.cancelled, undefined)
-    yield* interruptServer(attached.id)
+    yield* interruptServer(ctx.sessionID)
     if (!(yield* Ref.get(state)).started) return
     if (Option.isSome(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)))) return
     yield* Fiber.interrupt(events)
@@ -282,7 +280,7 @@ export const make = Effect.fnUntraced(function* (input: {
             yield* submit(attached, prompt)
             if (prompt.command) return "succeeded" as const
             return yield* Fiber.join(events)
-          }).pipe(Effect.onInterrupt(() => windDown(attached, subscription, ctx, state, events)))
+          }).pipe(Effect.onInterrupt(() => windDown(subscription, ctx, state, events)))
         }).pipe(Effect.scoped),
       (subscription, exit) => handoff(attached, subscription, ctx, state, exit),
     )
@@ -392,11 +390,9 @@ export const make = Effect.fnUntraced(function* (input: {
     }),
     close: Effect.fn("cli.acp.turn.close")(function* (sessionID) {
       if (FiberMap.hasUnsafe(turns, sessionID)) return yield* FiberMap.remove(turns, sessionID)
-      // A malformed ID names no session.
-      const id = Schema.decodeUnknownOption(Session.ID)(sessionID)
-      if (Option.isNone(id)) return
-      yield* input.client.session.interrupt({ sessionID: id.value }).pipe(
-        Effect.catchTag("SessionNotFoundError", () => Effect.void),
+      yield* ACPClient.decodeSessionID(sessionID).pipe(
+        Effect.flatMap((id) => input.client.session.interrupt({ sessionID: id })),
+        Effect.catchTag(["ACPInvalidRequestError", "SessionNotFoundError"], () => Effect.void),
         Effect.catch(ACPClient.classify),
       )
     }),

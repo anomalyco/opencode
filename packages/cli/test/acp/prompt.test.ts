@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { StopReason } from "@agentclientprotocol/sdk"
-import type { OpenCodeEvent } from "@opencode/client/promise"
+import type { OpenCodeEventEncoded } from "@opencode/protocol/groups/event"
 import { Schema } from "effect"
 import { mkdir } from "node:fs/promises"
 import path from "node:path"
@@ -226,7 +226,7 @@ describe("acp prompt turns over the wire", () => {
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
   })
 
-  test.each<{ name: string; stopReason: StopReason; events: (sessionID: string) => OpenCodeEvent[] }>([
+  test.each<{ name: string; stopReason: StopReason; events: (sessionID: string) => OpenCodeEventEncoded[] }>([
     { name: "a normal stop", stopReason: "end_turn", events: (id) => [stepEnded(id, "msg_1"), succeeded(id)] },
     {
       name: "a length-limited step",
@@ -481,6 +481,17 @@ describe("acp prompt turns over the wire", () => {
     acp.server.closeEvents()
 
     expect(await rpcError(prompt)).toMatchObject({ code: -32603, data: { errorName: "ServerUnavailable" } })
+  })
+
+  test("fails the prompt as server unavailable when the event stream's connection drops mid-turn", async () => {
+    await using acp = await startSession(held)
+
+    const prompt = acp.prompt(acp.sessionId, "hold")
+    await admitted(acp, acp.sessionId)
+    acp.server.dropEvents()
+
+    expect(await rpcError(prompt)).toMatchObject({ code: -32603, data: { errorName: "ServerUnavailable" } })
+    expect(acp.logs).toEqual([])
   })
 
   test("$/cancel_request on the prompt request cancels the turn like session/cancel", async () => {
