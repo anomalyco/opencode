@@ -6,13 +6,13 @@ export type PromptPart =
   | { readonly type: "text"; readonly text: string; readonly synthetic?: boolean; readonly ignored?: boolean }
   | { readonly type: "file"; readonly url: string; readonly filename?: string; readonly mime: string }
 
-export type ReplayPart = PromptPart | { readonly type: "reasoning"; readonly text: string }
+type ReplayPart = PromptPart | { readonly type: "reasoning"; readonly text: string }
 
 export function promptContentToParts(content: readonly ContentBlock[]): PromptPart[] {
   return content.flatMap(contentBlockToParts)
 }
 
-export function contentBlockToParts(block: ContentBlock): PromptPart[] {
+function contentBlockToParts(block: ContentBlock): PromptPart[] {
   switch (block.type) {
     case "text": {
       const audience = block.annotations?.audience
@@ -171,5 +171,3 @@ function filenameFromUri(uri: string | undefined): string | undefined {
   }
   return path.basename(uri) || undefined
 }
-
-export * as ACPContent from "./content"

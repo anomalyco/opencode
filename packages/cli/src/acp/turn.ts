@@ -1,7 +1,6 @@
 import type { CancelNotification, PromptRequest, PromptResponse, RequestError } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import type { Command } from "@opencode/schema/command"
-import type { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import {
@@ -40,8 +39,6 @@ export interface Interface {
   /** Unlike `cancel`, interrupts an idle session too, since server work can outlive its turn. */
   readonly close: (sessionID: string) => Effect.Effect<void, ACPError.Error | RequestError>
 }
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Turn") {}
 
 /** Core acknowledges an interrupt before its cleanup settles, and its shell tool waits 3s before SIGKILL. */
 export const CancelDrainTimeout = Context.Reference<Duration.Input>("@opencode/cli/acp/Turn/CancelDrainTimeout", {
@@ -243,15 +240,6 @@ export const make = Effect.fnUntraced(function* (input: {
       .pipe(Effect.catch(ACPClient.classify))
   })
 
-  const interruptServer = (sessionID: Session.ID) =>
-    input.client.session
-      .interrupt({ sessionID })
-      .pipe(
-        Effect.catchCause((cause) =>
-          Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP server interrupt failed", cause),
-        ),
-      )
-
   const windDown = Effect.fnUntraced(function* (
     subscription: Subscription,
     ctx: ACPTranslate.Context,
@@ -259,7 +247,13 @@ export const make = Effect.fnUntraced(function* (input: {
     events: Fiber.Fiber<ACPTranslate.Terminal, ACPError.Failure>,
   ) {
     yield* Deferred.succeed(subscription.cancelled, undefined)
-    yield* interruptServer(ctx.sessionID)
+    yield* input.client.session
+      .interrupt({ sessionID: ctx.sessionID })
+      .pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP server interrupt failed", cause),
+        ),
+      )
     if (!(yield* Ref.get(state)).started) return
     if (Option.exists(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)), Exit.isSuccess)) return
     yield* Fiber.interrupt(events)
@@ -367,7 +361,7 @@ export const make = Effect.fnUntraced(function* (input: {
     return yield* settle(attached, state, exit)
   })
 
-  return Service.of({
+  return {
     prompt: Effect.fn("cli.acp.turn.prompt")(function* (params, signal) {
       const attached = yield* input.sessions.require(params.sessionId)
       const catalog = yield* input.catalog.get(attached.cwd)
@@ -407,7 +401,7 @@ export const make = Effect.fnUntraced(function* (input: {
         Effect.catch(ACPClient.classify),
       )
     }),
-  })
+  } satisfies Interface
 })
 
 function aborted(signal: AbortSignal) {
@@ -426,8 +420,17 @@ function preparePrompt(catalog: Catalog, parts: readonly PromptPart[], messageID
   const files = visible.flatMap((part) => (part.type === "file" ? [{ uri: part.url, name: part.filename }] : []))
   const slash = detectSlashCommand(text)
   const command = slash ? catalog.commands.find((item) => item.name === slash.name) : undefined
-  const start = turnStart(messageID, slash)
-  return { start, text, files, synthetic, slash, command }
+  return {
+    start:
+      slash && builtinCommands.get(slash.name)?.start === "compaction"
+        ? { type: "compaction", id: messageID }
+        : { type: "input", id: messageID },
+    text,
+    files,
+    synthetic,
+    slash,
+    command,
+  }
 }
 
 function referenceUnreadableFile(part: PromptPart) {
@@ -438,12 +441,7 @@ function referenceUnreadableFile(part: PromptPart) {
   )
 }
 
-function turnStart(messageID: SessionMessage.ID, slash: PreparedPrompt["slash"]): ACPTranslate.TurnStart {
-  if (slash && builtinCommands.get(slash.name)?.start === "compaction") return { type: "compaction", id: messageID }
-  return { type: "input", id: messageID }
-}
-
-function detectSlashCommand(text: string): { readonly name: string; readonly args: string } | undefined {
+function detectSlashCommand(text: string) {
   const value = text.trim()
   if (!value.startsWith("/")) return undefined
   const [name, ...rest] = value.slice(1).split(/\s+/)

@@ -3,7 +3,7 @@ import type { Agent } from "@opencode/schema/agent"
 import type { Command } from "@opencode/schema/command"
 import type { Model } from "@opencode/schema/model"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Cause, Context, Deferred, Effect, Exit, Schedule, Schema, Semaphore, Stream, SubscriptionRef } from "effect"
+import { Cause, Deferred, Effect, Exit, Schedule, Schema, Semaphore, Stream, SubscriptionRef } from "effect"
 import type { ConfigOptionProvider } from "./config-option"
 
 export const builtinCommands = new Map([
@@ -19,7 +19,7 @@ export type Catalog = {
   readonly commands: ReadonlyArray<Command.Info>
 }
 
-export class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatalogNotReadyError", {
+class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatalogNotReadyError", {
   reason: Schema.Literals(["models", "agents"]),
 }) {
   override get message() {
@@ -27,7 +27,7 @@ export class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatal
   }
 }
 
-export class LoadError extends Schema.TaggedError<LoadError>()("ACPCatalogLoadError", {
+class LoadError extends Schema.TaggedError<LoadError>()("ACPCatalogLoadError", {
   cause: Schema.Defect(),
 }) {}
 
@@ -38,8 +38,6 @@ export interface Interface {
   readonly reload: (cwd: string) => Effect.Effect<void, Error>
   readonly changes: (cwd: string) => Stream.Stream<Catalog, Error>
 }
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Catalog") {}
 
 type Entry = {
   readonly cwd: string
@@ -125,7 +123,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       )
     })
 
-  return Service.of({
+  return {
     get: Effect.fn("cli.acp.catalog.get")(function* (cwd) {
       const loaded = yield* entry(cwd)
       return yield* SubscriptionRef.get(loaded.catalog)
@@ -134,7 +132,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       yield* reload(yield* entry(cwd))
     }),
     changes: (cwd) => Stream.unwrap(entry(cwd).pipe(Effect.map((loaded) => SubscriptionRef.changes(loaded.catalog)))),
-  })
+  } satisfies Interface
 })
 
 const load = (client: OpenCodeClient, cwd: string) =>

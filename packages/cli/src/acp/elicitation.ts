@@ -91,7 +91,7 @@ export function cancelUnshown(client: OpenCodeClient, form: Form.Info) {
   )
 }
 
-export function answer(form: AskedForm, response: CreateElicitationResponse): Form.Answer | undefined {
+function answer(form: AskedForm, response: CreateElicitationResponse): Form.Answer | undefined {
   if (response.action !== "accept") return undefined
   const content = Schema.decodeUnknownOption(Form.Answer)(response.content ?? {})
   if (Option.isNone(content)) return undefined

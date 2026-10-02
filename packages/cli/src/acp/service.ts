@@ -46,7 +46,7 @@ import { ACPReplay } from "./replay"
 import type { ACPSessions, Attached, SupportedMcpServer } from "./sessions"
 import type { ACPTurn } from "./turn"
 
-export const AuthMethodID = "opencode-login"
+const AuthMethodID = "opencode-login"
 
 export interface Interface {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse>

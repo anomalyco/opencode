@@ -73,7 +73,7 @@ export type Output =
     }
   | { readonly _tag: "AskSettled"; readonly id: string }
 
-export type Step = {
+type Step = {
   readonly state: TurnState
   readonly outputs: ReadonlyArray<Output>
   readonly terminal?: Terminal
@@ -145,7 +145,8 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
     return { state: { ...state, asks }, outputs: [{ _tag: "AskSettled", id: settledID }] }
   }
   if (!eventSessionID || (eventSessionID !== ctx.sessionID && !child)) return { state, outputs: [] }
-  if (matchesStart(event, ctx.start)) return { state: { ...state, started: true }, outputs: [] }
+  if (event.type === "session.inbox.delivered" && event.data.inboxID === ctx.start.id)
+    return { state: { ...state, started: true }, outputs: [] }
   if (!state.started) return { state, outputs: [] }
 
   switch (event.type) {
@@ -346,7 +347,14 @@ export function response(state: TurnState, sessionID: string, terminal: Terminal
       }
     : undefined
   const error = (state.stepError ?? state.executionError)?.type
-  const stopReason = resolveStopReason({ terminal, finish: state.finish, error })
+  const stopReason =
+    terminal === "interrupted" || error === "aborted"
+      ? "cancelled"
+      : state.finish === "length"
+        ? "max_tokens"
+        : state.finish === "content-filter" || error === "provider.content-filter"
+          ? "refusal"
+          : "end_turn"
   // Interruption clears the projected retry, so a retry pending at interrupt is reported here.
   const retry = state.retries.get(sessionID)
   return { stopReason, ...(usage ? { usage } : {}), _meta: retry ? { [RetryMeta]: retry } : {} }
@@ -443,21 +451,6 @@ function sessionIDFromEvent(event: OpenCodeEvent) {
 
 function toolKey(sessionID: string, id: string) {
   return `${sessionID}:${id}`
-}
-
-function matchesStart(event: OpenCodeEvent, start: TurnStart) {
-  return event.type === "session.inbox.delivered" && event.data.inboxID === start.id
-}
-
-function resolveStopReason(input: {
-  readonly terminal: Terminal
-  readonly finish: SessionMessage.Assistant["finish"]
-  readonly error?: string
-}): PromptResponse["stopReason"] {
-  if (input.terminal === "interrupted" || input.error === "aborted") return "cancelled"
-  if (input.finish === "length") return "max_tokens"
-  if (input.finish === "content-filter" || input.error === "provider.content-filter") return "refusal"
-  return "end_turn"
 }
 
 export * as ACPTranslate from "./translate"

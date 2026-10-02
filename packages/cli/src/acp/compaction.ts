@@ -5,7 +5,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 
 const MarkerMeta = "opencode/compaction"
 
-export type Started = { readonly status: "started"; readonly messageId: string; readonly reason: "auto" | "manual" }
+type Started = { readonly status: "started"; readonly messageId: string; readonly reason: "auto" | "manual" }
 
 type Compaction =
   | Started

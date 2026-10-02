@@ -56,22 +56,19 @@ export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailable
   {},
 ) {}
 
-const Errors = Schema.Union([
-  SessionNotFoundError,
-  SessionDirectoryMismatchError,
-  InvalidConfigOptionError,
-  InvalidModelError,
-  InvalidEffortError,
-  InvalidModeError,
-  InvalidAdditionalDirectoryError,
-  AuthRequiredError,
-  UnknownAuthMethodError,
-  InvalidRequestError,
-  ServiceFailureError,
-  ServerUnavailableError,
-])
-
-export type Error = typeof Errors.Type
+export type Error =
+  | SessionNotFoundError
+  | SessionDirectoryMismatchError
+  | InvalidConfigOptionError
+  | InvalidModelError
+  | InvalidEffortError
+  | InvalidModeError
+  | InvalidAdditionalDirectoryError
+  | AuthRequiredError
+  | UnknownAuthMethodError
+  | InvalidRequestError
+  | ServiceFailureError
+  | ServerUnavailableError
 
 export type Failure = Error | RequestError | ACPCatalog.Error
 
@@ -121,9 +118,9 @@ export function toRequestError(error: Error): RequestError {
   return exhaustive
 }
 
-export function fromUnknown(error: unknown, service?: string) {
+export function fromUnknown(error: unknown) {
   const errorName = error instanceof Error ? error.name : undefined
-  return new ServiceFailureError({ safeMessage: "Internal service failure", service, errorName })
+  return new ServiceFailureError({ safeMessage: "Internal service failure", errorName })
 }
 
 export * as ACPError from "./error"
