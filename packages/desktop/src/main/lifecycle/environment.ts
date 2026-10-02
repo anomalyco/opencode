@@ -6,12 +6,22 @@ import { DesktopPaths } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
 import { registerRendererProtocol, setDockIcon, setProtocolReporter } from "../windows"
 import { scoped } from "../native/logging"
+import { normalizeContextMenuParams } from "./context-menu"
 
 // electron-context-menu attaches to every existing and future window, so it can load once the first
 // window is up instead of holding up startup with its dependency tree.
 export const installContextMenu = Effect.gen(function* () {
   const { default: contextMenu } = yield* Effect.promise(() => import("electron-context-menu"))
-  contextMenu({ showSaveImageAs: true, showLookUpSelection: false, showSearchWithGoogle: false })
+  contextMenu({
+    showSaveImageAs: true,
+    showLookUpSelection: false,
+    showSearchWithGoogle: false,
+    shouldShowMenu: (_event, params) => {
+      normalizeContextMenuParams(params)
+
+      return true
+    },
+  })
 })
 
 export const prepareApplicationEnvironment = Effect.gen(function* () {
