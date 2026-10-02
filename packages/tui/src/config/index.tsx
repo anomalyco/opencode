@@ -281,7 +281,11 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
 
 export function resolve(
   input: Info,
-  options: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> },
+  options: {
+    terminalSuspend: boolean
+    terminalAvailable?: boolean
+    environment?: Readonly<Record<string, string | undefined>>
+  },
 ): Resolved {
   const tabsMode =
     input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
@@ -320,8 +324,8 @@ export function resolve(
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
       permissions: input.session?.permissions ?? "prompt",
-      // Persistent terminal panes need the opencode-pty daemon, which does not ship Windows binaries.
-      terminal: process.platform !== "win32",
+      // The daemon runs on the server; an explicit remote server may serve Windows clients.
+      terminal: options.terminalAvailable ?? process.platform !== "win32",
       tps: input.session?.tps ?? true,
     },
     tabs: {
@@ -344,7 +348,11 @@ const ConfigContext = createContext<{
 export function ConfigProvider(props: {
   config: Resolved
   service?: Interface
-  options?: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> }
+  options?: {
+    terminalSuspend: boolean
+    terminalAvailable?: boolean
+    environment?: Readonly<Record<string, string | undefined>>
+  }
   children: JSX.Element
 }) {
   const [config, setConfig] = createStore(props.config)

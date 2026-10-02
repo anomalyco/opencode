@@ -180,6 +180,7 @@ export type TuiInput = {
   app: TuiApp
   server: {
     endpoint: Endpoint
+    explicit?: boolean
     service?: {
       reconnect: (signal: AbortSignal) => Promise<Endpoint>
       restart: () => Promise<void>
@@ -204,8 +205,10 @@ export type TuiInput = {
 export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
   const log = input.log ?? (() => {})
   const global = yield* Global.Service
+  const terminalAvailable = process.platform !== "win32" || input.server.explicit === true
   const config = Config.resolve(yield* Effect.tryPromise(() => input.config.get()), {
     terminalSuspend: process.platform !== "win32",
+    terminalAvailable,
   })
   const options = { baseUrl: input.server.endpoint.url, headers: Service.headers(input.server.endpoint) }
   const api = OpenCode.make(options)
@@ -362,7 +365,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                     <ConfigProvider
                                       config={config}
                                       service={input.config}
-                                      options={{ terminalSuspend: process.platform !== "win32" }}
+                                      options={{ terminalSuspend: process.platform !== "win32", terminalAvailable }}
                                     >
                                       <Keymap.Provider>
                                         <ToastProvider>
