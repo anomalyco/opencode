@@ -154,19 +154,36 @@ describe("tool.grep", () => {
     Effect.gen(function* () {
       const test = yield* TestInstance
       const file = path.join(test.directory, "test.txt")
-      yield* Effect.promise(() => Bun.write(file, "line1\nline2\nline3"))
+      const sibling = path.join(test.directory, "sibling.txt")
+      yield* Effect.promise(() => Promise.all([Bun.write(file, "line1\nline2\nline3"), Bun.write(sibling, "line2")]))
       const info = yield* GrepTool
       const grep = yield* info.init()
       const result = yield* grep.execute(
         {
           pattern: "line2",
           path: file,
+          include: "*.txt",
         },
         ctx,
       )
       expect(result.metadata.matches).toBe(1)
       expect(result.output).toContain(file)
+      expect(result.output).not.toContain(sibling)
       expect(result.output).toContain("Line 2: line2")
+    }),
+  )
+
+  it.instance("honors include for exact file paths", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const file = path.join(test.directory, "test.txt")
+      yield* Effect.promise(() => Bun.write(file, "needle"))
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      const result = yield* grep.execute({ pattern: "needle", path: file, include: "*.json" }, ctx)
+
+      expect(result.metadata.matches).toBe(0)
+      expect(result.output).toBe("No files found")
     }),
   )
 
