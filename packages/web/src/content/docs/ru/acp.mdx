@@ -25,12 +25,15 @@ ACP — это открытый протокол, который стандар�
 
 ### Zed
 
-Добавьте в конфигурацию [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+Установите OpenCode из [реестра ACP Zed](https://zed.dev/docs/ai/external-agents#registry), выполнив `zed: acp registry` в палитре команд.
+
+Чтобы вместо этого использовать собственный исполняемый файл OpenCode, добавьте его в конфигурацию [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
+      "type": "custom",
       "command": "opencode",
       "args": ["acp"]
     }

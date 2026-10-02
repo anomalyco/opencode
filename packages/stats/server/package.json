@@ -1,20 +1,19 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/stats-server",
-  "version": "1.18.4",
+  "version": "1.18.34",
   "private": true,
   "type": "module",
   "license": "MIT",
-  "main": "./src/server.ts",
+  "main": "./src/stat-sync.ts",
   "exports": {
-    ".": "./src/server.ts"
+    ".": "./src/stat-sync.ts"
   },
   "scripts": {
-    "start": "bun src/server.ts",
+    "start": "bun src/stat-sync.ts",
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-firehose": "3.933.0",
     "@effect/platform-node": "catalog:",
     "@opencode-ai/stats-core": "workspace:*",
     "effect": "catalog:",

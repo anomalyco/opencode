@@ -5,6 +5,8 @@ import { createStore, type SetStoreFunction } from "solid-js/store"
 import type { FileSelection } from "@/context/file"
 import { Persist, persisted } from "@/utils/persist"
 import type { ServerScope } from "@/utils/server-scope"
+import type { BlobReference } from "@/utils/draft-store"
+import type { Platform } from "@/context/platform"
 
 interface PartBase {
   content: string
@@ -37,7 +39,7 @@ export interface ImageAttachmentPart {
   filename: string
   sourcePath?: string
   mime: string
-  dataUrl: string
+  blob: BlobReference
 }
 
 export type ContentPart = TextPart | FileAttachmentPart | AgentPart | ImageAttachmentPart
@@ -168,9 +170,9 @@ function createPromptActions(setStore: SetStoreFunction<PromptStore>) {
 }
 
 function promptTarget(serverScope: ServerScope, scope: PromptScope) {
-  if ("draftID" in scope) return Persist.draft(scope.draftID, "prompt")
+  if ("draftID" in scope) return Persist.prompt(Persist.draft(scope.draftID, "prompt"))
   const legacy = `${scope.dir}/prompt${scope.id ? "/" + scope.id : ""}.v2`
-  return Persist.serverScoped(serverScope, scope.dir, scope.id, "prompt", [legacy])
+  return Persist.prompt(Persist.serverScoped(serverScope, scope.dir, scope.id, "prompt", [legacy]))
 }
 
 function promptStore(initial?: InitialPrompt): PromptStore {
@@ -235,17 +237,22 @@ function createPromptStateValue(store: PromptStore, setStore: SetStoreFunction<P
   return value
 }
 
-function createPersistedPrompt(target: ReturnType<typeof promptTarget>, initial?: InitialPrompt) {
-  const [store, setStore, _, ready] = persisted(target, createStore<PromptStore>(promptStore(initial)))
+function createPersistedPrompt(target: ReturnType<typeof promptTarget>, initial?: InitialPrompt, platform?: Platform) {
+  const [store, setStore, _, ready] = persisted(target, createStore<PromptStore>(promptStore(initial)), platform)
   return { ready, ...createPromptStateValue(store, setStore) }
 }
 
-export function createPromptSession(serverScope: ServerScope, scope: PromptScope, initial?: InitialPrompt) {
-  return createPersistedPrompt(promptTarget(serverScope, scope), initial)
+export function createPromptSession(
+  serverScope: ServerScope,
+  scope: PromptScope,
+  initial?: InitialPrompt,
+  platform?: Platform,
+) {
+  return createPersistedPrompt(promptTarget(serverScope, scope), initial, platform)
 }
 
 export function createDraftPromptSession(draftID: string, initial?: InitialPrompt) {
-  return createPersistedPrompt(Persist.draft(draftID, "prompt"), initial)
+  return createPersistedPrompt(Persist.prompt(Persist.draft(draftID, "prompt")), initial)
 }
 
 export type PromptSession = ReturnType<typeof createPromptSession>

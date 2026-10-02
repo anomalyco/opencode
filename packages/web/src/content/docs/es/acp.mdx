@@ -25,12 +25,15 @@ A continuación se muestran ejemplos de editores populares que admiten ACP.
 
 ### Zed
 
-Agregue a su configuración [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+Instale OpenCode desde el [registro ACP de Zed](https://zed.dev/docs/ai/external-agents#registry) ejecutando `zed: acp registry` en la paleta de comandos.
+
+Para usar un ejecutable personalizado de OpenCode, agréguelo a su configuración de [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
+      "type": "custom",
       "command": "opencode",
       "args": ["acp"]
     }

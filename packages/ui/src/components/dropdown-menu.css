@@ -60,7 +60,7 @@
 
   [data-slot="dropdown-menu-checkbox-item"],
   [data-slot="dropdown-menu-radio-item"] {
-    padding-right: 28px;
+    padding-inline-end: 28px;
   }
 
   [data-slot="dropdown-menu-sub-trigger"] {
@@ -76,7 +76,7 @@
     width: 16px;
     height: 16px;
     position: absolute;
-    right: 8px;
+    inset-inline-end: 8px;
     top: 50%;
     transform: translateY(-50%);
   }

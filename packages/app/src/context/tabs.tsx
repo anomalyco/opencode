@@ -12,6 +12,7 @@ import { sessionHref } from "@/utils/session-route"
 import { createTabMemory } from "./tab-memory"
 import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed-tabs"
 import { createDraftPromptSession, type PromptModel } from "./prompt-state"
+import { migrateTabs } from "./tab-migration"
 
 export type SessionTab = {
   type: "session"
@@ -59,13 +60,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const [store, setStore, _, ready] = persisted(
       {
         ...Persist.window("tabs"),
-        migrate: (value: unknown) => {
-          if (!Array.isArray(value)) return value
-          return value.map((tab) => {
-            if (!tab || typeof tab !== "object" || "server" in tab) return tab
-            return { ...tab, server: fallback }
-          })
-        },
+        migrate: (value: unknown) => migrateTabs(value, fallback),
       },
       createStore<Tab[]>([]),
     )
@@ -106,7 +101,10 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     }
 
     const removeDraftPersisted = (draftID: string) => {
-      for (const key of draftPersistedKeys()) removePersisted(Persist.draft(draftID, key), platform)
+      for (const key of draftPersistedKeys()) {
+        const target = Persist.draft(draftID, key)
+        removePersisted(key === "prompt" ? Persist.prompt(target) : target, platform)
+      }
     }
 
     const removeInfo = (key: string) => {

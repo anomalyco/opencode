@@ -1,14 +1,9 @@
 import type { Hooks, PluginInput } from "@opencode-ai/plugin"
 import { OAUTH_DUMMY_KEY } from "../auth"
-import { createServer } from "http"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
-import { OauthCallbackPage } from "@opencode-ai/core/oauth/page"
 
-// Public Grok-CLI OAuth client. xAI's auth server rejects loopback OAuth from
-// non-allowlisted clients, so we reuse the Grok-CLI client_id that xAI ships
-// for desktop OAuth flows. Source of truth: hermes-agent PR #26534.
+// Public Grok-CLI OAuth client.
 const CLIENT_ID = "b1a00492-073a-47ea-816f-4c329264a828"
-const AUTHORIZE_URL = "https://auth.x.ai/oauth2/authorize"
 const TOKEN_URL = "https://auth.x.ai/oauth2/token"
 // RFC 8628 device authorization grant. Confirmed exposed by xAI's
 // /.well-known/openid-configuration as `device_authorization_endpoint`
@@ -30,49 +25,13 @@ const DEVICE_CODE_SLOW_DOWN_INCREMENT_MS = 5_000
 const DEVICE_CODE_DEFAULT_EXPIRES_MS = 5 * 60 * 1000
 const OAUTH_POLLING_SAFETY_MARGIN_MS = 3_000
 
-// xAI rejects redirect_uris that don't match what was registered for the
-// Grok-CLI client. The host:port pair is part of the registration, so we have
-// to bind the loopback server to this exact port.
-const OAUTH_HOST = "127.0.0.1"
-const OAUTH_PORT = 56121
-const OAUTH_REDIRECT_PATH = "/callback"
-const REDIRECT_URI = `http://${OAUTH_HOST}:${OAUTH_PORT}${OAUTH_REDIRECT_PATH}`
-
 // Refresh the access token a little before it actually expires so a single
 // long-running tool call doesn't have to recover from a mid-flight 401.
 const ACCESS_TOKEN_REFRESH_SKEW_MS = 120_000
 
 interface XaiAuthPluginOptions {
-  authorizeUrl?: string
   tokenUrl?: string
   deviceAuthorizationUrl?: string
-}
-
-interface PkceCodes {
-  verifier: string
-  challenge: string
-}
-
-async function generatePKCE(): Promise<PkceCodes> {
-  const verifier = generateRandomString(64)
-  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))
-  return { verifier, challenge: base64UrlEncode(hash) }
-}
-
-function generateRandomString(length: number): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~"
-  return Array.from(crypto.getRandomValues(new Uint8Array(length)))
-    .map((b) => chars[b % chars.length])
-    .join("")
-}
-
-function base64UrlEncode(buffer: ArrayBuffer): string {
-  const binary = String.fromCharCode(...new Uint8Array(buffer))
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "")
-}
-
-function generateState(): string {
-  return base64UrlEncode(crypto.getRandomValues(new Uint8Array(32)).buffer)
 }
 
 interface TokenResponse {
@@ -115,55 +74,6 @@ export function accessTokenIsExpiring(
   }
 }
 
-export function buildAuthorizeUrl(
-  pkce: PkceCodes,
-  state: string,
-  nonce: string,
-  options: XaiAuthPluginOptions = {},
-): string {
-  // `plan=generic` opts the consent screen into xAI's generic OAuth plan tier;
-  // without it, accounts.x.ai rejects loopback OAuth from non-allowlisted
-  // clients. `referrer=opencode` lets xAI attribute opencode-originated
-  // logins in their OAuth server logs (best-effort attribution while we
-  // continue to reuse the Grok-CLI client_id).
-  const params = new URLSearchParams({
-    response_type: "code",
-    client_id: CLIENT_ID,
-    redirect_uri: REDIRECT_URI,
-    scope: SCOPE,
-    code_challenge: pkce.challenge,
-    code_challenge_method: "S256",
-    state,
-    nonce,
-    plan: "generic",
-    referrer: "opencode",
-  })
-  return `${options.authorizeUrl ?? AUTHORIZE_URL}?${params.toString()}`
-}
-
-async function exchangeCodeForTokens(
-  code: string,
-  pkce: PkceCodes,
-  options: XaiAuthPluginOptions = {},
-): Promise<TokenResponse> {
-  const response = await fetch(options.tokenUrl ?? TOKEN_URL, {
-    method: "POST",
-    headers: authHeaders(),
-    body: new URLSearchParams({
-      grant_type: "authorization_code",
-      code,
-      redirect_uri: REDIRECT_URI,
-      client_id: CLIENT_ID,
-      code_verifier: pkce.verifier,
-    }).toString(),
-  })
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "")
-    throw new Error(`xAI token exchange failed (${response.status})${detail ? `: ${detail}` : ""}`)
-  }
-  return response.json() as Promise<TokenResponse>
-}
-
 async function refreshAccessToken(refreshToken: string, options: XaiAuthPluginOptions = {}): Promise<TokenResponse> {
   const response = await fetch(options.tokenUrl ?? TOKEN_URL, {
     method: "POST",
@@ -202,6 +112,7 @@ export async function requestDeviceCode(options: XaiAuthPluginOptions = {}): Pro
     body: new URLSearchParams({
       client_id: CLIENT_ID,
       scope: SCOPE,
+      referrer: "opencode",
     }).toString(),
   })
   if (!response.ok) {
@@ -283,170 +194,6 @@ export async function pollDeviceCodeToken(
     throw new Error(`xAI device token exchange failed (${response.status})${detail ? `: ${detail}` : ""}`)
   }
   throw new Error("xAI device authorization timed out")
-}
-
-// CORS allowlist for the loopback callback. The redirect_uri itself is
-// already bound to 127.0.0.1 and gated by PKCE+state, so we only accept
-// xAI's own auth origins for additional defense-in-depth on the OPTIONS
-// preflight.
-const CORS_ALLOWED_ORIGINS = new Set(["https://accounts.x.ai", "https://auth.x.ai"])
-
-interface PendingOAuth {
-  pkce: PkceCodes
-  state: string
-  resolve: (tokens: TokenResponse) => void
-  reject: (error: Error) => void
-}
-
-let oauthServer: ReturnType<typeof createServer> | undefined
-let pendingOAuth: PendingOAuth | undefined
-
-async function startOAuthServer(): Promise<{ port: number; redirectUri: string }> {
-  if (oauthServer) return { port: OAUTH_PORT, redirectUri: REDIRECT_URI }
-
-  const server = createServer((req, res) => {
-    const reqUrl = req.url || "/"
-    const url = new URL(reqUrl, `http://${OAUTH_HOST}:${OAUTH_PORT}`)
-
-    const origin = req.headers["origin"]
-    const allowOrigin = typeof origin === "string" && CORS_ALLOWED_ORIGINS.has(origin) ? origin : ""
-    if (allowOrigin) {
-      res.setHeader("Access-Control-Allow-Origin", allowOrigin)
-      res.setHeader("Access-Control-Allow-Methods", "GET, OPTIONS")
-      res.setHeader("Access-Control-Allow-Headers", "Content-Type")
-      res.setHeader("Access-Control-Allow-Private-Network", "true")
-      res.setHeader("Vary", "Origin")
-    }
-
-    if (req.method === "OPTIONS") {
-      res.writeHead(204)
-      res.end()
-      return
-    }
-
-    if (url.pathname === OAUTH_REDIRECT_PATH) {
-      const code = url.searchParams.get("code")
-      const state = url.searchParams.get("state")
-      const error = url.searchParams.get("error")
-      const errorDescription = url.searchParams.get("error_description")
-
-      if (error) {
-        const errorMsg = errorDescription || error
-        pendingOAuth?.reject(new Error(errorMsg))
-        pendingOAuth = undefined
-        res.writeHead(200, { "Content-Type": "text/html" })
-        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
-        return
-      }
-
-      if (!code) {
-        const errorMsg = "Missing authorization code"
-        pendingOAuth?.reject(new Error(errorMsg))
-        pendingOAuth = undefined
-        res.writeHead(400, { "Content-Type": "text/html" })
-        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
-        return
-      }
-
-      if (!pendingOAuth || state !== pendingOAuth.state) {
-        const errorMsg = "Invalid state - potential CSRF attack"
-        pendingOAuth?.reject(new Error(errorMsg))
-        pendingOAuth = undefined
-        res.writeHead(400, { "Content-Type": "text/html" })
-        res.end(OauthCallbackPage.error(errorMsg, { provider: "xAI" }))
-        return
-      }
-
-      const current = pendingOAuth
-      pendingOAuth = undefined
-
-      exchangeCodeForTokens(code, current.pkce)
-        .then((tokens) => current.resolve(tokens))
-        .catch((err) => current.reject(err))
-
-      res.writeHead(200, { "Content-Type": "text/html" })
-      res.end(OauthCallbackPage.success({ provider: "xAI" }))
-      return
-    }
-
-    if (url.pathname === "/cancel") {
-      pendingOAuth?.reject(new Error("Login cancelled"))
-      pendingOAuth = undefined
-      res.writeHead(200)
-      res.end("Login cancelled")
-      return
-    }
-
-    res.writeHead(404)
-    res.end("Not found")
-  })
-
-  // listen() failures (e.g. EADDRINUSE because Grok-CLI is bound to the same
-  // pinned port) must clear `oauthServer` and remove our error listener,
-  // otherwise the next startOAuthServer() short-circuits on the truthy check
-  // and returns a redirect_uri pointing at nothing.
-  await new Promise<void>((resolve, reject) => {
-    const onError = (err: Error) => {
-      oauthServer = undefined
-      reject(err)
-    }
-    server.once("error", onError)
-    server.listen(OAUTH_PORT, OAUTH_HOST, () => {
-      server.removeListener("error", onError)
-      // After listen() succeeds, install a permanent log-only listener so
-      // that subsequent server errors (e.g. accept() failures, socket-level
-      // errors) don't trip Node's default "unhandled error event = throw"
-      // behavior and crash the entire opencode process. Matches the silent-
-      // swallow behavior the Codex plugin gets from its permanent
-      // `oauthServer!.on("error", reject)`.
-      resolve()
-    })
-    oauthServer = server
-  })
-
-  return { port: OAUTH_PORT, redirectUri: REDIRECT_URI }
-}
-
-function stopOAuthServer() {
-  if (oauthServer) {
-    oauthServer.close()
-    oauthServer = undefined
-  }
-}
-
-function waitForOAuthCallback(pkce: PkceCodes, state: string): Promise<TokenResponse> {
-  // A previous in-flight authorize() that the user abandoned (or that is
-  // being superseded by a fresh attempt) still owns `pendingOAuth`. Reject
-  // it eagerly so its caller stops waiting on a state value that can never
-  // match the next callback.
-  if (pendingOAuth) {
-    pendingOAuth.reject(new Error("Superseded by a newer xAI authorize request"))
-    pendingOAuth = undefined
-  }
-  return new Promise((resolve, reject) => {
-    const timeout = setTimeout(
-      () => {
-        if (pendingOAuth) {
-          pendingOAuth = undefined
-          reject(new Error("OAuth callback timeout - authorization took too long"))
-        }
-      },
-      5 * 60 * 1000,
-    )
-
-    pendingOAuth = {
-      pkce,
-      state,
-      resolve: (tokens) => {
-        clearTimeout(timeout)
-        resolve(tokens)
-      },
-      reject: (error) => {
-        clearTimeout(timeout)
-        reject(error)
-      },
-    }
-  })
 }
 
 interface RefreshResult {
@@ -549,40 +296,6 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
       },
       methods: [
         {
-          label: "xAI Grok OAuth (SuperGrok Subscription)",
-          type: "oauth",
-          authorize: async () => {
-            await startOAuthServer()
-            const pkce = await generatePKCE()
-            const state = generateState()
-            const nonce = generateState()
-            const authUrl = buildAuthorizeUrl(pkce, state, nonce, options)
-
-            const callbackPromise = waitForOAuthCallback(pkce, state)
-
-            return {
-              url: authUrl,
-              instructions: "Complete authorization in your browser. This window will close automatically.",
-              method: "auto" as const,
-              callback: async () => {
-                try {
-                  const tokens = await callbackPromise
-                  return {
-                    type: "success" as const,
-                    refresh: tokens.refresh_token,
-                    access: tokens.access_token,
-                    expires: Date.now() + (tokens.expires_in ?? 3600) * 1000,
-                  }
-                } catch (err) {
-                  return { type: "failed" as const }
-                } finally {
-                  stopOAuthServer()
-                }
-              },
-            }
-          },
-        },
-        {
           // RFC 8628 device-code flow. The CLI prints a verification URL
           // and a short user_code that the user enters in a browser on
           // any device. No loopback callback server runs on the CLI host,
@@ -591,7 +304,7 @@ export async function XaiAuthPlugin(input: PluginInput, options: XaiAuthPluginOp
           // user's browser. Defends the only attack surface (the polling
           // loop) with the standard authorization_pending / slow_down
           // backoff and a hard deadline from xAI's `expires_in`.
-          label: "xAI Grok OAuth (Headless / Remote / VPS)",
+          label: "SuperGrok Subscription",
           type: "oauth",
           authorize: async () => {
             const device = await requestDeviceCode(options)

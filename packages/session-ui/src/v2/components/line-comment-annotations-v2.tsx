@@ -151,7 +151,10 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
               }
             : undefined
         },
-        onMouseEnter: () => note.hoverComment(comment.selection),
+        onMouseEnter: () => {
+          if (note.commenting()) return
+          note.hoverComment(comment.selection)
+        },
         onClick: () => {
           if (note.isEditing(comment.id)) return
           note.toggleComment(comment.id, comment.selection)
@@ -164,10 +167,14 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
       },
       selection: formatSelectedLineLabel(range, i18n.t),
       onInput: note.setDraft,
-      onCancel: note.cancelDraft,
+      onCancel: () => {
+        note.cancelDraft()
+        note.select(null)
+      },
       onSubmit: (comment) => {
         props.onSubmit({ comment, selection: cloneSelectedLineRange(range) })
         note.cancelDraft()
+        note.select(null)
       },
       cancelLabel: i18n.t("ui.lineComment.cancel"),
       submitLabel: i18n.t("ui.lineComment.submit"),

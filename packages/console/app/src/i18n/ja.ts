@@ -3,6 +3,11 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.promo.spaceBunny": "新しい匿名モデル Space Bunny Free が期間限定で利用可能です",
+  "go.referral.ended.label": "警告",
+  "go.referral.ended":
+    "紹介プログラムは終了しました。紹介リンクを使っても、あなたや共有した人にクレジットは付与されません。",
+  "go.graph.bonus": "利用枠{{count}}倍",
   "nav.github": "GitHub",
   "nav.docs": "ドキュメント",
   "nav.changelog": "変更履歴",
@@ -58,6 +63,7 @@ export const dict = {
   "common.cancel": "キャンセル",
   "common.creating": "作成中...",
   "common.create": "作成",
+  "common.contactUs": "お問い合わせ",
 
   "common.videoUnsupported": "お使いのブラウザは video タグをサポートしていません。",
   "common.figure": "図 {{n}}.",
@@ -224,6 +230,9 @@ export const dict = {
   "zen.faq.q8": "他のコーディングエージェントでもZenを使えますか？",
   "zen.faq.a8":
     "ZenはOpenCodeとの相性が良いですが、どのエージェントでもZenを利用できます。お使いのコーディングエージェントのセットアップ手順に従ってください。",
+  "zen.faq.q9": "返金を受けられますか？",
+  "zen.faq.a9":
+    "請求から14日以内で、その購入分のクレジットを一切使用していない場合、返金の対象となる可能性があります。返金を希望する場合は、{{contact}}ください。",
 
   "zen.cta.start": "Zenをはじめる",
   "zen.pricing.title": "$20の従量課金制残高を追加",
@@ -253,10 +262,10 @@ export const dict = {
   "zen.privacy.exceptionsLink": "以下の例外",
 
   "go.title": "OpenCode Go | すべての人のための低価格なコーディングモデル",
-  "go.banner.text": "Kimi K3の利用上限が期間限定で2倍に",
   "go.meta.description":
-    "Goは最初の月$5、その後$10/月で、Grok 4.5、GLM-5.2、GLM-5.1、Kimi K3、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro、DeepSeek V4 Flashに対して5時間のゆとりあるリクエスト上限があります。",
+    "Goは月額$10で、主要なコーディングモデルへのゆとりある利用上限と安定したアクセスを提供します。",
   "go.hero.title": "すべての人のための低価格なコーディングモデル",
+  "go.hero.tagline": "どのエージェントでも利用できます。必要に応じてクレジットをチャージ。いつでもキャンセル可能。",
   "go.hero.body":
     "Goは、世界中のプログラマーにエージェント型コーディングをもたらします。最も高性能なオープンソースモデルへの十分な制限と安定したアクセスを提供し、コストや可用性を気にすることなく強力なエージェントで構築できます。",
 
@@ -264,13 +273,34 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Goを購読する",
   "go.cta.price": "$10/月",
-  "go.cta.promo": "初月 $5",
+  "go.plans.month": "/月",
+  "go.plans.plus.cta": "Go Plus に登録",
+  "go.plans.plus.description": "Go Plus は月額$40で、より高い利用枠を提供します。",
+  "go.plans.go.feature1": "厳選された手頃なモデル",
+  "go.plans.go.feature2": "エージェント型コーディングで検証済み",
+  "go.plans.go.feature3": "十分な利用枠と安定したアクセス",
+  "go.plans.plus.feature1": "Go のすべての特典を含む",
+  "go.plans.plus.feature2": "より高い利用枠で、長時間のコーディングに集中",
+  "go.plans.plus.feature3": "大規模で高度なプロジェクト向け",
+  "go.plans.limits": "利用枠",
+  "go.plans.description": "モデル別の5時間あたりの推定リクエスト数と月間利用枠",
+  "go.plans.legend": "プラン",
   "go.pricing.body":
-    "どのエージェントでも使えます。最初の月$5、その後$10/月。必要に応じてクレジットを追加。いつでもキャンセルできます。",
+    "どのエージェントでも使えます。月額$10。必要に応じてクレジットを追加。いつでもキャンセルできます。",
   "go.graph.free": "無料",
   "go.graph.freePill": "Big Pickleと無料モデル",
   "go.graph.go": "Go",
   "go.graph.label": "5時間あたりのリクエスト数",
+  "go.graph.period": "利用枠",
+  "go.graph.model": "モデル",
+  "go.graph.requests": "推定リクエスト数 / 5時間",
+  "go.graph.allowance": "月間利用枠",
+  "go.graph.new": "新着",
+  "go.graph.scale": "リクエスト数は非線形目盛りで表示",
+  "go.graph.showAll": "全{{count}}モデルを表示",
+  "go.graph.showLess": "折りたたむ",
+  "go.graph.limitedRegions": "一部の地域に限定",
+  "go.graph.limitedTime": "期間限定",
   "go.graph.usageLimits": "利用制限",
   "go.graph.aria": "5時間あたりのリクエスト数: {{free}} 対 {{go}}",
 
@@ -298,21 +328,20 @@ export const dict = {
   "go.testimonials.frank.quote": "まだNvidiaにいられたらよかったのに。",
   "go.problem.title": "Goはどのような問題を解決していますか？",
   "go.problem.body":
-    "私たちはOpenCodeの体験をできるだけ多くの人に届けることに注力しています。OpenCode Goは低価格のサブスクリプションで、最初の月は$5、その後は$10/月です。ゆとりある上限と、最も高性能なオープンソースモデルへの信頼できるアクセスを提供します。",
+    "私たちはOpenCodeの体験をできるだけ多くの人に届けることに注力しています。OpenCode Goは月額$10の低価格なサブスクリプションです。ゆとりある上限と、最も高性能なオープンソースモデルへの信頼できるアクセスを提供します。",
   "go.problem.subtitle": " ",
   "go.problem.item1": "低価格なサブスクリプション料金",
   "go.problem.item2": "十分な制限と安定したアクセス",
   "go.problem.item3": "できるだけ多くのプログラマーのために構築",
-  "go.problem.item4":
-    "Grok 4.5、GLM-5.2、GLM-5.1、Kimi K3、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro、DeepSeek V4 Flashを含む",
+  "go.problem.item4": "エージェント型コーディング向けにテストされた厳選モデルラインナップ",
   "go.how.title": "Goの仕組み",
-  "go.how.body": "Goは最初の月$5、その後$10/月で始まります。OpenCodeまたは任意のエージェントで使えます。",
+  "go.how.body": "Goは月額$10です。OpenCodeまたは任意のエージェントで使えます。",
   "go.how.step1.title": "アカウントを作成",
   "go.how.step1.beforeLink": "",
   "go.how.step1.link": "セットアップ手順はこちら",
   "go.how.step2.title": "Goを購読する",
-  "go.how.step2.link": "最初の月$5",
-  "go.how.step2.afterLink": "その後$10/月、ゆとりある上限付き",
+  "go.how.step2.link": "月額$10",
+  "go.how.step2.afterLink": "ゆとりある上限付き",
   "go.how.step3.title": "コーディングを開始",
   "go.how.step3.body": "オープンソースモデルへの安定したアクセスで",
   "go.privacy.title": "あなたのプライバシーは私たちにとって重要です",
@@ -329,17 +358,31 @@ export const dict = {
   "go.faq.a2": "Go には、十分な利用上限と安定したアクセスを備えた、以下のモデルが含まれます。",
   "go.faq.q3": "GoはZenと同じですか？",
   "go.faq.a3":
-    "いいえ。Zenは従量課金制ですが、Goは最初の月$5、その後$10/月で始まり、Grok 4.5、GLM-5.2、GLM-5.1、Kimi K3、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro、DeepSeek V4 Flashのオープンソースモデルに対して、ゆとりある上限と信頼できるアクセスを提供します。",
+    "いいえ。Zenは従量課金制ですが、Goは月額$10で、厳選されたモデルラインナップへのゆとりある上限と安定したアクセスを提供します。",
   "go.faq.q4": "Goの料金は？",
   "go.faq.a4.p1.beforePricing": "Goは",
-  "go.faq.a4.p1.pricingLink": "最初の月$5",
-  "go.faq.a4.p1.afterPricing": "その後$10/月、ゆとりある上限付き。",
+  "go.faq.a4.p1.pricingLink": "月額$10",
+  "go.faq.a4.p1.afterPricing": "ゆとりある上限付き。",
   "go.faq.a4.p2.beforeAccount": "管理画面：",
   "go.faq.a4.p2.accountLink": "アカウント",
   "go.faq.a4.p3": "いつでもキャンセル可能です。",
   "go.faq.q5": "データとプライバシーは？",
-  "go.faq.a5.body":
-    "このプランは主に海外ユーザー向けに設計されており、米国、EU、シンガポールでホストされたモデルにより安定したグローバルアクセスを提供します。プロバイダーはゼロ保持ポリシーに従い、お客様のデータをモデルのトレーニングに使用しません。",
+  "go.faq.a5.model": "モデル",
+  "go.faq.a5.training": "モデルのトレーニング",
+  "go.faq.a5.retention": "データ保持",
+  "go.faq.a5.retention30": "30日",
+  "go.faq.a5.retention0": "0日",
+  "go.faq.a5.used": "使用あり",
+  "go.faq.a5.notUsed": "使用なし",
+  "go.faq.a5.noAgreement": "契約なし",
+  "go.faq.a5.notZdr": "ZDRではない",
+  "go.faq.a5.grokRetention":
+    "ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。",
+  "go.faq.a5.gptRetention": "不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。",
+  "go.faq.a5.museRetention":
+    "将来のMetaモデルのトレーニングにプロンプトと生成結果を使用する許可と引き換えに、トークン料金が大幅に割引されます。",
+  "go.faq.a5.learnMore": "詳しく見る",
+  "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年9月30日まで有効です。",
   "go.faq.a5.beforeExceptions":
     "Goのモデルは米国でホストされています。プロバイダーはゼロ保持ポリシーに従い、モデルのトレーニングにデータを使用しません（",
   "go.faq.a5.exceptionsLink": "以下の例外",
@@ -353,7 +396,10 @@ export const dict = {
 
   "go.faq.q9": "無料モデルとGoの違いは何ですか？",
   "go.faq.a9":
-    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。GoにはGrok 4.5、GLM-5.2、GLM-5.1、Kimi K3、Kimi K2.7 Code、Kimi K2.6、MiMo-V2.5-Pro、MiMo-V2.5、Qwen3.7 Max、Qwen3.7 Plus、Qwen3.6 Plus、MiniMax M2.7、MiniMax M3、DeepSeek V4 Pro、DeepSeek V4 Flashが含まれ、ローリングウィンドウ（5時間、週間、月間）全体でより高いリクエスト制限が適用されます。これは概算で5時間あたり$12、週間$30、月間$60相当です（実際のリクエスト数はモデルと使用状況により異なります）。",
+    "無料モデルにはBig Pickleと、その時点で利用可能なプロモーションモデルが含まれ、1日200リクエストの制限があります。Goでは厳選されたモデルラインナップを利用でき、ローリングウィンドウで月間利用枠の20%を5時間ごと、50%を週ごと、100%を月ごとの上限として適用します。モデル別の利用枠は異なる場合があります（実際のリクエスト数はモデルと使用状況により異なります）。",
+  "go.faq.q10": "返金を受けられますか？",
+  "go.faq.a10":
+    "請求から14日以内で、その請求期間中にGoの利用枠を一切使用していない場合、返金の対象となる可能性があります。返金を希望する場合は、{{contact}}ください。",
 
   "zen.api.error.rateLimitExceeded": "レート制限を超えました。後でもう一度お試しください。",
   "zen.api.error.modelNotSupported": "モデル {{model}} はサポートされていません",
@@ -379,7 +425,10 @@ export const dict = {
     "月額の利用上限 ${{amount}} に達しました。こちらから上限を管理してください: {{membersUrl}}",
   "zen.api.error.modelDisabled": "モデルが無効です",
   "zen.api.error.regionNotAllowed":
-    "このモデルは中国でホストされています。このモデルを使用したい場合は、設定で有効にしてください: {{consoleGoUrl}}",
+    "このモデルの最新バージョンは中国でのみホスト提供されており、利用するには明示的なオプトインが必要です: {{consoleGoUrl}}",
+  "zen.api.error.countryNotAllowed": "このモデルはお住まいの国では利用できません。",
+  "zen.api.error.trainingNotAllowed":
+    "このモデルは品質向上のためのデータを収集します。利用するには明示的な同意が必要です: {{consoleGoUrl}}",
   "zen.api.error.trialEnded":
     "{{model}} の無料プロモーションは終了しました。OpenCode Go を購読するとモデルを引き続き使用できます - {{link}}",
 
@@ -615,7 +664,6 @@ export const dict = {
   "workspace.payments.type.subscription": "サブスクリプション",
   "workspace.payments.view": "表示",
 
-  "workspace.black.loading": "読み込み中...",
   "workspace.black.time.day": "日",
   "workspace.black.time.days": "日",
   "workspace.black.time.hour": "時間",
@@ -625,7 +673,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "数秒",
   "workspace.black.subscription.title": "サブスクリプション",
   "workspace.black.subscription.message": "あなたは OpenCode Black を月額 ${{plan}} で購読しています。",
-  "workspace.black.subscription.manage": "サブスクリプションの管理",
+  "workspace.black.subscription.ending":
+    "OpenCode Black は現在の請求期間の終了とともに終了し、更新されません。新しいコンソールへ移行いたします。",
   "workspace.black.subscription.rollingUsage": "5時間利用",
   "workspace.black.subscription.weeklyUsage": "週間利用量",
   "workspace.black.subscription.resetsIn": "リセットまで",
@@ -653,26 +702,35 @@ export const dict = {
   "workspace.lite.time.fewSeconds": "数秒",
   "workspace.lite.subscription.message": "あなたは OpenCode Go を購読しています。",
   "workspace.lite.subscription.manage": "サブスクリプションの管理",
-  "workspace.lite.subscription.rollingUsage": "ローリング利用量",
+  "workspace.lite.subscription.rollingUsage": "5時間利用量",
+  "workspace.lite.subscription.rollingQuota": "5時間上限",
   "workspace.lite.subscription.weeklyUsage": "週間利用量",
+  "workspace.lite.subscription.weeklyQuota": "週間上限",
   "workspace.lite.subscription.monthlyUsage": "月間利用量",
+  "workspace.lite.subscription.monthlyQuota": "月間上限",
   "workspace.lite.subscription.resetsIn": "リセットまで",
+  "workspace.lite.subscription.showDetails": "詳細を表示",
+  "workspace.lite.subscription.hideDetails": "詳細を非表示",
+  "workspace.lite.subscription.model": "モデル",
+  "workspace.lite.subscription.contribution": "%",
+  "workspace.lite.subscription.total": "合計",
   "workspace.lite.subscription.useBalance": "利用限度額に達したら利用可能な残高を使用する",
   "workspace.lite.subscription.selectProvider":
     "Go モデルを使用するには、opencode の設定で「OpenCode Go」をプロバイダーとして選択してください。",
   "workspace.lite.providers.title": "プロバイダー",
   "workspace.lite.providers.description": "ルーティングに使用するプロバイダーを管理します。",
+  "workspace.lite.providers.allowTraining": "リクエストデータを学習に使用するモデルを許可",
   "workspace.lite.providers.useChina": "中国でホストされているモデルを有効にする",
   "workspace.lite.black.message":
     "現在 OpenCode Black を購読中、またはウェイティングリストに登録されています。Go に切り替える場合は、先に登録を解除してください。",
   "workspace.lite.other.message":
     "このワークスペースの別のメンバーが既に OpenCode Go を購読しています。ワークスペースにつき1人のメンバーのみが購読できます。",
   "workspace.lite.promo.description":
-    "OpenCode Goは{{price}}で始まり、その後は$10/月で、人気の高いオープンコーディングモデルへの安定したアクセスと余裕のある利用枠を提供します。",
-  "workspace.lite.promo.price": "初月$5",
+    "OpenCode Goは{{price}}で、人気の高いオープンコーディングモデルへの安定したアクセスと余裕のある利用枠を提供します。",
+  "workspace.lite.promo.price": "$10/月",
   "workspace.lite.promo.modelsTitle": "含まれるもの",
   "workspace.lite.promo.footer":
-    "このプランは主にグローバルユーザー向けに設計されており、米国、EU、シンガポールでホストされたモデルにより安定したグローバルアクセスを提供します。料金と利用制限は、初期の利用状況やフィードバックに基づいて変更される可能性があります。",
+    "このプランは主に海外のユーザー向けに設計されており、世界中から安定してご利用いただけます。料金と利用上限は、初期の利用状況やフィードバックを踏まえて変更される場合があります。",
   "workspace.lite.promo.subscribe": "Goを購読する",
   "workspace.lite.promo.subscribing": "リダイレクト中...",
   "workspace.lite.promo.otherMethods": "その他の支払い方法",

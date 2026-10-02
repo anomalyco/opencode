@@ -1,17 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode-ai/stats-core",
-  "version": "1.18.4",
+  "version": "1.18.34",
   "private": true,
   "type": "module",
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
-    "./athena": "./src/athena.ts",
     "./config": "./src/config.ts",
     "./database": "./src/database.ts",
     "./database/*": "./src/database/*.ts",
     "./domain/*": "./src/domain/*.ts",
+    "./r2-sql": "./src/r2-sql.ts",
     "./runtime": "./src/runtime.ts",
     "./stat-sync": "./src/stat-sync.ts"
   },
@@ -26,7 +26,6 @@
     "typecheck": "tsgo --noEmit"
   },
   "dependencies": {
-    "@aws-sdk/client-athena": "3.933.0",
     "@planetscale/database": "1.19.0",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",

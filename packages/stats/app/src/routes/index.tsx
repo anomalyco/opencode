@@ -1,21 +1,11 @@
-import { Link, Meta, Title } from "@solidjs/meta"
+import { Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode-ai/ui/provider-icon"
-import { geoEquirectangular, geoPath } from "d3-geo"
 import { scaleSqrt } from "d3-scale"
 import countryCodesSource from "i18n-iso-countries/codes.json?raw"
-import { feature, mesh } from "topojson-client"
-import countriesTopologySource from "world-atlas/countries-50m.json?raw"
-import ibmPlexMonoRegularLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Regular-Latin1.woff2?url"
-import ibmPlexMonoMediumLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Medium-Latin1.woff2?url"
-import ibmPlexMonoSemiBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-SemiBold-Latin1.woff2?url"
-import ibmPlexMonoBoldLatin1 from "@ibm/plex/IBM-Plex-Mono/fonts/split/woff2/IBMPlexMono-Bold-Latin1.woff2?url"
 import {
-  getStatsHomeData,
   type CacheRatioEntry,
   type CountryEntry,
-  type LeaderboardEntry,
   type MarketDay,
-  type StatsHomeData,
   type SessionCostEntry,
   type TokenCostEntry,
   type UsagePoint,
@@ -23,14 +13,17 @@ import {
 import { createAsync, query } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
-import type { FeatureCollection, GeometryObject, GeoJsonProperties } from "geojson"
-import type { GeometryCollection, Topology } from "topojson-specification"
-import { runStatsEffect } from "../stats-runtime"
+import { FormatLinks, JsonLd, LastModified, openCodeOrganization } from "../component/agent-meta"
+import { ChartDataTable } from "../component/chart-data-table"
 import { LocaleLinks } from "../component/locale-links"
 import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
-import { localizedUrl } from "../lib/language"
-import { findModelCatalogEntry, getModelCatalog, type ModelCatalog } from "./model-catalog"
+import { isoDay } from "../lib/format"
+import { jsonUrl, localizedUrl, markdownUrl } from "../lib/language"
+import { methodologyItems } from "../lib/methodology"
+import { loadHomePage, type HomePageData } from "../lib/page-data"
+import { homeSummary } from "../lib/summaries"
+import { formatCatalogLabName, isKnownCatalogLab } from "./model-catalog"
 import { SectionHeading } from "./section-heading"
 import { setStatsPageCacheHeaders } from "./stats-cache"
 import { ComparisonCardsSection, uniqueComparisonPairs, type ComparisonModelRef } from "./compare-cards"
@@ -45,9 +38,6 @@ import {
   type ThemePreference,
 } from "./stats-shell"
 
-const products = ["All Users", "Zen", "Go"] as const
-const tokenProducts = ["Zen", "Go"] as const
-const ranges = ["1D", "1W", "2W", "1M", "2M"] as const
 const comparisonPairIndexes = [
   [0, 1, "Top two by recent usage"],
   [0, 2, "Leader vs challenger"],
@@ -69,60 +59,19 @@ const usageColors = [
   "#ff6467",
 ]
 const marketColors = ["#ed6aff", "#a684ff", "#7c86ff", "#51a2ff", "#00d3f2", "#00d5be", "#00bc7d", "#9ae600", "#ffb900"]
-const geoMapWidth = 960
-const geoMapHeight = 430
 
-type UsageProduct = (typeof products)[number]
-type TokenProduct = (typeof tokenProducts)[number]
-type UsageRange = (typeof ranges)[number]
+type UsageRange = "1D" | "1W" | "2W" | "1M" | "2M"
 type IsoCountryCode = readonly [string, string, string]
-type WorldCountryProperties = GeoJsonProperties & { name?: string }
-type WorldTopology = Topology<{ countries: GeometryCollection<WorldCountryProperties> }>
-
-function productLabel(product: UsageProduct | TokenProduct, i18n: ReturnType<typeof useI18n>) {
-  if (product === "All Users") return i18n.t("product.allUsers")
-  if (product === "Zen") return i18n.t("product.zen")
-  return i18n.t("product.go")
-}
-
-function rangeLabel(range: UsageRange, i18n: ReturnType<typeof useI18n>) {
-  if (range === "1D") return i18n.t("range.1D")
-  if (range === "1W") return i18n.t("range.1W")
-  if (range === "2W") return i18n.t("range.2W")
-  if (range === "1M") return i18n.t("range.1M")
-  return i18n.t("range.2M")
-}
+type HomeLeaderboardEntry = HomePageData["leaderboard"]["weekly"][number]
+type HomeRetentionEntry = HomePageData["retention"][number]
 
 const countryNumericIds = new Map(
   (JSON.parse(countryCodesSource) as IsoCountryCode[]).map((country) => [country[0], country[2]] as const),
 )
-const worldTopology = JSON.parse(countriesTopologySource) as WorldTopology
-const worldCountryGeometries: GeometryCollection<WorldCountryProperties> = {
-  ...worldTopology.objects.countries,
-  geometries: worldTopology.objects.countries.geometries.filter((country) => String(country.id ?? "") !== "010"),
-}
-const worldCountries = feature<WorldCountryProperties>(worldTopology, worldCountryGeometries) as FeatureCollection<
-  GeometryObject,
-  WorldCountryProperties
->
-const worldProjection = geoEquirectangular().fitExtent(
-  [
-    [10, 12],
-    [geoMapWidth - 10, geoMapHeight - 12],
-  ],
-  worldCountries,
-)
-const worldPath = geoPath(worldProjection)
-const worldCountryPaths = worldCountries.features.map((country) => ({
-  id: String(country.id ?? "").padStart(3, "0"),
-  path: worldPath(country) ?? "",
-  marker: geoCountryMarker(country),
-}))
-const worldBorderPath = worldPath(mesh(worldTopology, worldCountryGeometries, (a, b) => a !== b)) ?? ""
 
 const getData = query(async () => {
   "use server"
-  return runStatsEffect(getStatsHomeData())
+  return loadHomePage()
 }, "getStatsHomeData")
 
 export default function StatsHome() {
@@ -133,7 +82,6 @@ export default function StatsHome() {
   const statsHomeUrl = localizedUrl(language.locale(), "/data/")
   const statsUnfurlUrl = new URL(statsUnfurlPath, localizedUrl("en", "/data/")).toString()
   const data = createAsync(() => getData())
-  const catalog = createAsync(() => getModelCatalog())
   const githubStars = createAsync(() => getGitHubStars())
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const updateThemePreference = (preference: ThemePreference) => {
@@ -153,44 +101,63 @@ export default function StatsHome() {
 
   return (
     <main data-page="stats" data-theme={themePreference()}>
-      <Title>{i18n.t("app.title")}</Title>
-      <Meta name="description" content={i18n.t("app.description")} />
-      <LocaleLinks path="/data/" />
-      <Meta property="og:type" content="website" />
-      <Meta property="og:site_name" content="OpenCode" />
-      <Meta property="og:title" content={i18n.t("app.title")} />
-      <Meta property="og:description" content={i18n.t("app.description")} />
-      <Meta property="og:url" content={statsHomeUrl} />
-      <Meta property="og:image" content={statsUnfurlUrl} />
-      <Meta property="og:image:type" content="image/jpeg" />
-      <Meta property="og:image:width" content="1200" />
-      <Meta property="og:image:height" content="630" />
-      <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
-      <Meta name="twitter:card" content="summary_large_image" />
-      <Meta name="twitter:title" content={i18n.t("app.title")} />
-      <Meta name="twitter:description" content={i18n.t("app.description")} />
-      <Meta name="twitter:image" content={statsUnfurlUrl} />
-      <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
-      <Link rel="preload" href={ibmPlexMonoRegularLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
-      <Link rel="preload" href={ibmPlexMonoMediumLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
-      <Link rel="preload" href={ibmPlexMonoSemiBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
-      <Link rel="preload" href={ibmPlexMonoBoldLatin1} as="font" type="font/woff2" crossorigin="anonymous" />
+      {/* Server-rendered head tags are never removed, so render them once data has loaded. */}
+      <Show when={data()}>
+        {(stats) => (
+          <>
+            <Title>{i18n.t("app.title")}</Title>
+            <Meta name="description" content={homeSummary(language.locale(), stats()) ?? i18n.t("app.description")} />
+            <LocaleLinks path="/data/" />
+            <FormatLinks path="/data/" />
+            <LastModified value={stats().updatedAt} />
+            <Meta property="og:type" content="website" />
+            <Meta property="og:site_name" content="OpenCode" />
+            <Meta property="og:title" content={i18n.t("app.title")} />
+            <Meta property="og:description" content={i18n.t("app.description")} />
+            <Meta property="og:url" content={statsHomeUrl} />
+            <Meta property="og:image" content={statsUnfurlUrl} />
+            <Meta property="og:image:type" content="image/jpeg" />
+            <Meta property="og:image:width" content="1200" />
+            <Meta property="og:image:height" content="630" />
+            <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
+            <Meta name="twitter:card" content="summary_large_image" />
+            <Meta name="twitter:title" content={i18n.t("app.title")} />
+            <Meta name="twitter:description" content={i18n.t("app.description")} />
+            <Meta name="twitter:image" content={statsUnfurlUrl} />
+            <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+            <JsonLd
+              data={homeStructuredData(stats(), {
+                name: i18n.t("app.title"),
+                description: homeSummary(language.locale(), stats()) ?? i18n.t("app.description"),
+                url: statsHomeUrl,
+                localizedUrl: (path) => localizedUrl(language.locale(), path),
+              })}
+            />
+          </>
+        )}
+      </Show>
       <Header githubStars={githubStars() ?? githubLink.fallbackStars} />
       <div data-component="container">
         <div data-component="content">
           <Show when={data()} fallback={<StatsLoading />}>
             {(stats) => (
               <>
-                <Hero updatedAt={stats().updatedAt} />
-                <TopModelsSection data={stats().usage} leaderboard={stats().leaderboard} />
+                <Hero updatedAt={stats().updatedAt} summary={homeSummary(language.locale(), stats())} />
+                <TopModelsSection
+                  data={stats().usage}
+                  leaderboard={stats().leaderboard}
+                  catalogLabs={stats().catalogLabs}
+                />
                 <UniqueUsersSection data={stats().users} />
+                <RetentionSection data={stats().retention} />
                 <SessionCostSection data={stats().sessionCost} />
-                <TokenCostSection data={stats().tokenCost} catalog={catalog() ?? null} />
+                <TokenCostSection data={stats().tokenCost} />
                 <CacheRatioSection data={stats().cacheRatio} />
-                <MarketShareSection data={stats().market} />
+                <MarketShareSection data={stats().market} labPaths={stats().labPaths} />
                 <GeoBreakdownSection data={stats().country} />
+                <MethodologySection />
                 <ComparisonCardsSection
-                  pairs={homeComparisonPairs(stats().leaderboard["All Users"]["2M"])}
+                  pairs={homeComparisonPairs(stats().leaderboard.weekly, stats().catalogLabs)}
                   title="Model Comparisons"
                   description="Popular model pairs from the leaderboard."
                   variant="featured"
@@ -209,7 +176,7 @@ export default function StatsHome() {
   )
 }
 
-function Hero(props: { updatedAt: string | null }) {
+function Hero(props: { updatedAt: string | null; summary?: string }) {
   const i18n = useI18n()
   const language = useLanguage()
   const [timeZone, setTimeZone] = createSignal("UTC")
@@ -256,7 +223,14 @@ function Hero(props: { updatedAt: string | null }) {
 
   return (
     <section data-section="hero">
-      <p data-slot="hero-meta" aria-live="polite" aria-atomic="true" aria-label={currentUpdatedLabel()}>
+      <p data-slot="hero-meta" role="status" aria-atomic="true">
+        <Show when={props.updatedAt} fallback={<span data-slot="visually-hidden">{currentUpdatedLabel()}</span>}>
+          {(updatedAt) => (
+            <time data-slot="visually-hidden" datetime={updatedAt()}>
+              {currentUpdatedLabel()}
+            </time>
+          )}
+        </Show>
         <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
           <path
             fill-rule="evenodd"
@@ -296,6 +270,7 @@ function Hero(props: { updatedAt: string | null }) {
           </a>
         </h1>
         <p data-slot="hero-copy">{i18n.t("home.heroCopy")}</p>
+        <Show when={props.summary}>{(summary) => <p data-slot="visually-hidden">{summary()}</p>}</Show>
       </div>
     </section>
   )
@@ -353,7 +328,7 @@ function ChartSection(props: {
   )
 }
 
-function SectionTitle(props: { id: string; title: string; description: string }) {
+function SectionTitle(props: { id: string; title: string; description?: string }) {
   return <SectionHeading href={`#${props.id}`} title={props.title} description={props.description} />
 }
 
@@ -401,235 +376,71 @@ function formatUpdatedAtLabel(value: { date: string; time: string }) {
   return `${value.date}, ${value.time}`
 }
 
-function TopModelsSection(props: { data: StatsHomeData["usage"]; leaderboard: StatsHomeData["leaderboard"] }) {
+function TopModelsSection(props: {
+  data: UsagePoint[]
+  leaderboard: HomePageData["leaderboard"]
+  catalogLabs: readonly string[]
+}) {
   const i18n = useI18n()
-  const [product, setProduct] = createSignal<UsageProduct>("Go")
-  const [range, setRange] = createSignal<UsageRange>("2M")
-  const [sheet, setSheet] = createSignal<"product" | "range">()
   const [activeModel, setActiveModel] = createSignal<string>()
-  const data = createMemo(() => props.data[product()][range()])
-  const leaderboard = createMemo(() => props.leaderboard[product()][range()])
-
-  createEffect(() => {
-    if (!sheet()) return
-    if (typeof document === "undefined") return
-    const htmlOverflow = document.documentElement.style.overflow
-    const bodyOverflow = document.body.style.overflow
-    document.documentElement.style.overflow = "hidden"
-    document.body.style.overflow = "hidden"
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSheet(undefined)
-    }
-    document.addEventListener("keydown", onKeyDown)
-    onCleanup(() => {
-      document.documentElement.style.overflow = htmlOverflow
-      document.body.style.overflow = bodyOverflow
-      document.removeEventListener("keydown", onKeyDown)
-    })
-  })
+  const [period, setPeriod] = createSignal<"weekly" | "daily">("weekly")
+  const leaderboard = createMemo(() => props.leaderboard[period()])
 
   return (
     <section id="top-models" data-section="top-models">
       <SectionHeading
-        as="h2"
         slot="top-models-title"
         href="#top-models"
         title={i18n.t("nav.topModels")}
         description={i18n.t("home.topModelsDescription")}
       />
       <Show
-        when={data().some((item) => usageTotal(item) > 0)}
+        when={props.data.some((item) => usageTotal(item) > 0)}
         fallback={<EmptyState title={i18n.t("home.noUsageTitle")} description={i18n.t("home.noUsageDescription")} />}
       >
-        <TopModelsChart
-          data={data()}
-          range={range()}
-          activeModel={activeModel()}
-          onActiveModelChange={setActiveModel}
-        />
+        <TopModelsChart data={props.data} range="2M" activeModel={activeModel()} onActiveModelChange={setActiveModel} />
       </Show>
+      <div data-slot="leaderboard-period" role="group" aria-label={i18n.t("nav.leaderboard")}>
+        <div data-component="usage-filter" data-variant="range">
+          <button
+            type="button"
+            data-active={period() === "weekly" ? "true" : undefined}
+            aria-pressed={period() === "weekly"}
+            onClick={() => {
+              setPeriod("weekly")
+              setActiveModel(undefined)
+            }}
+          >
+            {i18n.t("chart.weekly")}
+          </button>
+          <button
+            type="button"
+            data-active={period() === "daily" ? "true" : undefined}
+            aria-pressed={period() === "daily"}
+            onClick={() => {
+              setPeriod("daily")
+              setActiveModel(undefined)
+            }}
+          >
+            {i18n.t("chart.daily")}
+          </button>
+        </div>
+      </div>
       <Show
         when={leaderboard().length > 0}
         fallback={
           <EmptyState title={i18n.t("home.noLeaderboardTitle")} description={i18n.t("home.noLeaderboardDescription")} />
         }
       >
-        <Leaderboard data={leaderboard()} activeModel={activeModel()} onActiveModelChange={setActiveModel} />
-      </Show>
-      <div data-slot="chart-footer" hidden>
-        <StatsFilters product={product()} range={range()} onProductSelect={setProduct} onRangeSelect={setRange} />
-        <div data-slot="top-models-mobile-controls">
-          <MobileFilterButton
-            label={i18n.t("home.productFilter")}
-            value={productLabel(product(), i18n)}
-            expanded={sheet() === "product"}
-            onClick={() => setSheet(sheet() === "product" ? undefined : "product")}
-          />
-          <MobileFilterButton
-            label={i18n.t("home.dateRange")}
-            value={rangeLabel(range(), i18n)}
-            expanded={sheet() === "range"}
-            onClick={() => setSheet(sheet() === "range" ? undefined : "range")}
-          />
-        </div>
-      </div>
-      <Show when={sheet()}>
-        {(kind) => (
-          <MobileFilterSheet
-            kind={kind()}
-            product={product()}
-            range={range()}
-            onProductSelect={(value) => {
-              setProduct(value)
-              setSheet(undefined)
-            }}
-            onRangeSelect={(value) => {
-              setRange(value)
-              setSheet(undefined)
-            }}
-            onClose={() => setSheet(undefined)}
-          />
-        )}
+        <Leaderboard
+          data={leaderboard()}
+          showChange={period() === "weekly"}
+          activeModel={activeModel()}
+          onActiveModelChange={setActiveModel}
+          catalogLabs={props.catalogLabs}
+        />
       </Show>
     </section>
-  )
-}
-
-function MobileFilterButton(props: { label: string; value: string; expanded: boolean; onClick: () => void }) {
-  return (
-    <button
-      data-slot="mobile-filter-button"
-      type="button"
-      aria-label={props.label}
-      aria-expanded={props.expanded ? "true" : "false"}
-      onClick={props.onClick}
-    >
-      <span>{props.value}</span>
-      <ChevronDown />
-    </button>
-  )
-}
-
-function MobileFilterSheet(props: {
-  kind: "product" | "range"
-  product: UsageProduct
-  range: UsageRange
-  onProductSelect: (product: UsageProduct) => void
-  onRangeSelect: (range: UsageRange) => void
-  onClose: () => void
-}) {
-  const i18n = useI18n()
-  return (
-    <div data-component="mobile-filter-sheet" role="presentation" onClick={props.onClose}>
-      <div
-        data-slot="filter-sheet-panel"
-        role="radiogroup"
-        aria-label={props.kind === "product" ? i18n.t("home.productFilter") : i18n.t("home.dateRange")}
-      >
-        <Show
-          when={props.kind === "product"}
-          fallback={
-            <For each={ranges}>
-              {(item) => (
-                <button
-                  type="button"
-                  role="radio"
-                  aria-checked={props.range === item}
-                  data-active={props.range === item ? "true" : undefined}
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    props.onRangeSelect(item)
-                  }}
-                >
-                  {rangeLabel(item, i18n)}
-                </button>
-              )}
-            </For>
-          }
-        >
-          <For each={products}>
-            {(item) => (
-              <button
-                type="button"
-                role="radio"
-                aria-checked={props.product === item}
-                data-active={props.product === item ? "true" : undefined}
-                onClick={(event) => {
-                  event.stopPropagation()
-                  props.onProductSelect(item)
-                }}
-              >
-                {productLabel(item, i18n)}
-              </button>
-            )}
-          </For>
-        </Show>
-      </div>
-    </div>
-  )
-}
-
-function ChevronDown() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none">
-      <path d="M5 7L8 10L11 7" stroke="currentColor" />
-    </svg>
-  )
-}
-
-function StatsFilters(props: {
-  product: UsageProduct
-  range: UsageRange
-  onProductSelect: (product: UsageProduct) => void
-  onRangeSelect: (range: UsageRange) => void
-}) {
-  const i18n = useI18n()
-  return (
-    <>
-      <FilterPills
-        items={products}
-        selected={props.product}
-        label={i18n.t("home.productFilter")}
-        variant="product"
-        formatLabel={(item) => productLabel(item, i18n)}
-        onSelect={props.onProductSelect}
-      />
-      <FilterPills
-        items={ranges}
-        selected={props.range}
-        label={i18n.t("home.dateRange")}
-        variant="range"
-        formatLabel={(item) => rangeLabel(item, i18n)}
-        onSelect={props.onRangeSelect}
-      />
-    </>
-  )
-}
-
-function FilterPills<T extends string>(props: {
-  items: readonly T[]
-  selected: T
-  label: string
-  variant: "product" | "range"
-  formatLabel?: (item: T) => string
-  onSelect: (item: T) => void
-}) {
-  return (
-    <div data-component="usage-filter" data-variant={props.variant} role="radiogroup" aria-label={props.label}>
-      <For each={props.items}>
-        {(item) => (
-          <button
-            type="button"
-            role="radio"
-            aria-checked={props.selected === item}
-            data-active={props.selected === item ? "true" : undefined}
-            onClick={() => props.onSelect(item)}
-          >
-            {props.formatLabel ? props.formatLabel(item) : item}
-          </button>
-        )}
-      </For>
-    </div>
   )
 }
 
@@ -652,181 +463,195 @@ function TopModelsChart(props: {
   createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
 
   return (
-    <div
-      ref={chartRef}
-      data-component="top-models-chart"
-      data-range={props.range}
-      data-metric={metric()}
-      data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
-      role="img"
-      aria-label={props.ariaLabel ?? i18n.t("home.stackedUsageChart")}
-      style={{ "--top-models-count": props.data.length } as JSX.CSSProperties}
-      onPointerLeave={(event) => {
-        if (event.pointerType === "touch") return
-        setActiveIndex(undefined)
-        props.onActiveModelChange(undefined)
-      }}
-    >
-      <div data-slot="top-models-axis" aria-hidden="true">
-        <For each={props.data}>
-          {(day, index) => (
-            <div
-              data-active={activeIndex() === index() ? "true" : undefined}
-              data-label-hidden={isColumnLabelHidden(index(), props.data.length) ? "true" : undefined}
-              data-mobile-hidden={isTopModelsMobileAxisHidden(index(), props.data.length) ? "true" : undefined}
-            >
-              <span data-slot="axis-label">
-                <span data-slot="axis-total">{formatUsageChartValue(usageTotal(day), metric())}</span>
-                <span data-slot="axis-date">
-                  <span data-slot="axis-date-full">{day.date}</span>
-                  <span data-slot="axis-date-mobile">{formatTopModelsMobileDate(day.date, props.range)}</span>
-                </span>
-              </span>
-            </div>
-          )}
-        </For>
-      </div>
+    <>
       <div
-        data-slot="top-models-bars"
+        ref={chartRef}
+        data-component="top-models-chart"
+        data-range={props.range}
+        data-metric={metric()}
+        data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
+        role="img"
+        aria-label={props.ariaLabel ?? i18n.t("home.stackedUsageChart")}
+        style={{ "--top-models-count": props.data.length } as JSX.CSSProperties}
         onPointerLeave={(event) => {
           if (event.pointerType === "touch") return
           setActiveIndex(undefined)
           props.onActiveModelChange(undefined)
         }}
       >
-        <For each={props.data}>
-          {(day, dayIndex) => (
-            <div
-              data-slot="top-models-bar"
-              role="button"
-              tabIndex={0}
-              aria-label={`${day.date} ${formatUsageChartValue(usageTotal(day), metric())} ${usageChartTotalLabel(metric(), i18n)}`}
-              data-active={activeIndex() === dayIndex() ? "true" : undefined}
-              data-muted={activeIndex() !== undefined && activeIndex() !== dayIndex() ? "true" : undefined}
-              style={{ "--top-models-bar-height": `${getTopModelsBarHeight(usageTotal(day), maxTotal())}%` }}
-              onPointerDown={(event) => {
-                if (event.pointerType !== "touch") return
-                setActiveIndex(dayIndex())
-                props.onActiveModelChange(undefined)
-              }}
-              onPointerEnter={(event) => {
-                setActiveIndex(dayIndex())
-                if (isTopModelsBlankHover(event.currentTarget, event.clientY)) props.onActiveModelChange(undefined)
-              }}
-              onPointerMove={(event) => {
-                if (event.pointerType === "touch") return
-                setActiveIndex(dayIndex())
-                if (isTopModelsBlankHover(event.currentTarget, event.clientY)) props.onActiveModelChange(undefined)
-              }}
-              onClick={() => {
-                setActiveIndex(dayIndex())
-                props.onActiveModelChange(undefined)
-              }}
-              onFocus={() => {
-                setActiveIndex(dayIndex())
-                props.onActiveModelChange(undefined)
-              }}
-              onBlur={() => {
-                setActiveIndex(undefined)
-                props.onActiveModelChange(undefined)
-              }}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" && event.key !== " ") return
-                event.preventDefault()
-                setActiveIndex(dayIndex())
-                props.onActiveModelChange(undefined)
-              }}
-            >
+        <div data-slot="top-models-axis" aria-hidden="true">
+          <For each={props.data}>
+            {(day, index) => (
               <div
-                data-slot="top-models-stack"
-                style={{ "grid-template-rows": getTopModelsSegmentRows(day, segmentOrder()) }}
+                data-active={activeIndex() === index() ? "true" : undefined}
+                data-label-hidden={isColumnLabelHidden(index(), props.data.length) ? "true" : undefined}
+                data-mobile-hidden={isTopModelsMobileAxisHidden(index(), props.data.length) ? "true" : undefined}
               >
-                <For each={stackedTopModelsSegments(day, segmentOrder())}>
-                  {(item) => (
-                    <i
-                      data-series={item.index}
-                      data-model={item.segment.model}
-                      data-active={props.activeModel === item.segment.model ? "true" : undefined}
-                      style={{
-                        background: getTopModelsSegmentColor(
-                          item.segment.model,
-                          item.index,
-                          segmentOrder(),
-                          activeIndex() !== undefined && activeIndex() !== dayIndex(),
-                          props.activeModel,
-                        ),
-                      }}
-                      onPointerEnter={(event) => {
-                        event.stopPropagation()
-                        setActiveIndex(dayIndex())
-                        props.onActiveModelChange(item.segment.model)
-                      }}
-                      onPointerDown={(event) => {
-                        event.stopPropagation()
-                        setActiveIndex(dayIndex())
-                        props.onActiveModelChange(item.segment.model)
-                      }}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                        setActiveIndex(dayIndex())
-                        props.onActiveModelChange(item.segment.model)
-                      }}
-                    />
-                  )}
-                </For>
+                <span data-slot="axis-label">
+                  <span data-slot="axis-total">{formatUsageChartValue(usageTotal(day), metric())}</span>
+                  <span data-slot="axis-date">
+                    <span data-slot="axis-date-full">{day.date}</span>
+                    <span data-slot="axis-date-mobile">{formatTopModelsMobileDate(day.date, props.range)}</span>
+                  </span>
+                </span>
               </div>
-              <Show when={activeIndex() === dayIndex() && activePoint()}>
-                {(point) => (
-                  <div
-                    data-component="chart-tooltip"
-                    data-placement={dayIndex() > props.data.length * 0.62 ? "left" : "right"}
-                  >
-                    <strong>{point().date}</strong>
-                    <Show when={metric() === "tokens"}>
-                      <span>
-                        {formatUsageChartValue(usageTotal(point()), metric())} {usageChartTotalLabel(metric(), i18n)}
-                      </span>
-                    </Show>
-                    <Show when={metric() === "tokens"}>
-                      <div data-slot="tooltip-divider" />
-                    </Show>
-                    <For each={visibleTopModelsSegments(point())}>
-                      {(item) => (
-                        <p
-                          data-active={props.activeModel === item.segment.model ? "true" : undefined}
-                          data-muted={
-                            props.activeModel !== undefined && props.activeModel !== item.segment.model
-                              ? "true"
-                              : undefined
-                          }
-                        >
-                          <span data-slot="tooltip-label">
-                            <i
-                              style={{
-                                background: getRankColor(item.segment.model, item.index, segmentOrder(), usageColors),
-                              }}
-                            />{" "}
-                            {item.segment.model}
-                          </span>
-                          <b>{formatUsageChartValue(item.segment.value, metric())}</b>
-                        </p>
-                      )}
-                    </For>
-                  </div>
-                )}
-              </Show>
-            </div>
-          )}
-        </For>
+            )}
+          </For>
+        </div>
+        <div
+          data-slot="top-models-bars"
+          onPointerLeave={(event) => {
+            if (event.pointerType === "touch") return
+            setActiveIndex(undefined)
+            props.onActiveModelChange(undefined)
+          }}
+        >
+          <For each={props.data}>
+            {(day, dayIndex) => (
+              <div
+                data-slot="top-models-bar"
+                role="button"
+                tabIndex={0}
+                aria-label={`${day.date} ${formatUsageChartValue(usageTotal(day), metric())} ${usageChartTotalLabel(metric(), i18n)}`}
+                data-active={activeIndex() === dayIndex() ? "true" : undefined}
+                data-muted={activeIndex() !== undefined && activeIndex() !== dayIndex() ? "true" : undefined}
+                style={{ "--top-models-bar-height": `${getTopModelsBarHeight(usageTotal(day), maxTotal())}%` }}
+                onPointerDown={(event) => {
+                  if (event.pointerType !== "touch") return
+                  setActiveIndex(dayIndex())
+                  props.onActiveModelChange(undefined)
+                }}
+                onPointerEnter={(event) => {
+                  setActiveIndex(dayIndex())
+                  if (isTopModelsBlankHover(event.currentTarget, event.clientY)) props.onActiveModelChange(undefined)
+                }}
+                onPointerMove={(event) => {
+                  if (event.pointerType === "touch") return
+                  setActiveIndex(dayIndex())
+                  if (isTopModelsBlankHover(event.currentTarget, event.clientY)) props.onActiveModelChange(undefined)
+                }}
+                onClick={() => {
+                  setActiveIndex(dayIndex())
+                  props.onActiveModelChange(undefined)
+                }}
+                onFocus={() => {
+                  setActiveIndex(dayIndex())
+                  props.onActiveModelChange(undefined)
+                }}
+                onBlur={() => {
+                  setActiveIndex(undefined)
+                  props.onActiveModelChange(undefined)
+                }}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" && event.key !== " ") return
+                  event.preventDefault()
+                  setActiveIndex(dayIndex())
+                  props.onActiveModelChange(undefined)
+                }}
+              >
+                <div
+                  data-slot="top-models-stack"
+                  style={{ "grid-template-rows": getTopModelsSegmentRows(day, segmentOrder()) }}
+                >
+                  <For each={stackedTopModelsSegments(day, segmentOrder())}>
+                    {(item) => (
+                      <i
+                        data-series={item.index}
+                        data-model={item.segment.model}
+                        data-active={props.activeModel === item.segment.model ? "true" : undefined}
+                        style={{
+                          background: getTopModelsSegmentColor(
+                            item.segment.model,
+                            item.index,
+                            segmentOrder(),
+                            activeIndex() !== undefined && activeIndex() !== dayIndex(),
+                            props.activeModel,
+                          ),
+                        }}
+                        onPointerEnter={(event) => {
+                          event.stopPropagation()
+                          setActiveIndex(dayIndex())
+                          props.onActiveModelChange(item.segment.model)
+                        }}
+                        onPointerDown={(event) => {
+                          event.stopPropagation()
+                          setActiveIndex(dayIndex())
+                          props.onActiveModelChange(item.segment.model)
+                        }}
+                        onClick={(event) => {
+                          event.stopPropagation()
+                          setActiveIndex(dayIndex())
+                          props.onActiveModelChange(item.segment.model)
+                        }}
+                      />
+                    )}
+                  </For>
+                </div>
+                <Show when={activeIndex() === dayIndex() && activePoint()}>
+                  {(point) => (
+                    <div
+                      data-component="chart-tooltip"
+                      data-placement={dayIndex() > props.data.length * 0.62 ? "left" : "right"}
+                    >
+                      <strong>{point().date}</strong>
+                      <Show when={metric() === "tokens"}>
+                        <span>
+                          {formatUsageChartValue(usageTotal(point()), metric())} {usageChartTotalLabel(metric(), i18n)}
+                        </span>
+                      </Show>
+                      <Show when={metric() === "tokens"}>
+                        <div data-slot="tooltip-divider" />
+                      </Show>
+                      <For each={visibleTopModelsSegments(point())}>
+                        {(item) => (
+                          <p
+                            data-active={props.activeModel === item.segment.model ? "true" : undefined}
+                            data-muted={
+                              props.activeModel !== undefined && props.activeModel !== item.segment.model
+                                ? "true"
+                                : undefined
+                            }
+                          >
+                            <span data-slot="tooltip-label">
+                              <i
+                                style={{
+                                  background: getRankColor(item.segment.model, item.index, segmentOrder(), usageColors),
+                                }}
+                              />
+                              <span data-slot="tooltip-name">{item.segment.model}</span>
+                            </span>
+                            <b>{formatUsageChartValue(item.segment.value, metric())}</b>
+                          </p>
+                        )}
+                      </For>
+                    </div>
+                  )}
+                </Show>
+              </div>
+            )}
+          </For>
+        </div>
       </div>
-    </div>
+      <ChartDataTable
+        caption={props.ariaLabel ?? i18n.t("home.stackedUsageChart")}
+        headers={[
+          i18n.t("chart.date"),
+          ...(props.data[0]?.segments.map((segment) => segment.model) ?? []),
+          i18n.t("home.total"),
+        ]}
+        rows={props.data.map((point) => [
+          point.date,
+          ...point.segments.map((segment) => formatUsageChartValue(segment.value, metric())),
+          formatUsageChartValue(usageTotal(point), metric()),
+        ])}
+      />
+    </>
   )
 }
 
-function UniqueUsersSection(props: { data: StatsHomeData["users"] }) {
+function UniqueUsersSection(props: { data: UsagePoint[] }) {
   const i18n = useI18n()
   const [activeModel, setActiveModel] = createSignal<string>()
-  const data = createMemo(() => props.data.Go["2M"])
 
   return (
     <section id="unique-users" data-section="unique-users">
@@ -837,13 +662,13 @@ function UniqueUsersSection(props: { data: StatsHomeData["users"] }) {
         description={i18n.t("home.uniqueUsersDescription")}
       />
       <Show
-        when={data().some((item) => usageTotal(item) > 0)}
+        when={props.data.some((item) => usageTotal(item) > 0)}
         fallback={
           <EmptyState title={i18n.t("home.noUserDataTitle")} description={i18n.t("home.noUserDataDescription")} />
         }
       >
         <TopModelsChart
-          data={data()}
+          data={props.data}
           range="2M"
           metric="users"
           ariaLabel={i18n.t("home.uniqueUsersChart")}
@@ -853,6 +678,105 @@ function UniqueUsersSection(props: { data: StatsHomeData["users"] }) {
       </Show>
     </section>
   )
+}
+
+function RetentionSection(props: { data: HomeRetentionEntry[] }) {
+  const language = useLanguage()
+  const [activeIndex, setActiveIndex] = createSignal(0)
+
+  return (
+    <section id="retention" data-section="retention">
+      <SectionTitle id="retention" title="Weekly Retention" description="Weekly users returning the next week." />
+      <Show
+        when={props.data.length > 0}
+        fallback={
+          <EmptyState
+            title="No retention data"
+            description="Retention appears after a complete return week is available."
+          />
+        }
+      >
+        <table data-component="retention-chart" role="table" aria-label="Weekly retention">
+          <thead role="rowgroup">
+            <tr data-slot="retention-heading" role="row">
+              <th data-column="rank" role="columnheader" scope="col">
+                Rank
+              </th>
+              <th data-column="model" role="columnheader" scope="col">
+                Model
+              </th>
+              <th data-column="marker" role="columnheader" scope="col">
+                Retention
+              </th>
+              <th data-column="rate" role="columnheader" scope="col">
+                Rate
+              </th>
+              <th data-column="eligible" role="columnheader" scope="col">
+                Eligible
+              </th>
+            </tr>
+          </thead>
+          <tbody role="rowgroup">
+            <For each={props.data}>
+              {(item, index) => (
+                <tr
+                  data-slot="retention-row"
+                  data-active={activeIndex() === index() ? "true" : undefined}
+                  role="row"
+                  onPointerEnter={() => setActiveIndex(index())}
+                >
+                  <td data-column="rank" role="cell">
+                    {item.rank === null ? "–" : String(item.rank).padStart(2, "0")}
+                  </td>
+                  <th data-column="model" role="rowheader" scope="row">
+                    <a
+                      href={language.route(item.path)}
+                      onFocus={() => setActiveIndex(index())}
+                      onClick={() => setActiveIndex(index())}
+                      aria-label={`${item.model}, ${formatRetentionRate(item.rate)} weekly retention, ${formatUsers(item.eligibleUserWeeks)} eligible user-weeks`}
+                    >
+                      {item.model}
+                    </a>
+                  </th>
+                  <td data-column="marker" role="cell">
+                    <RetentionMarker rate={item.rate} active={activeIndex() === index()} />
+                  </td>
+                  <td data-column="rate" role="cell">
+                    {formatRetentionRate(item.rate)}
+                  </td>
+                  <td data-column="eligible" role="cell">
+                    {formatUsers(item.eligibleUserWeeks)}
+                  </td>
+                </tr>
+              )}
+            </For>
+          </tbody>
+        </table>
+      </Show>
+    </section>
+  )
+}
+
+function RetentionMarker(props: { rate: number; active: boolean }) {
+  const fill = createMemo(() => Math.min(100, Math.max(0, props.rate)))
+  return (
+    <i
+      data-component="retention-marker"
+      data-active={props.active ? "true" : undefined}
+      style={{ "--retention-position": `${fill()}%` } as JSX.CSSProperties}
+      aria-hidden="true"
+    >
+      <span />
+      <span />
+      <span />
+      <span />
+      <em />
+    </i>
+  )
+}
+
+function formatRetentionRate(value: number) {
+  return `${value.toFixed(1)}%`
 }
 
 function isTopModelsBlankHover(bar: HTMLElement, clientY: number) {
@@ -927,7 +851,7 @@ function isDenseColumnRange(range: UsageRange) {
 function scrollDenseChartToEnd(element: HTMLDivElement | undefined, range: UsageRange, count: number) {
   if (!element || count <= 0 || !isDenseColumnRange(range) || typeof window === "undefined") return
   window.requestAnimationFrame(() => {
-    element.scrollLeft = element.scrollWidth - element.clientWidth
+    element.scrollLeft = Number.MAX_SAFE_INTEGER
   })
 }
 
@@ -962,24 +886,27 @@ function formatUsers(value: number) {
 }
 
 function Leaderboard(props: {
-  data: LeaderboardEntry[]
+  data: HomeLeaderboardEntry[]
+  showChange: boolean
   activeModel: string | undefined
   onActiveModelChange: (model: string | undefined) => void
+  catalogLabs: readonly string[]
 }) {
-  const i18n = useI18n()
   const featured = createMemo(() => props.data.slice(0, 3))
   const compact = createMemo(() => props.data.slice(3))
 
   return (
-    <div id="leaderboard" data-component="leaderboard" role="list" aria-label={i18n.t("chart.leaderboardAria")}>
+    <div id="leaderboard" data-component="leaderboard">
       <div data-slot="leaderboard-featured">
         <For each={featured()}>
           {(entry) => (
             <LeaderboardCard
               entry={entry}
+              showChange={props.showChange}
               size="featured"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
+              catalogLabs={props.catalogLabs}
             />
           )}
         </For>
@@ -990,21 +917,25 @@ function Leaderboard(props: {
           {(entry) => (
             <LeaderboardCard
               entry={entry}
+              showChange={props.showChange}
               size="compact"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
+              catalogLabs={props.catalogLabs}
             />
           )}
         </For>
       </div>
-      <div data-slot="leaderboard-mobile" aria-label={i18n.t("chart.scrollableLeaderboardAria")}>
+      <div data-slot="leaderboard-mobile">
         <For each={props.data}>
           {(entry) => (
             <LeaderboardCard
               entry={entry}
+              showChange={props.showChange}
               size="featured"
               active={props.activeModel === entry.model}
               onActiveModelChange={props.onActiveModelChange}
+              catalogLabs={props.catalogLabs}
             />
           )}
         </For>
@@ -1014,24 +945,23 @@ function Leaderboard(props: {
 }
 
 function LeaderboardCard(props: {
-  entry: LeaderboardEntry
+  entry: HomeLeaderboardEntry
+  showChange: boolean
   size: "featured" | "compact"
   active: boolean
   onActiveModelChange: (model: string | undefined) => void
+  catalogLabs: readonly string[]
 }) {
   const i18n = useI18n()
   const language = useLanguage()
+  const hasProvider = () => isKnownCatalogLab(props.entry.provider, props.catalogLabs)
+  const icon = () => (hasProvider() ? getProviderIconId(props.entry.author) : "synthetic")
   return (
     <a
       data-component="leader-card"
       data-size={props.size}
       data-active={props.active ? "true" : undefined}
-      href={language.route(
-        `${import.meta.env.BASE_URL}${modelSlug(props.entry.provider)}/${modelSlug(props.entry.model)}`,
-      )}
-      role="listitem"
-      tabIndex={0}
-      aria-label={`${String(props.entry.rank).padStart(2, "0")} ${props.entry.model} ${i18n.t("chart.byAuthor", { author: props.entry.author })}`}
+      href={language.route(props.entry.path)}
       onPointerEnter={() => props.onActiveModelChange(props.entry.model)}
       onPointerLeave={(event) => {
         if (event.pointerType === "touch") return
@@ -1042,23 +972,33 @@ function LeaderboardCard(props: {
       onClick={() => props.onActiveModelChange(props.entry.model)}
     >
       <span data-slot="rank">{String(props.entry.rank).padStart(2, "0")}</span>
-      <ProviderIcon data-slot="leader-watermark" aria-hidden="true" id={getProviderIconId(props.entry.author)} />
+      <ProviderIcon data-slot="leader-watermark" aria-hidden="true" id={icon()} />
       <div data-slot="leader-body">
-        <ProviderIcon data-slot="leader-avatar" aria-hidden="true" id={getProviderIconId(props.entry.author)} />
+        <ProviderIcon data-slot="leader-avatar" aria-hidden="true" id={icon()} />
         <div data-slot="leader-copy">
           <div>
             <strong>{props.entry.model}</strong>
-            <span>{formatBillions(props.entry.tokens)}</span>
+            <span>
+              {formatBillions(props.entry.tokens)}
+              <span data-slot="visually-hidden"> {i18n.t("format.tokens")}</span>
+            </span>
           </div>
           <div>
-            <span>{props.entry.author}</span>
-            <span
-              data-slot="delta"
-              data-new={props.entry.change === null ? "true" : undefined}
-              data-negative={props.entry.change !== null && props.entry.change < 0 ? "true" : undefined}
-            >
-              {formatChange(props.entry.change, i18n)}
-            </span>
+            <Show when={hasProvider()} fallback={<span />}>
+              <span>{formatCatalogLabName(props.entry.provider)}</span>
+            </Show>
+            <Show when={props.showChange || props.entry.change === null}>
+              <span
+                data-slot="delta"
+                data-new={props.entry.change === null ? "true" : undefined}
+                data-negative={props.entry.change !== null && props.entry.change < 0 ? "true" : undefined}
+              >
+                {formatChange(props.entry.change, i18n)}
+                <Show when={props.entry.change !== null}>
+                  <span data-slot="visually-hidden"> {i18n.t("chart.vsPreviousWeek")}</span>
+                </Show>
+              </span>
+            </Show>
           </div>
         </div>
       </div>
@@ -1084,16 +1024,14 @@ function formatChange(value: number | null, i18n: ReturnType<typeof useI18n>) {
   return `${value}%`
 }
 
-function MarketShareSection(props: { data: StatsHomeData["market"] }) {
+function MarketShareSection(props: { data: MarketDay[]; labPaths: HomePageData["labPaths"] }) {
   const i18n = useI18n()
-  const [range, setRange] = createSignal<UsageRange>("2M")
   const [activeIndex, setActiveIndex] = createSignal(2)
   const [activeAuthor, setActiveAuthor] = createSignal<string>()
   const [inspecting, setInspecting] = createSignal(false)
-  const data = createMemo(() => props.data[range()])
-  const authorOrder = createMemo(() => getMarketAuthorOrder(data()))
-  const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(data().length - 1, 0)))
-  const activeDay = createMemo(() => data()[selectedIndex()])
+  const authorOrder = createMemo(() => getMarketAuthorOrder(props.data))
+  const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(props.data.length - 1, 0)))
+  const today = createMemo(() => props.data[props.data.length - 1])
 
   return (
     <section
@@ -1112,14 +1050,14 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
         description={i18n.t("home.marketShareDescription")}
       />
       <Show
-        when={activeDay()}
+        when={today()}
         fallback={<EmptyState title={i18n.t("home.noMarketTitle")} description={i18n.t("home.noMarketDescription")} />}
       >
         {(day) => (
           <>
             <MarketShare
-              data={data()}
-              range={range()}
+              data={props.data}
+              range="2M"
               authorOrder={authorOrder()}
               activeIndex={selectedIndex()}
               activeAuthor={activeAuthor()}
@@ -1128,19 +1066,15 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
                 setActiveIndex(index)
                 setInspecting(true)
               }}
-              onActiveAuthorChange={(author) => {
-                setActiveAuthor(author)
-                setInspecting(true)
-              }}
+              onActiveAuthorChange={setActiveAuthor}
+              onInspectingChange={setInspecting}
             />
             <MarketShareList
-              data={day().authors}
+              data={rankedMarketAuthors(day())}
+              labPaths={props.labPaths}
               authorOrder={authorOrder()}
               activeAuthor={activeAuthor()}
-              onActiveAuthorChange={(author) => {
-                setActiveAuthor(author)
-                setInspecting(true)
-              }}
+              onActiveAuthorChange={setActiveAuthor}
             />
           </>
         )}
@@ -1148,25 +1082,8 @@ function MarketShareSection(props: { data: StatsHomeData["market"] }) {
       <div data-slot="market-footer">
         <p>
           <span>[*]</span>
-          <strong>
-            {inspecting()
-              ? formatMarketDate(activeDay(), i18n.t("home.noData"))
-              : formatMarketRange(data(), i18n.t("home.noData"))}
-          </strong>
+          <strong>{formatMarketDate(today(), i18n.t("home.noData"))}</strong>
         </p>
-        <div hidden>
-          <FilterPills
-            items={ranges}
-            selected={range()}
-            label={i18n.t("home.dateRange")}
-            variant="range"
-            onSelect={(item) => {
-              setRange(item)
-              setActiveAuthor(undefined)
-              setInspecting(false)
-            }}
-          />
-        </div>
       </div>
     </section>
   )
@@ -1180,99 +1097,174 @@ function MarketShare(props: {
   activeAuthor: string | undefined
   inspecting: boolean
   onActiveIndexChange: (index: number) => void
-  onActiveAuthorChange: (author: string) => void
+  onActiveAuthorChange: (author: string | undefined) => void
+  onInspectingChange: (inspecting: boolean) => void
 }) {
   const i18n = useI18n()
   let chartRef: HTMLDivElement | undefined
+  const inspectDay = (index: number) => {
+    props.onActiveIndexChange(index)
+    props.onActiveAuthorChange(undefined)
+  }
 
   createEffect(() => scrollDenseChartToEnd(chartRef, props.range, props.data.length))
 
   return (
-    <div
-      ref={chartRef}
-      data-component="market-share"
-      data-range={props.range}
-      data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
-      role="img"
-      aria-label={i18n.t("home.marketChart")}
-      style={{ "--market-count": props.data.length } as JSX.CSSProperties}
-    >
-      <div data-slot="market-labels">
-        <For each={props.data}>
-          {(day, index) => (
-            <button
-              type="button"
-              data-active={props.inspecting && props.activeIndex === index() ? "true" : undefined}
-              data-label-hidden={isColumnLabelHidden(index(), props.data.length) ? "true" : undefined}
-              data-mobile-hidden={isMarketMobileLabelHidden(index(), props.data.length) ? "true" : undefined}
-              onClick={() => props.onActiveIndexChange(index())}
-              onPointerEnter={() => props.onActiveIndexChange(index())}
-            >
-              <span data-slot="market-axis-label">
-                <span data-slot="market-total">{formatTrillions(day.total)}</span>
-                <span data-slot="market-date">
-                  <span data-slot="market-date-full">{day.date}</span>
-                  <span data-slot="market-date-mobile">{formatMarketMobileDate(day.date)}</span>
+    <>
+      <div
+        ref={chartRef}
+        data-component="market-share"
+        data-range={props.range}
+        data-dense-labels={isDenseColumnRange(props.range) ? "true" : undefined}
+        role="img"
+        aria-label={i18n.t("home.marketChart")}
+        style={{ "--market-count": props.data.length } as JSX.CSSProperties}
+        onPointerLeave={(event) => {
+          if (event.pointerType === "touch") return
+          props.onInspectingChange(false)
+        }}
+      >
+        <div data-slot="market-labels">
+          <For each={props.data}>
+            {(day, index) => (
+              <button
+                type="button"
+                aria-label={`${day.date} ${formatTrillions(day.total)}`}
+                data-active={props.inspecting && props.activeIndex === index() ? "true" : undefined}
+                data-label-hidden={isColumnLabelHidden(index(), props.data.length) ? "true" : undefined}
+                data-mobile-hidden={isMarketMobileLabelHidden(index(), props.data.length) ? "true" : undefined}
+                aria-describedby={
+                  props.inspecting && props.activeIndex === index() ? "market-share-tooltip" : undefined
+                }
+                onBlur={() => props.onInspectingChange(false)}
+                onClick={() => inspectDay(index())}
+                onFocus={() => inspectDay(index())}
+                onPointerEnter={() => inspectDay(index())}
+              >
+                <span data-slot="market-axis-label">
+                  <span data-slot="market-total">{formatTrillions(day.total)}</span>
+                  <span data-slot="market-date">
+                    <span data-slot="market-date-full">{day.date}</span>
+                    <span data-slot="market-date-mobile">{formatMarketMobileDate(day.date)}</span>
+                  </span>
                 </span>
-              </span>
-            </button>
-          )}
-        </For>
-      </div>
-      <div data-slot="market-bars">
-        <For each={props.data}>
-          {(day, index) => (
-            <button
-              type="button"
-              aria-label={`${day.date} ${formatTrillions(day.total)}`}
-              data-active={props.inspecting && props.activeIndex === index() ? "true" : undefined}
-              onClick={() => props.onActiveIndexChange(index())}
-              onPointerEnter={() => props.onActiveIndexChange(index())}
+              </button>
+            )}
+          </For>
+        </div>
+        <div data-slot="market-bars">
+          <For each={props.data}>
+            {(day, index) => (
+              <button
+                type="button"
+                aria-label={`${day.date} ${formatTrillions(day.total)}`}
+                data-active={props.inspecting && props.activeIndex === index() ? "true" : undefined}
+                aria-describedby={
+                  props.inspecting && props.activeIndex === index() ? "market-share-tooltip" : undefined
+                }
+                onBlur={() => props.onInspectingChange(false)}
+                onClick={() => inspectDay(index())}
+                onFocus={() => inspectDay(index())}
+                onPointerEnter={() => inspectDay(index())}
+              >
+                <For each={stackedMarketAuthors(day, props.authorOrder)}>
+                  {(item) => (
+                    <span
+                      data-author={item.author.author}
+                      data-active={props.activeAuthor === item.author.author ? "true" : undefined}
+                      data-muted={
+                        props.activeAuthor !== undefined && props.activeAuthor !== item.author.author
+                          ? "true"
+                          : undefined
+                      }
+                      style={{
+                        "background-color": getMarketSegmentColor(
+                          item.author.author,
+                          getRankColor(item.author.author, item.index, props.authorOrder, marketColors),
+                          props.activeAuthor,
+                        ),
+                        "flex-grow": item.author.share,
+                      }}
+                      onPointerEnter={(event) => {
+                        event.stopPropagation()
+                        props.onActiveIndexChange(index())
+                        props.onActiveAuthorChange(item.author.author)
+                      }}
+                      onPointerDown={(event) => {
+                        event.stopPropagation()
+                        props.onActiveIndexChange(index())
+                        props.onActiveAuthorChange(item.author.author)
+                      }}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        props.onActiveIndexChange(index())
+                        props.onActiveAuthorChange(item.author.author)
+                      }}
+                    />
+                  )}
+                </For>
+              </button>
+            )}
+          </For>
+        </div>
+        <Show when={props.inspecting ? props.data[props.activeIndex] : undefined} keyed>
+          {(day) => (
+            <div
+              id="market-share-tooltip"
+              data-component="chart-tooltip"
+              data-placement={props.activeIndex > props.data.length * 0.62 ? "left" : "right"}
+              role="tooltip"
+              style={
+                {
+                  "--market-tooltip-left": `${((props.activeIndex + 0.5) / props.data.length) * 100}%`,
+                  "--market-tooltip-right": `${100 - ((props.activeIndex + 0.5) / props.data.length) * 100}%`,
+                } as JSX.CSSProperties
+              }
             >
-              <For each={stackedMarketAuthors(day, props.authorOrder)}>
-                {(item) => (
-                  <span
-                    data-author={item.author.author}
-                    data-active={props.activeAuthor === item.author.author ? "true" : undefined}
+              <strong>{day.date}</strong>
+              <span>
+                {formatTrillions(day.total)} {i18n.t("home.total")}
+              </span>
+              <div data-slot="tooltip-divider" />
+              <For each={rankedMarketAuthors(day)}>
+                {(item, index) => (
+                  <p
+                    data-active={props.activeAuthor === item.author ? "true" : undefined}
                     data-muted={
-                      props.activeAuthor !== undefined && props.activeAuthor !== item.author.author ? "true" : undefined
+                      props.activeAuthor !== undefined && props.activeAuthor !== item.author ? "true" : undefined
                     }
-                    style={{
-                      "background-color": getMarketSegmentColor(
-                        item.author.author,
-                        getRankColor(item.author.author, item.index, props.authorOrder, marketColors),
-                        props.activeAuthor,
-                      ),
-                      "flex-grow": item.author.share,
-                    }}
-                    onPointerEnter={(event) => {
-                      event.stopPropagation()
-                      props.onActiveIndexChange(index())
-                      props.onActiveAuthorChange(item.author.author)
-                    }}
-                    onPointerDown={(event) => {
-                      event.stopPropagation()
-                      props.onActiveIndexChange(index())
-                      props.onActiveAuthorChange(item.author.author)
-                    }}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      props.onActiveIndexChange(index())
-                      props.onActiveAuthorChange(item.author.author)
-                    }}
-                  />
+                  >
+                    <span data-slot="tooltip-label">
+                      <i style={{ background: getRankColor(item.author, index(), props.authorOrder, marketColors) }} />
+                      <span data-slot="tooltip-name">{formatCatalogLabName(item.author)}</span>
+                    </span>
+                    <em>{formatTrillions(item.tokens)}</em>
+                    <b>{item.share.toFixed(1)}%</b>
+                  </p>
                 )}
               </For>
-            </button>
+            </div>
           )}
-        </For>
+        </Show>
       </div>
-    </div>
+      <ChartDataTable
+        caption={i18n.t("home.marketChart")}
+        headers={[i18n.t("chart.date"), ...[...props.authorOrder.keys()].map(formatCatalogLabName)]}
+        rows={props.data.map((day) => [
+          day.date,
+          ...[...props.authorOrder.keys()].map((author) => {
+            const share = day.authors.find((item) => item.author === author)?.share ?? 0
+            return `${share.toFixed(1)}%`
+          }),
+        ])}
+      />
+    </>
   )
 }
 
 function MarketShareList(props: {
   data: MarketDay["authors"]
+  labPaths: HomePageData["labPaths"]
   authorOrder: Map<string, number>
   activeAuthor: string | undefined
   onActiveAuthorChange: (author: string) => void
@@ -1283,19 +1275,22 @@ function MarketShareList(props: {
     <ol data-component="market-share-list">
       <For each={props.data}>
         {(item, index) => {
-          const label = () =>
-            `${item.author} ${formatTrillions(item.tokens)} ${item.share.toFixed(1)} ${i18n.t("chart.percent")}`
           const content = () => (
             <>
               <span>{String(index() + 1).padStart(2, "0")}</span>
               <i style={{ background: getRankColor(item.author, index(), props.authorOrder, marketColors) }} />
-              <strong>{item.author}</strong>
-              <em>{formatTrillions(item.tokens)}</em>
+              <strong>{formatCatalogLabName(item.author)}</strong>
+              <em>
+                {formatTrillions(item.tokens)}
+                <span data-slot="visually-hidden"> {i18n.t("format.tokens")}</span>
+              </em>
               <b>{item.share.toFixed(1)}%</b>
             </>
           )
-          const href = () =>
-            item.author === "Other" ? undefined : language.route(`${import.meta.env.BASE_URL}${modelSlug(item.author)}`)
+          const href = () => {
+            const path = props.labPaths[item.author]
+            return path ? language.route(path) : undefined
+          }
           return (
             <li
               data-active={props.activeAuthor === item.author ? "true" : undefined}
@@ -1306,7 +1301,6 @@ function MarketShareList(props: {
                 fallback={
                   <button
                     type="button"
-                    aria-label={label()}
                     onClick={() => props.onActiveAuthorChange(item.author)}
                     onFocus={() => props.onActiveAuthorChange(item.author)}
                   >
@@ -1317,7 +1311,6 @@ function MarketShareList(props: {
                 {(href) => (
                   <a
                     href={href()}
-                    aria-label={label()}
                     onClick={() => props.onActiveAuthorChange(item.author)}
                     onFocus={() => props.onActiveAuthorChange(item.author)}
                   >
@@ -1333,23 +1326,11 @@ function MarketShareList(props: {
   )
 }
 
-function GeoBreakdownSection(props: { data: StatsHomeData["country"] }) {
+function GeoBreakdownSection(props: { data: CountryEntry[] }) {
   const i18n = useI18n()
-  const language = useLanguage()
   const [activeCountry, setActiveCountry] = createSignal<string>()
-  const data = createMemo(() => props.data["2M"])
-  const countryById = createMemo(
-    () =>
-      new Map(
-        data().flatMap((country) => {
-          const id = countryNumericId(country.country)
-          return id ? [[id, country] as const] : []
-        }),
-      ),
-  )
-  const maxTokens = createMemo(() => Math.max(0, ...data().map((country) => country.tokens)) || 1)
-  const topCountries = createMemo(() => data().slice(0, 15))
-  const active = createMemo(() => data().find((country) => country.country === activeCountry()) ?? data()[0])
+  const maxTokens = createMemo(() => Math.max(0, ...props.data.map((country) => country.tokens)) || 1)
+  const topCountries = createMemo(() => props.data.slice(0, 15))
 
   return (
     <section
@@ -1361,34 +1342,12 @@ function GeoBreakdownSection(props: { data: StatsHomeData["country"] }) {
       }}
     >
       <SectionBridge label={i18n.t("nav.marketShare").toUpperCase()} href="#market-share" />
-      <SectionTitle id="geo-breakdown" title={i18n.t("home.geoTitle")} description={i18n.t("home.geoDescription")} />
+      <SectionTitle id="geo-breakdown" title={i18n.t("home.geoTitle")} />
       <Show
-        when={data().length > 0}
+        when={props.data.length > 0}
         fallback={<EmptyState title={i18n.t("home.noGeoTitle")} description={i18n.t("home.noGeoDescription")} />}
       >
         <div data-component="geo-breakdown">
-          <div data-slot="geo-map-panel">
-            <GeoWorldMap
-              countryById={countryById()}
-              activeCountry={activeCountry()}
-              maxTokens={maxTokens()}
-              onActiveCountryChange={setActiveCountry}
-            />
-            <Show when={active()}>
-              {(country) => (
-                <div data-slot="geo-active-country">
-                  <span>#{String(country().rank).padStart(2, "0")}</span>
-                  <strong>
-                    {formatCountryName(country().country, language.tag(language.locale()), i18n.t("home.unknown"))}
-                  </strong>
-                  <p>
-                    <b>{formatGeoTokens(country().tokens)}</b>
-                    <em>{formatGeoShare(country().share)}</em>
-                  </p>
-                </div>
-              )}
-            </Show>
-          </div>
           <GeoCountryList
             data={topCountries()}
             activeCountry={activeCountry()}
@@ -1398,92 +1357,6 @@ function GeoBreakdownSection(props: { data: StatsHomeData["country"] }) {
         </div>
       </Show>
     </section>
-  )
-}
-
-function GeoWorldMap(props: {
-  countryById: Map<string, CountryEntry>
-  activeCountry: string | undefined
-  maxTokens: number
-  onActiveCountryChange: (country: string | undefined) => void
-}) {
-  const i18n = useI18n()
-  const opacityScale = createMemo(() => scaleSqrt().domain([0, props.maxTokens]).range([0.26, 0.96]).clamp(true))
-  const countryOpacity = (country: CountryEntry | undefined) => {
-    if (!country) return 0
-    const opacity = opacityScale()(country.tokens)
-    if (!props.activeCountry || props.activeCountry === country.country) return opacity
-    return Math.max(0.18, opacity * 0.36)
-  }
-
-  return (
-    <svg
-      data-component="geo-world-map"
-      viewBox={`0 0 ${geoMapWidth} ${geoMapHeight}`}
-      role="img"
-      aria-label={i18n.t("home.worldMap")}
-    >
-      <title>{i18n.t("home.geoMapTitle")}</title>
-      <g data-slot="geo-countries">
-        <For each={worldCountryPaths}>
-          {(country) => {
-            const entry = () => props.countryById.get(country.id)
-            return (
-              <path
-                d={country.path}
-                data-country-id={country.id}
-                data-has-data={entry() ? "true" : undefined}
-                data-active={entry()?.country === props.activeCountry ? "true" : undefined}
-                style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
-                aria-hidden="true"
-                onPointerEnter={() => {
-                  const item = entry()
-                  if (!item) return
-                  props.onActiveCountryChange(item.country)
-                }}
-                onClick={() => {
-                  const item = entry()
-                  if (!item) return
-                  props.onActiveCountryChange(item.country)
-                }}
-              />
-            )
-          }}
-        </For>
-      </g>
-      <g data-slot="geo-country-markers">
-        <For each={worldCountryPaths}>
-          {(country) => {
-            const entry = () => props.countryById.get(country.id)
-            return (
-              <Show when={country.marker && entry() ? country.marker : undefined}>
-                {(marker) => (
-                  <circle
-                    cx={marker().x}
-                    cy={marker().y}
-                    r={entry()?.country === props.activeCountry ? 3.4 : 2.4}
-                    data-active={entry()?.country === props.activeCountry ? "true" : undefined}
-                    style={{ "--geo-country-opacity": String(countryOpacity(entry())) } as JSX.CSSProperties}
-                    aria-hidden="true"
-                    onPointerEnter={() => {
-                      const item = entry()
-                      if (!item) return
-                      props.onActiveCountryChange(item.country)
-                    }}
-                    onClick={() => {
-                      const item = entry()
-                      if (!item) return
-                      props.onActiveCountryChange(item.country)
-                    }}
-                  />
-                )}
-              </Show>
-            )
-          }}
-        </For>
-      </g>
-      <path data-slot="geo-borders" d={worldBorderPath} aria-hidden="true" />
-    </svg>
   )
 }
 
@@ -1506,7 +1379,6 @@ function GeoCountryList(props: {
               type="button"
               data-active={props.activeCountry === country.country ? "true" : undefined}
               style={{ "--geo-row-opacity": String(opacityScale()(country.tokens)) } as JSX.CSSProperties}
-              aria-label={`${formatCountryName(country.country, language.tag(language.locale()), i18n.t("home.unknown"))} ${formatGeoTokens(country.tokens)} ${formatGeoShare(country.share)}`}
               onClick={() => props.onActiveCountryChange(country.country)}
               onPointerEnter={() => props.onActiveCountryChange(country.country)}
               onFocus={() => props.onActiveCountryChange(country.country)}
@@ -1516,7 +1388,10 @@ function GeoCountryList(props: {
               <strong>
                 {formatCountryName(country.country, language.tag(language.locale()), i18n.t("home.unknown"))}
               </strong>
-              <em>{formatGeoTokens(country.tokens)}</em>
+              <em>
+                {formatGeoTokens(country.tokens)}
+                <span data-slot="visually-hidden"> {i18n.t("format.tokens")}</span>
+              </em>
               <b>{formatGeoShare(country.share)}</b>
             </button>
           </li>
@@ -1526,16 +1401,32 @@ function GeoCountryList(props: {
   )
 }
 
-function countryNumericId(country: string) {
-  return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
+function MethodologySection() {
+  const i18n = useI18n()
+  return (
+    <section id="methodology" data-section="methodology">
+      <SectionBridge label={i18n.t("nav.geoBreakdown").toUpperCase()} href="#geo-breakdown" />
+      <SectionTitle
+        id="methodology"
+        title={i18n.t("methodology.title")}
+        description={i18n.t("methodology.description")}
+      />
+      <dl data-component="methodology-list">
+        <For each={methodologyItems}>
+          {([label, text]) => (
+            <div>
+              <dt>{i18n.t(label)}</dt>
+              <dd>{i18n.t(text)}</dd>
+            </div>
+          )}
+        </For>
+      </dl>
+    </section>
+  )
 }
 
-function geoCountryMarker(country: (typeof worldCountries.features)[number]) {
-  const bounds = worldPath.bounds(country)
-  const [x, y] = worldPath.centroid(country)
-  if (!Number.isFinite(x) || !Number.isFinite(y)) return undefined
-  if (bounds[1][0] - bounds[0][0] >= 3 && bounds[1][1] - bounds[0][1] >= 3) return undefined
-  return { x, y }
+function countryNumericId(country: string) {
+  return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
 }
 
 function formatCountryName(country: string, locale: string, unknown: string) {
@@ -1557,6 +1448,10 @@ function getMarketSegmentColor(author: string, color: string, activeAuthor: stri
   if (!activeAuthor) return color
   if (activeAuthor === author) return color
   return "var(--stats-bar-idle)"
+}
+
+function rankedMarketAuthors(day: MarketDay) {
+  return day.authors.toSorted((a, b) => b.tokens - a.tokens || a.author.localeCompare(b.author))
 }
 
 function stackedMarketAuthors(day: MarketDay, order: Map<string, number>) {
@@ -1613,16 +1508,6 @@ function formatMarketDate(day: MarketDay | undefined, fallback: string) {
   return formatMarketDateLabel(day.date)
 }
 
-function formatMarketRange(data: MarketDay[], fallback: string) {
-  const first = data[0]?.date
-  const last = data[data.length - 1]?.date
-  if (!first || !last) return fallback
-  const start = marketDateParts(first).start
-  const end = marketDateParts(last).end
-  if (start === end) return formatMarketDateLabel(start)
-  return `${start} ${new Date().getFullYear()} → ${end} ${new Date().getFullYear()}`
-}
-
 function formatMarketDateLabel(label: string) {
   const parts = marketDateParts(label)
   const year = new Date().getFullYear()
@@ -1635,12 +1520,10 @@ function marketDateParts(label: string) {
   return { start: start ?? label, end: end ?? start ?? label }
 }
 
-function TokenCostSection(props: { data: StatsHomeData["tokenCost"]; catalog: ModelCatalog | null }) {
+function TokenCostSection(props: { data: TokenCostEntry[] }) {
   const i18n = useI18n()
-  const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
-  const data = createMemo(() => priceTokenCostFromCatalog(props.data[product()], props.catalog))
-  const visible = createMemo(() => data().slice(0, 13))
+  const visible = createMemo(() => props.data.slice(0, 13))
   const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(visible().length - 1, 0)))
 
   return (
@@ -1659,17 +1542,6 @@ function TokenCostSection(props: { data: StatsHomeData["tokenCost"]; catalog: Mo
       >
         <TokenCostChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
       </Show>
-      <div data-slot="token-footer" hidden>
-        <FilterPills
-          items={tokenProducts}
-          selected={product()}
-          label={i18n.t("home.productFilter")}
-          variant="product"
-          formatLabel={(item) => productLabel(item, i18n)}
-          onSelect={setProduct}
-        />
-        <LiveIndicator />
-      </div>
     </section>
   )
 }
@@ -1722,12 +1594,10 @@ function TokenCostChart(props: {
   )
 }
 
-function CacheRatioSection(props: { data: StatsHomeData["cacheRatio"] }) {
+function CacheRatioSection(props: { data: CacheRatioEntry[] }) {
   const i18n = useI18n()
-  const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
-  const data = createMemo(() => props.data[product()])
-  const visible = createMemo(() => data().slice(0, 16))
+  const visible = createMemo(() => props.data.slice(0, 16))
   const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(visible().length - 1, 0)))
 
   return (
@@ -1744,17 +1614,6 @@ function CacheRatioSection(props: { data: StatsHomeData["cacheRatio"] }) {
       >
         <CacheRatioChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
       </Show>
-      <div data-slot="token-footer" hidden>
-        <FilterPills
-          items={tokenProducts}
-          selected={product()}
-          label={i18n.t("home.productFilter")}
-          variant="product"
-          formatLabel={(item) => productLabel(item, i18n)}
-          onSelect={setProduct}
-        />
-        <LiveIndicator />
-      </div>
     </section>
   )
 }
@@ -1852,12 +1711,10 @@ function MetricBar(props: { value: number; max: number; active: boolean }) {
   )
 }
 
-function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
+function SessionCostSection(props: { data: SessionCostEntry[] }) {
   const i18n = useI18n()
-  const [product, setProduct] = createSignal<TokenProduct>("Go")
   const [activeIndex, setActiveIndex] = createSignal(2)
-  const data = createMemo(() => props.data[product()])
-  const visible = createMemo(() => data().slice(0, 16))
+  const visible = createMemo(() => props.data.slice(0, 16))
   const selectedIndex = createMemo(() => Math.min(activeIndex(), Math.max(visible().length - 1, 0)))
 
   return (
@@ -1876,17 +1733,6 @@ function SessionCostSection(props: { data: StatsHomeData["sessionCost"] }) {
       >
         <SessionCostChart data={visible()} activeIndex={selectedIndex()} onActiveIndexChange={setActiveIndex} />
       </Show>
-      <div data-slot="token-footer" hidden>
-        <FilterPills
-          items={tokenProducts}
-          selected={product()}
-          label={i18n.t("home.productFilter")}
-          variant="product"
-          formatLabel={(item) => productLabel(item, i18n)}
-          onSelect={setProduct}
-        />
-        <LiveIndicator />
-      </div>
     </section>
   )
 }
@@ -1948,59 +1794,80 @@ function SessionCostChart(props: {
   )
 }
 
-function LiveIndicator() {
-  const i18n = useI18n()
-  return <span data-component="live-filter">{i18n.t("chart.live")}</span>
-}
-
 function formatTokenCount(value: number) {
   if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`
   return `${Math.round(value / 1_000)}K`
-}
-
-function priceTokenCostFromCatalog(data: TokenCostEntry[], catalog: ModelCatalog | null) {
-  if (!catalog) return data
-  return data
-    .flatMap((item) => {
-      const cost = catalogModelCost(catalog, item.model)
-      if (!cost) return []
-      return [
-        {
-          ...item,
-          total: cost.output,
-          input: cost.input,
-          output: cost.output,
-          cached: cost.cacheRead ?? cost.input,
-        },
-      ]
-    })
-    .toSorted((a, b) => a.total - b.total || a.model.localeCompare(b.model))
-}
-
-function catalogModelCost(catalog: ModelCatalog, model: string) {
-  return findModelCatalogEntry(catalog, model)?.cost
 }
 
 function formatSessionCost(value: number) {
   return `$${value.toFixed(4)}`
 }
 
-function homeComparisonPairs(leaderboard: LeaderboardEntry[]) {
+function homeStructuredData(
+  data: HomePageData,
+  page: {
+    name: string
+    description: string
+    url: string
+    localizedUrl: (path: string) => string
+  },
+) {
+  const first = data.usage[0]
+  const last = data.usage.at(-1)
+  return {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Dataset",
+        name: page.name,
+        description: page.description,
+        url: page.url,
+        creator: openCodeOrganization,
+        publisher: openCodeOrganization,
+        isAccessibleForFree: true,
+        variableMeasured: ["Tokens", "Unique users", "Sessions", "Cost per session", "Cache ratio", "Weekly retention"],
+        ...(data.updatedAt ? { dateModified: data.updatedAt } : {}),
+        ...(first && last
+          ? { temporalCoverage: `${isoDay(first.date, data.updatedAt)}/${isoDay(last.date, data.updatedAt)}` }
+          : {}),
+        distribution: [
+          { "@type": "DataDownload", encodingFormat: "application/json", contentUrl: jsonUrl("/data/") },
+          { "@type": "DataDownload", encodingFormat: "text/markdown", contentUrl: markdownUrl("/data/") },
+        ],
+      },
+      {
+        "@type": "ItemList",
+        name: "Top models by tokens, past 7 days",
+        itemListOrder: "https://schema.org/ItemListOrderDescending",
+        itemListElement: data.leaderboard.weekly.map((entry) => ({
+          "@type": "ListItem",
+          position: entry.rank,
+          name: entry.name,
+          url: page.localizedUrl(entry.path),
+        })),
+      },
+    ],
+  }
+}
+
+function homeComparisonPairs(leaderboard: HomeLeaderboardEntry[], catalogLabs: readonly string[]) {
   return uniqueComparisonPairs(
     comparisonPairIndexes.flatMap(([firstIndex, secondIndex, detail]) => {
       const first = leaderboard[firstIndex]
       const second = leaderboard[secondIndex]
-      return first && second ? [{ first: leaderboardRef(first), second: leaderboardRef(second), detail }] : []
+      return first && second
+        ? [{ first: leaderboardRef(first, catalogLabs), second: leaderboardRef(second, catalogLabs), detail }]
+        : []
     }),
   )
 }
 
-function leaderboardRef(entry: LeaderboardEntry): ComparisonModelRef {
+function leaderboardRef(entry: HomeLeaderboardEntry, catalogLabs: readonly string[]): ComparisonModelRef {
   return {
     name: entry.model,
     lab: entry.provider,
     slug: modelSlug(entry.model),
-    labName: entry.author,
+    labName: isKnownCatalogLab(entry.provider, catalogLabs) ? entry.author : undefined,
     metric: `#${entry.rank} / ${formatBillions(entry.tokens)}`,
   }
 }

@@ -10,7 +10,7 @@ export type HeaderLink = { href: string; label: string }
 export const githubLink = {
   href: "https://github.com/anomalyco/opencode",
   apiHref: "https://api.github.com/repos/anomalyco/opencode",
-  fallbackStars: "150K",
+  fallbackStars: "208K",
 }
 export const themePreferences = ["dark", "light", "system"] as const
 export const themeStorageKey = "opencode:stats-theme"
@@ -18,7 +18,8 @@ export type ThemePreference = (typeof themePreferences)[number]
 
 const compactNumberFormatter = new Intl.NumberFormat("en", {
   notation: "compact",
-  maximumFractionDigits: 1,
+  maximumFractionDigits: 0,
+  roundingIncrement: 5,
 })
 
 export const getGitHubStars = query(async () => {
@@ -230,6 +231,7 @@ export function Footer(props: {
     { href: "#cache-ratio", label: i18n.t("nav.cacheRatio") },
     { href: "#market-share", label: i18n.t("nav.marketShare") },
     { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
+    { href: "#methodology", label: i18n.t("methodology.title") },
   ]
   const legal = [
     { href: "https://opencode.ai/legal/terms-of-service", label: i18n.t("footer.terms") },
@@ -240,7 +242,7 @@ export function Footer(props: {
     { href: "https://opencode.ai/discord", label: i18n.t("footer.community") },
     { href: "https://x.com/opencode", label: "X" },
     { href: githubLink.href, label: i18n.t("header.github") },
-    { href: "https://www.youtube.com/@anomaly-co", label: i18n.t("footer.youtube") },
+    { href: "https://www.youtube.com/@anomalyco", label: i18n.t("footer.youtube") },
   ]
   const bridge = () =>
     props.bridge === undefined

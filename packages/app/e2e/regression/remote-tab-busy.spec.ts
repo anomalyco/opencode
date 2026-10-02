@@ -1,5 +1,6 @@
 import { expect, test, type Page, type Route } from "@playwright/test"
 import { base64Encode } from "@opencode-ai/core/util/encode"
+import { currentSession } from "../utils/mock-server"
 
 const serverA = "http://127.0.0.1:4096"
 const serverB = "http://127.0.0.1:4097"
@@ -57,11 +58,15 @@ async function mockServers(page: Page) {
     const current = url.origin === serverA ? sessionA : sessionB
     const directory = url.searchParams.get("directory")
     if (directory && directory !== current.directory) return json(route, { name: "InvalidDirectory" }, 500)
-    if (url.pathname === "/global/event" || url.pathname === "/event") return sse(route)
-    if (url.pathname === "/global/health") return json(route, { healthy: true })
-    if (url.pathname === "/session/status")
-      return json(route, url.origin === serverB ? { [sessionB.id]: { type: "busy" } } : {})
-    if (url.pathname === "/session") return json(route, [current])
+    if (url.pathname === "/global/event" || url.pathname === "/event" || url.pathname === "/api/event")
+      return sse(route, url.pathname === "/api/event")
+    if (url.pathname === "/global/health") return json(route, {}, 404)
+    if (url.pathname === "/api/health") return json(route, { pid: 1 })
+    if (url.pathname === "/api/session/active")
+      return json(route, { data: url.origin === serverB ? { [sessionB.id]: { type: "running" } } : {} })
+    if (url.pathname === "/api/session") return json(route, { data: [currentSession(current)], cursor: {} })
+    if (url.pathname === `/api/session/${current.id}`) return json(route, { data: currentSession(current) })
+    if (url.pathname === `/api/session/${current.id}/message`) return json(route, { data: [], cursor: {} })
     if (url.pathname === `/session/${current.id}`) return json(route, current)
     if (/^\/session\/[^/]+$/.test(url.pathname)) return json(route, { name: "NotFoundError" }, 404)
     if (url.pathname === `/session/${current.id}/message`) return json(route, [])
@@ -90,7 +95,20 @@ async function mockServers(page: Page) {
         directory: current.directory,
         home: current.directory,
       })
+    if (url.pathname === "/api/path")
+      return json(route, {
+        state: current.directory,
+        config: current.directory,
+        worktree: current.directory,
+        directory: current.directory,
+        home: current.directory,
+      })
     if (url.pathname === "/vcs") return json(route, { branch: "main", default_branch: "main" })
+    if (url.pathname === "/api/vcs")
+      return json(route, {
+        location: { directory: current.directory },
+        data: { branch: "main", defaultBranch: "main" },
+      })
     return json(route, {})
   })
 }
@@ -104,6 +122,10 @@ function json(route: Route, body: unknown, status = 200) {
   })
 }
 
-function sse(route: Route) {
-  return route.fulfill({ status: 200, contentType: "text/event-stream", body: ": ok\n\n" })
+function sse(route: Route, current: boolean) {
+  return route.fulfill({
+    status: 200,
+    contentType: "text/event-stream",
+    body: current ? 'data: {"id":"evt_connected","type":"server.connected","data":{}}\n\n' : ": ok\n\n",
+  })
 }

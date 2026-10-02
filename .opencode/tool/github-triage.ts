@@ -4,8 +4,8 @@ import { tool } from "@opencode-ai/plugin"
 const TEAM = {
   tui: ["kommander", "simonklee"],
   desktop_web: ["Hona", "Brendonovich"],
-  core: ["jlongster", "rekram1-node", "nexxeln", "kitlangton"],
-  inference: ["fwang", "MrMushrooooom", "starptech"],
+  core: ["jlongster", "rekram1-node", "neriousy", "nexxeln", "kitlangton"],
+  inference: ["fwang", "vaprdev", "vimtor"],
   windows: ["Hona"],
 } as const
 

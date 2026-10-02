@@ -1,5 +1,6 @@
 import { marked, type Tokens } from "marked"
 import remend from "remend"
+import { completedProjection } from "./markdown-projection"
 
 export type Block = {
   raw: string
@@ -50,7 +51,7 @@ function heal(text: string) {
 }
 
 export function stream(text: string, live: boolean): Block[] {
-  if (!live) return [{ raw: text, src: text, mode: "full" }] satisfies Block[]
+  if (!live) return completedProjection(text).blocks
   if (refs(text)) return [{ raw: text, src: heal(text), mode: "live" }] satisfies Block[]
   const tokens = marked.lexer(text)
   const tail = tokens.findLastIndex((token) => token.type !== "space")
@@ -84,14 +85,25 @@ export function stream(text: string, live: boolean): Block[] {
   return [...result, { raw, src: openCode(code.raw), mode: "code", language: language(code.lang) }]
 }
 
-export function canReusePendingBlock(current: Pick<Block, "mode" | "raw"> | undefined, next: Block) {
-  if (!current || current.mode !== next.mode) return false
-  if (next.mode === "code") return next.raw.startsWith(current.raw)
-  return current.raw === next.raw
-}
-
 export function project(previous: Projection | undefined, text: string, live: boolean): Projection {
-  if (!live || !previous || !text.startsWith(previous.text)) return { text, blocks: stream(text, live) }
+  if (!live) {
+    const current =
+      previous?.text === text
+        ? previous
+        : previous && text.startsWith(previous.text)
+          ? project(previous, text, true)
+          : undefined
+    if (!current) return completedProjection(text)
+    return {
+      text,
+      blocks: current.blocks.map((block) => {
+        if (block.mode === "live") return { raw: block.raw, src: block.raw, mode: "full" }
+        if (block.mode === "code" && !block.complete) return { ...block, complete: true }
+        return block
+      }),
+    }
+  }
+  if (!previous || !text.startsWith(previous.text)) return { text, blocks: stream(text, live) }
   const tail = previous.blocks.at(-1)
   const suffix = text.slice(previous.text.length)
   if (!suffix || tail?.mode !== "code" || tail.complete || closesFence(tail.raw, suffix))

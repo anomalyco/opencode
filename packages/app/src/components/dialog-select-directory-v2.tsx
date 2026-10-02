@@ -8,6 +8,7 @@ import { createEffect, createMemo, createResource, createSignal, For, onCleanup,
 import { useGlobal } from "@/context/global"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
+import type { Path } from "@opencode-ai/sdk/v2/client"
 import {
   absoluteTreePath,
   activeTreeNavigation,
@@ -28,6 +29,7 @@ import {
 } from "./directory-picker-domain"
 import "./dialog-select-directory-v2.css"
 import { DividerV2 } from "@opencode-ai/ui/v2/divider-v2"
+import { getFilename } from "@opencode-ai/core/util/path"
 
 interface DialogSelectDirectoryV2Props {
   title?: string
@@ -67,11 +69,13 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
     () => (missingBase() ? true : undefined),
-    () =>
-      sdk.client.path
+    async (): Promise<Path | undefined> => {
+      if ((await sdk.protocol) !== "v1") return
+      return sdk.client.path
         .get()
         .then((result) => result.data)
-        .catch(() => undefined),
+        .catch(() => undefined)
+    },
     { initialValue: undefined },
   )
   const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")
@@ -85,18 +89,26 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
   )
   const search = createDirectorySearch({ sdk, home, base: () => root() || start() })
   const [suggestions] = createResource(input, async (value) => {
-    const typed = cleanPickerInput(value).replace(/\/+$/, "")
+    const cleaned = cleanPickerInput(value)
+    const typed = cleaned.replace(/\/+$/, "")
     const current = displayPickerPath(root(), value, home()).replace(/\/+$/, "")
-    if (!typed || typed === current) return { query: value, items: [] }
+    if (!cleaned || (root() && typed === current)) return { query: value, items: [] }
     const directories = (await search(value)).map((absolute) => ({ absolute, type: "directory" as const }))
     if (!policy.includeFiles) return { query: value, items: directories.slice(0, 5) }
-    const files = await sdk.client.find
-      .files({ directory: root(), query: pickerFileSearchQuery(root(), value, home()), type: "file", limit: 20 })
-      .then((result) => result.data ?? [])
+    const base = pickerRoot(cleaned) || root() || start()
+    if (!base) return { query: value, items: directories.slice(0, 5) }
+    const files = await sdk.api.file
+      .find({
+        location: { directory: base },
+        query: pickerFileSearchQuery(base, value, home()),
+        type: "file",
+        limit: 20,
+      })
+      .then((result) => result.data)
       .catch(() => [])
     const results = [
       ...directories,
-      ...files.map((path) => ({ absolute: absoluteTreePath(root(), path), type: "file" as const })),
+      ...files.map((entry) => ({ absolute: absoluteTreePath(base, entry.path), type: "file" as const })),
     ]
     return {
       query: value,
@@ -115,9 +127,14 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
       existing ??
       loads.schedule(`${generation}:${key}`, eager ? "background" : "user", () => {
         if (!activeTreeNavigation(generation, navigation)) return Promise.resolve(undefined)
-        return sdk.client.file
-          .list({ directory: absolute, path: "" })
-          .then((result) => result.data ?? [])
+        return sdk.api.file
+          .list({ location: { directory: absolute } })
+          .then((result) =>
+            result.data.map((entry) => ({
+              name: getFilename(entry.path.replace(/[\\/]+$/, "")),
+              type: entry.type,
+            })),
+          )
           .catch(() => undefined)
       })
     listings.set(key, request)
@@ -312,6 +329,7 @@ export function DialogSelectDirectoryV2(props: DialogSelectDirectoryV2Props) {
                 {(suggestion, index) => (
                   <button
                     id={`directory-picker-v2-suggestion-${index()}`}
+                    data-directory-path={suggestion.absolute}
                     role="option"
                     aria-selected={index() === activeSuggestion()}
                     data-active={index() === activeSuggestion() ? "" : undefined}

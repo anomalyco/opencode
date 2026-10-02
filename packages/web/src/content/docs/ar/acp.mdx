@@ -25,12 +25,15 @@ ACP بروتوكول مفتوح يوحّد آلية التواصل بين محر
 
 ### Zed
 
-أضف إلى إعدادات [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+ثبّت OpenCode من [سجل ACP في Zed](https://zed.dev/docs/ai/external-agents#registry) عبر تشغيل `zed: acp registry` من لوحة الأوامر.
+
+لاستخدام ملف OpenCode تنفيذي مخصص بدلاً من ذلك، أضفه إلى إعدادات [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
+      "type": "custom",
       "command": "opencode",
       "args": ["acp"]
     }

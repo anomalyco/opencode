@@ -27,12 +27,15 @@ Poniżej znajdują się przykłady dla edytorów obsługujących ACP.
 
 ### Zed
 
-Dodaj do konfiguracji [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
+Zainstaluj OpenCode z [rejestru ACP Zed](https://zed.dev/docs/ai/external-agents#registry), uruchamiając `zed: acp registry` w palecie poleceń.
+
+Aby zamiast tego użyć niestandardowego pliku wykonywalnego OpenCode, dodaj go do konfiguracji [Zed](https://zed.dev) (`~/.config/zed/settings.json`):
 
 ```json title="~/.config/zed/settings.json"
 {
   "agent_servers": {
     "OpenCode": {
+      "type": "custom",
       "command": "opencode",
       "args": ["acp"]
     }

@@ -304,6 +304,7 @@ export namespace Billing {
     }),
     async (input) => {
       const user = Actor.assert("user")
+      throw new Error("Go subscriptions have moved to the new Console")
       const { successUrl, cancelUrl, method } = input
 
       const email = (await User.getAuthEmail(user.properties.userID))!
@@ -328,7 +329,6 @@ export namespace Billing {
           return LiteData.threeMonths100Coupon
         if (coupons.some((coupon) => coupon.type === "GOFREEMONTH" && !coupon.timeRedeemed))
           return LiteData.firstMonth100Coupon
-        if (!coupons.some((coupon) => coupon.type === "GO1MONTH50")) return LiteData.firstMonth50Coupon
         return undefined
       })()
       const createSession = () =>

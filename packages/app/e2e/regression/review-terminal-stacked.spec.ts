@@ -20,10 +20,12 @@ const branchDiffs = [
 test("keeps the review tree and terminal sized when both panels are open", async ({ page }) => {
   test.setTimeout(120_000)
   const events: Array<{ directory: string; payload: Record<string, unknown> }> = []
+  const sessionStatus = { [sessionID]: { type: "idle" as "busy" | "idle" } }
   let detailVersion = 1
   let detailFailures = 1
   await page.setViewportSize({ width: 1400, height: 900 })
   await mockOpenCodeServer(page, {
+    protocol: "v1",
     directory,
     project: {
       id: projectID,
@@ -55,7 +57,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
         time: { created: 1700000000000, updated: 1700000000000 },
       },
     ],
-    sessionStatus: { [sessionID]: { type: "idle" } },
+    sessionStatus: () => sessionStatus,
     pageMessages: () => ({ items: [] }),
     events: () => events.splice(0, 1),
     eventRetry: 16,
@@ -64,7 +66,10 @@ test("keeps the review tree and terminal sized when both panels are open", async
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ branch: "review-pane-performance", default_branch: "dev" }),
+      body: JSON.stringify({
+        branch: "review-pane-performance",
+        default_branch: "dev",
+      }),
     }),
   )
   await page.route("**/vcs/diff**", (route) => {
@@ -86,15 +91,51 @@ test("keeps the review tree and terminal sized when both panels are open", async
       ),
     })
   })
-  await page.route("**/pty", (route) =>
+  await page.route("**/pty*", (route) =>
     route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({ id: "pty_review_terminal", title: "Terminal 1" }),
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: {
+          id: "pty_review_terminal",
+          title: "Terminal 1",
+          command: "cmd.exe",
+          args: [],
+          cwd: directory,
+          status: "running",
+          pid: 1,
+        },
+      }),
     }),
   )
-  await page.route("**/pty/pty_review_terminal", (route) =>
-    route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
+  await page.route("**/pty/pty_review_terminal*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: {
+          id: "pty_review_terminal",
+          title: "Terminal 1",
+          command: "cmd.exe",
+          args: [],
+          cwd: directory,
+          status: "running",
+          pid: 1,
+        },
+      }),
+    }),
+  )
+  await page.route("**/pty/pty_review_terminal/connect-token*", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        location: { directory, project: { id: projectID, directory } },
+        data: { ticket: "e2e-ticket", expires_in: 60 },
+      }),
+    }),
   )
   await page.routeWebSocket("**/pty/pty_review_terminal/connect", () => undefined)
   await page.addInitScript(() => {
@@ -143,6 +184,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
   const preview = page.locator('[data-slot="session-review-v2-diff-scroll"]')
   await expect(preview).toContainText("after-1")
   detailVersion = 2
+  sessionStatus[sessionID] = { type: "busy" }
   events.push(statusEvent("busy"))
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
   const refreshedDiff = page.waitForRequest((request) => {
@@ -152,6 +194,7 @@ test("keeps the review tree and terminal sized when both panels are open", async
       url.searchParams.get("directory")?.replaceAll("\\", "/").endsWith("/src/branch/d00027") === true
     )
   })
+  sessionStatus[sessionID] = { type: "idle" }
   events.push(statusEvent("idle"))
   await refreshedDiff
   await expect(preview).toContainText("after-2")

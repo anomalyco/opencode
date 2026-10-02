@@ -1,5 +1,6 @@
 import { type ComponentProps, type JSX, Show, splitProps } from "solid-js"
 import { Icon } from "./icon"
+import { useI18n } from "../../context/i18n"
 import "./inline-input-v2.css"
 
 export interface InlineInputV2Props extends Omit<ComponentProps<"input">, "type" | "prefix"> {
@@ -22,6 +23,7 @@ export interface InlineInputV2Props extends Omit<ComponentProps<"input">, "type"
 }
 
 export function InlineInputV2(props: InlineInputV2Props) {
+  const i18n = useI18n()
   const [local, inputProps] = splitProps(props, [
     "class",
     "classList",
@@ -92,7 +94,7 @@ export function InlineInputV2(props: InlineInputV2Props) {
           <button
             type="button"
             data-slot="inline-input-v2-icon-button"
-            aria-label={local.copyLabel ?? "Copy"}
+            aria-label={local.copyLabel ?? i18n.t("ui.message.copy")}
             disabled={local.disabled}
             onClick={local.onCopyClick}
           >

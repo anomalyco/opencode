@@ -20,6 +20,7 @@ import {
   applyThemePreference,
   Footer,
   getGitHubStars,
+  githubLink,
   Header,
   isThemePreference,
   themeStorageKey,
@@ -89,6 +90,7 @@ export default function ModelCompareIndex() {
     { href: `${import.meta.env.BASE_URL}#market-share`, label: i18n.t("nav.marketShare") },
     { href: `${import.meta.env.BASE_URL}#token-cost`, label: i18n.t("nav.tokenCost") },
     { href: `${import.meta.env.BASE_URL}#session-cost`, label: i18n.t("nav.sessionCost") },
+    { href: `${import.meta.env.BASE_URL}#methodology`, label: i18n.t("methodology.title") },
   ])
   const updateThemePreference = (preference: ThemePreference) => {
     applyThemePreference(preference)
@@ -107,25 +109,32 @@ export default function ModelCompareIndex() {
 
   return (
     <main data-page="stats" data-theme={themePreference()}>
-      <Title>{compareTitle}</Title>
-      <Meta name="description" content={compareDescription} />
-      <LocaleLinks path={comparePath} />
-      <Meta property="og:type" content="website" />
-      <Meta property="og:site_name" content="OpenCode" />
-      <Meta property="og:title" content={compareTitle} />
-      <Meta property="og:description" content={compareDescription} />
-      <Meta property="og:url" content={compareUrl()} />
-      <Meta property="og:image" content={statsUnfurlUrl} />
-      <Meta property="og:image:type" content="image/png" />
-      <Meta property="og:image:width" content="1200" />
-      <Meta property="og:image:height" content="630" />
-      <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
-      <Meta name="twitter:card" content="summary_large_image" />
-      <Meta name="twitter:title" content={compareTitle} />
-      <Meta name="twitter:description" content={compareDescription} />
-      <Meta name="twitter:image" content={statsUnfurlUrl} />
-      <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
-      <Header githubStars={githubStars() ?? "150K"} links={compareHeaderLinks()} brandHref={import.meta.env.BASE_URL} />
+      {/* Server-rendered head tags are never removed, so render them once data has loaded. */}
+      <Show when={catalog()}>
+        <Title>{compareTitle}</Title>
+        <Meta name="description" content={compareDescription} />
+        <LocaleLinks path={comparePath} />
+        <Meta property="og:type" content="website" />
+        <Meta property="og:site_name" content="OpenCode" />
+        <Meta property="og:title" content={compareTitle} />
+        <Meta property="og:description" content={compareDescription} />
+        <Meta property="og:url" content={compareUrl()} />
+        <Meta property="og:image" content={statsUnfurlUrl} />
+        <Meta property="og:image:type" content="image/png" />
+        <Meta property="og:image:width" content="1200" />
+        <Meta property="og:image:height" content="630" />
+        <Meta property="og:image:alt" content={i18n.t("app.unfurlAlt")} />
+        <Meta name="twitter:card" content="summary_large_image" />
+        <Meta name="twitter:title" content={compareTitle} />
+        <Meta name="twitter:description" content={compareDescription} />
+        <Meta name="twitter:image" content={statsUnfurlUrl} />
+        <Meta name="twitter:image:alt" content={i18n.t("app.unfurlAlt")} />
+      </Show>
+      <Header
+        githubStars={githubStars() ?? githubLink.fallbackStars}
+        links={compareHeaderLinks()}
+        brandHref={import.meta.env.BASE_URL}
+      />
       <div data-component="container">
         <div data-component="content">
           <section id="compare-tool" data-section="compare-home-hero">

@@ -27,6 +27,7 @@ import { ModelV2 } from "@opencode-ai/core/model"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
+import { ProviderError } from "@/provider/error"
 
 type ConfigModel = NonNullable<NonNullable<ConfigV1.Info["provider"]>[string]["models"]>[string]
 
@@ -753,6 +754,92 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
 
 describe("session.llm.stream", () => {
   const vivgridFixture = { providerID: "vivgrid", modelID: "gemini-3.1-pro-preview" }
+  const opencodeFixture = { providerID: "opencode-test", modelID: vivgridFixture.modelID }
+
+  const headerCases = [
+    { providerID: opencodeFixture.providerID, child: false },
+    { providerID: opencodeFixture.providerID, child: true },
+    { providerID: "custom-test", child: false },
+    { providerID: "custom-test", child: true },
+  ]
+  headerCases.forEach((input) => {
+    it.instance(
+      `sends session identity headers for ${input.child ? "child" : "root"} sessions on ${input.providerID}`,
+      () =>
+        Effect.gen(function* () {
+          const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+          const request = waitRequest(
+            "/chat/completions",
+            new Response(createChatStream("Hello"), {
+              status: 200,
+              headers: { "Content-Type": "text/event-stream" },
+            }),
+          )
+          const resolved = yield* Provider.use.getModel(
+            ProviderV2.ID.make(input.providerID),
+            ModelV2.ID.make(opencodeFixture.modelID),
+          )
+          const sessionID = SessionID.make("session-child")
+          const parentSessionID = input.child ? SessionID.make("session-parent") : undefined
+          const agent = {
+            name: "test",
+            mode: "primary",
+            options: {},
+            permission: [{ permission: "*", pattern: "*", action: "allow" }],
+          } satisfies Agent.Info
+          const user = {
+            id: MessageID.make("msg_user-parent-header"),
+            sessionID,
+            role: "user",
+            time: { created: Date.now() },
+            agent: agent.name,
+            model: {
+              providerID: ProviderV2.ID.make(input.providerID),
+              modelID: resolved.id,
+            },
+          } satisfies SessionV1.User
+
+          yield* drain({
+            user,
+            sessionID,
+            parentSessionID,
+            model: resolved,
+            agent,
+            system: ["You are a helpful assistant."],
+            messages: [{ role: "user", content: "Hello" }],
+            tools: {},
+          })
+
+          const headers = (yield* Effect.promise(() => request)).headers
+          expect(headers.get("x-opencode-session-id")).toBe(sessionID)
+          expect(headers.get("x-opencode-parent-session-id")).toBe(parentSessionID ?? null)
+          expect(headers.get("x-parent-session-id")).toBe(parentSessionID ?? null)
+          if (input.providerID.startsWith("opencode")) {
+            expect(headers.get("x-opencode-session")).toBe(sessionID)
+            return
+          }
+          expect(headers.get("x-session-affinity")).toBe(sessionID)
+          expect(headers.get("X-Session-Id")).toBe(sessionID)
+        }),
+      {
+        config: () => {
+          const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+          return {
+            enabled_providers: [input.providerID],
+            provider: {
+              [input.providerID]: {
+                name: "OpenCode Test",
+                npm: "@ai-sdk/openai-compatible",
+                models: { [fixture.model.id]: configModel(fixture.model) as ConfigModel },
+                options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+              },
+            },
+          }
+        },
+      },
+    )
+  })
+
   it.instance(
     "sends temperature, tokens, and reasoning options for openai-compatible models",
     () =>
@@ -819,6 +906,70 @@ describe("session.llm.stream", () => {
 
         const reasoning = (body.reasoningEffort as string | undefined) ?? (body.reasoning_effort as string | undefined)
         expect(reasoning).toBe("high")
+      }),
+    {
+      config: () => ({
+        enabled_providers: [vivgridFixture.providerID],
+        provider: {
+          [vivgridFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  it.instance(
+    "surfaces network_error finish reasons as retryable stream failures",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          createEventResponse(
+            [
+              {
+                id: "chatcmpl-network-error",
+                object: "chat.completion.chunk",
+                choices: [{ index: 0, delta: { role: "assistant", content: "" }, finish_reason: "network_error" }],
+              },
+            ],
+            true,
+          ),
+        )
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(vivgridFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-network-error")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+        const user = {
+          id: MessageID.make("msg_user-network-error"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(vivgridFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        const error = yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [{ role: "user", content: "Hello" }],
+          tools: {},
+        }).pipe(Effect.flip)
+        yield* Effect.promise(() => request)
+
+        if (!(error instanceof ProviderError.ResponseStreamError)) throw error
+        expect(error.message).toBe("Provider finish_reason: network_error")
       }),
     {
       config: () => ({
@@ -899,6 +1050,117 @@ describe("session.llm.stream", () => {
         enabled_providers: [cerebrasFixture.providerID],
         provider: {
           [cerebrasFixture.providerID]: {
+            options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+          },
+        },
+      }),
+    },
+  )
+
+  const mistralFixture = { providerID: "mistral", modelID: "mistral-small-latest" }
+  it.instance(
+    "replays native Mistral reasoning from chat history",
+    () =>
+      Effect.gen(function* () {
+        const fixture = loadFixture(mistralFixture.providerID, mistralFixture.modelID)
+        const request = waitRequest(
+          "/chat/completions",
+          createEventResponse(
+            [
+              {
+                id: "chatcmpl-mistral",
+                object: "chat.completion.chunk",
+                created: 0,
+                model: fixture.model.id,
+                choices: [{ index: 0, delta: { role: "assistant", content: "Hello" } }],
+              },
+              {
+                id: "chatcmpl-mistral",
+                object: "chat.completion.chunk",
+                created: 0,
+                model: fixture.model.id,
+                choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
+              },
+            ],
+            true,
+          ),
+        )
+
+        const resolved = yield* Provider.use.getModel(
+          ProviderV2.ID.make(mistralFixture.providerID),
+          ModelV2.ID.make(fixture.model.id),
+        )
+        const sessionID = SessionID.make("session-test-mistral-reasoning")
+        const agent = {
+          name: "test",
+          mode: "primary",
+          options: {},
+          permission: [{ permission: "*", pattern: "*", action: "allow" }],
+        } satisfies Agent.Info
+
+        const user = {
+          id: MessageID.make("msg_user-mistral-reasoning"),
+          sessionID,
+          role: "user",
+          time: { created: Date.now() },
+          agent: agent.name,
+          model: { providerID: ProviderV2.ID.make(mistralFixture.providerID), modelID: resolved.id },
+        } satisfies SessionV1.User
+
+        const thinking = {
+          type: "thinking",
+          thinking: [
+            { type: "text", text: "thinking" },
+            {
+              type: "tool_reference",
+              tool: "web_search",
+              title: "Example result",
+              url: "https://example.com/tool",
+              favicon: "https://example.com/favicon.ico",
+              description: "Example description",
+            },
+            { type: "reference", reference_ids: [1, "source-2"] },
+          ],
+          closed: true,
+          signature: "sig-123",
+        }
+
+        yield* drain({
+          user,
+          sessionID,
+          model: resolved,
+          agent,
+          system: ["You are a helpful assistant."],
+          messages: [
+            { role: "user", content: "Hello" },
+            {
+              role: "assistant",
+              content: [
+                {
+                  type: "reasoning",
+                  text: "thinking",
+                  providerOptions: { mistral: { thinking } },
+                },
+                { type: "text", text: "Previous answer" },
+              ],
+            },
+            { role: "user", content: "Continue" },
+          ] satisfies ModelMessage[],
+          tools: {},
+        })
+
+        const capture = yield* Effect.promise(() => request)
+        const messages = capture.body.messages as Array<Record<string, unknown>>
+        expect(messages.find((message) => message.role === "assistant")).toEqual({
+          role: "assistant",
+          content: [thinking, { type: "text", text: "Previous answer" }],
+        })
+      }),
+    {
+      config: () => ({
+        enabled_providers: [mistralFixture.providerID],
+        provider: {
+          [mistralFixture.providerID]: {
             options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
           },
         },

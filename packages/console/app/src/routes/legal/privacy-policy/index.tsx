@@ -237,9 +237,8 @@ export default function PrivacyPolicy() {
                       </td>
                       <td>
                         <ul>
-                          <li>Providing, Customizing and Improving the Services</li>
-                          <li>Marketing the Services</li>
-                          <li>Corresponding with You</li>
+                          <li>Passing through to upstream provider to provide services</li>
+                          <li>Not stored</li>
                         </ul>
                       </td>
                       <td>
