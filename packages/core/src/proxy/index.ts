@@ -20,7 +20,7 @@ export function makeProxyFetch(config?: ConfigProxy.Info): typeof globalThis.fet
   const dispatchers = new Map<string, ProxyDispatcher>()
   let fileConfig = config
   let fileConfigLoaded = config !== undefined
-  return async (input, init) => {
+  const proxyFetch = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     // Read `proxy` from opencode.json once, lazily, since the shared client is
     // global while Config is location-scoped.
     if (!fileConfigLoaded) {
@@ -35,6 +35,9 @@ export function makeProxyFetch(config?: ConfigProxy.Info): typeof globalThis.fet
     dispatchers.set(key, dispatcher)
     return dispatcher.fetch(input, init)
   }
+  // Bun's `fetch` type carries an extra `preconnect`; the runtime contract used
+  // by `FetchHttpClient.Fetch` is the standard call signature.
+  return proxyFetch as unknown as typeof globalThis.fetch
 }
 
 /** Proxy-aware `HttpClient` layer built from environment settings. */
