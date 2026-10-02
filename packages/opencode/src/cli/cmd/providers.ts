@@ -36,6 +36,22 @@ const cliTry = <Value>(message: string, fn: () => PromiseLike<Value>) =>
     catch: (error) => new CliError({ message: message + errorMessage(error) }),
   })
 
+// Positional `login [url]` doubles as a provider id shortcut (`auth login opencode`).
+// Only http(s) URLs enter the well-known enterprise flow; anything else falls through
+// to the provider login below. Without this, `fetch("opencode/.well-known/opencode")`
+// throws `fetch() URL is invalid`.
+export function isWellKnownLoginUrl(value: string | undefined): value is string {
+  if (!value) return false
+  const trimmed = value.trim()
+  if (!/^https?:\/\//i.test(trimmed)) return false
+  try {
+    const parsed = new URL(trimmed)
+    return parsed.protocol === "http:" || parsed.protocol === "https:"
+  } catch {
+    return false
+  }
+}
+
 const handlePluginAuth = Effect.fn("Cli.providers.pluginAuth")(function* (
   plugin: { auth: PluginAuth },
   provider: string,
@@ -300,7 +316,8 @@ export const ProvidersLoginCommand = effectCmd({
   command: "login [url]",
   describe: "log in to a provider",
   // URL login skips instance bootstrap, which would load remote config with the stale token and crash before re-auth.
-  instance: (args) => !args.url,
+  // A bare provider id (`auth login opencode`) still needs the instance, so only skip for real http(s) URLs.
+  instance: (args) => !isWellKnownLoginUrl(args.url),
   builder: (yargs: Argv) =>
     yargs
       .positional("url", {
@@ -322,12 +339,16 @@ export const ProvidersLoginCommand = effectCmd({
 
     UI.empty()
     yield* Prompt.intro("Add credential")
-    if (args.url) {
-      const url = args.url.replace(/\/+$/, "")
+    const loginUrl = args.url
+    if (isWellKnownLoginUrl(loginUrl)) {
+      const url = loginUrl.replace(/\/+$/, "")
       const wellknown = (yield* cliTry(`Failed to load auth provider metadata from ${url}: `, () =>
         fetch(`${url}/.well-known/opencode`).then((x) => x.json()),
       )) as {
-        auth: { command: string[]; env: string }
+        auth?: { command: string[]; env: string }
+      }
+      if (!wellknown?.auth || !Array.isArray(wellknown.auth.command) || typeof wellknown.auth.env !== "string") {
+        return yield* fail(`Auth provider metadata from ${url} is missing auth configuration`)
       }
       yield* Prompt.log.info(`Running \`${wellknown.auth.command.join(" ")}\``)
       const abort = new AbortController()
@@ -409,8 +430,9 @@ export const ProvidersLoginCommand = effectCmd({
     ]
 
     let provider: string
-    if (args.provider) {
-      const input = args.provider
+    const providerArg = args.provider ?? (loginUrl && !isWellKnownLoginUrl(loginUrl) ? loginUrl : undefined)
+    if (providerArg) {
+      const input = providerArg
       const byID = options.find((x) => x.value === input)
       const byName = options.find((x) => x.label.toLowerCase() === input.toLowerCase())
       const match = byID ?? byName
