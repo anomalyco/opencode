@@ -42,10 +42,8 @@ export default Runtime.handler(
         Effect.map((reason) => `server exited unexpectedly (${reason})`),
       ),
     )
-    // Closing the handler scope would wait for the private server's graceful shutdown; its lease pipe already
-    // ends the server once this process exits.
+    // Exit directly: closing the scope would wait on the server's graceful shutdown, and its lease pipe ends it anyway.
     yield* Effect.sync(() => {
-      // stdout carries ACP, so the diagnostic goes to stderr.
       if (failure) process.stderr.write(`opencode acp: ${failure}\n`)
       process.exit(failure ? 1 : 0)
     })

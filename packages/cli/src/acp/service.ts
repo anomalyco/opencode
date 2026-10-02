@@ -50,7 +50,6 @@ export const AuthMethodID = "opencode-login"
 
 export type Failure = ACPError.Error | RequestError | ACPCatalog.Error
 
-/** What the client advertised in `initialize`. */
 export type Capabilities = {
   readonly childSessionUpdates: boolean
   readonly formElicitation: boolean
@@ -87,7 +86,6 @@ export function make(input: {
     return configOptions(yield* input.catalog.get(attached.cwd), yield* Ref.get(attached.selection))
   })
 
-  // A selection the catalog has not seen may be new on the server, so reload once before rejecting it.
   const withReload = <A>(attached: Attached, select: Effect.Effect<A, Failure>) => {
     const retry = () => input.catalog.reload(attached.cwd).pipe(Effect.andThen(select))
     return select.pipe(
@@ -110,7 +108,7 @@ export function make(input: {
     }
   })
 
-  // Both selectors update the selection before switching on the server, so the echoed event diffs to no change.
+  // Update selection before switching so the echoed event is a no-op.
   const selectModel = Effect.fnUntraced(function* (attached: Attached, model: Model.Ref) {
     yield* Ref.update(attached.selection, (selection) => ({ ...selection, model }))
     yield* input.client.session.switchModel({ sessionID: attached.id, model }).pipe(Effect.catch(ACPClient.classify))
@@ -195,8 +193,7 @@ export function make(input: {
     newSession: Effect.fnUntraced(function* (params) {
       const directories = yield* ACPDirectories.parse(params.cwd, params.additionalDirectories)
       const mcpServers = yield* supportedMcpServers(params.mcpServers)
-      // Load before creating so a catalog failure leaves no session behind. Agent and model stay unset
-      // so the server resolves its defaults after plugins activate.
+      // Load first so a catalog failure leaves no session.
       yield* input.catalog.get(params.cwd)
       const created = yield* input.client.session
         .create({ location: { directory: AbsolutePath.make(params.cwd) }, ...ACPDirectories.grant(directories) })
@@ -269,7 +266,7 @@ export function make(input: {
       const mcpServers = yield* supportedMcpServers(params.mcpServers)
       const sessionID = yield* ACPClient.decodeSessionID(params.sessionId)
       const forked = yield* input.client.session.fork({ sessionID }).pipe(Effect.catch(ACPClient.classify))
-      // Forks copy the source session's rules, so the request list replaces any inherited grants.
+      // Forks inherit the source's grants; replace them with this request's.
       yield* ACPDirectories.activate(input.client, forked, directories)
       const attachment = yield* input.sessions.attach(forked, forked.location.directory, mcpServers)
       return { sessionId: attachment.attached.id, configOptions: attachment.configOptions }

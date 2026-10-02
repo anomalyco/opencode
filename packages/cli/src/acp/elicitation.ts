@@ -11,13 +11,12 @@ import { Cause, Effect, Option, Schema } from "effect"
 import type { ACPConnection } from "./connection"
 import type { ACPService } from "./service"
 
-/** A form with an unbranded ID. */
 export type AskedForm = Omit<Form.Info, "id"> & { readonly id: string }
 type InputField = Exclude<Form.Field, Form.ExternalField>
 type SelectField = Form.StringField | Form.MultiselectField
 
-// Form mode must not collect secrets, so only forms from flows known not to ask for credentials are elicited.
 const QuestionKind = "question"
+// Form mode must not collect secrets; elicit only flows known to be credential-free.
 const ElicitedKind = Schema.Struct({ kind: Schema.Literals([QuestionKind, "websearch.provider"]) })
 const Credential = /password|passphrase|secret|token|api[_ -]?key|credential|private[_ -]?key/i
 const ToolSource = Schema.Struct({ tool: Schema.Struct({ id: Schema.String }) })
@@ -29,19 +28,12 @@ type Input = {
   readonly requestedSchema: ElicitationSchema
   readonly clientSessionID: string
   readonly child?: { readonly id: string; readonly title?: string }
-  /** Whether the asking tool call reached the client as a `session/update` tool call. */
   readonly toolCallSent: boolean
-  /** Completes once the form is answered or cancelled elsewhere. */
   readonly settled: Effect.Effect<void>
 }
 
 type Outcome = Form.Answer | "cancel" | "settled"
 
-/**
- * Asks the client, then resolves the form on the server. Once `cancelled` completes, the client's request is
- * cancelled or never sent, and the form is cancelled. Once `settled` completes, the client's request is cancelled and
- * the server is left alone. Resolving on the server is uninterruptible.
- */
 export const reply = Effect.fn("cli.acp.elicitation.reply")(function* (input: Input, cancelled: Effect.Effect<void>) {
   yield* Effect.uninterruptibleMask((restore) =>
     // The race starts racers in order and stops once one is done, so an earlier cancel never starts the ask.
@@ -62,7 +54,6 @@ export const reply = Effect.fn("cli.acp.elicitation.reply")(function* (input: In
 export const UnshownQuestionMessage =
   "The question couldn't be shown to the user in this client. Continue without an answer: make reasonable assumptions and state them, or ask the user in your reply if you can't proceed."
 
-/** Cancels a form, interrupting its session when the server can't cancel it. */
 function cancel(client: OpenCodeClient, form: Form.Info, message?: string) {
   return client.session.form.cancel({ sessionID: form.sessionID, formID: form.id, message }).pipe(
     Effect.catchTag(["FormAlreadySettledError", "FormNotFoundError"], () => Effect.void),
@@ -75,14 +66,6 @@ function cancel(client: OpenCodeClient, form: Form.Info, message?: string) {
   )
 }
 
-/**
- * The form-mode schema for a form, or undefined when the form is cancelled instead: the client lacks form
- * elicitation, the form is not from an allowed flow or has a field whose key, title, description, or option label
- * looks like a credential, or ACP can't represent it faithfully. Unrepresentable forms have `external` fields, `when`
- * conditions, a hidden required field without a default, a default outside a field's options, or a free-text answer
- * alongside options that must also satisfy `required` or item bounds across both inputs. Hidden fields are not asked
- * and answer with their default.
- */
 export function requestedSchema(form: AskedForm, capabilities: ACPService.Capabilities): ElicitationSchema | undefined {
   if (!capabilities.formElicitation) return undefined
   if (Option.isNone(Schema.decodeUnknownOption(ElicitedKind)(form.metadata))) return undefined
@@ -100,17 +83,13 @@ export function requestedSchema(form: AskedForm, capabilities: ACPService.Capabi
   }
 }
 
-/**
- * Cancels a form that `requestedSchema` won't show. A question is cancelled with a message the question tool returns
- * to the model, so the turn continues instead of ending as interrupted; other forms are cancelled silently.
- */
+// The question tool returns the message to the model, so the turn continues instead of ending as interrupted.
 export function cancelUnshown(client: OpenCodeClient, form: Form.Info) {
   return cancel(client, form, form.metadata?.kind === QuestionKind ? UnshownQuestionMessage : undefined).pipe(
     Effect.uninterruptible,
   )
 }
 
-/** The answer for an accepted response, or undefined when the user declined, cancelled, or sent invalid content. */
 export function answer(form: AskedForm, response: CreateElicitationResponse): Form.Answer | undefined {
   if (response.action !== "accept") return undefined
   const content = Schema.decodeUnknownOption(Form.Answer)(response.content ?? {})
@@ -206,7 +185,6 @@ function properties(field: InputField): Array<[string, ElicitationPropertySchema
   }
 }
 
-// A free-text answer next to a field's options is a separate optional property that wins over the selection.
 function other(field: SelectField, description: string): [string, ElicitationPropertySchema] {
   return [
     customKey(field),
@@ -219,7 +197,7 @@ function other(field: SelectField, description: string): [string, ElicitationPro
   ]
 }
 
-// Core rejects an empty string for a required field, so the client is told it needs at least one character.
+// Core rejects an empty string for a required field.
 function text(field: Form.StringField) {
   return {
     format: field.format,

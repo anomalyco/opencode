@@ -13,33 +13,25 @@ import {
 } from "@agentclientprotocol/sdk"
 import { Context, Deferred, Effect } from "effect"
 
-/**
- * Completes once the response to the request being handled is written, so messages sent afterwards follow it.
- * Interrupts when the request fails. Outside a request it completes immediately.
- */
 export const Responded = Context.Reference<Effect.Effect<void>>("@opencode/cli/acp/Connection/Responded", {
   defaultValue: () => Effect.void,
 })
 
 export interface Interface {
   readonly sessionUpdate: (params: SessionNotification) => Effect.Effect<void, RequestError>
-  /** Interruption cancels the client's request. */
   readonly requestPermission: (
     params: RequestPermissionRequest,
   ) => Effect.Effect<RequestPermissionResponse, RequestError>
   readonly extNotification: (method: string, params: Record<string, unknown>) => Effect.Effect<void, RequestError>
-  /** Interruption cancels the client's request. */
   readonly createElicitation: (
     params: CreateElicitationRequest,
   ) => Effect.Effect<CreateElicitationResponse, RequestError>
-  /** Tracks an incoming request from now on and returns its `Responded`. */
   readonly responded: (requestId: JsonRpcId) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Connection") {}
 
 export function make(app: AgentApp, stream: Stream) {
-  // Settled as each response is written to the stream, which serializes every outgoing message.
   const responses = new Map<JsonRpcId, Deferred.Deferred<void>>()
   const writer = stream.writable.getWriter()
   const agent = app.connect({
@@ -79,7 +71,6 @@ export function make(app: AgentApp, stream: Stream) {
   }
 }
 
-// The client's rejections stay typed; any other rejection is a defect.
 function promise<A>(evaluate: (signal: AbortSignal) => Promise<A>) {
   return Effect.tryPromise({ try: evaluate, catch: (cause) => cause }).pipe(
     Effect.catch((cause) => (cause instanceof RequestError ? Effect.fail(cause) : Effect.die(cause))),

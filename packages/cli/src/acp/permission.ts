@@ -36,12 +36,6 @@ const options: PermissionOption[] = [
 
 const decodeFiles = Schema.decodeUnknownOption(Schema.Array(FileDiff.Info))
 
-/**
- * Asks the client, then replies to the server. Once `cancelled` completes, the client's request is cancelled or never
- * sent, and the server gets `reject`. Once `settled` completes, the client's request is cancelled and the server is
- * left alone. The server reply is uninterruptible, so a server that is alive but stuck can hold a cancel past
- * `CancelDrainTimeout`; a dead server fails fast.
- */
 export const reply = Effect.fn("cli.acp.permission.reply")(function* (input: Input, cancelled: Effect.Effect<void>) {
   yield* Effect.uninterruptibleMask((restore) =>
     // The race starts racers in order and stops once one is done, so an earlier cancel never starts the ask.
@@ -103,8 +97,7 @@ function prefixedTitle(prefix: string | undefined, title: string | undefined) {
   return `${prefix}: ${title}`
 }
 
-// Core sends the edit and write previews as file diffs; a diff that no longer applies to the file gets no preview.
-// The patch tool's diffs have their common indentation trimmed for display, so its previews come from its own hunks.
+// Core trims the patch tool's diffs for display, which breaks `applyPatch`, so its previews come from its own hunks.
 const permissionPreviews = Effect.fnUntraced(function* (
   toolName: string,
   input: ToolInput,
@@ -128,8 +121,6 @@ const permissionPreviews = Effect.fnUntraced(function* (
   return previews.flat()
 })
 
-// Patch.derive throws when a hunk does not match the current file, and a read can fail; the patch then gets no
-// previews.
 function patchPreviews(input: ToolInput, cwd: string) {
   return Effect.forEach(
     patchHunks(input),
@@ -176,8 +167,6 @@ function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyA
   }
 }
 
-// Only these actions ask with path resources; an external directory asks for `<dir>/*`, located at the directory.
-// Core's wildcard matching treats only `*` and `?` as special.
 function permissionLocations(
   toolName: string,
   input: ToolInput,

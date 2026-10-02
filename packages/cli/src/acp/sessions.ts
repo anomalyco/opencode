@@ -19,11 +19,6 @@ export type Attached = {
 }
 
 export interface Interface {
-  /**
-   * Attaches a session in its own scope, closing any previous attachment of the same ID. Once the attaching request
-   * has responded, the scope follows the cwd's catalog and pushes config option and command updates while it is
-   * open. A failed attach leaves the session detached. Returns the session's config options as of the attach.
-   */
   readonly attach: (
     session: Session.Info,
     cwd: string,
@@ -32,12 +27,10 @@ export interface Interface {
     { readonly attached: Attached; readonly configOptions: SessionConfigOption[] },
     ACPError.Error | RequestError | ACPCatalog.Error
   >
-  /** Closes the session scope. No-op when the session is not attached. */
   readonly detach: (sessionID: string) => Effect.Effect<void>
   /** Closes this attachment. No-op once the session has been re-attached or detached. */
   readonly release: (attached: Attached) => Effect.Effect<void>
   readonly require: (sessionID: string) => Effect.Effect<Attached, ACPError.SessionNotFoundError>
-  /** Forks work into this attachment's scope, so it ends on detach or re-attach. Fails once the attachment is gone. */
   readonly fork: (attached: Attached, effect: Effect.Effect<void>) => Effect.Effect<void, ACPError.SessionNotFoundError>
 }
 
@@ -46,7 +39,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/cl
 type Entry = {
   readonly attached: Attached
   readonly scope: Scope.Closeable
-  /** Selection changes from other clients, applied by the session's fold. */
   readonly selected: Queue.Queue<Selection>
 }
 
@@ -59,7 +51,7 @@ export const make = Effect.fnUntraced(function* (input: {
 }) {
   const scope = yield* Effect.scope
   const sessions = new Map<string, Entry>()
-  // Kept across re-attachment so resuming with the same servers does not add them again.
+  // Outlives entries so re-attaching does not re-add servers.
   const registeredMcp = new Map<string, Set<string>>()
   const connected = yield* Deferred.make<void>()
 
@@ -151,9 +143,8 @@ export const make = Effect.fnUntraced(function* (input: {
       if (replaced) yield* Scope.close(replaced.scope, Exit.void)
       yield* registerMcp(entry.attached, mcpServers).pipe(Effect.onError(() => remove(session.id, entry)))
       const responded = yield* ACPConnection.Responded
-      // Updates wait for the response that hands the client this session. `changes` emits the latest catalog
-      // first, so a reload since `current` is still pushed. One fold applies catalog and selection changes so
-      // pushes leave the client on the latest pair.
+      // `changes` replays the latest catalog, so a reload since `current` still pushes.
+      // One fold keeps catalog and selection consistent.
       yield* Effect.gen(function* () {
         yield* responded
         yield* sendCommands(session.id, current)

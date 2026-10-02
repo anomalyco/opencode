@@ -23,7 +23,7 @@ import { ACPTurn } from "./turn"
 export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stream: Stream) {
   const run = Effect.runPromiseWith(yield* Effect.context<Scope.Scope>())
   const catalog = yield* ACPCatalog.make(client)
-  // Requests can dispatch once the stream's read loop yields, which may be before the service below is built.
+  // Requests can dispatch before the service below is built.
   const ready = yield* Deferred.make<ACPService.Interface>()
   const handle =
     <Params, A>(
@@ -103,8 +103,6 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
     "session/set_mode",
     handle((service, ctx) => service.setSessionMode(ctx.params)),
   )
-  // The SDK signal is passed through rather than interrupting the fiber: a cancelled turn still resolves with
-  // `stopReason: "cancelled"`.
   request(
     "session/prompt",
     handle((service, ctx) => service.prompt(ctx.params, ctx.signal)),

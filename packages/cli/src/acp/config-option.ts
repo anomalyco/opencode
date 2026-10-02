@@ -28,7 +28,6 @@ export type ModelSelection = {
   variant?: string
 }
 
-/** A session's model and mode. Unset fields follow the catalog defaults. */
 export type Selection = {
   readonly model?: Model.Ref
   readonly modeID?: Agent.ID
