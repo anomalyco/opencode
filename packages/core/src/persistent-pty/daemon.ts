@@ -229,6 +229,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
         new Promise<ReturnType<typeof spawn>>((resolve, reject) => {
           const child = spawn(executable, ["daemon"], {
             detached: true,
+            windowsHide: true,
             stdio: "ignore",
             env: { ...process.env, OPENCODE_PTY_RUNTIME_DIR: directory },
           })
