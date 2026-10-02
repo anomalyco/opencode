@@ -82,7 +82,8 @@ export function makeAuthHeader(
     const native = await loadNative()
     const selected = deps.providers ?? selectProviders(settings.auth, challenges, native)
     for (const provider of selected) {
-      const value = await provider.step(ctx, challenges.join(", "))
+      const challenge = challenges.find((entry) => entry.split(/\s/, 1)[0].toLowerCase() === provider.scheme) ?? provider.scheme
+      const value = await provider.step(ctx, challenge)
       if (value) return value
     }
     return undefined
@@ -288,14 +289,22 @@ function readHead(socket: net.Socket): Promise<Head> {
   })
 }
 
+/**
+ * Parse `Proxy-Authenticate` values, preserving each scheme's token so NTLM can
+ * read the Type2 message. Comma splitting is safe here because the base64
+ * tokens NTLM/Negotiate use never contain commas.
+ */
 const challengesOf = (value: string | string[] | undefined): string[] => {
   if (!value) return []
   const values = Array.isArray(value) ? value : [value]
   return values
     .flatMap((entry) => entry.split(","))
-    .map((entry) => entry.trim().split(/\s/, 1)[0])
-    .filter((entry): entry is string => Boolean(entry))
+    .map((entry) => entry.trim())
+    .filter(Boolean)
 }
+
+const schemeNamesOf = (challenges: readonly string[]): string[] =>
+  challenges.map((entry) => entry.split(/\s/, 1)[0].toLowerCase()).filter(Boolean)
 
 /**
  * Serializes async work per key so concurrent cold-start requests through one
