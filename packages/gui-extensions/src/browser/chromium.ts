@@ -699,6 +699,7 @@ export function createBrowserPage(
           },
         )
         const element = action.ref ? await rect(target(action.ref), true) : undefined
+        await painted()
         const metrics = await cdp.send("Page.getLayoutMetrics")
         const bounds = element
           ? {
