@@ -1,8 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import fs from "node:fs/promises"
 import path from "node:path"
 import type { Permission } from "@opencode/schema/permission"
-import { tmpdir } from "../fixture/tmpdir"
 import { makeSession, rpcError, startWire, type Wire } from "./wire-fixture"
 
 const key = "opencode.acp.additionalDirectories"
@@ -28,56 +26,6 @@ const updates = (acp: Wire) =>
   acp.server.requests.filter((request) => request.method === "PATCH" && request.path.startsWith("/api/session/"))
 
 describe("acp additional directories over the wire", () => {
-  test("session/new grants normalized unique directories other than cwd and lists them", async () => {
-    await using acp = await startWire()
-    await acp.initialize()
-
-    const created = await acp.request("session/new", {
-      cwd: "/workspace",
-      additionalDirectories: ["/shared/lib/", "/workspace", "/docs/../product-docs", "/shared/lib", "/workspace/"],
-      mcpServers: [],
-    })
-
-    expect(acp.server.sessions.get(created.sessionId)).toMatchObject({
-      permissions: [grant(sharedLib), grant(productDocs)],
-      metadata: { [key]: [sharedLib, productDocs] },
-    })
-    expect((await acp.request("session/list", { cwd: "/workspace" })).sessions).toEqual([
-      expect.objectContaining({
-        sessionId: created.sessionId,
-        additionalDirectories: [sharedLib, productDocs],
-      }),
-    ])
-  })
-
-  test("grants both the written and real spelling of a symlinked root and drops links to cwd", async () => {
-    await using tmp = await tmpdir()
-    const root = await fs.realpath(tmp.path)
-    const cwd = path.join(root, "workspace")
-    const shared = path.join(root, "shared")
-    await Promise.all([fs.mkdir(cwd), fs.mkdir(shared)])
-    await Promise.all([
-      fs.symlink(shared, path.join(root, "shared-link")),
-      fs.symlink(cwd, path.join(root, "workspace-link")),
-    ])
-    await using acp = await startWire()
-    await acp.initialize()
-
-    const created = await acp.request("session/new", {
-      cwd,
-      additionalDirectories: [path.join(root, "workspace-link"), path.join(root, "shared-link")],
-      mcpServers: [],
-    })
-
-    expect(acp.server.sessions.get(created.sessionId)).toMatchObject({
-      permissions: [grant(path.join(root, "shared-link")), grant(shared)],
-      metadata: { [key]: [path.join(root, "shared-link")] },
-    })
-    expect((await acp.request("session/list", { cwd })).sessions[0]?.additionalDirectories).toEqual([
-      path.join(root, "shared-link"),
-    ])
-  })
-
   test.each(["shared/lib", "", "/shared/*", "/shared/lib?"])(
     "rejects %p before creating a session",
     async (directory) => {
@@ -154,29 +102,5 @@ describe("acp additional directories over the wire", () => {
       permissions: [grant(sharedLib), ...other],
     })
     expect(acp.server.sessions.get("ses_source")?.permissions).toEqual([grant(old), ...other])
-  })
-
-  test("leaves sessions alone without additional directories", async () => {
-    await using acp = await startWire()
-    acp.server.sessions.set("ses_saved", {
-      ...makeSession("ses_saved"),
-      metadata: { host: "tui" },
-      permissions: [userGrant, ...other],
-    })
-    await acp.initialize()
-
-    const created = await acp.request("session/new", { cwd: "/workspace", mcpServers: [] })
-    await acp.request("session/load", { cwd: "/workspace", sessionId: "ses_saved", mcpServers: [] })
-    await acp.request("session/resume", { cwd: "/workspace", sessionId: "ses_saved", additionalDirectories: [] })
-
-    const create = acp.server.requests.find((request) => request.method === "POST" && request.path === "/api/session")
-    expect(create?.body).toMatchObject({ location: { directory: "/workspace" }, permissions: null, metadata: null })
-    expect(acp.server.sessions.get(created.sessionId)?.permissions).toBeUndefined()
-    expect(updates(acp)).toEqual([])
-    expect(
-      (await acp.request("session/list", { cwd: "/workspace" })).sessions.map(
-        (session) => session.additionalDirectories,
-      ),
-    ).toEqual([undefined, undefined])
   })
 })

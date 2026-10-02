@@ -11,23 +11,17 @@ type JsonRpcRequest = {
   readonly params?: unknown
 }
 
-export type JsonRpcError = {
+type JsonRpcError = {
   readonly code: number
   readonly message?: string
   readonly data?: unknown
 }
 
-export type JsonRpcResponse<T> = {
+type JsonRpcResponse<T> = {
   readonly jsonrpc: "2.0"
   readonly id: number
   readonly result?: T
   readonly error?: JsonRpcError
-}
-
-type JsonRpcNotification<T> = {
-  readonly jsonrpc: "2.0"
-  readonly method: string
-  readonly params: T
 }
 
 type JsonRpcMessage = Record<string, unknown>
@@ -39,36 +33,17 @@ type Waiter = {
   readonly timer: ReturnType<typeof setTimeout>
 }
 
-export type AcpProcess = {
+type AcpProcess = {
   readonly pid: number
   readonly exited: Promise<number>
   readonly request: <T>(method: string, params?: unknown) => Promise<JsonRpcResponse<T>>
-  readonly send: <T>(
-    method: string,
-    params?: unknown,
-  ) => { readonly id: number; readonly response: Promise<JsonRpcResponse<T>> }
-  readonly notify: (method: string, params: unknown) => Promise<void>
-  readonly waitForNotification: <T>(
-    method: string,
-    predicate: (params: T) => boolean,
-    timeoutMs?: number,
-  ) => Promise<JsonRpcNotification<T>>
   readonly close: () => Promise<number>
   readonly stderr: () => string
   readonly [Symbol.asyncDispose]: () => Promise<void>
 }
 
-export const verifierSkill = `---
-name: verifier-skill
-description: Verifier compatibility skill.
----
-
-# Verifier Skill
-`
-
 export async function createAcpFixture(
   options: {
-    readonly skill?: string
     readonly respond?: (request: unknown) => string | Response | Promise<string | Response>
   } = {},
 ) {
@@ -76,12 +51,7 @@ export async function createAcpFixture(
   const home = path.join(root, "workspace")
   const config = path.join(root, "config")
   const models = path.join(root, "models.json")
-  const skills = path.join(root, "skills")
   await Promise.all([fs.mkdir(home, { recursive: true }), fs.mkdir(config, { recursive: true })])
-  if (options.skill) {
-    await fs.mkdir(path.join(skills, "verifier-skill"), { recursive: true })
-    await Bun.write(path.join(skills, "verifier-skill", "SKILL.md"), options.skill)
-  }
 
   const requests: unknown[] = []
   const llm = Bun.serve({
@@ -100,10 +70,7 @@ export async function createAcpFixture(
       })
     },
   })
-  await Bun.write(
-    path.join(config, "opencode.json"),
-    JSON.stringify(verifierConfig(`http://127.0.0.1:${llm.port}/v1`, options.skill ? skills : undefined)),
-  )
+  await Bun.write(path.join(config, "opencode.json"), JSON.stringify(verifierConfig(`http://127.0.0.1:${llm.port}/v1`)))
   await Bun.write(models, "{}")
 
   const processes = new Set<AcpProcess>()
@@ -111,7 +78,7 @@ export async function createAcpFixture(
     root,
     home,
     llm: { requests },
-    spawn(extraEnv: Record<string, string | undefined> = {}) {
+    spawn() {
       const acp = spawnAcp({
         env: isolatedEnv(root, {
           USERPROFILE: root,
@@ -119,7 +86,6 @@ export async function createAcpFixture(
           OPENCODE_CONFIG_CONTENT: undefined,
           OPENCODE_DISABLE_AUTOUPDATE: "true",
           OPENCODE_MODELS_PATH: models,
-          ...extraEnv,
         }),
       })
       processes.add(acp)
@@ -167,7 +133,10 @@ export function toolCallStream(id: string, name: string, input: unknown) {
     {
       choices: [
         {
-          delta: { role: "assistant", tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: "" } }] },
+          delta: {
+            role: "assistant",
+            tool_calls: [{ index: 0, id, type: "function", function: { name, arguments: "" } }],
+          },
           finish_reason: null,
         },
       ],
@@ -185,7 +154,7 @@ export function toolCallStream(id: string, name: string, input: unknown) {
   })
 }
 
-function verifierConfig(llmUrl: string, skills?: string) {
+function verifierConfig(llmUrl: string) {
   const model = {
     capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
     cost: { input: 0, output: 0 },
@@ -194,7 +163,6 @@ function verifierConfig(llmUrl: string, skills?: string) {
   return {
     update: "disable",
     model: "test/test-model",
-    ...(skills ? { skills: [skills] } : {}),
     providers: {
       test: {
         name: "Test",
@@ -305,41 +273,27 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
     })
   }
 
-  const write = async (message: JsonRpcRequest | JsonRpcNotification<unknown>) => {
+  const write = async (message: JsonRpcRequest) => {
     if (inputClosed) throw new Error("ACP stdin is closed")
     await child.stdin.write(encoder.encode(`${JSON.stringify(message)}\n`))
     await child.stdin.flush()
   }
 
-  const send = <T>(method: string, params?: unknown) => {
+  const request = <T>(method: string, params?: unknown) => {
     const id = nextID++
-    const request: JsonRpcRequest =
+    const message: JsonRpcRequest =
       params === undefined ? { jsonrpc: "2.0", id, method } : { jsonrpc: "2.0", id, method, params }
-    const response = write(request).then(async () => {
+    return write(message).then(async () => {
       const response = await take((message) => isResponse(message) && message.id === id, 20_000, `${method} response`)
       if (!isResponse<T>(response)) throw new Error(`Invalid ACP response: ${JSON.stringify(response)}`)
       return response
     })
-    return { id, response }
   }
 
   return {
     pid: child.pid,
     exited: child.exited,
-    request: <T>(method: string, params?: unknown) => send<T>(method, params).response,
-    send,
-    notify: (method: string, params: unknown) => write({ jsonrpc: "2.0", method, params }),
-    async waitForNotification<T>(method: string, predicate: (params: T) => boolean, timeoutMs = 20_000) {
-      const notification = await take(
-        (message) => isNotification<T>(message) && message.method === method && predicate(message.params),
-        timeoutMs,
-        `${method} notification`,
-      )
-      if (!isNotification<T>(notification)) {
-        throw new Error(`Invalid ACP notification: ${JSON.stringify(notification)}`)
-      }
-      return notification
-    },
+    request,
     async close() {
       if (!inputClosed) {
         inputClosed = true
@@ -373,10 +327,6 @@ function isJsonRpcMessage(message: unknown): message is JsonRpcMessage {
 
 function isResponse<T>(message: JsonRpcMessage): message is JsonRpcMessage & JsonRpcResponse<T> {
   return message.jsonrpc === "2.0" && typeof message.id === "number" && !("method" in message)
-}
-
-function isNotification<T>(message: JsonRpcMessage): message is JsonRpcMessage & JsonRpcNotification<T> {
-  return message.jsonrpc === "2.0" && typeof message.method === "string" && !("id" in message)
 }
 
 function asError(error: unknown) {
