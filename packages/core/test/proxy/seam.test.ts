@@ -9,7 +9,7 @@ test("shared http client uses the injected fetch", async () => {
   const fakeFetch = (async () => {
     calls++
     return new Response("ok")
-  }) as typeof fetch
+  }) as unknown as typeof fetch
 
   const layer = FetchHttpClient.layer.pipe(Layer.provide(Layer.succeed(FetchHttpClient.Fetch, fakeFetch)))
   const client = await Effect.runPromise(HttpClient.HttpClient.pipe(Effect.provide(layer)))
