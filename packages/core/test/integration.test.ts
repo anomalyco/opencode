@@ -324,11 +324,17 @@ describe("Integration", () => {
           })
 
           // Stored credentials and detected env vars appear as connections.
+          // The global active credential (most recently created) sorts first.
           expect((yield* integrations.get(integrationID))?.connections).toEqual([
             {
               type: "credential",
               id: personal.id,
               label: "Personal",
+            },
+            {
+              type: "credential",
+              id: work.id,
+              label: "Work",
             },
             { type: "env", name: "INTEGRATION_TEST_ACME_KEY" },
           ])
@@ -338,6 +344,14 @@ describe("Integration", () => {
             label: "Personal",
           })
           expect(work.id).not.toBe(personal.id)
+
+          // Switching the global active reorders connections machine-wide.
+          yield* credentials.activate(work.id)
+          expect(yield* integrations.connection.active(integrationID)).toEqual({
+            type: "credential",
+            id: work.id,
+            label: "Work",
+          })
         }),
       (previous) =>
         Effect.sync(() => {
@@ -346,4 +360,66 @@ describe("Integration", () => {
         }),
     )
   })
+
+  it.effect("prefers the per-directory pinned credential over the global active", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("pinned-acme")
+      yield* integrations.transform((editor) =>
+        editor.method.update({ integrationID, method: { type: "key", label: "API key" } }),
+      )
+      const work = yield* credentials.create({
+        integrationID,
+        label: "Work",
+        value: Credential.Key.make({ type: "key", key: "work-secret" }),
+      })
+      const personal = yield* credentials.create({
+        integrationID,
+        label: "Personal",
+        value: Credential.Key.make({ type: "key", key: "personal-secret" }),
+      })
+      // Global fallback is the most recently created credential.
+      expect(yield* integrations.connection.active(integrationID)).toEqual({
+        type: "credential",
+        id: personal.id,
+        label: "Personal",
+      })
+
+      // Pinning by label selects Work for this location only.
+      yield* integrations.connection.pin(integrationID, "Work")
+      expect(yield* integrations.connection.active(integrationID)).toEqual({
+        type: "credential",
+        id: work.id,
+        label: "Work",
+      })
+      expect(
+        (yield* integrations.get(integrationID))?.connections.map((connection) =>
+          connection.type === "credential" ? connection.label : connection.type,
+        ),
+      ).toEqual(["Work", "Personal"])
+
+      // Pinning by ID also works.
+      yield* integrations.connection.pin(integrationID, work.id)
+      const byID = yield* integrations.connection.active(integrationID)
+      expect(byID?.type === "credential" ? byID.id : undefined).toBe(work.id)
+
+      // An unmatched pin falls back to the global active.
+      yield* integrations.connection.pin(integrationID, "Missing")
+      expect(yield* integrations.connection.active(integrationID)).toEqual({
+        type: "credential",
+        id: personal.id,
+        label: "Personal",
+      })
+
+      // Clearing the pin restores global ordering without changing the global active.
+      yield* integrations.connection.unpin(integrationID)
+      expect(
+        (yield* integrations.get(integrationID))?.connections.map((connection) =>
+          connection.type === "credential" ? connection.label : connection.type,
+        ),
+      ).toEqual(["Personal", "Work"])
+      expect((yield* credentials.list(integrationID))[0]?.id).toBe(personal.id)
+    }),
+  )
 })

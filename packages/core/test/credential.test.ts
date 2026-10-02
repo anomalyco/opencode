@@ -22,14 +22,22 @@ describe("Credential", () => {
       yield* credentials.update(created.id, { label: "Personal" })
       expect((yield* credentials.list(integrationID))[0]?.label).toBe("Personal")
 
-      const replacement = yield* credentials.create({
+      const second = yield* credentials.create({
         integrationID,
         label: "Replacement",
         value: Credential.Key.make({ type: "key", key: "replacement" }),
       })
-      expect(yield* credentials.list(integrationID)).toEqual([replacement])
+      // New credentials become the global active and sort first.
+      expect(yield* credentials.list(integrationID)).toEqual([second, expect.objectContaining({ id: created.id })])
 
-      yield* credentials.remove(replacement.id)
+      yield* credentials.activate(created.id)
+      expect((yield* credentials.list(integrationID))[0]?.id).toBe(created.id)
+
+      yield* credentials.remove(created.id)
+      // Removing the active credential promotes the most recent remainder.
+      expect(yield* credentials.list(integrationID)).toEqual([second])
+
+      yield* credentials.remove(second.id)
       expect(yield* credentials.list(integrationID)).toEqual([])
     }),
   )

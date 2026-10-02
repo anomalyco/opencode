@@ -144,8 +144,14 @@ export interface Interface extends State.Transformable<Draft> {
   /** Returns all integrations with their methods and current connections. */
   readonly list: () => Effect.Effect<Info[]>
   readonly connection: {
-    /** Returns the active connection for one integration. */
+    /** Returns the active connection for one integration, honoring the location pin. */
     readonly active: (id: ID) => Effect.Effect<IntegrationConnection.Info | undefined>
+    /** Makes one stored credential the global active fallback for its integration. */
+    readonly activate: (credentialID: Credential.ID) => Effect.Effect<void>
+    /** Pins one stored credential (ID or label) for this location only. */
+    readonly pin: (integrationID: ID, selector: string) => Effect.Effect<void>
+    /** Clears the location pin, falling back to the global active credential. */
+    readonly unpin: (integrationID: ID) => Effect.Effect<void>
     /** Resolves a connection into usable credential material. */
     readonly resolve: (
       connection: IntegrationConnection.Info,
@@ -225,6 +231,11 @@ export const locationLayer = Layer.effect(
     const events = yield* EventV2.Service
     const scope = yield* Scope.Scope
     const attempts = SynchronizedRef.makeUnsafe(new Map<AttemptID, AttemptEntry>())
+    // Per-location credential pins (credential ID or label). Location-scoped, so
+    // two directories share one global credential store yet resolve the same
+    // integration to different stored credentials. Set from
+    // `providers.<integrationID>.auth` in opencode.json via ConfigProviderPlugin.
+    const pins = SynchronizedRef.makeUnsafe(new Map<ID, string>())
     const state = State.create<Data, Draft>({
       initial: () => ({ integrations: new Map<ID, Entry>() }),
       draft: (draft) => ({
@@ -285,19 +296,39 @@ export const locationLayer = Layer.effect(
       finalize: () => events.publish(Event.Updated, {}).pipe(Effect.asVoid),
     })
 
-    const resolveConnections = (entry: Entry | undefined, saved: readonly Credential.Info[]) => {
-      const credentials = saved
-        .map((credential) => ({
-          type: "credential" as const,
-          id: credential.id,
-          label: credential.label,
-        }))
-        .toReversed()
+    // Credential precedence for one Location (highest first):
+    // 1. Stored credential selected by `Integration.connection.active`:
+    //    per-location pin (`providers.<integrationID>.auth`), else the global active.
+    // 2. Explicit `apiKey` in provider/model config is only a fallback when no
+    //    connection resolves (see SessionRunnerModel); stored connections win.
+    // 3. Environment connection (`providers.<id>.env` names present in process.env).
+    // Pins are location-local; the global active fallback lives in the shared store.
+    const pinned = (integrationID: ID) => SynchronizedRef.get(pins).pipe(Effect.map((all) => all.get(integrationID)))
+
+    const orderByPin = (saved: readonly Credential.Info[], pin: string | undefined) => {
+      if (!pin) return saved
+      const index = saved.findIndex((credential) => credential.id === pin || credential.label === pin)
+      if (index === -1) return saved
+      return [saved[index]!, ...saved.slice(0, index), ...saved.slice(index + 1)]
+    }
+
+    const resolveConnections = (
+      entry: Entry | undefined,
+      saved: readonly Credential.Info[],
+      pin?: string,
+    ) => {
+      // Credential.list already returns the global active first.
+      const ordered = orderByPin(saved, pin)
+      const stored = ordered.map((credential) => ({
+        type: "credential" as const,
+        id: credential.id,
+        label: credential.label,
+      }))
       const env = (entry?.methods ?? [])
         .filter((method) => method.type === "env")
         .flatMap((method) => method.names.filter((name) => process.env[name]))
         .map((name) => ({ type: "env" as const, name }))
-      return [...credentials, ...env]
+      return [...stored, ...env]
     }
 
     const project = (entry: Entry, connections: IntegrationConnection.Info[]) =>
@@ -369,18 +400,41 @@ export const locationLayer = Layer.effect(
       get: Effect.fn("Integration.get")(function* (id) {
         const entry = state.get().integrations.get(id)
         if (!entry) return undefined
-        return project(entry, resolveConnections(entry, yield* credentials.list(id)))
+        return project(entry, resolveConnections(entry, yield* credentials.list(id), yield* pinned(id)))
       }),
       list: Effect.fn("Integration.list")(function* () {
         const saved = Map.groupBy(yield* credentials.all(), (credential) => credential.integrationID)
+        const allPins = yield* SynchronizedRef.get(pins)
         return Array.from(state.get().integrations.values(), (entry) =>
-          project(entry, resolveConnections(entry, saved.get(entry.ref.id) ?? [])),
+          project(entry, resolveConnections(entry, saved.get(entry.ref.id) ?? [], allPins.get(entry.ref.id))),
         ).toSorted((a, b) => a.name.localeCompare(b.name))
       }),
       connection: {
         active: Effect.fn("Integration.connection.active")(function* (id) {
           const entry = state.get().integrations.get(id)
-          return resolveConnections(entry, yield* credentials.list(id))[0]
+          return resolveConnections(entry, yield* credentials.list(id), yield* pinned(id))[0]
+        }),
+        activate: Effect.fn("Integration.connection.activate")(function* (credentialID) {
+          const credential = yield* credentials.get(credentialID)
+          yield* credentials.activate(credentialID)
+          if (credential) {
+            yield* events.publish(Event.ConnectionUpdated, { integrationID: credential.integrationID })
+          }
+          yield* events.publish(Event.Updated, {})
+        }),
+        pin: Effect.fn("Integration.connection.pin")(function* (integrationID, selector) {
+          yield* SynchronizedRef.update(pins, (all) => new Map(all).set(integrationID, selector))
+          yield* events.publish(Event.ConnectionUpdated, { integrationID })
+          yield* events.publish(Event.Updated, {})
+        }),
+        unpin: Effect.fn("Integration.connection.unpin")(function* (integrationID) {
+          yield* SynchronizedRef.update(pins, (all) => {
+            const next = new Map(all)
+            next.delete(integrationID)
+            return next
+          })
+          yield* events.publish(Event.ConnectionUpdated, { integrationID })
+          yield* events.publish(Event.Updated, {})
         }),
         resolve: Effect.fn("Integration.connection.resolve")(function* (connection) {
           if (connection.type === "env") {

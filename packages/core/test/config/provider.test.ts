@@ -3,6 +3,7 @@ import { Effect, Schema } from "effect"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Config } from "@opencode-ai/core/config"
 import { ConfigProviderPlugin } from "@opencode-ai/core/config/plugin/provider"
+import { Credential } from "@opencode-ai/core/credential"
 import { Integration } from "@opencode-ai/core/integration"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { PluginV2 } from "@opencode-ai/core/plugin"
@@ -265,5 +266,47 @@ describe("ConfigProviderPlugin.Plugin", () => {
         expect(model.variants[1]?.headers).toEqual({ slow: "slow" })
       }),
     ),
+  )
+
+  it.effect("pins the configured credential for the location without changing the global active", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("pinned-config")
+      yield* integrations.transform((editor) =>
+        editor.method.update({ integrationID, method: { type: "key", label: "API key" } }),
+      )
+      const work = yield* credentials.create({
+        integrationID,
+        label: "Work",
+        value: Credential.Key.make({ type: "key", key: "work-secret" }),
+      })
+      const personal = yield* credentials.create({
+        integrationID,
+        label: "Personal",
+        value: Credential.Key.make({ type: "key", key: "personal-secret" }),
+      })
+      const initial = yield* integrations.connection.active(integrationID)
+      expect(initial?.type === "credential" ? initial.id : undefined).toBe(personal.id)
+
+      const config = Config.Service.of({
+        entries: () =>
+          Effect.succeed([
+            new Config.Document({
+              type: "document",
+              info: decode({ providers: { [integrationID]: { auth: "Work" } } }),
+            }),
+          ]),
+      })
+      yield* addPlugin(config)
+
+      // The location pin selects Work while the global active stays Personal.
+      expect(yield* integrations.connection.active(integrationID)).toEqual({
+        type: "credential",
+        id: work.id,
+        label: "Work",
+      })
+      expect((yield* credentials.list(integrationID))[0]?.id).toBe(personal.id)
+    }),
   )
 })
