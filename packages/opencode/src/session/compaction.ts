@@ -467,9 +467,10 @@ const layer = Layer.effect(
       const summary = summaryText({ info: processor.message, parts: summaryParts })
       if (result === "continue" && !processor.message.error && (!summary || processor.message.finish === "length")) {
         processor.message.error = new NamedError.Unknown({
-          message: summary
-            ? "Compaction summary was cut off by the output length limit"
-            : "Compaction produced no summary",
+          message:
+            processor.message.finish === "length"
+              ? "Compaction summary was cut off by the output length limit"
+              : "Compaction produced no summary",
         }).toObject()
         processor.message.finish = "error"
         yield* session.updateMessage(processor.message)
