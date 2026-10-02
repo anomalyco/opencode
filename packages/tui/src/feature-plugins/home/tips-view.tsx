@@ -148,7 +148,7 @@ export function Tips(props: { api: TuiPluginApi; connected?: boolean }) {
   }, NO_MODELS_PARTS)
 
   return (
-    <box flexDirection="row" maxWidth="100%">
+    <box flexDirection="row" maxWidth="100%" flexShrink={0}>
       <text flexShrink={0} style={{ fg: theme.warning }}>
         ● Tip{" "}
       </text>
