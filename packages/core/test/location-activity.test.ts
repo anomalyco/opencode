@@ -12,6 +12,7 @@ import { LocationActivity } from "@opencode/core/location-activity"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
+import { Pty } from "@opencode/core/pty"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
@@ -20,7 +21,40 @@ import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { Workspace } from "@opencode/core/workspace"
+import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
+
+const fixtureMap = (lookup: (ref: Location.Ref) => Layer.Layer<LocationServices>) =>
+  Effect.map(LayerMap.make(lookup, { idleTimeToLive: Duration.infinity }), (map) => ({
+    ...map,
+    get: (ref: Location.Ref) => map.get(LocationServiceMap.canonical(ref)),
+    contextEffect: (ref: Location.Ref) => map.contextEffect(LocationServiceMap.canonical(ref)),
+    contextEffectOption: (ref: Location.Ref) => map.contextEffectOption(LocationServiceMap.canonical(ref)),
+    invalidate: (ref: Location.Ref) => map.invalidate(LocationServiceMap.canonical(ref)),
+  }))
+
+const harness = (locations: Layer.Layer<LocationServiceMap.Service, never, Bus.Service>) =>
+  testEffect(
+    AppNodeBuilder.build(
+      LayerNode.group([
+        Database.node,
+        Bus.node,
+        SessionStore.node,
+        LocationServiceMap.node,
+        SessionExecution.node,
+        LocationActivity.node,
+      ]),
+      [
+        LocationServiceMap.node.replace(
+          makeGlobalNode({
+            service: LocationServiceMap.Service,
+            layer: locations,
+            deps: [Bus.node],
+          }),
+        ),
+      ],
+    ),
+  )
 
 // Keep real execution ownership, location caching, forms, and eviction. The fixture
 // runner waits on a form instead of making a model request before asking a question.
@@ -28,7 +62,7 @@ const locations = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const map = yield* LayerMap.make(
+    return yield* fixtureMap(
       (ref: Location.Ref) =>
         // The fixture only exercises these three Location services.
         // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
@@ -66,39 +100,30 @@ const locations = Layer.effect(
           Layer.provide(Layer.succeed(Bus.Service, bus)),
           Layer.fresh,
         ) as unknown as Layer.Layer<LocationServices>,
-      { idleTimeToLive: Duration.infinity },
     )
-    return {
-      ...map,
-      get: (ref: Location.Ref) => map.get(LocationServiceMap.canonical(ref)),
-      contextEffect: (ref: Location.Ref) => map.contextEffect(LocationServiceMap.canonical(ref)),
-      contextEffectOption: (ref: Location.Ref) => map.contextEffectOption(LocationServiceMap.canonical(ref)),
-      invalidate: (ref: Location.Ref) => map.invalidate(LocationServiceMap.canonical(ref)),
-    }
   }),
 )
 
-const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([
-      Database.node,
-      Bus.node,
-      SessionStore.node,
-      LocationServiceMap.node,
-      SessionExecution.node,
-      LocationActivity.node,
-    ]),
-    [
-      LocationServiceMap.node.replace(
-        makeGlobalNode({
-          service: LocationServiceMap.Service,
-          layer: locations,
-          deps: [Bus.node],
-        }),
-      ),
-    ],
-  ),
+// Real terminals: the location graph is the compiled Pty node over the fixture Location.
+const terminalLocations = Layer.effect(
+  LocationServiceMap.Service,
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    return yield* fixtureMap(
+      (ref: Location.Ref) =>
+        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+        LayerNode.compile(Pty.node, {
+          replacements: [
+            Location.node.replace(Layer.succeed(Location.Service, Location.Service.of(location(ref)))),
+            Bus.node.replace(Layer.succeed(Bus.Service, bus)),
+          ],
+        }).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices>,
+    )
+  }),
 )
+
+const it = harness(locations)
+const terminalIt = harness(terminalLocations)
 
 describe("LocationActivity eviction", () => {
   for (const [count, admission] of [
@@ -218,4 +243,28 @@ describe("LocationActivity eviction", () => {
         }),
     )
   }
+})
+
+describe("LocationActivity terminals", () => {
+  const terminalTest = process.platform === "win32" ? terminalIt.effect.skip : terminalIt.effect
+  terminalTest("retains a location while a terminal runs and evicts it after the terminal is removed", () =>
+    Effect.gen(function* () {
+      const map = yield* LocationServiceMap.Service
+      const ref = LocationServiceMap.canonical({ directory: AbsolutePath.make("/tmp") })
+      const context = yield* map.contextEffect(ref).pipe(Effect.scoped)
+      const pty = Context.get(context, Pty.Service)
+      const info = yield* pty.create({ command: "cat", cwd: "/tmp", env: { TERM: "xterm-256color" } })
+      yield* Effect.addFinalizer(() => pty.remove(info.id).pipe(Effect.ignore))
+
+      // The first sweep adopts the cached location; the deadline then passes with no session activity.
+      yield* TestClock.adjust("1 minute")
+      yield* TestClock.adjust("62 minutes")
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([ref])
+      expect((yield* pty.get(info.id)).status).toBe("running")
+
+      yield* pty.remove(info.id)
+      yield* TestClock.adjust("62 minutes")
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
+    }),
+  )
 })
