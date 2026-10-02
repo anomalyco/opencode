@@ -1,5 +1,6 @@
 import { RequestError } from "@agentclientprotocol/sdk"
 import { Schema } from "effect"
+import type { ACPCatalog } from "./catalog"
 
 export class SessionNotFoundError extends Schema.TaggedError<SessionNotFoundError>()("ACPSessionNotFoundError", {
   sessionId: Schema.String,
@@ -71,6 +72,8 @@ const Errors = Schema.Union([
 ])
 
 export type Error = typeof Errors.Type
+
+export type Failure = Error | RequestError | ACPCatalog.Error
 
 export function toRequestError(error: Error): RequestError {
   switch (error._tag) {

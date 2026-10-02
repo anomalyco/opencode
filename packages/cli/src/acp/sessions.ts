@@ -1,5 +1,5 @@
 import { isDeepStrictEqual } from "node:util"
-import type { McpServer, RequestError, SessionConfigOption } from "@agentclientprotocol/sdk"
+import type { McpServer, SessionConfigOption } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import { Mcp } from "@opencode/schema/mcp"
 import type { Session } from "@opencode/schema/session"
@@ -23,10 +23,7 @@ export interface Interface {
     session: Session.Info,
     cwd: string,
     mcpServers: readonly SupportedMcpServer[],
-  ) => Effect.Effect<
-    { readonly attached: Attached; readonly configOptions: SessionConfigOption[] },
-    ACPError.Error | RequestError | ACPCatalog.Error
-  >
+  ) => Effect.Effect<{ readonly attached: Attached; readonly configOptions: SessionConfigOption[] }, ACPError.Failure>
   readonly detach: (sessionID: string) => Effect.Effect<void>
   readonly release: (attached: Attached) => Effect.Effect<void>
   readonly require: (sessionID: string) => Effect.Effect<Attached, ACPError.SessionNotFoundError>

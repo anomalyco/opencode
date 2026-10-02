@@ -4,6 +4,7 @@ import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Schema } from "effect"
 import path from "node:path"
+import { ACPReplay } from "../../src/acp/replay"
 import { ACPTranslate } from "../../src/acp/translate"
 import {
   assistantMessage,
@@ -629,7 +630,7 @@ function translate(row: Row) {
     }
     return {
       updates: row.messages.flatMap((message) => [
-        ...ACPTranslate.replayMessage(decodeMessage(message), context.cwd, capabilities),
+        ...ACPReplay.updates(decodeMessage(message), context.cwd, capabilities),
       ]),
     }
   }

@@ -6,9 +6,9 @@ import type { Session } from "@opencode/schema/session"
 import { Patch } from "@opencode/util/patch"
 import { applyPatch } from "diff"
 import { Cause, Effect, Option, Schema } from "effect"
+import { ACPChild } from "./child"
 import { ACPClient } from "./client"
 import type { ACPConnection } from "./connection"
-import { ACPTranslate } from "./translate"
 import { absolutePath, filePath, patchHunks, pendingToolCall, stringValue, toLocations, type ToolInput } from "./tool"
 
 type PermissionEvent = Extract<OpenCodeEvent, { type: "permission.asked" }>
@@ -23,7 +23,7 @@ type Input = {
   readonly clientSessionID: string
   readonly cwd: string
   readonly tool?: Tool
-  readonly child?: ACPTranslate.ChildSession
+  readonly child?: ACPChild.Session
   readonly settled: Effect.Effect<void>
 }
 
@@ -58,14 +58,11 @@ const ask = Effect.fnUntraced(function* (input: Input) {
   const previews = yield* permissionPreviews(toolName, toolInput, input.event.data.metadata, input.cwd).pipe(
     Effect.orElseSucceed((): Preview[] => []),
   )
-  const toolCallID = input.tool?.id ?? input.event.data.id
+  const title = permissionTitle(toolName, toolInput, previews)
   const toolCall = pendingToolCall({
-    toolCallId: input.child ? `${input.child.id}:${toolCallID}` : toolCallID,
+    toolCallId: ACPChild.toolCallID(input.child, input.tool?.id ?? input.event.data.id),
     toolName,
-    state: {
-      input: toolInput,
-      title: prefixedTitle(input.child?.title, permissionTitle(toolName, toolInput, previews)),
-    },
+    state: { input: toolInput, title: title ? ACPChild.title(input.child, title) : input.child?.title },
     cwd: input.cwd,
   })
   const result = yield* input.connection.requestPermission({
@@ -75,7 +72,7 @@ const ask = Effect.fnUntraced(function* (input: Input) {
       rawInput: input.tool ? toolCall.rawInput : undefined,
       locations: permissionLocations(toolName, toolInput, input.event.data, input.cwd),
       ...(previews.length > 0 ? { content: previews } : {}),
-      ...(input.child ? { _meta: ACPTranslate.childSessionMeta(input.child) } : {}),
+      ...(input.child ? { _meta: ACPChild.meta(input.child) } : {}),
     },
     options,
   })
@@ -89,12 +86,6 @@ function respond(input: Input, decision: Permission.Reply | "settled") {
     Effect.catchTag("PermissionNotFoundError", () => Effect.void),
     Effect.catch(ACPClient.classify),
   )
-}
-
-function prefixedTitle(prefix: string | undefined, title: string | undefined) {
-  if (!prefix) return title
-  if (!title) return prefix
-  return `${prefix}: ${title}`
 }
 
 // Core trims the patch tool's diffs for display, which breaks `applyPatch`, so its previews come from its own hunks.

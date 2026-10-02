@@ -8,8 +8,9 @@ import type { OpenCodeClient } from "@opencode/client/effect"
 import { Form } from "@opencode/schema/form"
 import { Session } from "@opencode/schema/session"
 import { Cause, Effect, Option, Schema } from "effect"
+import type { Capabilities } from "./capabilities"
+import { ACPChild } from "./child"
 import type { ACPConnection } from "./connection"
-import type { ACPService } from "./service"
 
 export type AskedForm = Omit<Form.Info, "id"> & { readonly id: string }
 type InputField = Exclude<Form.Field, Form.ExternalField>
@@ -27,7 +28,7 @@ type Input = {
   readonly form: Form.Info
   readonly requestedSchema: ElicitationSchema
   readonly clientSessionID: string
-  readonly child?: { readonly id: string; readonly title?: string }
+  readonly child?: ACPChild.Session
   readonly toolCallSent: boolean
   readonly settled: Effect.Effect<void>
 }
@@ -66,7 +67,7 @@ function cancel(client: OpenCodeClient, form: Form.Info, message?: string) {
   )
 }
 
-export function requestedSchema(form: AskedForm, capabilities: ACPService.Capabilities): ElicitationSchema | undefined {
+export function requestedSchema(form: AskedForm, capabilities: Capabilities): ElicitationSchema | undefined {
   if (!capabilities.formElicitation) return undefined
   if (Option.isNone(Schema.decodeUnknownOption(ElicitedKind)(form.metadata))) return undefined
   if (form.fields.some(credentialLike)) return undefined
@@ -108,8 +109,8 @@ const ask = Effect.fnUntraced(function* (input: Input) {
   const response = yield* input.connection.createElicitation({
     mode: "form",
     sessionId: input.clientSessionID,
-    ...(toolCallID ? { toolCallId: input.child ? `${input.child.id}:${toolCallID}` : toolCallID } : {}),
-    message: input.child?.title ? `${input.child.title}: ${input.form.title}` : input.form.title,
+    ...(toolCallID ? { toolCallId: ACPChild.toolCallID(input.child, toolCallID) } : {}),
+    message: ACPChild.title(input.child, input.form.title),
     requestedSchema: input.requestedSchema,
   })
   return answer(input.form, response) ?? "cancel"

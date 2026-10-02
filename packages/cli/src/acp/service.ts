@@ -3,7 +3,7 @@ import { SessionsCursor } from "@opencode/protocol/groups/session"
 import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { FSUtil } from "@opencode/util/fs-util"
-import { DateTime, Effect, Option, Ref, Schema, Stream } from "effect"
+import { DateTime, Effect, Ref, Schema } from "effect"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import type {
   AuthenticateRequest,
@@ -27,7 +27,6 @@ import type {
   NewSessionResponse,
   PromptRequest,
   PromptResponse,
-  RequestError,
   ResumeSessionRequest,
   ResumeSessionResponse,
   SetSessionConfigOptionRequest,
@@ -36,41 +35,34 @@ import type {
   SetSessionModeResponse,
 } from "@agentclientprotocol/sdk"
 import { OPENCODE_VERSION } from "../version"
+import { ACPCapabilities, type Capabilities } from "./capabilities"
 import type { ACPCatalog, Catalog } from "./catalog"
 import { ACPClient } from "./client"
 import { configOptions, currentModel, DEFAULT_VARIANT_VALUE, parseModelSelection } from "./config-option"
 import type { ACPConnection } from "./connection"
 import { ACPDirectories } from "./directories"
 import { ACPError } from "./error"
+import { ACPReplay } from "./replay"
 import type { ACPSessions, Attached, SupportedMcpServer } from "./sessions"
-import { ACPTranslate } from "./translate"
 import type { ACPTurn } from "./turn"
 
 export const AuthMethodID = "opencode-login"
 
-export type Failure = ACPError.Error | RequestError | ACPCatalog.Error
-
-export type Capabilities = {
-  readonly childSessionUpdates: boolean
-  readonly formElicitation: boolean
-  readonly compaction: boolean
-}
-
 export interface Interface {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse>
-  readonly authenticate: (input: AuthenticateRequest) => Effect.Effect<AuthenticateResponse, Failure>
-  readonly newSession: (input: NewSessionRequest) => Effect.Effect<NewSessionResponse, Failure>
-  readonly loadSession: (input: LoadSessionRequest) => Effect.Effect<LoadSessionResponse, Failure>
-  readonly listSessions: (input: ListSessionsRequest) => Effect.Effect<ListSessionsResponse, Failure>
-  readonly deleteSession: (input: DeleteSessionRequest) => Effect.Effect<DeleteSessionResponse, Failure>
-  readonly resumeSession: (input: ResumeSessionRequest) => Effect.Effect<ResumeSessionResponse, Failure>
-  readonly closeSession: (input: CloseSessionRequest) => Effect.Effect<CloseSessionResponse, Failure>
-  readonly forkSession: (input: ForkSessionRequest) => Effect.Effect<ForkSessionResponse, Failure>
+  readonly authenticate: (input: AuthenticateRequest) => Effect.Effect<AuthenticateResponse, ACPError.Failure>
+  readonly newSession: (input: NewSessionRequest) => Effect.Effect<NewSessionResponse, ACPError.Failure>
+  readonly loadSession: (input: LoadSessionRequest) => Effect.Effect<LoadSessionResponse, ACPError.Failure>
+  readonly listSessions: (input: ListSessionsRequest) => Effect.Effect<ListSessionsResponse, ACPError.Failure>
+  readonly deleteSession: (input: DeleteSessionRequest) => Effect.Effect<DeleteSessionResponse, ACPError.Failure>
+  readonly resumeSession: (input: ResumeSessionRequest) => Effect.Effect<ResumeSessionResponse, ACPError.Failure>
+  readonly closeSession: (input: CloseSessionRequest) => Effect.Effect<CloseSessionResponse, ACPError.Failure>
+  readonly forkSession: (input: ForkSessionRequest) => Effect.Effect<ForkSessionResponse, ACPError.Failure>
   readonly setSessionConfigOption: (
     input: SetSessionConfigOptionRequest,
-  ) => Effect.Effect<SetSessionConfigOptionResponse, Failure>
-  readonly setSessionMode: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, Failure>
-  readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, Failure>
+  ) => Effect.Effect<SetSessionConfigOptionResponse, ACPError.Failure>
+  readonly setSessionMode: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, ACPError.Failure>
+  readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, ACPError.Failure>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void>
 }
 
@@ -86,7 +78,7 @@ export function make(input: {
     return configOptions(yield* input.catalog.get(attached.cwd), yield* Ref.get(attached.selection))
   })
 
-  const withReload = <A>(attached: Attached, select: Effect.Effect<A, Failure>) => {
+  const withReload = <A>(attached: Attached, select: Effect.Effect<A, ACPError.Failure>) => {
     const retry = () => input.catalog.reload(attached.cwd).pipe(Effect.andThen(select))
     return select.pipe(
       Effect.catchTags({ ACPInvalidModelError: retry, ACPInvalidModeError: retry, ACPInvalidEffortError: retry }),
@@ -132,36 +124,9 @@ export function make(input: {
     return session
   })
 
-  const replay = Effect.fnUntraced(function* (attached: Attached) {
-    const capabilities = yield* Ref.get(input.capabilities)
-    yield* Stream.paginate(undefined, (cursor: string | undefined) =>
-      (cursor
-        ? input.client.message.list({ sessionID: attached.id, limit: 200, cursor })
-        : input.client.message.list({ sessionID: attached.id, limit: 200, order: "asc" })
-      ).pipe(
-        Effect.catch(ACPClient.classify),
-        Effect.map((page) => [page.data, Option.fromNullishOr(page.cursor.next)] as const),
-      ),
-    ).pipe(
-      Stream.runForEach((message) =>
-        Effect.forEach(
-          ACPTranslate.replayMessage(message, attached.cwd, capabilities),
-          (update) => input.connection.sessionUpdate({ sessionId: attached.id, update }),
-          { discard: true },
-        ),
-      ),
-    )
-  })
-
   return {
     initialize: Effect.fnUntraced(function* (params) {
-      const elicitation = params.clientCapabilities?.elicitation
-      const compaction = params.clientCapabilities?.session?.compaction
-      yield* Ref.set(input.capabilities, {
-        childSessionUpdates: params.clientCapabilities?._meta?.[ACPTranslate.ChildSessionUpdatesCapability] === true,
-        formElicitation: elicitation?.form !== undefined && elicitation.form !== null,
-        compaction: compaction !== undefined && compaction !== null,
-      })
+      yield* Ref.set(input.capabilities, ACPCapabilities.parse(params.clientCapabilities))
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",
         name: "Login with opencode",
@@ -179,7 +144,7 @@ export function make(input: {
           mcpCapabilities: { http: true, sse: false },
           promptCapabilities: { embeddedContext: true, image: true },
           sessionCapabilities: { additionalDirectories: {}, close: {}, delete: {}, fork: {}, list: {}, resume: {} },
-          _meta: { [ACPTranslate.ChildSessionUpdatesCapability]: true },
+          _meta: { [ACPCapabilities.ChildSessionUpdates]: true },
         },
         authMethods: [authMethod],
         agentInfo: { name: "OpenCode", version: OPENCODE_VERSION },
@@ -206,11 +171,16 @@ export function make(input: {
       const mcpServers = yield* supportedMcpServers(params.mcpServers)
       const session = yield* getSession(params.sessionId, params.cwd)
       yield* ACPDirectories.activate(input.client, session, directories)
-      const attached = (yield* input.sessions.attach(session, session.location.directory, mcpServers)).attached
-      return yield* replay(attached).pipe(
-        Effect.andThen(currentOptions(attached)),
+      const attachment = yield* input.sessions.attach(session, session.location.directory, mcpServers)
+      return yield* ACPReplay.history(
+        input.client,
+        input.connection,
+        attachment.attached,
+        yield* Ref.get(input.capabilities),
+      ).pipe(
+        Effect.andThen(currentOptions(attachment.attached)),
         Effect.map((configOptions) => ({ configOptions })),
-        Effect.onError(() => input.sessions.release(attached)),
+        Effect.onError(() => input.sessions.release(attachment.attached)),
       )
     }),
     listSessions: Effect.fnUntraced(function* (params) {

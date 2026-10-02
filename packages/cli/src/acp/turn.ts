@@ -21,7 +21,9 @@ import {
 } from "effect"
 import { access, constants } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
+import type { Capabilities } from "./capabilities"
 import { builtinCommands, type ACPCatalog, type Catalog } from "./catalog"
+import { ACPChild } from "./child"
 import { ACPClient } from "./client"
 import { currentModel } from "./config-option"
 import type { ACPConnection } from "./connection"
@@ -29,14 +31,11 @@ import { linkReference, promptContentToParts, type PromptPart } from "./content"
 import { ACPElicitation } from "./elicitation"
 import { ACPError } from "./error"
 import { ACPPermission } from "./permission"
-import type { ACPService } from "./service"
 import type { ACPSessions, Attached } from "./sessions"
 import { ACPTranslate } from "./translate"
 
-type Failure = ACPError.Error | RequestError | ACPCatalog.Error
-
 export interface Interface {
-  readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, Failure>
+  readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, ACPError.Failure>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void>
   /** Unlike `cancel`, interrupts an idle session too, since server work can outlive its turn. */
   readonly close: (sessionID: string) => Effect.Effect<void, ACPError.Error | RequestError>
@@ -74,11 +73,11 @@ export const make = Effect.fnUntraced(function* (input: {
   readonly connection: ACPConnection.Interface
   readonly sessions: ACPSessions.Interface
   readonly catalog: ACPCatalog.Interface
-  readonly capabilities: Ref.Ref<ACPService.Capabilities>
+  readonly capabilities: Ref.Ref<Capabilities>
 }) {
   const scope = yield* Effect.scope
   const drainTimeout = yield* CancelDrainTimeout
-  const turns = yield* FiberMap.make<string, PromptResponse, Failure>()
+  const turns = yield* FiberMap.make<string, PromptResponse, ACPError.Failure>()
 
   const subscribe = Effect.fnUntraced(function* () {
     // Parented to the service scope; the session scope may already be closed.
@@ -143,7 +142,7 @@ export const make = Effect.fnUntraced(function* (input: {
         return input.connection.sessionUpdate({ sessionId: ctx.sessionID, update: output.update })
       case "ChildUpdate":
         return input.connection
-          .extNotification(ACPTranslate.ChildSessionUpdateMethod, output.update)
+          .extNotification(ACPChild.UpdateMethod, output.update)
           .pipe(
             Effect.catchCause((cause) =>
               Cause.hasInterruptsOnly(cause)
@@ -257,7 +256,7 @@ export const make = Effect.fnUntraced(function* (input: {
     subscription: Subscription,
     ctx: ACPTranslate.Context,
     state: Ref.Ref<ACPTranslate.TurnState>,
-    events: Fiber.Fiber<ACPTranslate.Terminal, Failure>,
+    events: Fiber.Fiber<ACPTranslate.Terminal, ACPError.Failure>,
   ) {
     yield* Deferred.succeed(subscription.cancelled, undefined)
     yield* interruptServer(ctx.sessionID)
@@ -300,7 +299,7 @@ export const make = Effect.fnUntraced(function* (input: {
     subscription: Subscription,
     ctx: ACPTranslate.Context,
     state: Ref.Ref<ACPTranslate.TurnState>,
-    exit: Exit.Exit<ACPTranslate.Terminal, Failure>,
+    exit: Exit.Exit<ACPTranslate.Terminal, ACPError.Failure>,
   ) {
     const close = Scope.close(subscription.scope, Exit.void)
     if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) return yield* close
@@ -318,7 +317,7 @@ export const make = Effect.fnUntraced(function* (input: {
   const settle = Effect.fnUntraced(function* (
     attached: Attached,
     state: Ref.Ref<ACPTranslate.TurnState>,
-    exit: Exit.Exit<ACPTranslate.Terminal, Failure>,
+    exit: Exit.Exit<ACPTranslate.Terminal, ACPError.Failure>,
   ) {
     if (Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause)) return yield* Effect.failCause(exit.cause)
     const current = yield* Ref.get(state)
