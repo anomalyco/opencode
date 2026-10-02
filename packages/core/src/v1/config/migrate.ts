@@ -179,12 +179,13 @@ export function commands(info?: Readonly<Record<string, ConfigCommandV1.Info>>) 
 }
 
 function modelSelection(input?: string, variant?: string) {
-  if (input === undefined || !/^[^/#]+\/[^#]+$/.test(input)) return undefined
-  const separator = input.indexOf("/")
+  const match = input?.match(/^([^/#]+)\/([^#]+)(?:#([^#]+))?$/)
+  if (!match) return undefined
+  const selected = match[3] ?? variant
   return {
-    providerID: providerID(input.slice(0, separator)),
-    model: input.slice(separator + 1),
-    ...(variant === undefined || variant.length === 0 || variant.includes("#") ? {} : { variant }),
+    providerID: providerID(match[1]!),
+    model: match[2]!,
+    ...(selected === undefined || selected.length === 0 || selected.includes("#") ? {} : { variant: selected }),
   }
 }
 
