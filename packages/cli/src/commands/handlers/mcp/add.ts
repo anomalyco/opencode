@@ -2,7 +2,7 @@ import { EOL } from "node:os"
 import path from "node:path"
 import { readFile, stat, writeFile } from "node:fs/promises"
 import { Effect, Option } from "effect"
-import { applyEdits, modify } from "jsonc-parser"
+import { applyEdits, modify, parse } from "jsonc-parser"
 import { Global } from "@opencode/util/global"
 import { Commands } from "../../commands"
 import { Runtime } from "../../../framework/runtime"
@@ -32,7 +32,7 @@ export default Runtime.handler(
 
     const global = yield* Global.Service
     const configPath = yield* Effect.promise(() => resolveConfigPath(input.global ? global.config : process.cwd()))
-    yield* Effect.promise(() => write(configPath, input.name, server))
+    yield* Effect.promise(() => writeMcpConfig(configPath, input.name, server))
     process.stdout.write(`MCP server "${input.name}" added to ${configPath}` + EOL)
   }),
 )
@@ -56,13 +56,26 @@ export async function resolveConfigPath(directory: string) {
   return candidates[0]
 }
 
-async function write(configPath: string, name: string, server: unknown) {
+export async function writeMcpConfig(configPath: string, name: string, server: unknown) {
   const text = await readFile(configPath, "utf8").catch((error) => {
     if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return "{}"
     throw error
   })
-  const edits = modify(text, ["mcp", "servers", name], server, {
+  const config: unknown = parse(text)
+  const mcp = record(config) && record(config.mcp) ? config.mcp : undefined
+  const legacy = mcp ? Object.values(mcp).some(serverConfig) : false
+  const native = mcp ? record(mcp.servers) && !serverConfig(mcp.servers) : false
+  const target = legacy && !native ? ["mcp", name] : ["mcp", "servers", name]
+  const edits = modify(text, target, server, {
     formattingOptions: { tabSize: 2, insertSpaces: true },
   })
   await writeFile(configPath, applyEdits(text, edits))
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+function serverConfig(value: unknown) {
+  return record(value) && (value.type === "local" || value.type === "remote")
 }
