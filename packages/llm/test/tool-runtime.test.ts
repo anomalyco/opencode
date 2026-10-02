@@ -113,7 +113,7 @@ describe("LLMClient tools", () => {
       ).toEqual(["user", "assistant", "tool"])
       expect(Array.isArray(messages) ? messages[1] : undefined).toMatchObject({
         role: "assistant",
-        content: null,
+        content: "",
         tool_calls: [{ id: "call_1", type: "function", function: { name: "get_weather" } }],
       })
       expect(Array.isArray(messages) ? messages[2] : undefined).toMatchObject({
