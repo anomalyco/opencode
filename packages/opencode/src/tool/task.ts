@@ -210,11 +210,12 @@ export const TaskTool = Tool.define(
           agent: next.name,
           parts,
         })
-        if (result.info.role === "assistant" && result.info.error) {
-          const message =
-            "message" in result.info.error.data && typeof result.info.error.data.message === "string"
+        if (result.info.role === "assistant" && (result.info.error || result.info.finish === "error")) {
+          const message = result.info.error
+            ? "message" in result.info.error.data && typeof result.info.error.data.message === "string"
               ? result.info.error.data.message
               : result.info.error.name
+            : `finished with error${result.info.finish ? ` (finish: ${result.info.finish})` : ""}`
           return yield* Effect.fail(new Error(`Subagent failed (task_id: ${nextSession.id}): ${message}`))
         }
         const failed = result.parts.findLast((item) => item.type === "tool" && item.state.status === "error")
