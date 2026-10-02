@@ -29,6 +29,14 @@ const patterns = [
   /model_context_window_exceeded/i,
   /too many tokens/i,
   /token limit exceeded/i,
+  // Oversized openai-chat payloads (multi-MB bodies from large code contexts)
+  // surface as 400s with size hints rather than token counts. Classify them as
+  // context overflow so callers compact/clip instead of surfacing an opaque
+  // `inference_failed`.
+  /payload (is )?too large/i,
+  /request body (is )?too large/i,
+  /maximum request size/i,
+  /request.*exceeds.*size limit/i,
 ]
 
 const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, /too many requests/i]

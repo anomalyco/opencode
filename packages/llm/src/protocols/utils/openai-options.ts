@@ -2,9 +2,15 @@ import { Schema } from "effect"
 import type { LLMRequest, ReasoningEffort, TextVerbosity as TextVerbosityValue } from "../../schema"
 import { ReasoningEfforts, TextVerbosity } from "../../schema"
 
-export const OpenAIReasoningEfforts = ReasoningEfforts.filter(
-  (effort): effort is Exclude<ReasoningEffort, "max"> => effort !== "max",
-)
+// OpenAI's native Chat and Responses APIs document low through xhigh (plus
+// none/minimal on newer models) and do not advertise `max`. OpenAI-compatible
+// providers that reuse this protocol (notably DeepSeek V4 Flash /
+// deepseek-flash, which advertises high/max) do accept `max`, so accept it
+// here and let the upstream provider validate. Rejecting it locally turns a
+// valid DeepSeek request into an InvalidRequest 400 before it ever reaches
+// the provider, which surfaces as an opaque `inference_failed` for callers
+// using max reasoning effort on large contexts via the openai-chat protocol.
+export const OpenAIReasoningEfforts = ReasoningEfforts
 export type OpenAIReasoningEffort = (typeof OpenAIReasoningEfforts)[number]
 
 // Mirrors OpenAI's `ResponseIncludable` union from the official SDK. Keep this

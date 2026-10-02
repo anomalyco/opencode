@@ -18,6 +18,26 @@ describe("provider error classification", () => {
     expect(messages.every(isContextOverflow)).toBe(true)
   })
 
+  test("classifies oversized openai-chat payloads as context overflow (#52174)", () => {
+    const messages = [
+      "Payload too large",
+      "Request body too large",
+      '{"statusCode":400,"errorCode":"inference_failed","message":"Payload too large"}',
+      '{"statusCode":400,"errorCode":"inference_failed","message":"Request body too large"}',
+      "Maximum request size exceeded",
+      "Request exceeds size limit",
+    ]
+
+    expect(messages.every(isContextOverflow)).toBe(true)
+  })
+
+  test("does not classify generic inference failures as context overflow", () => {
+    // `inference_failed` alone is generic (overload, invalid params, etc.)
+    // and must not trigger context compaction.
+    expect(isContextOverflow('{"statusCode":400,"errorCode":"inference_failed"}')).toBe(false)
+    expect(isContextOverflow("inference failed")).toBe(false)
+  })
+
   test("does not classify rate limits as context overflow", () => {
     const messages = [
       "Throttling error: Too many tokens, please wait before trying again.",
