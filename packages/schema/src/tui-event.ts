@@ -53,6 +53,11 @@ export const SessionSelect = Event.define({
   type: "tui.session.select",
   schema: {
     sessionID: SessionID.annotate({ description: "Session ID to navigate to" }),
+    client: optional(
+      Schema.String.annotate({
+        description: "Only the TUI started with this --client id navigates. Omit to navigate every attached TUI.",
+      }),
+    ),
   },
 })
 

@@ -1449,6 +1449,10 @@ export type GlobalEvent = {
            * Session ID to navigate to
            */
           sessionID: string
+          /**
+           * Only the TUI started with this --client id navigates. Omit to navigate every attached TUI.
+           */
+          client?: string
         }
       }
     | {
@@ -2652,6 +2656,10 @@ export type EventTuiSessionSelect = {
      * Session ID to navigate to
      */
     sessionID: string
+    /**
+     * Only the TUI started with this --client id navigates. Omit to navigate every attached TUI.
+     */
+    client?: string
   }
 }
 
@@ -3016,6 +3024,10 @@ export type EventTuiSessionSelect2 = {
      * Session ID to navigate to
      */
     sessionID: string
+    /**
+     * Only the TUI started with this --client id navigates. Omit to navigate every attached TUI.
+     */
+    client?: string
   }
 }
 
@@ -5831,6 +5843,10 @@ export type TuiSessionSelect = {
      * Session ID to navigate to
      */
     sessionID: string
+    /**
+     * Only the TUI started with this --client id navigates. Omit to navigate every attached TUI.
+     */
+    client?: string
   }
 }
 
@@ -10913,6 +10929,10 @@ export type TuiSelectSessionData = {
      * Session ID to navigate to
      */
     sessionID: string
+    /**
+     * Only the TUI started with this --client id navigates. Omit to navigate every attached TUI.
+     */
+    client?: string
   }
   path?: never
   query?: {

@@ -97,6 +97,10 @@ export const TuiThreadCommand = cmd({
         type: "boolean",
         describe: "fork the session when continuing (use with --continue or --session)",
       })
+      .option("client", {
+        type: "string",
+        describe: "id that /tui/select-session can target so only this TUI switches sessions",
+      })
       .option("prompt", {
         type: "string",
         describe: "prompt to use",
@@ -292,6 +296,7 @@ export const TuiThreadCommand = cmd({
               prompt,
               fork: args.fork,
               auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
+              client: args.client,
             },
           }),
         )

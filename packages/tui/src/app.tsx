@@ -1001,6 +1001,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
 
   event.on("tui.session.select", (evt, { workspace }) => {
     if (workspace !== project.workspace.current()) return
+    if (evt.properties.client !== undefined && evt.properties.client !== args.client) return
     route.navigate({
       type: "session",
       sessionID: evt.properties.sessionID,

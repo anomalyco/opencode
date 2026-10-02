@@ -32,6 +32,10 @@ export const AttachCommand = cmd({
         type: "boolean",
         describe: "fork the session when continuing (use with --continue or --session)",
       })
+      .option("client", {
+        type: "string",
+        describe: "id that /tui/select-session can target so only this TUI switches sessions",
+      })
       .option("password", {
         alias: ["p"],
         type: "string",
@@ -139,6 +143,7 @@ export const AttachCommand = cmd({
           continue: args.continue,
           sessionID: args.session,
           fork: args.fork,
+          client: args.client,
         },
         directory,
         headers,
