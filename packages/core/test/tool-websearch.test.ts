@@ -32,18 +32,48 @@ describe("WebSearchTool provider selection", () => {
   })
 
   test("supports an explicit operational override", () => {
-    expect(WebSearchTool.selectProvider(sessionID, { enableExa: false, enableParallel: false }, "parallel")).toBe(
-      "parallel",
-    )
-    expect(WebSearchTool.selectProvider(sessionID, { enableExa: false, enableParallel: false }, "exa")).toBe("exa")
+    expect(
+      WebSearchTool.selectProvider(
+        sessionID,
+        { enableExa: false, enableParallel: false, enableTinyfish: false },
+        "parallel",
+      ),
+    ).toBe("parallel")
+    expect(
+      WebSearchTool.selectProvider(sessionID, { enableExa: false, enableParallel: false, enableTinyfish: false }, "exa"),
+    ).toBe("exa")
+    expect(
+      WebSearchTool.selectProvider(
+        sessionID,
+        { enableExa: false, enableParallel: false, enableTinyfish: false },
+        "tinyfish",
+      ),
+    ).toBe("tinyfish")
   })
 
   test("prefers Parallel when both explicit flags are enabled", () => {
-    expect(WebSearchTool.selectProvider(sessionID, { enableExa: true, enableParallel: true })).toBe("parallel")
+    expect(
+      WebSearchTool.selectProvider(sessionID, { enableExa: true, enableParallel: true, enableTinyfish: false }),
+    ).toBe("parallel")
   })
 
   test("prefers Exa when only its explicit flag is enabled", () => {
-    expect(WebSearchTool.selectProvider(sessionID, { enableExa: true, enableParallel: false })).toBe("exa")
+    expect(
+      WebSearchTool.selectProvider(sessionID, { enableExa: true, enableParallel: false, enableTinyfish: false }),
+    ).toBe("exa")
+  })
+
+  test("selects TinyFish when only its explicit flag is enabled", () => {
+    expect(
+      WebSearchTool.selectProvider(sessionID, { enableExa: false, enableParallel: false, enableTinyfish: true }),
+    ).toBe("tinyfish")
+  })
+
+  test("extracts Mcp-Session-Id case-insensitively", () => {
+    expect(WebSearchTool.mcpSessionIdFromHeaders({ "mcp-session-id": "abc" })).toBe("abc")
+    expect(WebSearchTool.mcpSessionIdFromHeaders({ "Mcp-Session-Id": "abc" } as Record<string, string>)).toBe("abc")
+    expect(WebSearchTool.mcpSessionIdFromHeaders({ "MCP-SESSION-ID": "abc" } as Record<string, string>)).toBe("abc")
+    expect(WebSearchTool.mcpSessionIdFromHeaders({})).toBeUndefined()
   })
 })
 
@@ -71,11 +101,13 @@ const requests: Request[] = []
 const assertions: PermissionV2.AssertInput[] = []
 let responseBody = payload("search results")
 let makeResponse = () => new Response(responseBody, { status: 200 })
-let config: WebSearchTool.Config = { enableExa: false, enableParallel: false }
+let tinyfishSessionId: string | undefined = "test-session-123"
+let config: WebSearchTool.Config = { enableExa: false, enableParallel: false, enableTinyfish: false }
 
 beforeEach(() => {
   responseBody = payload("search results")
   makeResponse = () => new Response(responseBody, { status: 200 })
+  tinyfishSessionId = "test-session-123"
 })
 
 const http = Layer.succeed(
@@ -83,11 +115,26 @@ const http = Layer.succeed(
   HttpClient.make((request) =>
     Effect.sync(() => {
       if (request.body._tag !== "Uint8Array") throw new Error(`Unexpected request body: ${request.body._tag}`)
+      const parsed = JSON.parse(new TextDecoder().decode(request.body.body))
       requests.push({
         url: request.url,
         headers: request.headers,
-        body: JSON.parse(new TextDecoder().decode(request.body.body)),
+        body: parsed,
       })
+      if (parsed?.method === "initialize") {
+        const headers = tinyfishSessionId ? { "Mcp-Session-Id": tinyfishSessionId } : {}
+        return HttpClientResponse.fromWeb(
+          request,
+          new Response(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: 0,
+              result: { protocolVersion: "2025-06-18", capabilities: {}, serverInfo: { name: "tinyfish", version: "test" } },
+            }),
+            { status: 200, headers },
+          ),
+        )
+      }
       return HttpClientResponse.fromWeb(request, makeResponse())
     }),
   ),
@@ -115,11 +162,17 @@ const websearchConfig = Layer.succeed(
     get enableParallel() {
       return config.enableParallel
     },
+    get enableTinyfish() {
+      return config.enableTinyfish
+    },
     get exaApiKey() {
       return config.exaApiKey
     },
     get parallelApiKey() {
       return config.parallelApiKey
+    },
+    get tinyfishApiKey() {
+      return config.tinyfishApiKey
     },
   }),
 )
@@ -141,7 +194,7 @@ describe("WebSearchTool registration", () => {
       requests.length = 0
       assertions.length = 0
       responseBody = payload("exa results")
-      config = { provider: "exa", enableExa: false, enableParallel: false }
+      config = { provider: "exa", enableExa: false, enableParallel: false, enableTinyfish: false }
       const registry = yield* ToolRegistry.Service
 
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual(["websearch"])
@@ -208,7 +261,13 @@ describe("WebSearchTool registration", () => {
       requests.length = 0
       assertions.length = 0
       responseBody = payload("parallel results")
-      config = { provider: "parallel", enableExa: false, enableParallel: false, parallelApiKey: "parallel-secret" }
+      config = {
+        provider: "parallel",
+        enableExa: false,
+        enableParallel: false,
+        enableTinyfish: false,
+        parallelApiKey: "parallel-secret",
+      }
       const registry = yield* ToolRegistry.Service
 
       const settled = yield* settleTool(registry, {
@@ -247,7 +306,13 @@ describe("WebSearchTool registration", () => {
       requests.length = 0
       assertions.length = 0
       responseBody = payload("credentialed exa results")
-      config = { provider: "exa", enableExa: false, enableParallel: false, exaApiKey: "exa secret" }
+      config = {
+        provider: "exa",
+        enableExa: false,
+        enableParallel: false,
+        enableTinyfish: false,
+        exaApiKey: "exa secret",
+      }
       const registry = yield* ToolRegistry.Service
 
       const settled = yield* settleTool(registry, {
@@ -266,7 +331,7 @@ describe("WebSearchTool registration", () => {
       requests.length = 0
       assertions.length = 0
       responseBody = ""
-      config = { provider: "exa", enableExa: false, enableParallel: false }
+      config = { provider: "exa", enableExa: false, enableParallel: false, enableTinyfish: false }
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -299,7 +364,7 @@ describe("WebSearchTool registration", () => {
           }),
           { status: 200 },
         )
-      config = { provider: "exa", enableExa: false, enableParallel: false }
+      config = { provider: "exa", enableExa: false, enableParallel: false, enableTinyfish: false }
       const registry = yield* ToolRegistry.Service
 
       expect(
@@ -311,6 +376,75 @@ describe("WebSearchTool registration", () => {
       ).toEqual({ type: "error", value: "Unable to search the web for too much" })
       expect(chunksRead).toBeLessThan(10)
       expect(cancelled).toBe(true)
+    }),
+  )
+
+  it.effect("calls TinyFish with Mcp-Session-Id from initialize", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      assertions.length = 0
+      responseBody = payload("tinyfish results")
+      tinyfishSessionId = "session-abc-123"
+      config = {
+        provider: "tinyfish",
+        enableExa: false,
+        enableParallel: false,
+        enableTinyfish: true,
+        tinyfishApiKey: "tinyfish-secret",
+      }
+      const registry = yield* ToolRegistry.Service
+
+      const settled = yield* settleTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-tinyfish", name: "websearch", input: { query: "effect layers" } },
+      })
+
+      expect(requests.length).toBe(2)
+      expect(requests[0]).toMatchObject({
+        url: WebSearchTool.TINYFISH_URL,
+        body: { jsonrpc: "2.0", method: "initialize" },
+      })
+      expect(requests[0]?.headers).not.toHaveProperty("mcp-session-id")
+      expect(requests[1]).toMatchObject({
+        url: WebSearchTool.TINYFISH_URL,
+        headers: { authorization: "Bearer tinyfish-secret", "mcp-session-id": "session-abc-123" },
+        body: {
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/call",
+          params: { name: "search", arguments: { query: "effect layers" } },
+        },
+      })
+      expect(settled).toEqual({
+        result: { type: "text", value: "tinyfish results" },
+        output: {
+          structured: { provider: "tinyfish", text: "tinyfish results" },
+          content: [{ type: "text", text: "tinyfish results" }],
+        },
+      })
+      expect(JSON.stringify(settled)).not.toContain("tinyfish-secret")
+    }),
+  )
+
+  it.effect("fails TinyFish search when initialize omits Mcp-Session-Id", () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      assertions.length = 0
+      responseBody = payload("should not be used")
+      tinyfishSessionId = undefined
+      config = { provider: "tinyfish", enableExa: false, enableParallel: false, enableTinyfish: true }
+      const registry = yield* ToolRegistry.Service
+
+      expect(
+        yield* executeTool(registry, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-tinyfish-missing-session", name: "websearch", input: { query: "x" } },
+        }),
+      ).toEqual({ type: "error", value: "Unable to search the web for x" })
+      expect(requests.length).toBe(1)
+      expect(requests[0]?.body).toMatchObject({ method: "initialize" })
     }),
   )
 })
