@@ -2,6 +2,7 @@ export * as ProxyAuthProvider from "./provider"
 
 import { basic } from "./basic"
 import { negotiate } from "./negotiate"
+import { ntlm } from "./ntlm"
 import type { ProxyAuthNative } from "../native"
 import type { ProxyAuth } from "../resolve"
 
@@ -45,5 +46,6 @@ function factory(scheme: ProxyAuthScheme, native?: ProxyAuthNative): ProxyAuthPr
   if (scheme === "basic") return basic
   if (!native) return undefined
   if (scheme === "negotiate") return negotiate(native)
+  if (scheme === "ntlm") return ntlm(native)
   return undefined
 }
