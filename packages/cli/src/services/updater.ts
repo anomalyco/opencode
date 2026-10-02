@@ -107,6 +107,23 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/Updater") {}
 
+/**
+ * A package manager can only replace the copy of OpenCode that lives inside its own
+ * global root. When the running binary was installed somewhere else - for example a
+ * second prefix, or a manually linked directory - `install --global` refreshes an
+ * unrelated copy and the running binary is left untouched.
+ */
+export function replacesExecutable(root: string | undefined, executable: string): boolean {
+  const candidate = root?.trim()
+  // An unreadable root leaves the previous behaviour in place rather than
+  // disabling upgrades outright.
+  if (!candidate) return true
+  const resolvedRoot = path.resolve(candidate)
+  const resolvedExecutable = path.resolve(executable)
+  if (resolvedExecutable === resolvedRoot) return false
+  return resolvedExecutable.startsWith(resolvedRoot + path.sep)
+}
+
 export function decodePolicy(text: string): Policy | undefined {
   // The CLI only projects this host-level preference instead of initializing
   // the location-scoped server configuration graph.
@@ -131,7 +148,7 @@ const make = Effect.gen(function* () {
   const flock = yield* EffectFlock.Service
   const installedVersion = yield* Ref.make(OPENCODE_VERSION)
   const channel = OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")
-  const installedPackage = yield* Effect.gen(function* () {
+  const installed = yield* Effect.gen(function* () {
     const executable = yield* fs.realPath(process.execPath)
     const directory = path.dirname(path.dirname(executable))
     const manifest: { name: string; bin?: Record<string, string> } = yield* fs
@@ -140,8 +157,10 @@ const make = Effect.gen(function* () {
     // Source invocations run inside Bun or Node, which may themselves be npm packages.
     if (!/^@opencode(?:-ai)?\/cli(?:-node)?$/.test(manifest.name)) return
     if (Object.values(manifest.bin ?? {}).some((bin) => path.resolve(directory, bin) === executable))
-      return manifest.name
+      return { package: manifest.name, executable }
   }).pipe(Effect.orElseSucceed(() => undefined))
+  const installedPackage = installed?.package
+  const installedExecutable = installed?.executable ?? process.execPath
 
   const readPolicy = Effect.fnUntraced(function* () {
     const values = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
@@ -187,29 +206,51 @@ const make = Effect.gen(function* () {
       return "brew"
     if (!installedPackage) return
 
-    const checks: ReadonlyArray<{ method: Method; command: string[] }> = [
-      { method: "npm", command: ["npm", "list", "-g", "--depth=0", installedPackage] },
-      { method: "pnpm", command: ["pnpm", "list", "-g", "--depth=0", installedPackage] },
-      { method: "bun", command: ["bun", "pm", "ls", "-g"] },
-      { method: "yarn", command: ["yarn", "global", "list"] },
-      { method: "vp", command: ["vp", "list", "-g", "--json", installedPackage] },
+    const checks: ReadonlyArray<{ method: Method; command: string[]; root: string[] }> = [
+      {
+        method: "npm",
+        command: ["npm", "list", "-g", "--depth=0", installedPackage],
+        root: ["npm", "root", "-g"],
+      },
+      {
+        method: "pnpm",
+        command: ["pnpm", "list", "-g", "--depth=0", installedPackage],
+        root: ["pnpm", "root", "-g"],
+      },
+      { method: "bun", command: ["bun", "pm", "ls", "-g"], root: ["bun", "pm", "bin", "-g"] },
+      { method: "yarn", command: ["yarn", "global", "list"], root: ["yarn", "global", "dir"] },
+      { method: "vp", command: ["vp", "list", "-g", "--json", installedPackage], root: ["vp", "root", "-g"] },
     ]
     const results = yield* Effect.forEach(
       checks,
       (check) =>
-        exec(check.command).pipe(
-          Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })),
-          Effect.map((result) => ({ check, result })),
-        ),
+        Effect.all(
+          [
+            exec(check.command).pipe(
+              Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })),
+              Effect.map((result) => ({ check, result })),
+            ),
+            // A manager that cannot replace the running binary is not a candidate, however
+            // many copies of the package it happens to have registered.
+            exec(check.root, "5 seconds").pipe(
+              Effect.map((result) => result.code === 0 ? result.stdout : ""),
+              Effect.orElseSucceed(() => ""),
+              Effect.map((root) => replacesExecutable(root || undefined, installedExecutable)),
+            ),
+          ],
+          { concurrency: "unbounded" },
+        ).pipe(Effect.map(([probe, owned]) => ({ probe, owned }))),
       { concurrency: "unbounded" },
     )
     return results.find((result) => {
-      if (result.check.method !== "vp") return result.result.stdout.includes(installedPackage)
+      if (!result.owned) return
+      const { check, result: probe } = result.probe
+      if (check.method !== "vp") return probe.stdout.includes(installedPackage)
       // Vite+ repeats the filter in its successful no-match message, so substring detection would be a false positive.
-      return Option.exists(decodeVpPackages(result.result.stdout), (packages) =>
+      return Option.exists(decodeVpPackages(probe.stdout), (packages) =>
         packages.some((item) => item.name === installedPackage),
       )
-    })?.check.method
+    })?.probe.check.method
   })
 
   const removal = (method: Method) => {
