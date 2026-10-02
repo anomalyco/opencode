@@ -1,0 +1,25 @@
+[package]
+name = "proxy-auth-native"
+version = "0.0.1"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+napi = { version = "3", default-features = false, features = ["napi6", "async"] }
+napi-derive = "3"
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_Security_Authentication_Identity",
+  "Win32_Security_Credentials",
+] }
+
+[target.'cfg(unix)'.dependencies]
+libgssapi = "0.7"
+
+[build-dependencies]
+napi-build = "2"
