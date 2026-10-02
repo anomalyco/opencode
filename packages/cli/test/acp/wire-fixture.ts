@@ -16,7 +16,6 @@ import {
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionNotification,
-  type WriteTextFileRequest,
 } from "@agentclientprotocol/sdk"
 import { OpenCode } from "@opencode/client/effect"
 import type { OpenCodeEventEncoded } from "@opencode/protocol/groups/event"
@@ -49,10 +48,10 @@ type EphemeralEvent = Exclude<OpenCodeEvent, DurableEvent>
 type EventData<Type extends OpenCodeEvent["type"]> = Extract<OpenCodeEvent, { type: Type }>["data"]
 type AssistantMessage = Extract<SessionMessageInfo, { type: "assistant" }>
 
-export type Events = ReadonlyArray<OpenCodeEvent> | void
+type Events = ReadonlyArray<OpenCodeEvent> | void
 type Hook<Input> = (input: Input) => Events | Promise<Events>
 
-export type ServerRequest = {
+type ServerRequest = {
   readonly method: string
   readonly path: string
   readonly query: Record<string, string>
@@ -89,7 +88,7 @@ const FormReplyBody = Schema.Struct({ answer: Form.Answer })
 const McpBody = Schema.Struct({ config: Schema.Unknown })
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
-export type Submission =
+type Submission =
   | ({ readonly kind: "prompt"; readonly sessionID: string } & typeof PromptBody.Type)
   | ({ readonly kind: "command"; readonly sessionID: string } & typeof CommandBody.Type)
   | ({ readonly kind: "compact"; readonly sessionID: string } & typeof CompactBody.Type)
@@ -97,7 +96,7 @@ export type Submission =
 
 type PromptSubmission = Extract<Submission, { readonly kind: "prompt" }>
 
-export type Selection =
+type Selection =
   | { readonly sessionID: string; readonly model: typeof ModelBody.Type.model }
   | { readonly sessionID: string; readonly agent: string }
 
@@ -123,7 +122,6 @@ const ChildUpdate = Schema.Union([
     error: Schema.optional(Schema.Struct({ type: Schema.String, message: Schema.String })),
   }),
 ])
-export type ChildUpdate = typeof ChildUpdate.Type
 
 export type WireOptions = {
   readonly fetch?: (request: ServerRequest) => Response | undefined | Promise<Response | undefined>
@@ -134,11 +132,6 @@ export type WireOptions = {
     readonly signal: AbortSignal
   }>
   readonly onInterrupt?: Hook<{ readonly sessionID: string }>
-  readonly onPermissionReply?: Hook<{
-    readonly sessionID: string
-    readonly requestID: string
-    readonly decision: string
-  }>
   readonly onFormCancel?: Hook<{ readonly sessionID: string; readonly formID: string }>
   readonly onFormReply?: Hook<FormReply>
   readonly permission?: (
@@ -158,25 +151,20 @@ type FormReply = {
   readonly answer: typeof FormReplyBody.Type.answer
 }
 
-type CatalogKind = "model" | "default" | "agent" | "command"
-
-export type Catalog = {
+type Catalog = {
   models: ModelInfo[]
-  // Unset follows the first listed model.
-  defaultModel?: ModelInfo | null
   agents: AgentInfo[]
   commands: CommandInfo[]
 }
 
 export type InitializeOptions = {
-  readonly writeTextFile?: boolean
   readonly childSessionUpdates?: boolean
   readonly terminalAuth?: boolean
   readonly elicitation?: boolean
   readonly compaction?: CompactionCapabilities | null
 }
 
-export const testModel = {
+const testModel = {
   id: "test-model",
   modelID: "test-model",
   providerID: "test",
@@ -204,7 +192,7 @@ export const secondModel = {
   limit: { context: 200_000, output: 20_000 },
 } satisfies ModelInfo
 
-export const buildAgent = {
+const buildAgent = {
   id: "build",
   name: "Build",
   request: { settings: {}, headers: {}, body: {} },
@@ -213,7 +201,7 @@ export const buildAgent = {
   permissions: [],
 } satisfies AgentInfo
 
-export const planAgent = {
+const planAgent = {
   id: "plan",
   name: "Plan",
   description: "Plan first",
@@ -404,10 +392,6 @@ export function enqueued(sessionID: string, id: string, type: string, payload: o
   return Response.json({ data: { id, sessionID, time: { created: 0 }, type, payload, delivery: "steer" } })
 }
 
-export function makeClient(baseUrl: string) {
-  return OpenCode.make({ baseUrl }).pipe(Effect.provide(FetchHttpClient.layer))
-}
-
 export async function startWire(options: WireOptions = {}) {
   const waiters = new Set<() => void>()
   const changed = () => waiters.forEach((check) => check())
@@ -416,8 +400,7 @@ export async function startWire(options: WireOptions = {}) {
   const received: AnyMessage[] = []
   const updates: SessionNotification[] = []
   const permissions: RequestPermissionRequest[] = []
-  const writes: WriteTextFileRequest[] = []
-  const childUpdates: ChildUpdate[] = []
+  const childUpdates: Array<typeof ChildUpdate.Type> = []
   const elicitations: CreateElicitationRequest[] = []
   // Client handlers record SDK-validated params; responses wait until they have seen every earlier agent message.
   const counts = { sent: 0, handled: 0 }
@@ -432,7 +415,8 @@ export async function startWire(options: WireOptions = {}) {
   const logs: Array<Pick<Logger.Options<unknown>, "message" | "cause">> = []
   const agentScope = Scope.makeUnsafe()
   const agentConnection = await Effect.runPromise(
-    makeClient(server.url).pipe(
+    OpenCode.make({ baseUrl: server.url }).pipe(
+      Effect.provide(FetchHttpClient.layer),
       Effect.flatMap((client) => ACP.connect(client, ndJsonStream(agentToClient.writable, clientToAgent.readable))),
       Scope.provide(agentScope),
       (effect) =>
@@ -455,10 +439,6 @@ export async function startWire(options: WireOptions = {}) {
     .onRequest("elicitation/create", (ctx) => {
       handled(elicitations, ctx.params)
       return options.elicitation?.(ctx.params, ctx.signal) ?? { action: "cancel" }
-    })
-    .onRequest("fs/write_text_file", (ctx) => {
-      handled(writes, ctx.params)
-      return {}
     })
     .connect({
       writable: clientStream.writable,
@@ -510,7 +490,6 @@ export async function startWire(options: WireOptions = {}) {
     request("initialize", {
       protocolVersion: 1,
       clientCapabilities: {
-        ...(capabilities.writeTextFile ? { fs: { writeTextFile: true, readTextFile: false } } : {}),
         ...(capabilities.elicitation ? { elicitation: { form: {} } } : {}),
         ...(capabilities.compaction !== undefined ? { session: { compaction: capabilities.compaction } } : {}),
         _meta: {
@@ -523,13 +502,12 @@ export async function startWire(options: WireOptions = {}) {
 
   return {
     server,
-    logs,
     received,
     updates,
     permissions,
-    writes,
     childUpdates,
     elicitations,
+    logs,
     request,
     until,
     initialize,
@@ -559,7 +537,7 @@ export async function startSession(options: WireOptions & { readonly capabilitie
   const wire = await startWire(options)
   await wire.initialize(options.capabilities)
   const session = await wire.newSession()
-  return Object.assign(wire, { sessionId: session.sessionId, session })
+  return Object.assign(wire, { sessionId: session.sessionId })
 }
 
 export async function rpcError(promise: Promise<unknown>) {
@@ -582,7 +560,6 @@ function startServer(options: WireOptions, changed: () => void) {
     agents: [buildAgent, planAgent],
     commands: [reviewCommand],
   }
-  const catalogReads: Array<{ readonly kind: CatalogKind; readonly directory: string }> = []
   const requests: ServerRequest[] = []
   const submissions: Submission[] = []
   const selections: Selection[] = []
@@ -594,7 +571,6 @@ function startServer(options: WireOptions, changed: () => void) {
   const fake = {
     requests,
     catalog,
-    catalogReads,
     sessions: new Map<string, SessionInfo>(),
     messages: new Map<string, SessionMessageInfo[]>(),
     submissions,
@@ -634,15 +610,6 @@ function startServer(options: WireOptions, changed: () => void) {
   const notFound = (sessionID: string) =>
     Response.json({ _tag: "SessionNotFoundError", sessionID, message: "session not found" }, { status: 404 })
   const noContent = () => new Response(null, { status: 204 })
-  // Routes without session-location middleware reject a malformed ID in their path decode; routes with it name the field.
-  const pathDecodeError = {
-    _tag: "InvalidRequestError",
-    message: 'Expected a string starting with "ses"',
-    kind: "Params",
-  }
-  const fieldError = { _tag: "InvalidRequestError", message: "Invalid session ID", field: "sessionID" }
-  const malformed = (sessionID: string, body: object) =>
-    sessionID.startsWith("ses") ? undefined : Response.json(body, { status: 400 })
 
   // Handlers record facts synchronously before awaiting hooks, so waiters can observe a held request.
   const observed = (response: Response | Promise<Response>) => {
@@ -686,17 +653,10 @@ function startServer(options: WireOptions, changed: () => void) {
         })
         .finally(changed)
   }
-  const catalogRoute = (kind: CatalogKind) =>
+  const catalogRoute = (data: () => unknown) =>
     route((_req, query) => {
       const directory = query["location[directory]"] ?? "/workspace"
-      fake.catalogReads.push({ kind, directory })
-      const data = {
-        model: catalog.models,
-        default: catalog.defaultModel === undefined ? (catalog.models[0] ?? null) : catalog.defaultModel,
-        agent: catalog.agents,
-        command: catalog.commands,
-      }[kind]
-      return Response.json({ location: { directory, project: { id: "global", directory } }, data })
+      return Response.json({ location: { directory, project: { id: "global", directory } }, data: data() })
     })
   const page = <Item>(items: readonly Item[], query: Record<string, string>, limit: number) => {
     const start = Number(query.cursor ?? 0)
@@ -733,10 +693,10 @@ function startServer(options: WireOptions, changed: () => void) {
           )
         }),
       },
-      "/api/model": { GET: catalogRoute("model") },
-      "/api/model/default": { GET: catalogRoute("default") },
-      "/api/agent": { GET: catalogRoute("agent") },
-      "/api/command": { GET: catalogRoute("command") },
+      "/api/model": { GET: catalogRoute(() => catalog.models) },
+      "/api/model/default": { GET: catalogRoute(() => catalog.models[0] ?? null) },
+      "/api/agent": { GET: catalogRoute(() => catalog.agents) },
+      "/api/command": { GET: catalogRoute(() => catalog.commands) },
       "/api/session": {
         GET: route((_req, query) => {
           const sessions = [...fake.sessions.values()]
@@ -756,15 +716,8 @@ function startServer(options: WireOptions, changed: () => void) {
       },
       "/api/session/:sessionID": {
         GET: route((req) => {
-          const invalid = malformed(req.params.sessionID, pathDecodeError)
-          if (invalid) return invalid
           const session = fake.sessions.get(req.params.sessionID)
           return session ? Response.json({ data: session }) : notFound(req.params.sessionID)
-        }),
-        DELETE: route((req) => {
-          const invalid = malformed(req.params.sessionID, pathDecodeError)
-          if (invalid) return invalid
-          return fake.sessions.delete(req.params.sessionID) ? noContent() : notFound(req.params.sessionID)
         }),
         PATCH: body(UpdateBody, (req, input) => {
           const session = fake.sessions.get(req.params.sessionID)
@@ -779,8 +732,6 @@ function startServer(options: WireOptions, changed: () => void) {
       },
       "/api/session/:sessionID/fork": {
         POST: route((req) => {
-          const invalid = malformed(req.params.sessionID, fieldError)
-          if (invalid) return invalid
           const source = fake.sessions.get(req.params.sessionID)
           if (!source) return notFound(req.params.sessionID)
           const forked = createSession(source)
@@ -802,12 +753,6 @@ function startServer(options: WireOptions, changed: () => void) {
       },
       "/api/session/:sessionID/message": {
         GET: route((req, query) => Response.json(page(fake.messages.get(req.params.sessionID) ?? [], query, 200))),
-      },
-      "/api/session/:sessionID/message/:messageID": {
-        GET: route((req) => {
-          const message = fake.messages.get(req.params.sessionID)?.find((item) => item.id === req.params.messageID)
-          return message ? Response.json({ data: message }) : new Response(null, { status: 404 })
-        }),
       },
       "/api/session/:sessionID/prompt": {
         POST: body(PromptBody, async (req, input) => {
@@ -846,10 +791,12 @@ function startServer(options: WireOptions, changed: () => void) {
         }),
       },
       "/api/session/:sessionID/permission/:requestID/reply": {
-        POST: body(ReplyBody, async (req, input) => {
-          const reply = { sessionID: req.params.sessionID, requestID: req.params.requestID, decision: input.decision }
-          fake.replies.push(reply)
-          await emit(options.onPermissionReply?.(reply))
+        POST: body(ReplyBody, (req, input) => {
+          fake.replies.push({
+            sessionID: req.params.sessionID,
+            requestID: req.params.requestID,
+            decision: input.decision,
+          })
           return noContent()
         }),
       },
