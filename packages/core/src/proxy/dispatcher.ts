@@ -163,7 +163,7 @@ async function requestAbsoluteForm(
   const challenges = new Set<string>()
   for (let round = 0; round < MAX_AUTH_ROUNDS; round++) {
     const header = challenges.size ? await authHeader([...challenges], target.origin) : undefined
-    const response = await httpOnce(proxy, target, request, header)
+    const response = await sendAbsolute(proxy, target, request, header)
     if (response.status !== 407) return response
     for (const scheme of challengesOf(response.headers.get("proxy-authenticate") ?? undefined)) challenges.add(scheme)
     response.body?.cancel()
@@ -173,37 +173,35 @@ async function requestAbsoluteForm(
   throw new Error(`Proxy authentication failed after ${MAX_AUTH_ROUNDS} attempts`)
 }
 
-function httpOnce(
+/**
+ * Send an absolute-form request over a raw socket connected to the proxy.
+ * `node:http` is not used here because it resolves an absolute-form path to the
+ * target host when that host resolves locally, silently bypassing the proxy.
+ * `Connection: close` makes the response end when the proxy closes the socket.
+ */
+function sendAbsolute(
   proxy: URL,
   target: URL,
   request: Request,
   authorization: string | undefined,
 ): Promise<Response> {
   return new Promise((resolve, reject) => {
-    const headers: Record<string, string> = Object.fromEntries(request.headers)
-    headers.host = target.host
-    if (authorization) headers["proxy-authorization"] = authorization
-    const req = http.request(
-      {
-        host: proxy.hostname,
-        port: Number(proxy.port) || 80,
-        method: request.method,
-        path: target.toString(),
-        headers,
-      },
-      (res) => resolve(nodeResponse(res)),
-    )
-    req.on("error", reject)
-    pipeBody(request, req)
+    const socket = net.connect({ host: proxy.hostname, port: Number(proxy.port) || 80 })
+    socket.on("connect", async () => {
+      const headers: Record<string, string> = { host: target.host, connection: "close", ...Object.fromEntries(request.headers) }
+      if (authorization) headers["proxy-authorization"] = authorization
+      const body = request.body ? Buffer.from(await new Response(request.body).arrayBuffer()) : undefined
+      if (body) headers["content-length"] = String(body.length)
+      const lines = [`${request.method} ${target.toString()} HTTP/1.1`]
+      for (const [key, value] of Object.entries(headers)) lines.push(`${key}: ${value}`)
+      socket.write(lines.join("\r\n") + "\r\n\r\n")
+      if (body) socket.write(body)
+      readHead(socket).then((head) => {
+        resolve(new Response(bodyStream(socket, head.rest), { status: head.status, headers: head.headers }))
+      }, reject)
+    })
+    socket.on("error", reject)
   })
-}
-
-function pipeBody(request: Request, req: http.ClientRequest): void {
-  if (!request.body) {
-    req.end()
-    return
-  }
-  Readable.fromWeb(request.body as import("node:stream/web").ReadableStream).pipe(req)
 }
 
 function nodeResponse(res: http.IncomingMessage): Response {
@@ -214,6 +212,51 @@ function nodeResponse(res: http.IncomingMessage): Response {
   }
   if (res.statusCode === 204 || res.statusCode === 304) return new Response(null, { status: res.statusCode, headers })
   return new Response(Readable.toWeb(res) as ReadableStream, { status: res.statusCode ?? 500, headers })
+}
+
+/**
+ * Adapt the remaining socket bytes to a web stream without the double-close
+ * ("Controller is already closed") that `Readable.toWeb` produces when the
+ * consumer closes before the socket ends.
+ */
+function bodyStream(socket: net.Socket, rest: Buffer): ReadableStream<Uint8Array> {
+  let closed = false
+  const close = (controller: ReadableStreamDefaultController<Uint8Array>) => {
+    if (closed) return
+    closed = true
+    try {
+      controller.close()
+    } catch {}
+  }
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      if (rest.length) controller.enqueue(new Uint8Array(rest))
+      if (socket.readableEnded) {
+        close(controller)
+        return
+      }
+      socket.on("data", (chunk) => {
+        if (closed) return
+        try {
+          controller.enqueue(new Uint8Array(chunk))
+        } catch {
+          closed = true
+        }
+      })
+      socket.on("end", () => close(controller))
+      socket.on("error", (error) => {
+        if (closed) return
+        closed = true
+        try {
+          controller.error(error)
+        } catch {}
+      })
+    },
+    cancel() {
+      closed = true
+      socket.destroy()
+    },
+  })
 }
 
 /** Read one HTTP response head, returning any body bytes that followed it. */
