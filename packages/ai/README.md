@@ -1309,7 +1309,7 @@ gateway.responses("google/gemini-3.8-flash") // Explicit Responses override
 gateway.messages("openai/gpt-6-luna") // Explicit Messages override
 ```
 
-Default routing sends `openai/gpt-*`, `meta/muse-*`, and `xai/grok-*` / `spacexai/grok-*` to Responses; everything else uses Messages. Full Gateway model IDs stay unchanged. Package entrypoints are also available at `@opencode/ai/providers/vercel-ai-gateway/{messages,responses,chat}` with flat `model(id, settings)` inputs.
+Default routing sends `openai/gpt-*`, `meta/muse-*`, and `spacexai/grok-*` to Responses; everything else uses Messages. Full Gateway model IDs stay unchanged. Package entrypoints are also available at `@opencode/ai/providers/vercel-ai-gateway/{messages,responses,chat}` with flat `model(id, settings)` inputs.
 
 Set `providerOptions.reasoningEffort` for named effort. Messages lowers it to `thinking` plus `output_config.effort`, Responses to `reasoning.effort`, and Chat to `reasoning_effort`.
 

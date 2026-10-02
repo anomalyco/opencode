@@ -32,7 +32,12 @@ for (const item of [
     options: { reasoningEffort: "low" },
     reasoning: false,
   },
-  { name: "responses Muse", model: gateway.model("meta/muse-spark-1.3"), options: {}, reasoning: true },
+  {
+    name: "responses Muse",
+    model: gateway.model("meta/muse-spark-1.3"),
+    options: { reasoningEffort: "low" },
+    reasoning: true,
+  },
   {
     name: "responses Grok",
     model: gateway.model("spacexai/grok-4.7"),
