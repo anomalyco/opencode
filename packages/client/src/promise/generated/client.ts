@@ -2049,7 +2049,7 @@ export function make(options: ClientOptions) {
             path: `/api/vcs/init`,
             query: { location: input?.["location"], provider: input?.["provider"] },
             successStatus: 204,
-            declaredStatuses: [400, 401, 409, 501, 503],
+            declaredStatuses: [400, 401, 404, 409, 501, 503],
             empty: true,
           },
           requestOptions,
