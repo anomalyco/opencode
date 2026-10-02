@@ -74,13 +74,13 @@ const activitySchema = Persistence.struct({ placement: placementSchema, details:
 const placementOnlySchema = Persistence.struct({ placement: placementSchema })
 
 const generalSchema = Persistence.struct({
-  autoSave: Schema.Boolean,
+  // Retired preferences without readers; kept so stored values still decode and round-trip.
+  autoSave: Persistence.optional(Schema.Boolean),
   releaseNotes: Schema.Boolean,
   showFileTree: Schema.Boolean,
-  showNavigation: Schema.Boolean,
-  showSearch: Schema.Boolean,
-  showProjectIcon: Schema.Boolean,
-  showTerminal: Schema.Boolean,
+  showNavigation: Persistence.optional(Schema.Boolean),
+  showSearch: Persistence.optional(Schema.Boolean),
+  showTerminal: Persistence.optional(Schema.Boolean),
   timelineDetail: Persistence.struct({
     shell: activitySchema,
     edit: activitySchema,
@@ -94,7 +94,6 @@ const generalSchema = Persistence.struct({
   mobileDiffWrap: Schema.Boolean,
   terminalPlacement: Schema.Literals(["side", "bottom"]),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
-  experimentalBrowser: Schema.Boolean,
 })
 
 const appearanceSchema = Persistence.struct({
@@ -103,7 +102,6 @@ const appearanceSchema = Persistence.struct({
   sans: Schema.String,
   terminal: Schema.String,
   tabLayout: Schema.Literals(["horizontal", "vertical"]),
-  showProjectName: Schema.Boolean,
 })
 
 const permissionsSchema = Persistence.struct({
@@ -134,7 +132,10 @@ const soundsSchema = Persistence.struct({
 
 export const settingsSchema = Persistence.struct({
   general: generalSchema,
-  sessionSummary: Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
+  // Owned by the summary extension, which copies it out once; kept so settings rewrites cannot drop it first.
+  sessionSummary: Schema.optional(
+    Persistence.struct({ projectExpanded: Schema.Boolean, serverExpanded: Schema.Boolean }),
+  ),
   appearance: appearanceSchema,
   keybinds: Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none())))),
   permissions: permissionsSchema,
@@ -238,23 +239,16 @@ export const settingsPersistence = Persistence.migrate(
 
 export const defaultSettings: Settings = {
   general: {
-    autoSave: true,
     releaseNotes: true,
     showFileTree: false,
-    showNavigation: false,
-    showSearch: false,
-    showProjectIcon: false,
-    showTerminal: false,
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: false,
     mobileTitlebarPosition: "top",
     mobileDiffWrap: true,
     terminalPlacement: "side",
     followUpBehavior: "steer",
-    experimentalBrowser: false,
   },
-  sessionSummary: { projectExpanded: true, serverExpanded: true },
-  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", showProjectName: false },
+  appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal" },
   keybinds: {},
   permissions: { autoApprove: false },
   workspaces: { defaultDestination: "last-used", lastUsed: {} },
@@ -279,7 +273,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
   init: () => {
     const [store, setStore, , ready] = persisted({ key: "settings.v3" }, settingsPersistence, defaultSettings)
     const showFileTree = withFallback(() => store.general?.showFileTree, defaultSettings.general.showFileTree)
-    const showSearch = withFallback(() => store.general?.showSearch, defaultSettings.general.showSearch)
     const showCustomAgents = withFallback(
       () => store.general?.showCustomAgents,
       defaultSettings.general.showCustomAgents,
@@ -301,10 +294,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         return store
       },
       general: {
-        autoSave: withFallback(() => store.general?.autoSave, defaultSettings.general.autoSave),
-        setAutoSave(value: boolean) {
-          setStore("general", "autoSave", value)
-        },
         releaseNotes: withFallback(() => store.general?.releaseNotes, defaultSettings.general.releaseNotes),
         setReleaseNotes(value: boolean) {
           setStore("general", "releaseNotes", value)
@@ -312,22 +301,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showFileTree,
         setShowFileTree(value: boolean) {
           setStore("general", "showFileTree", value)
-        },
-        showNavigation: withFallback(() => store.general?.showNavigation, defaultSettings.general.showNavigation),
-        setShowNavigation(value: boolean) {
-          setStore("general", "showNavigation", value)
-        },
-        showSearch,
-        setShowSearch(value: boolean) {
-          setStore("general", "showSearch", value)
-        },
-        showProjectIcon: withFallback(() => store.general?.showProjectIcon, defaultSettings.general.showProjectIcon),
-        setShowProjectIcon(value: boolean) {
-          setStore("general", "showProjectIcon", value)
-        },
-        showTerminal: withFallback(() => store.general?.showTerminal, defaultSettings.general.showTerminal),
-        setShowTerminal(value: boolean) {
-          setStore("general", "showTerminal", value)
         },
         timelineDetail: withFallback(() => store.general?.timelineDetail, defaultSettings.general.timelineDetail),
         setTimelineDetail(value: TimelineDetail) {
@@ -359,33 +332,9 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setFollowUpBehavior(value: FollowUpBehavior) {
           setStore("general", "followUpBehavior", value)
         },
-        experimentalBrowser: withFallback(
-          () => store.general?.experimentalBrowser,
-          defaultSettings.general.experimentalBrowser,
-        ),
-        setExperimentalBrowser(value: boolean) {
-          setStore("general", "experimentalBrowser", value)
-        },
-      },
-      sessionSummary: {
-        projectExpanded: withFallback(
-          () => store.sessionSummary?.projectExpanded,
-          defaultSettings.sessionSummary.projectExpanded,
-        ),
-        serverExpanded: withFallback(
-          () => store.sessionSummary?.serverExpanded,
-          defaultSettings.sessionSummary.serverExpanded,
-        ),
-        setProjectExpanded(value: boolean) {
-          setStore("sessionSummary", "projectExpanded", value)
-        },
-        setServerExpanded(value: boolean) {
-          setStore("sessionSummary", "serverExpanded", value)
-        },
       },
       visibility: {
         fileTree: showFileTree,
-        search: showSearch,
         customAgents: showCustomAgents,
       },
       appearance: {
@@ -408,13 +357,6 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         tabLayout: withFallback(() => store.appearance?.tabLayout, defaultSettings.appearance.tabLayout),
         setTabLayout(value: TabLayout) {
           setStore("appearance", "tabLayout", value)
-        },
-        showProjectName: withFallback(
-          () => store.appearance?.showProjectName,
-          defaultSettings.appearance.showProjectName,
-        ),
-        setShowProjectName(value: boolean) {
-          setStore("appearance", "showProjectName", value)
         },
       },
       keybinds: {

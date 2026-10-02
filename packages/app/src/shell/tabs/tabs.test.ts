@@ -29,28 +29,25 @@ describe("tab migration", () => {
     expect(decodeTabs(Schema.encodeSync(TabStorage.Tabs)(restored))).toEqual([legacy, draft])
   })
 
-  test("drops null and malformed persisted tabs", () => {
-    expect(
-      decodeTabs([null, sessionTab("a"), { type: "session", server }, { type: "unknown", server }, "invalid"]),
-    ).toEqual([sessionTab("a")])
+  const dropped: { name: string; stored: unknown; expected: Tab[] }[] = [
+    {
+      name: "null and malformed tabs",
+      stored: [null, sessionTab("a"), { type: "session", server }, { type: "unknown", server }, "invalid"],
+      expected: [sessionTab("a")],
+    },
+    { name: "tabs without a server", stored: [{ type: "session", sessionId: "a" }], expected: [] },
+    { name: "null top-level data", stored: null, expected: [] },
+    { name: "object top-level data", stored: {}, expected: [] },
+  ]
+
+  test.each(dropped)("drops $name", ({ stored, expected }) => {
+    expect(decodeTabs(stored)).toEqual(expected)
   })
 
-  test("drops persisted tabs without a server", () => {
-    expect(decodeTabs([{ type: "session", sessionId: "a" }])).toEqual([])
-  })
-
-  test("replaces invalid top-level persisted data", () => {
-    expect(decodeTabs(null)).toEqual([])
-    expect(decodeTabs({})).toEqual([])
-  })
-
-  test("preserves the active child route", () => {
+  test("preserves the active child route and drops an invalid one", () => {
     expect(decodeTabs([{ ...sessionTab("root"), routeSessionId: "child", routeParentId: "parent" }])).toEqual([
       { ...sessionTab("root"), routeSessionId: "child", routeParentId: "parent" },
     ])
-  })
-
-  test("drops an invalid child route", () => {
     expect(decodeTabs([{ ...sessionTab("parent"), routeSessionId: 1 }])).toEqual([sessionTab("parent")])
     expect(decodeTabs([{ ...sessionTab("parent"), routeSessionId: "child", routeParentId: 1 }])).toEqual([
       { ...sessionTab("parent"), routeSessionId: "child" },
@@ -89,6 +86,7 @@ describe("tab migration", () => {
       tab: { title: "Title", directory: "/project" },
     })
     const panes = Schema.decodeUnknownSync(TabStorage.Panes)({ tab: { terminal: true, terminalHeight: 300 } })
+    expect(panes).toEqual({ tab: { dock: true, dockHeight: 300 } })
     expect(Schema.encodeSync(TabStorage.Panes)(panes)).toEqual({ tab: { terminal: true, terminalHeight: 300 } })
     expect(() => Schema.decodeUnknownSync(TabStorage.Panes)({ tab: { terminal: "yes" } })).toThrow()
   })
@@ -139,15 +137,10 @@ describe("tab memory", () => {
 })
 
 describe("closed tab stack", () => {
-  test("records session tabs with their index", () => {
-    const stack = pushClosedTab([], sessionTab("a"), 2)
-
-    expect(stack).toEqual([{ tab: sessionTab("a"), index: 2 }])
-  })
-
-  test("ignores draft tabs", () => {
+  test("records session tabs with their index and ignores draft tabs", () => {
     const draft: Tab = { type: "draft", draftID: "d1", server, directory: "/tmp" }
 
+    expect(pushClosedTab([], sessionTab("a"), 2)).toEqual([{ tab: sessionTab("a"), index: 2 }])
     expect(pushClosedTab([], draft, 0)).toEqual([])
   })
 
@@ -162,34 +155,16 @@ describe("closed tab stack", () => {
     expect(stack.at(-1)?.tab.sessionId).toBe("s29")
   })
 
-  test("pops the most recently closed tab", () => {
+  test("pops the most recently closed tab that is not already open", () => {
     const stack = [
       { tab: sessionTab("a"), index: 0 },
       { tab: sessionTab("b"), index: 1 },
     ]
-    const result = takeClosedTab(stack, [])
 
-    expect(result.entry?.tab.sessionId).toBe("b")
-    expect(result.stack).toEqual([{ tab: sessionTab("a"), index: 0 }])
-  })
-
-  test("skips entries whose tab is already open", () => {
-    const stack = [
-      { tab: sessionTab("a"), index: 0 },
-      { tab: sessionTab("b"), index: 1 },
-    ]
-    const result = takeClosedTab(stack, [sessionTab("b")])
-
-    expect(result.entry?.tab.sessionId).toBe("a")
-    expect(result.stack).toEqual([])
-  })
-
-  test("returns no entry when everything is open or empty", () => {
+    expect(takeClosedTab(stack, [])).toEqual({ entry: stack[1], stack: [stack[0]] })
+    expect(takeClosedTab(stack, [sessionTab("b")])).toEqual({ entry: stack[0], stack: [] })
+    expect(takeClosedTab(stack, [sessionTab("a"), sessionTab("b")])).toEqual({ entry: undefined, stack: [] })
     expect(takeClosedTab([], []).entry).toBeUndefined()
-
-    const result = takeClosedTab([{ tab: sessionTab("a"), index: 0 }], [sessionTab("a")])
-    expect(result.entry).toBeUndefined()
-    expect(result.stack).toEqual([])
   })
 
   test("purges removed sessions", () => {

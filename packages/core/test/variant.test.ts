@@ -126,6 +126,26 @@ test("spells Cloudflare AI Gateway variants for their upstream routes", () => {
   ])
 })
 
+test("spells xAI Responses variants with catalog effort levels", () => {
+  const supports: Variant.Support[] = [{ type: "effort", values: ["low", "medium", "high", "xhigh"] }]
+  expect(resolve(model("@opencode/ai/providers/xai", "grok-4.6"), supports)).toEqual(
+    ["low", "medium", "high", "xhigh"].map((effort) => ({
+      id: effort,
+      settings: { reasoningEffort: effort, reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    })),
+  )
+  expect(resolve(model("@opencode/ai/providers/xai", "grok-4.3"), [{ type: "effort", values: ["none", "low"] }])).toEqual([
+    {
+      id: "none",
+      settings: { reasoningEffort: "none", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    },
+    { id: "low", settings: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] } },
+  ])
+  expect(resolve(model("@opencode/ai/providers/xai", "grok-4.6"), [{ type: "effort" }]).map((item) => item.id)).toEqual([
+    "low", "medium", "high",
+  ])
+})
+
 test("spells Chat Completions variants for direct providers", () => {
   expect(
     resolve(model("@opencode/ai/providers/deepseek", "deepseek-v4-flash"), [
@@ -175,8 +195,8 @@ test("spells Chat Completions variants for direct providers", () => {
     ]),
   ).toEqual([
     { id: "none", settings: { enableThinking: false } },
-    { id: "high", settings: { enableThinking: true, thinkingBudget: 131_072 } },
-    { id: "max", settings: { enableThinking: true, thinkingBudget: 262_144 } },
+    { id: "high", settings: { enableThinking: true, thinkingBudget: 32_000 } },
+    { id: "max", settings: { enableThinking: true, thinkingBudget: 63_999 } },
   ])
 
   expect(
@@ -196,7 +216,97 @@ test("spells Chat Completions variants for direct providers", () => {
   ])
 })
 
+test("spells Bedrock Converse Claude budgets as a thinking setting", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/amazon-bedrock", "us.anthropic.claude-haiku-4-5-20251001-v1:0", 64_000), [
+      { type: "budget_tokens", min: 1024 },
+    ]),
+  ).toEqual([
+    { id: "high", settings: { thinking: { type: "enabled", budgetTokens: 16_000 } } },
+    { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 31_999 } } },
+  ])
+})
+
+test("spells Bedrock Converse effort for Grok and Nova", () => {
+  const supports: Variant.Support[] = [{ type: "effort", values: ["low", "xhigh"] }]
+  expect(resolve(model("@opencode/ai/providers/amazon-bedrock", "us.xai.grok-4.6"), supports)).toEqual([
+    { id: "low", body: { additionalModelRequestFields: { reasoning: { effort: "low" } } } },
+    { id: "xhigh", body: { additionalModelRequestFields: { reasoning: { effort: "xhigh" } } } },
+  ])
+  expect(resolve(model("@opencode/ai/providers/amazon-bedrock", "us.amazon.nova-2-lite-v1:0"), supports)).toEqual([
+    {
+      id: "low",
+      body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "low" } } },
+    },
+    {
+      id: "xhigh",
+      body: { additionalModelRequestFields: { reasoningConfig: { type: "enabled", maxReasoningEffort: "xhigh" } } },
+    },
+  ])
+})
+
+test("caps Alibaba thinking budget variants at 64k", () => {
+  const supports: Variant.Support[] = [{ type: "toggle" }, { type: "budget_tokens" }]
+  expect(resolve(model("@opencode/ai/providers/alibaba/chat", "kimi-k2.6", 262_144), supports)).toEqual([
+    { id: "none", settings: { enableThinking: false } },
+    { id: "high", settings: { enableThinking: true, thinkingBudget: 32_000 } },
+    { id: "max", settings: { enableThinking: true, thinkingBudget: 63_999 } },
+  ])
+  expect(resolve(model("@opencode/ai/providers/alibaba/messages", "kimi-k2.6", 262_144), supports)).toEqual([
+    { id: "none", settings: { thinking: { type: "disabled" } } },
+    { id: "high", settings: { thinking: { type: "enabled", budgetTokens: 32_000 } } },
+    { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 63_999 } } },
+  ])
+  expect(resolve(model("@opencode/ai/providers/alibaba/chat", "kimi-k2.5", 32_768), supports)).toEqual([
+    { id: "none", settings: { enableThinking: false } },
+    { id: "high", settings: { enableThinking: true, thinkingBudget: 16_384 } },
+    { id: "max", settings: { enableThinking: true, thinkingBudget: 32_767 } },
+  ])
+})
+
+test("spells Workers AI thinking controls through the chat template", () => {
+  const pkg = "@opencode/ai/providers/cloudflare-workers-ai"
+  const off = { body: { chat_template_kwargs: { enable_thinking: false, thinking: false } } }
+  const on = { body: { chat_template_kwargs: { enable_thinking: true, thinking: true } } }
+  expect(
+    resolve(model(pkg, "@cf/deepseek-ai/deepseek-v4-flash-0731"), [
+      { type: "effort", values: ["none", "low", "high", "max"] },
+    ]),
+  ).toEqual([
+    { id: "none", ...off },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+    { id: "max", settings: { reasoningEffort: "max" } },
+  ])
+  expect(resolve(model(pkg, "@cf/zai-org/glm-4.7-flash"), [{ type: "toggle" }])).toEqual([
+    { id: "none", ...off },
+    { id: "thinking", ...on },
+  ])
+  expect(
+    resolve(model(pkg, "@cf/qwen/qwen3.8-27b"), [
+      { type: "toggle" },
+      { type: "effort", values: ["low", "medium", "xhigh"] },
+    ]),
+  ).toEqual([
+    { id: "none", ...off },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "medium", settings: { reasoningEffort: "medium" } },
+    { id: "xhigh", settings: { reasoningEffort: "xhigh" } },
+  ])
+})
+
 test("spells Chat Completions variants for hosting providers", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/digitalocean", "openai-gpt-5-nano", undefined, "digitalocean"), [
+      { type: "effort", values: ["minimal", "low", "medium", "high"] },
+    ]),
+  ).toEqual([
+    { id: "minimal", settings: { reasoningEffort: "minimal" } },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "medium", settings: { reasoningEffort: "medium" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+
   expect(
     resolve(model("@opencode/ai/providers/openai-compatible", "deepseek-ai/deepseek-v4-pro", undefined, "nvidia"), [
       { type: "effort", values: ["none", "high", "max"] },

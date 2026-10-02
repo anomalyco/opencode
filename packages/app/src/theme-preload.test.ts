@@ -19,58 +19,35 @@ beforeEach(() => {
 })
 
 describe("theme preload", () => {
-  test("uses default theme and system light mode when settings are absent", () => {
-    run()
+  test.each([
+    { stored: undefined, systemDark: false, scheme: "light", background: "#fafafa" },
+    { stored: "dark", systemDark: false, scheme: "dark", background: "#080808" },
+    { stored: "light", systemDark: true, scheme: "light", background: "#fafafa" },
+    { stored: "system", systemDark: true, scheme: "dark", background: "#080808" },
+  ])(
+    "paints the default theme in $scheme for stored scheme $stored (system dark: $systemDark)",
+    ({ stored, systemDark, scheme, background }) => {
+      setSystemDark(systemDark)
+      if (stored) localStorage.setItem("opencode-color-scheme", stored)
+      run()
 
-    expect(document.documentElement.dataset.theme).toBe("oc-2")
-    expect(document.documentElement.dataset.colorScheme).toBe("light")
-    expect(document.documentElement.style.backgroundColor).toBe("#fafafa")
-  })
+      expect(document.documentElement.dataset.theme).toBe("oc-2")
+      expect(document.documentElement.dataset.colorScheme).toBe(scheme)
+      expect(document.documentElement.style.backgroundColor).toBe(background)
+    },
+  )
 
-  test("restores explicit dark mode on a light system", () => {
-    localStorage.setItem("opencode-color-scheme", "dark")
-    run()
-
-    expect(document.documentElement.dataset.colorScheme).toBe("dark")
-    expect(document.documentElement.style.backgroundColor).toBe("#080808")
-  })
-
-  test("restores explicit light mode on a dark system", () => {
-    setSystemDark(true)
-    localStorage.setItem("opencode-color-scheme", "light")
-    run()
-
-    expect(document.documentElement.dataset.colorScheme).toBe("light")
-    expect(document.documentElement.style.backgroundColor).toBe("#fafafa")
-  })
-
-  test("resolves persisted system mode before paint", () => {
-    setSystemDark(true)
-    localStorage.setItem("opencode-color-scheme", "system")
-    run()
-
-    expect(document.documentElement.dataset.colorScheme).toBe("dark")
-    expect(document.documentElement.style.backgroundColor).toBe("#080808")
-  })
-
-  test("keeps cached css for non-default themes", () => {
+  test.each([
+    { scheme: undefined, key: "opencode-theme-css-light", css: "--background-base:#fff;", expected: "light" },
+    { scheme: "dark", key: "opencode-theme-css-dark", css: "--background-base:#010203;", expected: "dark" },
+  ])("restores the cached $expected css of a custom theme", ({ scheme, key, css, expected }) => {
     localStorage.setItem("opencode-theme-id", "nightowl")
-    localStorage.setItem("opencode-theme-css-light", "--background-base:#fff;")
-
+    if (scheme) localStorage.setItem("opencode-color-scheme", scheme)
+    localStorage.setItem(key, css)
     run()
 
     expect(document.documentElement.dataset.theme).toBe("nightowl")
-    expect(document.getElementById("oc-theme-preload")?.textContent).toContain("--background-base:#fff;")
-  })
-
-  test("restores the cached variant for a persisted custom dark theme", () => {
-    localStorage.setItem("opencode-theme-id", "nightowl")
-    localStorage.setItem("opencode-color-scheme", "dark")
-    localStorage.setItem("opencode-theme-css-dark", "--background-base:#010203;")
-    run()
-
-    expect(document.documentElement.dataset.theme).toBe("nightowl")
-    expect(document.documentElement.dataset.colorScheme).toBe("dark")
-    expect(document.getElementById("oc-theme-preload")?.textContent).toContain("--background-base:#010203;")
+    expect(document.documentElement.dataset.colorScheme).toBe(expected)
+    expect(document.getElementById("oc-theme-preload")?.textContent).toContain(css)
   })
 })

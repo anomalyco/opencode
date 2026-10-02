@@ -31,6 +31,12 @@ export function createWindowRegistry<W>(persistence: {
       if (!lastFocusedID) return
       return windows.get(lastFocusedID)
     },
+    get(id: string) {
+      return windows.get(id)
+    },
+    list() {
+      return [...windows.values()]
+    },
     closed(id: string) {
       windows.delete(id)
       if (lastFocusedID === id) lastFocusedID = windows.keys().next().value

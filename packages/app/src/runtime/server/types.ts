@@ -129,6 +129,7 @@ export type Model = {
 
 export type Provider = {
   id: string
+  canonical?: string
   /** Integration that connects this provider; differs from `id` for Console-managed providers. */
   integrationID?: string
   name: string

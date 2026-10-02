@@ -45,6 +45,7 @@ export const Info = Schema.Struct({
   file: Schema.String,
   pid: optional(NonNegativeInt),
   exit: optional(Schema.Finite),
+  signal: optional(Schema.String),
   // Always present; defaults to an empty object when the creator supplies no metadata.
   metadata: Metadata,
   time: Time,

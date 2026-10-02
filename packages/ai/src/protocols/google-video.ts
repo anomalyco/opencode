@@ -4,13 +4,11 @@ import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { VideoModel, VideoResponse, type VideoRequestFor } from "../video.js"
 import { ProviderShared, optionalArray } from "./shared.js"
 
-const ADAPTER = "google-video"
-const NAME = "Google Veo"
-const PROVIDER = ProviderID.make("google")
+const route = MediaProtocol.identity({ id: "google-video", name: "Google Veo", provider: "google" })
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 /** Veo keeps generated files for two days; the asset carries that deadline so callers materialize in time. */
 const FILE_RETENTION = Duration.days(2)
@@ -19,11 +17,9 @@ const FILE_RETENTION = Duration.days(2)
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-export type GoogleVideoString<Known extends string> = Known | (string & {})
-
 /** Provider-native `parameters`. Common fields (`aspectRatio`, `resolution`, `durationSeconds`, `seed`) live on the request. */
 export type GoogleVideoOptions = {
-  readonly personGeneration?: GoogleVideoString<"allow_all" | "allow_adult" | "dont_allow">
+  readonly personGeneration?: OpenString<"allow_all" | "allow_adult" | "dont_allow">
 } & Record<string, unknown>
 
 export type Request = VideoRequestFor<GoogleVideoOptions>
@@ -40,7 +36,9 @@ const StartResponse = Schema.Struct({ name: Schema.String })
 
 const Operation = Schema.Struct({
   done: Schema.optional(Schema.Boolean),
-  error: Schema.optional(Schema.Struct({ message: Schema.optional(Schema.String) })),
+  error: Schema.optional(
+    Schema.Struct({ code: Schema.optional(Schema.Number), message: Schema.optional(Schema.String) }),
+  ),
   response: Schema.optional(
     Schema.Struct({
       generateVideoResponse: Schema.optional(
@@ -64,33 +62,39 @@ const Operation = Schema.Struct({
   metadata: Schema.optional(Schema.Unknown),
 })
 
+// Operation errors are `google.rpc.Status`; unlisted codes (INTERNAL, UNAVAILABLE, ...) are provider-side.
+const FAILURE = {
+  3: "InvalidRequest", // INVALID_ARGUMENT
+  7: "Authentication", // PERMISSION_DENIED
+  8: "RateLimit", // RESOURCE_EXHAUSTED
+  9: "InvalidRequest", // FAILED_PRECONDITION
+  11: "InvalidRequest", // OUT_OF_RANGE
+  16: "Authentication", // UNAUTHENTICATED
+} as const satisfies Record<number, MediaProtocol.Failure>
+
 // ---------------------------------------------------------------------------
 // 5. Request body construction
 // ---------------------------------------------------------------------------
 
 // Veo takes inline media only; a prior Veo output is `Media.url` with transient auth, so materialize it first.
 const inlineMedia = (asset: Media.Asset) =>
-  ProviderShared.requireInlineMedia(NAME, asset).pipe(
+  ProviderShared.requireInlineMedia(route.name, asset).pipe(
     Effect.map((inline) => ({ inlineData: { mimeType: inline.mime, data: inline.base64 } })),
   )
 
 const fromRequest = Effect.fn("GoogleVideo.fromRequest")(function* (request: Request) {
   if (request.n !== undefined && request.n > 1)
-    return yield* ProviderShared.unsupportedOperation({
-      operation: "video.n",
-      provider: PROVIDER,
-      route: ADAPTER,
-      message: `${NAME} generates one video per request; call it once per video instead of n=${request.n}`,
-    })
+    return yield* route.unsupported(
+      "video.n",
+      `${route.name} generates one video per request; call it once per video instead of n=${request.n}`,
+    )
   if (request.audio === false)
-    return yield* ProviderShared.unsupportedOperation({
-      operation: "video.audio",
-      provider: PROVIDER,
-      route: ADAPTER,
-      message: `${NAME} always generates audio; audio: false cannot be honored`,
-    })
+    return yield* route.unsupported(
+      "video.audio",
+      `${route.name} always generates audio; audio: false cannot be honored`,
+    )
   if (request.frames?.last !== undefined && request.frames.first === undefined)
-    return yield* ProviderShared.invalidRequest(`${NAME} requires frames.first when frames.last is set`)
+    return yield* ProviderShared.invalidRequest(`${route.name} requires frames.first when frames.last is set`)
   const image = request.frames?.first === undefined ? undefined : yield* inlineMedia(request.frames.first)
   const lastFrame = request.frames?.last === undefined ? undefined : yield* inlineMedia(request.frames.last)
   const video = request.video === undefined ? undefined : yield* inlineMedia(request.video)
@@ -129,7 +133,7 @@ const fromRequest = Effect.fn("GoogleVideo.fromRequest")(function* (request: Req
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
-const decodeStart = MediaProtocol.decodeStarted(ADAPTER, NAME, StartResponse, (value) => ({
+const decodeStart = route.decodeStarted(StartResponse, (value) => ({
   token: { operation: value.name },
   snapshot: { id: value.name, status: "running" },
 }))
@@ -140,7 +144,7 @@ const statusOf = (operation: typeof Operation.Type): Status => {
   return operation.error === undefined ? "completed" : "failed"
 }
 
-const decodeOperation = MediaProtocol.decodeJson(ADAPTER, NAME, Operation)
+const decodeOperation = route.decodeJson(Operation)
 
 const decodeStatus = Effect.fn("GoogleVideo.decodeStatus")(function* (
   response: HttpClientResponse.HttpClientResponse,
@@ -157,12 +161,12 @@ const decodeResult = Effect.fn("GoogleVideo.decodeResult")(function* (
   const output = yield* decodeOperation(response)
   const operation = output.value
   const status = statusOf(operation)
-  if (status === "running")
-    return yield* output.invalid(`${NAME} operation ${context.token.operation} has not finished`)
+  if (status === "running") return yield* output.pending(context.token.operation)
   if (status === "failed")
     return yield* output.ended(
       "failed",
-      `${NAME} operation failed${operation.error?.message === undefined ? "" : `: ${operation.error.message}`}`,
+      `${route.name} operation failed${operation.error?.message === undefined ? "" : `: ${operation.error.message}`}`,
+      MediaProtocol.failure(FAILURE, operation.error?.code),
     )
   const generated = operation.response?.generateVideoResponse
   // Downloads require the same API key as the poll; the asset carries it transiently and follows the redirect.
@@ -179,14 +183,14 @@ const decodeResult = Effect.fn("GoogleVideo.decodeResult")(function* (
   const reasons = generated?.raiMediaFilteredReasons ?? []
   const notices = reasons.map((reason) => ({
     type: "filtered" as const,
-    message: `${NAME} filtered media: ${reason}`,
+    message: `${route.name} filtered media: ${reason}`,
     providerMetadata: { google: { raiMediaFilteredReason: reason } },
   }))
   if (videos.length === 0 && (reasons.length > 0 || (generated?.raiMediaFilteredCount ?? 0) > 0))
     return yield* output.contentPolicy(
-      `${NAME} filtered every video${reasons.length === 0 ? "" : `: ${reasons.join("; ")}`}`,
+      `${route.name} filtered every video${reasons.length === 0 ? "" : `: ${reasons.join("; ")}`}`,
     )
-  if (videos.length === 0) return yield* output.invalid(`${NAME} operation completed without any video`)
+  if (videos.length === 0) return yield* output.invalid(`${route.name} operation completed without any video`)
   return new VideoResponse({
     videos,
     notices: notices.length === 0 ? undefined : notices,
@@ -206,9 +210,7 @@ const decodeResult = Effect.fn("GoogleVideo.decodeResult")(function* (
 
 const operationPath = (token: Token) => `/${token.operation}`
 
-export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>(route, {
   token: Token,
   start: { body: { from: fromRequest }, decode: decodeStart },
   status: { path: operationPath, decode: decodeStatus },
@@ -218,8 +220,6 @@ export const protocol = MediaProtocol.queued<Request, VideoResponse, Token>({
 export const model = (input: MediaRoute.ModelInput) =>
   VideoModel.fromRoute<GoogleVideoOptions, Token>(
     {
-      id: ADAPTER,
-      provider: PROVIDER,
       protocol,
       baseURL: DEFAULT_BASE_URL,
       path: ({ request }) => `/models/${request.model.id}:predictLongRunning`,

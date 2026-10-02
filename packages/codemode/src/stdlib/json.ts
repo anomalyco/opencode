@@ -40,7 +40,7 @@ const parse = <R>(ctx: Interpreter<R>, args: Array<Value>): Effect.Effect<Value,
           else set(value, name, revived)
         }
       }
-      return yield* apply([key, value])
+      return yield* apply([key, value], holder)
     })
   return visit(record(ctx.builtins.Object, { "": parsed }), "")
 }

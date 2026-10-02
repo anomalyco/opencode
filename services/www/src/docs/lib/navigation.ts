@@ -146,7 +146,6 @@ export const docsSections: DocsSection[] = [
         items: [
           { title: "Inference", slug: "console/inference" },
           { title: "BYOK", slug: "console/byok" },
-          { title: "Usage", slug: "console/usage" },
           { title: "Budgets", slug: "console/budgets" },
         ],
       },

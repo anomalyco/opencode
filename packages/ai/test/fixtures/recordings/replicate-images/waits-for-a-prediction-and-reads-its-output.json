@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:replicate-images",
+      "provider:replicate",
+      "protocol:replicate-images"
+    ],
+    "name": "replicate-images/waits-for-a-prediction-and-reads-its-output",
+    "recordedAt": "2026-09-23T18:42:06.871Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.replicate.com/v1/models/black-forest-labs/flux-schnell/predictions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"input\":{\"prompt\":\"A simple flat black circle centered on a plain white background.\",\"aspect_ratio\":\"1:1\",\"output_format\":\"webp\",\"megapixels\":\"0.25\"}}"
+      },
+      "response": {
+        "status": 201,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"id\":\"mde2assdssrp40d0sy9tf0p6a8\",\"model\":\"black-forest-labs/flux-schnell\",\"version\":\"hidden\",\"input\":{\"aspect_ratio\":\"1:1\",\"megapixels\":\"0.25\",\"output_format\":\"webp\",\"prompt\":\"A simple flat black circle centered on a plain white background.\"},\"logs\":\"running quantized prediction\\nUsing seed: 6062557\\n  0%|          | 0/4 [00:00<?, ?it/s]\\n100%|██████████| 4/4 [00:00<00:00, 57.07it/s]\\nTotal safe images: 1 out of 1\\n\",\"output\":[\"https://replicate.delivery/xezq/r1LEsqIqPxYAH9qg7cV5mGQBxCuO98VnnE3py6f7AyTe9cQXA/out-0.webp\"],\"data_removed\":false,\"error\":null,\"source\":\"api\",\"status\":\"succeeded\",\"created_at\":\"2026-09-23T18:42:04.366Z\",\"started_at\":\"2026-09-23T18:42:04.374610941Z\",\"completed_at\":\"2026-09-23T18:42:04.540732474Z\",\"urls\":{\"cancel\":\"https://api.replicate.com/v1/predictions/mde2assdssrp40d0sy9tf0p6a8/cancel\",\"get\":\"https://api.replicate.com/v1/predictions/mde2assdssrp40d0sy9tf0p6a8\",\"stream\":\"https://stream.replicate.com/v1/files/uwhq-pppjocryviy6634d5p2ypvoge6a4sdagsyjscmwfycwk4s5mzfya\",\"web\":\"https://replicate.com/p/mde2assdssrp40d0sy9tf0p6a8\"},\"metrics\":{\"image_count\":1,\"predict_time\":0.166121534,\"total_time\":0.174732474}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.replicate.com/v1/predictions/mde2assdssrp40d0sy9tf0p6a8",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"id\":\"mde2assdssrp40d0sy9tf0p6a8\",\"model\":\"black-forest-labs/flux-schnell\",\"version\":\"hidden\",\"input\":{\"aspect_ratio\":\"1:1\",\"megapixels\":\"0.25\",\"output_format\":\"webp\",\"prompt\":\"A simple flat black circle centered on a plain white background.\"},\"logs\":\"running quantized prediction\\nUsing seed: 6062557\\n  0%|          | 0/4 [00:00\\u003c?, ?it/s]\\n100%|██████████| 4/4 [00:00\\u003c00:00, 57.07it/s]\\nTotal safe images: 1 out of 1\\n\",\"output\":[\"https://replicate.delivery/xezq/r1LEsqIqPxYAH9qg7cV5mGQBxCuO98VnnE3py6f7AyTe9cQXA/out-0.webp\"],\"data_removed\":false,\"error\":null,\"source\":\"api\",\"status\":\"succeeded\",\"created_at\":\"2026-09-23T18:42:04.366Z\",\"started_at\":\"2026-09-23T18:42:04.374610941Z\",\"completed_at\":\"2026-09-23T18:42:04.540732474Z\",\"urls\":{\"cancel\":\"https://api.replicate.com/v1/predictions/mde2assdssrp40d0sy9tf0p6a8/cancel\",\"get\":\"https://api.replicate.com/v1/predictions/mde2assdssrp40d0sy9tf0p6a8\",\"stream\":\"https://stream.replicate.com/v1/files/uwhq-pppjocryviy6634d5p2ypvoge6a4sdagsyjscmwfycwk4s5mzfya\",\"web\":\"https://replicate.com/p/mde2assdssrp40d0sy9tf0p6a8\"},\"metrics\":{\"image_count\":1,\"predict_time\":0.166121534,\"total_time\":0.174732474}}\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://replicate.delivery/xezq/r1LEsqIqPxYAH9qg7cV5mGQBxCuO98VnnE3py6f7AyTe9cQXA/out-0.webp",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "image/webp"
+        },
+        "body": "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",
+        "bodyEncoding": "base64"
+      }
+    }
+  ]
+}

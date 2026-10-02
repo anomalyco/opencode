@@ -5,12 +5,6 @@ const ServerReadyData = Schema.Struct({
   url: Schema.String,
 })
 
-export const PairingInfo = Schema.Struct({
-  urls: Schema.Array(Schema.String),
-  username: Schema.Literal("opencode"),
-  password: Schema.String,
-})
-
 export const AppAwaitInitialization = Rpc.make("AppAwaitInitialization", { success: ServerReadyData })
 export const AppReconnectService = Rpc.make("AppReconnectService", { success: ServerReadyData })
 export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks", {
@@ -59,12 +53,6 @@ export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
   payload: { value: Schema.Unknown },
 })
 export const AppRelaunch = Rpc.make("AppRelaunch")
-export const AppPairInfo = Rpc.make("AppPairInfo", { success: PairingInfo, error: Schema.String })
-export const AppGetKeepScreenActive = Rpc.make("AppGetKeepScreenActive", { success: Schema.Boolean })
-export const AppSetKeepScreenActive = Rpc.make("AppSetKeepScreenActive", {
-  payload: { enabled: Schema.Boolean },
-  error: Schema.String,
-})
 export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
@@ -81,7 +69,4 @@ export const AppRpcs = RpcGroup.make(
   AppRecordFatalRendererError,
   AppSetNativeTranslations,
   AppRelaunch,
-  AppPairInfo,
-  AppGetKeepScreenActive,
-  AppSetKeepScreenActive,
 )

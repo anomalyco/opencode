@@ -1,15 +1,12 @@
 import { Effect, Schema } from "effect"
-import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { AIError, ContentPolicyError, ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords } from "../schema/index.js"
 import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
-import { ProviderShared } from "./shared.js"
+import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
-const ADAPTER = "google-speech"
-const NAME = "Google Speech"
-const PROVIDER = ProviderID.make("google")
+const route = MediaProtocol.identity({ id: "google-speech", name: "Google Speech", provider: "google" })
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 const DEFAULT_SAMPLE_RATE = 24000
 
@@ -37,55 +34,21 @@ export type Request = SpeechRequestFor<GoogleSpeechOptions>
 // 3. Streaming event schema
 // ---------------------------------------------------------------------------
 
-const GenerateContentChunk = Schema.Struct({
-  candidates: Schema.optional(
-    Schema.Array(
-      Schema.Struct({
-        content: Schema.optional(
-          Schema.Struct({
-            parts: Schema.optional(
-              Schema.Array(
-                Schema.Struct({
-                  text: Schema.optional(Schema.String),
-                  inlineData: Schema.optional(
-                    Schema.Struct({ mimeType: Schema.String, data: Schema.Uint8ArrayFromBase64 }),
-                  ),
-                }),
-              ),
-            ),
-          }),
-        ),
-        finishReason: Schema.optional(Schema.String),
-      }),
-    ),
-  ),
-  promptFeedback: Schema.optional(
-    Schema.Struct({ blockReason: Schema.optional(Schema.String), blockReasonMessage: Schema.optional(Schema.String) }),
-  ),
-  usageMetadata: Schema.optional(
-    Schema.Struct({
-      promptTokenCount: Schema.optional(Schema.Number),
-      candidatesTokenCount: Schema.optional(Schema.Number),
-      totalTokenCount: Schema.optional(Schema.Number),
-    }),
-  ),
-  modelVersion: Schema.optional(Schema.String),
-  responseId: Schema.optional(Schema.String),
-})
-type GenerateContentChunk = Schema.Schema.Type<typeof GenerateContentChunk>
+const GenerateContentChunk = GeminiGenerateContent.chunk(
+  Schema.Struct({
+    text: Schema.optional(Schema.String),
+    inlineData: Schema.optional(Schema.Struct({ mimeType: Schema.String, data: Schema.Uint8ArrayFromBase64 })),
+  }),
+)
 
-const decodeChunk = MediaProtocol.decodeFrame(ADAPTER, NAME, GenerateContentChunk)
+const decodeChunk = route.decodeFrame(GenerateContentChunk)
 
 // ---------------------------------------------------------------------------
 // 4. Parser state
 // ---------------------------------------------------------------------------
 
-interface State extends SpeechStream.Audio {
+interface State extends SpeechStream.Audio, GeminiGenerateContent.Metadata {
   readonly mimeType?: string
-  readonly usage?: GenerateContentChunk["usageMetadata"]
-  readonly finishReason?: string
-  readonly modelVersion?: string
-  readonly responseId?: string
 }
 
 // ---------------------------------------------------------------------------
@@ -93,11 +56,18 @@ interface State extends SpeechStream.Audio {
 // ---------------------------------------------------------------------------
 
 const fromRequest = Effect.fn("GoogleSpeech.fromRequest")(function* (request: MediaProtocol.Addressed<Request>) {
+  // Not in `unsupported`: that list would also reject `timestamps: false`, which asks for nothing.
+  if (request.timestamps === true)
+    return yield* route.unsupported("media.timestamps", `${route.name} does not return timestamps`)
+  if (request.format === "pcm" && request.mode === "generate" && /^gemini-3\.8-.*-tts(?:-|$)/.test(request.model.id))
+    return yield* route.unsupported(
+      "media.format",
+      `${route.name} returns WAV by default for Gemini 3.8 TTS unary requests; omit the format to accept it`,
+    )
   if (request.format !== undefined && request.format !== "pcm")
-    return yield* SpeechStream.unsupportedFormat(
-      PROVIDER,
-      ADAPTER,
-      `${NAME} only returns raw PCM; request format "pcm" or omit it, then wrap the samples yourself`,
+    return yield* route.unsupported(
+      "media.format",
+      `${route.name} only accepts raw PCM as an explicit format; omit it to accept the provider's default output`,
     )
   const voiceName = SpeechStream.voiceID(request.voice)
   return MediaProtocol.json(
@@ -120,66 +90,41 @@ const fromRequest = Effect.fn("GoogleSpeech.fromRequest")(function* (request: Me
   )
 })
 
-// Only `gemini-3.1-flash-tts-preview` and later stream; earlier TTS models reject `streamGenerateContent`.
-const path = (request: MediaProtocol.Addressed<Request>) =>
-  request.mode === "stream"
-    ? `/models/${request.model.id}:streamGenerateContent?alt=sse`
-    : `/models/${request.model.id}:generateContent`
-
 // ---------------------------------------------------------------------------
 // 6. Stream parsing
 // ---------------------------------------------------------------------------
 
 const step = Effect.fn("GoogleSpeech.step")(function* (state: State, frame: string) {
   const chunk = yield* decodeChunk(frame)
-  const blockReason = chunk.promptFeedback?.blockReason
-  if (blockReason !== undefined)
-    return yield* new AIError({
-      reason: new ContentPolicyError({
-        message: `${NAME} blocked the prompt (${blockReason})${
-          chunk.promptFeedback?.blockReasonMessage === undefined ? "" : `: ${chunk.promptFeedback.blockReasonMessage}`
-        }`,
-        body: frame,
-      }),
-    })
-  const candidate = chunk.candidates?.[0]
-  const audio = (candidate?.content?.parts ?? []).flatMap((part) =>
+  const blocked = GeminiGenerateContent.blocked(route.name, chunk, frame)
+  if (blocked !== undefined) return yield* blocked
+  const audio = (chunk.candidates?.[0]?.content?.parts ?? []).flatMap((part) =>
     part.inlineData === undefined ? [] : [part.inlineData],
   )
-  const next: State = {
-    ...state,
-    mimeType: state.mimeType ?? audio[0]?.mimeType,
-    usage: chunk.usageMetadata ?? state.usage,
-    finishReason: candidate?.finishReason ?? state.finishReason,
-    modelVersion: chunk.modelVersion ?? state.modelVersion,
-    responseId: chunk.responseId ?? state.responseId,
-  }
-  return [next, audio.flatMap((part) => SpeechStream.delta(next, part.data)[1])] as const
+  const next: State = { ...GeminiGenerateContent.track(state, chunk), mimeType: state.mimeType ?? audio[0]?.mimeType }
+  const events = audio.flatMap((part) => SpeechStream.delta(next, part.data)[1])
+  const withheld = next.chunks.length === 0 ? GeminiGenerateContent.withheld(route.name, chunk, frame) : undefined
+  if (withheld !== undefined) return yield* withheld
+  return [next, events] as const
 })
 
-const finish = (state: State) => {
-  const usage = state.usage
+const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) => {
+  if (state.finishReason === undefined) return Effect.fail(route.incomplete())
   const sampleRate = SpeechStream.sampleRate(state.mimeType) ?? DEFAULT_SAMPLE_RATE
-  return SpeechStream.finish(ADAPTER, state, {
-    ...SpeechStream.pcm("pcm_s16le", sampleRate, state.mimeType ?? `audio/L16;codec=pcm;rate=${sampleRate}`),
-    usage:
-      usage === undefined
-        ? undefined
-        : {
-            type: "tokens",
-            input: usage.promptTokenCount,
-            output: usage.candidatesTokenCount,
-            total: ProviderShared.totalTokens(
-              usage.promptTokenCount,
-              usage.candidatesTokenCount,
-              usage.totalTokenCount,
-            ),
-            details: { google: usage },
-          },
-    providerMetadata: {
-      google: { finishReason: state.finishReason, modelVersion: state.modelVersion, responseId: state.responseId },
-    },
-    detail: state.finishReason === undefined ? undefined : `finish reason: ${state.finishReason}`,
+  const output =
+    state.mimeType?.split(";")[0]?.toLowerCase() === "audio/wav"
+      ? SpeechStream.container("wav", sampleRate)
+      : SpeechStream.pcm("pcm_s16le", sampleRate, state.mimeType ?? `audio/L16;codec=pcm;rate=${sampleRate}`)
+  if (context.request.format === "pcm" && output.info.format !== "pcm")
+    return Effect.fail(
+      route.frameError(`Google Speech returned ${output.info.format} instead of the requested raw PCM`),
+    )
+  return SpeechStream.finish(route, state, {
+    ...output,
+    usage: GeminiGenerateContent.usage(state.usage),
+    notices: GeminiGenerateContent.notices(route.name, state),
+    providerMetadata: GeminiGenerateContent.providerMetadata(state),
+    detail: `finish reason: ${state.finishReason}`,
   })
 }
 
@@ -187,14 +132,10 @@ const finish = (state: State) => {
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.stream<Request, SpeechEvent, string, State>({
-  id: ADAPTER,
-  name: NAME,
-  unsupported: ["instructions", "speed", "timestamps"],
+export const protocol = MediaProtocol.stream<Request, SpeechEvent, string, State>(route, {
+  unsupported: ["instructions", "speed"],
   body: { from: fromRequest },
-  // `generateContent` answers with one document shaped exactly like a streamed chunk, so it is a single frame.
-  frames: (bytes, context) =>
-    context.request.mode === "stream" ? Framing.sse.frame(bytes) : Framing.document.frame(bytes),
+  frames: (bytes, context) => GeminiGenerateContent.frames(bytes, context.request.mode),
   initial: () => ({ chunks: [] }),
   step,
   finish,
@@ -202,7 +143,12 @@ export const protocol = MediaProtocol.stream<Request, SpeechEvent, string, State
 
 export const model = (input: MediaRoute.ModelInput) =>
   SpeechModel.fromRoute<GoogleSpeechOptions, string, State>(
-    { id: ADAPTER, provider: PROVIDER, protocol, baseURL: DEFAULT_BASE_URL, path: ({ request }) => path(request) },
+    {
+      protocol,
+      baseURL: DEFAULT_BASE_URL,
+      // Only `gemini-3.1-flash-tts-preview` and later stream; earlier TTS models reject `streamGenerateContent`.
+      path: ({ request }) => GeminiGenerateContent.path(request.model.id, request.mode),
+    },
     input,
   )
 

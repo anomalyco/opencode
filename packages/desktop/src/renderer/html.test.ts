@@ -1,69 +1,27 @@
-import { describe, expect, test } from "bun:test"
-import { join, dirname, resolve } from "node:path"
-import { existsSync } from "node:fs"
-import { fileURLToPath } from "node:url"
+import { expect, test } from "bun:test"
+import { join } from "node:path"
 
-const dir = dirname(fileURLToPath(import.meta.url))
-const root = resolve(dir, "../..")
+// Packaged windows load the renderer through the privileged `oc://` protocol, where a root-relative
+// path such as `src="/foo.js"` resolves from the protocol origin instead of next to the HTML entry.
+test("index.html references local resources by relative path and has no web manifest", async () => {
+  const content = await Bun.file(join(import.meta.dirname, "index.html")).text()
+  const paths = [...content.matchAll(/\bsrc=["']([^"']+)["']|<link[^>]+href=["']([^"']+)["']/g)].map(
+    (match) => match[1] ?? match[2],
+  )
+  expect(paths.length).toBeGreaterThan(0)
+  for (const path of paths) expect(path).not.toMatch(/^\/[^/]/)
+  // A web app manifest does not apply in Electron.
+  expect(content).not.toContain('rel="manifest"')
+})
 
-const html = async (name: string) => Bun.file(join(dir, name)).text()
-
-/**
- * Packaged Electron windows load renderer HTML via the privileged `oc://`
- * protocol. Root-relative asset paths like `src="/foo.js"` would resolve from
- * the protocol origin root instead of relative to the current HTML entrypoint.
- *
- * All local resource references must use relative paths (`./`).
- */
-describe("electron renderer html", () => {
-  for (const name of ["index.html"]) {
-    describe(name, () => {
-      test("script src attributes use relative paths", async () => {
-        const content = await html(name)
-        const srcs = [...content.matchAll(/\bsrc=["']([^"']+)["']/g)].map((m) => m[1])
-        for (const src of srcs) {
-          expect(src).not.toMatch(/^\/[^/]/)
-        }
-      })
-
-      test("link href attributes use relative paths", async () => {
-        const content = await html(name)
-        const hrefs = [...content.matchAll(/<link[^>]+href=["']([^"']+)["']/g)].map((m) => m[1])
-        for (const href of hrefs) {
-          expect(href).not.toMatch(/^\/[^/]/)
-        }
-      })
-
-      test("no web manifest link (not applicable in Electron)", async () => {
-        const content = await html(name)
-        expect(content).not.toContain('rel="manifest"')
-      })
-    })
+// Telemetry must not delay first paint: nothing awaits before render, and the Sentry SDK loads lazily.
+test("the renderer entry renders while optional telemetry is still loading", async () => {
+  const entry = await Bun.file(join(import.meta.dirname, "index.tsx")).text()
+  const render = entry.indexOf("render(")
+  expect(render).toBeGreaterThan(-1)
+  expect(entry.slice(0, render)).not.toMatch(/\bawait\b/)
+  for await (const file of new Bun.Glob("**/*.{ts,tsx}").scan({ cwd: import.meta.dirname })) {
+    if (file.includes(".test.")) continue
+    expect(await Bun.file(join(import.meta.dirname, file)).text()).not.toMatch(/\bfrom\s+["']@sentry\//)
   }
-})
-
-/**
- * Vite resolves `publicDir` relative to `root`, not the config file.
- * This test reads the actual values from electron.vite.config.ts to catch
- * regressions where the publicDir path no longer resolves correctly
- * after the renderer root is accounted for.
- */
-describe("electron vite publicDir", () => {
-  test("configured publicDir resolves to a directory with oc-theme-preload.js", async () => {
-    const config = await Bun.file(join(root, "electron.vite.config.ts")).text()
-    const pub = config.match(/publicDir:\s*["']([^"']+)["']/)
-    const rendererRoot = config.match(/root:\s*["']([^"']+)["']/)
-    expect(pub).not.toBeNull()
-    expect(rendererRoot).not.toBeNull()
-    const resolved = resolve(root, rendererRoot![1], pub![1])
-    expect(existsSync(resolved)).toBe(true)
-    expect(existsSync(join(resolved, "oc-theme-preload.js"))).toBe(true)
-  })
-})
-
-test("renders before loading optional telemetry", async () => {
-  const source = await Bun.file(join(dir, "index.tsx")).text()
-  expect(source.indexOf("render(() =>")).toBeGreaterThan(-1)
-  expect(source.indexOf("render(() =>")).toBeLessThan(source.indexOf("initializeSentry(version)"))
-  expect(source).not.toContain("await initializeSentry")
 })

@@ -130,8 +130,8 @@ export function Answer(props: {
         <text attributes={TextAttributes.BOLD} fg={theme.text.base} flexShrink={0}>
           /btw
         </text>
-        <text fg={theme.text.muted} wrapMode="word" flexGrow={1}>
-          {props.question}
+        <text fg={theme.text.muted} wrapMode="none" flexGrow={1} truncate>
+          {props.question.replace(/\s+/g, " ")}
         </text>
         <text fg={theme.text.muted} flexShrink={0} onMouseUp={() => dialog.clear()}>
           esc

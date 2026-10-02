@@ -26,6 +26,7 @@ import { Model } from "@opencode/schema/model"
 import { asc, eq } from "drizzle-orm"
 import { Effect, Schema } from "effect"
 import { testEffect } from "./lib/effect"
+import legacyMedia from "./fixture/provider-context/2.0.14-media.json"
 
 const model = SessionRunnerModel.resolved(
   LanguageModel.make({ id: "deployment", provider: "openai", route: OpenAIResponses.route }),
@@ -45,6 +46,51 @@ const replacement = [
 ]
 const providerContext = SessionProviderContext.encode(target, replacement)
 const sessionID = SessionSchema.ID.make("ses_provider_context")
+
+// Frozen serialized data, deliberately not constructed using today's Message API.
+const legacyContext = Schema.decodeUnknownSync(SessionProviderContext.Info)({
+  ...providerContext,
+  messages: legacyMedia,
+})
+
+test("reads pre-2.0.15 checkpoint media without rewriting the stored payload", async () => {
+  const before = JSON.stringify(legacyContext)
+  const decoded = SessionProviderContext.decode(legacyContext)
+  expect(await Effect.runPromise(SessionProviderContext.validate(legacyContext))).toEqual(decoded)
+  expect(decoded[0]?.content).toMatchObject([
+    { type: "text", text: "retained attachments" },
+    {
+      type: "media",
+      media: { source: { type: "base64", data: "AQID", mediaType: "image/png" } },
+      filename: "attachment.png",
+      cache: { type: "ephemeral" },
+      metadata: { attachment: "original" },
+      providerMetadata: { openai: { detail: "high" } },
+    },
+    { type: "media", media: { source: { type: "base64", data: "BAUG", mediaType: "image/jpeg" } } },
+  ])
+  expect(decoded[1]?.content).toMatchObject(legacyMedia[1]?.content ?? [])
+  expect(JSON.stringify(legacyContext)).toBe(before)
+})
+
+test("reads mixed legacy and current media without overriding an existing asset", async () => {
+  const current = {
+    type: "media",
+    media: { source: { type: "base64", data: "BAUG", mediaType: "image/jpeg" } },
+    mediaType: "image/png",
+    data: "AQID",
+  }
+  const context = Schema.decodeUnknownSync(SessionProviderContext.Info)({
+    ...providerContext,
+    messages: [{ role: "user", content: [...(legacyMedia[0]?.content ?? []), current] }],
+  })
+  const decoded = SessionProviderContext.decode(context)
+  expect(await Effect.runPromise(SessionProviderContext.validate(context))).toEqual(decoded)
+  expect(decoded[0]?.content.at(-1)).toMatchObject({ media: current.media })
+  const invalid = { ...context, messages: [{ role: "user", content: [{ ...current, media: null }] }] }
+  expect(() => SessionProviderContext.decode(invalid)).toThrow()
+  expect(await Effect.runPromise(Effect.isFailure(SessionProviderContext.validate(invalid)))).toBe(true)
+})
 
 const it = testEffect(
   AppNodeBuilder.build(
@@ -94,6 +140,26 @@ const setup = Effect.gen(function* () {
     SessionHistory.entriesForRunner(database.db, sessionID, instructions, boundary)
   return { db: database.db, bus, state, instructions, prepare, prompt, compact, load }
 })
+
+it.effect("loads and replays a persisted pre-2.0.15 media checkpoint", () =>
+  Effect.gen(function* () {
+    const s = yield* setup
+    yield* s.prepare
+    yield* s.prompt("original request")
+    yield* s.bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "" })
+    yield* s.compact(legacyContext)
+    yield* s.prompt("continue")
+    const history = yield* SessionHistory.load(s.db, sessionID, target)
+    expect(toLLMMessages(history, model.ref).slice(0, 2)).toEqual([...SessionProviderContext.decode(legacyContext)])
+    expect(history.some(SessionProviderContext.isCheckpoint)).toBe(true)
+    const local = yield* SessionHistory.load(s.db, sessionID, "local")
+    expect(local.some(SessionProviderContext.isCheckpoint)).toBe(false)
+    expect(toLLMMessages(local, model.ref).map((message) => message.content)).toEqual([
+      [Message.text("original request")],
+      [Message.text("continue")],
+    ])
+  }),
+)
 
 test("canonical provider context round-trips tools, opaque checkpoints and binary media through JSON", () => {
   const messages = [

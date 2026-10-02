@@ -174,21 +174,46 @@ test("declared errors are thrown as Error instances that keep the body", async (
   expect(error).toMatchObject({ _tag: "InvalidRequestError", kind: "integration_authorization" })
 })
 
-test("declared errors with a data envelope read the nested message", async () => {
-  const client = OpenCode.make({
-    baseUrl: "http://localhost:3000",
-    fetch: async () =>
-      Response.json({ name: "WorktreeError", data: { message: "Worktree directory unavailable" } }, { status: 400 }),
+test("worktree errors retain the existing envelope with or without a tag", async () => {
+  for (const body of [
+    { name: "WorktreeError", data: { message: "Worktree directory unavailable" } },
+    { _tag: "WorktreeError", name: "WorktreeError", data: { message: "Worktree directory unavailable" } },
+  ]) {
+    const client = OpenCode.make({
+      baseUrl: "http://localhost:3000",
+      fetch: async () => Response.json(body, { status: 400 }),
+    })
+    const error = await client.worktree.create({ projectID: "prj_test" }).then(
+      () => undefined,
+      (cause: unknown) => cause,
+    )
+    expect(error).toBeInstanceOf(Error)
+    if (!(error instanceof Error)) throw error
+    expect(error.message).toBe("Worktree directory unavailable")
+    expect(error.name).toBe("WorktreeError")
+    expect(error).toMatchObject(body)
+  }
+})
+
+test("client errors keep the reason and describe the failure in the message", async () => {
+  const failure = (fetch: () => Promise<Response>) =>
+    OpenCode.make({ baseUrl: "http://localhost:3000", fetch })
+      .session.list()
+      .catch((cause: unknown) => cause)
+  expect(await failure(() => Promise.reject(new TypeError("Unable to connect")))).toMatchObject({
+    reason: "Transport",
+    message: "Transport: Unable to connect",
   })
-  const error = await client.worktree.create({ projectID: "prj_test" }).then(
-    () => undefined,
-    (cause: unknown) => cause,
+  expect(await failure(async () => new Response("", { status: 500 }))).toMatchObject({
+    reason: "UnexpectedStatus",
+    message: "UnexpectedStatus: 500",
+  })
+  expect(await failure(async () => new Response("<html>", { headers: { "content-type": "text/html" } }))).toMatchObject(
+    {
+      reason: "UnsupportedContentType",
+      message: "UnsupportedContentType: text/html",
+    },
   )
-  expect(error).toBeInstanceOf(Error)
-  if (!(error instanceof Error)) throw error
-  expect(error.message).toBe("Worktree directory unavailable")
-  expect(error.name).toBe("WorktreeError")
-  expect(error).toMatchObject({ name: "WorktreeError", data: { message: "Worktree directory unavailable" } })
 })
 
 test("project.update uses the global project contract", async () => {

@@ -11,7 +11,6 @@ export interface Snapshot {
   /** Normalized 0..1 when the provider reports progress. */
   readonly progress?: number
   readonly position?: number
-  readonly expiresAt?: number
 }
 
 /**
@@ -22,15 +21,11 @@ export interface Route<Response> {
   readonly status: Effect.Effect<Snapshot, AIError>
   readonly result: Effect.Effect<Response, AIError>
   readonly cancel?: Effect.Effect<void, AIError>
-  /** Provider polling hint (e.g. `openai-poll-after-ms`) that overrides the default interval for the next poll. */
-  readonly pollHint?: (snapshot: Snapshot) => Duration.Duration | undefined
 }
 
 export interface Poll {
   readonly interval?: Duration.Input
   readonly timeout?: Duration.Input
-  /** Full override of the polling schedule; `interval` and `pollHint` are ignored when supplied. */
-  readonly schedule?: Schedule.Schedule<unknown, Snapshot>
 }
 
 export interface AwaitOptions {
@@ -40,19 +35,31 @@ export interface AwaitOptions {
 export const DEFAULT_POLL_INTERVAL = Duration.seconds(5)
 export const DEFAULT_POLL_TIMEOUT = Duration.minutes(10)
 
-export type Event =
-  | { readonly type: "generation-queued"; readonly id: string; readonly position?: number }
-  | { readonly type: "generation-progress"; readonly id: string; readonly progress?: number }
-  | { readonly type: "generation-finished"; readonly id: string; readonly status: Status }
+export const QueuedEvent = Schema.Struct({
+  type: Schema.tag("generation-queued"),
+  id: Schema.String,
+  position: Schema.optional(Schema.Number),
+}).annotate({ identifier: "Generation.Event.Queued" })
+
+export const ProgressEvent = Schema.Struct({
+  type: Schema.tag("generation-progress"),
+  id: Schema.String,
+  progress: Schema.optional(Schema.Number),
+}).annotate({ identifier: "Generation.Event.Progress" })
+
+export type Observation = Schema.Schema.Type<typeof QueuedEvent> | Schema.Schema.Type<typeof ProgressEvent>
+
+export type Event = Observation | { readonly type: "generation-finished"; readonly id: string; readonly status: Status }
 
 const TERMINAL: ReadonlySet<Status> = new Set(["completed", "failed", "cancelled", "expired"])
+
+export const isTerminal = (status: Status) => TERMINAL.has(status)
 
 export class Generation<Response> {
   readonly id: string
   readonly status: Status
   readonly progress?: number
   readonly position?: number
-  readonly expiresAt?: number
 
   constructor(
     readonly route: Route<Response>,
@@ -64,7 +71,6 @@ export class Generation<Response> {
     this.status = snapshot.status
     this.progress = snapshot.progress
     this.position = snapshot.position
-    this.expiresAt = snapshot.expiresAt
   }
 
   get snapshot(): Snapshot {
@@ -73,12 +79,11 @@ export class Generation<Response> {
       status: this.status,
       progress: this.progress,
       position: this.position,
-      expiresAt: this.expiresAt,
     }
   }
 
   get terminal() {
-    return TERMINAL.has(this.status)
+    return isTerminal(this.status)
   }
 
   refresh(): Effect.Effect<Generation<Response>, AIError> {
@@ -97,7 +102,7 @@ export class Generation<Response> {
     return settled.pipe(
       // Non-completed terminal states also go through `result` so the route can surface its provider failure body.
       Effect.flatMap((generation) => generation.result()),
-      Effect.timeoutOrElse({ duration: timeout, orElse: () => this.timeoutError(timeout) }),
+      Effect.timeoutOrElse({ duration: timeout, orElse: () => timeoutError(this.id, timeout) }),
     )
   }
 
@@ -106,9 +111,10 @@ export class Generation<Response> {
   }
 
   /**
-   * Status observations as a stream, ending after the first terminal observation. Each poll is bounded by the time
-   * remaining until `poll.timeout`, so a hung status request fails the stream instead of stalling it. (`Stream.interruptWhen`
-   * would express this directly but deadlocks under `TestClock` when the source completes while the timer sleeps.)
+   * Status observations as a stream, ending after the first terminal observation. Each poll and each sleep between polls
+   * is bounded by the time remaining until `poll.timeout`, so a hung status request or a long interval fails the stream at
+   * the deadline instead of stalling it. (`Stream.interruptWhen` would express this directly but deadlocks under
+   * `TestClock` when the source completes while the timer sleeps.)
    */
   events(options?: AwaitOptions): Stream.Stream<Event, AIError> {
     if (this.terminal) return Stream.make(this.event())
@@ -117,17 +123,13 @@ export class Generation<Response> {
       Clock.currentTimeMillis.pipe(
         Effect.map((start) => {
           const deadline = start + Duration.toMillis(timeout)
-          const refresh = Clock.currentTimeMillis.pipe(
-            Effect.flatMap((now) =>
-              this.refresh().pipe(
-                Effect.timeoutOrElse({
-                  duration: Duration.millis(Math.max(0, deadline - now)),
-                  orElse: () => this.timeoutError(timeout),
-                }),
-              ),
+          const refresh = within(this.refresh(), this.id, timeout, deadline)
+          const schedule = this.schedule(options?.poll).pipe(
+            Schedule.modifyDelay((meta) =>
+              Effect.succeed(Duration.min(meta.duration, Duration.millis(Math.max(0, deadline - meta.now)))),
             ),
           )
-          return Stream.fromEffectSchedule(refresh, this.schedule(options?.poll)).pipe(
+          return Stream.fromEffectSchedule(refresh, schedule).pipe(
             Stream.takeUntil((generation) => generation.terminal),
             Stream.map((generation) => generation.event()),
           )
@@ -142,29 +144,64 @@ export class Generation<Response> {
     return { type: "generation-progress", id: this.id, progress: this.progress }
   }
 
-  private timeoutError(timeout: Duration.Duration) {
-    return new AIError({
-      reason: new TimeoutError({
-        message: `Generation ${this.id} did not finish within ${Duration.format(timeout)}`,
-        timeoutMs: Duration.toMillis(timeout),
-      }),
-    })
-  }
-
   private poll(poll: Poll | undefined) {
     return this.refresh().pipe(
       Effect.repeat({ schedule: this.schedule(poll), until: (generation) => generation.terminal }),
     )
   }
 
-  private schedule(poll: Poll | undefined): Schedule.Schedule<unknown, Generation<Response>> {
-    if (poll?.schedule) return poll.schedule.pipe(Schedule.setInputType<Generation<Response>>())
-    const interval = poll?.interval ?? DEFAULT_POLL_INTERVAL
-    const pollHint = this.route.pollHint
-    const spaced = Schedule.spaced(interval).pipe(Schedule.setInputType<Generation<Response>>())
-    if (!pollHint) return spaced
-    return spaced.pipe(
-      Schedule.modifyDelay((metadata) => Effect.succeed(pollHint(metadata.input.snapshot) ?? interval)),
-    )
+  private schedule(poll: Poll | undefined) {
+    return Schedule.spaced(poll?.interval ?? DEFAULT_POLL_INTERVAL)
   }
 }
+
+/** `events` followed by the expanded result, with the result fetch bounded by the same `poll.timeout` deadline. */
+export const resultEvents = <Response, A>(
+  generation: Generation<Response>,
+  expand: (response: Response) => ReadonlyArray<A>,
+  options?: AwaitOptions,
+): Stream.Stream<Observation | A, AIError> => {
+  const timeout = Duration.fromInputUnsafe(options?.poll?.timeout ?? DEFAULT_POLL_TIMEOUT)
+  return Stream.unwrap(
+    Clock.currentTimeMillis.pipe(
+      Effect.map((start) =>
+        generation.events(options).pipe(
+          Stream.filter((event): event is Observation => event.type !== "generation-finished"),
+          Stream.concat(
+            Stream.fromIterableEffect(
+              within(generation.result(), generation.id, timeout, start + Duration.toMillis(timeout)).pipe(
+                Effect.map(expand),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
+  )
+}
+
+/**
+ * Run `effect` within the time left until `deadline`. Fails before starting once the deadline has passed: a fast
+ * request could otherwise win the zero-budget race and schedule another zero-delay poll.
+ */
+const within = <A>(effect: Effect.Effect<A, AIError>, id: string, timeout: Duration.Duration, deadline: number) =>
+  Clock.currentTimeMillis.pipe(
+    Effect.flatMap((now) =>
+      now >= deadline
+        ? Effect.fail(timeoutError(id, timeout))
+        : effect.pipe(
+            Effect.timeoutOrElse({
+              duration: Duration.millis(deadline - now),
+              orElse: () => Effect.fail(timeoutError(id, timeout)),
+            }),
+          ),
+    ),
+  )
+
+const timeoutError = (id: string, timeout: Duration.Duration) =>
+  new AIError({
+    reason: new TimeoutError({
+      message: `Generation ${id} did not finish within ${Duration.format(timeout)}`,
+      timeoutMs: Duration.toMillis(timeout),
+    }),
+  })

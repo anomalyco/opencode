@@ -1,6 +1,5 @@
 import { Tool } from "@opencode/schema/tool"
-import { Effect, Option, Schema, Stream } from "effect"
-import * as Sse from "effect/unstable/encoding/Sse"
+import { Effect, Option, Schema } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import { Media } from "../media.js"
 import {
@@ -13,17 +12,16 @@ import {
   ToolDefinition,
   type ContentPart,
   type MediaPart,
+  type OpenString,
   type ProviderID,
   type TextPart,
   type ToolEntry,
   type ToolResultPart,
 } from "../schema/index.js"
+import { Json, decodeJson, encodeJson } from "../utils/json.js"
 import { isRecord } from "../utils/record.js"
-export { isRecord }
+export { Json, decodeJson, encodeJson, isRecord }
 
-export const Json = Schema.fromJsonString(Schema.Unknown)
-export const decodeJson = Schema.decodeUnknownSync(Json)
-export const encodeJson = Schema.encodeSync(Json)
 const isJson = Schema.is(Schema.Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
 export const optionalArray = <const S extends Schema.Top>(schema: S) => Schema.optional(Schema.Array(schema))
@@ -35,7 +33,7 @@ export const lenient = <const S extends Schema.Top>(schema: S) =>
   )
 /** Provider-defined string enum: known values for autocomplete, any string accepted at runtime. */
 export const knownString = <Known extends string>() =>
-  Schema.declare<Known | (string & {})>((value): value is Known | (string & {}) => typeof value === "string", {
+  Schema.declare<OpenString<Known>>((value): value is OpenString<Known> => typeof value === "string", {
     expected: "string",
   })
 
@@ -111,6 +109,14 @@ export const sumTokens = (...values: ReadonlyArray<number | undefined>): number 
   if (values.every((value) => value === undefined)) return undefined
   return values.reduce((acc: number, value) => acc + (value ?? 0), 0)
 }
+
+/**
+ * Caps an explicit thinking budget at half the output limit. Thinking counts against the output limit, so a budget
+ * near it leaves the answer, a tool call, or a summary without room. Smaller budgets, special values such as `-1` and
+ * `0`, and requests without an output limit pass through unchanged.
+ */
+export const fitThinkingBudget = (budget: number, maxTokens: number | undefined, minimum = 1) =>
+  maxTokens === undefined || budget <= maxTokens / 2 ? budget : Math.max(minimum, Math.floor(maxTokens / 2))
 
 export const eventError = (route: string, message: string, body?: string, cause?: unknown) =>
   new AIError({
@@ -211,7 +217,8 @@ export const mediaReference = (
   if (provider !== undefined && asset.source.type === "ref" && asset.source.provider === provider)
     return Effect.succeed({ type: "ref", value: asset.source.id })
   const accepted = provider === undefined ? "" : `, and ${provider} references`
-  return Effect.fail(invalidRequest(`${label} accepts inline bytes, data URLs, http(s) URLs${accepted}`))
+  const got = asset.source.type === "ref" ? `; got ${asset.source.provider}:${asset.source.id}` : ""
+  return Effect.fail(invalidRequest(`${label} accepts inline bytes, data URLs, http(s) URLs${accepted}${got}`))
 }
 
 /**
@@ -227,8 +234,6 @@ export const toolFileMedia = (item: Tool.FileContent): MediaPart => {
       : Media.base64(item.uri, item.mime)
   return Message.media(asset, { filename: item.name })
 }
-
-export const trimBaseUrl = (value: string) => value.replace(/\/+$/, "")
 
 export const toolResultText = (part: ToolResultPart) => {
   if (part.result.type === "text") return String(part.result.value)
@@ -250,51 +255,6 @@ export const errorText = (error: unknown) => {
   if (error === undefined) return "undefined"
   return "Unknown stream error"
 }
-
-/**
- * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, optionally filters named events, and drops empty and bare `null`
- * events. `[DONE]` is dropped by default or retained for protocols that use it
- * as their stream boundary. Retry control events are ignored without
- * interrupting the stream. Decoder failures become provider output errors so
- * the public error channel stays `AIError`.
- */
-export const sseFraming = (
-  bytes: Stream.Stream<Uint8Array, AIError>,
-  events?: ReadonlySet<string>,
-  includeDone = false,
-): Stream.Stream<string, AIError> =>
-  bytes.pipe(
-    Stream.decodeText(),
-    Stream.mapAccumEffect(
-      () => {
-        const output: Sse.Event[] = []
-        return {
-          output,
-          parser: Sse.makeParser((event) => {
-            if (event._tag === "Event") output.push(event)
-          }),
-        }
-      },
-      (state, chunk) =>
-        Effect.gen(function* () {
-          const error = state.parser.feed(chunk)
-          if (error) return yield* eventError("sse", error.message, chunk, error)
-          return [state, state.output.splice(0)] as const
-        }),
-    ),
-    Stream.filter(
-      (event) =>
-        (events === undefined || events.has(event.event)) &&
-        event.data.length > 0 &&
-        // Some OpenAI-compatible proxies serialize an empty flush as a bare
-        // `data: null`, between events or after `[DONE]`. No protocol has a
-        // null event, so it carries nothing and must not abort the stream.
-        event.data !== "null" &&
-        (event.data !== "[DONE]" || includeDone || (events !== undefined && event.event !== "message")),
-    ),
-    Stream.map((event) => event.data),
-  )
 
 /**
  * Canonical invalid-request constructor shared by protocol lowering.

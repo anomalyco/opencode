@@ -220,6 +220,7 @@ export const makeSessionGroup = <
       HttpApiEndpoint.post("session.create", "/api/session", {
         payload: Schema.Struct({
           id: Session.ID.pipe(Schema.optional),
+          parentID: Session.ID.pipe(Schema.optional),
           title: Schema.String.pipe(Schema.optional),
           agent: Agent.ID.pipe(Schema.optional),
           model: Model.Ref.pipe(Schema.optional),
@@ -228,11 +229,13 @@ export const makeSessionGroup = <
           permissions: Permission.Ruleset.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: PublicSessionInfo }),
+        error: SessionNotFoundError,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.create",
           summary: "Create session",
-          description: "Create a session at the requested location.",
+          description:
+            "Create a session at the requested location. A parentID creates a linked child session at its parent's location.",
         }),
       ),
     )
@@ -855,6 +858,7 @@ export const makeSessionGroup = <
     .add(
       HttpApiEndpoint.delete("session.form.cancel", "/api/session/:sessionID/form/:formID", {
         params: { sessionID: Schema.String, formID: Form.ID },
+        query: Schema.Struct({ message: Schema.optional(Schema.String) }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, FormAlreadySettledError, FormNotFoundError],
       })
@@ -863,7 +867,7 @@ export const makeSessionGroup = <
           OpenApi.annotations({
             identifier: "session.form.cancel",
             summary: "Cancel form",
-            description: "Cancel a pending form.",
+            description: "Cancel a pending form, optionally telling the asker why it was not answered.",
           }),
         ),
     )

@@ -1,0 +1,13 @@
+export default {
+  "tab.title": "Tekintse át",
+  "tab.count.one": "{{count}} fájl megváltozott",
+  "tab.count.other": "{{count}} fájl megváltozott",
+  "mobile.title.one": "Változás",
+  "mobile.title.other": "Változások",
+  "empty.git": "Még nincsenek végrehajtatlan változtatások",
+  "empty.branch": "A fióktelep még nem változott",
+  "git.title": "Hozzon létre egy Git tárolót",
+  "git.description": "Kövesse nyomon, tekintse át és vonja vissza a változtatásokat ebben a projektben",
+  loadingChanges: "Módosítások betöltése…",
+  noChanges: "Nincs változás",
+}

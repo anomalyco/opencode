@@ -203,6 +203,18 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("accepts partial model capabilities without reporting a diagnostic", () => {
+    const result = normalized({
+      providers: {
+        demo: { name: "Demo", models: { demo: { name: "Demo", capabilities: { input: ["text"], output: ["text"] } } } },
+      },
+    })
+    expect(result.diagnostics).toEqual([])
+    expect(result.encoded.providers).toEqual({
+      demo: { name: "Demo", models: { demo: { name: "Demo", capabilities: { input: ["text"], output: ["text"] } } } },
+    })
+  })
+
   test("uses a valid retired provider alias when the canonical legacy entry is malformed", () => {
     const result = normalized({
       provider: {

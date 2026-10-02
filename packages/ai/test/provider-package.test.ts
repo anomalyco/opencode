@@ -214,7 +214,7 @@ describe("provider package entrypoints", () => {
       })
       expect(selected.provider).toBe(provider.id)
       expect(selected.route.endpoint.baseURL).toBe(provider.baseURL({ accountId: "account" }))
-      expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
+      expect(selected.route.defaults.headers).toMatchObject({ "x-application": "opencode" })
       expect(selected.route.defaults.http?.body).toEqual({ custom: true })
       expect(selected.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
     }
@@ -300,7 +300,9 @@ describe("provider package entrypoints", () => {
     })
 
     expect(String(selected.provider)).toBe("example")
-    expect(selected.route.id).toBe("anthropic-messages")
+    expect(selected.route.id).toBe("anthropic-compatible-messages")
+    expect(selected.route.protocol).toBe("anthropic-messages")
+    expect(selected.route.providerMetadataKey).toBe("example")
     expect(selected.route.endpoint).toMatchObject({
       baseURL: "https://messages.example.test/v1",
     })
@@ -319,6 +321,7 @@ describe("provider package entrypoints", () => {
       thinking: { type: "adaptive" },
     })
 
+    expect(selected.route.id).toBe("anthropic-messages")
     expect(selected.route.defaults.providerOptions).toEqual({ thinking: { type: "adaptive" } })
   })
 

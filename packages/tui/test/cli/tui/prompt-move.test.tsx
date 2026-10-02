@@ -12,6 +12,7 @@ import { RouteProvider, useRoute } from "../../../src/context/route"
 import { ThemeProvider } from "../../../src/context/theme"
 import { DialogProvider } from "../../../src/ui/dialog"
 import { ToastProvider, useToast } from "../../../src/ui/toast"
+import { SessionLocationMissing } from "../../../src/routes/session/location-missing"
 import { emptyThemeSource } from "../../fixture/fixture"
 import { createApi, createEventStream, createFetch, json } from "../../fixture/tui-client"
 import { TestTuiContexts } from "../../fixture/tui-environment"
@@ -175,6 +176,68 @@ test.each([false, true])("Ctrl+M moves only an existing session (home=%s)", asyn
   }
 })
 
+test("choosing a directory recovers the session when its location is unavailable", async () => {
+  const fixture = await renderMove({ directory: clone, unavailable: "location", showMissingLocation: true })
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Session location unavailable"))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame((frame) => frame.includes("Worktrees") && frame.includes(linked))
+    await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof InputRenderable)
+    await fixture.app.mockInput.typeText("linked")
+    await fixture.app.waitForFrame((frame) => frame.includes(linked) && !frame.includes(main))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.moves.length === 1)
+
+    expect(fixture.moves).toEqual([{ directory: linked }])
+    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_clone" })
+    expect(fixture.requests).toEqual([])
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+test("creating a worktree recovers the session without reading its removed location", async () => {
+  const fixture = await renderMove({ directory: clone, unavailable: "location", showMissingLocation: true })
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Session location unavailable"))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame((frame) => frame.includes("Worktrees") && frame.includes(linked))
+    fixture.app.mockInput.pressKey("a", { ctrl: true })
+    await fixture.app.waitForFrame((frame) => frame.includes("Name worktree"))
+    await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof InputRenderable)
+    await fixture.app.mockInput.typeText("fresh")
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.moves.length === 1)
+
+    expect(fixture.requests).toEqual([{ payload: { projectID: "proj_test", name: "fresh" }, directory: null }])
+    expect(fixture.moves).toEqual([{ directory: created }])
+    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_clone" })
+    expect(fixture.reads.locations).not.toContain(clone)
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
+test("failed recovery does not navigate away from the session", async () => {
+  const fixture = await renderMove({ directory: clone, unavailable: "location", showMissingLocation: true, moveFails: true })
+  try {
+    await fixture.app.waitForFrame((frame) => frame.includes("Session location unavailable"))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitForFrame((frame) => frame.includes("Worktrees") && frame.includes(linked))
+    await fixture.app.waitFor(() => fixture.app.renderer.currentFocusedEditor instanceof InputRenderable)
+    await fixture.app.mockInput.typeText("linked")
+    await fixture.app.waitForFrame((frame) => frame.includes(linked) && !frame.includes(main))
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.toast.currentToast !== null)
+
+    expect(fixture.moves).toEqual([{ directory: linked }])
+    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_clone" })
+    expect(fixture.toast.currentToast).toMatchObject({ title: "Failed to move session", variant: "error" })
+  } finally {
+    fixture.app.renderer.destroy()
+  }
+})
+
 test.each([
   { name: "session", unavailable: "session" as const },
   { name: "location", unavailable: "location" as const },
@@ -223,6 +286,8 @@ async function renderMove(input: {
   launch?: string
   launchProjectID?: string
   unavailable?: "session" | "location"
+  showMissingLocation?: boolean
+  moveFails?: boolean
 }) {
   const launch = input.launch ?? (input.home ? input.directory : main)
   const requests: unknown[] = []
@@ -294,6 +359,7 @@ async function renderMove(input: {
     }
     if (url.pathname === "/api/session/ses_clone/move") {
       moves.push(await request.json())
+      if (input.moveFails) return json({ message: "Destination unavailable" }, { status: 503 })
       return new Response(null, { status: 204 })
     }
     return undefined
@@ -313,7 +379,9 @@ async function renderMove(input: {
       projectID: () => (input.home ? data.location.info()?.project.id : "proj_test"),
       sessionID: () => (input.home ? undefined : "ses_clone"),
     })
-    return null
+    return input.showMissingLocation ? (
+      <SessionLocationMissing directory={input.directory} projectID="proj_test" sessionID="ses_clone" />
+    ) : null
   }
 
   const app = await testRender(

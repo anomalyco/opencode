@@ -8,29 +8,20 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useCheckServerHealth } from "@/runtime/server/health"
 import { useServers } from "@/runtime/server/registry"
-import { serverAddress } from "./pairing"
-import type { decodePairingCode } from "./pairing"
+import { pairingLink, redeemPairingLink, serverAddress } from "./pairing"
 import { isMixedContent } from "./browser"
 import { createCameraAvailability } from "./camera"
 import "./screen.css"
 
 const PairingScanner = lazy(() => import("./scanner").then((module) => ({ default: module.PairingScanner })))
 
-export function ConnectServerScreen(
-  props: { pairing?: NonNullable<ReturnType<typeof decodePairingCode>>; onConnect?: () => void } = {},
-) {
+export function ConnectServerScreen(props: { url?: string } = {}) {
   const language = useLanguage()
   const platform = usePlatform()
   const servers = useServers()
   const check = useCheckServerHealth()
   const camera = createCameraAvailability()
-  const [state, setState] = createStore({
-    url: props.pairing?.urls[0] ?? "",
-    password: props.pairing?.password ?? "",
-    urls: props.pairing?.urls ?? ([] as string[]),
-    error: "",
-    scanning: false,
-  })
+  const [state, setState] = createStore({ url: props.url ?? "", password: "", error: "", scanning: false })
   const connectionError = () =>
     language.t(
       platform.platform === "web" && isMixedContent(location.href, state.url)
@@ -39,6 +30,16 @@ export function ConnectServerScreen(
     )
   const request = useMutation(() => ({
     mutationFn: async () => {
+      const link = pairingLink(state.url)
+      if (link) {
+        const redeemed = await redeemPairingLink(link)
+        if (!redeemed) {
+          setState("error", language.t("server.connect.link.expired"))
+          return
+        }
+        // Keep the token in the form so a failed connection check can retry without the spent code.
+        setState({ url: link.url, password: redeemed.password })
+      }
       const url = serverAddress(state.url)
       if (!url) {
         setState("error", language.t("server.connect.address.invalid"))
@@ -51,7 +52,6 @@ export function ConnectServerScreen(
         return
       }
       servers.add({ type: "http", http })
-      props.onConnect?.()
     },
     onError: () => setState("error", connectionError()),
   }))
@@ -76,13 +76,7 @@ export function ConnectServerScreen(
                   void camera.refetch()
                 }}
                 onScan={(pairing) => {
-                  setState({
-                    url: pairing.urls[0],
-                    urls: pairing.urls,
-                    password: pairing.password,
-                    error: "",
-                    scanning: false,
-                  })
+                  setState({ url: pairing.url, password: pairing.password, error: "", scanning: false })
                   request.mutate()
                 }}
               />
@@ -110,18 +104,12 @@ export function ConnectServerScreen(
                 spellcheck={false}
                 required
                 appearance="large"
-                list="server-connect-addresses"
                 placeholder={language.t("dialog.server.add.placeholder")}
                 value={state.url}
                 disabled={request.isPending}
                 aria-describedby={state.error ? "server-connect-error" : undefined}
                 onInput={(event) => setState({ url: event.currentTarget.value, error: "" })}
               />
-              <datalist id="server-connect-addresses">
-                {state.urls.map((url) => (
-                  <option value={url} />
-                ))}
-              </datalist>
             </div>
             <div class="server-connect-field">
               <label for="server-connect-password">{language.t("dialog.server.add.password")}</label>

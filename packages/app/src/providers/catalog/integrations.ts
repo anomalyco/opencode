@@ -16,7 +16,13 @@ export function useIntegrations(directory: Accessor<string | undefined>) {
     })().catch(() => undefined)
   })
 
+  const location = () => {
+    const value = directory()
+    return value ? { directory: value } : undefined
+  }
+
   return {
-    list: () => data.location.integration.list(directory() ? { directory: directory()! } : undefined) ?? [],
+    ready: () => data.location.integration.list(location()) !== undefined,
+    list: () => data.location.integration.list(location()) ?? [],
   }
 }

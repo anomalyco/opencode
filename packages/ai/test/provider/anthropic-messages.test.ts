@@ -148,11 +148,13 @@ describe("Anthropic Messages route", () => {
     Effect.gen(function* () {
       const enabled = yield* compileRequest(
         LLMRequest.update(request, {
+          generation: { maxTokens: 4_096 },
           providerOptions: { thinking: { type: "enabled", budgetTokens: 1_024 } },
         }),
       )
       const legacy = yield* compileRequest(
         LLMRequest.update(request, {
+          generation: { maxTokens: 4_096 },
           providerOptions: { thinking: { type: "enabled", budget_tokens: 2_048 } },
         }),
       )
@@ -165,6 +167,22 @@ describe("Anthropic Messages route", () => {
       expect(enabled.body.thinking).toEqual({ type: "enabled", budget_tokens: 1_024 })
       expect(legacy.body.thinking).toEqual({ type: "enabled", budget_tokens: 2_048 })
       expect(disabled.body.thinking).toEqual({ type: "disabled" })
+    }),
+  )
+
+  it.effect("fits the thinking budget to half the output limit", () =>
+    Effect.gen(function* () {
+      const thinking = (maxTokens: number) =>
+        compileRequest(
+          LLMRequest.update(request, {
+            generation: { maxTokens },
+            providerOptions: { thinking: { type: "enabled", budgetTokens: 31_999 } },
+          }),
+        ).pipe(Effect.map((prepared) => prepared.body.thinking))
+
+      expect(yield* thinking(64_000)).toEqual({ type: "enabled", budget_tokens: 31_999 })
+      expect(yield* thinking(20_000)).toEqual({ type: "enabled", budget_tokens: 10_000 })
+      expect(yield* thinking(1_500)).toEqual({ type: "enabled", budget_tokens: 1_024 })
     }),
   )
 
@@ -296,6 +314,9 @@ describe("Anthropic Messages route", () => {
         "claude-haiku-5-1",
         "claude-fable-6",
         "anthropic/claude-mythos-7.2",
+        "claude-sonnet-5-5",
+        "claude-opus-4-8@20260101",
+        "claude-nova-6",
       ]
 
       const prepared = yield* Effect.forEach(ids, (id) =>
@@ -570,9 +591,9 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("rejects a system update between a local tool call and its result", () =>
+  it.effect("moves a system update between a local tool call and its result after the result", () =>
     Effect.gen(function* () {
-      const error = yield* compileRequest(
+      const prepared = yield* compileRequest(
         LLM.request({
           model: opus48,
           messages: [
@@ -583,9 +604,13 @@ describe("Anthropic Messages route", () => {
           ],
           cache: "none",
         }),
-      ).pipe(Effect.flip)
+      )
 
-      expect(error.message).toContain("system updates cannot split a local tool call from its tool result")
+      expect(prepared.body.messages.slice(1)).toEqual([
+        { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
+        { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: '"Done."' }] },
+        { role: "system", content: [{ type: "text", text: "Too early.", cache_control: undefined }] },
+      ])
     }),
   )
 
@@ -1648,6 +1673,40 @@ describe("Anthropic Messages route", () => {
       )
 
       expect(response.finishReason).toEqual({ normalized: "stop", raw: "pause_turn" })
+    }),
+  )
+
+  it.effect("carries a refusal's category and explanation on the content-filter finish", () =>
+    Effect.gen(function* () {
+      const refusal = (stop_details: unknown) =>
+        LLMClient.generate(request).pipe(
+          Effect.provide(
+            fixedResponse(
+              sseEvents(
+                { type: "message_start", message: { usage: { input_tokens: 5 } } },
+                { type: "message_delta", delta: { stop_reason: "refusal", stop_details }, usage: { output_tokens: 0 } },
+                { type: "message_stop" },
+              ),
+            ),
+          ),
+        )
+
+      expect(
+        (yield* refusal({
+          type: "refusal",
+          category: "cyber",
+          explanation: "This request was declined because it could enable cyber harm.",
+        })).finishReason,
+      ).toEqual({
+        normalized: "content-filter",
+        raw: "refusal",
+        category: "cyber",
+        explanation: "This request was declined because it could enable cyber harm.",
+      })
+      expect((yield* refusal({ type: "refusal", category: null, explanation: null })).finishReason).toEqual({
+        normalized: "content-filter",
+        raw: "refusal",
+      })
     }),
   )
 

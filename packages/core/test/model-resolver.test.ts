@@ -9,6 +9,7 @@ import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Compatibility, ID, Info, Model, VariantID } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
+import { Variant } from "@opencode/core/variant"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { AISDK } from "@opencode/core/aisdk"
 import { Npm } from "@opencode/util/npm"
@@ -374,6 +375,7 @@ describe("ModelResolver", () => {
         activate: () => Effect.die("unused"),
         update: () => Effect.die("unused"),
         remove: () => Effect.die("unused"),
+        status: () => Effect.die("unused"),
       },
       oauth: {
         connect: () => Effect.die("unused"),
@@ -577,6 +579,29 @@ describe("ModelResolver", () => {
         include: ["reasoning.encrypted_content"],
         reasoning: { effort: "xhigh", summary: "auto" },
       })
+    }),
+  )
+
+  it.effect("sends xAI Responses effort variants with reasoning summaries", () =>
+    Effect.gen(function* () {
+      const base = model("@opencode/ai/providers/xai", { providerID: Provider.ID.make("xai"), modelID: "grok-4.6" })
+      const catalog = Info.make({
+        ...base,
+        variants: Variant.resolve(base, [{ type: "effort", values: ["low", "high"] }]),
+      })
+      const resolved = yield* ModelResolver.resolveModel(
+        catalog,
+        VariantID.make("high"),
+        Credential.Key.make({ type: "key", key: "secret" }),
+      )
+      const prepared = yield* compileRequest(LLM.request({ model: resolved, prompt: "Hello" }))
+
+      expect(resolved.route.id).toBe("xai-responses")
+      expect(prepared.body).toMatchObject({
+        reasoning: { effort: "high", summary: "auto" },
+        include: ["reasoning.encrypted_content"],
+      })
+      expect(prepared.body).not.toHaveProperty("reasoning_effort")
     }),
   )
 
@@ -1282,7 +1307,7 @@ describe("ModelResolver", () => {
         reasoningEffort: "high",
       })
       expect(String(mistral.provider)).toBe("test-provider")
-      expect(xai.route.id).toBe("openai-responses")
+      expect(xai.route.id).toBe("xai-responses")
       expect(xai.route.defaults.providerOptions).toEqual({
         reasoningEffort: "high",
         store: false,

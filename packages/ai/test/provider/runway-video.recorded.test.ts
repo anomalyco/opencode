@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { Video } from "../../src/index.js"
 import { Runway } from "../../src/providers.js"
 import { recordedTests } from "../recorded-test.js"
-import { videoPoll } from "./video-recording.js"
+import { queuedPoll } from "./queued-recording.js"
 
 const model = Runway.configure({
   apiKey: process.env.RUNWAYML_API_SECRET ?? "fixture",
@@ -28,7 +28,7 @@ describe("Runway recorded", () => {
             aspectRatio: "1280:720",
             durationSeconds: 2,
           },
-          { poll: videoPoll },
+          { poll: queuedPoll },
         )
 
         expect(response.videos).toHaveLength(1)

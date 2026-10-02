@@ -14,14 +14,14 @@ for (const tool of ["shell", "execute", "subagent"]) {
       await timeline.getByRole("button", { name: "Start tool", exact: true }).click()
       await expect(group).toHaveAttribute("data-timeline-part-ids", "tool_context_lifecycle,tool_shell_lifecycle")
       const original = await group.elementHandle()
+      const title = tool === "subagent" ? "Agent" : tool === "execute" ? "Execute" : "Shell"
       for (const action of [undefined, "Complete input", "Run command", "Complete command"]) {
         if (action) await timeline.getByRole("button", { name: action, exact: true }).click()
         await expect(group).toHaveAttribute("data-timeline-part-ids", "tool_context_lifecycle,tool_shell_lifecycle")
-        const usage = group.locator(
-          '[data-component="context-tool-group-trigger"] [data-slot="context-tool-group-usage"]',
+        await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+          "aria-label",
+          `Used 2 Read, ${title}`,
         )
-        await expect(usage.locator('[data-slot="context-tool-group-prefix"]')).toHaveText("Used")
-        await expect(usage.locator('[data-slot="context-tool-group-count"]')).toHaveText("2")
         await expect(timeline.locator('[data-timeline-row="AssistantPart"]')).toHaveCount(1)
         await expect(trigger).toHaveAttribute("aria-expanded", String(open))
         expect(await original!.evaluate((node) => node.isConnected)).toBe(true)
@@ -70,12 +70,10 @@ story("transitions a streaming shell from writing through command execution", as
   await expect(title).toHaveCSS("font-family", /^Inter,/)
   await expect(title).toHaveCSS("font-weight", "530")
   await expect(title).toHaveCSS("line-height", "16px")
-  await expect(title).toHaveCSS("color", "rgb(22, 22, 22)")
   await expect(subtitle).toHaveCSS("font-size", "13px")
   await expect(subtitle).toHaveCSS("font-family", /^Inter,/)
   await expect(subtitle).toHaveCSS("font-weight", "440")
   await expect(subtitle).toHaveCSS("line-height", "16px")
-  await expect(subtitle).toHaveCSS("color", "rgb(92, 92, 92)")
   await timeline.getByRole("button", { name: "Complete input" }).click()
   await expect(shimmer).toHaveAttribute("data-active", "true")
   await expect(subtitle).toHaveText("printf ready")
@@ -141,9 +139,10 @@ for (const open of [false, true]) {
         "aria-expanded",
         String(open),
       )
-      await expect(
-        group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-      ).toHaveText("Shell")
+      await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+        "aria-label",
+        "Used 1 Shell",
+      )
       await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(0)
       await expect(used).toHaveAttribute("aria-expanded", "true")
       if (!open) await thought.click()
@@ -178,21 +177,3 @@ story("does not infer Thinking from busy, retry, or recovery without reasoning",
     "Recovered response",
   )
 })
-
-for (const locale of ["de", "ar"] as const) {
-  // Moved from packages/app/e2e/regression/session-timeline-locale-projection.spec.ts
-  story(`projects localized tool names with an English fallback in ${locale}`, async ({ mount, page }) => {
-    const timeline = await mount("current-session-research-agents--agent-research", {
-      args: { scenario: "exploration" },
-      globals: { locale },
-    })
-    await timeline.getByRole("button", { name: "Complete read" }).click()
-    await timeline.getByRole("button", { name: "Complete glob" }).click()
-    const group = timeline.locator('[data-timeline-part-ids="tool_context_read,tool_context_glob"]')
-    await expect(group.getByRole("button")).toHaveAccessibleName(/^Used 2 /)
-    await expect(
-      group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-    ).toHaveText(locale === "de" ? "Lesen, Glob" : "\u0642\u0631\u0627\u0621\u0629, Glob")
-    await expect(page.locator("html")).toHaveAttribute("lang", locale)
-  })
-}

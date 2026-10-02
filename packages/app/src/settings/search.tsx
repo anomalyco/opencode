@@ -12,7 +12,6 @@ import { ProjectIcon } from "@/shell/layout/project-icon"
 import { useCommand } from "@/shell/commands/command"
 import { settingsProjects, useSettingsServers } from "./servers/inventory"
 import { useSettingsSurface } from "./surface"
-import { pageIcons } from "./pages"
 import { rankSettings, type SettingsSearchResult } from "./search-results"
 import { settingsSearchIndex } from "./search-index"
 import { SettingsSearchEmpty } from "./search-empty"
@@ -74,10 +73,10 @@ export function SettingsSearch() {
     settingsSearchIndex({
       servers: inventory(),
       desktop: platform.platform === "desktop",
-      browser: !!platform.browserPane,
-      dev: import.meta.env.VITE_OPENCODE_CHANNEL !== "prod",
+      browser: platform.platform === "desktop",
       mobile: mobile(),
       translate: language.t,
+      extensions: surface.extensions.items(),
     }),
   )
   const matches = createMemo(() => rankSettings(search.state.query, catalog(), origin()))
@@ -295,11 +294,7 @@ export function SettingsSearch() {
                       <span class="settings-search-label">
                         <Show
                           when={item.projectInfo}
-                          fallback={
-                            <Show when={item.topLevel}>
-                              <Icon name={pageIcons[item.view.tab]} />
-                            </Show>
-                          }
+                          fallback={<Show when={item.topLevel && item.icon}>{(icon) => <Icon name={icon()} />}</Show>}
                         >
                           {(project) => (
                             <ProjectIcon project={project()} class="settings-search-project-icon" aria-hidden="true" />

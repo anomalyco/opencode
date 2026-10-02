@@ -1,4 +1,4 @@
-import { For, createResource, type JSX } from "solid-js"
+import { createResource } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ExternalLink } from "@/runtime/platform/external-link"
@@ -35,34 +35,40 @@ export function SettingsAbout(props: { active: boolean }) {
     () => loadOtherContributorCount(platform.fetch ?? fetch),
     { initialValue: FALLBACK_OTHER_CONTRIBUTORS },
   )
+  const credit = (name: string) => (
+    <bdi dir="ltr">
+      <ExternalLink href={profile(name)}>{name}</ExternalLink>
+    </bdi>
+  )
+  const writerCredits = () => [
+    ...writers.map(credit),
+    <ExternalLink href="https://github.com/anomalyco/opencode/graphs/contributors">
+      {language.plural("settings.about.otherContributor", otherContributors.latest, {
+        count: otherContributors.latest,
+      })}
+    </ExternalLink>,
+  ]
 
   return (
     <div class="settings-about-content">
       <div class="settings-about-intro">
-        <p>{language.t("settings.about.version", { version: platform.version ?? language.t("settings.about.devVersion") })}</p>
+        <p>
+          {language.t("settings.about.version", {
+            version: platform.version ?? language.t("settings.about.devVersion"),
+          })}
+        </p>
         <p>{language.t("settings.about.license")}</p>
       </div>
 
       <AnimatedWordmark active={props.active} />
 
       <div class="settings-about-credits">
-        <CreditLine
-          label={language.t("settings.about.writtenBy")}
-          names={writers}
-          and={language.t("settings.about.and")}
-          tail={
-            <ExternalLink href="https://github.com/anomalyco/opencode/graphs/contributors">
-              {language.plural("settings.about.otherContributor", otherContributors.latest, {
-                count: otherContributors.latest,
-              })}
-            </ExternalLink>
-          }
-        />
-        <CreditLine
-          label={language.t("settings.about.illustratedBy")}
-          names={illustrators}
-          and={language.t("settings.about.and")}
-        />
+        <p>{language.rich("settings.about.writtenByNames", { names: language.list(writerCredits()) })}</p>
+        <p>
+          {language.rich("settings.about.illustratedByNames", {
+            names: language.list(illustrators.map(credit)),
+          })}
+        </p>
       </div>
 
       <div class="settings-about-publication">
@@ -89,30 +95,6 @@ export function SettingsAbout(props: { active: boolean }) {
         <img class="settings-about-anomaly-brush" src={anomalyBrush} alt="" />
       </div>
     </div>
-  )
-}
-
-function CreditLine(props: {
-  label: string
-  names: readonly string[]
-  and: string
-  tail?: JSX.Element
-}) {
-  return (
-    <p>
-      {props.label}{" "}
-      <For each={props.names}>
-        {(name, index) => (
-          <>
-            {index() === 0 ? "" : index() === props.names.length - 1 && !props.tail ? `, ${props.and} ` : ", "}
-            <bdi dir="ltr">
-              <ExternalLink href={profile(name)}>{name}</ExternalLink>
-            </bdi>
-          </>
-        )}
-      </For>
-      {props.tail ? <>, {props.and} {props.tail}</> : null}
-    </p>
   )
 }
 

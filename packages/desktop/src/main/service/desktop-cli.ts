@@ -17,7 +17,6 @@ export interface Resolved {
   readonly version: string
   readonly command: readonly string[]
   readonly binary?: string
-  readonly wslBuild?: { readonly script: string; readonly output: string }
 }
 
 export interface Interface {
@@ -63,16 +62,7 @@ const make = Effect.fn("DesktopCli.resolve")(function* () {
         binary: undefined,
       }
     : yield* resolveBundledCli(!app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1")
-  return {
-    ...cli,
-    wslBuild:
-      app.isPackaged || !process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD || !process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT
-        ? undefined
-        : {
-            script: process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD,
-            output: process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT,
-          },
-  } satisfies Resolved
+  return cli satisfies Resolved
 })
 
 const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isolated: boolean) {

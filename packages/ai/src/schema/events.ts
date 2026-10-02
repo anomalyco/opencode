@@ -264,6 +264,10 @@ export type ToolError = Schema.Schema.Type<typeof ToolError>
 export const FinishReasonDetails = Schema.Struct({
   normalized: FinishReason,
   raw: Schema.optional(Schema.String),
+  /** The provider's policy area for a content-filter finish, such as `cyber`. */
+  category: Schema.optional(Schema.String),
+  /** The provider's human-readable reason for a content-filter finish. */
+  explanation: Schema.optional(Schema.String),
 }).annotate({ identifier: "LLM.FinishReasonDetails" })
 export type FinishReasonDetails = Schema.Schema.Type<typeof FinishReasonDetails>
 

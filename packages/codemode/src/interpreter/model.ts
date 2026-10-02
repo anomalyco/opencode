@@ -72,7 +72,7 @@ export const uriError = failure("URIError")
 
 // Orient the agent rather than enumerate JavaScript; interpreter-support.md is the full matrix.
 export const supportedSyntaxMessage =
-  "This is a restricted JavaScript-like language. Supported: plain and async functions, data literals, destructuring, standard control flow, await and Promise, and built-ins such as Array, Object, Math, JSON, Date, RegExp, Map, Set, and URL. Unsupported: classes, this, getters/setters, BigInt, and custom Symbols. Use plain functions and data objects instead."
+  "This is a restricted JavaScript-like language. Supported: plain and async functions, data literals, destructuring, standard control flow, await and Promise, and built-ins such as Array, Object, Math, JSON, Date, RegExp, Map, Set, and URL. Unsupported: classes, getters/setters, BigInt, and custom Symbols. Use plain functions and data objects instead."
 
 export const unsupportedSyntax = (kind: string, node: AstNode): PendingThrow =>
   new PendingThrow(

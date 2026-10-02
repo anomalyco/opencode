@@ -1,5 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test"
-import { base64Encode } from "@opencode/util/encode"
+import { sessionHref } from "./app"
 
 export const APP_READY_TIMEOUT = 30_000
 
@@ -18,6 +18,6 @@ export async function expectSessionTitle(page: Page, title: string) {
 }
 
 export async function expectSessionReady(page: Page, input: { server: string; sessionID: string; title: string }) {
-  await expect(page).toHaveURL(`/server/${base64Encode(input.server)}/session/${input.sessionID}`)
+  await expect(page).toHaveURL(sessionHref(input.sessionID, input.server))
   await expectSessionTitle(page, input.title)
 }

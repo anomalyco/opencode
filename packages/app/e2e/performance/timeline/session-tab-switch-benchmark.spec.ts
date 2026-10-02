@@ -2,14 +2,11 @@ import type { Page } from "@playwright/test"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { expectSessionTitle } from "../../utils/waits"
 import { benchmark, benchmarkDiagnostics, expect } from "../benchmark"
-import { fixture } from "./session-timeline-stress.fixture"
-import { expected, messages, workload } from "./session-tab-switch.fixture"
-import {
-  createReviewDiffs,
-  installStressSessionTabs,
-  installTimelineSettings,
-  stressSessionHref,
-} from "./timeline-test-helpers"
+import { fixture, installStressSessionTabs, installTimelineSettings } from "../../utils/session-fixture"
+import { sessionHref } from "../../utils/app"
+import { expected, messages } from "../../utils/markdown-sessions"
+import { workload } from "./session-tab-switch.fixture"
+import { createReviewDiffs } from "./timeline-test-helpers"
 import { measureSessionSwitch, waitForStableTimeline } from "./session-tab-switch-probe"
 
 const scenarios = [
@@ -43,7 +40,7 @@ scenarios.forEach((scenario) => {
       sourceIDs: messages[fixture.sourceID].map((message) => message.id),
       lastID: expected[fixture.targetID].lastID,
       requiredPartID: expected[fixture.targetID].answerID,
-      href: stressSessionHref(fixture.targetID),
+      href: sessionHref(fixture.targetID),
       switch: () => switchSession(page, fixture.targetID, fixture.expected.targetTitle),
     })
 
@@ -97,7 +94,7 @@ async function prepareSessionTabs(page: Page) {
     })
   await installTimelineSettings(page)
   await installStressSessionTabs(page)
-  await page.goto(stressSessionHref(fixture.sourceID))
+  await page.goto(sessionHref(fixture.sourceID))
   await expectSessionTitle(page, fixture.expected.sourceTitle)
   await expectReadyTimeline(page, fixture.sourceID)
   await expect(page.locator(`[data-timeline-part-id="${expected[fixture.targetID].answerID}"]`)).toHaveCount(0)
@@ -120,7 +117,7 @@ async function expectReadyTimeline(page: Page, sessionID: string) {
 }
 
 async function switchSession(page: Page, sessionID: string, title: string) {
-  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${stressSessionHref(sessionID)}"]`)
+  const tab = page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(sessionID)}"]`)
   await expect(tab).toHaveCount(1)
   await tab.click()
   await expectSessionTitle(page, title)

@@ -74,7 +74,7 @@ type ServerSDKBase = {
 function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerScope): ServerSDKBase {
   const platform = usePlatform()
   const transport = createServerTransport({ http: server.http, fetch: platform.fetch })
-  if (server.type === "ssh") {
+  if (server.type === "extension") {
     createEffect(
       on(
         () => `${server.http.url}\0${server.http.password ?? ""}`,
@@ -84,8 +84,7 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     )
   }
   const events = createOpenCodeEventSource()
-  const reconnect =
-    server.type === "ssh" || (server.type === "sidecar" && server.variant === "base") ? server.reconnect : undefined
+  const reconnect = server.type === "extension" || server.type === "sidecar" ? server.reconnect : undefined
 
   const connection = createClientConnection(transport.api, {
     reconnect: reconnect ? async (signal) => transport.update(await reconnect(signal)) : undefined,
