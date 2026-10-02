@@ -48,6 +48,12 @@ cache on macOS/Linux) when the optional native addon is installed. On a machine
 already configured for browser or command-line proxy authentication, no extra
 configuration is required.
 
+:::note
+The optional native addon's OS bindings are still being implemented. Until they
+ship, use Basic credentials (below) or an authenticating proxy that accepts
+them. The configuration and selection logic below are in place.
+:::
+
 You can be explicit about the mechanism and credentials in `opencode.json`:
 
 ```jsonc

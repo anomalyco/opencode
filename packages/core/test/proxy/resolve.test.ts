@@ -36,3 +36,21 @@ test("url userinfo becomes username/password", () => {
   expect(settings.username).toBe("u")
   expect(settings.password).toBe("p")
 })
+
+test("password {env:VAR} is expanded from the environment", () => {
+  const settings = resolve({
+    config: { password: "{env:PROXY_PASSWORD}" } as any,
+    env: { HTTPS_PROXY: "http://proxy:8080", PROXY_PASSWORD: "s3cret" },
+    target: "https://a.test/",
+  })
+  expect(settings.password).toBe("s3cret")
+})
+
+test("a literal password is preserved", () => {
+  const settings = resolve({
+    config: { password: "literal" } as any,
+    env: { HTTPS_PROXY: "http://proxy:8080" },
+    target: "https://a.test/",
+  })
+  expect(settings.password).toBe("literal")
+})

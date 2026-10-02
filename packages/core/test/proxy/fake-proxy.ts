@@ -56,9 +56,9 @@ export async function startFakeProxy(options: FakeProxyOptions): Promise<FakePro
       return
     }
     const [host, port] = (req.url ?? "").split(":")
-    clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n")
     const upstream = connect(Number(port) || 443, host)
     upstream.on("connect", () => {
+      clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n")
       if (head?.length) upstream.write(head)
       upstream.pipe(clientSocket)
       clientSocket.pipe(upstream)

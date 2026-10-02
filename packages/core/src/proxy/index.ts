@@ -3,6 +3,7 @@ export * as Proxy from "./index"
 import { Layer } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/unstable/http"
 import type { ConfigProxy } from "../config/proxy"
+import { readProxyConfig } from "./config-file"
 import { makeDispatcher, type ProxyDispatcher } from "./dispatcher"
 import { resolve } from "./resolve"
 
@@ -17,11 +18,19 @@ import { resolve } from "./resolve"
  */
 export function makeProxyFetch(config?: ConfigProxy.Info): typeof globalThis.fetch {
   const dispatchers = new Map<string, ProxyDispatcher>()
+  let fileConfig = config
+  let fileConfigLoaded = config !== undefined
   return async (input, init) => {
+    // Read `proxy` from opencode.json once, lazily, since the shared client is
+    // global while Config is location-scoped.
+    if (!fileConfigLoaded) {
+      fileConfig = readProxyConfig(process.cwd())
+      fileConfigLoaded = true
+    }
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url
-    const settings = resolve({ config, env: process.env, target: url })
+    const settings = resolve({ config: fileConfig, env: process.env, target: url })
     if (!settings.url) return globalThis.fetch(input, init)
-    const key = `${settings.url.origin}|${settings.auth}|${settings.username ?? ""}`
+    const key = `${settings.url.origin}|${settings.auth}|${settings.username ?? ""}|${settings.password ?? ""}`
     const dispatcher = dispatchers.get(key) ?? makeDispatcher(settings)
     dispatchers.set(key, dispatcher)
     return dispatcher.fetch(input, init)
