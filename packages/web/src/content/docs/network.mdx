@@ -42,7 +42,29 @@ export HTTPS_PROXY=http://username:password@proxy.example.com:8080
 Avoid hardcoding passwords. Use environment variables or secure credential storage.
 :::
 
-For proxies requiring advanced authentication like NTLM or Kerberos, consider using an LLM Gateway that supports your authentication method.
+For **Negotiate (Kerberos/SPNEGO)** and **NTLM**, OpenCode authenticates
+automatically using your OS credentials (Windows SSPI, or the Kerberos ticket
+cache on macOS/Linux) when the optional native addon is installed. On a machine
+already configured for browser or command-line proxy authentication, no extra
+configuration is required.
+
+You can be explicit about the mechanism and credentials in `opencode.json`:
+
+```jsonc
+{
+  "proxy": {
+    "url": "http://proxy.example.com:8080",
+    "auth": "auto",                       // auto | negotiate | ntlm | basic | none
+    "username": "DOMAIN\\user",           // optional
+    "password": "{env:PROXY_PASSWORD}",   // optional; prefer env or the OS cache
+    "no_proxy": "localhost,127.0.0.1,.internal.example.com"
+  }
+}
+```
+
+`auth: "auto"` tries Negotiate, then NTLM, then Basic, based on the proxy's
+`Proxy-Authenticate` challenges. If the native addon is not installed, OpenCode
+falls back to Basic credentials and warns once. Credentials are never logged.
 
 ---
 
