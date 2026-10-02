@@ -232,7 +232,7 @@ Recent work
       model,
     )
 
-    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"])
+    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool", "tool", "tool"])
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Checking" },
       { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "sig_1" } } },
@@ -281,6 +281,36 @@ Recent work
       },
     ])
     expect(messages[1]?.content).toEqual([
+      {
+        type: "tool-result",
+        id: "pending",
+        name: "read",
+        result: {
+          type: "error",
+          value: {
+            error: { type: "unknown", message: "Tool execution was interrupted" },
+            content: [],
+            structured: {},
+          },
+        },
+      },
+    ])
+    expect(messages[2]?.content).toEqual([
+      {
+        type: "tool-result",
+        id: "running",
+        name: "read",
+        result: {
+          type: "error",
+          value: {
+            error: { type: "unknown", message: "Tool execution was interrupted" },
+            content: [],
+            structured: {},
+          },
+        },
+      },
+    ])
+    expect(messages[3]?.content).toEqual([
       {
         type: "tool-result",
         id: "completed",

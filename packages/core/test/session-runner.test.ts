@@ -517,7 +517,11 @@ const verifyPartialFlushOnFailure = (kind: FragmentKind) =>
         type: "assistant",
         finish: "error",
         error: { type: "unknown", message: "Provider unavailable" },
-        content: [fixture.expectedContent],
+        content: [
+          kind === "tool input"
+            ? { type: "tool", id: fragmentID(kind, "partial"), state: { status: "error" } }
+            : fixture.expectedContent,
+        ],
       },
     ])
   })
