@@ -593,10 +593,6 @@ function toolMessage(input: LLMRequest["messages"][number]) {
   }
 }
 
-function text(part: ContentPart) {
-  return part.type === "text" ? [part.text] : []
-}
-
 function userPart(part: ContentPart): UserContent {
   if (part.type === "text") return [{ type: "text", text: part.text }]
   if (part.type === "media")
