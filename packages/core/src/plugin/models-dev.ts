@@ -73,6 +73,26 @@ function modeName(model: ModelsDev.Model, mode: string) {
   return `${model.name} ${mode.charAt(0).toUpperCase()}${mode.slice(1)}`
 }
 
+// The opencode-go gateway rejects prompts around ~147-148k input tokens while
+// the upstream catalog advertises up to 1M context. Without a local clamp,
+// automatic compaction never fires and the session bricks on repeated HTTP
+// 400s. Keep the effective limits at the real gateway constraint so both
+// proactive compaction and overflow recovery engage in time.
+const OPENCODE_GO_CONTEXT_LIMIT = 148_000
+const OPENCODE_GO_INPUT_LIMIT = 128_000
+
+function clampOpencodeGoLimit(providerID: ProviderV2.ID, draft: ModelV2Info) {
+  if (providerID !== "opencode-go") return
+  if (draft.limit.context <= OPENCODE_GO_CONTEXT_LIMIT && draft.limit.input === undefined) return
+  if (draft.limit.context > OPENCODE_GO_CONTEXT_LIMIT) draft.limit.context = OPENCODE_GO_CONTEXT_LIMIT
+  const input = draft.limit.input
+  if (input === undefined) {
+    if (draft.limit.context >= OPENCODE_GO_INPUT_LIMIT) draft.limit.input = OPENCODE_GO_INPUT_LIMIT
+    return
+  }
+  if (input > OPENCODE_GO_INPUT_LIMIT) draft.limit.input = Math.min(OPENCODE_GO_INPUT_LIMIT, draft.limit.context)
+}
+
 function applyModel(
   draft: ModelV2Info,
   model: ModelsDev.Model,
@@ -161,15 +181,19 @@ export const ModelsDevPlugin = define({
 
           for (const model of Object.values(item.models)) {
             const baseCost = cost(model.cost)
-            catalog.model.update(providerID, model.id, (draft) => applyModel(draft, model, { cost: baseCost }))
+            catalog.model.update(providerID, model.id, (draft) => {
+              applyModel(draft, model, { cost: baseCost })
+              clampOpencodeGoLimit(providerID, draft)
+            })
             for (const [mode, options] of Object.entries(model.experimental?.modes ?? {})) {
-              catalog.model.update(providerID, `${model.id}-${mode}`, (draft) =>
+              catalog.model.update(providerID, `${model.id}-${mode}`, (draft) => {
                 applyModel(draft, model, {
                   name: modeName(model, mode),
                   cost: mergeCost(baseCost, options.cost),
                   request: options.provider,
-                }),
-              )
+                })
+                clampOpencodeGoLimit(providerID, draft)
+              })
             }
           }
         }

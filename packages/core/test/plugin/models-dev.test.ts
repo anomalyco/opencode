@@ -124,6 +124,89 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
+  it.effect("clamps opencode-go limits to gateway constraints", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const catalog = yield* Catalog.Service
+      const models = ModelsDev.Service.of({
+        get: () =>
+          Effect.succeed({
+            "opencode-go": {
+              id: "opencode-go",
+              name: "OpenCode Go",
+              env: [],
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://opencode.ai/zen/go/v1",
+              models: {
+                "qwen3.8-flash": {
+                  id: "qwen3.8-flash",
+                  name: "Qwen 3.8 Flash",
+                  family: "qwen",
+                  release_date: "2026-01-01",
+                  attachment: false,
+                  reasoning: false,
+                  temperature: true,
+                  tool_call: true,
+                  limit: { context: 1_000_000, output: 65_536 },
+                },
+                "small-model": {
+                  id: "small-model",
+                  name: "Small",
+                  family: "small",
+                  release_date: "2026-01-01",
+                  attachment: false,
+                  reasoning: false,
+                  temperature: true,
+                  tool_call: true,
+                  limit: { context: 100_000, output: 8_192 },
+                },
+              },
+            },
+            acme: {
+              id: "acme",
+              name: "Acme",
+              env: [],
+              npm: "@ai-sdk/openai-compatible",
+              api: "https://api.acme.test/v1",
+              models: {
+                large: {
+                  id: "large",
+                  name: "Large",
+                  family: "large",
+                  release_date: "2026-01-01",
+                  attachment: false,
+                  reasoning: false,
+                  temperature: true,
+                  tool_call: true,
+                  limit: { context: 1_000_000, output: 8_192 },
+                },
+              },
+            },
+          } satisfies Record<string, ModelsDev.Provider>),
+        refresh: () => Effect.void,
+      })
+
+      yield* ModelsDevPlugin.effect(
+        host({
+          catalog: catalogHost(catalog),
+          integration: integrationHost(integrations),
+        }),
+      ).pipe(Effect.provideService(ModelsDev.Service, models))
+
+      const goProvider = ProviderV2.ID.make("opencode-go")
+      const flashed = yield* catalog.model.get(goProvider, ModelV2.ID.make("qwen3.8-flash"))
+      expect(flashed?.limit.context).toBe(148_000)
+      expect(flashed?.limit.input).toBe(128_000)
+
+      const small = yield* catalog.model.get(goProvider, ModelV2.ID.make("small-model"))
+      expect(small?.limit.context).toBe(100_000)
+      expect(small?.limit.input).toBeUndefined()
+
+      const acmeLarge = yield* catalog.model.get(ProviderV2.ID.make("acme"), ModelV2.ID.make("large"))
+      expect(acmeLarge?.limit.context).toBe(1_000_000)
+    }),
+  )
+
   it.effect("registers key methods for providers with environment variables", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

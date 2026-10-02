@@ -201,9 +201,13 @@ const responseBody = (body: string | void, request: HttpClientRequest.HttpClient
   return { body: redacted.slice(0, BODY_LIMIT), bodyTruncated: true }
 }
 
+const MESSAGE_BODY_LIMIT = 2_000
+
 const providerMessage = (status: number, body: { readonly body?: string }) => {
-  if (body.body && body.body.length <= 500) return `Provider request failed with HTTP ${status}: ${body.body}`
-  return `Provider request failed with HTTP ${status}`
+  if (!body.body) return `Provider request failed with HTTP ${status} (no body)`
+  if (body.body.length <= MESSAGE_BODY_LIMIT) return `Provider request failed with HTTP ${status}: ${body.body}`
+  const truncated = body.body.slice(0, MESSAGE_BODY_LIMIT)
+  return `Provider request failed with HTTP ${status}: ${truncated}… [truncated ${body.body.length - MESSAGE_BODY_LIMIT} chars]`
 }
 
 const responseHttp = (input: {
@@ -259,7 +263,8 @@ const statusReason = (input: {
   ) {
     return new InvalidRequestReason({
       message: input.message,
-      classification: isContextOverflow(body) ? "context-overflow" : undefined,
+      classification:
+        isContextOverflow(body) || isContextOverflow(input.message) ? "context-overflow" : undefined,
       http: input.http,
     })
   }

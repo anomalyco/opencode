@@ -806,7 +806,7 @@ const onError = (state: ParserState, event: AnthropicEvent): StepResult => [
   [
     LLMEvent.providerError({
       message: providerErrorMessage(event),
-      classification: isContextOverflow(event.error?.message ?? "") ? "context-overflow" : undefined,
+      classification: isContextOverflow(providerErrorMessage(event)) ? "context-overflow" : undefined,
     }),
   ],
 ]

@@ -29,13 +29,29 @@ const patterns = [
   /model_context_window_exceeded/i,
   /too many tokens/i,
   /token limit exceeded/i,
+  // Gateway-style rejections (e.g. opencode-go anthropic-messages 400s) that
+  // mention the offending input/prompt without using the exact upstream
+  // phrasing above. Each pattern requires an overflow signal (exceed, too
+  // long/large, maximum, limit) alongside the input scope so generic 400s like
+  // "invalid parameter" stay non-overflow.
+  /prompt.*exceed/i,
+  /input.*exceed/i,
+  /context.*exceed/i,
+  /exceed.*context/i,
+  /input.*too long/i,
+  /input.*too large/i,
+  /prompt.*too (long|large)/i,
+  /maximum.*input.*length/i,
+  /token.*limit.*exceed|exceed.*token.*limit/i,
+  /maximum.*tokens?.*exceed|exceed.*maximum.*tokens?/i,
+  /exceed.*\d[\d,]*\s*tokens?/i,
 ]
 
 const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, /too many requests/i]
 
 export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&
-  (patterns.some((pattern) => pattern.test(message)) || /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message))
+  (patterns.some((pattern) => pattern.test(message)) || /4(00|13)\s*(status code)?\s*\(no body\)/i.test(message))
 
 export const isContextOverflowFailure = (failure: unknown) =>
   failure instanceof LLMError

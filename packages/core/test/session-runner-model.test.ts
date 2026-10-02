@@ -344,4 +344,17 @@ describe("SessionRunnerModel", () => {
       expect(SessionRunnerModel.supported(model({ type: "native", settings: {} }))).toBe(false)
     }),
   )
+
+  it.effect("clamps opencode-go context to the gateway limit", () =>
+    Effect.gen(function* () {
+      const catalog = ModelV2.Info.make({
+        ...model({ type: "aisdk", package: "@ai-sdk/anthropic", url: "https://opencode.ai/zen/go/v1" }),
+        providerID: ProviderV2.ID.make("opencode-go"),
+        limit: { context: 1_000_000, output: 65_536 },
+      })
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(catalog)
+
+      expect(resolved.route.defaults.limits?.context).toBe(148_000)
+    }),
+  )
 })
