@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs"
 import path from "node:path"
 import { xdgConfig } from "xdg-basedir"
-import { parse } from "jsonc-parser"
+import { parse, type ParseError } from "jsonc-parser"
 import type { ConfigProxy } from "../config/proxy"
 
 /**
@@ -28,7 +28,7 @@ export function readProxyConfig(cwd: string, globalConfigDir = path.join(xdgConf
 
 function readJson(file: string): { proxy?: ConfigProxy.Info } | undefined {
   try {
-    const errors: unknown[] = []
+    const errors: ParseError[] = []
     return parse(readFileSync(file, "utf8"), errors, { allowTrailingComma: true })
   } catch {
     return undefined

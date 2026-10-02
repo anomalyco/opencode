@@ -57,7 +57,7 @@ export function makeDispatcher(settings: ProxySettings, deps: ProxyDispatcherDep
 
   return {
     async fetch(input, init) {
-      const request = input instanceof Request ? input : new Request(input, init)
+      const request = input instanceof Request ? input : new Request(String(input), init)
       const target = new URL(request.url)
       if (target.protocol === "https:") {
         const key = `${proxy.origin}->${target.origin}`
