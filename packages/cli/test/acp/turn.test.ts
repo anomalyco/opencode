@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionNotification } from "@agentclientprotocol/sdk"
 import { resolve } from "node:path"
+import { ACPElicitation } from "../../src/acp/elicitation"
 import {
   assistantMessage,
   childCreated,
@@ -363,7 +364,9 @@ describe("acp turn events over the wire", () => {
     })
 
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
-    expect(acp.server.cancelledForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_question" }])
+    expect(acp.server.cancelledForms).toEqual([
+      { sessionID: acp.sessionId, formID: "frm_question", message: ACPElicitation.UnshownQuestionMessage },
+    ])
     expect(acp.elicitations).toEqual([])
   })
 

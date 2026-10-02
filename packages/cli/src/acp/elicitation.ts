@@ -57,9 +57,12 @@ export const reply = Effect.fn("cli.acp.elicitation.reply")(function* (input: In
   )
 })
 
-/** Cancels a form, interrupting its session when the server can't cancel it. */
-export function cancel(client: OpenCodeClient, form: AskedForm) {
-  return settle(() => client.session.form.cancel({ sessionID: form.sessionID, formID: form.id })).pipe(
+export const UnshownQuestionMessage =
+  "This client could not show the question to the user, so it was cancelled. Continue without an answer; make reasonable assumptions and state them."
+
+/** Cancels a form, interrupting its session when the server can't cancel it. A message tells the asker why. */
+export function cancel(client: OpenCodeClient, form: AskedForm, message?: string) {
+  return settle(() => client.session.form.cancel({ sessionID: form.sessionID, formID: form.id, message })).pipe(
     Effect.catch(() =>
       Effect.tryPromise(() => client.session.interrupt({ sessionID: form.sessionID })).pipe(Effect.ignore),
     ),

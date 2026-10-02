@@ -331,7 +331,7 @@ describe("acp elicitation over the wire", () => {
 
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
     expect(acp.elicitations).toHaveLength(ids.length)
-    expect(acp.server.cancelledForms.map((item) => item.formID)).toEqual(ids)
+    expect(acp.server.cancelledForms).toEqual(ids.map((formID) => ({ sessionID: acp.sessionId, formID })))
     expect(acp.server.repliedForms).toEqual([])
     expect(acp.server.interrupts).toEqual([])
   })
@@ -357,6 +357,53 @@ describe("acp elicitation over the wire", () => {
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
     expect(acp.elicitations).toEqual([])
     expect(acp.server.cancelledForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_plugin" }])
+  })
+
+  test("cancels a question with a credential-looking field with a message for the model", async () => {
+    await using acp = await startSession({
+      capabilities: { elicitation: true },
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        ephemeralEvent("form.created", {
+          form: {
+            id: "frm_token",
+            sessionID,
+            title: "Questions",
+            metadata: { kind: "question", tool: { messageID: "msg_tools", id: "call_question" } },
+            fields: [{ key: "q0", title: "GitHub token", type: "string", options: [], custom: true }],
+          },
+        }),
+      ],
+      onFormCancel: ({ sessionID }) => [succeeded(sessionID)],
+    })
+
+    expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
+    expect(acp.elicitations).toEqual([])
+    expect(acp.server.cancelledForms).toEqual([
+      { sessionID: acp.sessionId, formID: "frm_token", message: ACPElicitation.UnshownQuestionMessage },
+    ])
+  })
+
+  test("cancels other forms it cannot show without a message", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        ephemeralEvent("form.created", {
+          form: {
+            id: "frm_websearch",
+            sessionID,
+            title: "Web search provider",
+            metadata: { kind: "websearch.provider" },
+            fields: [{ key: "provider", type: "string", options: [{ value: "exa", label: "Exa" }] }],
+          },
+        }),
+      ],
+      onFormCancel: ({ sessionID }) => [succeeded(sessionID)],
+    })
+
+    expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
+    expect(acp.elicitations).toEqual([])
+    expect(acp.server.cancelledForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_websearch" }])
   })
 
   test("cancelling the turn cancels its pending elicitation and the form, and never sends queued ones", async () => {
