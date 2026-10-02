@@ -37,6 +37,10 @@ import type {
   SessionsInterruptOutput,
   SessionsMessageInput,
   SessionsMessageOutput,
+  SessionsTodoInput,
+  SessionsTodoOutput,
+  SessionsLegacyInput,
+  SessionsLegacyOutput,
   MessagesListInput,
   MessagesListOutput,
   ModelsListInput,
@@ -486,6 +490,28 @@ export function make(options: ClientOptions) {
           {
             method: "GET",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      todo: (input: SessionsTodoInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsTodoOutput }>(
+          {
+            method: "GET",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/todo`,
+            successStatus: 200,
+            declaredStatuses: [404, 400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
+      legacy: (input: SessionsLegacyInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: SessionsLegacyOutput }>(
+          {
+            method: "GET",
+            path: `/session/${encodeURIComponent(input.sessionID)}/todo`,
             successStatus: 200,
             declaredStatuses: [404, 400, 401],
             empty: false,

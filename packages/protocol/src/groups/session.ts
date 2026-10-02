@@ -21,6 +21,7 @@ import { Model } from "@opencode-ai/schema/model"
 import { Location } from "@opencode-ai/schema/location"
 import { Revert } from "@opencode-ai/schema/revert"
 import { SessionEvent } from "@opencode-ai/schema/session-event"
+import { SessionTodo } from "@opencode-ai/schema/session-todo"
 
 const SessionsQueryFields = {
   workspace: Workspace.ID.pipe(Schema.optional),
@@ -368,6 +369,36 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S>(sessionLo
             identifier: "v2.session.message",
             summary: "Get session message",
             description: "Retrieve one projected message owned by the Session.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.todo", "/api/session/:sessionID/todo", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Array(SessionTodo.Info) }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.todo",
+            summary: "Get session todos",
+            description: "Retrieve the todo list associated with a specific session.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.todo.legacy", "/session/:sessionID/todo", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Array(SessionTodo.Info) }),
+        error: SessionNotFoundError,
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "v2.session.todo.legacy",
+            summary: "Get session todos (legacy)",
+            description: "Retrieve the todo list associated with a specific session (legacy endpoint).",
           }),
         ),
     )

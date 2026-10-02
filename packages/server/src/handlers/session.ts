@@ -1,4 +1,5 @@
 import { SessionV2 } from "@opencode-ai/core/session"
+import { SessionTodo } from "@opencode-ai/core/session/todo"
 import { DateTime, Effect, Stream } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
@@ -379,6 +380,40 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
             messageID: ctx.params.messageID,
             message: `Message not found: ${ctx.params.messageID}`,
           })
+        }),
+      )
+      .handle(
+        "session.todo",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+          )
+          const todos = yield* SessionTodo.Service
+          return { data: yield* todos.get(ctx.params.sessionID) }
+        }),
+      )
+      .handle(
+        "session.todo.legacy",
+        Effect.fn(function* (ctx) {
+          yield* session.get(ctx.params.sessionID).pipe(
+            Effect.catchTag("Session.NotFoundError", (error) =>
+              Effect.fail(
+                new SessionNotFoundError({
+                  sessionID: error.sessionID,
+                  message: `Session not found: ${error.sessionID}`,
+                }),
+              ),
+            ),
+          )
+          const todos = yield* SessionTodo.Service
+          return { data: yield* todos.get(ctx.params.sessionID) }
         }),
       )
   }),
