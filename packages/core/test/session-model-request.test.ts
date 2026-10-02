@@ -85,6 +85,17 @@ describe("SessionModelRequest.boundImages", () => {
     expect(result[2]?.content[0]).toMatchObject({ type: "media", filename: "third.png" })
   })
 
+  test("keeps the replaced prefix stable while images are appended", () => {
+    const image = "a".repeat(1024 * 1024)
+    const history = (count: number) =>
+      Array.from({ length: count }, () => Message.user({ type: "media", media: Media.base64(image, "image/png") }))
+    const replaced = (count: number) =>
+      boundImages(history(count)).filter((message) => message.content[0]?.type === "text").length
+
+    expect([26, 30, 35].map(replaced)).toEqual([10, 10, 10])
+    expect(replaced(36)).toBe(20)
+  })
+
   test("replaces images nested in tool results", () => {
     const image = "a".repeat(13 * 1024 * 1024)
     const result = boundImages([
