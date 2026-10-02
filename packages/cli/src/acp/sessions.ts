@@ -139,7 +139,8 @@ export const make = Effect.fnUntraced(function* (input: {
       if (replaced) yield* Scope.close(replaced.scope, Exit.void)
       yield* registerMcp(entry.attached, mcpServers).pipe(Effect.onError(() => remove(session.id, entry)))
       const responded = yield* ACPConnection.Responded
-      // `changes` replays the latest catalog, so a reload since `current` still pushes; one fold keeps catalog and selection consistent.
+      // `changes` replays the latest catalog, so a reload since `current` still pushes.
+      // One fold keeps catalog and selection consistent.
       yield* Effect.gen(function* () {
         yield* responded
         yield* sendCommands(session.id, current)
