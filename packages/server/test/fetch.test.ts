@@ -5,7 +5,10 @@ import path from "node:path"
 import { Agent } from "@opencode/schema/agent"
 import { Integration } from "@opencode/schema/integration"
 import { ServerInfo } from "@opencode/protocol/groups/server"
-import { Effect, Schedule, Schema } from "effect"
+import { Effect, Layer, PlatformError, Schedule, Schema } from "effect"
+import { FSUtil } from "@opencode/util/fs-util"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Session } from "@opencode/schema/session"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
@@ -17,6 +20,105 @@ const options = {
   models: { fetch: false },
   fs: { filewatcher: false },
 } as const
+
+for (const input of [
+  { code: "ENOENT", reason: "NotFound", status: 404, tag: "DirectoryNotFoundError", message: "Directory not found" },
+  {
+    code: "EACCES",
+    reason: "PermissionDenied",
+    status: 403,
+    tag: "DirectoryAccessDeniedError",
+    message: "Access denied to directory",
+  },
+  {
+    code: "EPERM",
+    reason: "Unknown",
+    status: 403,
+    tag: "DirectoryAccessDeniedError",
+    message: "Access denied to directory",
+  },
+  { code: "EIO", reason: "Unknown", status: 500 },
+] as const) {
+  it.live(`returns directory HTTP errors for ${input.code} and retries after recovery`, () =>
+    Effect.gen(function* () {
+      const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-directory-errors-")))
+      const directory = path.join(config.path, "project")
+      const filesystem = yield* FSUtil.Service.pipe(Effect.provide(LayerNode.compile(FSUtil.node)))
+      const blocked = new Set<string>()
+      const cause = PlatformError.systemError({
+        _tag: input.reason,
+        module: "FileSystem",
+        method: "realPath",
+        pathOrDescriptor: directory,
+        cause: Object.assign(new Error(input.code), { code: input.code }),
+      })
+      const handler = yield* ServerFetch.make(
+        { ...options, config: { directory: config.path } },
+        {
+          overrides: [
+            FSUtil.node.replace(
+              Layer.succeed(FSUtil.Service, {
+                ...filesystem,
+                realPath: (target) =>
+                  blocked.has(target) && input.code !== "ENOENT" ? Effect.fail(cause) : filesystem.realPath(target),
+              }),
+            ),
+          ],
+        },
+      )
+      // Session creation only resolves its placement; it does not boot the Location graph.
+      const created = yield* Effect.promise(() =>
+        handler(
+          new Request("http://opencode.local/api/session", {
+            method: "POST",
+            headers: { "content-type": "application/json", "x-opencode-directory": encodeURIComponent(directory) },
+            body: JSON.stringify({ location: { directory } }),
+          }),
+        ),
+      )
+      expect(created.status).toBe(200)
+      const session = Schema.decodeUnknownSync(Schema.Struct({ data: Session.Info }))(
+        yield* Effect.promise(() => created.json()),
+      ).data
+      blocked.add(directory)
+      if (input.code !== "ENOENT") yield* Effect.promise(() => fs.mkdir(directory))
+      const endpoints = [
+        "/api/model",
+        "/api/integration",
+        `/api/session/${session.id}/permission`,
+        `/api/experimental/session/${session.id}/instructions/entries`,
+        `/api/session/${session.id}/form`,
+        "/api/session/global/form",
+      ]
+      for (const endpoint of endpoints) {
+        const response = yield* Effect.promise(() =>
+          handler(
+            new Request(`http://opencode.local${endpoint}`, {
+              headers: { "x-opencode-directory": encodeURIComponent(directory) },
+            }),
+          ),
+        )
+        expect({ endpoint, status: response.status }).toEqual({ endpoint, status: input.status })
+        if (input.status !== 500)
+          expect(yield* Effect.promise(() => response.json())).toEqual({
+            _tag: input.tag,
+            directory,
+            message: `${input.message}: ${directory}`,
+          })
+      }
+      blocked.clear()
+      if (input.code === "ENOENT") yield* Effect.promise(() => fs.mkdir(directory))
+      const recovered = yield* Effect.promise(() =>
+        handler(
+          new Request("http://opencode.local/api/model", {
+            headers: { "x-opencode-directory": encodeURIComponent(directory) },
+          }),
+        ),
+      )
+      expect(recovered.status).toBe(200)
+    }),
+  )
+}
 
 type Handler = (request: Request) => Promise<Response>
 
@@ -105,7 +207,9 @@ it.live("serves the HttpApi and enforces Basic auth like the Node server", () =>
       ),
     )
     expect(response.status).toBe(200)
-    const body = yield* Effect.promise(() => response.json()).pipe(Effect.flatMap(Schema.decodeUnknownEffect(ServerInfo)))
+    const body = yield* Effect.promise(() => response.json()).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(ServerInfo)),
+    )
     expect(body.version).toBe("test-version")
     expect(body.paths.tmp).toEndWith("opencode")
     expect(body.capabilities?.persistentPty).toBe(process.platform !== "win32")

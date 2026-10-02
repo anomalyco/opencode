@@ -12,6 +12,7 @@ import { Instance } from "@opencode/core/instance"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
+import type { FileSystemDirectory } from "@opencode/core/filesystem/directory"
 import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -58,7 +59,7 @@ const itWithActiveExecution = testEffect(
                   replacements: [Project.node.replace(globalProjectNode), offlineModels],
                 }),
                 Layer.succeed(SessionRunner.Service, { drain: () => Effect.never }),
-              ) as unknown as Layer.Layer<LocationServices>,
+              ) as unknown as Layer.Layer<LocationServices, FileSystemDirectory.Error>,
           ),
         ),
       ),
@@ -68,7 +69,11 @@ const itWithActiveExecution = testEffect(
 const unavailableLocations = Layer.effect(
   LocationServiceMap.Service,
   LayerMap.make(
-    () => Layer.effectDiscard(Effect.fail(new Error("broken location"))) as unknown as Layer.Layer<LocationServices>,
+    () =>
+      Layer.effectDiscard(Effect.die(new Error("broken location"))) as unknown as Layer.Layer<
+        LocationServices,
+        FileSystemDirectory.Error
+      >,
   ),
 )
 const itWithUnavailableDestination = testEffect(

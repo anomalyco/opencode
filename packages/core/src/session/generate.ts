@@ -1,4 +1,5 @@
 export * as SessionGenerate from "./generate.js"
+import type { FileSystemDirectory } from "../filesystem/directory.js"
 
 import { LLMClient, Message, type AIError } from "@opencode/ai"
 import { Effect } from "effect"
@@ -14,7 +15,12 @@ import { SessionModelRequest } from "./model-request.js"
 import type { SessionRunnerModel } from "./runner/model.js"
 import type { SessionSchema } from "./schema.js"
 
-export type Error = AgentNotFoundError | Instructions.InitializationBlocked | SessionRunnerModel.Error | AIError
+export type Error =
+  | AgentNotFoundError
+  | Instructions.InitializationBlocked
+  | SessionRunnerModel.Error
+  | AIError
+  | FileSystemDirectory.Error
 
 /** Generates text from current Session context without mutating the Session. */
 export const generate = Effect.fn("SessionGenerate.generate")(function* (input: {

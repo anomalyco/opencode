@@ -23,6 +23,7 @@ import {
   SkillNotFoundError,
 } from "@opencode/protocol/errors"
 import { AbsolutePath } from "@opencode/core/schema"
+import { directoryErrors } from "../location"
 import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } from "./session-error"
 
 const DefaultSessionsLimit = 50
@@ -299,6 +300,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               Effect.catchTag("Session.DestinationUnavailableError", (error) =>
                 Effect.fail(new InvalidRequestError({ message: `Directory is unavailable: ${error.directory}` })),
               ),
+              directoryErrors,
             )
           return HttpApiSchema.NoContent.make()
         }),
@@ -335,6 +337,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 Effect.catchTag("Session.SkillNotFoundError", (error) =>
                   Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
                 ),
+                directoryErrors,
               ),
           }
         }),
@@ -370,6 +373,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                   }),
                 ),
               ),
+              directoryErrors,
             )
           return HttpApiSchema.NoContent.make()
         }),
@@ -388,6 +392,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               Effect.catchTag("Session.SkillNotFoundError", (error) =>
                 Effect.fail(new SkillNotFoundError({ skill: error.skill, message: `Skill not found: ${error.skill}` })),
               ),
+              directoryErrors,
             )
           return HttpApiSchema.NoContent.make()
         }),
@@ -471,6 +476,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 Effect.catchTag("Session.MessageNotFoundError", missingMessage),
                 Effect.catchTag("Session.BusyError", busySession),
                 Effect.catchTag("Snapshot.Error", failedSnapshot("stage session revert", ctx.params.sessionID)),
+                directoryErrors,
               ),
           }
         }),
@@ -485,6 +491,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               Effect.catchTag("Session.NotFoundError", missingSession),
               Effect.catchTag("Session.BusyError", busySession),
               Effect.catchTag("Snapshot.Error", failedSnapshot("clear session revert", ctx.params.sessionID)),
+              directoryErrors,
             )
           return HttpApiSchema.NoContent.make()
         }),
@@ -527,6 +534,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
                 (error) => new InvalidRequestError({ message: error.message, field: error.field }),
               ),
               Effect.catchTag("Snapshot.Error", failedSnapshot("diff session turn", ctx.params.sessionID)),
+              directoryErrors,
             ),
           }
         }),
@@ -588,15 +596,14 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.generate",
         Effect.fn(function* (ctx) {
-          const text = yield* session
-            .generate({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt })
-            .pipe(
-              Effect.mapError((error) =>
-                error._tag === "Session.NotFoundError"
-                  ? missingSession(error)
-                  : new ServiceUnavailableError({ message: error.message, service: "session generation" }),
-              ),
-            )
+          const text = yield* session.generate({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt }).pipe(
+            directoryErrors,
+            Effect.mapError((error) =>
+              error._tag === "Session.NotFoundError"
+                ? missingSession(error)
+                : new ServiceUnavailableError({ message: error.message, service: "session generation" }),
+            ),
+          )
           return { data: { text } }
         }),
       )

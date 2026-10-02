@@ -2,7 +2,8 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
-import { InvalidRequestError } from "@opencode/protocol/errors"
+import { DirectoryNotFoundError, DirectoryAccessDeniedError, InvalidRequestError } from "@opencode/protocol/errors"
+import { FileSystemDirectory } from "@opencode/core/filesystem/directory"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
@@ -12,7 +13,24 @@ export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceM
 
 export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware, { provides: LocationServices }>()(
   "@opencode/HttpApiLocation",
+  { error: [DirectoryNotFoundError, DirectoryAccessDeniedError] },
 ) {}
+
+export function directoryErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
+  return effect.pipe(
+    Effect.catchIf(
+      (error): error is Extract<E, FileSystemDirectory.Error> =>
+        error instanceof FileSystemDirectory.DirectoryNotFoundError ||
+        error instanceof FileSystemDirectory.DirectoryAccessDeniedError,
+      (error): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> =>
+        Effect.fail(
+          error instanceof FileSystemDirectory.DirectoryNotFoundError
+            ? new DirectoryNotFoundError({ directory: error.directory, message: error.message })
+            : new DirectoryAccessDeniedError({ directory: error.directory, message: error.message }),
+        ),
+    ),
+  )
+}
 
 export function response<A, E, R>(data: Effect.Effect<A, E, R>) {
   return Effect.gen(function* () {
@@ -61,7 +79,7 @@ export const layer = Layer.effect(
     return LocationMiddleware.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))))
+        return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))), directoryErrors)
       }),
     )
   }),

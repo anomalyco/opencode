@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import type { FileSystemDirectory } from "@opencode/core/filesystem/directory"
 import { Context, Deferred, Duration, Effect, Fiber, Layer, LayerMap, RcMap, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -65,7 +66,7 @@ const locations = Layer.effect(
           Layer.provideMerge(Form.layer),
           Layer.provide(Layer.succeed(Bus.Service, bus)),
           Layer.fresh,
-        ) as unknown as Layer.Layer<LocationServices>,
+        ) as unknown as Layer.Layer<LocationServices, FileSystemDirectory.Error>,
       { idleTimeToLive: Duration.infinity },
     )
     return {

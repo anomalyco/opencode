@@ -9,6 +9,7 @@ import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
+import type { FileSystemDirectory } from "@opencode/core/filesystem/directory"
 import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -58,7 +59,7 @@ const locations = Layer.effect(
         Layer.provide(client),
         Layer.provide(config),
         Layer.provide(models),
-      ) as unknown as Layer.Layer<LocationServices>,
+      ) as unknown as Layer.Layer<LocationServices, FileSystemDirectory.Error>,
   ),
 )
 const it = testEffect(

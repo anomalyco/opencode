@@ -2531,6 +2531,22 @@ export type UnauthorizedError = { readonly _tag: "UnauthorizedError"; readonly m
 export const isUnauthorizedError = (value: unknown): value is UnauthorizedError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "UnauthorizedError"
 
+export type DirectoryAccessDeniedError = {
+  readonly _tag: "DirectoryAccessDeniedError"
+  readonly directory: string
+  readonly message: string
+}
+export const isDirectoryAccessDeniedError = (value: unknown): value is DirectoryAccessDeniedError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "DirectoryAccessDeniedError"
+
+export type DirectoryNotFoundError = {
+  readonly _tag: "DirectoryNotFoundError"
+  readonly directory: string
+  readonly message: string
+}
+export const isDirectoryNotFoundError = (value: unknown): value is DirectoryNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "DirectoryNotFoundError"
+
 export type ServiceUnavailableError = {
   readonly _tag: "ServiceUnavailableError"
   readonly message: string

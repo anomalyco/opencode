@@ -27,6 +27,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
+import type { FileSystemDirectory } from "@opencode/core/filesystem/directory"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { Location } from "@opencode/core/location"
 import { LocationWatcher } from "@opencode/core/filesystem/location-watcher"
@@ -67,7 +68,7 @@ const activityLocations = Layer.effect(
           workspaceID: ref.workspaceID,
           project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
         }),
-      ) as unknown as Layer.Layer<LocationServices>,
+      ) as unknown as Layer.Layer<LocationServices, FileSystemDirectory.Error>,
     { idleTimeToLive: Duration.infinity },
   ),
 )

@@ -1,5 +1,18 @@
 import { Schema } from "effect"
 import { Skill } from "@opencode/schema/skill"
+import { AbsolutePath } from "@opencode/schema/schema"
+
+export class DirectoryNotFoundError extends Schema.TaggedError<DirectoryNotFoundError>()(
+  "DirectoryNotFoundError",
+  { directory: AbsolutePath, message: Schema.String },
+  { httpApiStatus: 404 },
+) {}
+
+export class DirectoryAccessDeniedError extends Schema.TaggedError<DirectoryAccessDeniedError>()(
+  "DirectoryAccessDeniedError",
+  { directory: AbsolutePath, message: Schema.String },
+  { httpApiStatus: 403 },
+) {}
 
 export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()(
   "InvalidRequestError",

@@ -26,6 +26,7 @@ import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/
 import { SessionStore } from "@opencode/core/session/store"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
+import type { FileSystemDirectory } from "@opencode/core/filesystem/directory"
 import { Image } from "@opencode/core/image"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -83,7 +84,7 @@ const locations = makeGlobalNode({
               restore: () => Effect.void,
             }),
             Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
-          ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices>,
+          ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FileSystemDirectory.Error>,
       )
     }),
   ),

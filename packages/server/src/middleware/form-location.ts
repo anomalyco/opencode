@@ -1,17 +1,22 @@
 import { Instance } from "@opencode/core/instance/service"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Session } from "@opencode/core/session"
-import { InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
+import {
+  DirectoryNotFoundError,
+  DirectoryAccessDeniedError,
+  InvalidRequestError,
+  SessionNotFoundError,
+} from "@opencode/protocol/errors"
 import { Effect, Layer } from "effect"
 import { HttpRouter, HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
-import { requestRef, sessionInfo, type LocationServices } from "../location"
+import { directoryErrors, requestRef, sessionInfo, type LocationServices } from "../location"
 
 export class FormLocationMiddleware extends HttpApiMiddleware.Service<
   FormLocationMiddleware,
   { provides: LocationServices }
 >()("@opencode/HttpApiFormLocation", {
-  error: [InvalidRequestError, SessionNotFoundError],
+  error: [InvalidRequestError, SessionNotFoundError, DirectoryNotFoundError, DirectoryAccessDeniedError],
 }) {}
 
 export const formLocationLayer = Layer.effect(
@@ -29,11 +34,11 @@ export const formLocationLayer = Layer.effect(
           // the session row lookup because some MCP elicitations cannot currently be attributed to
           // a real session. Keep this undocumented and remove once elicitations carry session ownership.
           const request = yield* HttpServerRequest.HttpServerRequest
-          return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))))
+          return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))), directoryErrors)
         }
 
         const session = yield* sessionInfo(sessions, route.params.sessionID)
-        return yield* effect.pipe(instances.provide(session))
+        return yield* effect.pipe(instances.provide(session), directoryErrors)
       }),
     )
   }),

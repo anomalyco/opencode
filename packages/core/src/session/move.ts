@@ -1,4 +1,5 @@
 export * as SessionMove from "./move.js"
+import type { FileSystemDirectory } from "../filesystem/directory.js"
 
 import type { Session } from "@opencode/schema/session"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -45,7 +46,11 @@ export interface Interface {
     delivery?: SessionInbox.Delivery
   }) => Effect.Effect<
     void,
-    NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError | DestinationUnavailableError
+    | NotFoundError
+    | DestinationNotFoundError
+    | DestinationNotDirectoryError
+    | DestinationUnavailableError
+    | FileSystemDirectory.Error
   >
 }
 
@@ -91,7 +96,8 @@ const layer = Layer.effect(
       yield* locations.contextEffect(destination.location).pipe(
         Effect.scoped,
         Effect.catchCause((cause) => {
-          if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
+          if (Cause.hasInterruptsOnly(cause))
+            return Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
           return Effect.logWarning("session move destination unavailable", { directory, cause }).pipe(
             Effect.andThen(Effect.fail(new DestinationUnavailableError({ directory }))),
           )
