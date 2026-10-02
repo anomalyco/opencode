@@ -1,0 +1,108 @@
+import { expect } from "bun:test"
+import { Effect } from "effect"
+import { LLM, LLMClient, LLMEvent, LLMRequest } from "../../src/index.js"
+import { isRetryable } from "../../src/provider-error.js"
+import { VercelAIGateway } from "../../src/providers/vercel-ai-gateway.js"
+import { recordedTests } from "../recorded-test.js"
+import { expectWeatherToolLoop, goldenWeatherToolLoopRequest, runWeatherToolLoop } from "../recorded-scenarios.js"
+
+const gateway = VercelAIGateway.configure({ apiKey: process.env.AI_GATEWAY_API_KEY ?? "fixture" })
+const recorded = recordedTests({
+  prefix: "vercel-native",
+  provider: "vercel-ai-gateway",
+  requires: ["AI_GATEWAY_API_KEY"],
+})
+
+for (const item of [
+  {
+    name: "messages Claude",
+    model: gateway.messages("anthropic/claude-sonnet-4.6"),
+    options: { thinking: { type: "enabled", budgetTokens: 1024 } },
+  },
+  {
+    name: "messages Gemini",
+    model: gateway.messages("google/gemini-2.5-flash"),
+    options: { thinking: { type: "enabled", budgetTokens: 1024 } },
+  },
+  { name: "responses GPT", model: gateway.model("openai/gpt-5-nano"), options: { reasoningEffort: "low" } },
+  { name: "responses Muse", model: gateway.model("meta/muse-spark-1.3"), options: {} },
+  { name: "responses Grok", model: gateway.model("xai/grok-4.1-fast-reasoning"), options: {} },
+  {
+    name: "chat Claude",
+    model: gateway.chat("anthropic/claude-sonnet-4.6"),
+    options: { thinking: { type: "enabled", budgetTokens: 1024 } },
+  },
+] as const) {
+  recorded.effect(
+    `continues ${item.name} reasoning and tools`,
+    () =>
+      Effect.gen(function* () {
+        const events = yield* runWeatherToolLoop(
+          LLMRequest.update(
+            goldenWeatherToolLoopRequest({
+              id: item.name,
+              model: item.model,
+              maxTokens: 2048,
+              temperature: false,
+            }),
+            { providerOptions: item.options },
+          ),
+        )
+        expectWeatherToolLoop(events)
+        expect(events.filter(LLMEvent.is.finish).every((event) => event.providerMetadata?.gateway !== undefined)).toBe(
+          true,
+        )
+        if (item.name !== "responses Grok") expect(events.some(LLMEvent.is.reasoningEnd)).toBe(true)
+        if (item.name === "responses Grok")
+          expect(events.filter(LLMEvent.is.finish).some((event) => (event.usage?.reasoningTokens ?? 0) > 0)).toBe(true)
+      }),
+    120_000,
+  )
+}
+
+recorded.effect(
+  "rejects invalid credentials without retryable classification",
+  () =>
+    Effect.gen(function* () {
+      const result = yield* LLMClient.generate(
+        LLM.request({
+          model: VercelAIGateway.configure({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-4.6"),
+          prompt: "Hello",
+          generation: { maxTokens: 32 },
+        }),
+      ).pipe(Effect.result)
+      expect(result._tag).toBe("Failure")
+      if (result._tag === "Failure") {
+        expect(result.failure.reason.http?.status).toBe(401)
+        expect(isRetryable(result.failure)).toBe(false)
+      }
+    }),
+  30_000,
+)
+
+recorded.effect(
+  "automatically caches distinct Claude system blocks",
+  () =>
+    Effect.gen(function* () {
+      const request = LLM.request({
+        model: gateway.messages("anthropic/claude-sonnet-4.6"),
+        system: [
+          {
+            type: "text",
+            text: Array.from(
+              { length: 250 },
+              (_, i) => `Rule ${i}: Preserve provider reasoning state and keep stable prompt prefixes intact.`,
+            ).join("\n"),
+          },
+          { type: "text", text: "Reply with OK only." },
+        ],
+        prompt: "Confirm.",
+        generation: { maxTokens: 32 },
+        providerOptions: { gateway: { only: ["anthropic"] } },
+      })
+      yield* LLMClient.generate(request)
+      const second = yield* LLMClient.generate(request)
+      expect(second.usage?.cacheReadInputTokens).toBeGreaterThan(0)
+    }),
+  60_000,
+)

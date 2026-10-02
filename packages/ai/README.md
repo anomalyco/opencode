@@ -1283,7 +1283,52 @@ const gateway = CloudflareAIGateway.configure({
 }).model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 ```
 
-Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock, Azure OpenAI, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, Fireworks, Groq, Mistral, OpenRouter, TogetherAI, and xAI. Z.ai currently exposes image generation. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
+Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock, Azure OpenAI, Baseten, Cerebras, Cohere, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, Fireworks, Groq, Mistral, OpenRouter, TogetherAI, Vercel AI Gateway, and xAI. Z.ai currently exposes image generation. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
+
+### Vercel AI Gateway
+
+Gateway supports Messages, Responses, and Chat directly, without the AI SDK transport:
+
+```ts
+import { VercelAIGateway } from "@opencode/ai/providers"
+
+const gateway = VercelAIGateway.configure({
+  // Optional: otherwise reads AI_GATEWAY_API_KEY, then VERCEL_OIDC_TOKEN.
+  apiKey,
+  providerOptions: {
+    gateway: { only: ["anthropic", "bedrock"], caching: "auto" },
+  },
+})
+
+gateway.model("anthropic/claude-sonnet-4.6") // Messages
+gateway.model("openai/gpt-5-nano") // Responses
+gateway.model("meta/muse-spark-1.3") // Responses
+gateway.model("xai/grok-4.1-fast-reasoning") // Responses
+gateway.chat("anthropic/claude-sonnet-4.6") // Explicit Chat override
+gateway.responses("google/gemini-2.5-flash") // Explicit Responses override
+gateway.messages("openai/gpt-5-nano") // Explicit Messages override
+```
+
+Default routing sends `openai/gpt-*`, `meta/muse-*`, and `xai/grok-*` to Responses; everything else uses Messages. Full Gateway model IDs stay unchanged. Package entrypoints are also available at `@opencode/ai/providers/vercel-ai-gateway/{messages,responses,chat}` with flat `model(id, settings)` inputs.
+
+Set request `providerOptions.reasoningEffort` for named effort. Messages lowers it to `thinking` plus `output_config.effort`, Responses to `reasoning.effort`, and Chat to `reasoning_effort`. Choose values the selected model supports; the Gateway may translate effort across upstreams. Older Claude models may require budget-based thinking instead of adaptive thinking.
+
+```ts
+LLM.request({
+  model: gateway.messages("anthropic/claude-sonnet-4.6"),
+  prompt: "Review this algorithm.",
+  generation: { maxTokens: 4096 },
+  providerOptions: { thinking: { type: "enabled", budgetTokens: 2048 } },
+})
+```
+
+Messages and Chat expose `thinking` for on/off or token-budget controls. Responses uses `reasoningEffort` and `reasoningSummary`; native upstream controls can be passed as `upstream: { google: { thinkingConfig: ... } }`, etc. A budget translated by Gateway is **not** necessarily a hard reasoning-token cap. Explicit upstream options may override shared settings.
+
+Gateway controls live under `providerOptions.gateway`: routing `only`/`order`/`sort`, fallback `models`, `byok`, `providerTimeouts`, `zeroDataRetention`, regional inference, and usage tags/user. Upstream options live under `providerOptions.upstream` and lower into the original provider namespaces on the wire.
+
+Automatic Gateway caching is enabled by default. Request `cache: "none"` suppresses that default, but does not disable upstream implicit caching or manually placed cache hints. Messages preserves distinct system blocks and explicit hints. Responses additionally exposes `cacheTTL` and `cacheAnchorItems` (wire input-item count, not canonical message count). `promptCacheKey` supplies session affinity and the supported OpenAI-style cache-key field.
+
+Gateway routing, cost, and warnings are retained on terminal events' `providerMetadata.gateway`. Reasoning signatures and encrypted state remain on the corresponding content parts for replay. Existing experimental evaluation remains available. These language-model routes currently use HTTP/SSE; Gateway WebSocket, native compaction, and additional media modalities are not exposed by this facade yet.
 
 Each named provider owns its module, endpoint, authentication, and route setup. Providers with the same wire format compose the shared protocol directly:
 

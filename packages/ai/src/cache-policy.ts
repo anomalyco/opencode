@@ -52,6 +52,8 @@ const RESPECTS_INLINE_HINTS = new Set([
   "bedrock-converse",
   "openrouter",
   "digitalocean",
+  "vercel-ai-gateway-messages",
+  "vercel-ai-gateway-chat",
 ])
 
 // OpenRouter upstreams other than Anthropic and Alibaba Qwen cache without breakpoints. Gemini uses only the last
@@ -171,6 +173,10 @@ const countHints = (request: LLMRequest) =>
 
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
+  // Gateway owns automatic marker placement. Only place our own breakpoints when the caller
+  // explicitly selects a policy, avoiding competing automatic breakpoint budgets.
+  if (request.model.provider === "vercel-ai-gateway" && (request.cache === undefined || request.cache === "auto"))
+    return request
   const policy =
     request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto")
       ? openRouterPolicy(request.model.id)
