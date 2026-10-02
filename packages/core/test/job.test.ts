@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Job } from "@opencode/core/job"
+import { Inactivity } from "@opencode/core/inactivity"
 import { KV } from "@opencode/core/kv"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Integration } from "@opencode/core/integration"
@@ -8,7 +9,7 @@ import { Cause, Deferred, Effect, Exit, Fiber, Scope } from "effect"
 import { SessionSchema } from "@opencode/core/session/schema"
 import { testEffect } from "./lib/effect"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Job.node, KV.node])))
+const it = testEffect(AppNodeBuilder.build(LayerNode.group([Job.node, KV.node, Inactivity.node])))
 
 describe("Job", () => {
   it.live("tracks process-local work through explicit observation", () =>

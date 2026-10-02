@@ -10,6 +10,7 @@ import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "./bus.js"
+import { Inactivity } from "./inactivity.js"
 import { Environment } from "./environment/index.js"
 import { FileRetention } from "./file-retention.js"
 import { Location } from "./location.js"
@@ -121,6 +122,7 @@ const layer = () =>
     Service,
     Effect.gen(function* () {
       const bus = yield* Bus.Service
+      const inactivity = yield* Inactivity.Service
       const location = yield* Location.Service
       const global = yield* Global.Service
       const shell = yield* ShellSelect.Service
@@ -255,11 +257,9 @@ const layer = () =>
         input: CreateInput,
         before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
       ) {
-        const sessionID = input.metadata?.sessionID
+        const sessionID = Schema.is(SessionSchema.ID)(input.metadata?.sessionID) ? input.metadata.sessionID : undefined
         const sessionEnvironment =
-          location.workspaceID === undefined && Schema.is(SessionSchema.ID)(sessionID)
-            ? yield* environments.get(sessionID)
-            : undefined
+          location.workspaceID === undefined && sessionID !== undefined ? yield* environments.get(sessionID) : undefined
         const invocation: ShellCreateBefore = {
           command: input.command,
           cwd: input.cwd ?? location.directory,
@@ -296,6 +296,8 @@ const layer = () =>
         runFork(
           Effect.scoped(
             Effect.gen(function* () {
+              // Registered before spawn so ownership outlasts the handle's cleanup, even on failure.
+              yield* inactivity.hold({ location, sessionID })
               const handle = yield* environment.spawner
                 .spawn(
                   ChildProcess.make(invocation.shell, args, {
@@ -443,6 +445,7 @@ export const node = makeLocationNode({
   layer: layer(),
   deps: [
     Bus.node,
+    Inactivity.node,
     Location.node,
     Global.node,
     ShellSelect.node,

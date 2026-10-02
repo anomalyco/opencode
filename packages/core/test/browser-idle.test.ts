@@ -13,7 +13,7 @@ import { LocationServiceMap } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
 import { Rpc } from "@opencode/core/rpc"
 import { AbsolutePath } from "@opencode/core/schema"
-import { Job } from "@opencode/core/job"
+import { Inactivity } from "@opencode/core/inactivity"
 import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionStore } from "@opencode/core/session/store"
@@ -32,7 +32,7 @@ const it = testEffect(
         makeGlobalNode({
           service: LocationActivity.Service,
           layer: LocationActivity.layer({ timeToLive: "2 seconds", sweepInterval: "100 millis" }),
-          deps: [Bus.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node, Job.node],
+          deps: [Bus.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node, Inactivity.node],
         }),
       ),
     ],

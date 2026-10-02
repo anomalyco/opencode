@@ -5,6 +5,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { KV } from "./kv.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
+import { Inactivity } from "./inactivity.js"
 
 const Background = Schema.Struct({
   id: Schema.String,
@@ -129,8 +130,6 @@ export interface Interface {
   readonly start: (input: StartInput) => Effect.Effect<Info>
   readonly wait: (input: WaitInput) => Effect.Effect<WaitResult>
   readonly block: (input: BlockInput) => Effect.Effect<BlockResult | undefined>
-  /** Whether a running job is currently blocking this Session. Background jobs do not count. */
-  readonly isBlocking: (input: BlockInput) => Effect.Effect<boolean>
   readonly background: (id: string) => Effect.Effect<Info | undefined>
   readonly backgroundAll: (input: BackgroundAllInput) => Effect.Effect<Info[]>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
@@ -179,6 +178,7 @@ function decrementSession(input: Map<SessionSchema.ID, number>, sessionID: Sessi
  */
 export const make = Effect.gen(function* () {
   const kv = yield* KV.Service
+  const inactivity = yield* Inactivity.Service
   const state: State = {
     jobs: yield* SynchronizedRef.make(new Map()),
     scope: yield* Scope.Scope,
@@ -287,7 +287,13 @@ export const make = Effect.gen(function* () {
           }),
         )
         if ("scope" in result)
-          yield* restore(input.run).pipe(
+          yield* restore(
+            Effect.gen(function* () {
+              if (input.recovery?.kind === "subagent")
+                yield* inactivity.hold({ sessionID: input.recovery.parentSessionID })
+              return yield* input.run
+            }).pipe(Effect.scoped),
+          ).pipe(
             Effect.exit,
             Effect.flatMap((exit) => settle(input.id, result.scope, exit)),
             Effect.asVoid,
@@ -354,11 +360,6 @@ export const make = Effect.gen(function* () {
       Effect.tap((outcome) => (outcome.type === "finished" ? consume(input.id, result.wait.generation) : Effect.void)),
       Effect.ensuring(removeBlock(input)),
     )
-  })
-
-  const isBlocking: Interface["isBlocking"] = Effect.fnUntraced(function* (input) {
-    const job = (yield* SynchronizedRef.get(state.jobs)).get(input.id)
-    return job?.blockingSessions.has(input.sessionID) ?? false
   })
 
   const markBackground = Effect.fnUntraced(function* (job: Active) {
@@ -474,7 +475,6 @@ export const make = Effect.gen(function* () {
     start,
     wait,
     block,
-    isBlocking,
     background,
     backgroundAll,
     cancel,
@@ -485,4 +485,4 @@ export const make = Effect.gen(function* () {
 
 const layer = Layer.effect(Service, make)
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [KV.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [KV.node, Inactivity.node] })
