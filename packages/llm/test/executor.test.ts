@@ -113,6 +113,72 @@ describe("RequestExecutor", () => {
     }).pipe(Effect.provide(responsesLayer([new Response("invalid parameter", { status: 400 })]))),
   )
 
+  it.effect("treats transient 400 model stub as retryable", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status: 400 })
+      expect(error.retryable).toBe(true)
+    }).pipe(
+      Effect.provide(
+        responsesLayer(
+          Array.from(
+            { length: 3 },
+            () =>
+              new Response('{"model":"deepseek-v4.1-flash"}', {
+                status: 400,
+                headers: { "retry-after-ms": "0" },
+              }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("recovers from transient 400 model stub on retry", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const response = yield* executor.execute(request)
+
+      expect(response.status).toBe(200)
+      expect(yield* response.text).toBe("ok")
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response('{"model":"deepseek-v4.1-flash"}', {
+            status: 400,
+            headers: { "retry-after-ms": "0" },
+          }),
+          new Response("ok", { status: 200 }),
+        ]),
+      ),
+    ),
+  )
+
+  it.effect("keeps normal 400 error payloads non-retryable", () =>
+    Effect.gen(function* () {
+      const attempts = yield* Ref.make(0)
+      return yield* Effect.gen(function* () {
+        const executor = yield* RequestExecutor.Service
+        const error = yield* executor.execute(request).pipe(Effect.flip)
+
+        expectLLMError(error)
+        expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
+        expect(error.retryable).toBe(false)
+        expect(yield* Ref.get(attempts)).toBe(1)
+      }).pipe(
+        Effect.provide(
+          countedResponsesLayer(attempts, [
+            new Response('{"error":{"message":"bad request","type":"invalid_request_error"}}', { status: 400 }),
+            new Response("should not retry", { status: 200 }),
+          ]),
+        ),
+      )
+    }),
+  )
+
   it.effect("returns redacted diagnostics for retryable rate limits", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
