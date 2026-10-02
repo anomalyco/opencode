@@ -1,5 +1,9 @@
 import { expect, test } from "bun:test"
 import { SessionCompaction } from "@opencode-ai/core/session/compaction"
+import { SessionMessage } from "@opencode-ai/core/session/message"
+import { ModelV2 } from "@opencode-ai/core/model"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { DateTime } from "effect"
 
 test("compaction prompt preserves detailed work state and relevant files", () => {
   const prompt = SessionCompaction.buildPrompt({ context: ["conversation history"] })
@@ -44,4 +48,31 @@ test("compaction describes tool media without embedding base64", () => {
 
   expect(serialized).toBe("Image read successfully\n[Attached image/png: pixel.png]")
   expect(serialized).not.toContain(base64)
+})
+
+test("compaction serializes empty error assistants as empty so they are skipped", () => {
+  const created = DateTime.makeUnsafe(0)
+  const empty = SessionMessage.Assistant.make({
+    id: SessionMessage.ID.make("msg_empty"),
+    type: "assistant",
+    agent: "build",
+    model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+    content: [],
+    finish: "error",
+    error: { type: "unknown", message: "HTTP 400" },
+    time: { created, completed: created },
+  })
+  const blank = SessionMessage.Assistant.make({
+    id: SessionMessage.ID.make("msg_blank"),
+    type: "assistant",
+    agent: "build",
+    model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+    content: [SessionMessage.AssistantText.make({ type: "text", id: "blank", text: "   " })],
+    finish: "error",
+    error: { type: "unknown", message: "HTTP 400" },
+    time: { created, completed: created },
+  })
+
+  expect(SessionCompaction.serialize(empty)).toBe("")
+  expect(SessionCompaction.serialize(blank)).toBe("")
 })
