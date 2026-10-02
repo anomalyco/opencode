@@ -698,6 +698,16 @@ const messageTexts = (request: LLMRequest, role: "user" | "system") =>
 const userTexts = (request: LLMRequest) => messageTexts(request, "user")
 const systemTexts = (request: LLMRequest) => messageTexts(request, "system")
 const messageRoles = (request: LLMRequest | undefined) => request?.messages.map((message) => message.role)
+const unmatchedToolCalls = (request: LLMRequest) => {
+  const results = new Set(
+    request.messages.flatMap((message) =>
+      message.content.flatMap((part) => (part.type === "tool-result" ? [part.id] : [])),
+    ),
+  )
+  return request.messages.flatMap((message) =>
+    message.content.flatMap((part) => (part.type === "tool-call" && !results.has(part.id) ? [part.id] : [])),
+  )
+}
 
 const recordedEventTypes = (id: Session.ID) =>
   Effect.gen(function* () {
@@ -6382,19 +6392,10 @@ describe("SessionRunnerLLM", () => {
 
     yield* s.runPrompt("Storage fails after the tool ran").pipe(Effect.exit)
 
-    const orphans = s.requests.slice(1).flatMap((request) => {
-      const results = new Set(
-        request.messages.flatMap((message) =>
-          message.content.flatMap((part) => (part.type === "tool-result" ? [part.id] : [])),
-        ),
-      )
-      return request.messages.flatMap((message) =>
-        message.content.flatMap((part) => (part.type === "tool-call" && !results.has(part.id) ? [part.id] : [])),
-      )
-    })
-    expect(orphans).toEqual([])
+    expect(s.requests).toHaveLength(2)
+    expect(unmatchedToolCalls(s.requests[1]!)).toEqual([])
     const tool = requireAssistant(yield* s.context).content.find((part) => part.type === "tool")
-    expect(tool?.state.status).not.toBe("running")
+    expect(tool?.state.status).toBe("error")
   })
 
   scenario("records a tool error whose first persistence attempt failed", function* (s) {
@@ -6425,18 +6426,9 @@ describe("SessionRunnerLLM", () => {
 
     yield* s.runPrompt("Storage fails while recording a tool error").pipe(Effect.exit)
 
-    const orphans = s.requests.slice(1).flatMap((request) => {
-      const results = new Set(
-        request.messages.flatMap((message) =>
-          message.content.flatMap((part) => (part.type === "tool-result" ? [part.id] : [])),
-        ),
-      )
-      return request.messages.flatMap((message) =>
-        message.content.flatMap((part) => (part.type === "tool-call" && !results.has(part.id) ? [part.id] : [])),
-      )
-    })
     expect(attempts).toBe(2)
-    expect(orphans).toEqual([])
+    expect(s.requests).toHaveLength(2)
+    expect(unmatchedToolCalls(s.requests[1]!)).toEqual([])
     const tool = requireAssistant(yield* s.context).content.find((part) => part.type === "tool")
     expect(tool?.state.status).toBe("error")
   })

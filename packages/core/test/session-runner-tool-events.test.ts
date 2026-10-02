@@ -693,3 +693,65 @@ test("content-filter failure explains the refusal when the provider gives a reas
     },
   })
 })
+
+const commitThenHold = (eventType: string) =>
+  Effect.gen(function* () {
+    const committed = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const published: Array<string> = []
+    const bus: Pick<Bus.Interface, "publish"> = {
+      publish: (definition, data) =>
+        Effect.gen(function* () {
+          published.push(definition.type)
+          if (definition.type === eventType) {
+            yield* Deferred.succeed(committed, undefined)
+            yield* Deferred.await(release)
+          }
+          return { id: Event.ID.create(), type: definition.type, data } as Event.Payload<typeof definition>
+        }),
+    }
+    const publisher = createLLMEventPublisher(bus, {
+      sessionID,
+      agent: Agent.ID.make("build"),
+      model: { id: Model.ID.make("model"), providerID: Provider.ID.opencode },
+      providerMetadataKey: "anthropic",
+      started: 0,
+      assistantMessageID: SessionMessage.ID.create(),
+    })
+    return { committed, release, published, publisher }
+  })
+
+const interruptAfterCommit = (
+  eventType: string,
+  terminal: (publisher: ReturnType<typeof createLLMEventPublisher>) => Effect.Effect<unknown>,
+) =>
+  Effect.gen(function* () {
+    const { committed, release, published, publisher } = yield* commitThenHold(eventType)
+    yield* publisher.publish(LLMEvent.toolCall({ id: "call-held", name: "read", input: {} }))
+    const write = yield* terminal(publisher).pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(committed)
+    const cancellation = yield* Fiber.interrupt(write).pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Effect.yieldNow
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(cancellation)
+    expect(yield* publisher.failUnsettledTools({ type: "aborted", message: "Interrupted" })).toBe(false)
+    expect(published.filter((type) => type === SessionEvent.Tool.Failed.type || type === eventType)).toEqual([
+      eventType,
+    ])
+  })
+
+test("an interrupt after a committed Tool.Failed write does not allow a second terminal event", async () => {
+  await Effect.runPromise(
+    interruptAfterCommit(SessionEvent.Tool.Failed.type, (publisher) =>
+      publisher.failUnsettledTools({ type: "unknown", message: "first failure" }),
+    ),
+  )
+})
+
+test("an interrupt after a committed Tool.Success write does not allow a second terminal event", async () => {
+  await Effect.runPromise(
+    interruptAfterCommit(SessionEvent.Tool.Success.type, (publisher) =>
+      publisher.toolExecution("call-held", "read", { output: "ok", content: [{ type: "text", text: "ok" }] } as never),
+    ),
+  )
+})

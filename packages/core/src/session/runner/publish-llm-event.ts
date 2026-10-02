@@ -341,6 +341,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   const flush = Effect.fn("SessionRunner.flush")(flushFragments)
 
   // A failed terminal write must leave the call unsettled so step cleanup can still fail it.
+  // Uninterruptible so an interrupt after the write commits cannot unsettle a recorded result.
   const unsettle = (tool: ToolState) =>
     Effect.sync(() => {
       tool.settled = false
@@ -362,7 +363,10 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         ...failureSnapshot(tool, metadata),
         executed: tool.providerExecuted,
       })
-      .pipe(Effect.onError(() => unsettle(tool)))
+      .pipe(
+        Effect.onError(() => unsettle(tool)),
+        Effect.uninterruptible,
+      )
     return true
   })
 
@@ -598,7 +602,10 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
         executed: tool.providerExecuted,
       })
-      .pipe(Effect.onError(() => unsettle(tool)))
+      .pipe(
+        Effect.onError(() => unsettle(tool)),
+        Effect.uninterruptible,
+      )
   })
 
   return {
