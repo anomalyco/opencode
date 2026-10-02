@@ -101,6 +101,7 @@ function stubOps(opts?: {
   text?: string
   error?: NonNullable<SessionV1.Assistant["error"]>
   toolError?: string
+  finish?: string
 }): TaskPromptOps {
   return {
     cancel: () => Effect.void,
@@ -108,7 +109,7 @@ function stubOps(opts?: {
     prompt: (input) =>
       Effect.sync(() => {
         opts?.onPrompt?.(input)
-        return reply(input, opts?.text ?? "done", opts?.error, opts?.toolError)
+        return reply(input, opts?.text ?? "done", opts?.error, opts?.toolError, opts?.finish)
       }),
   }
 }
@@ -118,6 +119,7 @@ function reply(
   text: string,
   error?: NonNullable<SessionV1.Assistant["error"]>,
   toolError?: string,
+  finish?: string,
 ): SessionV1.WithParts {
   const id = MessageID.ascending()
   return {
@@ -134,7 +136,7 @@ function reply(
       modelID: input.model?.modelID ?? ref.modelID,
       providerID: input.model?.providerID ?? ref.providerID,
       time: { created: Date.now() },
-      finish: "stop",
+      finish: finish ?? "stop",
       error,
     },
     parts: [
@@ -324,6 +326,49 @@ describe("tool.task", () => {
       expect(failure).toBeInstanceOf(Error)
       if (!(failure instanceof Error)) throw new Error("expected Error defect")
       expect(failure.message).toBe(`Subagent failed (task_id: ${child?.id}): Network connection lost`)
+    }),
+  )
+
+  it.instance("execute fails when subagent finishes with error and no error object", () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const { chat, assistant } = yield* seed()
+      const tool = yield* TaskTool
+      const def = yield* tool.init()
+
+      const exit = yield* def
+        .execute(
+          {
+            description: "inspect bug",
+            prompt: "look into the cache key path",
+            subagent_type: "general",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: {
+              promptOps: stubOps({
+                text: "",
+                finish: "error",
+              }),
+            },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isSuccess(exit)) throw new Error("expected task failure")
+      const child = (yield* sessions.children(chat.id))[0]
+      expect(child).toBeDefined()
+      const failure = Cause.squash(exit.cause)
+      expect(failure).toBeInstanceOf(Error)
+      if (!(failure instanceof Error)) throw new Error("expected Error defect")
+      expect(failure.message).toBe(`Subagent failed (task_id: ${child?.id}): finished with error (finish: error)`)
     }),
   )
 
