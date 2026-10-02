@@ -4,6 +4,7 @@ import { AuthClient } from "~/context/auth"
 import { useAuthSession } from "~/context/auth"
 import { i18n } from "~/i18n"
 import { localeFromRequest, route } from "~/lib/language"
+import { continuePath } from "~/lib/login-redirect"
 
 export async function GET(input: APIEvent) {
   const url = new URL(input.request.url)
@@ -32,7 +33,7 @@ export async function GET(input: APIEvent) {
         current: id,
       }
     })
-    const next = url.pathname === "/auth/callback" ? "/auth" : url.pathname.replace("/auth/callback", "")
+    const next = continuePath(url.pathname.slice("/auth/callback".length)) ?? "/auth"
     return redirect(route(locale, next))
   } catch (e: any) {
     return new Response(
