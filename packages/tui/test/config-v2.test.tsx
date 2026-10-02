@@ -91,11 +91,6 @@ test("resolves automatic tabs from the terminal environment", () => {
   ).toMatchObject({ mode: "on", enabled: true })
 })
 
-test("enables persistent terminals for explicit servers independently of local terminal suspension", () => {
-  expect(resolve({}, { terminalSuspend: false, terminalAvailable: false }).session.terminal).toBe(false)
-  expect(resolve({}, { terminalSuspend: false, terminalAvailable: true }).session.terminal).toBe(true)
-})
-
 test("shows resolved tab defaults in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "tabs.mode")).toMatchObject({
     default: "auto",

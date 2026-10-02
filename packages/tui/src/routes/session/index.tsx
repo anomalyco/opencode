@@ -142,6 +142,7 @@ export function Session(props: {
   promptMuted?: boolean
   sidebarVisible: boolean
   onToggleSidebar: () => void
+  terminals?: boolean
   visibleTerminalID?: string
   onTerminalPicker?: (show: (() => void) | undefined) => void
   width?: number
@@ -1472,6 +1473,7 @@ export function Session(props: {
                   }
                   setComposer("open", false)
                 }}
+                terminals={props.terminals}
                 visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>

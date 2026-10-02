@@ -101,7 +101,6 @@ export default Runtime.handler(Commands, (input) =>
       },
       server: {
         endpoint: server.endpoint,
-        explicit: requestedServer !== undefined,
         service: service
           ? {
               reconnect: (signal) => runServicePromise(service.reconnect(), { signal }),

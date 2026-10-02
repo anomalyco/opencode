@@ -7,7 +7,6 @@ import { Keymap } from "../../../context/keymap"
 import { SubagentsTab } from "./subagents-tab"
 import { ShellTab } from "./shell-tab"
 import { TerminalsTab } from "./terminals-tab"
-import { useConfig } from "../../../config"
 import { ComposerContext, type ComposerTab } from "./context"
 
 export { useComposerTab, type ComposerHint } from "./context"
@@ -17,12 +16,12 @@ export type ComposerProps = {
   open: boolean
   defaultTab?: string
   onClose?: () => void
+  terminals?: boolean
   visibleTerminalID?: string
 }
 
 export function Composer(props: ComposerProps) {
   const theme = useTheme()
-  const config = useConfig().data
 
   const [store, setStore] = createStore({
     tabs: {} as Record<string, ComposerTab>,
@@ -131,7 +130,7 @@ export function Composer(props: ComposerProps) {
             </box>
             <SubagentsTab sessionID={props.sessionID} />
             <ShellTab sessionID={props.sessionID} />
-            <Show when={config.session.terminal}>
+            <Show when={props.terminals}>
               <TerminalsTab sessionID={props.sessionID} visibleTerminalID={props.visibleTerminalID} />
             </Show>
             <box flexDirection="row" gap={2} paddingLeft={1} flexShrink={0}>

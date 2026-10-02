@@ -1,6 +1,7 @@
 import { Duration, Effect } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { PersistentPty } from "@opencode/core/persistent-pty"
 import { UnauthorizedError } from "@opencode/protocol/errors"
 import { Api } from "../api"
 import { ServerAuth } from "../auth"
@@ -21,6 +22,7 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
             pid: process.pid ?? 0,
             urls: info.urls(),
             paths: info.paths,
+            persistentPty: PersistentPty.available,
           }
         }),
       )
