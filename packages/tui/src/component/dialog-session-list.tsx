@@ -161,18 +161,26 @@ export function DialogSessionList() {
           : undefined
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
+      const attention = sessionTabs.status(session.id).attention
       return {
         title: deleting
           ? `Press ${shortcuts.get("session.delete")} again to confirm`
           : withTimestampedFallback(session),
         value: session.id,
         category,
-        footer,
+        footer: attention
+          ? [attention === "permission" ? "Permission required" : "Answer required", footer].filter(Boolean).join(" · ")
+          : footer,
         bg: deleting ? theme.background.action.destructive.focused : undefined,
         fg: deleting ? theme.text.action.destructive.focused : undefined,
-        gutter:
-          data.session.status(session.id) === "running" ||
-          data.session.family(session.id).some((id) => data.session.status(id) === "running")
+        gutter: attention
+          ? () => (
+              <text fg={theme.text.feedback[attention === "permission" ? "warning" : "info"].base}>
+                {attention === "permission" ? "△" : "•"}
+              </text>
+            )
+          : data.session.status(session.id) === "running" ||
+              data.session.family(session.id).some((id) => data.session.status(id) === "running")
             ? (color: RGBA) => <Spinner color={color} />
             : slot === undefined
               ? undefined
