@@ -191,6 +191,8 @@ describe("acp elicitation mapping", () => {
       [{ key: "api_key", type: "string" }],
       [{ key: "q0", title: "GitHub token", type: "string" }],
       [{ key: "q0", title: "Password", type: "string", hidden: true, default: "" }],
+      [{ key: "q0", title: "Setup", description: "Paste your API key", type: "string" }],
+      [{ key: "q0", title: "Setup", type: "string", options: [{ value: "a", label: "Use my access token" }] }],
     ]
     expect(credentials.map((fields) => ACPElicitation.requestedSchema(form(fields), capable))).toEqual(
       credentials.map(() => undefined),
@@ -331,7 +333,8 @@ describe("acp elicitation over the wire", () => {
 
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
     expect(acp.elicitations).toHaveLength(ids.length)
-    expect(acp.server.cancelledForms).toEqual(ids.map((formID) => ({ sessionID: acp.sessionId, formID })))
+    expect(acp.server.cancelledForms.map((item) => item.formID)).toEqual(ids)
+    expect(acp.server.cancelledForms.map((item) => item.message)).toEqual(ids.map(() => undefined))
     expect(acp.server.repliedForms).toEqual([])
     expect(acp.server.interrupts).toEqual([])
   })
@@ -359,7 +362,7 @@ describe("acp elicitation over the wire", () => {
     expect(acp.server.cancelledForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_plugin" }])
   })
 
-  test("cancels a question with a credential-looking field with a message for the model", async () => {
+  test("cancels a question that looks like it asks for a credential with a message for the model", async () => {
     await using acp = await startSession({
       capabilities: { elicitation: true },
       onPrompt: ({ sessionID, id }) => [
@@ -370,7 +373,16 @@ describe("acp elicitation over the wire", () => {
             sessionID,
             title: "Questions",
             metadata: { kind: "question", tool: { messageID: "msg_tools", id: "call_question" } },
-            fields: [{ key: "q0", title: "GitHub token", type: "string", options: [], custom: true }],
+            fields: [
+              {
+                key: "q0",
+                title: "Setup",
+                description: "Paste your API key",
+                type: "string",
+                options: [{ value: "Later", label: "Later" }],
+                custom: true,
+              },
+            ],
           },
         }),
       ],

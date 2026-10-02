@@ -161,13 +161,7 @@ export const make = Effect.fnUntraced(function* (input: {
         return Effect.gen(function* () {
           const capabilities = yield* Ref.get(input.capabilities)
           const requestedSchema = ACPElicitation.requestedSchema(output.form, capabilities)
-          // A message lets the question tool return it to the model, which continues instead of ending the turn.
-          if (!requestedSchema)
-            return yield* ACPElicitation.cancel(
-              input.client,
-              output.form,
-              output.form.metadata?.kind === "question" ? ACPElicitation.UnshownQuestionMessage : undefined,
-            )
+          if (!requestedSchema) return yield* ACPElicitation.cancelUnshown(input.client, output.form)
           const settled = yield* Deferred.make<void>()
           subscription.forms.set(output.form.id, settled)
           yield* Queue.offer(

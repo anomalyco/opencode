@@ -1,17 +1,19 @@
 import type { PromptResponse } from "@agentclientprotocol/sdk"
 import { describe, expect, test } from "bun:test"
+import { Option, Schema } from "effect"
 import { ACPElicitation } from "../../src/acp/elicitation"
-import { createAcpFixture, expectOk, initialize, newSession } from "./subprocess"
+import { createAcpFixture, expectOk, initialize, newSession, toolCallStream } from "./subprocess"
+
+const ChatRequest = Schema.Struct({
+  messages: Schema.Array(
+    Schema.Struct({ role: Schema.String, tool_call_id: Schema.optional(Schema.String), content: Schema.Unknown }),
+  ),
+})
 
 // The first completion asks a question; the follow-up completion ends the turn.
 function askingModel(request: unknown) {
   if (JSON.stringify(request).includes('"role":"tool"')) return "done"
-  return new Response(questionCall(), { headers: { "content-type": "text/event-stream" } })
-}
-
-function questionCall() {
-  const call = { index: 0, id: "call_question", type: "function", function: { name: "question", arguments: "" } }
-  const input = {
+  return toolCallStream("call_question", "question", {
     questions: [
       {
         header: "Runtime",
@@ -22,17 +24,7 @@ function questionCall() {
         ],
       },
     ],
-  }
-  const chunks = [
-    { choices: [{ delta: { role: "assistant", tool_calls: [call] }, finish_reason: null }], usage: null },
-    {
-      choices: [{ delta: { tool_calls: [{ index: 0, function: { arguments: JSON.stringify(input) } }] } }],
-      usage: null,
-    },
-    { choices: [{ delta: {}, finish_reason: "tool_calls" }], usage: null },
-    { choices: [], usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 11 } },
-  ]
-  return `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join("")}data: [DONE]\n\n`
+  })
 }
 
 describe("acp question subprocess", () => {
@@ -50,8 +42,11 @@ describe("acp question subprocess", () => {
     )
 
     expect(result.stopReason).toBe("end_turn")
-    expect(
-      fixture.llm.requests.some((request) => JSON.stringify(request).includes(ACPElicitation.UnshownQuestionMessage)),
-    ).toBe(true)
+    const results = fixture.llm.requests
+      .flatMap((request) => Option.toArray(Schema.decodeUnknownOption(ChatRequest)(request)))
+      .flatMap((request) => request.messages)
+      .filter((message) => message.role === "tool" && message.tool_call_id === "call_question")
+    expect(results).toHaveLength(1)
+    expect(String(results[0]?.content)).toContain(ACPElicitation.UnshownQuestionMessage)
   }, 60_000)
 })

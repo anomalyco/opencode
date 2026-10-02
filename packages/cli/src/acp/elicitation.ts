@@ -16,8 +16,9 @@ type InputField = Exclude<Form.Field, Form.ExternalField>
 type SelectField = Form.StringField | Form.MultiselectField
 
 // Form mode must not collect secrets, so only forms from flows known not to ask for credentials are elicited.
-const ElicitedKind = Schema.Struct({ kind: Schema.Literals(["question", "websearch.provider"]) })
-const Credential = /password|passphrase|secret|token|api[_-]?key|credential|private[_-]?key/i
+const QuestionKind = "question"
+const ElicitedKind = Schema.Struct({ kind: Schema.Literals([QuestionKind, "websearch.provider"]) })
+const Credential = /password|passphrase|secret|token|api[_ -]?key|credential|private[_ -]?key/i
 const ToolSource = Schema.Struct({ tool: Schema.Struct({ id: Schema.String }) })
 
 type Input = {
@@ -58,10 +59,10 @@ export const reply = Effect.fn("cli.acp.elicitation.reply")(function* (input: In
 })
 
 export const UnshownQuestionMessage =
-  "This client could not show the question to the user, so it was cancelled. Continue without an answer; make reasonable assumptions and state them."
+  "The question couldn't be shown to the user in this client. Continue without an answer: make reasonable assumptions and state them, or ask the user in your reply if you can't proceed."
 
-/** Cancels a form, interrupting its session when the server can't cancel it. A message tells the asker why. */
-export function cancel(client: OpenCodeClient, form: AskedForm, message?: string) {
+/** Cancels a form, interrupting its session when the server can't cancel it. */
+function cancel(client: OpenCodeClient, form: AskedForm, message?: string) {
   return settle(() => client.session.form.cancel({ sessionID: form.sessionID, formID: form.id, message })).pipe(
     Effect.catch(() =>
       Effect.tryPromise(() => client.session.interrupt({ sessionID: form.sessionID })).pipe(Effect.ignore),
@@ -71,15 +72,16 @@ export function cancel(client: OpenCodeClient, form: AskedForm, message?: string
 
 /**
  * The form-mode schema for a form, or undefined when the form is cancelled instead: the client lacks form
- * elicitation, the form is not from an allowed flow or has a field that looks like a credential, or ACP can't
- * represent it faithfully. Unrepresentable forms have `external` fields, `when` conditions, a hidden required field
- * without a default, a default outside a field's options, or a free-text answer alongside options that must also
- * satisfy `required` or item bounds across both inputs. Hidden fields are not asked and answer with their default.
+ * elicitation, the form is not from an allowed flow or has a field whose key, title, description, or option label
+ * looks like a credential, or ACP can't represent it faithfully. Unrepresentable forms have `external` fields, `when`
+ * conditions, a hidden required field without a default, a default outside a field's options, or a free-text answer
+ * alongside options that must also satisfy `required` or item bounds across both inputs. Hidden fields are not asked
+ * and answer with their default.
  */
 export function requestedSchema(form: AskedForm, capabilities: ACPService.Capabilities): ElicitationSchema | undefined {
   if (!capabilities.formElicitation) return undefined
   if (Option.isNone(Schema.decodeUnknownOption(ElicitedKind)(form.metadata))) return undefined
-  if (form.fields.some((field) => Credential.test(field.key) || Credential.test(field.title ?? ""))) return undefined
+  if (form.fields.some(credentialLike)) return undefined
   const fields = form.fields.filter((field): field is InputField => field.type !== "external")
   if (fields.length !== form.fields.length || fields.some((field) => field.when?.length)) return undefined
   if (fields.some((field) => field.hidden && field.required && field.default === undefined)) return undefined
@@ -91,6 +93,14 @@ export function requestedSchema(form: AskedForm, capabilities: ACPService.Capabi
     properties: Object.fromEntries(visible.flatMap(properties)),
     required: visible.filter((field) => field.required).map((field) => field.key),
   }
+}
+
+/**
+ * Cancels a form that `requestedSchema` won't show. A question is cancelled with a message the question tool returns
+ * to the model, so the turn continues instead of ending as interrupted; other forms are cancelled silently.
+ */
+export function cancelUnshown(client: OpenCodeClient, form: AskedForm) {
+  return cancel(client, form, form.metadata?.kind === QuestionKind ? UnshownQuestionMessage : undefined)
 }
 
 /** The answer for an accepted response, or undefined when the user declined, cancelled, or sent invalid content. */
@@ -137,6 +147,14 @@ function settle(evaluate: () => Promise<void>) {
     Effect.catch((cause) =>
       isFormAlreadySettledError(cause) || isFormNotFoundError(cause) ? Effect.void : Effect.fail(cause),
     ),
+  )
+}
+
+function credentialLike(field: Form.Field) {
+  const labels =
+    field.type === "string" || field.type === "multiselect" ? (field.options ?? []).map((option) => option.label) : []
+  return [field.key, field.title, field.description, ...labels].some(
+    (text) => text !== undefined && Credential.test(text),
   )
 }
 
