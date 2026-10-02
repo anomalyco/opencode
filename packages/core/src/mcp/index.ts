@@ -555,7 +555,14 @@ export const layer = (options?: Options) =>
               yield* bus.publish(McpEvent.StatusChanged, { server: name })
               continue
             }
-            fork(startServer(name, entry).pipe(locks.withLock(name)))
+            fork(
+              Effect.suspend(() =>
+                // Initial reconciliation can yield to a lifecycle request before this task acquires the lock.
+                entries.get(name) === entry && entry.status.status === "pending" && !entry.scope
+                  ? startServer(name, entry)
+                  : Effect.void,
+              ).pipe(locks.withLock(name)),
+            )
           }
           return
         }
