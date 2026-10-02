@@ -16019,6 +16019,15 @@
           "requireAssistantAfterTool": {
             "type": "boolean"
           },
+          "supportsStore": {
+            "type": "boolean"
+          },
+          "supportsUsageInStreaming": {
+            "type": "boolean"
+          },
+          "supportsStrictMode": {
+            "type": "boolean"
+          },
           "supportsPromptCacheKey": {
             "type": "boolean"
           }
