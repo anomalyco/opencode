@@ -8,6 +8,11 @@ Optional native addon providing OS-backed proxy authentication for OpenCode:
 It is an **optional** dependency. When it is absent, `@opencode-ai/core` loads
 `undefined` and degrades to Basic authentication or explicit credentials.
 
+> **Status:** the JavaScript interface, loader, and packaging are complete, but
+> the RSPI/GSSAPI calls in `native/src/lib.rs` are a **scaffold** and are not yet
+> implemented. Until they are, Negotiate and NTLM do not authenticate; Basic
+> works today. Build and CI wiring live outside this package.
+
 ## Interface
 
 ```ts

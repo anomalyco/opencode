@@ -34,17 +34,28 @@ export function resolve(input: {
 
   const url = new URL(raw.includes("://") ? raw : `${target.protocol}//${raw}`)
   const username = config?.username ?? (url.username ? decodeURIComponent(url.username) : undefined)
-  const password = config?.password ?? (url.password ? decodeURIComponent(url.password) : undefined)
+  const password = expandEnv(
+    config?.password ?? (url.password ? decodeURIComponent(url.password) : undefined),
+    env,
+  )
   const clean = new URL(url.toString())
   clean.username = ""
   clean.password = ""
   return { url: clean, auth, username, password, ...(noProxy ? { no_proxy: noProxy } : {}) }
 }
 
+/** Expand a single `{env:VAR}` placeholder so secrets stay out of config files. */
+function expandEnv(value: string | undefined, env: Record<string, string | undefined>): string | undefined {
+  if (!value) return value
+  const match = /^\{env:([A-Za-z_][A-Za-z0-9_]*)\}$/.exec(value)
+  return match ? (env[match[1]] ?? "") : value
+}
+
 export function isLoopback(host: string): boolean {
   const name = host.replace(/^\[|\]$/g, "").toLowerCase()
-  if (name === "localhost" || name === "::1") return true
-  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(name)
+  if (name === "localhost" || name === "::1" || name === "0:0:0:0:0:0:0:1") return true
+  const mapped = /^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/.exec(name)
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(mapped ? mapped[1] : name)
   return match ? Number(match[1]) === 127 : false
 }
 

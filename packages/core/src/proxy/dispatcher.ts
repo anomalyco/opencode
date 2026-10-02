@@ -1,11 +1,8 @@
 export * as ProxyDispatcher from "./dispatcher"
 
-import http from "node:http"
-import https from "node:https"
 import net from "node:net"
 import tls from "node:tls"
 import { once } from "node:events"
-import { Readable } from "node:stream"
 import type { ProxySettings } from "./resolve"
 import { selectProviders, type ProxyAuthContext, type ProxyAuthProvider } from "./auth/provider"
 import { ProxyAuthError } from "./error"
@@ -41,14 +38,16 @@ interface Head {
  * requests. Both answer a `407` by walking the advertised schemes
  * (Negotiate → NTLM → Basic) and retrying, bounded by `MAX_AUTH_ROUNDS`.
  *
- * The CONNECT handshake uses a raw socket because Bun's `http.request` cannot
- * emit a valid CONNECT target. `makeDispatcher` returns a `{ fetch, close }`
- * object rather than an undici `Dispatcher`, because the chosen seam is a fetch
- * function.
+ * Raw sockets are used instead of `node:http`: Bun's `http.request` cannot emit
+ * a valid `CONNECT` target, and it resolves an absolute-form `path` against the
+ * target host when that host resolves locally, silently bypassing the proxy.
+ * `makeDispatcher` returns a `{ fetch, close }` object rather than an undici
+ * `Dispatcher`, because the chosen seam is a fetch function.
  */
 export function makeDispatcher(settings: ProxySettings, deps: ProxyDispatcherDeps = {}): ProxyDispatcher {
   const proxy = settings.url
   const withLock = makeAsyncKeyedLock()
+  const tunnels = new Map<string, Tunnel>()
 
   if (!proxy) {
     return { fetch: (input, init) => globalThis.fetch(input, init), close: async () => {} }
@@ -61,12 +60,19 @@ export function makeDispatcher(settings: ProxySettings, deps: ProxyDispatcherDep
       const request = input instanceof Request ? input : new Request(input, init)
       const target = new URL(request.url)
       if (target.protocol === "https:") {
-        const tunnel = await withLock(proxy.origin, () => openTunnel(proxy, target, authHeader))
+        const key = `${proxy.origin}->${target.origin}`
+        const existing = tunnels.get(key)
+        if (existing && !existing.socket.destroyed) return requestThroughTunnel(existing, request)
+        const tunnel = await withLock(key, () => openTunnel(proxy, target, authHeader))
+        tunnels.set(key, tunnel)
         return requestThroughTunnel(tunnel, request)
       }
       return withLock(proxy.origin, () => requestAbsoluteForm(proxy, target, request, authHeader))
     },
-    async close() {},
+    async close() {
+      for (const tunnel of tunnels.values()) tunnel.socket.destroy()
+      tunnels.clear()
+    },
   }
 }
 
@@ -100,12 +106,21 @@ export async function openTunnel(
   authHeader: (challenges: string[], target: string) => Promise<string | undefined>,
 ): Promise<Tunnel> {
   const challenges = new Set<string>()
+  let previous = ""
   for (let round = 0; round < MAX_AUTH_ROUNDS; round++) {
     const attempted = challenges.size > 0
     const header = attempted ? await authHeader([...challenges], target.origin) : undefined
     const result = await connectOnce(proxy, target, header)
     if ("socket" in result) return result
     for (const scheme of result.challenges) challenges.add(scheme)
+    // A credentialed round that receives a *new* challenge (for example NTLM's
+    // Type2 token) continues; the same challenge repeated means the credentials
+    // were rejected.
+    const signature = result.challenges.join("|")
+    if (header && signature !== previous) {
+      previous = signature
+      continue
+    }
     if (header) throw new ProxyAuthError("rejected", { proxy: proxy.origin })
     // A challenge arrived but no provider could produce credentials for it.
     if (attempted) throw new ProxyAuthError("no-credentials", { proxy: proxy.origin })
@@ -119,13 +134,11 @@ function connectOnce(
   authorization: string | undefined,
 ): Promise<{ socket: net.Socket } | { challenges: string[] }> {
   return new Promise((resolve, reject) => {
+    // RFC 7231 requires `host:port`; default the scheme's port when the URL omits it.
+    const authority = `${target.hostname}:${Number(target.port) || 443}`
     const socket = net.connect({ host: proxy.hostname, port: Number(proxy.port) || 80 })
     socket.on("connect", () => {
-      const lines = [
-        `CONNECT ${target.hostname}:${target.port} HTTP/1.1`,
-        `Host: ${target.hostname}:${target.port}`,
-        "Proxy-Connection: Keep-Alive",
-      ]
+      const lines = [`CONNECT ${authority} HTTP/1.1`, `Host: ${authority}`, "Proxy-Connection: Keep-Alive"]
       if (authorization) lines.push(`Proxy-Authorization: ${authorization}`)
       socket.write(lines.join("\r\n") + "\r\n\r\n")
       readHead(socket).then((head) => {
@@ -146,21 +159,22 @@ async function requestThroughTunnel(tunnel: Tunnel, request: Request): Promise<R
   const target = new URL(request.url)
   const tlsSocket = tls.connect({ socket: tunnel.socket, servername: target.hostname })
   await once(tlsSocket, "secureConnect")
-  return new Promise((resolve, reject) => {
-    const req = https.request(
-      {
-        host: target.hostname,
-        port: Number(target.port) || 443,
-        method: request.method,
-        path: target.pathname + target.search,
-        headers: Object.fromEntries(request.headers),
-        createConnection: () => tlsSocket,
-      },
-      (res) => resolve(nodeResponse(res)),
-    )
-    req.on("error", reject)
-    pipeBody(request, req)
-  })
+  // Write the request directly over the established TLS socket. `https.request`
+  // cannot be used here: given an already-TLS socket it would attempt a second
+  // handshake. `Connection: close` bounds the response to this socket's end.
+  const headers: Record<string, string> = {
+    host: target.host,
+    connection: "close",
+    ...Object.fromEntries(request.headers),
+  }
+  const body = request.body ? Buffer.from(await new Response(request.body).arrayBuffer()) : undefined
+  if (body) headers["content-length"] = String(body.length)
+  const lines = [`${request.method} ${target.pathname}${target.search} HTTP/1.1`]
+  for (const [key, value] of Object.entries(headers)) lines.push(`${key}: ${value}`)
+  tlsSocket.write(lines.join("\r\n") + "\r\n\r\n")
+  if (body) tlsSocket.write(body)
+  const head = await readHead(tlsSocket)
+  return new Response(bodyStream(tlsSocket, head.rest), { status: head.status, headers: head.headers })
 }
 
 async function requestAbsoluteForm(
@@ -170,13 +184,20 @@ async function requestAbsoluteForm(
   authHeader: (challenges: string[], target: string) => Promise<string | undefined>,
 ): Promise<Response> {
   const challenges = new Set<string>()
+  let previous = ""
   for (let round = 0; round < MAX_AUTH_ROUNDS; round++) {
     const attempted = challenges.size > 0
     const header = attempted ? await authHeader([...challenges], target.origin) : undefined
     const response = await sendAbsolute(proxy, target, request, header)
     if (response.status !== 407) return response
-    for (const scheme of challengesOf(response.headers.get("proxy-authenticate") ?? undefined)) challenges.add(scheme)
+    const advertised = challengesOf(response.headers.get("proxy-authenticate") ?? undefined)
+    for (const scheme of advertised) challenges.add(scheme)
     response.body?.cancel()
+    const signature = advertised.join("|")
+    if (header && signature !== previous) {
+      previous = signature
+      continue
+    }
     if (header) throw new ProxyAuthError("rejected", { proxy: proxy.origin })
     // A challenge arrived but no provider could produce credentials for it.
     if (attempted) throw new ProxyAuthError("no-credentials", { proxy: proxy.origin })
@@ -186,8 +207,6 @@ async function requestAbsoluteForm(
 
 /**
  * Send an absolute-form request over a raw socket connected to the proxy.
- * `node:http` is not used here because it resolves an absolute-form path to the
- * target host when that host resolves locally, silently bypassing the proxy.
  * `Connection: close` makes the response end when the proxy closes the socket.
  */
 function sendAbsolute(
@@ -199,7 +218,11 @@ function sendAbsolute(
   return new Promise((resolve, reject) => {
     const socket = net.connect({ host: proxy.hostname, port: Number(proxy.port) || 80 })
     socket.on("connect", async () => {
-      const headers: Record<string, string> = { host: target.host, connection: "close", ...Object.fromEntries(request.headers) }
+      const headers: Record<string, string> = {
+        host: target.host,
+        connection: "close",
+        ...Object.fromEntries(request.headers),
+      }
       if (authorization) headers["proxy-authorization"] = authorization
       const body = request.body ? Buffer.from(await new Response(request.body).arrayBuffer()) : undefined
       if (body) headers["content-length"] = String(body.length)
@@ -213,16 +236,6 @@ function sendAbsolute(
     })
     socket.on("error", reject)
   })
-}
-
-function nodeResponse(res: http.IncomingMessage): Response {
-  const headers = new Headers()
-  for (const [key, value] of Object.entries(res.headers)) {
-    if (value === undefined) continue
-    for (const entry of Array.isArray(value) ? value : [value]) headers.append(key, entry)
-  }
-  if (res.statusCode === 204 || res.statusCode === 304) return new Response(null, { status: res.statusCode, headers })
-  return new Response(Readable.toWeb(res) as ReadableStream, { status: res.statusCode ?? 500, headers })
 }
 
 /**
@@ -286,7 +299,12 @@ function readHead(socket: net.Socket): Promise<Head> {
       const headers: Record<string, string> = {}
       for (const line of headerLines) {
         const colon = line.indexOf(":")
-        if (colon > 0) headers[line.slice(0, colon).trim().toLowerCase()] = line.slice(colon + 1).trim()
+        if (colon <= 0) continue
+        const key = line.slice(0, colon).trim().toLowerCase()
+        const value = line.slice(colon + 1).trim()
+        // Some proxies emit one `Proxy-Authenticate` per scheme; join rather
+        // than overwrite so auto-selection sees every advertised mechanism.
+        headers[key] = headers[key] ? `${headers[key]}, ${value}` : value
       }
       resolve({ status: Number(statusLine.split(" ")[1]), headers, rest })
     }
@@ -309,9 +327,6 @@ const challengesOf = (value: string | string[] | undefined): string[] => {
     .map((entry) => entry.trim())
     .filter(Boolean)
 }
-
-const schemeNamesOf = (challenges: readonly string[]): string[] =>
-  challenges.map((entry) => entry.split(/\s/, 1)[0].toLowerCase()).filter(Boolean)
 
 /**
  * Serializes async work per key so concurrent cold-start requests through one
