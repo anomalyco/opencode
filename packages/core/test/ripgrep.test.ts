@@ -1,9 +1,13 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Effect } from "effect"
+import { Cause, Effect, Exit, Layer, Stream } from "effect"
+import { ChildProcessSpawner } from "effect/unstable/process"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
+import { AppProcess } from "@opencode-ai/core/process"
 import { Ripgrep } from "@opencode-ai/core/ripgrep"
+import { RipgrepBinary } from "@opencode-ai/core/ripgrep/binary"
 import { RelativePath } from "@opencode-ai/core/schema"
 import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
@@ -81,5 +85,112 @@ describe("Ripgrep", () => {
         }),
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
+  )
+})
+
+const encoder = new TextEncoder()
+
+const fakeHandle = (options: { stdout?: Stream.Stream<Uint8Array>; stderr?: string; code: number }) =>
+  ChildProcessSpawner.makeHandle({
+    pid: ChildProcessSpawner.ProcessId(0),
+    exitCode: Effect.succeed(ChildProcessSpawner.ExitCode(options.code)),
+    isRunning: Effect.succeed(false),
+    kill: () => Effect.void,
+    stdin: { [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") } as any,
+    stdout: options.stdout ?? Stream.empty,
+    stderr:
+      options.stderr === undefined ? Stream.empty : Stream.make(encoder.encode(options.stderr)),
+    all: Stream.empty,
+    getInputFd: () => ({ [Symbol.for("effect/Sink/TypeId")]: Symbol.for("effect/Sink/TypeId") }) as any,
+    getOutputFd: () => Stream.empty,
+    unref: Effect.succeed(Effect.void),
+  })
+
+const fakeBinary = Layer.succeed(
+  RipgrepBinary.Service,
+  RipgrepBinary.Service.of({ filepath: Effect.succeed("/fake/rg") }),
+)
+
+const mockedIt = (spawn: (command: unknown) => Effect.Effect<any, any, any>) =>
+  testEffect(
+    AppNodeBuilder.build(Ripgrep.node, [
+      [AppProcess.node, Layer.mock(AppProcess.Service, { spawn: spawn as any })],
+      [RipgrepBinary.node, fakeBinary],
+    ]),
+  )
+
+describe("Ripgrep failures", () => {
+  const failingAllocation = mockedIt(() =>
+    Effect.succeed(
+      fakeHandle({ code: 2, stderr: "memory allocation of 134217728 bytes failed\n" }),
+    ),
+  )
+
+  failingAllocation.effect("fails fast on allocation/commit-limit failures instead of partial success", () =>
+    Effect.gen(function* () {
+      const ripgrep = yield* Ripgrep.Service
+      const exit = yield* ripgrep.grep({ cwd: "/tmp", pattern: "needle", limit: 10 }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        expect(String((error as Error).message)).toMatch(/allocation|failed with code 2/i)
+      }
+    }),
+  )
+
+  const invalidPattern = mockedIt(() =>
+    Effect.succeed(fakeHandle({ code: 2, stderr: "regex parse error:\n([: unclosed group\n" })),
+  )
+
+  invalidPattern.effect("keeps invalid patterns as InvalidPatternError", () =>
+    Effect.gen(function* () {
+      const ripgrep = yield* Ripgrep.Service
+      const exit = yield* ripgrep.grep({ cwd: "/tmp", pattern: "([", limit: 10 }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(Ripgrep.InvalidPatternError)
+      }
+    }),
+  )
+
+  const spawnFailure = mockedIt(() => Effect.fail(new Error("spawn ENOMEM")))
+  spawnFailure.effect("surfaces spawn failures as Ripgrep.Error", () =>
+    Effect.gen(function* () {
+      const ripgrep = yield* Ripgrep.Service
+      const exit = yield* ripgrep.grep({ cwd: "/tmp", pattern: "needle", limit: 10 }).pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(Ripgrep.Error)
+      }
+    }),
+  )
+})
+
+describe("Ripgrep concurrency", () => {
+  const state = { active: 0, max: 0 }
+  const tracking = mockedIt(() =>
+    Effect.gen(function* () {
+      state.active += 1
+      state.max = Math.max(state.max, state.active)
+      yield* Effect.sleep("30 millis")
+      state.active -= 1
+      return fakeHandle({ code: 1 })
+    }),
+  )
+
+  tracking.live("bounds concurrent ripgrep subprocesses", () =>
+    Effect.gen(function* () {
+      state.active = 0
+      state.max = 0
+      const ripgrep = yield* Ripgrep.Service
+      const results = yield* Effect.forEach(Array.from({ length: 12 }, (_, index) => index), () =>
+        ripgrep.grep({ cwd: "/tmp", pattern: "needle", limit: 10 }),
+      { concurrency: "unbounded" })
+      expect(results).toHaveLength(12)
+      expect(state.max).toBeLessThanOrEqual(Ripgrep.MAX_CONCURRENT_RIPGREP)
+      expect(state.max).toBeGreaterThan(1)
+    }),
   )
 })
