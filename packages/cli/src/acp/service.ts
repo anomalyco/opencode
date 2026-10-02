@@ -132,18 +132,24 @@ export function make(input: {
     return session
   })
 
-  const replay = (attached: Attached) =>
-    Stream.paginate(undefined, (cursor: string | undefined) =>
+  const replay = Effect.fnUntraced(function* (attached: Attached) {
+    const capabilities = yield* Ref.get(input.capabilities)
+    yield* Stream.paginate(undefined, (cursor: string | undefined) =>
       ACPPromise.promise(() =>
         cursor
           ? input.client.message.list({ sessionID: attached.id, limit: 200, cursor })
           : input.client.message.list({ sessionID: attached.id, limit: 200, order: "asc" }),
       ).pipe(Effect.map((page) => [page.data, Option.fromNullishOr(page.cursor.next)] as const)),
-    ).pipe(Stream.runForEach((message) => replayMessage(attached, message)))
+    ).pipe(Stream.runForEach((message) => replayMessage(attached, message, capabilities)))
+  })
 
   // A message that fails to translate keeps the updates before the failure and does not stop the replay.
-  const replayMessage = Effect.fnUntraced(function* (attached: Attached, message: SessionMessageInfo) {
-    const updates = ACPTranslate.replayMessage(message, attached.cwd, (yield* Ref.get(input.capabilities)).compaction)
+  const replayMessage = Effect.fnUntraced(function* (
+    attached: Attached,
+    message: SessionMessageInfo,
+    capabilities: Capabilities,
+  ) {
+    const updates = ACPTranslate.replayMessage(message, attached.cwd, capabilities)
     while (true) {
       const next = yield* Effect.result(Effect.try(() => updates.next()))
       if (Result.isFailure(next))

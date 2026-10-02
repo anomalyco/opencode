@@ -352,11 +352,8 @@ export const make = Effect.fnUntraced(function* (input: {
   )
 
   // Forked uninterruptible: interruption reaches only `execute`, so the fiber still settles with a response.
-  const run = Effect.fn("cli.acp.turn.run")(function* (
-    attached: Attached,
-    prompt: PreparedPrompt,
-    capabilities: ACPService.Capabilities,
-  ) {
+  const run = Effect.fn("cli.acp.turn.run")(function* (attached: Attached, prompt: PreparedPrompt) {
+    const capabilities = yield* Ref.get(input.capabilities)
     const state = yield* Ref.make(ACPTranslate.initial)
     const ctx: ACPTranslate.Context = {
       sessionID: attached.id,
@@ -374,7 +371,6 @@ export const make = Effect.fnUntraced(function* (input: {
     prompt: Effect.fn("cli.acp.turn.prompt")(function* (params, signal) {
       const attached = yield* input.sessions.require(params.sessionId)
       const catalog = yield* input.catalog.get(attached.cwd)
-      const capabilities = yield* Ref.get(input.capabilities)
       if (params.prompt.some((block) => block.type === "image" && !block.data && !block.uri)) {
         return yield* new ACPError.InvalidRequestError({ message: "image content has no data or uri", field: "prompt" })
       }
@@ -392,7 +388,7 @@ export const make = Effect.fnUntraced(function* (input: {
             }),
           )
         }
-        const forked = Effect.runForkWith(fiber.context)(run(attached, prompt, capabilities), { uninterruptible: true })
+        const forked = Effect.runForkWith(fiber.context)(run(attached, prompt), { uninterruptible: true })
         FiberMap.setUnsafe(turns, attached.id, forked)
         return Effect.succeed(forked)
       })

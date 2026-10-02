@@ -222,7 +222,7 @@ describe("acp standard compaction updates over the wire", () => {
     expect(compacted.response.stopReason).toBe("end_turn")
   })
 
-  test("completes a compaction without a readable summary and leaves out the summary", async () => {
+  test("completes a compaction without a readable summary with a cleared summary", async () => {
     await using acp = await startSession({
       capabilities: standard,
       onPrompt: ({ sessionID, id }) =>
@@ -242,7 +242,7 @@ describe("acp standard compaction updates over the wire", () => {
     const compactionId = await events.messageID("session.compaction.started")
     expect(turnUpdates(acp.updates)).toEqual([
       compaction(acp.sessionId, { compactionId, status: "in_progress" }),
-      compaction(acp.sessionId, { compactionId, status: "completed" }),
+      compaction(acp.sessionId, { compactionId, status: "completed", summary: null }),
       chunk(acp.sessionId, "msg_after", "after"),
     ])
   })
@@ -254,11 +254,6 @@ describe("acp standard compaction updates over the wire", () => {
         turn(
           sessionID,
           id,
-          durableEvent("session.compaction.failed", {
-            sessionID,
-            reason: "auto",
-            error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
-          }),
           durableEvent("session.compaction.started", { sessionID, reason: "auto", recent: "" }),
           ephemeralEvent("session.compaction.delta", { sessionID, text: "partial" }),
           durableEvent("session.compaction.failed", { sessionID, reason: "auto", error: providerError }),
@@ -268,18 +263,89 @@ describe("acp standard compaction updates over the wire", () => {
 
     await acp.prompt(acp.sessionId, "hello")
 
-    const unstarted = await events.messageID("session.compaction.failed")
-    const started = await events.messageID("session.compaction.started")
+    const compactionId = await events.messageID("session.compaction.started")
     expect(turnUpdates(acp.updates)).toEqual([
-      compaction(acp.sessionId, { compactionId: unstarted, status: "failed", error: "Nothing to compact yet" }),
-      compaction(acp.sessionId, { compactionId: started, status: "in_progress" }),
-      summaryChunk(acp.sessionId, started, "partial"),
-      compaction(acp.sessionId, {
-        compactionId: started,
-        status: "failed",
-        summary: null,
-        error: providerError.message,
-      }),
+      compaction(acp.sessionId, { compactionId, status: "in_progress" }),
+      summaryChunk(acp.sessionId, compactionId, "partial"),
+      compaction(acp.sessionId, { compactionId, status: "failed", summary: null, error: providerError.message }),
+    ])
+  })
+
+  test("opens a compaction that fails before it starts before settling it", async () => {
+    await using acp = await startSession({
+      capabilities: standard,
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          durableEvent("session.compaction.failed", {
+            sessionID,
+            reason: "auto",
+            error: { type: "compaction.unavailable", message: "Nothing to compact yet" },
+          }),
+        ),
+    })
+    using events = await watchEvents(acp.server.url)
+
+    await acp.prompt(acp.sessionId, "hello")
+
+    const compactionId = await events.messageID("session.compaction.failed")
+    expect(turnUpdates(acp.updates)).toEqual([
+      compaction(acp.sessionId, { compactionId, status: "in_progress" }),
+      compaction(acp.sessionId, { compactionId, status: "failed", summary: null, error: "Nothing to compact yet" }),
+    ])
+  })
+
+  test("reports a defect as a generic failure and keeps core's own failure messages", async () => {
+    const limit = { type: "compaction.failed", message: "Compaction summary reached the output token limit" }
+    const defect = { type: "compaction.failed", message: "Error: database is locked\n    at run (compaction.ts:1:1)" }
+    await using acp = await startSession({
+      capabilities: standard,
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          durableEvent("session.compaction.started", { sessionID, reason: "auto", recent: "" }),
+          durableEvent("session.compaction.failed", { sessionID, reason: "auto", error: limit }),
+          durableEvent("session.compaction.started", { sessionID, reason: "auto", recent: "" }),
+          durableEvent("session.compaction.failed", { sessionID, reason: "auto", error: defect }),
+        ),
+    })
+    using events = await watchEvents(acp.server.url)
+
+    await acp.prompt(acp.sessionId, "hello")
+
+    const first = await events.messageID("session.compaction.started")
+    const second = await events.messageID("session.compaction.started")
+    expect(turnUpdates(acp.updates)).toEqual([
+      compaction(acp.sessionId, { compactionId: first, status: "in_progress" }),
+      compaction(acp.sessionId, { compactionId: first, status: "failed", summary: null, error: limit.message }),
+      compaction(acp.sessionId, { compactionId: second, status: "in_progress" }),
+      compaction(acp.sessionId, { compactionId: second, status: "failed", summary: null, error: "Compaction failed" }),
+    ])
+  })
+
+  test("drops summary chunks outside an open compaction", async () => {
+    await using acp = await startSession({
+      capabilities: standard,
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          ephemeralEvent("session.compaction.delta", { sessionID, text: "early" }),
+          durableEvent("session.compaction.started", { sessionID, reason: "auto", recent: "" }),
+          durableEvent("session.compaction.ended", { sessionID, reason: "auto", text: summary, recent: "" }),
+          ephemeralEvent("session.compaction.delta", { sessionID, text: "late" }),
+        ),
+    })
+    using events = await watchEvents(acp.server.url)
+
+    await acp.prompt(acp.sessionId, "hello")
+
+    const compactionId = await events.messageID("session.compaction.started")
+    expect(turnUpdates(acp.updates)).toEqual([
+      compaction(acp.sessionId, { compactionId, status: "in_progress" }),
+      compaction(acp.sessionId, { compactionId, status: "completed", summary: [{ type: "text", text: summary }] }),
     ])
   })
 
@@ -309,7 +375,7 @@ describe("acp standard compaction updates over the wire", () => {
     const compactionId = await events.messageID("session.compaction.started")
     expect(updatesBeforeResponse(acp)).toEqual([
       compaction(acp.sessionId, { compactionId, status: "in_progress" }).update,
-      compaction(acp.sessionId, { compactionId, status: "cancelled" }).update,
+      compaction(acp.sessionId, { compactionId, status: "cancelled", summary: null }).update,
     ])
   })
 
@@ -338,6 +404,36 @@ describe("acp standard compaction updates over the wire", () => {
       compaction(acp.sessionId, { compactionId, status: "in_progress" }).update,
       summaryChunk(acp.sessionId, compactionId, "partial").update,
       compaction(acp.sessionId, { compactionId, status: "cancelled", summary: null }).update,
+    ])
+  })
+
+  test("closes the marker of a compaction left open when the wind-down never reports it", async () => {
+    const submitted: string[] = []
+    await using acp = await startSession({
+      cancelDrainTimeout: "50 millis",
+      onPrompt: ({ sessionID, id }) => {
+        submitted.push(id)
+        return [
+          delivered(sessionID, id),
+          durableEvent("session.compaction.started", { sessionID, reason: "manual", recent: "", inputID: id }),
+        ]
+      },
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await acp.waitForUpdate((item) => item.update.sessionUpdate === "session_info_update")
+    await acp.notify("session/cancel", { sessionId: acp.sessionId })
+
+    expect((await prompt).stopReason).toBe("cancelled")
+    const messageId = submitted[0]
+    expect(updatesBeforeResponse(acp)).toEqual([
+      marker(acp.sessionId, { status: "started", messageId, reason: "manual" }).update,
+      marker(acp.sessionId, {
+        status: "failed",
+        messageId,
+        reason: "manual",
+        error: { type: "aborted", message: "Compaction cancelled" },
+      }).update,
     ])
   })
 
@@ -449,6 +545,7 @@ describe("acp standard compaction updates over the wire", () => {
       compaction("ses_compacted", {
         compactionId: "msg_compaction_failed",
         status: "failed",
+        summary: null,
         error: providerError.message,
       }),
       compaction("ses_compacted", {
@@ -456,8 +553,8 @@ describe("acp standard compaction updates over the wire", () => {
         status: "completed",
         summary: [{ type: "text", text: summary }],
       }),
-      compaction("ses_compacted", { compactionId: "msg_compaction_cancelled", status: "cancelled" }),
-      compaction("ses_compacted", { compactionId: "msg_compaction_native", status: "completed" }),
+      compaction("ses_compacted", { compactionId: "msg_compaction_cancelled", status: "cancelled", summary: null }),
+      compaction("ses_compacted", { compactionId: "msg_compaction_native", status: "completed", summary: null }),
       chunk("ses_compacted", "msg_after", "after"),
     ])
   })
