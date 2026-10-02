@@ -136,7 +136,8 @@ Both fields can also be set on a model or variant when only part of a provider's
 HTTP requests wait up to five minutes for response headers and up to five minutes between streamed response chunks.
 Set the provider's `settings.headerTimeout` or `settings.chunkTimeout` to a number of milliseconds to change a limit,
 or to `false` to disable it. `settings.timeout` additionally bounds the whole request from send until the response
-completes; it has no default. These configuration settings apply provider-wide, not per model or variant.
+completes; it has no default. These configuration settings apply provider-wide, not per model or variant. On a
+WebSocket transport, `chunkTimeout` bounds the gap between frames instead and defaults to thirty minutes.
 
 ```jsonc title="opencode.jsonc"
 {
