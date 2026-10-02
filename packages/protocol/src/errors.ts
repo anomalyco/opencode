@@ -8,12 +8,6 @@ export class LocationNotFoundError extends Schema.TaggedError<LocationNotFoundEr
   { httpApiStatus: 404 },
 ) {}
 
-export class LocationAccessDeniedError extends Schema.TaggedError<LocationAccessDeniedError>()(
-  "LocationAccessDeniedError",
-  { location: Location.PublicRef, message: Schema.String },
-  { httpApiStatus: 403 },
-) {}
-
 export class InvalidRequestError extends Schema.TaggedError<InvalidRequestError>()(
   "InvalidRequestError",
   {

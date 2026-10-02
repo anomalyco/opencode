@@ -8,7 +8,6 @@ import { FileSystem } from "@opencode/core/filesystem"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Workspace } from "@opencode/core/workspace"
-import { blockRealPath } from "./fixture/realpath"
 import { location } from "./fixture/location"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
@@ -119,7 +118,12 @@ describe("FileSystem", () => {
                   Location.node.replace(
                     Layer.succeed(Location.Service, location({ directory: AbsolutePath.make(directory) })),
                   ),
-                  blockRealPath(filesystem, (target) => (target === directory ? cause : undefined)),
+                  FSUtil.node.replace(
+                    Layer.succeed(FSUtil.Service, {
+                      ...filesystem,
+                      realPath: (target) => (target === directory ? Effect.fail(cause) : filesystem.realPath(target)),
+                    }),
+                  ),
                 ],
               }),
             ),
@@ -141,7 +145,7 @@ describe("FileSystem", () => {
             }
             expect(result.cause.reasons.filter(Cause.isDieReason)).toMatchObject([{ defect: cause }])
           }
-        }).pipe(Effect.provide(LayerNode.compile(FSUtil.node).pipe(Layer.fresh))),
+        }).pipe(Effect.provide(LayerNode.compile(FSUtil.node))),
       ),
     )
   }

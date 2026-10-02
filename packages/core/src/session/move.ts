@@ -10,6 +10,7 @@ import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
 import { Location } from "../location.js"
+import type { FileSystem } from "../filesystem.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { Project } from "../project.js"
 import { AbsolutePath, RelativePath } from "../schema.js"
@@ -49,7 +50,7 @@ export interface Interface {
     | DestinationNotFoundError
     | DestinationNotDirectoryError
     | DestinationUnavailableError
-    | FSUtil.DirectoryError
+    | FileSystem.DirectoryNotFoundError
   >
 }
 

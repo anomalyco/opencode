@@ -11,7 +11,6 @@ import { FileMutation } from "./file-mutation.js"
 import { Environment } from "./environment/index.js"
 import { Formatter } from "./formatter.js"
 import { FileSystem } from "./filesystem.js"
-import { FSUtil } from "@opencode/util/fs-util"
 import { FileSystemSearch } from "./filesystem/search.js"
 import { Generate } from "./generate.js"
 import { Form } from "./form.js"
@@ -115,7 +114,7 @@ const nodes = [
 export const graph = LayerNode.group(nodes)
 
 export type Services = LayerNode.Output<typeof graph>
-export type Error = FSUtil.DirectoryError
+export type Error = FileSystem.DirectoryNotFoundError
 
 export interface Options {
   // Plugins this instance is born with; empty and absent are equivalent.
@@ -157,27 +156,15 @@ export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Ser
     InstancePlugins.node.replace(InstancePlugins.bound(options.plugins ?? [])),
   ]
 
-  return Layer.unwrap(
-    Effect.gen(function* () {
-      // Validate before project/config discovery can turn directory access failures into defects.
-      if (!ref.workspaceID)
-        yield* FSUtil.Service.pipe(
-          Effect.flatMap((fs) => fs.realDirectory(ref.directory)),
-          Effect.provide(LayerNode.compile(FSUtil.node, { replacements: options.replacements })),
-        )
-      return LayerNode.compile(graph, { replacements, shared: Node.tags.values.global })
-    }),
-  ).pipe(
-    // Unavailable directories are expected; other instance boot failures remain defects.
+  return LayerNode.compile(graph, { replacements, shared: Node.tags.values.global }).pipe(
+    // A missing directory is expected; other instance boot failures remain defects.
     Layer.catchCause(
       (cause): Layer.Layer<Services, Error> =>
         Layer.unwrap(
           Effect.failCause(cause).pipe(
             Effect.catch(
               (error): Effect.Effect<never, Error> =>
-                error instanceof FSUtil.DirectoryNotFoundError || error instanceof FSUtil.DirectoryAccessDeniedError
-                  ? Effect.fail(error)
-                  : Effect.die(error),
+                error instanceof FileSystem.DirectoryNotFoundError ? Effect.fail(error) : Effect.die(error),
             ),
           ),
         ),

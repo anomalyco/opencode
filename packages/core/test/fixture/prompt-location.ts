@@ -1,4 +1,4 @@
-import type { FSUtil } from "@opencode/util/fs-util"
+import type { FileSystem } from "@opencode/core/filesystem"
 import { Bus } from "@opencode/core/bus"
 import { Image } from "@opencode/core/image"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -25,7 +25,7 @@ export const promptLocationNode = makeGlobalNode({
               Bus.node.replace(Layer.succeed(Bus.Service, bus)),
               Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
             ],
-          }) as unknown as Layer.Layer<LocationServices, FSUtil.DirectoryError>,
+          }) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
       )
     }),
   ),

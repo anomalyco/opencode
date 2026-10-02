@@ -1,4 +1,4 @@
-import type { FSUtil } from "@opencode/util/fs-util"
+import type { FileSystem } from "@opencode/core/filesystem"
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer, LayerMap } from "effect"
@@ -50,7 +50,7 @@ const locations = makeGlobalNode({
             list: () => Effect.succeed([info]),
           }),
           Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
-        ) as unknown as Layer.Layer<LocationServices, FSUtil.DirectoryError>,
+        ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
     ),
   ),
   deps: [],

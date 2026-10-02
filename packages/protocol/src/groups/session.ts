@@ -19,7 +19,6 @@ import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenAp
 import {
   ConflictError,
   LocationNotFoundError,
-  LocationAccessDeniedError,
   CommandExecutionError,
   CommandNotFoundError,
   FormAlreadySettledError,
@@ -382,7 +381,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ ...Location.PublicRef.fields, delivery: SessionInbox.Delivery.pipe(Schema.optional) }),
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, InvalidRequestError, LocationNotFoundError, LocationAccessDeniedError],
+        error: [SessionNotFoundError, InvalidRequestError, LocationNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.move",
@@ -592,14 +591,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           }),
         }),
         success: Schema.Struct({ data: Schema.Array(FileDiff.Info) }),
-        error: [
-          InvalidRequestError,
-          MessageNotFoundError,
-          SessionNotFoundError,
-          UnknownError,
-          LocationNotFoundError,
-          LocationAccessDeniedError,
-        ],
+        error: [InvalidRequestError, MessageNotFoundError, SessionNotFoundError, UnknownError, LocationNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.diff",

@@ -1,4 +1,4 @@
-import type { FSUtil } from "@opencode/util/fs-util"
+import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
 import { LLMClient, LLMEvent, LanguageModel, type LLMRequest } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols"
@@ -59,7 +59,7 @@ const locations = Layer.effect(
         Layer.provide(client),
         Layer.provide(config),
         Layer.provide(models),
-      ) as unknown as Layer.Layer<LocationServices, FSUtil.DirectoryError>,
+      ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
   ),
 )
 const it = testEffect(

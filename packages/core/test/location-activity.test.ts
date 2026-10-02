@@ -1,4 +1,4 @@
-import type { FSUtil } from "@opencode/util/fs-util"
+import type { FileSystem } from "@opencode/core/filesystem"
 import { describe, expect } from "bun:test"
 import { Context, Deferred, Duration, Effect, Fiber, Layer, LayerMap, RcMap, Schema } from "effect"
 import { TestClock } from "effect/testing"
@@ -66,7 +66,7 @@ const locations = Layer.effect(
           Layer.provideMerge(Form.layer),
           Layer.provide(Layer.succeed(Bus.Service, bus)),
           Layer.fresh,
-        ) as unknown as Layer.Layer<LocationServices, FSUtil.DirectoryError>,
+        ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
       { idleTimeToLive: Duration.infinity },
     )
     return {
