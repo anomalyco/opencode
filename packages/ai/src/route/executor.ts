@@ -191,9 +191,9 @@ const httpError = (input: {
   const source = rootCause(input.error)
   const native = nativeTransportFailure(source)
   const code = native?.code
-  const describe = (detail: string | undefined) =>
-    code && detail && !detail.includes(code) ? `${code}: ${detail}` : detail
-  const message = describe(native?.message ?? (input.error instanceof Error ? input.error.message : undefined))
+  const detail =
+    code && native?.message && !native.message.includes(code) ? `${code}: ${native.message}` : native?.message
+  const message = detail ?? (input.error instanceof Error ? input.error.message : undefined)
 
   if (Cause.isTimeoutError(input.error) || Cause.isTimeoutError(source))
     return transportError({ message: message ?? "HTTP transport timed out", code: code ?? "Timeout" })
@@ -201,13 +201,8 @@ const httpError = (input: {
     return transportError({ message: message ?? "HTTP transport failed", code })
   // Effect reports every response body read failure as a DecodeError, but the raw byte stream decodes
   // nothing: provider output parsing happens later and fails as InvalidProviderOutput.
-  if (input.operation === "read" && input.error.reason._tag === "DecodeError") {
-    const detail = describe(native?.message)
-    return transportError({
-      message: detail ? `${CONNECTION_LOST}: ${detail}` : CONNECTION_LOST,
-      code,
-    })
-  }
+  if (input.operation === "read" && input.error.reason._tag === "DecodeError")
+    return transportError({ message: detail ? `${CONNECTION_LOST}: ${detail}` : CONNECTION_LOST, code })
   if (input.error.reason._tag === "TransportError") {
     return transportError({
       message: message ?? input.error.reason.description ?? "HTTP transport failed",
