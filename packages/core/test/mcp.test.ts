@@ -107,6 +107,9 @@ function resourceServer(
           { uri: "docs://logo", blob: "aGVsbG8=", mimeType: "image/png" },
         ] as Array<{ uri: string; text: string; mimeType?: string } | { uri: string; blob: string; mimeType?: string }>,
         resourceLists: 0,
+        resourceFailure: false,
+        resourceGate: undefined as (() => Promise<void>) | undefined,
+        templateGate: undefined as (() => Promise<void>) | undefined,
         resourceReads: [] as string[],
         templatesUnsupported: false,
         missing: [] as string[],
@@ -199,16 +202,21 @@ function resourceServer(
           }),
         )
         if (input.resources !== false) {
-          protocol.setRequestHandler("resources/list", (request) => {
+          protocol.setRequestHandler("resources/list", async (request) => {
             state.resourceLists += 1
+            if (state.resourceFailure) throw new Error("Resource discovery unavailable")
             const page = state.resourcePages?.[request.params?.cursor ?? "initial"]
-            return Promise.resolve({ resources: page?.items ?? state.resources, nextCursor: page?.nextCursor })
+            const result = { resources: page?.items ?? state.resources, nextCursor: page?.nextCursor }
+            await state.resourceGate?.()
+            return result
           })
-          protocol.setRequestHandler("resources/templates/list", (request) => {
+          protocol.setRequestHandler("resources/templates/list", async (request) => {
             state.templateLists += 1
             if (state.templatesUnsupported) return Promise.reject(new Error("Method not found"))
             const page = state.templatePages?.[request.params?.cursor ?? "initial"]
-            return Promise.resolve({ resourceTemplates: page?.items ?? state.templates, nextCursor: page?.nextCursor })
+            const result = { resourceTemplates: page?.items ?? state.templates, nextCursor: page?.nextCursor }
+            await state.templateGate?.()
+            return result
           })
           protocol.setRequestHandler("resources/read", (request) => {
             state.resourceReads.push(request.params.uri)
@@ -1359,56 +1367,373 @@ test("settles modern MCP URL elicitations when the user confirms", async () => {
   )
 })
 
-test("loads and reads MCP resources", async () => {
-  await Effect.runPromise(
-    Effect.scoped(
+testEffect(Layer.empty).live("coalesces concurrent MCP resource discovery and reuses successful catalogs", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const server = yield* resourceServer()
+    const gate = () => {
+      Deferred.doneUnsafe(started, Exit.void)
+      return Effect.runPromise(Deferred.await(release))
+    }
+    server.state.resourceGate = gate
+    server.state.templateGate = gate
+    server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
+    server.state.templates = [{ name: "File", uriTemplate: "docs://{path}" }]
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* settled(service)
+      const reads = yield* Effect.all(
+        Array.from({ length: 8 }, (_, index) =>
+          index % 2 ? service.resources({ server: "resources" }) : service.resourceCatalog(),
+        ),
+        { concurrency: "unbounded" },
+      ).pipe(Effect.forkScoped)
+      yield* Deferred.await(started)
+      yield* Deferred.succeed(release, undefined)
+      const catalogs = yield* Fiber.join(reads)
+      expect(catalogs.every((catalog) => catalog.resources[0]?.uri === "docs://readme")).toBe(true)
+      expect(catalogs.every((catalog) => catalog.templates[0]?.uriTemplate === "docs://{path}")).toBe(true)
+      expect(server.state.resourceLists).toBe(1)
+      expect(server.state.templateLists).toBe(1)
+      yield* service.resourceCatalog()
+      yield* service.resources({ server: "resources" })
+      expect(server.state.resourceLists).toBe(1)
+      expect(server.state.templateLists).toBe(1)
+    }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+  }),
+)
+
+testEffect(Layer.empty).live("keeps shared MCP discovery running when one reader is cancelled", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer()
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    server.state.resourceGate = () => {
+      Deferred.doneUnsafe(started, Exit.void)
+      return Effect.runPromise(Deferred.await(release))
+    }
+    server.state.resources = [{ name: "Guide", uri: "docs://guide" }]
+    const connection = yield* connect(
+      "resources",
+      new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+      import.meta.dir,
+    )
+    const first = yield* connection.resources().pipe(Effect.forkScoped)
+    yield* Deferred.await(started)
+    const second = yield* connection.resources().pipe(Effect.forkScoped)
+    yield* Fiber.interrupt(first)
+    yield* Deferred.succeed(release, undefined)
+    expect((yield* Fiber.join(second))[0]?.uri).toBe("docs://guide")
+    expect((yield* connection.resources())[0]?.uri).toBe("docs://guide")
+    expect(server.state.resourceLists).toBe(1)
+  }),
+)
+
+for (const modern of [false, true]) {
+  testEffect(Layer.empty).live(
+    `invalidates MCP resource discovery on ${modern ? "modern" : "legacy"} notifications`,
+    () =>
+      Effect.gen(function* () {
+        const server = yield* resourceServer({ modern, listChanged: true })
+        const connection = yield* connect(
+          "resources",
+          new ConfigMCP.Remote({
+            type: "remote",
+            url: server.url,
+            oauth: false,
+            protocol: modern ? "2026-07-28" : undefined,
+          }),
+          import.meta.dir,
+        )
+        // Successful empty catalogs are cacheable too.
+        expect(yield* connection.resources()).toEqual([])
+        expect(yield* connection.resourceTemplates()).toEqual([])
+        server.state.resources = [{ name: "Guide", uri: "docs://guide" }]
+        server.state.templates = [{ name: "Issue", uriTemplate: "issue://{id}" }]
+        expect(yield* connection.resources()).toEqual([])
+        expect(yield* connection.resourceTemplates()).toEqual([])
+        const changed = yield* Deferred.make<void>()
+        connection.onResourcesChanged(() => Deferred.doneUnsafe(changed, Exit.void))
+        yield* Effect.promise(server.sendResourceListChanged)
+        yield* Deferred.await(changed)
+        expect((yield* connection.resources()).map((resource) => resource.uri)).toEqual(["docs://guide"])
+        expect((yield* connection.resourceTemplates()).map((template) => template.uriTemplate)).toEqual([
+          "issue://{id}",
+        ])
+        expect(server.state.resourceLists).toBe(2)
+        expect(server.state.templateLists).toBe(2)
+      }),
+  )
+}
+
+testEffect(Layer.empty).live("does not cache failed MCP discovery as an empty catalog", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer()
+    server.state.resourceFailure = true
+    server.state.templatesUnsupported = true
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* settled(service)
+      expect(yield* service.resourceCatalog()).toEqual({ resources: [], templates: [] })
+      server.state.resourceFailure = false
+      server.state.resources = [{ name: "Guide", uri: "docs://guide" }]
+      expect((yield* service.resources({ server: "resources" })).resources.map((resource) => resource.uri)).toEqual([
+        "docs://guide",
+      ])
+      server.state.templatesUnsupported = false
+      server.state.templates = [{ name: "Issue", uriTemplate: "issue://{id}" }]
+      const recovered = yield* service.resourceCatalog()
+      expect(recovered.templates.map((template) => template.uriTemplate)).toEqual(["issue://{id}"])
+      expect(server.state.resourceLists).toBe(2)
+      expect(server.state.templateLists).toBeGreaterThanOrEqual(2)
+    }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+  }),
+)
+
+testEffect(Layer.empty).live("does not publish in-flight MCP discovery after notification invalidation", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({ listChanged: true })
+    server.state.resources = [{ name: "Old", uri: "docs://old" }]
+    server.state.templates = [{ name: "Old", uriTemplate: "old://{id}" }]
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const gate = () => {
+      Deferred.doneUnsafe(started, Exit.void)
+      return Effect.runPromise(Deferred.await(release))
+    }
+    server.state.resourceGate = gate
+    server.state.templateGate = gate
+    const connection = yield* connect(
+      "resources",
+      new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+      import.meta.dir,
+    )
+    const old = yield* Effect.all([connection.resources(), connection.resourceTemplates()], {
+      concurrency: "unbounded",
+    }).pipe(Effect.forkScoped)
+    yield* Deferred.await(started)
+    // Both old requests must have captured their responses before the notification.
+    yield* Effect.sync(() => server.state.templateLists === 1 && server.state.resourceLists === 1).pipe(
+      Effect.filterOrFail(
+        (ready) => ready,
+        () => new Error("discovery did not start"),
+      ),
+      Effect.retry({ times: 100, schedule: Schedule.spaced("1 millis") }),
+    )
+    server.state.resourceGate = undefined
+    server.state.templateGate = undefined
+    server.state.resources = [{ name: "New", uri: "docs://new" }]
+    server.state.templates = [{ name: "New", uriTemplate: "new://{id}" }]
+    const changed = yield* Deferred.make<void>()
+    connection.onResourcesChanged(() => Deferred.doneUnsafe(changed, Exit.void))
+    yield* Effect.promise(server.sendResourceListChanged)
+    yield* Deferred.await(changed)
+    expect((yield* connection.resources())[0]?.uri).toBe("docs://new")
+    expect((yield* connection.resourceTemplates())[0]?.uriTemplate).toBe("new://{id}")
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(old)
+    expect((yield* connection.resources())[0]?.uri).toBe("docs://new")
+    expect((yield* connection.resourceTemplates())[0]?.uriTemplate).toBe("new://{id}")
+    expect(server.state.resourceLists).toBe(2)
+    expect(server.state.templateLists).toBe(2)
+  }),
+)
+
+testEffect(Layer.empty).live(
+  "invalidates MCP discovery on disconnect, reconnect, replacement, and session recovery",
+  () =>
+    Effect.gen(function* () {
+      const first = yield* resourceServer()
+      const second = yield* resourceServer()
+      first.state.resources = [{ name: "First", uri: "docs://first" }]
+      first.state.templates = [{ name: "First", uriTemplate: "first://{id}" }]
+      second.state.resources = [{ name: "Second", uri: "docs://second" }]
+      second.state.templates = [{ name: "Second", uriTemplate: "second://{id}" }]
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* settled(service)
+        expect((yield* service.resourceCatalog()).resources[0]?.uri).toBe("docs://first")
+        yield* service.disconnect("resources")
+        expect(yield* service.resourceCatalog()).toEqual({ resources: [], templates: [] })
+        first.state.resources = [{ name: "Reconnected", uri: "docs://reconnected" }]
+        yield* Effect.promise(first.restart)
+        yield* service.connect("resources")
+        expect((yield* service.resourceCatalog()).resources[0]?.uri).toBe("docs://reconnected")
+        expect(first.state.resourceLists).toBe(2)
+        expect(first.state.templateLists).toBe(2)
+        yield* service.add("resources", new ConfigMCP.Remote({ type: "remote", url: second.url, oauth: false }))
+        const replaced = yield* service.resources({ server: "resources" })
+        expect(replaced.resources[0]?.uri).toBe("docs://second")
+        expect(replaced.templates[0]?.uriTemplate).toBe("second://{id}")
+        yield* Effect.promise(second.restart)
+        second.state.resources = [{ name: "Recovered", uri: "docs://recovered" }]
+        second.state.templates = [{ name: "Recovered", uriTemplate: "recovered://{id}" }]
+        // A foreground call observes session expiry even while discovery is still cached.
+        yield* service.callTool({ server: "resources", name: "echo" })
+        const recovered = yield* service.resourceCatalog()
+        expect(recovered.resources[0]?.uri).toBe("docs://recovered")
+        expect(recovered.templates[0]?.uriTemplate).toBe("recovered://{id}")
+        expect(second.state.resourceLists).toBe(2)
+        expect(second.state.templateLists).toBe(2)
+      }).pipe(Effect.provide(resourceMcpLayer(first.url)))
+    }),
+)
+
+for (const catalog of [false, true]) {
+  testEffect(Layer.empty).live(
+    `recovers when MCP ${catalog ? "catalog" : "resource"} discovery first observes session expiry`,
+    () =>
       Effect.gen(function* () {
         const server = yield* resourceServer()
-        server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
-        server.state.templates = [{ name: "File", uriTemplate: "docs://{path}" }]
-
         yield* Effect.gen(function* () {
           const service = yield* Mcp.Service
           yield* settled(service)
-          expect(yield* service.resourceCatalog()).toEqual({
-            resources: [
-              {
-                server: "resources",
-                name: "Readme",
-                uri: "docs://readme",
-                description: undefined,
-                mimeType: undefined,
-              },
-            ],
-            templates: [
-              {
-                server: "resources",
-                name: "File",
-                uriTemplate: "docs://{path}",
-                description: undefined,
-                mimeType: undefined,
-              },
-            ],
-          })
-
-          server.state.resources = [{ name: "Guide", uri: "docs://guide" }]
-          expect((yield* service.resourceCatalog()).resources.map((resource) => resource.uri)).toEqual(["docs://guide"])
-          expect(yield* service.readResource({ server: "resources", uri: "docs://readme" })).toEqual({
-            server: "resources",
-            uri: "docs://readme",
-            contents: [
-              { type: "text", uri: "docs://readme", text: "hello", mimeType: "text/plain" },
-              { type: "blob", uri: "docs://logo", blob: "aGVsbG8=", mimeType: "image/png" },
-            ],
-          })
-          expect(server.clientVersion()).toMatchObject({ name: "sdk", version: "1.2.3" })
-        }).pipe(
-          Effect.provide(resourceMcpLayer(server.url, undefined, { clientInfo: { name: "sdk", version: "1.2.3" } })),
-        )
+          yield* Effect.promise(server.restart)
+          server.state.resources = [{ name: "Recovered", uri: "docs://recovered" }]
+          server.state.templates = [{ name: "Recovered", uriTemplate: "recovered://{id}" }]
+          const recovered = yield* catalog ? service.resourceCatalog() : service.resources({ server: "resources" })
+          expect(recovered.resources[0]?.uri).toBe("docs://recovered")
+          expect(recovered.templates[0]?.uriTemplate).toBe("recovered://{id}")
+          expect(server.state.initializations).toBe(2)
+          expect(server.state.resourceLists).toBe(1)
+          expect(server.state.templateLists).toBe(1)
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
       }),
-    ),
   )
-})
+}
+
+testEffect(Layer.empty).live("recovers coalesced MCP discovery readers after session expiry", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer()
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* settled(service)
+      yield* Effect.promise(server.restart)
+      server.state.resources = [{ name: "Recovered", uri: "docs://recovered" }]
+      server.state.templates = [{ name: "Recovered", uriTemplate: "recovered://{id}" }]
+      const catalogs = yield* Effect.all(
+        Array.from({ length: 8 }, (_, index) =>
+          index % 2 ? service.resources({ server: "resources" }) : service.resourceCatalog(),
+        ),
+        { concurrency: "unbounded" },
+      )
+      expect(catalogs.every((catalog) => catalog.resources[0]?.uri === "docs://recovered")).toBe(true)
+      expect(catalogs.every((catalog) => catalog.templates[0]?.uriTemplate === "recovered://{id}")).toBe(true)
+      expect(server.state.initializations).toBe(2)
+      expect(server.state.resourceLists).toBe(1)
+      expect(server.state.templateLists).toBe(1)
+    }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+  }),
+)
+
+testEffect(Layer.empty).live("does not let in-flight MCP discovery populate a replacement connection", () =>
+  Effect.gen(function* () {
+    const first = yield* resourceServer()
+    const second = yield* resourceServer()
+    const started = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    first.state.resourceGate = () => {
+      Deferred.doneUnsafe(started, Exit.void)
+      return Effect.runPromise(Deferred.await(release))
+    }
+    first.state.resources = [{ name: "Old", uri: "docs://old" }]
+    second.state.resources = [{ name: "New", uri: "docs://new" }]
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* settled(service)
+      const old = yield* service.resources({ server: "resources" }).pipe(Effect.exit, Effect.forkScoped)
+      yield* Deferred.await(started)
+      yield* service.add("resources", new ConfigMCP.Remote({ type: "remote", url: second.url, oauth: false }))
+      expect((yield* service.resourceCatalog()).resources[0]?.uri).toBe("docs://new")
+      yield* Deferred.succeed(release, undefined)
+      expect(Exit.isFailure(yield* Fiber.join(old))).toBe(true)
+      expect((yield* service.resourceCatalog()).resources[0]?.uri).toBe("docs://new")
+      expect(second.state.resourceLists).toBe(1)
+    }).pipe(Effect.provide(resourceMcpLayer(first.url)))
+  }),
+)
+
+testEffect(Layer.empty).live("keeps MCP discovery private to each live connection", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({ modern: true })
+    const config = (account: string) =>
+      new ConfigMCP.Remote({
+        type: "remote",
+        url: server.url,
+        oauth: false,
+        protocol: "2026-07-28",
+        headers: { "x-test-account": account },
+      })
+    const first = yield* connect("resources", config("first"), "/first-location")
+    server.state.resources = [{ name: "First", uri: "docs://first" }]
+    expect((yield* first.resources())[0]?.uri).toBe("docs://first")
+    const second = yield* connect("resources", config("second"), "/second-location")
+    server.state.resources = [{ name: "Second", uri: "docs://second" }]
+    expect((yield* second.resources())[0]?.uri).toBe("docs://second")
+    expect((yield* first.resources())[0]?.uri).toBe("docs://first")
+    expect(server.state.resourceLists).toBe(2)
+    expect(first).not.toBe(second)
+  }),
+)
+
+testEffect(Layer.empty).live("loads and reads MCP resources and refreshes discovery after five seconds", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer()
+    server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
+    server.state.templates = [{ name: "File", uriTemplate: "docs://{path}" }]
+
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* service.callTool({ server: "resources", name: "echo" })
+      expect(yield* service.resourceCatalog()).toEqual({
+        resources: [
+          {
+            server: "resources",
+            name: "Readme",
+            uri: "docs://readme",
+            description: undefined,
+            mimeType: undefined,
+          },
+        ],
+        templates: [
+          {
+            server: "resources",
+            name: "File",
+            uriTemplate: "docs://{path}",
+            description: undefined,
+            mimeType: undefined,
+          },
+        ],
+      })
+
+      server.state.resources = [{ name: "Guide", uri: "docs://guide" }]
+      server.state.templates = [{ name: "Issue", uriTemplate: "issue://{id}" }]
+      yield* TestClock.adjust("4999 millis")
+      const cached = yield* service.resourceCatalog()
+      expect(cached.resources.map((resource) => resource.uri)).toEqual(["docs://readme"])
+      expect(cached.templates.map((template) => template.uriTemplate)).toEqual(["docs://{path}"])
+      expect(server.state.resourceLists).toBe(1)
+      expect(server.state.templateLists).toBe(1)
+      yield* TestClock.adjust("1 millis")
+      expect((yield* service.resourceCatalog()).resources.map((resource) => resource.uri)).toEqual(["docs://guide"])
+      expect(
+        (yield* service.resources({ server: "resources" })).templates.map((template) => template.uriTemplate),
+      ).toEqual(["issue://{id}"])
+      expect(server.state.resourceLists).toBe(2)
+      expect(server.state.templateLists).toBe(2)
+      expect(yield* service.readResource({ server: "resources", uri: "docs://readme" })).toEqual({
+        server: "resources",
+        uri: "docs://readme",
+        contents: [
+          { type: "text", uri: "docs://readme", text: "hello", mimeType: "text/plain" },
+          { type: "blob", uri: "docs://logo", blob: "aGVsbG8=", mimeType: "image/png" },
+        ],
+      })
+      expect(server.clientVersion()).toMatchObject({ name: "sdk", version: "1.2.3" })
+    }).pipe(Effect.provide(resourceMcpLayer(server.url, undefined, { clientInfo: { name: "sdk", version: "1.2.3" } })))
+  }).pipe(Effect.provide(TestClock.layer())),
+)
 
 it.live("discovers and reads MCP resources through Code Mode", () =>
   Effect.gen(function* () {
@@ -1473,6 +1798,8 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
 
       // A server may declare resources without implementing template listing.
       server.state.templatesUnsupported = true
+      yield* Effect.promise(server.restart)
+      yield* mcp.connect("resources")
       const untemplated = yield* run('return await tools.opencode.list_mcp_resources({ server: "resources" })')
       expect(JSON.parse(untemplated.output.output)).toEqual({
         resources: [
@@ -2001,6 +2328,45 @@ const shutdownIt = testEffect(
     ],
   ),
 )
+shutdownIt.live("invalidates MCP resource discovery after a credential switch reconnects", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({ modern: true })
+    server.state.resources = [{ name: "Before", uri: "docs://before" }]
+    server.state.templates = [{ name: "Before", uriTemplate: "before://{id}" }]
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      const bus = yield* Bus.Service
+      yield* service.add("resources", new ConfigMCP.Remote({ type: "remote", url: server.url, protocol: "2026-07-28" }))
+      yield* service.servers().pipe(
+        Effect.filterOrFail(
+          (servers) => servers[0]?.status.status === "connected",
+          () => new Error("test server did not connect"),
+        ),
+        Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+      )
+      expect((yield* service.resourceCatalog()).resources[0]?.uri).toBe("docs://before")
+      const integrationID = (yield* service.servers())[0]?.integrationID
+      if (!integrationID) return yield* Effect.die("Missing test integration")
+      server.state.resources = [{ name: "After", uri: "docs://after" }]
+      server.state.templates = [{ name: "After", uriTemplate: "after://{id}" }]
+      yield* bus.publish(Credential.Event.Switched, { integrationID, credentialID: null })
+      yield* Effect.sync(() => server.state.toolLists).pipe(
+        Effect.filterOrFail(
+          (count) => count === 2,
+          () => new Error("credential switch did not reconnect"),
+        ),
+        Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+      )
+      yield* settled(service)
+      const catalog = yield* service.resourceCatalog()
+      expect(catalog.resources[0]?.uri).toBe("docs://after")
+      expect(catalog.templates[0]?.uriTemplate).toBe("after://{id}")
+      expect(server.state.resourceLists).toBe(2)
+      expect(server.state.templateLists).toBe(2)
+    }).pipe(Effect.provide(Mcp.layer()))
+  }),
+)
+
 shutdownIt.effect("discards in-flight and queued MCP notifications after its layer closes", () =>
   Effect.gen(function* () {
     const bus = yield* Bus.Service

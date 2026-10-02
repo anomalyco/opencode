@@ -26,13 +26,15 @@ import {
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
-import { Cause, Effect, Exit, Schema } from "effect"
+import { Cause, Clock, Deferred, Effect, Exit, Schema } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { McpStdio } from "./stdio.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
+// Collapse discovery bursts without keeping non-notifying servers stale for long.
+const RESOURCE_DISCOVERY_TTL = 5_000
 const DEFAULT_EXECUTION_TIMEOUT = 12 * 60 * 60 * 1_000 // 12 hours
 const TERMINATE_TIMEOUT = 1_000
 const toError = (error: unknown) => (error instanceof Error ? error : new Error(String(error)))
@@ -293,6 +295,28 @@ export const connect = Effect.fnUntraced(function* (
         Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
       )
 
+    const expired = () => (session.reported ? new SessionExpiredError({ server }) : undefined)
+    const resources = yield* discoveryCache(
+      request("list MCP resources", (signal) => client.listResources(undefined, { ...catalog, signal })).pipe(
+        Effect.map((r) => r.resources),
+      ),
+      expired,
+    )
+    const templates = yield* discoveryCache(
+      request("list MCP resource templates", (signal) =>
+        client.listResourceTemplates(undefined, { ...catalog, signal }),
+      ).pipe(Effect.map((r) => r.resourceTemplates)),
+      expired,
+    )
+    const invalidate = () => {
+      resources.invalidate()
+      templates.invalidate()
+    }
+    // Invalidate synchronously, before consumers fork their notification handling.
+    changed.resources = invalidate
+    client.onclose = invalidate
+    session.expired = invalidate
+
     return {
       modern: client.getProtocolEra() === "modern",
       instructions: client.getInstructions()?.trim() || undefined,
@@ -300,14 +324,8 @@ export const connect = Effect.fnUntraced(function* (
         request("list MCP tools", () => client.listTools(undefined, catalog)).pipe(Effect.map((r) => r.tools)),
       prompts: () =>
         request("list MCP prompts", () => client.listPrompts(undefined, catalog)).pipe(Effect.map((r) => r.prompts)),
-      resources: () =>
-        request("list MCP resources", () => client.listResources(undefined, catalog)).pipe(
-          Effect.map((r) => r.resources),
-        ),
-      resourceTemplates: () =>
-        request("list MCP resource templates", () => client.listResourceTemplates(undefined, catalog)).pipe(
-          Effect.map((r) => r.resourceTemplates),
-        ),
+      resources: () => resources.get,
+      resourceTemplates: () => templates.get,
       readResource: (input) => {
         if (!client.getServerCapabilities()?.resources) return Effect.succeed(undefined)
         return request("read MCP resource", (signal) =>
@@ -331,10 +349,16 @@ export const connect = Effect.fnUntraced(function* (
           ),
         ).pipe(Effect.map(toCallToolResult)),
       onClose: (callback) => {
-        client.onclose = () => callback(lastError ? `Connection closed: ${lastError}` : "Connection closed")
+        client.onclose = () => {
+          invalidate()
+          callback(lastError ? `Connection closed: ${lastError}` : "Connection closed")
+        }
       },
       onSessionExpired: (callback) => {
-        session.expired = callback
+        session.expired = () => {
+          invalidate()
+          callback()
+        }
       },
       onToolsChanged: (callback) => {
         changed.tools = callback
@@ -343,7 +367,10 @@ export const connect = Effect.fnUntraced(function* (
         changed.prompts = callback
       },
       onResourcesChanged: (callback) => {
-        changed.resources = callback
+        changed.resources = () => {
+          invalidate()
+          callback()
+        }
       },
     } satisfies Connection
   }
@@ -357,6 +384,50 @@ export const connect = Effect.fnUntraced(function* (
     })
   return yield* new ConnectError({ server, message: explain(error) })
 })
+
+// Each cache belongs to this connection's scope. A detached load may finish for its existing
+// readers, but cannot repopulate the cache after a notification or connection teardown.
+const discoveryCache = <A>(load: Effect.Effect<A, Error>, expired: () => SessionExpiredError | undefined) =>
+  Effect.gen(function* () {
+    const scope = yield* Effect.scope
+    const clock = yield* Clock.Clock
+    let current: { pending: Deferred.Deferred<A, Error>; expires?: number } | undefined
+    let closed = false
+    const invalidate = () => {
+      current = undefined
+    }
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        closed = true
+        invalidate()
+      }),
+    )
+    const get = Effect.suspend(() => {
+      if (closed) return Effect.fail(expired() ?? new Error("Connection closed"))
+      if (current && (current.expires === undefined || clock.currentTimeMillisUnsafe() < current.expires))
+        return Deferred.await(current.pending)
+      const entry: NonNullable<typeof current> = { pending: Deferred.makeUnsafe<A, Error>() }
+      current = entry
+      return load.pipe(
+        Effect.onExit((exit) =>
+          Effect.sync(() => {
+            if (current === entry && Exit.isSuccess(exit))
+              entry.expires = clock.currentTimeMillisUnsafe() + RESOURCE_DISCOVERY_TTL
+            if (current === entry && Exit.isFailure(exit)) invalidate()
+            // Session recovery closes this scope before the SDK failure necessarily reaches the
+            // loader. Preserve that known expiry for readers instead of propagating interruption.
+            const error = Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause) ? expired() : undefined
+            Deferred.doneUnsafe(entry.pending, error ? Exit.fail(error) : exit)
+          }),
+        ),
+        Effect.ignoreCause,
+        // One caller's cancellation must not cancel discovery for its other readers.
+        Effect.forkIn(scope, { startImmediately: true }),
+        Effect.andThen(Deferred.await(entry.pending)),
+      )
+    })
+    return { get, invalidate }
+  })
 
 // Absent config is legacy: the SDK sends the plain initialize handshake with no discover probe.
 function negotiation(protocol: ConfigMCP.Protocol | undefined): VersionNegotiationOptions | undefined {
