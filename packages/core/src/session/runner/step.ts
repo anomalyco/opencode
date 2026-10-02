@@ -25,6 +25,7 @@ import { SessionModelRequest } from "../model-request.js"
 import { SessionSchema } from "../schema.js"
 import { toSessionError } from "../to-session-error.js"
 import { SessionUsage } from "../usage.js"
+import type { InterruptReason } from "../execution.js"
 import { SessionRunnerModel } from "./model.js"
 import { createLLMEventPublisher } from "./publish-llm-event.js"
 import { SessionRunnerRetry } from "./retry.js"
@@ -43,6 +44,8 @@ export const Outcome = Data.taggedEnum<Outcome>()
 
 interface Input {
   readonly isLocationClosed: () => boolean
+  /** Reads the coordinator's recorded interruption cause; evaluated here at settlement, after the interrupt lands. */
+  readonly interruptionReason: Effect.Effect<InterruptReason | undefined>
   readonly sessionID: SessionSchema.ID
   readonly assistantMessageID: SessionMessage.ID
   readonly agent: Agent.ID
@@ -59,6 +62,10 @@ interface Input {
 }
 
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
+const TOOLS_INTERRUPTED_EVICTION = {
+  type: "aborted",
+  message: "Tool execution interrupted: location idle eviction",
+} as const
 const STEP_INTERRUPTED = { type: "aborted", message: "Step interrupted" } as const
 const RESULT_MISSING = { type: "tool.result-missing", message: "Provider did not return a tool result" } as const
 
@@ -199,15 +206,21 @@ export const make = Effect.gen(function* () {
         for (const decline of tools.declines)
           yield* publisher.failTool(decline.call.id, {
             type: "aborted",
-            message: input.isLocationClosed()
-              ? "Interaction cancelled because the location shut down"
-              : decline.reason._tag === "QuestionTool.CancelledError"
+            // A question cancellation carries its own truthful message (with the pending
+            // content); it outranks the closed-location blanket. Other declines keep it.
+            message:
+              decline.reason._tag === "QuestionTool.CancelledError"
                 ? decline.reason.message
-                : "The user declined this tool call",
+                : input.isLocationClosed()
+                  ? "Interaction cancelled because the location shut down"
+                  : "The user declined this tool call",
           })
         const interrupted = tools.declines.length > 0 || streamInterrupted || tools.interrupted
         const toolFailure = interrupted
-          ? TOOLS_INTERRUPTED
+          ? // Other causes keep the blanket wording; only eviction is distinguishable today.
+            (yield* input.interruptionReason) === "inactivity"
+            ? TOOLS_INTERRUPTED_EVICTION
+            : TOOLS_INTERRUPTED
           : tools.failure !== undefined
             ? toSessionError(Cause.squash(tools.failure))
             : recorded.providerFailed

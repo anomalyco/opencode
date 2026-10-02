@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Context, Deferred, Duration, Effect, Fiber, Layer, LayerMap, RcMap, Schema } from "effect"
+import { Context, Deferred, Duration, Effect, Exit, Fiber, Layer, LayerMap, MutableHashMap, Option, RcMap, Schema } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -24,48 +24,76 @@ import { testEffect } from "./lib/effect"
 
 // Keep real execution ownership, location caching, forms, and eviction. The fixture
 // runner waits on a form instead of making a model request before asking a question.
+// The build record + closeForms hook mirrors production's buildLocationServiceMap: the
+// entry's forms close receives the invalidate cause (the scope finalizer cannot).
 const locations = Layer.effect(
   LocationServiceMap.Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const builds = MutableHashMap.empty<
+      Location.Ref,
+      { closeForms?: (options?: Form.CloseOptions) => Effect.Effect<void> }
+    >()
     const map = yield* LayerMap.make(
-      (ref: Location.Ref) =>
-        // The fixture only exercises these three Location services.
-        // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-        Layer.merge(
-          Layer.succeed(
-            Location.Service,
-            Location.Service.of({
-              directory: ref.directory,
-              workspaceID: ref.workspaceID,
-              project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
-            }),
-          ),
-          Layer.effect(
-            SessionRunner.Service,
-            Effect.gen(function* () {
-              const forms = yield* Form.Service
-              return SessionRunner.Service.of({
-                drain: ({ sessionID }) =>
-                  forms
-                    .ask({
-                      sessionID,
-                      title: "Questions",
-                      fields: [{ key: "runtime", type: "string" }],
+      (ref: Location.Ref) => {
+        const build: { closeForms?: (options?: Form.CloseOptions) => Effect.Effect<void> } = {}
+        MutableHashMap.set(builds, ref, build)
+        return Layer.fromBuild((memoMap, scope) =>
+          Effect.suspend(() =>
+            Layer.buildWithMemoMap(
+              // The fixture only exercises these three Location services.
+              // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+              Layer.merge(
+                Layer.succeed(
+                  Location.Service,
+                  Location.Service.of({
+                    directory: ref.directory,
+                    workspaceID: ref.workspaceID,
+                    project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
+                  }),
+                ),
+                Layer.effect(
+                  SessionRunner.Service,
+                  Effect.gen(function* () {
+                    const forms = yield* Form.Service
+                    return SessionRunner.Service.of({
+                      drain: ({ sessionID }) =>
+                        forms
+                          .ask({
+                            sessionID,
+                            title: "Questions",
+                            fields: [{ key: "runtime", type: "string" }],
+                          })
+                          .pipe(
+                            Effect.orDie,
+                            Effect.as(SessionRunner.DrainResult.Complete()),
+                            Effect.onInterrupt(() => Effect.sleep("5 minutes")),
+                          ),
                     })
-                    .pipe(
-                      Effect.orDie,
-                      Effect.as(SessionRunner.DrainResult.Complete()),
-                      Effect.onInterrupt(() => Effect.sleep("5 minutes")),
-                    ),
-              })
+                  }),
+                ),
+              ).pipe(
+                Layer.provideMerge(Form.layer),
+                Layer.provide(Layer.succeed(Bus.Service, bus)),
+                Layer.fresh,
+              ) as unknown as Layer.Layer<LocationServices>,
+              memoMap,
+              scope,
+            ),
+          ).pipe(
+            Effect.onExit((exit) => {
+              if (Exit.isSuccess(exit)) {
+                const forms = Context.get(exit.value, Form.Service)
+                build.closeForms = (options) => forms.close(options)
+                return Effect.void
+              }
+              if (Option.getOrUndefined(MutableHashMap.get(builds, ref)) !== build) return Effect.void
+              MutableHashMap.remove(builds, ref)
+              return Effect.void
             }),
           ),
-        ).pipe(
-          Layer.provideMerge(Form.layer),
-          Layer.provide(Layer.succeed(Bus.Service, bus)),
-          Layer.fresh,
-        ) as unknown as Layer.Layer<LocationServices>,
+        )
+      },
       { idleTimeToLive: Duration.infinity },
     )
     return {
@@ -73,7 +101,15 @@ const locations = Layer.effect(
       get: (ref: Location.Ref) => map.get(LocationServiceMap.canonical(ref)),
       contextEffect: (ref: Location.Ref) => map.contextEffect(LocationServiceMap.canonical(ref)),
       contextEffectOption: (ref: Location.Ref) => map.contextEffectOption(LocationServiceMap.canonical(ref)),
-      invalidate: (ref: Location.Ref) => map.invalidate(LocationServiceMap.canonical(ref)),
+      invalidate: (ref: Location.Ref, options?: Form.CloseOptions) => {
+        const key = LocationServiceMap.canonical(ref)
+        const build = Option.getOrUndefined(MutableHashMap.get(builds, key))
+        // Mirror production: a cause-carrying invalidate cancels pending forms with the
+        // cause before detaching the entry, so the scope finalizer never bare-cancels.
+        if (options?.cause !== undefined)
+          return (build?.closeForms?.(options) ?? Effect.void).pipe(Effect.andThen(() => map.invalidate(key)))
+        return map.invalidate(key).pipe(Effect.andThen(build?.closeForms?.(options) ?? Effect.void))
+      },
     }
   }),
 )
@@ -218,4 +254,31 @@ describe("LocationActivity eviction", () => {
         }),
     )
   }
+
+  it.effect("cancels an idle location's pending form with the eviction cause on the close path", () =>
+    Effect.gen(function* () {
+      const map = yield* LocationServiceMap.Service
+      const ref = LocationServiceMap.canonical({ directory: AbsolutePath.make("/project") })
+      const context = yield* map.contextEffect(ref).pipe(Effect.scoped)
+      const forms = Context.get(context, Form.Service)
+      // No execution owns this form (the elicitation shape): the sweep finds no
+      // owner, so the close path — not an interrupt — cancels it.
+      const created = yield* forms.create({
+        sessionID: Session.ID.make("ses_idle_question"),
+        title: "Questions",
+        fields: [{ key: "runtime", title: "Runtime", description: "Which runtime?", type: "string" }],
+      })
+
+      yield* TestClock.adjust("62 minutes")
+
+      const state = yield* forms.state(created.id)
+      expect(state).toMatchObject({ status: "cancelled", cause: "evicted" })
+      expect(state).toHaveProperty(
+        "message",
+        expect.stringContaining("The location was evicted for inactivity before this form received a reply"),
+      )
+      expect(state).toHaveProperty("message", expect.stringContaining('"Which runtime?"'))
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
+    }),
+  )
 })

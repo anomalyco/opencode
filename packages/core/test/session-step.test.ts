@@ -101,6 +101,7 @@ for (const fixture of [
       const result = yield* steps
         .attempt({
           isLocationClosed: () => false,
+          interruptionReason: Effect.succeed(undefined),
           sessionID,
           assistantMessageID,
           agent: Agent.defaultID,

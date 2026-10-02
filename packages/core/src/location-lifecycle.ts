@@ -16,7 +16,10 @@ const isSessionEvent = Schema.is(SessionEvent.Durable)
 
 export class Service extends Context.Service<
   Service,
-  { readonly isClosed: () => boolean; readonly shutdown: Effect.Effect<void> }
+  {
+    readonly isClosed: () => boolean
+    readonly shutdown: (options?: Form.CloseOptions) => Effect.Effect<void>
+  }
 >()("@opencode/LocationLifecycle") {}
 
 const layer = Layer.effect(
@@ -39,21 +42,25 @@ const layer = Layer.effect(
     })
     yield* Effect.addFinalizer(() => unsubscribe)
     let closed = false
-    const shutdown = yield* Effect.cached(
-      Effect.gen(function* () {
+    // The close happens once: the first invocation fixes the cause. The instance
+    // finalizer and the invalidate close hook share this guard.
+    const shutdown = (options?: Form.CloseOptions) =>
+      Effect.suspend(() => {
+        if (closed) return Effect.void
         closed = true
-        yield* permission.close
-        yield* forms.close
-        yield* rpc.close
-        yield* bus.publish(
-          LocationEvent.Shutdown,
-          {},
-          {
-            location: Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
-          },
-        )
-      }).pipe(Effect.uninterruptible),
-    )
+        return Effect.gen(function* () {
+          yield* permission.close
+          yield* forms.close(options)
+          yield* rpc.close
+          yield* bus.publish(
+            LocationEvent.Shutdown,
+            {},
+            {
+              location: Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
+            },
+          )
+        }).pipe(Effect.uninterruptible)
+      })
     return Service.of({
       isClosed: () => closed,
       shutdown,

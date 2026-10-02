@@ -19,6 +19,8 @@ const assertions: Permission.AssertInput[] = []
 let captured: Form.CreateInput | undefined
 let reject = false
 let deny = false
+let cancelCause: "evicted" | undefined
+let cancelMessage: string | undefined
 const capturedInput = () => captured
 const questionInput = {
   questions: [
@@ -53,7 +55,13 @@ const form = Layer.mock(Form.Service, {
       Effect.andThen(
         Effect.sync(
           (): Form.TerminalState =>
-            reject ? { status: "cancelled" } : { status: "answered", answer: { q0: "Build", q1: ["Dev"] } },
+            reject
+              ? {
+                  status: "cancelled",
+                  ...(cancelCause === undefined ? {} : { cause: cancelCause }),
+                  ...(cancelMessage === undefined ? {} : { message: cancelMessage }),
+                }
+              : { status: "answered", answer: { q0: "Build", q1: ["Dev"] } },
         ),
       ),
     ),
@@ -256,8 +264,69 @@ describe("QuestionTool", () => {
       if (Exit.isFailure(exit)) {
         const error = Cause.squash(exit.cause)
         expect(error).toBeInstanceOf(QuestionTool.CancelledError)
-        expect(error).toHaveProperty("message", "The user dismissed this question")
+        // The dismissal detail names the pending content, so the declines message is never
+        // content-free; the fixed class message stays the default when no detail is set.
+        expect(error).toHaveProperty("message", expect.stringContaining("The user dismissed this question"))
+        expect(error).toHaveProperty("message", expect.stringContaining('"Continue"="Continue?"'))
       }
+    }),
+  )
+
+  it.effect("reports the eviction cause with the pending question content", () =>
+    Effect.gen(function* () {
+      captured = undefined
+      reject = true
+      deny = false
+      cancelCause = "evicted"
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          cancelCause = undefined
+        }),
+      )
+      const registryService = yield* Tool.Service
+      const fiber = yield* executeTool(registryService, {
+        sessionID,
+        ...toolIdentity,
+        call: { type: "tool-call", id: "call-question", name: "question", input: questionInput },
+      }).pipe(Effect.forkScoped)
+
+      const exit = yield* Fiber.await(fiber)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(QuestionTool.CancelledError)
+        expect(error).toHaveProperty(
+          "message",
+          expect.stringContaining("the location was evicted for inactivity"),
+        )
+        expect(error).toHaveProperty("message", expect.stringContaining('"Continue"="Continue?"'))
+      }
+    }),
+  )
+
+  it.effect("surfaces a client-provided cancellation message as model-facing feedback", () =>
+    Effect.gen(function* () {
+      captured = undefined
+      reject = true
+      deny = false
+      cancelMessage = "Nobody is watching the session"
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          cancelMessage = undefined
+        }),
+      )
+      const registryService = yield* Tool.Service
+
+      expect(
+        yield* executeTool(registryService, {
+          sessionID,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-question", name: "question", input: questionInput },
+        }),
+      ).toEqual({
+        status: "error",
+        error: { type: "tool.execution", message: "Nobody is watching the session" },
+      })
     }),
   )
 })

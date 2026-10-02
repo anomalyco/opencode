@@ -5,6 +5,7 @@ import { Context, Data, Effect } from "effect"
 import { SessionSchema } from "../schema.js"
 import type { Promotable } from "../inbox.js"
 import type { AgentNotFoundError, MessageDecodeError, StepFailedError } from "../error.js"
+import type { InterruptReason } from "../execution.js"
 import { SessionRunnerModel } from "./model.js"
 import type { Instructions } from "../../instructions/index.js"
 
@@ -34,6 +35,8 @@ export interface Interface {
     readonly continuation?: Continuation
     /** "steer" settles the active intent without promoting queued next-turn work. */
     readonly promotable?: Promotable
+    /** Reads the caller's recorded interruption cause; absent for direct drains with no coordinator. */
+    readonly interruptionReason?: Effect.Effect<InterruptReason | undefined>
   }) => Effect.Effect<DrainResult, RunError>
 }
 

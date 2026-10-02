@@ -78,7 +78,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
               yield* Effect.logInfo("location services evicted", {
                 directory: entry.ref.directory,
                 workspaceID: entry.ref.workspaceID,
-              }).pipe(Effect.andThen(locations.invalidate(entry.ref)))
+              }).pipe(Effect.andThen(locations.invalidate(entry.ref, { cause: "evicted" })))
             }),
           { discard: true, concurrency: "unbounded" },
         )

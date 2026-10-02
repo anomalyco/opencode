@@ -7,6 +7,19 @@ import { Bus } from "./bus.js"
 
 const RETENTION = Duration.minutes(10)
 
+// Client-facing close messages must stay bounded for UI surfaces.
+const CLOSE_MESSAGE_CAP = 160
+
+function truncate(text: string, cap: number): string {
+  return text.length > cap ? `${text.slice(0, cap)}…` : text
+}
+
+// Identifies the pending content the way toField filled it: the field's question
+// text when present, else its title, else its key.
+function describePendingContent(form: Info): string {
+  return form.fields.map((field) => `"${field.description ?? field.title ?? field.key}"`).join("; ")
+}
+
 export const ID = Form.ID
 export type ID = typeof ID.Type
 
@@ -76,6 +89,13 @@ export interface ReplyInput {
 
 export interface CancelOptions {
   readonly message?: string
+  /** Why the form is being cancelled by the close path; absent for caller-initiated cancels. */
+  readonly cause?: "evicted"
+}
+
+export interface CloseOptions {
+  /** Why the close path is cancelling pending forms; absent for teardown without a known cause. */
+  readonly cause?: "evicted"
 }
 
 export interface ListInput {
@@ -83,7 +103,7 @@ export interface ListInput {
 }
 
 export interface Interface {
-  readonly close: Effect.Effect<void>
+  readonly close: (options?: CloseOptions) => Effect.Effect<void>
   readonly create: (input: CreateInput) => Effect.Effect<Info, AlreadyExistsError | InvalidFormError>
   readonly ask: (input: CreateInput) => Effect.Effect<TerminalState, AlreadyExistsError | InvalidFormError>
   readonly get: (id: ID) => Effect.Effect<Info, NotFoundError>
@@ -204,6 +224,7 @@ export const layer = Layer.effect(
           const next: TerminalState = {
             status: "cancelled",
             ...(options?.message === undefined ? {} : { message: options.message }),
+            ...(options?.cause === undefined ? {} : { cause: options.cause }),
           }
           yield* bus.publish(Form.Event.Cancelled, { id, sessionID: entry.form.sessionID })
           yield* Cache.set(forms, id, { ...entry, state: next })
@@ -212,19 +233,31 @@ export const layer = Layer.effect(
       ),
     )
 
-    const close = Effect.sync(() => {
-      closed = true
-    }).pipe(
-      Effect.andThen(Cache.values(forms)),
-      Effect.flatMap((entries) =>
-        Effect.forEach(
-          Array.from(entries).filter((entry) => entry.state.status === "pending"),
-          (entry) => cancel(entry.form.id).pipe(Effect.ignore),
-          { discard: true },
+    const close = (options?: CloseOptions) =>
+      Effect.sync(() => {
+        closed = true
+      }).pipe(
+        Effect.andThen(Cache.values(forms)),
+        Effect.flatMap((entries) =>
+          Effect.forEach(
+            Array.from(entries).filter((entry) => entry.state.status === "pending"),
+            (entry) =>
+              cancel(entry.form.id, {
+                ...(options?.cause === undefined
+                  ? {}
+                  : {
+                      cause: options.cause,
+                      message: truncate(
+                        `The location was evicted for inactivity before this form received a reply ("${entry.form.title}": ${describePendingContent(entry.form)})`,
+                        CLOSE_MESSAGE_CAP,
+                      ),
+                    }),
+              }).pipe(Effect.ignore),
+            { discard: true },
+          ),
         ),
-      ),
-    )
-    yield* Effect.addFinalizer(() => close)
+      )
+    yield* Effect.addFinalizer(() => close())
 
     return Service.of({ create, ask, get, list, state, reply, cancel, close })
   }),

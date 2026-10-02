@@ -150,7 +150,12 @@ export const State = Schema.Union([
   Schema.Struct({ status: Schema.Literal("pending") }),
   Schema.Struct({ status: Schema.Literal("answered"), answer: Answer }),
   // A message tells the asker why nobody answered, e.g. a non-interactive client.
-  Schema.Struct({ status: Schema.Literal("cancelled"), message: Schema.String.pipe(optional) }),
+  // A cause records the close-path event that cancelled the form, e.g. idle eviction.
+  Schema.Struct({
+    status: Schema.Literal("cancelled"),
+    message: Schema.String.pipe(optional),
+    cause: Schema.Literal("evicted").pipe(optional),
+  }),
 ])
   .pipe(Schema.toTaggedUnion("status"))
   .annotate({ identifier: "Form.State" })

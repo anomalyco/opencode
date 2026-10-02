@@ -6,6 +6,7 @@ import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
+import type { InterruptReason } from "../execution.js"
 import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
@@ -58,6 +59,8 @@ const layer = Layer.effect(
       let step = input.continuation?.step ?? 1
       let entering = true
       const promotable = input.promotable ?? "input"
+      // Cause reads happen at settlement time; the accessor is bound per drain call.
+      const interruptionReason = input.interruptionReason ?? Effect.succeed(undefined)
       if (!force && !continuing) {
         const pending = yield* SessionInbox.nextPromotable(db, sessionID, "input")
         if (!pending) return DrainResult.Complete()
@@ -188,7 +191,7 @@ const layer = Layer.effect(
       while (true) {
         const next = yield* advanceToStep()
         if (next._tag !== "Ready") return next
-        continuing = yield* runStep(next.context, step)
+        continuing = yield* runStep(next.context, step, interruptionReason)
         step++
         force = false
         entering = false
@@ -203,7 +206,11 @@ const layer = Layer.effect(
     })
 
     /** Owns logical Step policy; each attempt owns its streaming, tools, and durable settlement. */
-    const runStep = Effect.fn("SessionRunner.runStep")(function* (first: SessionContext.Loaded, step: number) {
+    const runStep = Effect.fn("SessionRunner.runStep")(function* (
+      first: SessionContext.Loaded,
+      step: number,
+      interruptionReason: Effect.Effect<InterruptReason | undefined>,
+    ) {
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
       const retry = yield* SessionRunnerRetry.make(bus, sessionID)
@@ -244,6 +251,8 @@ const layer = Layer.effect(
         })
         const outcome = yield* steps.attempt({
           isLocationClosed: lifecycle.isClosed,
+          // Read at settlement time inside the attempt: the interrupt lands mid-step.
+          interruptionReason,
           sessionID,
           assistantMessageID,
           agent: loaded.agent.id,
