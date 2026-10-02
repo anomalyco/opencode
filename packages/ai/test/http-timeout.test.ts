@@ -49,6 +49,31 @@ const stalledServer = Effect.gen(function* () {
   return { layer, stalled, resume: () => resume() }
 })
 
+// Sends one content chunk, then only what the test asks for. Lets a test prove
+// that bytes framing drops, such as SSE comment keepalives, are not progress.
+const heartbeatServer = Effect.gen(function* () {
+  const started = yield* Deferred.make<void>()
+  const encoder = new TextEncoder()
+  let emit = (_text: string) => {}
+  const layer = dynamicResponse((input) =>
+    Effect.sync(() =>
+      input.respond(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            emit = (text) => controller.enqueue(encoder.encode(text))
+            emit(sseRaw(`data: ${JSON.stringify(deltaChunk({ content: "Hi" }))}`))
+          },
+          pull() {
+            Deferred.doneUnsafe(started, Effect.void)
+          },
+        }),
+        SSE,
+      ),
+    ),
+  )
+  return { layer, started, emit: (text: string) => emit(text) }
+})
+
 describe("HTTP transport timeouts", () => {
   it.effect("fails when response headers take longer than five minutes", () =>
     Effect.gen(function* () {
@@ -84,6 +109,31 @@ describe("HTTP transport timeouts", () => {
 
       expect(error.reason).toMatchObject({ _tag: "Transport", transport: "http", operation: "read", code: "Timeout" })
       expect(error.reason.http).toMatchObject({ status: 200 })
+    }),
+  )
+
+  it.effect("ignores SSE comment keepalives when bounding a stalled stream", () =>
+    Effect.gen(function* () {
+      const server = yield* heartbeatServer
+      const fiber = yield* LLMClient.generate(
+        LLM.request({ model, prompt: "Hello", http: { chunkTimeout: 20_000 } }),
+      ).pipe(Effect.provide(server.layer), Effect.flip, Effect.forkChild({ startImmediately: true }))
+      yield* Deferred.await(server.started)
+      yield* Effect.yieldNow
+      // A comment every 10s keeps the socket warm without carrying progress, so
+      // the 20s chunk bound must still fire.
+      yield* TestClock.adjust("10 seconds")
+      server.emit(sseRaw(": keepalive"))
+      yield* Effect.yieldNow
+      yield* TestClock.adjust("10 seconds")
+      const error = yield* Fiber.join(fiber)
+
+      expect(error.reason).toMatchObject({
+        _tag: "Transport",
+        transport: "http",
+        operation: "read",
+        code: "Timeout",
+      })
     }),
   )
 
