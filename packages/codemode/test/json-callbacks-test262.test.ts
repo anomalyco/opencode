@@ -210,11 +210,14 @@ describe("Test262 JSON.stringify replacer adaptations", () => {
 })
 
 describe("CodeMode JSON callback boundaries", () => {
-  test("this remains unsupported rather than exposing callback holders", async () => {
-    const result = await Effect.runPromise(
-      CodeMode.execute({ code: `return JSON.parse("1", function (key, item) { return this })`, tools: {} }),
-    )
-    expect(result).toMatchObject({ ok: false, error: { kind: "UnsupportedSyntax" } })
+  test("revivers and replacers see the holder as this", async () => {
+    expect(
+      await value(`
+        const revived = JSON.parse('{"a":{"b":1}}', function (key, item) { return key === "b" ? this.b + 1 : item })
+        const text = JSON.stringify({ a: 1, b: 2 }, function (key, item) { return key === "a" ? this.b : item })
+        return [revived, text]
+      `),
+    ).toEqual([{ a: { b: 2 } }, '{"a":2,"b":2}'])
   })
 
   test("prototype-named keys parse as own data and reach the reviver", async () => {

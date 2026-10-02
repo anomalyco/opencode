@@ -152,7 +152,7 @@ export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Ser
   const replacements: LayerNode.Replacements = [
     ...(options.discovery === false ? vanillaReplacements : []),
     ...(options.replacements ?? []),
-    Location.node.replace(Location.boundNode(ref, { discovery: options.discovery })),
+    Location.node.replace(Location.boundNode(ref)),
     InstancePlugins.node.replace(InstancePlugins.bound(options.plugins ?? [])),
   ]
 

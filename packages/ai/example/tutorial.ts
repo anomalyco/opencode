@@ -1,18 +1,7 @@
-import { Config, Effect, Formatter, Layer, Schema, Stream } from "effect"
+import { Config, Effect, Formatter, Schema, Stream } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
-import {
-  Image,
-  ImageClient,
-  LLM,
-  LLMClient,
-  LLMRequest,
-  Media,
-  Message,
-  ProviderID,
-  Tool,
-  ToolRuntime,
-} from "@opencode/ai"
-import { Route, Auth, Endpoint, Framing, Protocol, RequestExecutor } from "@opencode/ai/route"
+import { AIClient, Image, LLM, LLMRequest, Media, Message, ProviderID, Tool, ToolRuntime } from "@opencode/ai"
+import { Route, Auth, Endpoint, Framing, Protocol } from "@opencode/ai/route"
 import { OpenAI } from "@opencode/ai/providers"
 
 /**
@@ -243,12 +232,10 @@ const generateImage = Effect.gen(function* () {
   yield* Media.write(response.image, "tutorial-image.jpg").pipe(Effect.provide(NodeFileSystem.layer))
 })
 
-// Provide the LLM runtime and the HTTP request executor once. Keep one path
-// enabled at a time so the tutorial can demonstrate generate, stream, or
+// Provide every modality client and the HTTP request executor once with
+// `AIClient.layer` (`AIClient.layerWith(executor)` swaps the executor). Keep one
+// path enabled at a time so the tutorial can demonstrate generate, stream, or
 // tool-loop behavior without spending tokens on every example.
-const requestExecutorLayer = RequestExecutor.fetchLayer
-const llmClientLayer = LLMClient.layer.pipe(Layer.provide(requestExecutorLayer))
-const imageClientLayer = ImageClient.layer.pipe(Layer.provide(requestExecutorLayer))
 
 const program = Effect.gen(function* () {
   // yield* generateOnce
@@ -257,6 +244,6 @@ const program = Effect.gen(function* () {
   // yield* generateDynamicObject.pipe(Effect.andThen((response) => Effect.sync(() => console.log(response.object))))
   // yield* generateImage
   yield* streamWithTools
-}).pipe(Effect.provide(Layer.mergeAll(requestExecutorLayer, llmClientLayer, imageClientLayer)))
+}).pipe(Effect.provide(AIClient.layer))
 
 Effect.runPromise(program)

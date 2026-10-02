@@ -1,11 +1,13 @@
 import { Global } from "@opencode/util/global"
 import { AppProcess } from "@opencode/util/process"
+import { EffectFlock } from "@opencode/util/effect-flock"
 import { OPENCODE_ARTIFACT, OPENCODE_CHANNEL, OPENCODE_LOCAL, OPENCODE_VERSION } from "../version"
 import { Context, Duration, Effect, FileSystem, Layer, Option, Ref, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { parse, type ParseError } from "jsonc-parser"
 import path from "node:path"
 import { stripVTControlCharacters } from "node:util"
+import { RetainedImage } from "./retained-image"
 import { action, parseReleaseVersion, type Policy } from "./updater-action"
 import { errorMessage } from "../util/error"
 
@@ -96,7 +98,7 @@ export interface Interface {
   readonly check: () => Effect.Effect<CheckResult | undefined, Error>
   readonly apply: (version: string) => Effect.Effect<void, Error>
   readonly method: () => Effect.Effect<Method | undefined>
-  readonly latest: () => Effect.Effect<string, Error>
+  readonly latest: (method?: Method) => Effect.Effect<string, Error>
   readonly upgrade: (method: Method, version: string) => Effect.Effect<void, Error>
   readonly removal: (
     method: Method,
@@ -126,10 +128,11 @@ const make = Effect.gen(function* () {
   const fs = yield* FileSystem.FileSystem
   const global = yield* Global.Service
   const appProcess = yield* AppProcess.Service
+  const flock = yield* EffectFlock.Service
   const installedVersion = yield* Ref.make(OPENCODE_VERSION)
   const channel = OPENCODE_CHANNEL.replace(/[^a-zA-Z0-9._-]/g, "-")
+  const executable = yield* fs.realPath(process.execPath).pipe(Effect.orElseSucceed(() => process.execPath))
   const installedPackage = yield* Effect.gen(function* () {
-    const executable = yield* fs.realPath(process.execPath)
     const directory = path.dirname(path.dirname(executable))
     const manifest: { name: string; bin?: Record<string, string> } = yield* fs
       .readFileString(path.join(directory, "package.json"))
@@ -139,6 +142,10 @@ const make = Effect.gen(function* () {
     if (Object.values(manifest.bin ?? {}).some((bin) => path.resolve(directory, bin) === executable))
       return manifest.name
   }).pipe(Effect.orElseSucceed(() => undefined))
+  // "opencode" is Homebrew Core's formula; the others are published to anomalyco/tap.
+  const installedFormula = ["opencode", "opencode-beta", "opencode-v2"].find((name) =>
+    executable.includes(`${path.sep}Cellar${path.sep}${name}${path.sep}`),
+  )
 
   const readPolicy = Effect.fnUntraced(function* () {
     const values = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
@@ -166,21 +173,16 @@ const make = Effect.gen(function* () {
       )
   })
 
+  const curlBinary = path.resolve(
+    global.home,
+    ".opencode",
+    "bin",
+    process.platform === "win32" ? "opencode.exe" : "opencode",
+  )
+
   const method = Effect.fnUntraced(function* () {
-    const binary = path.join(
-      global.home,
-      ".opencode",
-      "bin",
-      process.platform === "win32" ? "opencode.exe" : "opencode",
-    )
-    if (path.resolve(process.execPath) === path.resolve(binary)) return "curl"
-    const executable = yield* fs.realPath(process.execPath).pipe(Effect.orElseSucceed(() => process.execPath))
-    if (
-      ["opencode-beta", "opencode-v2"].some((name) =>
-        executable.includes(`${path.sep}Cellar${path.sep}${name}${path.sep}`),
-      )
-    )
-      return "brew"
+    if (path.resolve(process.execPath) === curlBinary) return "curl"
+    if (installedFormula) return "brew"
     if (!installedPackage) return
 
     const checks: ReadonlyArray<{ method: Method; command: string[] }> = [
@@ -220,18 +222,26 @@ const make = Effect.gen(function* () {
     const command = commands[method]
     return {
       command,
-      run: exec(command, "5 minutes").pipe(
-        Effect.flatMap((result) => (result.code === 0 ? Effect.void : Effect.fail(new Error(resultDetail(result))))),
+      run: retaining(
+        method,
+        exec(command, "5 minutes").pipe(
+          Effect.flatMap((result) => (result.code === 0 ? Effect.void : Effect.fail(new Error(resultDetail(result))))),
+        ),
+        global.tmp,
       ),
     }
   }
 
   const release = Effect.fnUntraced(function* (method?: Method) {
     const distribution = method === "brew" ? "homebrew" : "npm"
+    // Homebrew Core builds its formula on its own schedule, so the tap release does not describe it.
+    const core = method === "brew" && installedFormula === "opencode"
     const response = yield* Effect.tryPromise({
       try: (signal) =>
         fetch(
-          `https://opencode.ai/update/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/${distribution}?current=${encodeURIComponent(OPENCODE_VERSION)}`,
+          core
+            ? "https://formulae.brew.sh/api/formula/opencode.json"
+            : `https://opencode.ai/update/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/${distribution}?current=${encodeURIComponent(OPENCODE_VERSION)}`,
           {
             signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
           },
@@ -254,19 +264,22 @@ const make = Effect.gen(function* () {
           retry: "Try again in a few minutes.",
         }),
       )
-    const data: { version: string; metadata?: { package?: string } } = yield* Effect.tryPromise({
-      try: () => response.json(),
-      catch: (cause) =>
-        new UpgradeError(
-          {
-            title: "Could not read the OpenCode update information",
-            detail: errorDetail(cause),
-            retry: "Try again in a few minutes.",
-          },
-          { cause },
-        ),
-    })
-    if (!data.metadata?.package)
+    const data: { version?: string; metadata?: { package?: string }; versions?: { stable?: string } } =
+      yield* Effect.tryPromise({
+        try: () => response.json(),
+        catch: (cause) =>
+          new UpgradeError(
+            {
+              title: "Could not read the OpenCode update information",
+              detail: errorDetail(cause),
+              retry: "Try again in a few minutes.",
+            },
+            { cause },
+          ),
+      })
+    const version = core ? data.versions?.stable : data.version
+    const packageName = core ? "opencode" : data.metadata?.package
+    if (!version || !packageName)
       return yield* Effect.fail(
         new UpgradeError({
           title: "Could not read the OpenCode update information",
@@ -274,11 +287,11 @@ const make = Effect.gen(function* () {
           retry: "Try again in a few minutes.",
         }),
       )
-    return { package: data.metadata.package, version: data.version }
+    return { package: packageName, version }
   })
 
-  const latest = () =>
-    method().pipe(
+  const latest = (selected?: Method) =>
+    (selected ? Effect.succeed(selected) : method()).pipe(
       Effect.flatMap(release),
       Effect.map((data) => data.version),
     )
@@ -287,6 +300,19 @@ const make = Effect.gen(function* () {
     Effect.acquireRelease(fs.makeTempDirectory({ directory: global.cache, prefix }), (directory) =>
       fs.remove(directory, { recursive: true, force: true }).pipe(Effect.ignore),
     )
+
+  // On Windows the installer must delete or replace the running binary, which only works
+  // while another link to it exists (see RetainedImage). Upgrades keep that link in the
+  // cache; uninstall has already removed the cache, so it uses the temporary directory.
+  const retaining = <A, E, R>(method: Method, effect: Effect.Effect<A, E, R>, directory = global.cache) => {
+    if (process.platform !== "win32" || method === "brew") return effect
+    // Only the installed binary is at stake; source checkouts run inside bun or node.
+    const owned = method === "curl" ? path.resolve(process.execPath) === curlBinary : installedPackage !== undefined
+    if (!owned) return effect
+    return Effect.scoped(RetainedImage.retain(directory, "upgrade").pipe(Effect.andThen(effect))).pipe(
+      Effect.provideService(FileSystem.FileSystem, fs),
+    )
+  }
 
   const runUpgrade = (input: {
     readonly method: Method
@@ -325,7 +351,8 @@ const make = Effect.gen(function* () {
   const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
     if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
     const version = input.trim().replace(/^v/, "")
-    const packageName = (yield* release(method)).package
+    const packageName =
+      method === "brew" && installedFormula === "opencode" ? "opencode" : (yield* release(method)).package
     const target = `${packageName}@${version}`
     if (installedPackage && packageName !== installedPackage && (method === "pnpm" || method === "yarn")) {
       return yield* Effect.fail(new Error(`Reinstall ${target} with ${method} to migrate from ${installedPackage}.`))
@@ -351,15 +378,21 @@ const make = Effect.gen(function* () {
     }
     yield* Effect.scoped(
       Effect.gen(function* () {
+        // Other OpenCode processes may be installing at the same time. Wait longer than the
+        // slowest install (curl runs two 5-minute commands).
+        yield* flock.acquire("cli-upgrade", undefined, { timeoutMs: Duration.toMillis("15 minutes") })
         if (method === "bun") {
           // Bun does not prune old versions from its shared package cache.
           yield* fs.makeDirectory(global.cache, { recursive: true })
           const cache = yield* temporaryDirectory("update-")
-          return yield* runUpgrade({
+          return yield* retaining(
             method,
-            command: ["bun", "install", "--global", "--trust", "--cache-dir", cache, target],
-            displayCommand: ["bun", "install", "--global", "--trust", target],
-          })
+            runUpgrade({
+              method,
+              command: ["bun", "install", "--global", "--trust", "--cache-dir", cache, target],
+              displayCommand: ["bun", "install", "--global", "--trust", target],
+            }),
+          )
         }
         if (method === "curl") {
           yield* fs.makeDirectory(global.cache, { recursive: true })
@@ -372,15 +405,18 @@ const make = Effect.gen(function* () {
             title: "Could not download the OpenCode installer",
             retry: "Check your network, then run opencode upgrade again.",
           })
-          return yield* runUpgrade({
+          return yield* retaining(
             method,
-            command: ["bash", installer, "--version", version, "--no-modify-path"],
-            displayCommand: ["opencode", "upgrade", version, "--method", "curl"],
-            title: "The OpenCode installer failed",
-          })
+            runUpgrade({
+              method,
+              command: ["bash", installer, "--version", version, "--no-modify-path"],
+              displayCommand: ["opencode", "upgrade", version, "--method", "curl"],
+              title: "The OpenCode installer failed",
+            }),
+          )
         }
         if (method === "brew") return yield* runUpgrade({ method, command: ["brew", "upgrade", packageName] })
-        return yield* runUpgrade({ method, command: commands[method] })
+        return yield* retaining(method, runUpgrade({ method, command: commands[method] }))
       }),
     ).pipe(
       Effect.mapError((cause) =>

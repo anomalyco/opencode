@@ -103,6 +103,29 @@ const provider = (input: Partial<VcsDefinition> = {}) =>
   }) satisfies VcsDefinition
 
 describe("Vcs", () => {
+  it.live("routes initialization through the requested provider before a repository exists", () =>
+    withTmp((directory) =>
+      Effect.gen(function* () {
+        const vcs = yield* Vcs.Service
+        const calls: string[] = []
+        yield* vcs.transform((editor) => {
+          editor.add(provider({ id: "read-only" }))
+          editor.add(
+            provider({
+              id: "custom",
+              init: (input) => Effect.sync(() => void calls.push(input.worktree)),
+            }),
+          )
+        })
+        expect(yield* vcs.initialize("missing").pipe(Effect.flip)).toMatchObject({ kind: "unknown" })
+        expect(yield* vcs.initialize("read-only").pipe(Effect.flip)).toMatchObject({ kind: "unsupported" })
+        expect(calls).toEqual([])
+        yield* vcs.initialize("custom")
+        expect(calls).toEqual([directory])
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("returns empty results outside version control", () =>
     withTmp((directory) =>
       Effect.gen(function* () {

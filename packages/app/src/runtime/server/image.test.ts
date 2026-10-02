@@ -96,31 +96,24 @@ describe("readLocalImage", () => {
     expect(requests).toHaveLength(0)
   })
 
-  test.each([400, 401])("propagates declared API errors (%s)", async (status) => {
-    const error = { _tag: "RequestError", message: "Cannot read image" }
+  test.each([
+    [400, { _tag: "RequestError", message: "Cannot read image" }],
+    [401, { _tag: "RequestError", message: "Cannot read image" }],
+    [404, { _tag: "FileNotFoundError", path: "image.png", message: "File not found: image.png" }],
+  ])("propagates declared API errors (%s)", async (status, error) => {
     const { api } = setup(() => Response.json(error, { status }))
-    await expect(readLocalImage(api, "/repo", "image.png", new AbortController().signal)).rejects.toEqual(error)
+    await expect(readLocalImage(api, "/repo", "image.png", new AbortController().signal)).rejects.toMatchObject(error)
   })
 
-  test("propagates missing-file errors", async () => {
-    const error = { _tag: "FileNotFoundError", path: "image.png", message: "File not found: image.png" }
-    const { api } = setup(() => Response.json(error, { status: 404 }))
-    await expect(readLocalImage(api, "/repo", "image.png", new AbortController().signal)).rejects.toEqual(error)
-  })
+  test("does not turn an unexpected HTTP status or a transport failure into a Blob", async () => {
+    const unexpected = setup(() => new Response("Not an image", { status: 500 }))
+    await expect(
+      readLocalImage(unexpected.api, "/repo", "image.png", new AbortController().signal),
+    ).rejects.toMatchObject({ reason: "UnexpectedStatus", cause: { status: 500 } })
 
-  test("does not turn an unexpected HTTP status into a Blob", async () => {
-    const status = 500
-    const { api } = setup(() => new Response("Not an image", { status }))
-    await expect(readLocalImage(api, "/repo", "image.png", new AbortController().signal)).rejects.toMatchObject({
-      reason: "UnexpectedStatus",
-      cause: { status },
-    })
-  })
-
-  test("propagates transport failures", async () => {
     const error = new Error("Connection lost")
-    const { api } = setup(() => Promise.reject(error))
-    await expect(readLocalImage(api, "/repo", "image.png", new AbortController().signal)).rejects.toMatchObject({
+    const lost = setup(() => Promise.reject(error))
+    await expect(readLocalImage(lost.api, "/repo", "image.png", new AbortController().signal)).rejects.toMatchObject({
       reason: "Transport",
       cause: error,
     })

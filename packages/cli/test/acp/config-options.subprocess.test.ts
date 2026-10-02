@@ -1,15 +1,7 @@
 import type { SetSessionConfigOptionResponse } from "@agentclientprotocol/sdk"
 import { describe, expect, test } from "bun:test"
-import {
-  alternateValue,
-  createAcpFixture,
-  expectOk,
-  flattenSelectOptions,
-  initialize,
-  newSession,
-  requireSelectOption,
-  selectConfigOption,
-} from "./subprocess"
+import { alternateValue, flattenSelectOptions, requireSelectOption, selectConfigOption } from "./select-options"
+import { createAcpFixture, expectOk, initialize, newSession } from "./subprocess"
 
 describe("acp config option subprocess", () => {
   test('model option is listed with category "model"', async () => {

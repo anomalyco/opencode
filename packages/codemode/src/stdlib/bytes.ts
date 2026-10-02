@@ -18,6 +18,7 @@ import {
 } from "../interpreter/objects.js"
 import { describeValue } from "../interpreter/references.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
+import { callbackMethods, sortArray } from "./array.js"
 
 /** The bytes a Uint8Array, array, or other iterable of numbers describes; the host array clamps each value. */
 const collectBytes = <R>(ctx: Interpreter<R>, source: Value, name: string): Effect.Effect<Uint8Array, unknown, R> => {
@@ -126,6 +127,22 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
       },
     ],
     [
+      "sort",
+      1,
+      (thisValue, args) => {
+        const target = self(thisValue, "sort")
+        // Without a comparator, typed arrays sort numerically rather than by string.
+        if (args[0] === undefined) {
+          target.bytes.sort()
+          return target
+        }
+        return Effect.map(sortArray(ctx, [...target.bytes], args[0], "Uint8Array.sort"), (sorted) => {
+          target.bytes.set(Uint8Array.from(sorted, coerceToNumber))
+          return target
+        })
+      },
+    ],
+    [
       "indexOf",
       1,
       (thisValue, args) => self(thisValue, "indexOf").bytes.indexOf(coerceToNumber(args[0]), optNumber(args[1])),
@@ -135,7 +152,7 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
       1,
       (thisValue, args) => {
         const target = self(thisValue, "lastIndexOf").bytes
-        return args[1] === undefined
+        return args.length < 2
           ? target.lastIndexOf(coerceToNumber(args[0]))
           : target.lastIndexOf(coerceToNumber(args[0]), optNumber(args[1]))
       },
@@ -170,6 +187,13 @@ export const uint8ArrayGlobal = <R>(ctx: Interpreter<R>) => {
             .map(([index, byte]) => wrapAll([index, byte])),
         ),
     ],
+    ...callbackMethods(
+      ctx,
+      "Uint8Array",
+      self,
+      (target) => target.bytes,
+      (values) => wrap(Uint8Array.from(values, coerceToNumber)),
+    ),
   ])
   define(proto, IteratorSymbol, get(proto, "values"), hidden)
   return uint8Array

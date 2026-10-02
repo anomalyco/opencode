@@ -3,18 +3,36 @@ import type { JsonValue, OpenCodeEvent, SessionMessageInfo } from "@opencode/cli
 import { Duration, Effect, Layer } from "effect"
 import { HttpRouter, HttpServer, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
-import { MockApi, MockBadRequest, MockNotFound } from "./mock-api"
+import { SERVER } from "./app"
+import { MockApi, MockBadRequest, MockInternal, MockNotFound, MockShellNotFound, MockUnsupported } from "./mock-api"
+import { installSseTransport } from "./sse-transport"
+
+type Resolvable<T> = T | (() => T)
+
+// A hook's replacement response.
+export type MockAnswer = { status: number; body: unknown }
 
 export interface MockServerConfig {
   server?: string
   provider: unknown | (() => unknown)
-  integrationMethods?: Record<string, unknown[]>
+  integrations?: unknown[]
   onConnectKey?: (input: { integrationID: string; body: unknown }) => void
+  // Terminal shells the settings offer (`/api/config/shell`).
   shells?: unknown[]
+  // Background shell commands (`GET /api/shell`).
+  shellCommands?: Resolvable<unknown[]>
+  // All output a shell command has captured so far in `directory`, or undefined for an unknown command (404
+  // ShellNotFoundError). The mock pages it like the server: from the request's byte `cursor`, at most `limit` bytes
+  // (default 65,536).
+  shellOutput?: (input: { id: string; directory: string }) => string | undefined
+  // Records `POST /api/experimental/fs/write` (attachment uploads), which answers the requested path.
+  // Without it, writes answer 501 MockUnsupported.
+  onFileWrite?: (input: { path: string; directory: string; body: string }) => void
   configEntries?: unknown[]
-  websearchProviders?: unknown[]
   directory: string
   project: unknown
+  // Replaces the `/api/project` inventory, which defaults to `[project]`.
+  projects?: Resolvable<unknown[]>
   sessions: ({ id: string } & Record<string, unknown>)[]
   pageMessages: (
     sessionId: string,
@@ -24,18 +42,58 @@ export interface MockServerConfig {
     items: SessionMessageInfo[]
     cursor?: string
   }
-  vcsDiff?: unknown[]
-  vcsBranches?: string[]
+  vcs?: { current: string; default: string }
+  // Initializes the mock project's VCS; without a handler this mutation answers 501.
+  onVcsInit?: (input: { directory: string; provider?: string }) => void
+  vcsDiff?: unknown[] | ((input: { mode?: string }) => unknown[])
+  // Benchmark latency only. Tests hold message pages with `beforeMessagesResponse`.
   messageDelay?: number
   beforeMessagesResponse?: (input: { sessionID: string; before?: string }) => Promise<void>
   onMessages?: (input: { sessionID: string; before?: string; phase: "start" | "end" }) => void
   message?: (sessionID: string, messageID: string) => SessionMessageInfo | undefined
   onMessage?: (input: { sessionID: string; messageID: string }) => void
   onRevertStage?: (input: { sessionID: string; messageID: string }) => void
+  onSession?: (sessionID: string) => void
   events?: () => OpenCodeEvent[]
   eventRetry?: number
+  // Idle event streams send a comment every 15 s like the real server. Set false only to test the client's stall watchdog.
+  keepalive?: boolean
   permissions?: unknown[] | (() => unknown[])
+  // Requests only listed by `/api/session/:id/permission`, keyed by session ID.
+  sessionPermissions?: Record<string, unknown[]>
+  // Returning true fails the next `/api/permission/request` listing with a 500.
+  permissionListFailures?: () => boolean
+  // Without it, permission replies answer 501 MockUnsupported.
+  onPermissionReply?: (input: { sessionID: string; permissionID: string; body: unknown }) => void
   forms?: unknown[] | (() => unknown[])
+  // MCP servers. A list serves every workspace; a function receives the requested directory.
+  mcp?: unknown[] | ((directory: string) => unknown[])
+  // Connect/disconnect record the server's new status in that workspace (`connected`/`disabled`); the hook may return
+  // another status (for example `{ status: "failed", error }`). Unknown servers answer 404.
+  onMcpAction?: (input: {
+    server: string
+    action: "connect" | "disconnect"
+    directory: string
+  }) => void | Record<string, unknown>
+  // Starts an OAuth attempt (POST .../connect/oauth) and returns its authorization URL; the attempt then stays pending.
+  // Without it, OAuth connects answer 501 MockUnsupported.
+  onIntegrationOAuth?: (input: { integrationID: string; directory: string; body: unknown }) => { url: string }
+  plugins?: Resolvable<unknown[]>
+  skills?: Resolvable<unknown[]>
+  // Replaces the `/api/worktree` inventory, which defaults to the directory plus project sandboxes.
+  worktrees?: Resolvable<unknown[]>
+  // Without them, creating or removing a worktree answers 501 MockUnsupported. `onWorktreeCreate` may hold the request
+  // and return the answer; by default it creates `<directory>/<name>`. A created directory joins the project's sandboxes.
+  onWorktreeCreate?: (input: unknown) => void | MockAnswer | Promise<void | MockAnswer>
+  onWorktreeRemove?: (input: unknown) => void | Promise<void>
+  // POST /api/session keeps the client-reserved `id` and `location`. Return an answer to fail the attempt (1-based).
+  onSessionCreate?: (body: Record<string, unknown>, attempt: number) => void | MockAnswer
+  // Title of created sessions (default: the request's title, else "New session").
+  createdSessionTitle?: string
+  // Slash commands served by `/api/command`.
+  commands?: Resolvable<unknown[]>
+  // Records POST /api/session/:id/command (204). Without it, commands answer 501 MockUnsupported.
+  onCommand?: (input: { sessionID: string; body: unknown }) => void
   fileList?: (path: string) => unknown | Promise<unknown>
   fileContent?: (path: string) => unknown | Promise<unknown>
   findFiles?: (input: { query: string; dirs?: string; limit?: number }) => unknown
@@ -44,22 +102,60 @@ export interface MockServerConfig {
   onPrompt?: (input: { sessionID: string; body: Record<string, unknown> }) => void
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
+  // Serves `/api/pty*` and mock PTY WebSockets. Created IDs are the first unused `${prefix}<n>` (prefix must start with "pty").
+  // `directory` is the owning workspace (Location); `cwd` is the reported working directory (default: `directory`).
+  pty?: { prefix?: string; initial?: { id: string; title: string; directory?: string; cwd?: string }[] }
+  // Answers 500 InvalidDirectory when a request names a directory this server does not own.
+  strictDirectory?: boolean
+  // Answers 401 UnauthorizedError unless a request carries this password; a function may change it mid-test.
+  password?: Resolvable<string>
 }
 
+export type MockPtyInfo = {
+  id: string
+  title: string
+  command: string
+  args: string[]
+  cwd: string
+  status: "running" | "exited"
+  pid: number
+}
+
+export type MockPtySocket = { id: string; url: URL; input: string[]; closed: boolean; send(data: string): void }
+
+export type MockPty = {
+  list: MockPtyInfo[]
+  created: MockPtyInfo[]
+  removed: string[]
+  updates: { id: string; body: unknown }[]
+  tokens: { id: string; headers: Record<string, string>; ticket: string }[]
+  sockets: MockPtySocket[]
+  // WebSockets closed with 1008 because the PTY, its workspace, or an unused issued ticket did not match.
+  rejected: { id: string; url: URL; reason: string }[]
+  // Writes output to the newest open socket, optionally for one PTY.
+  send(data: string, id?: string): void
+}
+
+type MockStream = { push: (payloads: unknown[]) => void }
+
 type MockStreamWindow = Window & {
+  // Set to any value by benchmarks that bring their own event stream.
   __testSseTransport?: unknown
-  __mockServerStream?: { push: (payloads: unknown[]) => void }
+  // `installSseTransport` registrations; `command` takes its browser command shape.
+  __testSseTransports?: Record<string, { command: (input: unknown) => unknown }>
+  // Per-origin mock event streams; in-page benchmark probes push through them directly.
+  __mockServerStreams?: Record<string, MockStream>
 }
 
 export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
-  const server =
-    config.server ??
-    `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
+  const server = config.server ?? SERVER
+
+  mockedOrigins(page).add(server)
 
   await page.addInitScript(
-    ({ server, retry }) => {
+    ({ server, retry, keepalive: idle }) => {
       const host = window as MockStreamWindow
-      if (host.__testSseTransport || host.__mockServerStream) return
+      if (host.__testSseTransport || host.__testSseTransports?.[server] || host.__mockServerStreams?.[server]) return
       const originalFetch = window.fetch.bind(window)
       const encoder = new TextEncoder()
       const state: {
@@ -68,7 +164,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         connections: number
       } = { buffer: [], connections: 0 }
       const frame = (payload: unknown) => `data: ${JSON.stringify(payload)}\n\n`
-      host.__mockServerStream = {
+      const stream = {
         push(payloads: unknown[]) {
           const frames = payloads.map(frame)
           const controller = state.controller
@@ -79,6 +175,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
           frames.forEach((item) => controller.enqueue(encoder.encode(item)))
         },
       }
+      host.__mockServerStreams = { ...host.__mockServerStreams, [server]: stream }
       const fetch = (input: RequestInfo | URL, init?: RequestInit) => {
         const request = new Request(input, init)
         const url = new URL(request.url)
@@ -88,7 +185,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         let ended = false
         let own: ReadableStreamDefaultController<Uint8Array> | undefined
         let keepalive: ReturnType<typeof setInterval> | undefined
-        const stream = new ReadableStream<Uint8Array>({
+        const body = new ReadableStream<Uint8Array>({
           start(controller) {
             own = controller
             state.controller = controller
@@ -99,7 +196,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
             state.buffer.splice(0).forEach((item) => controller.enqueue(encoder.encode(item)))
             // Match the real server's idle stream so long scenarios do not
             // trigger the client's 45-second stall watchdog and reload history.
-            keepalive = setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 15_000)
+            if (idle) keepalive = setInterval(() => controller.enqueue(encoder.encode(": keepalive\n\n")), 15_000)
             request.signal.addEventListener(
               "abort",
               () => {
@@ -120,7 +217,7 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
           },
         })
         return Promise.resolve(
-          new Response(stream, {
+          new Response(body, {
             status: 200,
             headers: { "cache-control": "no-cache", "content-type": "text/event-stream" },
           }),
@@ -128,38 +225,82 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       }
       Object.defineProperty(window, "fetch", { configurable: true, writable: true, value: fetch })
     },
-    { server, retry: config.eventRetry },
+    { server, retry: config.eventRetry, keepalive: config.keepalive !== false },
   )
 
+  // Delivers events on this server's mock stream; buffered until the app connects.
+  // An origin served by an SSE transport receives the events as one burst on its active connection.
+  const push = (payloads: readonly OpenCodeEvent[]) =>
+    page.evaluate(
+      ({ server, payloads }) => {
+        const host = window as MockStreamWindow
+        const stream = host.__mockServerStreams?.[server]
+        if (stream) return stream.push(payloads)
+        const transport = host.__testSseTransports?.[server]
+        if (!transport) throw new Error(`No mock event stream for ${server}`)
+        transport.command({ type: "send", deliveries: payloads.map((payload) => ({ payload })), burst: true })
+      },
+      { server, payloads: payloads as unknown[] },
+    )
+  // Server-side events the mock publishes itself; delivery failures other than a missing document fail the test.
+  const emit = (events: OpenCodeEvent[]) =>
+    void push(events).catch((error: unknown) => {
+      if (page.isClosed() || retryableDelivery(error)) return
+      throw error
+    })
+
   if (config.events) {
-    const pump = { busy: false }
+    // Batches stay queued until the page accepts them; failures other than a missing document fail the test.
+    const pump = { busy: false, pending: [] as OpenCodeEvent[] }
     const timer = setInterval(() => {
       if (pump.busy) return
-      const batch = config.events?.() ?? []
-      if (batch.length === 0) return
+      pump.pending.push(...(config.events?.() ?? []))
+      if (pump.pending.length === 0) return
       pump.busy = true
-      void page
-        .evaluate((payloads) => (window as MockStreamWindow).__mockServerStream?.push(payloads), batch as unknown[])
-        .catch(() => {})
+      const batch = pump.pending.slice()
+      void push(batch)
+        .then(
+          () => {
+            pump.pending.splice(0, batch.length)
+          },
+          (error: unknown) => {
+            if (page.isClosed()) return clearInterval(timer)
+            if (retryableDelivery(error)) return
+            clearInterval(timer)
+            throw error
+          },
+        )
         .finally(() => {
           pump.busy = false
         })
     }, 50)
     page.on("close", () => clearInterval(timer))
   }
-  const transport = createMockServerHandler(config)
+  const transport = createMockServerHandler(config, emit)
   page.on("close", () => void transport.dispose())
 
   await page.route("**/api/**", async (route) => {
     const url = new URL(route.request().url())
-    const appPort = new URL(
-      process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
-    ).port
-    if (url.origin !== server && url.port !== appPort) return route.fallback()
+    if (!answers(page, server, url)) return route.fallback()
     // Production serves the UI and API from one origin; leave app assets to Vite.
     if (!url.pathname.startsWith("/api/")) return route.fallback()
     if (route.request().method() === "OPTIONS") {
       return route.fulfill({ status: 204, headers: corsHeaders })
+    }
+    const password = config.password === undefined ? undefined : resolve(config.password)
+    if (
+      password !== undefined &&
+      (await route.request().headerValue("authorization")) !== `Basic ${btoa(`opencode:${password}`)}`
+    ) {
+      return route.fulfill({
+        status: 401,
+        headers: corsHeaders,
+        json: { _tag: "UnauthorizedError", message: "Authentication required" },
+      })
+    }
+    const directory = url.searchParams.get("directory") ?? url.searchParams.get("location[directory]")
+    if (config.strictDirectory && directory && !ownedDirectories(config).has(directory)) {
+      return route.fulfill({ status: 500, headers: corsHeaders, json: { name: "InvalidDirectory" } })
     }
 
     const body = route.request().postDataBuffer()
@@ -170,23 +311,94 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
         body: body ? Uint8Array.from(body) : undefined,
       }),
     )
-    if (response.status === 404 && url.origin !== server) return route.fallback()
+    const payload = Buffer.from(await response.arrayBuffer())
+    // A handler's 404 carries a tagged error; a route the mock does not define must not reach the app server, whose
+    // SPA fallback would answer HTML 200. Answer 501 and fail the test from the route handler.
+    if (response.status === 404 && !payload.toString().includes('"_tag"')) {
+      const request = `${route.request().method()} ${url.pathname}`
+      await route.fulfill({
+        status: 501,
+        headers: corsHeaders,
+        json: { name: "MockUnsupported", message: `The mock server has no route for ${request}` },
+      })
+      throw new Error(`Unmocked API request: ${request} (add it to e2e/utils/mock-server.ts)`)
+    }
     return route.fulfill({
       status: response.status,
       headers: { ...Object.fromEntries(response.headers), ...corsHeaders },
-      body: Buffer.from(await response.arrayBuffer()),
+      body: payload,
     })
   })
+
+  if (config.pty) {
+    const host = new URL(server).host
+    await page.routeWebSocket(
+      (url) => url.host === host && /^\/api\/pty\/[^/]+\/connect$/.test(url.pathname),
+      (ws) => {
+        const url = new URL(ws.url())
+        const id = decodeURIComponent(url.pathname.split("/")[3]!)
+        const reason = transport.pty.admit(id, url)
+        if (reason) {
+          transport.pty.rejected.push({ id, url, reason })
+          return ws.close({ code: 1008, reason })
+        }
+        const socket: MockPtySocket = {
+          id,
+          url,
+          input: [],
+          closed: false,
+          send: (data) => ws.send(data),
+        }
+        ws.onMessage((message) => socket.input.push(message.toString()))
+        ws.onClose(() => {
+          socket.closed = true
+        })
+        transport.pty.sockets.push(socket)
+      },
+    )
+  }
+
+  return { server, pty: transport.pty, push }
 }
 
-export function createMockServerHandler(config: MockServerConfig) {
-  return HttpRouter.toWebHandler(
+// Mocks several servers on one page. Each origin gets its own handler and its own SSE transport for events.
+export async function mockServers(page: Page, servers: Record<string, Omit<MockServerConfig, "server" | "events">>) {
+  return Object.fromEntries(
+    await Promise.all(
+      Object.entries(servers).map(async ([origin, config]) => {
+        const transport = await installSseTransport(page, {
+          server: origin,
+          retry: config.eventRetry,
+          keepalive: config.keepalive,
+        })
+        const mock = await mockOpenCodeServer(page, { ...config, server: origin })
+        return [origin, { transport, pty: mock.pty }] as const
+      }),
+    ),
+  )
+}
+
+// `emit` publishes the events a real server sends after a mutation (without a page, nothing is published).
+export function createMockServerHandler(config: MockServerConfig, emit: (events: OpenCodeEvent[]) => void = () => {}) {
+  const pty = createPty(config)
+  const web = HttpRouter.toWebHandler(
     HttpApiBuilder.layer(MockApi).pipe(
-      Layer.provide(mockHandlers(config, { cursors: new Map<string, string>(), nextCursor: 0 })),
+      Layer.provide(
+        mockHandlers(config, {
+          cursors: new Map<string, string>(),
+          nextCursor: 0,
+          sessionCreates: 0,
+          pty,
+          emit,
+          mcp: new Map<string, Record<string, unknown>>(),
+          attempts: new Map<string, number>(),
+        }),
+      ),
       Layer.provide(HttpServer.layerServices),
     ),
     { disableLogger: true },
   )
+  return { ...web, pty }
 }
 
 const corsHeaders = {
@@ -196,10 +408,192 @@ const corsHeaders = {
   "access-control-expose-headers": "x-next-cursor",
 }
 
-function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, string>; nextCursor: number }) {
+const APP_ORIGIN = new URL(
+  process.env.PLAYWRIGHT_BASE_URL ?? `http://127.0.0.1:${process.env.PLAYWRIGHT_PORT ?? "3000"}`,
+).origin
+const registeredOrigins = new WeakMap<Page, Set<string>>()
+
+function mockedOrigins(page: Page) {
+  const found = registeredOrigins.get(page)
+  if (found) return found
+  const created = new Set<string>()
+  registeredOrigins.set(page, created)
+  return created
+}
+
+// A server answers its own origin. Production builds call the API on the app origin, which the default server also
+// answers unless a server was configured for the app origin explicitly.
+function answers(page: Page, server: string, url: URL) {
+  if (url.origin === server) return true
+  return server === SERVER && url.origin === APP_ORIGIN && !mockedOrigins(page).has(APP_ORIGIN)
+}
+
+// The document is not loaded yet or is being replaced; the pump retries on its next tick.
+function retryableDelivery(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  return [
+    "No mock event stream",
+    "Execution context was destroyed",
+    "Target page, context or browser has been closed",
+  ].some((text) => message.includes(text))
+}
+
+const PTY_TICKET = "e2e-ticket"
+
+function createPty(config: MockServerConfig) {
+  const info = (id: string, title: string, cwd = config.directory): MockPtyInfo => ({
+    id,
+    title,
+    command: "cmd.exe",
+    args: [],
+    cwd,
+    status: "running",
+    pid: 1,
+  })
+  // Core scopes PTYs by Location, which can differ from the process cwd, so ownership is kept apart from `cwd`.
+  const owners = new Map((config.pty?.initial ?? []).map((item) => [item.id, item.directory ?? config.directory]))
+  // Issued, not yet used connect tickets, each bound to one PTY and workspace.
+  const tickets: { id: string; directory: string; ticket: string }[] = []
+  const issued = { count: 0 }
+  const owns = (item: MockPtyInfo, directory: string) => owners.get(item.id) === directory
+  const pty: MockPty = {
+    list: (config.pty?.initial ?? []).map((item) => info(item.id, item.title, item.cwd ?? item.directory)),
+    created: [],
+    removed: [],
+    updates: [],
+    tokens: [],
+    sockets: [],
+    rejected: [],
+    send(data, id) {
+      const socket = pty.sockets.findLast((item) => !item.closed && (id === undefined || item.id === id))
+      if (!socket) throw new Error(`No open PTY socket${id ? ` for ${id}` : ""}`)
+      socket.send(data)
+    },
+  }
+  return Object.assign(pty, {
+    info,
+    // The first `${prefix}<n>` no initial, created, or removed PTY has used.
+    allocate() {
+      const prefix = config.pty?.prefix ?? "pty_"
+      const used = new Set([...pty.list, ...pty.created].map((item) => item.id).concat(pty.removed))
+      const number = Array.from({ length: used.size + 1 }, (_, index) => index + 1).find(
+        (value) => !used.has(`${prefix}${value}`),
+      )!
+      return { id: `${prefix}${number}`, number }
+    },
+    add(created: MockPtyInfo, directory: string) {
+      owners.set(created.id, directory)
+      pty.created.push(created)
+      pty.list.push(created)
+    },
+    find: (id: string, directory: string) => pty.list.find((item) => item.id === id && owns(item, directory)),
+    owned: (directory: string) => pty.list.filter((item) => owns(item, directory)),
+    // Unique per server; the first stays `e2e-ticket` so single-terminal specs can assert a fixed value.
+    issue(id: string, directory: string) {
+      issued.count += 1
+      const ticket = issued.count === 1 ? PTY_TICKET : `${PTY_TICKET}-${issued.count}`
+      tickets.push({ id, directory, ticket })
+      return ticket
+    },
+    // Returns why a connect URL is refused: the PTY must exist, belong to the requested workspace, and carry the exact
+    // unused ticket issued for that PTY and workspace. Admission consumes the ticket.
+    admit(id: string, url: URL) {
+      const found = pty.list.find((item) => item.id === id)
+      if (!found) return "PTY not found"
+      const directory = url.searchParams.get("location[directory]") || config.directory
+      if (!owns(found, directory)) return "PTY belongs to another workspace"
+      const ticket = url.searchParams.get("ticket")
+      const index = tickets.findIndex(
+        (item) => item.id === id && item.directory === directory && item.ticket === ticket,
+      )
+      if (index < 0) return "No unused ticket was issued for this PTY"
+      tickets.splice(index, 1)
+    },
+  })
+}
+
+// Every directory this server's configuration names: its own, project and inventory worktrees, and session locations.
+function ownedDirectories(config: MockServerConfig) {
+  const projects = [config.project, ...(config.projects ? resolve(config.projects) : [])].filter(record)
+  return new Set(
+    [
+      config.directory,
+      ...projects.flatMap((item) => [
+        item.worktree,
+        item.canonical,
+        ...(Array.isArray(item.sandboxes) ? item.sandboxes : []),
+      ]),
+      ...(config.worktrees ? resolve(config.worktrees) : []).filter(record).map((item) => item.directory),
+      ...config.sessions.map((session) => (record(session.location) ? session.location.directory : session.directory)),
+    ].filter((item): item is string => typeof item === "string"),
+  )
+}
+
+function addSandbox(config: MockServerConfig, directory: string) {
+  const project = config.project as { sandboxes?: string[] }
+  if (project.sandboxes?.includes(directory)) return
+  project.sandboxes = [...(project.sandboxes ?? []), directory]
+}
+
+// The requested `location[directory]`; absent or empty (a server-level read) means the server directory.
+function requestDirectory(config: MockServerConfig, request: { url: string }) {
+  return new URL(request.url, "http://localhost").searchParams.get("location[directory]") || config.directory
+}
+
+function resolve<T>(value: Resolvable<T>) {
+  return typeof value === "function" ? (value as () => T)() : value
+}
+
+function mockHandlers(
+  config: MockServerConfig,
+  state: {
+    cursors: Map<string, string>
+    nextCursor: number
+    sessionCreates: number
+    pty: ReturnType<typeof createPty>
+    emit: (events: OpenCodeEvent[]) => void
+    // MCP status overrides by `<directory>\n<server>`, and OAuth attempt creation times by attempt ID.
+    mcp: Map<string, Record<string, unknown>>
+    attempts: Map<string, number>
+  },
+) {
   const noContent = Effect.succeed(HttpApiSchema.NoContent.make())
   const delay = config.messageDelay === undefined ? Effect.void : Effect.sleep(Duration.millis(config.messageDelay))
   const configEntries = config.configEntries ?? []
+  const ptyEnabled = Effect.suspend(() =>
+    config.pty ? Effect.void : Effect.fail(new MockNotFound({ message: "PTY is not enabled for this mock server" })),
+  )
+  // PTYs are scoped to the workspace (`location[directory]`) they were created in, like the real server.
+  const findPty = (id: string, request: { url: string }) =>
+    ptyEnabled.pipe(
+      Effect.andThen(() =>
+        Effect.suspend(() => {
+          const directory = requestDirectory(config, request)
+          const found = state.pty.find(id, directory)
+          return found ? Effect.succeed(found) : Effect.fail(new MockNotFound({ message: "PTY not found" }))
+        }),
+      ),
+    )
+  const mcpServers = (directory: string) =>
+    (typeof config.mcp === "function" ? config.mcp(directory) : (config.mcp ?? [])).map((server) => {
+      const status = record(server) ? state.mcp.get(`${directory}\n${String(server.name)}`) : undefined
+      return status && record(server) ? { ...server, status } : server
+    })
+  const mcpAction = (server: string, action: "connect" | "disconnect", request: { url: string }) =>
+    Effect.suspend(() => {
+      const directory = requestDirectory(config, request)
+      if (!mcpServers(directory).some((item) => record(item) && item.name === server))
+        return Effect.fail(new MockNotFound({ message: `MCP server ${server} not found` }))
+      const status = config.onMcpAction?.({ server, action, directory }) ?? {
+        status: action === "connect" ? "connected" : "disabled",
+      }
+      state.mcp.set(`${directory}\n${server}`, status)
+      return noContent
+    })
+  const unsupported = (operation: string, handler: string) =>
+    Effect.fail(
+      new MockUnsupported({ message: `The mock server does not ${operation}; configure ${handler} for this scenario` }),
+    )
   return HttpApiBuilder.group(MockApi, "mock", (handlers) =>
     handlers
       .handleRaw("event", () => {
@@ -217,6 +611,47 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
           const content =
             value && typeof value === "object" && "content" in value ? String(value.content) : String(value ?? "")
           return HttpServerResponse.uint8Array(new TextEncoder().encode(content))
+        }),
+      )
+      // Raw, so a hook's answer can replace the status and body.
+      .handleRaw("worktreeCreate", (ctx) =>
+        Effect.gen(function* () {
+          const create = config.onWorktreeCreate
+          if (!create) return yield* unsupported("create worktrees", "onWorktreeCreate")
+          const input = yield* Effect.orDie(ctx.request.json)
+          const payload = record(input) ? input : {}
+          const answer = (yield* Effect.promise(async () => create(input))) || {
+            status: 200,
+            body: {
+              directory: `${typeof payload.directory === "string" ? payload.directory : config.directory}/${
+                typeof payload.name === "string" ? payload.name : "copy"
+              }`,
+            },
+          }
+          if (answer.status === 200 && record(answer.body) && typeof answer.body.directory === "string")
+            addSandbox(config, answer.body.directory)
+          return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+        }),
+      )
+      .handleRaw("sessionCreate", (ctx) =>
+        Effect.gen(function* () {
+          const input = yield* Effect.orDie(ctx.request.json)
+          const payload = record(input) ? input : {}
+          state.sessionCreates += 1
+          const answer = config.onSessionCreate?.(payload, state.sessionCreates)
+          if (answer) return HttpServerResponse.jsonUnsafe(answer.body, { status: answer.status })
+          const created = currentSession(
+            {
+              ...payload,
+              id: typeof payload.id === "string" ? payload.id : "ses_mock_created",
+              projectID: (config.project as { id?: string }).id,
+              title: config.createdSessionTitle ?? (typeof payload.title === "string" ? payload.title : "New session"),
+              parentID: typeof payload.parentID === "string" ? payload.parentID : undefined,
+            },
+            config.directory,
+          )
+          config.sessions.push(created)
+          return HttpServerResponse.jsonUnsafe({ data: created })
         }),
       )
       .handleAll({
@@ -240,9 +675,9 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             },
             data: [],
           }),
-        agent: () =>
+        agent: (ctx) =>
           Effect.succeed({
-            location: location(config),
+            location: location(config, requestDirectory(config, ctx.request)),
             data: [
               {
                 id: "build",
@@ -258,14 +693,16 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         model: () => Effect.succeed({ location: location(config), data: currentModels(providerConfig(config)) }),
         modelDefault: () =>
           Effect.succeed({ location: location(config), data: currentDefaultModel(providerConfig(config)) }),
-        integrationList: () => Effect.succeed({ location: location(config), data: [] }),
+        integrationList: () => Effect.succeed({ location: location(config), data: config.integrations ?? [] }),
         integrationGet: (ctx) =>
           Effect.succeed({
             location: location(config),
-            data: {
+            data: config.integrations
+              ?.filter(record)
+              .find((integration) => integration.id === ctx.params.integrationID) ?? {
               id: ctx.params.integrationID,
               name: ctx.params.integrationID,
-              methods: config.integrationMethods?.[ctx.params.integrationID] ?? [{ type: "key", label: "API key" }],
+              methods: [{ type: "key", label: "API key" }],
               connections: [],
             },
           }),
@@ -273,16 +710,62 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
           Effect.sync(() => config.onConnectKey?.({ integrationID: ctx.params.integrationID, body: ctx.payload })).pipe(
             Effect.andThen(noContent),
           ),
-        credentialRemove: () => noContent,
-        command: () => Effect.succeed({ location: location(config), data: [] }),
-        skill: () => Effect.succeed({ location: location(config), data: [] }),
-        plugin: () => Effect.succeed({ location: location(config), data: [] }),
-        mcp: () => Effect.succeed({ location: location(config), data: [] }),
-        mcpResource: () => Effect.succeed({ location: location(config), data: { resources: [], templates: [] } }),
-        projectList: () => {
-          const project = config.project as typeof config.project & { canonical?: string; worktree?: string }
-          return Effect.succeed([{ ...project, canonical: project.canonical ?? project.worktree ?? config.directory }])
+        integrationOAuthConnect: (ctx) => {
+          const start = config.onIntegrationOAuth
+          if (!start) return unsupported("start OAuth connections", "onIntegrationOAuth")
+          return Effect.sync(() => {
+            const directory = requestDirectory(config, ctx.request)
+            const created = Date.now()
+            const attemptID = `con_mock_${state.attempts.size + 1}`
+            state.attempts.set(attemptID, created)
+            const started = start({ integrationID: ctx.params.integrationID, directory, body: ctx.payload })
+            return {
+              location: location(config, directory),
+              data: {
+                attemptID,
+                url: started.url,
+                instructions: "",
+                mode: "auto",
+                time: { created, expires: created + 600_000 },
+              },
+            }
+          })
         },
+        integrationOAuthStatus: (ctx) =>
+          Effect.suspend(() => {
+            const created = state.attempts.get(ctx.params.attemptID)
+            if (created === undefined) return Effect.fail(new MockNotFound({ message: "OAuth attempt not found" }))
+            return Effect.succeed({
+              location: location(config, requestDirectory(config, ctx.request)),
+              data: { status: "pending", time: { created, expires: created + 600_000 } },
+            })
+          }),
+        credentialRemove: () => noContent,
+        command: (ctx) =>
+          Effect.sync(() => ({
+            location: location(config, requestDirectory(config, ctx.request)),
+            data: resolve(config.commands ?? []),
+          })),
+        skill: () => Effect.sync(() => ({ location: location(config), data: resolve(config.skills ?? []) })),
+        plugin: () => Effect.sync(() => ({ location: location(config), data: resolve(config.plugins ?? []) })),
+        mcp: (ctx) =>
+          Effect.sync(() => {
+            const directory = requestDirectory(config, ctx.request)
+            return { location: location(config, directory), data: mcpServers(directory) }
+          }),
+        mcpConnect: (ctx) => mcpAction(ctx.params.server, "connect", ctx.request),
+        mcpDisconnect: (ctx) => mcpAction(ctx.params.server, "disconnect", ctx.request),
+        mcpResource: (ctx) =>
+          Effect.succeed({
+            location: location(config, requestDirectory(config, ctx.request)),
+            data: { resources: [], templates: [] },
+          }),
+        projectList: () =>
+          Effect.sync(() => {
+            if (config.projects) return resolve(config.projects)
+            const project = config.project as typeof config.project & { canonical?: string; worktree?: string }
+            return [{ ...project, canonical: project.canonical ?? project.worktree ?? config.directory }]
+          }),
         projectUpdate: (ctx) => {
           const project = config.project as { canonical?: string }
           return Effect.succeed({
@@ -294,43 +777,74 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
         },
         configShells: () => Effect.succeed(config.shells ?? []),
         configUpdate: () => noContent,
-        websearchProviders: () => Effect.succeed({ location: location(config), data: config.websearchProviders ?? [] }),
+        websearchProviders: () => Effect.succeed({ location: location(config), data: [] }),
         worktreeList: () =>
-          Effect.succeed([
-            { directory: config.directory },
-            ...((config.project as { sandboxes?: string[] }).sandboxes ?? []).map((directory) => ({
-              directory,
-              strategy: "git",
-            })),
-          ]),
-        worktreeCreate: (ctx) => {
-          const input = ctx.payload
-          return Effect.succeed({
-            directory: `${typeof input.directory === "string" ? input.directory : config.directory}/${
-              typeof input.name === "string" ? input.name : "copy"
-            }`,
-          })
-        },
-        worktreeRemove: () => noContent,
-        worktreeRefresh: () => noContent,
-        location: () => Effect.succeed(location(config)),
-        permissionRequests: () =>
-          Effect.succeed({
-            location: location(config),
-            data: (typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])).map(
-              currentPermission,
-            ),
+          Effect.sync(() => {
+            if (config.worktrees) return resolve(config.worktrees)
+            return [
+              { directory: config.directory },
+              ...((config.project as { sandboxes?: string[] }).sandboxes ?? []).map((directory) => ({
+                directory,
+                strategy: "git",
+              })),
+            ]
           }),
+        worktreeRemove: (ctx) => {
+          const remove = config.onWorktreeRemove
+          if (!remove) return unsupported("remove worktrees", "onWorktreeRemove")
+          return Effect.promise(async () => remove(ctx.payload)).pipe(Effect.andThen(noContent))
+        },
+        // Discovery against a static inventory changes nothing, and the app refreshes whenever worktree settings open.
+        worktreeRefresh: () => noContent,
+        location: (ctx) => Effect.sync(() => location(config, requestDirectory(config, ctx.request))),
+        permissionRequests: () =>
+          Effect.suspend(() =>
+            config.permissionListFailures?.()
+              ? Effect.fail(new MockInternal({ message: "Permission list failed" }))
+              : Effect.succeed({
+                  location: location(config),
+                  data: (typeof config.permissions === "function"
+                    ? config.permissions()
+                    : (config.permissions ?? [])
+                  ).map(currentPermission),
+                }),
+          ),
         formRequests: () =>
           Effect.succeed({
             location: location(config),
             data: typeof config.forms === "function" ? config.forms() : (config.forms ?? []),
           }),
         vcs: () =>
-          Effect.succeed({ location: location(config), data: { branch: { current: "main", default: "main" } } }),
+          Effect.succeed({
+            location: location(config),
+            data: { branch: config.vcs ?? { current: "main", default: "main" } },
+          }),
+        vcsInit: (ctx) => {
+          if (!config.onVcsInit) return unsupported("initialize VCS", "onVcsInit")
+          return Effect.sync(() => {
+            const url = new URL(ctx.request.url, "http://localhost")
+            const provider = url.searchParams.get("provider") ?? undefined
+            config.onVcsInit?.({ directory: requestDirectory(config, ctx.request), provider })
+            const project = config.project as { id: string; vcs?: string }
+            project.vcs = provider ?? "git"
+            state.emit([
+              {
+                id: "evt_vcs_initialized",
+                type: "worktree.updated",
+                created: Date.now(),
+                data: { projectID: project.id },
+              },
+            ])
+          }).pipe(Effect.andThen(noContent))
+        },
         vcsStatus: () => Effect.succeed({ location: location(config), data: [] }),
-        vcsBranches: () => Effect.succeed({ location: location(config), data: config.vcsBranches ?? ["main"] }),
-        vcsDiff: () => Effect.succeed({ location: location(config), data: config.vcsDiff ?? [] }),
+        vcsBranches: () => Effect.succeed({ location: location(config), data: ["main"] }),
+        vcsDiff: (ctx) =>
+          Effect.sync(() => ({
+            location: location(config),
+            data:
+              typeof config.vcsDiff === "function" ? config.vcsDiff({ mode: ctx.query.mode }) : (config.vcsDiff ?? []),
+          })),
         fsList: (ctx) =>
           Effect.promise(() => Promise.resolve(config.fileList?.(ctx.query.path ?? ""))).pipe(
             Effect.map((data) => ({ location: location(config), data })),
@@ -358,9 +872,98 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
                 : entries,
             })),
           ),
-        shell: () => Effect.succeed({ location: location(config), data: [] }),
-        ptyConnectToken: () =>
-          Effect.succeed({ location: location(config), data: { ticket: "e2e-ticket", expires_in: 60 } }),
+        fsWrite: (ctx) => {
+          const write = config.onFileWrite
+          if (!write) return unsupported("write files", "onFileWrite")
+          return Effect.sync(() => {
+            const directory = requestDirectory(config, ctx.request)
+            const path = new URL(ctx.request.url, "http://localhost").searchParams.get("path") ?? ""
+            write({ path, directory, body: new TextDecoder().decode(ctx.payload) })
+            return { location: location(config, directory), data: { path } }
+          })
+        },
+        shell: (ctx) =>
+          Effect.sync(() => ({
+            location: location(config, requestDirectory(config, ctx.request)),
+            data: resolve(config.shellCommands ?? []),
+          })),
+        shellOutput: (ctx) =>
+          Effect.suspend(() => {
+            const directory = requestDirectory(config, ctx.request)
+            const output = config.shellOutput?.({ id: ctx.params.id, directory })
+            if (output === undefined)
+              return Effect.fail(
+                new MockShellNotFound({ id: ctx.params.id, message: `Shell command not found: ${ctx.params.id}` }),
+              )
+            const bytes = new TextEncoder().encode(output)
+            const query = new URL(ctx.request.url, "http://localhost").searchParams
+            const cursor = Math.min(Number(query.get("cursor") ?? 0), bytes.length)
+            // The server answers at most one page (`Shell.output` defaults `limit` to 65,536 bytes).
+            const end = Math.min(bytes.length, cursor + Number(query.get("limit") ?? 65_536))
+            return Effect.succeed({
+              location: location(config, directory),
+              data: {
+                output: new TextDecoder().decode(bytes.subarray(cursor, end)),
+                cursor: end,
+                size: bytes.length,
+                truncated: false,
+              },
+            })
+          }),
+        ptyList: (ctx) =>
+          ptyEnabled.pipe(
+            Effect.map(() => {
+              const directory = requestDirectory(config, ctx.request)
+              return { location: location(config, directory), data: state.pty.owned(directory) }
+            }),
+          ),
+        ptyCreate: (ctx) =>
+          ptyEnabled.pipe(
+            Effect.map(() => {
+              const next = state.pty.allocate()
+              const directory = requestDirectory(config, ctx.request)
+              const created = state.pty.info(
+                next.id,
+                ctx.payload.title ?? `Terminal ${next.number}`,
+                ctx.payload.cwd ?? directory,
+              )
+              state.pty.add(created, directory)
+              return { location: location(config, directory), data: created }
+            }),
+          ),
+        ptyGet: (ctx) =>
+          findPty(ctx.params.ptyID, ctx.request).pipe(
+            Effect.map((data) => ({ location: location(config, requestDirectory(config, ctx.request)), data })),
+          ),
+        ptyUpdate: (ctx) =>
+          findPty(ctx.params.ptyID, ctx.request).pipe(
+            Effect.map((found) => {
+              state.pty.updates.push({ id: found.id, body: ctx.payload })
+              if (ctx.payload.title) found.title = ctx.payload.title
+              return { location: location(config, requestDirectory(config, ctx.request)), data: found }
+            }),
+          ),
+        ptyRemove: (ctx) =>
+          findPty(ctx.params.ptyID, ctx.request).pipe(
+            Effect.map((found) => {
+              state.pty.removed.push(found.id)
+              state.pty.list.splice(state.pty.list.indexOf(found), 1)
+              return HttpApiSchema.NoContent.make()
+            }),
+          ),
+        ptyConnectToken: (ctx) =>
+          findPty(ctx.params.ptyID, ctx.request).pipe(
+            Effect.map((found) => {
+              const directory = requestDirectory(config, ctx.request)
+              const ticket = state.pty.issue(found.id, directory)
+              state.pty.tokens.push({
+                id: found.id,
+                headers: Object.fromEntries(Object.entries(ctx.request.headers)),
+                ticket,
+              })
+              return { location: location(config, directory), data: { ticket, expires_in: 60 } }
+            }),
+          ),
         sessionList: (ctx) => {
           const sessions = config.sessions
             .filter((session) => {
@@ -392,19 +995,6 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             cursor: { next: offset + limit < ordered.length ? String(offset + limit) : undefined },
           })
         },
-        sessionCreate: (ctx) => {
-          const payload = record(ctx.payload) ? ctx.payload : {}
-          const created = currentSession(
-            {
-              id: "ses_mock_created",
-              projectID: (config.project as { id?: string }).id,
-              title: typeof payload.title === "string" ? payload.title : "New session",
-              parentID: typeof payload.parentID === "string" ? payload.parentID : undefined,
-            },
-            config.directory,
-          )
-          return Effect.sync(() => config.sessions.push(created)).pipe(Effect.as({ data: created }))
-        },
         sessionActive: () => {
           const statuses = (
             typeof config.sessionStatus === "function" ? config.sessionStatus() : (config.sessionStatus ?? {})
@@ -417,12 +1007,14 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
             ),
           })
         },
-        sessionGet: (ctx) => {
-          const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
-          return session
-            ? Effect.succeed({ data: currentSession(session, config.directory) })
-            : Effect.fail(new MockNotFound({ message: "Session not found" }))
-        },
+        sessionGet: (ctx) =>
+          Effect.suspend(() => {
+            config.onSession?.(ctx.params.sessionID)
+            const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
+            return session
+              ? Effect.succeed({ data: currentSession(session, config.directory) })
+              : Effect.fail(new MockNotFound({ message: "Session not found" }))
+          }),
         sessionRemove: () => noContent,
         sessionShell: () => noContent,
         sessionForm: (ctx) => {
@@ -477,17 +1069,58 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
           ).pipe(Effect.andThen(noContent)),
         sessionSwitchAgent: () => noContent,
         sessionSwitchModel: () => noContent,
-        sessionPermission: (ctx) => {
-          const permissions =
-            typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? [])
-          return Effect.succeed({
-            data: permissions
+        // Only the session's own list; location requests (`permissions`) come from `/api/permission/request`.
+        sessionPermission: (ctx) =>
+          Effect.sync(() => ({
+            data: (config.sessionPermissions?.[ctx.params.sessionID] ?? [])
               .map(currentPermission)
               .filter((permission) => permission.sessionID === ctx.params.sessionID),
-          })
+          })),
+        // Like the server, a reply publishes `permission.replied`, and later reads no longer list the request.
+        sessionPermissionReply: (ctx) => {
+          const reply = config.onPermissionReply
+          if (!reply) return unsupported("record permission replies", "onPermissionReply")
+          return Effect.sync(() => {
+            const sessionID = ctx.params.sessionID
+            const permissionID = ctx.params.permissionID
+            reply({ sessionID, permissionID, body: ctx.payload })
+            const pending = [
+              config.sessionPermissions?.[sessionID] ?? [],
+              typeof config.permissions === "function" ? config.permissions() : (config.permissions ?? []),
+            ]
+            pending.forEach((list) => {
+              const index = list.findIndex((item) => record(item) && item.id === permissionID)
+              if (index >= 0) list.splice(index, 1)
+            })
+            state.emit([
+              {
+                id: `evt_permission_replied_${permissionID}`,
+                created: Date.now(),
+                type: "permission.replied",
+                location: { directory: requestDirectory(config, ctx.request) },
+                data: {
+                  sessionID,
+                  requestID: permissionID,
+                  reply:
+                    record(ctx.payload) && typeof ctx.payload.decision === "string" ? ctx.payload.decision : "once",
+                },
+              } as OpenCodeEvent,
+            ])
+          }).pipe(Effect.andThen(noContent))
         },
-        sessionPermissionReply: () => noContent,
-        sessionRename: () => noContent,
+        sessionRename: (ctx) =>
+          Effect.sync(() => {
+            const title = record(ctx.payload) ? ctx.payload.title : undefined
+            const session = config.sessions.find((item) => item.id === ctx.params.sessionID)
+            if (session && typeof title === "string") session.title = title
+          }).pipe(Effect.andThen(noContent)),
+        sessionCommand: (ctx) => {
+          const recordCommand = config.onCommand
+          if (!recordCommand) return unsupported("run session commands", "onCommand")
+          return Effect.sync(() => recordCommand({ sessionID: ctx.params.sessionID, body: ctx.payload })).pipe(
+            Effect.andThen(noContent),
+          )
+        },
         sessionInterrupt: () => noContent,
         sessionRevertStage: (ctx) => {
           const payload = record(ctx.payload) ? ctx.payload : {}
@@ -537,9 +1170,10 @@ function mockHandlers(config: MockServerConfig, state: { cursors: Map<string, st
   )
 }
 
-function location(config: MockServerConfig) {
+// The requested workspace (directory) inside the configured project.
+function location(config: MockServerConfig, directory = config.directory) {
   return {
-    directory: config.directory,
+    directory,
     project: { id: (config.project as { id?: string }).id, directory: config.directory, canonical: config.directory },
   }
 }

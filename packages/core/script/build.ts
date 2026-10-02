@@ -26,7 +26,6 @@ const result = await Bun.build({
     "#fff",
     "#photon-wasm",
     "#shell-parser-wasm",
-    "#process-lock-ffi",
     "#v1-migration",
   ],
   splitting: true,

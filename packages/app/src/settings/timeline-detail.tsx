@@ -51,7 +51,12 @@ export function TimelineDetailControl(props: { value: TimelineDetail; onChange: 
           style={{ "--timeline-detail-progress": `${(position() / (presets.length - 1)) * 100}%` }}
         >
           <For each={presets}>
-            {(_, index) => <span style={{ "inset-inline-start": `${(index() / (presets.length - 1)) * 100}%` }} />}
+            {(_, index) => (
+              <span
+                data-selected={index() <= position() ? "" : undefined}
+                style={{ "inset-inline-start": `${(index() / (presets.length - 1)) * 100}%` }}
+              />
+            )}
           </For>
         </div>
         <input

@@ -60,6 +60,7 @@ export const registerToolPlugin = <R>(
     readonly effect: (context: Context) => Effect.Effect<void, never, R>
   },
   overrides: Parameters<typeof host>[0] = {},
+  hook?: Context["tool"]["hook"],
 ): Effect.Effect<void, never, R | Tool.Service | Scope.Scope> =>
   Effect.gen(function* () {
     const tools = yield* Tool.Service
@@ -73,7 +74,7 @@ export const registerToolPlugin = <R>(
         transform: tools.transform,
         reload: tools.reload,
         list: tools.list,
-        hook: () => Effect.die("registerToolPlugin does not support tool hooks"),
+        hook: hook ?? (() => Effect.die("registerToolPlugin does not support tool hooks")),
       },
     })
     yield* plugin.effect(context)

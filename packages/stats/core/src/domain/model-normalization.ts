@@ -6,6 +6,7 @@ export const MODEL_AUTHOR_RULES = [
   { match: "gpt", author: "openai" },
   { match: "grok", author: "xai" },
   { match: "hy3", author: "tencent" },
+  { match: "hy4", author: "tencent" },
   { match: "kimi", author: "moonshot" },
   { match: "mimo", author: "xiaomi" },
   { match: "minimax", author: "minimax" },

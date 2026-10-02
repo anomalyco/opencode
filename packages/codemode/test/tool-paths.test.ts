@@ -354,3 +354,17 @@ describe("tools.search alias", () => {
     expect(await value(runtime, `return await tools.search({})`)).toBe("custom")
   })
 })
+
+describe("tool references under ==", () => {
+  test("compare by identity against data objects without converting them", async () => {
+    const runtime = CodeMode.make({ tools: { probe: echo("Probe", "ok") } })
+    expect(
+      await value(
+        runtime,
+        `let calls = 0
+         const o = { valueOf() { calls++; return 1 } }
+         return [o == tools.probe, tools == { a: 1 }, tools.probe == null, calls]`,
+      ),
+    ).toEqual([false, false, false, 0])
+  })
+})

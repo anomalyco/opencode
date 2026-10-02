@@ -92,6 +92,15 @@ describe("Auth", () => {
     }),
   )
 
+  it.effect("reports a missing config credential as Authentication naming the variable", () =>
+    Effect.gen(function* () {
+      const error = yield* Auth.toEffect(Auth.config("OPENAI_API_KEY").bearer())(input).pipe(withEnv({}), Effect.flip)
+
+      expect(error.reason._tag).toBe("Authentication")
+      expect(error.message).toContain("OPENAI_API_KEY is not set")
+    }),
+  )
+
   it.effect("can intentionally leave auth untouched", () =>
     Effect.gen(function* () {
       const headers = yield* Auth.none.apply(input)

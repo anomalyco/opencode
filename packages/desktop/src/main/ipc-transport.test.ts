@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import { MessageChannel } from "node:worker_threads"
 import type { MessagePortMain, WebContents } from "electron"
-import { Context, Effect, Layer, ManagedRuntime, Option, Queue, Schema, Stream } from "effect"
-import { Rpc, RpcClient, RpcClientError, RpcGroup, RpcMessage, RpcServer } from "effect/unstable/rpc"
+import { Effect, Layer, ManagedRuntime, Schema, Stream } from "effect"
+import { Rpc, RpcGroup, RpcMessage, RpcServer } from "effect/unstable/rpc"
 import { Transferable } from "effect/unstable/workers"
 import { omitUndefined } from "../shared/ipc-transport"
 import { FilesOpenFilePicker } from "../shared/ipc-rpc/files"
@@ -28,15 +28,15 @@ describe("desktop RPC transport", () => {
     // What openAttachmentPickerDialog sends for the composer's attach button.
     const payload = { options: { multiple: true, title: undefined, defaultPath: "C:\\project", extensions: undefined } }
 
-    // The renderer posts the wire format itself, so a present-but-undefined key reaches the JSON codec.
-    const rejected = await rawRequest(channel.port2, 0, payload)
-    expect(rejected).toMatchObject({
-      _tag: "Exit",
-      exit: { _tag: "Failure", cause: [{ _tag: "Die", defect: expect.stringContaining('["options"]["title"]') }] },
+    // Structured clone keeps a present-but-undefined key, so it reaches the JSON codec.
+    const rejected = await call(channel.port2, 0, "FilesOpenFilePicker", payload)
+    expect(rejected.exit).toMatchObject({
+      _tag: "Failure",
+      cause: [{ _tag: "Die", defect: expect.stringContaining('["options"]["title"]') }],
     })
 
-    const accepted = await rawRequest(channel.port2, 1, omitUndefined(payload))
-    expect(accepted).toMatchObject({ _tag: "Exit", exit: { _tag: "Success", value: null } })
+    const accepted = await call(channel.port2, 1, "FilesOpenFilePicker", omitUndefined(payload))
+    expect(accepted.exit).toEqual({ _tag: "Success", value: null })
     expect(received).toEqual({ multiple: true, defaultPath: "C:\\project" })
 
     channel.port2.close()
@@ -45,9 +45,13 @@ describe("desktop RPC transport", () => {
 
   test("omitting undefined fields leaves bytes and defined values alone", () => {
     const data = new Uint8Array([0, 255, 2])
-    const result = omitUndefined({ data, nested: [{ keep: null, drop: undefined }], count: 0 }) as { data: Uint8Array }
-    expect(result).toEqual({ data, nested: [{ keep: null }], count: 0 })
-    expect(result.data).toBe(data)
+    expect(omitUndefined(data)).toBe(data)
+    // Strict equality: a kept `drop: undefined` key must fail the match.
+    expect(omitUndefined({ data, nested: [{ keep: null, drop: undefined }], count: 0 })).toStrictEqual({
+      data,
+      nested: [{ keep: null }],
+      count: 0,
+    })
   })
 
   test("keeps multiple renderer ports independent", async () => {
@@ -73,29 +77,34 @@ describe("desktop RPC transport", () => {
     const second = new MessageChannel()
     handoff.bind(sender(1), serverPort(first.port1))
     handoff.bind(sender(2), serverPort(second.port1))
-    const firstClient = makeClient(first.port2)
-    const secondClient = makeClient(second.port2)
 
-    const [focused, unfocused] = await Promise.all([callFocused(firstClient), callFocused(secondClient)])
-
-    expect(focused).toBe(true)
-    expect(unfocused).toBe(false)
-    expect(await putBlob(firstClient, new Uint8Array([2, 7, 1]))).toBe("2,7,1")
-    // Binary payloads arrive as bytes, not as base64 text.
+    const [focused, unfocused] = await Promise.all([
+      call(first.port2, 0, "test.focused", null),
+      call(second.port2, 0, "test.focused", null),
+    ])
+    expect(focused.exit).toEqual({ _tag: "Success", value: true })
+    expect(unfocused.exit).toEqual({ _tag: "Success", value: false })
+    const put = await call(first.port2, 1, "test.blob.put", omitUndefined({ data: new Uint8Array([2, 7, 1]) }))
+    expect(put.exit).toEqual({ _tag: "Success", value: "2,7,1" })
+    // Binary payloads arrive as bytes, not as base64 text or a plain object.
     expect(received).toBeInstanceOf(Uint8Array)
-    expect(await getBlob(firstClient)).toEqual(new Uint8Array([3, 1, 4]))
-    expect(await firstEvent(firstClient)).toEqual(new TestEvent({ value: "session.new" }))
+    expect((await call(first.port2, 2, "test.blob.get", null)).exit).toEqual({
+      _tag: "Success",
+      value: new Uint8Array([3, 1, 4]),
+    })
+    expect((await call(first.port2, 3, "test.events", null)).chunks).toEqual([
+      { _tag: "TestEvent", value: "session.new" },
+    ])
 
     const reloaded = new MessageChannel()
     handoff.bind(sender(1), serverPort(reloaded.port1))
-    const reloadedClient = makeClient(reloaded.port2)
     const [reloadedFocused, stillUnfocused] = await Promise.all([
-      callFocused(reloadedClient),
-      callFocused(secondClient),
+      call(reloaded.port2, 0, "test.focused", null),
+      call(second.port2, 1, "test.focused", null),
     ])
-    expect(reloadedFocused).toBe(true)
-    expect(stillUnfocused).toBe(false)
-    await Promise.all([firstClient.dispose(), secondClient.dispose(), reloadedClient.dispose()])
+    expect(reloadedFocused.exit).toEqual({ _tag: "Success", value: true })
+    expect(stillUnfocused.exit).toEqual({ _tag: "Success", value: false })
+    for (const port of [first.port2, second.port2, reloaded.port2]) port.close()
     await runtime.dispose()
   })
 })
@@ -107,90 +116,25 @@ const TestRpcs = RpcGroup.make(
   Rpc.make("test.blob.get", { success: Transferable.Uint8Array }),
   Rpc.make("test.events", { success: TestEvent, stream: true }),
 )
-type TestRpcClient = RpcClient.FromGroup<typeof TestRpcs, RpcClientError.RpcClientError>
 
-class TestClient extends Context.Service<TestClient, TestRpcClient>()("opencode/desktop/TestClient") {}
-
-function makeClient(port: MessagePort) {
-  return ManagedRuntime.make(
-    Layer.effect(TestClient, RpcClient.make(TestRpcs)).pipe(Layer.provide(clientProtocol(port))),
-  )
-}
-
-function callFocused(runtime: ManagedRuntime.ManagedRuntime<TestClient, never>) {
-  return runtime.runPromise(
-    Effect.gen(function* () {
-      const client = yield* TestClient
-      return yield* client["test.focused"]()
-    }),
-  )
-}
-
-function putBlob(runtime: ManagedRuntime.ManagedRuntime<TestClient, never>, data: Uint8Array) {
-  return runtime.runPromise(
-    Effect.gen(function* () {
-      const client = yield* TestClient
-      return yield* client["test.blob.put"]({ data })
-    }),
-  )
-}
-
-function getBlob(runtime: ManagedRuntime.ManagedRuntime<TestClient, never>) {
-  return runtime.runPromise(
-    Effect.gen(function* () {
-      const client = yield* TestClient
-      return yield* client["test.blob.get"]()
-    }),
-  )
-}
-
-function firstEvent(runtime: ManagedRuntime.ManagedRuntime<TestClient, never>) {
-  return runtime.runPromise(
-    Effect.gen(function* () {
-      const client = yield* TestClient
-      return yield* client["test.events"]().pipe(Stream.runHead, Effect.map(Option.getOrThrow))
-    }),
-  )
-}
-
-function clientProtocol(port: MessagePort) {
-  return Layer.effect(
-    RpcClient.Protocol,
-    RpcClient.Protocol.make(
-      Effect.fnUntraced(function* (writeResponse, clientIds) {
-        const inbound = yield* Queue.unbounded<RpcMessage.FromServerEncoded>()
-        const onMessage = (event: MessageEvent) =>
-          Queue.offerUnsafe(inbound, event.data as RpcMessage.FromServerEncoded)
-        port.addEventListener("message", onMessage)
-        port.start()
-        yield* Effect.addFinalizer(() =>
-          Effect.sync(() => {
-            port.removeEventListener("message", onMessage)
-            port.close()
-          }),
-        )
-        yield* Stream.fromQueue(inbound).pipe(
-          Stream.runForEach((message) =>
-            Effect.forEach(clientIds, (clientId) => writeResponse(clientId, message), { discard: true }),
-          ),
-          Effect.forkScoped,
-        )
-        return {
-          codecFor: Schema.toCodecJson,
-          send: (_clientId: number, request: RpcMessage.FromClientEncoded) =>
-            Effect.sync(() => port.postMessage(request)),
-          supportsAck: true,
-          supportsTransferables: false,
-        }
-      }),
-    ),
-  )
-}
-
-function rawRequest(port: MessageChannel["port2"], id: number, payload: unknown) {
-  const response = new Promise<RpcMessage.FromServerEncoded>((resolve) => port.once("message", resolve))
-  port.postMessage({ _tag: "Request", id, tag: "FilesOpenFilePicker", payload, headers: [] })
-  return response
+// Speaks the wire format the way src/renderer/ipc-client.ts does: post a request, ack each chunk,
+// and settle on the exit. The payload is posted as given so a test can send what omitUndefined drops.
+function call(port: MessageChannel["port2"], id: number, tag: string, payload: unknown) {
+  const chunks: unknown[] = []
+  return new Promise<{ chunks: unknown[]; exit: RpcMessage.ResponseExitEncoded["exit"] }>((resolve) => {
+    const onMessage = (message: RpcMessage.FromServerEncoded) => {
+      if (!("requestId" in message) || Number(message.requestId) !== id) return
+      if (message._tag === "Chunk") {
+        chunks.push(...message.values)
+        port.postMessage({ _tag: "Ack", requestId: message.requestId } satisfies RpcMessage.AckEncoded)
+        return
+      }
+      port.off("message", onMessage)
+      resolve({ chunks, exit: message.exit })
+    }
+    port.on("message", onMessage)
+    port.postMessage({ _tag: "Request", id, tag, payload, headers: [] })
+  })
 }
 
 function sender(id: number) {
@@ -203,7 +147,7 @@ function sender(id: number) {
   } as unknown as WebContents
 }
 
-function serverPort(port: import("node:worker_threads").MessagePort) {
+function serverPort(port: MessageChannel["port1"]) {
   const listeners = new Map<(event: Electron.MessageEvent) => void, (data: unknown) => void>()
   return {
     on(event: string, listener: (event: Electron.MessageEvent) => void) {

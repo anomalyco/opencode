@@ -24,28 +24,13 @@ export function contentBlockToParts(block: ContentBlock): PromptPart[] {
       }
       return [{ type: "text", text: block.text }]
     }
-    case "image":
-      if (block.data) {
-        return [
-          {
-            type: "file",
-            url: `data:${block.mimeType};base64,${block.data}`,
-            filename: filenameFromUri(block.uri ?? undefined) ?? "image",
-            mime: block.mimeType,
-          },
-        ]
-      }
-      if (block.uri?.startsWith("data:") || block.uri?.startsWith("http://") || block.uri?.startsWith("https://")) {
-        return [
-          {
-            type: "file",
-            url: block.uri,
-            filename: filenameFromUri(block.uri) ?? "image",
-            mime: block.mimeType,
-          },
-        ]
-      }
-      return []
+    case "image": {
+      const url = block.data ? `data:${block.mimeType};base64,${block.data}` : block.uri
+      if (!url) return []
+      const filename = filenameFromUri(block.uri ?? undefined) ?? "image"
+      if (url.startsWith("data:")) return [{ type: "file", url, filename, mime: block.mimeType }]
+      return [resourceLinkToPart({ uri: url, name: filename, mimeType: block.mimeType })]
+    }
     case "resource_link":
       return [resourceLinkToPart(block)]
     case "resource":
@@ -171,12 +156,19 @@ function resourceLinkToPart(link: ResourceLink): PromptPart {
         mime: link.mimeType ?? "text/plain",
       }
   }
-  return { type: "text", text: link.uri }
+  return linkReference(link.name, link.uri)
+}
+
+export function linkReference(name: string | undefined, uri: string): PromptPart {
+  return { type: "text", text: name ? `[${name}](${uri})` : uri }
 }
 
 function filenameFromUri(uri: string | undefined): string | undefined {
   if (!uri || uri.startsWith("data:")) return undefined
-  if (URL.canParse(uri)) return path.basename(new URL(uri).pathname) || undefined
+  if (URL.canParse(uri)) {
+    const url = new URL(uri)
+    return path.basename((url.protocol === "zed:" && url.searchParams.get("path")) || url.pathname) || undefined
+  }
   return path.basename(uri) || undefined
 }
 

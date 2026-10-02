@@ -59,7 +59,7 @@ export type ClosedSessionTab = {
   index: number
 }
 
-const CLOSED_SESSION_TAB_LIMIT = 10
+const CLOSED_SESSION_TAB_LIMIT = 25
 
 export function recordClosedSessionTab(
   stack: readonly ClosedSessionTab[],
@@ -74,11 +74,14 @@ export function recordClosedSessionTab(
 /**
  * Pop the most recently closed tab that is not already open and restore it at its original
  * position. Entries for already-open sessions are consumed so repeated reopens walk the stack.
+ * Selecting a session removes only its entry, preserving the rest of the closed history.
  */
-export function reopenSessionTab(stack: readonly ClosedSessionTab[], tabs: readonly SessionTab[]) {
+export function reopenSessionTab(stack: readonly ClosedSessionTab[], tabs: readonly SessionTab[], sessionID?: string) {
   const remaining = [...stack]
   while (remaining.length > 0) {
-    const entry = remaining.pop()!
+    const index = sessionID ? remaining.findIndex((entry) => entry.tab.sessionID === sessionID) : remaining.length - 1
+    if (index === -1) break
+    const [entry] = remaining.splice(index, 1)
     if (tabs.some((tab) => tab.sessionID === entry.tab.sessionID)) continue
     const next = [...tabs]
     next.splice(Math.min(entry.index, tabs.length), 0, entry.tab)

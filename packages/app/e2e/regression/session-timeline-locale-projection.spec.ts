@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { assistantMessage, setupTimeline, toolPart, userMessage } from "../performance/timeline-stability/fixture"
+import { assistantMessage, setupTimeline, toolPart, userMessage } from "../utils/timeline"
 
 for (const locale of ["de", "ar"] as const) {
   test(`projects localized tool names with an English fallback in ${locale}`, async ({ page }) => {
@@ -16,9 +16,9 @@ for (const locale of ["de", "ar"] as const) {
     })
 
     const group = page.locator(`[data-timeline-part-ids="${ids.join(",")}"]`)
-    const names = locale === "de" ? "Lesen, Glob" : "\u0642\u0631\u0627\u0621\u0629, Glob"
-    await expect(group.getByRole("button")).toHaveAccessibleName(`Used 2 ${names}`)
-    await expect(group.locator('[data-slot="basic-tool-tool-title"]')).toHaveText(names)
+    const label = locale === "de" ? "2 Lesen und Glob verwendet" : "استُخدمت 2 أداتان: \u2068قراءة وGlob\u2069"
+    await expect(group.getByRole("button")).toHaveAccessibleName(label)
+    await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute("aria-label", label)
     await expect(page.locator("html")).toHaveAttribute("lang", locale)
   })
 }

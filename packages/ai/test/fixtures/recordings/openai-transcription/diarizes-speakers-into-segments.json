@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:openai-transcription",
+      "provider:openai",
+      "protocol:openai-transcription"
+    ],
+    "name": "openai-transcription/diarizes-speakers-into-segments",
+    "recordedAt": "2026-09-23T12:32:01.274Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/audio/transcriptions",
+        "headers": {
+          "content-type": "multipart/form-data; boundary=----WebKitFormBoundaryf476753a62264fa88f2d753a7e85c3a4"
+        },
+        "body": "--BOUNDARY\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.mp3\"\r\nContent-Type: audio/mpeg\r\n\r\n[audio]\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\ngpt-4o-transcribe-diarize\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"response_format\"\r\n\r\ndiarized_json\r\n--BOUNDARY\r\nContent-Disposition: form-data; name=\"chunking_strategy\"\r\n\r\nauto\r\n--BOUNDARY--\r\n"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"text\":\"Hello from OpenCode!\",\"task\":\"transcribe\",\"duration\":1.54125,\"segments\":[{\"type\":\"transcript.text.segment\",\"text\":\" Hello from OpenCode!\",\"speaker\":\"A\",\"start\":0.30000000000000004,\"end\":1.3499999999999999,\"id\":\"seg_0\"}],\"usage\":{\"type\":\"tokens\",\"total_tokens\":107,\"input_tokens\":15,\"input_token_details\":{\"text_tokens\":0,\"audio_tokens\":15},\"output_tokens\":92}}"
+      }
+    }
+  ]
+}

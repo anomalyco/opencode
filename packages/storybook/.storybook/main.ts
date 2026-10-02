@@ -8,6 +8,7 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const ui = path.resolve(here, "../../ui")
 const sessionUi = path.resolve(here, "../../session-ui")
 const app = path.resolve(here, "../../app/src")
+const extensions = path.resolve(here, "../../gui-extensions/src")
 const mocks = path.resolve(here, "./mocks")
 
 export default defineMain({
@@ -27,6 +28,7 @@ export default defineMain({
     "../../ui/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
     "../../session-ui/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
     "../../app/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+    "../../gui-extensions/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
   ],
   async viteFinal(config) {
     const { mergeConfig, searchForWorkspaceRoot } = await import("vite")
@@ -46,6 +48,7 @@ export default defineMain({
           { find: /^@\/runtime\/server\/global-sync$/, replacement: path.resolve(mocks, "app/context/global-sync.ts") },
           { find: /^@\/runtime\/server\/sync$/, replacement: path.resolve(mocks, "app/context/server-sync.ts") },
           { find: /^@\/runtime\/server\/client$/, replacement: path.resolve(mocks, "app/context/server-sdk.ts") },
+          { find: /^@\/runtime\/server\/current$/, replacement: path.resolve(mocks, "app/context/server-current.ts") },
           {
             find: /^@\/providers\/catalog\/providers$/,
             replacement: path.resolve(mocks, "app/hooks/use-providers.ts"),
@@ -62,7 +65,7 @@ export default defineMain({
       },
       server: {
         fs: {
-          allow: [searchForWorkspaceRoot(process.cwd()), ui, sessionUi, app, mocks],
+          allow: [searchForWorkspaceRoot(process.cwd()), ui, sessionUi, app, extensions, mocks],
         },
       },
     })

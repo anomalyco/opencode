@@ -1,5 +1,8 @@
 import type {
   ServerInfoOutput,
+  ServerPairOutput,
+  ServerConnectInput,
+  ServerConnectOutput,
   LocationGetInput,
   LocationGetOutput,
   LocationReloadOutput,
@@ -144,6 +147,9 @@ import type {
   McpDisconnectOutput,
   McpResourceCatalogInput,
   McpResourceCatalogOutput,
+  CredentialListOutput,
+  CredentialCreateInput,
+  CredentialCreateOutput,
   CredentialUpdateInput,
   CredentialUpdateOutput,
   CredentialActivateInput,
@@ -234,6 +240,8 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  VcsInitInput,
+  VcsInitOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsBaseInput,
@@ -330,11 +338,12 @@ export function make(options: ClientOptions) {
   }
 
   const responseError = async (response: Response, descriptor: RequestDescriptor): Promise<never> => {
-    if (descriptor.declaredStatuses.includes(response.status)) throw await json(response)
+    if (descriptor.declaredStatuses.includes(response.status))
+      throw declared((await json(response)) as DeclaredErrorBody)
     try {
       await response.body?.cancel()
     } catch {}
-    throw new ClientError("UnexpectedStatus", { cause: { status: response.status } })
+    throw new ClientError("UnexpectedStatus", { cause: { status: response.status }, detail: String(response.status) })
   }
 
   const request = async <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): Promise<A> => {
@@ -358,7 +367,7 @@ export function make(options: ClientOptions) {
         try {
           await response.body?.cancel()
         } catch {}
-        throw new ClientError("UnsupportedContentType")
+        throw new ClientError("UnsupportedContentType", { detail: response.headers.get("content-type") })
       }
       if (response.body === null) throw new ClientError("MalformedResponse")
       const reader = response.body.getReader()
@@ -413,6 +422,22 @@ export function make(options: ClientOptions) {
       info: (requestOptions?: RequestOptions) =>
         request<ServerInfoOutput>(
           { method: "GET", path: `/api/info`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ),
+      pair: (requestOptions?: RequestOptions) =>
+        request<ServerPairOutput>(
+          { method: "POST", path: `/api/pair`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ),
+      connect: (input: ServerConnectInput, requestOptions?: RequestOptions) =>
+        request<ServerConnectOutput>(
+          {
+            method: "GET",
+            path: `/auth/connect/${encodeURIComponent(input.code)}`,
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
           requestOptions,
         ),
     },
@@ -554,6 +579,7 @@ export function make(options: ClientOptions) {
             path: `/api/session`,
             body: {
               id: input?.["id"],
+              parentID: input?.["parentID"],
               title: input?.["title"],
               agent: input?.["agent"],
               model: input?.["model"],
@@ -562,7 +588,7 @@ export function make(options: ClientOptions) {
               permissions: input?.["permissions"],
             },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1035,6 +1061,7 @@ export function make(options: ClientOptions) {
             {
               method: "DELETE",
               path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
+              query: { message: input["message"] },
               successStatus: 204,
               declaredStatuses: [400, 401, 404, 409],
               empty: true,
@@ -1372,6 +1399,29 @@ export function make(options: ClientOptions) {
       },
     },
     credential: {
+      list: (requestOptions?: RequestOptions) =>
+        request<{ readonly data: CredentialListOutput }>(
+          { method: "GET", path: `/api/credential`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ).then((value) => value.data),
+      create: (input: CredentialCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: CredentialCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/credential`,
+            body: {
+              id: input["id"],
+              integrationID: input["integrationID"],
+              label: input["label"],
+              value: input["value"],
+              activate: input["activate"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 409],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       update: (input: CredentialUpdateInput, requestOptions?: RequestOptions) =>
         request<CredentialUpdateOutput>(
           {
@@ -1992,6 +2042,18 @@ export function make(options: ClientOptions) {
         ),
     },
     vcs: {
+      init: (input?: VcsInitInput, requestOptions?: RequestOptions) =>
+        request<VcsInitOutput>(
+          {
+            method: "POST",
+            path: `/api/vcs/init`,
+            query: { location: input?.["location"], provider: input?.["provider"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 409, 501, 503],
+            empty: true,
+          },
+          requestOptions,
+        ),
       get: (input?: VcsGetInput, requestOptions?: RequestOptions) =>
         request<VcsGetOutput>(
           {
@@ -2184,7 +2246,7 @@ async function json(response: Response): Promise<unknown> {
     try {
       await response.body?.cancel()
     } catch {}
-    throw new ClientError("UnsupportedContentType")
+    throw new ClientError("UnsupportedContentType", { detail: response.headers.get("content-type") })
   }
   let text: string
   try {
@@ -2198,6 +2260,19 @@ async function json(response: Response): Promise<unknown> {
   } catch (cause) {
     throw new ClientError("MalformedResponse", { cause })
   }
+}
+
+type DeclaredErrorBody = {
+  readonly _tag?: string
+  readonly message?: string
+  readonly data?: { readonly message?: string }
+}
+
+/** Throw declared error bodies as Errors. The body's fields stay on the error, so narrowing on `_tag` or `name` still works. */
+function declared(body: DeclaredErrorBody) {
+  const error = Object.assign(new Error(body.message ?? body.data?.message), body)
+  if (body._tag) error.name = body._tag
+  return error
 }
 
 function isContentType(response: Response, expected: string) {

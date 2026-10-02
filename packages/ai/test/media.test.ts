@@ -3,7 +3,7 @@ import { NodeFileSystem } from "@effect/platform-node"
 import { Effect, Ref, Schema } from "effect"
 import { FileSystem } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { Media, Message } from "../src/index.js"
+import { AIError, Media, Message } from "../src/index.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, scriptedResponses } from "./lib/http.js"
 
@@ -63,6 +63,13 @@ describe("Media", () => {
       expect(Media.detectMediaType(WEBP)).toBe("image/webp")
       expect(Media.detectMediaType(PDF)).toBe("application/pdf")
       expect(Media.detectMediaType(Uint8Array.from([1, 2, 3]))).toBeUndefined()
+      expect(Media.detectMediaType(new TextEncoder().encode("ID3\x04"))).toBe("audio/mpeg")
+      expect(Media.detectMediaType(Uint8Array.from([0xff, 0xfb, 0x90, 0x64]))).toBe("audio/mpeg")
+      expect(Media.detectMediaType(Uint8Array.from([0xff, 0xf3, 0x90, 0x64]))).toBe("audio/mpeg")
+      expect(Media.detectMediaType(Uint8Array.from([0xff, 0xf1, 0x50, 0x80]))).toBe("audio/aac")
+      expect(Media.detectMediaType(new TextEncoder().encode("RIFF\0\0\0\0WAVEfmt "))).toBe("audio/wav")
+      expect(Media.detectMediaType(new TextEncoder().encode("OggS\0\x02"))).toBe("audio/ogg")
+      expect(Media.detectMediaType(new TextEncoder().encode("fLaC\0\0\0\x22"))).toBe("audio/flac")
       expect(Media.bytes(PNG).mediaType).toBe("image/png")
       expect(Media.bytes(Uint8Array.from([1, 2, 3])).mediaType).toBe("application/octet-stream")
       expect(Media.bytes(Uint8Array.from([1, 2, 3]), "image/x-custom").mediaType).toBe("image/x-custom")
@@ -151,6 +158,56 @@ describe("Media", () => {
       expect(parts[0].filename).toBe("a.png")
       expect(parts[1].media.kind).toBe("document")
       expect(parts[1].media.expiresAt).toBe(7)
+    }),
+  )
+
+  it.effect("keeps transient url download headers out of toJSON and AssetSchema encoding", () =>
+    Effect.sync(() => {
+      const asset = Media.url("https://cdn.example.test/video.mp4", {
+        mediaType: "video/mp4",
+        expiresAt: 42,
+        headers: { "x-goog-api-key": "secret" },
+      })
+      expect(asset.headers).toEqual({ "x-goog-api-key": "secret" })
+      const source = { type: "url", url: "https://cdn.example.test/video.mp4", mediaType: "video/mp4", expiresAt: 42 }
+
+      expect(asset.toJSON()).not.toHaveProperty("headers")
+      expect(JSON.stringify(asset)).not.toContain("secret")
+      expect(asset.toJSON().source).toEqual(source)
+
+      const encoded = Schema.encodeSync(Media.AssetSchema)(asset)
+      expect(encoded).not.toHaveProperty("headers")
+      expect(encoded.source).toEqual(source)
+
+      const codec = Schema.fromJsonString(Media.AssetSchema)
+      const json = Schema.encodeSync(codec)(asset)
+      expect(json).not.toContain("secret")
+      const restored = Schema.decodeSync(codec)(json)
+      expect(restored).toBeInstanceOf(Media.Asset)
+      expect(restored.source).toEqual(source)
+      expect(restored.expiresAt).toBe(42)
+      expect(restored.headers).toBeUndefined()
+    }),
+  )
+
+  it.effect("fails url downloads with non-2xx status as a typed AIError keeping http and body", () =>
+    Effect.gen(function* () {
+      const body = JSON.stringify({ error: { message: "file expired" } })
+      const error = yield* Media.url("https://cdn.example.test/expired.png")
+        .bytes()
+        .pipe(
+          Effect.flip,
+          Effect.provide(
+            dynamicResponse((input) =>
+              Effect.succeed(input.respond(body, { status: 404, headers: { "content-type": "application/json" } })),
+            ),
+          ),
+        )
+      expect(error).toBeInstanceOf(AIError)
+      expect(error.message).toContain("file expired")
+      expect(error.reason.http?.status).toBe(404)
+      expect(error.reason.http?.url).toBe("https://cdn.example.test/expired.png")
+      expect(error.reason.body).toBe(body)
     }),
   )
 

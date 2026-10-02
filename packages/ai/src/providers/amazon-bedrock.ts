@@ -31,6 +31,7 @@ export interface Settings extends ProviderPackage.Settings {
   readonly profile?: string
   readonly region?: string
   readonly topP?: number
+  readonly thinking?: BedrockConverse.OptionsInput["thinking"]
 }
 export const routes = [BedrockConverse.route]
 
@@ -71,6 +72,7 @@ export const model: ProviderPackage.Definition<Settings>["model"] = (modelID, se
     generation: settings.topP === undefined ? undefined : { topP: settings.topP },
     headers: settings.headers === undefined ? undefined : { ...settings.headers },
     http: settings.body === undefined ? undefined : { body: { ...settings.body } },
+    providerOptions: settings.thinking === undefined ? undefined : { thinking: settings.thinking },
     profile: settings.profile,
     region: settings.region,
   }).model(modelID)

@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:bedrock-converse-thinking-binding",
+      "provider:amazon-bedrock",
+      "protocol:bedrock-converse",
+      "reasoning"
+    ],
+    "name": "bedrock-converse-thinking-binding/accepts-the-default-binding-with-no-thinking-configured",
+    "recordedAt": "2026-09-28T23:09:14.527Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://bedrock-runtime.us-east-1.amazonaws.com/model/global.anthropic.claude-opus-5-5/converse-stream",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"modelId\":\"global.anthropic.claude-opus-5-5\",\"messages\":[{\"role\":\"user\",\"content\":[{\"text\":\"Say hello.\"}]}],\"system\":[{\"text\":\"Reply with the single word 'Hello'.\"}],\"inferenceConfig\":{\"maxTokens\":1024},\"additionalModelRequestFields\":{\"thinking\":{\"type\":\"adaptive\",\"block_binding\":{\"prefix_mismatch_behavior\":\"drop_block\"}},\"anthropic_beta\":[\"thinking-binding-controls-2026-08-01\"]}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/vnd.amazon.eventstream"
+        },
+        "body": "AAAAoQAAAFKtAFmXCzpldmVudC10eXBlBwAMbWVzc2FnZVN0YXJ0DTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSiIsInJvbGUiOiJhc3Npc3RhbnQifUMJiXoAAAC8AAAAV0Ua/isLOmV2ZW50LXR5cGUHABFjb250ZW50QmxvY2tEZWx0YQ06Y29udGVudC10eXBlBwAQYXBwbGljYXRpb24vanNvbg06bWVzc2FnZS10eXBlBwAFZXZlbnR7ImNvbnRlbnRCbG9ja0luZGV4IjowLCJkZWx0YSI6eyJ0ZXh0IjoiSGVsbG8ifSwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDRCJ91Ic6iwAAALQAAABWAm2FfAs6ZXZlbnQtdHlwZQcAEGNvbnRlbnRCbG9ja1N0b3ANOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJjb250ZW50QmxvY2tJbmRleCI6MCwicCI6ImFiY2RlZmdoaWprbG1ub3BxcnN0dXZ3eHl6QUJDREVGR0hJSktMTU5PUFFSU1RVViJ9qr7BagAAAIYAAABRR+j7OQs6ZXZlbnQtdHlwZQcAC21lc3NhZ2VTdG9wDTpjb250ZW50LXR5cGUHABBhcHBsaWNhdGlvbi9qc29uDTptZXNzYWdlLXR5cGUHAAVldmVudHsicCI6ImFiY2RlIiwic3RvcFJlYXNvbiI6ImVuZF90dXJuIn0pJ2GhAAABCAAAAE4PaiuaCzpldmVudC10eXBlBwAIbWV0YWRhdGENOmNvbnRlbnQtdHlwZQcAEGFwcGxpY2F0aW9uL2pzb24NOm1lc3NhZ2UtdHlwZQcABWV2ZW50eyJtZXRyaWNzIjp7ImxhdGVuY3lNcyI6MTI0OX0sInAiOiJhYmNkZWZnaGlqa2xtbm9wcXJzdHV2d3h5ekFCQ0RFRkdISUpLTE1OT1BRUlNUVVZXWFkiLCJ1c2FnZSI6eyJpbnB1dFRva2VucyI6MjgsIm91dHB1dFRva2VucyI6NSwic2VydmVyVG9vbFVzYWdlIjp7fSwidG90YWxUb2tlbnMiOjMzfX2s2SiQ",
+        "bodyEncoding": "base64"
+      }
+    }
+  ]
+}

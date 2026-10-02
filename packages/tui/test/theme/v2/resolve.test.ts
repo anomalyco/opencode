@@ -14,7 +14,7 @@ import { getOpenCodeTheme, parseTheme, type ThemeDocumentSource } from "../../..
 
 const opencodeLight = selectTheme(getOpenCodeTheme(), "light")
 const opencodeDark = selectTheme(getOpenCodeTheme(), "dark")
-const chromaticHues = ["gray", "red", "orange", "yellow", "green", "cyan", "blue", "purple"] as const
+const chromaticHues = ["gray", "red", "orange", "green", "cyan", "blue", "purple"] as const
 const light: ThemeDefinition = {
   ...opencodeLight,
   categorical: ["blue", "purple"],

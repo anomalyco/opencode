@@ -211,11 +211,6 @@
           transform 120ms ease;
       }
 
-      &[data-value="review"] {
-        padding-left: 8px;
-        padding-right: 8px;
-      }
-
       [data-slot="tabs-trigger"] {
         height: 100%;
         padding: 0 !important;
@@ -552,18 +547,6 @@
       }
     }
 
-    &[data-value="open-file"],
-    &[data-value^="file://"],
-    &[data-value="browser"],
-    &[data-value^="browser:"] {
-      gap: 8px;
-      padding-inline-end: 4px;
-
-      [data-slot="tabs-trigger-close-button"] {
-        margin-inline-start: 0;
-      }
-    }
-
     &:has([data-selected]) {
       background-color: var(--v2-background-bg-layer-02);
       box-shadow: none;
@@ -581,7 +564,7 @@
     font-variation-settings: "slnt" 0;
     font-variant-numeric: tabular-nums;
 
-    &[data-selected]:not([data-value="open-file"]) {
+    &[data-selected] {
       color: var(--v2-text-text-base);
     }
 

@@ -1,5 +1,9 @@
 {
   "$schema": "https://raw.githubusercontent.com/nicolo-ribaudo/oxc-project.github.io/refs/heads/json-schema/src/public/.oxlintrc.schema.json",
+  "jsPlugins": [
+    { "name": "anti-slop", "specifier": "./script/oxlint/anti-slop/index.ts" },
+    { "name": "anti-slop-effect", "specifier": "./script/oxlint/anti-slop/effect/index.ts" }
+  ],
   "categories": {
     "correctness": "off",
     "suspicious": "off",
@@ -18,5 +22,94 @@
       }
     ]
   },
-  "ignorePatterns": ["**/node_modules", "**/dist", "**/.build", "**/.sst", "**/*.d.ts", "**/sdk.gen.ts"]
+  "overrides": [
+    {
+      "files": [
+        "packages/app/**",
+        "packages/desktop/**",
+        "packages/gui-extensions/**",
+        "packages/ui/**",
+        "packages/session-ui/**"
+      ],
+      "rules": {
+        "oxc/no-accumulating-spread": "warn",
+        "anti-slop/no-array-filter-map": "warn",
+        "anti-slop/no-reduce-accumulator-copy": "warn",
+        "anti-slop/no-chained-type-assertions": "warn",
+        "anti-slop/no-conditional-empty-object-spread": "warn",
+        "anti-slop/no-known-value-widening": "warn",
+        "anti-slop/no-module-mocking": "warn",
+        "anti-slop/no-object-parameters": "warn",
+        "anti-slop/no-reflect-apply": "warn",
+        "anti-slop/no-reflect-get": "warn",
+        "anti-slop/no-runtime-typeof": "warn",
+        "anti-slop/no-shape-in-symbol-names": "warn",
+        "anti-slop/no-unknown-parameters": "warn",
+        "anti-slop/no-unknown-returns": "warn",
+        "anti-slop/no-unknown-type-aliases": "warn",
+        "anti-slop/no-unsafe-dictionary-type": "warn",
+        "anti-slop/no-widen-then-assert": "warn",
+        "anti-slop/require-readable-spacing": "warn",
+        "anti-slop/require-safety-comment-for-type-assertion": "warn"
+      }
+    },
+    {
+      "files": ["packages/app/**", "packages/desktop/**", "packages/gui-extensions/**", "packages/session-ui/**"],
+      "rules": {
+        "anti-slop-effect/no-manual-effect-error-tag": "warn",
+        "anti-slop-effect/no-manual-tag-comparison": "warn",
+        "anti-slop-effect/no-manual-tagged-construction": "warn",
+        "anti-slop-effect/no-service-constructor-imports": "warn",
+        "anti-slop-effect/prefer-effect-match": "warn"
+      }
+    },
+    {
+      "files": ["packages/gui-extensions/src/*/**"],
+      "rules": {
+        "no-restricted-imports": [
+          "error",
+          {
+            "patterns": [
+              {
+                "regex": "^@opencode/(app|desktop)(/|$)",
+                "message": "GUI extensions never import the app or desktop packages. Use the SDK."
+              },
+              {
+                "regex": "^@/",
+                "message": "GUI extensions never import app internals. Use the SDK."
+              },
+              {
+                "group": ["../*/*", "!../*/contract", "!../sdk/*"],
+                "message": "Import another extension only through its contract.ts."
+              },
+              {
+                "regex": "\\.css$",
+                "message": "Import CSS with ?inline and contribute it with ctx.add(Style, css)."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "ignorePatterns": [
+    "**/node_modules",
+    "**/dist",
+    "**/.build",
+    "**/.sst",
+    "**/*.d.ts",
+    "**/sdk.gen.ts",
+    ".agent/**",
+    ".agents/**",
+    ".claude/**",
+    ".codex/**",
+    ".continue/**",
+    ".cursor/**",
+    ".gemini/**",
+    ".opencode/**",
+    ".pi/**",
+    ".roo/**",
+    ".windsurf/**",
+    "script/oxlint/anti-slop/**"
+  ]
 }

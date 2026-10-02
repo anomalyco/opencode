@@ -18,7 +18,7 @@ import {
   textPart,
   toolPart,
   userMessage,
-} from "./fixture"
+} from "../../utils/timeline"
 
 test.describe("timeline tool state stability", () => {
   test("moves lightweight tools through streaming, running, and completed without replacing rows", async ({
