@@ -68,6 +68,7 @@ export type PromptProps = {
   ref?: (ref: PromptRef | undefined) => void
   hint?: JSX.Element
   right?: JSX.Element
+  footer?: JSX.Element
   showPlaceholder?: boolean
   placeholders?: {
     normal?: string[]
@@ -1654,6 +1655,7 @@ export function Prompt(props: PromptProps) {
           </Switch>
           <Show when={status().type !== "retry"}>
             <box gap={2} flexDirection="row">
+              {props.footer}
               <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
                 {(file) => (
                   <text fg={editorContextLabelState() === "pending" ? theme.secondary : theme.textMuted}>{file()}</text>

@@ -1328,6 +1328,7 @@ export function Session() {
                       }}
                       sessionID={route.sessionID}
                       right={<pluginRuntime.Slot name="session_prompt_right" session_id={route.sessionID} />}
+                      footer={<pluginRuntime.Slot name="session_prompt_footer" session_id={route.sessionID} />}
                     />
                   </pluginRuntime.Slot>
                 </Show>
