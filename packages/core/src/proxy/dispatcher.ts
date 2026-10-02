@@ -8,6 +8,7 @@ import { once } from "node:events"
 import { Readable } from "node:stream"
 import type { ProxySettings } from "./resolve"
 import { selectProviders, type ProxyAuthContext, type ProxyAuthProvider } from "./auth/provider"
+import { ProxyAuthError } from "./error"
 
 export const MAX_AUTH_ROUNDS = 3
 
@@ -98,10 +99,10 @@ export async function openTunnel(
     const result = await connectOnce(proxy, target, header)
     if ("socket" in result) return result
     for (const scheme of result.challenges) challenges.add(scheme)
-    if (header) throw new Error(`Proxy authentication rejected by ${proxy.origin}`)
-    if (challenges.size === 0) throw new Error(`Proxy at ${proxy.origin} did not advertise an authentication scheme`)
+    if (header) throw new ProxyAuthError("rejected", { proxy: proxy.origin })
+    if (challenges.size === 0) throw new ProxyAuthError("no-credentials", { proxy: proxy.origin })
   }
-  throw new Error(`Proxy authentication failed after ${MAX_AUTH_ROUNDS} attempts`)
+  throw new ProxyAuthError("rounds-exceeded", { proxy: proxy.origin })
 }
 
 function connectOnce(
@@ -167,10 +168,10 @@ async function requestAbsoluteForm(
     if (response.status !== 407) return response
     for (const scheme of challengesOf(response.headers.get("proxy-authenticate") ?? undefined)) challenges.add(scheme)
     response.body?.cancel()
-    if (header) throw new Error(`Proxy authentication rejected by ${proxy.origin}`)
-    if (challenges.size === 0) throw new Error(`Proxy at ${proxy.origin} did not advertise an authentication scheme`)
+    if (header) throw new ProxyAuthError("rejected", { proxy: proxy.origin })
+    if (challenges.size === 0) throw new ProxyAuthError("no-credentials", { proxy: proxy.origin })
   }
-  throw new Error(`Proxy authentication failed after ${MAX_AUTH_ROUNDS} attempts`)
+  throw new ProxyAuthError("rounds-exceeded", { proxy: proxy.origin })
 }
 
 /**
