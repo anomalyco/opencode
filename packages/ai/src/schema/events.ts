@@ -72,6 +72,15 @@ export class Usage extends Schema.Class<Usage>("AI.Usage")({
   cacheWriteInputTokens: Schema.optional(Schema.Number),
   reasoningTokens: Schema.optional(Schema.Number),
   totalTokens: Schema.optional(Schema.Number),
+  /**
+   * Provider-reported cost for this physical request, normalized to USD.
+   *
+   * Set only when the endpoint bills and reports one (OpenRouter, LiteLLM,
+   * Manifest, and other gateways that stamp `usage.cost`). `0` is a meaningful
+   * value for a flat-fee or free routed request and stays authoritative;
+   * absent means the caller falls back to pricing the token counts.
+   */
+  cost: Schema.optional(Schema.Number),
   providerMetadata: Schema.optional(ProviderMetadata),
 }) {
   /**
