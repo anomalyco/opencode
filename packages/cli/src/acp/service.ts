@@ -49,7 +49,6 @@ export const AuthMethodID = "opencode-login"
 
 export type Failure = ACPError.Error | RequestError | ACPCatalog.Error
 
-/** What the client advertised in `initialize`. */
 export type Capabilities = {
   readonly childSessionUpdates: boolean
   readonly formElicitation: boolean
@@ -86,7 +85,6 @@ export function make(input: {
     return configOptions(yield* input.catalog.get(attached.cwd), yield* Ref.get(attached.selection))
   })
 
-  // A selection the catalog has not seen may be new on the server, so reload once before rejecting it.
   const withReload = <A>(attached: Attached, select: Effect.Effect<A, Failure>) => {
     const retry = () => input.catalog.reload(attached.cwd).pipe(Effect.andThen(select))
     return select.pipe(
@@ -193,8 +191,7 @@ export function make(input: {
     }),
     newSession: Effect.fnUntraced(function* (params) {
       const directories = yield* ACPDirectories.parse(params.cwd, params.additionalDirectories)
-      // Load before creating so a catalog failure leaves no session behind. Agent and model stay unset
-      // so the server resolves its defaults after plugins activate.
+      // Load first so a catalog failure leaves no session; agent and model stay unset for the server to default.
       yield* input.catalog.get(params.cwd)
       const created = yield* input.client.session
         .create({ location: { directory: AbsolutePath.make(params.cwd) }, ...ACPDirectories.grant(directories) })

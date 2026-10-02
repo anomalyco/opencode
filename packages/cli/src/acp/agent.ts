@@ -102,8 +102,6 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
     "session/set_mode",
     handle((service, ctx) => service.setSessionMode(ctx.params)),
   )
-  // The SDK signal is passed through rather than interrupting the fiber: a cancelled turn still resolves with
-  // `stopReason: "cancelled"`.
   request(
     "session/prompt",
     handle((service, ctx) => service.prompt(ctx.params, ctx.signal)),

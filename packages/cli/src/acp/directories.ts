@@ -11,12 +11,7 @@ import { ACPError } from "./error"
 const key = "opencode.acp.additionalDirectories"
 const decodeStored = Schema.decodeUnknownOption(Schema.Array(Schema.String))
 
-/**
- * Normalizes additional workspace roots without following symlinks, keeping the spelling tools will see, and
- * drops duplicates and roots that resolve to cwd. Glob characters are rejected because permission resources
- * would treat them as wildcards. The ACP SDK has already dropped entries that are not strings and replaced a
- * value that is not an array with `[]`.
- */
+// Glob characters are rejected because permission resources would treat them as wildcards.
 export const parse = Effect.fnUntraced(function* (cwd: string, directories: readonly string[] = []) {
   const invalid = directories.find((directory) => !isAbsolute(directory) || /[*?]/.test(directory))
   if (invalid !== undefined) return yield* new ACPError.InvalidAdditionalDirectoryError({ directory: invalid })
@@ -26,24 +21,15 @@ export const parse = Effect.fnUntraced(function* (cwd: string, directories: read
   )
 })
 
-/** Session create fields that grant these directories. */
 export function grant(directories: readonly string[]) {
   if (directories.length === 0) return {}
   return { permissions: rules(directories), metadata: { [key]: [...directories] } }
 }
 
-/** The additional directories ACP last activated for the session, in request order. */
 export function list(session: Pick<Session.Info, "metadata">) {
   return [...Option.getOrElse(decodeStored(session.metadata?.[key]), () => [])]
 }
 
-/**
- * Replaces the rules granted for the previously activated directories with grants for these directories.
- * Grants persist on the server session, so they also apply when it is used from other clients, and child
- * sessions copy them when they are created; a child created earlier keeps roots its parent later dropped.
- * Session rules are evaluated after agent and config rules, so a grant overrides config `external_directory`
- * rules inside the root, while read, edit, and shell rules still apply.
- */
 export const activate = Effect.fnUntraced(function* (
   client: OpenCodeClient,
   session: Session.Info,

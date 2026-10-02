@@ -36,23 +36,15 @@ import { ACPTranslate } from "./translate"
 type Failure = ACPError.Error | RequestError | ACPCatalog.Error
 
 export interface Interface {
-  /**
-   * Runs the session's only turn. Cancelling it, including through the request's `$/cancel_request` signal,
-   * interrupts the turn and still resolves with `stopReason: "cancelled"`.
-   */
   readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, Failure>
-  /** Interrupts the session's active turn and waits for it to settle. No-op when the session is idle. */
   readonly cancel: (input: CancelNotification) => Effect.Effect<void>
-  /** Like `cancel`, but an idle session is still interrupted, since server work can outlive its turn. */
+  /** Unlike `cancel`, interrupts an idle session too, since server work can outlive its turn. */
   readonly close: (sessionID: string) => Effect.Effect<void, ACPError.Error | RequestError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Turn") {}
 
-/**
- * How long a cancelled turn keeps forwarding the server's wind-down. Core acknowledges an interrupt before its
- * cleanup settles, and its shell tool waits 3 seconds before escalating to SIGKILL.
- */
+/** Core acknowledges an interrupt before its cleanup settles, and its shell tool waits 3s before SIGKILL. */
 export const CancelDrainTimeout = Context.Reference<Duration.Input>("@opencode/cli/acp/Turn/CancelDrainTimeout", {
   defaultValue: () => "5 seconds",
 })
@@ -68,15 +60,12 @@ type PreparedPrompt = {
 
 type PermissionAsk = Extract<ACPTranslate.Output, { readonly _tag: "PermissionAsk" }>
 
-/** A turn's event feed. It moves to the session scope when the turn ends with children still running. */
 type Subscription = {
   readonly scope: Scope.Closeable
   readonly events: Queue.Dequeue<OpenCodeEvent, unknown>
-  /** Runs permission and form asks one at a time in ask order, without holding back the rest of the stream. */
+  /** Asks run one at a time in order without holding back the event stream. */
   readonly asks: Queue.Queue<Effect.Effect<void, ACPError.Error | RequestError>>
-  /** Completed when the turn is cancelled; pending and later asks then resolve without the client. */
   readonly cancelled: Deferred.Deferred<void>
-  /** Completed per asked form once the server reports it answered or cancelled. */
   readonly forms: Map<string, Deferred.Deferred<void>>
 }
 
@@ -121,7 +110,6 @@ export const make = Effect.fnUntraced(function* (input: {
       ),
     )
 
-  // A turn settles only after the asks it saw have been resolved.
   const asksSettled = Effect.fnUntraced(function* (subscription: Subscription) {
     const settled = yield* Deferred.make<void>()
     yield* Queue.offer(subscription.asks, Deferred.succeed(settled, undefined).pipe(Effect.asVoid))
@@ -241,8 +229,6 @@ export const make = Effect.fnUntraced(function* (input: {
   const interruptServer = (sessionID: Session.ID) =>
     input.client.session.interrupt({ sessionID }).pipe(Effect.ignoreCause)
 
-  // Rejects pending asks, interrupts the server once, then forwards its wind-down until the terminal event or the
-  // timeout. Tools and a compaction still open at the timeout are settled so the client never shows them running.
   const windDown = Effect.fnUntraced(function* (
     subscription: Subscription,
     ctx: ACPTranslate.Context,
@@ -419,7 +405,6 @@ function preparePrompt(catalog: Catalog, parts: readonly PromptPart[], messageID
   return { start, text, files, synthetic, slash, command }
 }
 
-// Covers only missing or permission-denied targets; the server still rejects oversized, non-regular, or unlistable ones.
 function referenceUnreadableFile(part: PromptPart) {
   if (part.type !== "file" || !part.url.startsWith("file://")) return Effect.succeed(part)
   return Effect.tryPromise(() => access(fileURLToPath(part.url), constants.R_OK)).pipe(

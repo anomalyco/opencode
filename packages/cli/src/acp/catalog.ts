@@ -6,7 +6,6 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Context, Deferred, Effect, Exit, Schedule, Schema, Semaphore, Stream, SubscriptionRef } from "effect"
 import type { ConfigOptionProvider } from "./config-option"
 
-// ACP runs these itself; they take precedence over server commands with the same name.
 export const builtinCommands = new Map([
   ["compact", { description: "Compact the session", start: "compaction" as const }],
 ])
@@ -17,7 +16,6 @@ export type Catalog = {
   readonly defaultModel: Model.Ref
   readonly modes: ReadonlyArray<{ id: Agent.ID; name: string; description?: string }>
   readonly defaultModeID: Agent.ID
-  /** Server commands, without those shadowed by a built-in. */
   readonly commands: ReadonlyArray<Command.Info>
 }
 
@@ -36,11 +34,8 @@ export class LoadError extends Schema.TaggedError<LoadError>()("ACPCatalogLoadEr
 export type Error = NotReadyError | LoadError
 
 export interface Interface {
-  /** Loads a directory's catalog once. Concurrent callers share the load, and a failed load is not cached. */
   readonly get: (cwd: string) => Effect.Effect<Catalog, Error>
-  /** Resolves after a reload that started after the call. A failed reload keeps the previous catalog. */
   readonly reload: (cwd: string) => Effect.Effect<void, Error>
-  /** Emits the current catalog, then each reloaded one. */
   readonly changes: (cwd: string) => Stream.Stream<Catalog, Error>
 }
 
@@ -54,7 +49,6 @@ type Entry = {
   loaded: number
 }
 
-// Provider, integration, and credential changes reach the catalog through model.updated.
 const reloadOn = new Set<OpenCodeEvent["type"]>(["model.updated", "agent.updated", "command.updated"])
 
 export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
@@ -62,8 +56,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
   const entries = new Map<string, Deferred.Deferred<Entry, Error>>()
   const connected = yield* Deferred.make<void>()
 
-  // A reload covers every request made before it starts, so requests queued behind a running reload share
-  // one more load. Typed load failures keep the previous catalog and still settle the requests they covered.
+  // A reload covers every request made before it starts, so requests queued behind a running one share one load.
   const reload = (entry: Entry) =>
     Effect.suspend(() => {
       const target = ++entry.requested

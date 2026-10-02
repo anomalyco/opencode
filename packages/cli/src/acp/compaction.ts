@@ -23,7 +23,6 @@ type Compaction =
       readonly error: SessionError.Error
     }
 
-/** Each session's compaction that has started and not yet settled, by session ID. */
 export type Tracked = ReadonlyMap<string, Started>
 
 type LifecycleEvent = Extract<
@@ -35,14 +34,9 @@ type OpeningEvent = Extract<
   { readonly type: "session.compaction.started" | "session.compaction.failed" }
 >
 
-// Core reports a cancelled or interrupted compaction as a failure with one of these error types.
 const Cancelled = new Set(["aborted", "compaction.interrupted"])
 
-/**
- * Whether compactions go out as the standard session updates rather than the `_meta` marker. A child compaction
- * projected onto the parent session keeps the marker, since a standard update there would read as compaction of the
- * parent's own context.
- */
+// A child compaction on the parent session keeps the marker; a standard update would read as the parent's own.
 export function usesStandardUpdates(
   ctx: { readonly compaction: boolean; readonly childUpdates: boolean },
   child: boolean,
@@ -50,7 +44,6 @@ export function usesStandardUpdates(
   return ctx.compaction && (!child || ctx.childUpdates)
 }
 
-/** Tracks a lifecycle event and returns the updates it sends. */
 export function apply(event: LifecycleEvent, tracked: Tracked, standard: boolean) {
   const sessionID = event.data.sessionID
   if (event.type === "session.compaction.started") {
@@ -70,8 +63,7 @@ export function apply(event: LifecycleEvent, tracked: Tracked, standard: boolean
     }
     return { tracked: remaining, updates: [update(completed, standard)] }
   }
-  // Automatic compaction can fail before it starts, for example when there is nothing to compact yet. A live
-  // standard compaction still opens before it settles.
+  // Automatic compaction can fail before it starts; a standard client still sees it open before it settles.
   const started = current ?? open(event)
   const failed: Compaction = { ...started, status: "failed", reason: event.data.reason, error: event.data.error }
   return {
@@ -80,18 +72,16 @@ export function apply(event: LifecycleEvent, tracked: Tracked, standard: boolean
   }
 }
 
-/** A summary chunk for the session's tracked compaction, if it has one and uses standard updates. */
 export function chunk(started: Started | undefined, text: string, standard: boolean): SessionUpdate | undefined {
   if (!started || !standard) return undefined
   return { sessionUpdate: "compaction_summary_chunk", compactionId: started.messageId, content: { type: "text", text } }
 }
 
-/** Settles a compaction a cancelled turn left open the way core settles a cancelled one. */
 export function abandon(started: Started, standard: boolean) {
   return update({ ...started, status: "failed", error: { type: "aborted", message: "Compaction cancelled" } }, standard)
 }
 
-/** A settled compaction as one terminal update. A running one has no live turn on this connection to settle it. */
+// A running compaction has no live turn on this connection to settle it, so it is not replayed.
 export function replay(message: Extract<SessionMessage.Info, { type: "compaction" }>, standard: boolean) {
   if (message.status === "running") return undefined
   const base = { messageId: message.id, reason: message.reason }
@@ -139,7 +129,7 @@ function update(compaction: Compaction, standard: boolean): SessionUpdate {
   }
 }
 
-// Core reports a defect as `compaction.failed` with the pretty-printed cause, whose stack trace spans several lines.
+// Core reports a defect as `compaction.failed` with a multi-line pretty-printed cause.
 function errorMessage(error: SessionError.Error) {
   if (!error.message || (error.type === "compaction.failed" && error.message.includes("\n"))) return "Compaction failed"
   return error.message

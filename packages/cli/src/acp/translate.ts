@@ -23,9 +23,8 @@ export type Context = {
   readonly cwd: string
   readonly start: TurnStart
   readonly childUpdates: boolean
-  /** Whether the client advertised `session.compaction`, so compactions use the standard session updates. */
   readonly compaction: boolean
-  /** A background consumer follows open children after the parent turn ends; it never writes `session/update`. */
+  /** Background mode follows open children after the turn ends and never writes `session/update`. */
   readonly mode: "turn" | "background"
 }
 
@@ -73,7 +72,6 @@ export type TurnState = {
   readonly compactions: ACPCompaction.Tracked
   readonly children: ReadonlyMap<string, ChildSession>
   readonly openChildren: ReadonlySet<string>
-  /** Forms asked of the client that the server has not yet answered or cancelled. */
   readonly forms: ReadonlySet<string>
   readonly finish?: SessionMessage.Assistant["finish"]
   readonly usage?: { readonly turn: TokenUsage.Info; readonly last: TokenUsage.Info }
@@ -97,7 +95,6 @@ export type Output =
       readonly _tag: "FormAsk"
       readonly form: FormEvent["data"]["form"]
       readonly child?: ChildSession
-      /** Whether the form's session sends its tool calls to the client as `session/update` tool calls. */
       readonly toolCallSent: boolean
     }
   | { readonly _tag: "FormSettled"; readonly formID: string }
@@ -340,7 +337,6 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
   }
 }
 
-/** The ACP failure a settled turn reports instead of a response, if any. */
 export function failure(state: TurnState) {
   const error = state.stepError ?? state.executionError
   if (error?.type === "provider.auth") return new ACPError.AuthRequiredError()
@@ -368,15 +364,12 @@ export function response(state: TurnState, sessionID: string, terminal: Terminal
     : undefined
   const error = (state.stepError ?? state.executionError)?.type
   const stopReason = resolveStopReason({ terminal, finish: state.finish, error })
-  // Only an interrupt during backoff leaves a retry pending. Interruption clears the projected retry, so report it here.
+  // Interruption clears the projected retry, so a retry pending at interrupt is reported here.
   const retry = state.retries.get(sessionID)
   return { stopReason, ...(usage ? { usage } : {}), _meta: retry ? { [RetryMeta]: retry } : {} }
 }
 
-/**
- * Fails the tools and cancels the session's compaction a cancelled turn left open, for when the server's wind-down
- * never reports them. Child compactions are left to the consumer that follows children after the turn.
- */
+// Child compactions are left to the background consumer that follows children after the turn.
 export function abandon(state: TurnState, ctx: Context): Step {
   const compaction = state.compactions.get(ctx.sessionID)
   return {
@@ -403,7 +396,6 @@ export function abandon(state: TurnState, ctx: Context): Step {
   }
 }
 
-/** The updates that replay a stored message. */
 export function* replayMessage(
   message: SessionMessage.Info,
   cwd: string,
@@ -519,7 +511,6 @@ function childStatus(ctx: Context, child: ChildSession, value: ChildSessionEvent
   ]
 }
 
-// A background consumer ends once its last open child settles.
 function childEnded(
   state: TurnState,
   ctx: Context,
