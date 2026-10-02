@@ -340,21 +340,29 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
 
   const flush = Effect.fn("SessionRunner.flush")(flushFragments)
 
+  // A failed terminal write must leave the call unsettled so step cleanup can still fail it.
+  const unsettle = (tool: ToolState) =>
+    Effect.sync(() => {
+      tool.settled = false
+    })
+
   const failTool = Effect.fnUntraced(function* (id: string, error: SessionError.Error, metadata?: Tool.Metadata) {
     const tool = tools.get(id)
     if (!tool || tool.settled) return false
     tool.settled = true
-    yield* bus.publish(SessionEvent.Tool.Failed, {
-      sessionID: input.sessionID,
-      assistantMessageID,
-      id,
-      error:
-        tool.name === "subagent" && error.type === "aborted" && typeof tool.progress?.sessionID === "string"
-          ? { ...error, message: `${error.message} (sessionID: ${tool.progress.sessionID})` }
-          : error,
-      ...failureSnapshot(tool, metadata),
-      executed: tool.providerExecuted,
-    })
+    yield* bus
+      .publish(SessionEvent.Tool.Failed, {
+        sessionID: input.sessionID,
+        assistantMessageID,
+        id,
+        error:
+          tool.name === "subagent" && error.type === "aborted" && typeof tool.progress?.sessionID === "string"
+            ? { ...error, message: `${error.message} (sessionID: ${tool.progress.sessionID})` }
+            : error,
+        ...failureSnapshot(tool, metadata),
+        executed: tool.providerExecuted,
+      })
+      .pipe(Effect.onError(() => unsettle(tool)))
     return true
   })
 
@@ -578,17 +586,19 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     if (tool.name !== name)
       return yield* Effect.die(new Error(`Tool execution name changed for ${id}: ${tool.name} -> ${name}`))
     if (tool.settled) return yield* Effect.die(new Error(`Duplicate tool execution: ${id}`))
-    tool.settled = true
     const content = result.content
     if (!isReadonlyArrayNonEmpty(content)) return yield* Effect.die(new Error(`Tool execution has no content: ${id}`))
-    yield* bus.publish(SessionEvent.Tool.Success, {
-      sessionID: input.sessionID,
-      assistantMessageID,
-      id,
-      content,
-      ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
-      executed: tool.providerExecuted,
-    })
+    tool.settled = true
+    yield* bus
+      .publish(SessionEvent.Tool.Success, {
+        sessionID: input.sessionID,
+        assistantMessageID,
+        id,
+        content,
+        ...(result.metadata === undefined ? {} : { metadata: result.metadata }),
+        executed: tool.providerExecuted,
+      })
+      .pipe(Effect.onError(() => unsettle(tool)))
   })
 
   return {

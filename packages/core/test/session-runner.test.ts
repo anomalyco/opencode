@@ -6371,6 +6371,76 @@ describe("SessionRunnerLLM", () => {
     })
   })
 
+  scenario("never replays a local tool call whose result failed to persist", function* (s) {
+    yield* s.bus.project(SessionEvent.Tool.Success, (event) =>
+      event.data.id === "call-store-orphan" ? Effect.die("SQLiteError: database or disk is full") : Effect.void,
+    )
+    yield* s.llm.push(
+      TestLLM.toolCalls(LLMEvent.toolCall({ id: "call-store-orphan", name: "storefail", input: {} })),
+      TestLLM.stop(),
+    )
+
+    yield* s.runPrompt("Storage fails after the tool ran").pipe(Effect.exit)
+
+    const orphans = s.requests.slice(1).flatMap((request) => {
+      const results = new Set(
+        request.messages.flatMap((message) =>
+          message.content.flatMap((part) => (part.type === "tool-result" ? [part.id] : [])),
+        ),
+      )
+      return request.messages.flatMap((message) =>
+        message.content.flatMap((part) => (part.type === "tool-call" && !results.has(part.id) ? [part.id] : [])),
+      )
+    })
+    expect(orphans).toEqual([])
+    const tool = requireAssistant(yield* s.context).content.find((part) => part.type === "tool")
+    expect(tool?.state.status).not.toBe("running")
+  })
+
+  scenario("records a tool error whose first persistence attempt failed", function* (s) {
+    const registry = yield* Tool.Service
+    yield* transformTools(
+      registry,
+      {
+        failed: {
+          name: "failed",
+          description: "Fail normally",
+          input: Schema.Struct({}),
+          output: Schema.Struct({}),
+          execute: () => Effect.fail(new Tool.Error({ message: "Ordinary tool failure" })),
+        },
+      },
+      { codemode: false },
+    )
+    let attempts = 0
+    yield* s.bus.project(SessionEvent.Tool.Failed, (event) => {
+      if (event.data.id !== "call-failed-orphan") return Effect.void
+      attempts++
+      return attempts === 1 ? Effect.die("SQLiteError: database or disk is full") : Effect.void
+    })
+    yield* s.llm.push(
+      TestLLM.toolCalls(LLMEvent.toolCall({ id: "call-failed-orphan", name: "failed", input: {} })),
+      TestLLM.stop(),
+    )
+
+    yield* s.runPrompt("Storage fails while recording a tool error").pipe(Effect.exit)
+
+    const orphans = s.requests.slice(1).flatMap((request) => {
+      const results = new Set(
+        request.messages.flatMap((message) =>
+          message.content.flatMap((part) => (part.type === "tool-result" ? [part.id] : [])),
+        ),
+      )
+      return request.messages.flatMap((message) =>
+        message.content.flatMap((part) => (part.type === "tool-call" && !results.has(part.id) ? [part.id] : [])),
+      )
+    })
+    expect(attempts).toBe(2)
+    expect(orphans).toEqual([])
+    const tool = requireAssistant(yield* s.context).content.find((part) => part.type === "tool")
+    expect(tool?.state.status).toBe("error")
+  })
+
   scenario("durably fails a hosted tool left unresolved at normal provider EOF", function* (s) {
     yield* s.llm.push([LLMEvent.stepStart({ index: 0 }), hostedCall("call-hosted-eof", "effect")])
 
