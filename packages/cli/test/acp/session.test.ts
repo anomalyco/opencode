@@ -137,17 +137,26 @@ describe("acp session lifecycle over the wire", () => {
     const first = await acp.newSession("/workspace", [local, local, remote])
     await acp.request("session/resume", { cwd: "/workspace", sessionId: first.sessionId, mcpServers: [local, remote] })
     await acp.request("session/resume", { cwd: "/workspace", sessionId: first.sessionId, mcpServers: [changed] })
-    await acp.newSession("/workspace", [local])
+    await acp.request("session/resume", { cwd: "/workspace", sessionId: first.sessionId, mcpServers: [local] })
 
     const localConfig = (args: string[]) => ({
       name: "tools",
       directory: "/workspace",
       config: { type: "local", command: ["bun", ...args], environment: { TOKEN: "x" } },
     })
-    expect(acp.server.mcp).toHaveLength(4)
     expect(acp.server.mcp.filter((item) => item.name === "tools")).toEqual([
       localConfig(["server.ts"]),
       localConfig(["changed.ts"]),
+      localConfig(["server.ts"]),
+    ])
+
+    await acp.newSession("/workspace", [local])
+
+    expect(acp.server.mcp).toHaveLength(5)
+    expect(acp.server.mcp.filter((item) => item.name === "tools")).toEqual([
+      localConfig(["server.ts"]),
+      localConfig(["changed.ts"]),
+      localConfig(["server.ts"]),
       localConfig(["server.ts"]),
     ])
     expect(acp.server.mcp.find((item) => item.name === "docs")).toEqual({
