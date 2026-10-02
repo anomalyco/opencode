@@ -315,6 +315,69 @@ describe("RequestExecutor", () => {
     ),
   )
 
+  it.effect("classifies gateway upstream 403 as retryable provider-internal", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "ProviderInternal", status: 403 })
+      expect(error.retryable).toBe(true)
+      expect(errorHttp(error)?.body).toContain("Upstream response was not valid JSON")
+    }).pipe(
+      Effect.provide(
+        responsesLayer(
+          Array.from(
+            { length: 3 },
+            () =>
+              new Response("Upstream request failed: [server_error] Upstream response was not valid JSON", {
+                status: 403,
+                headers: { "retry-after-ms": "0" },
+              }),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("retries gateway upstream 403 before succeeding", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const response = yield* executor.execute(request)
+
+      expect(response.status).toBe(200)
+      expect(yield* response.text).toBe("ok")
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response("Upstream request failed: [server_error] Upstream response was not valid JSON", {
+            status: 403,
+            headers: { "retry-after-ms": "0" },
+          }),
+          new Response("ok", { status: 200 }),
+        ]),
+      ),
+    ),
+  )
+
+  it.effect("keeps genuine 403 permission errors non-retryable", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expectLLMError(error)
+      expect(error.reason).toMatchObject({ _tag: "Authentication" })
+      expect(error.retryable).toBe(false)
+    }).pipe(
+      Effect.provide(
+        responsesLayer([
+          new Response("Forbidden: insufficient permissions", { status: 403 }),
+          new Response("should not retry", { status: 200 }),
+        ]),
+      ),
+    ),
+  )
+
   it.effect("redacts common secret fields in response bodies", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
