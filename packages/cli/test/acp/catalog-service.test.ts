@@ -1,10 +1,9 @@
 import { describe, expect } from "bun:test"
-import { OpenCode } from "@opencode/client/promise"
 import { Clock, Duration, Effect, Fiber } from "effect"
 import { TestClock } from "effect/testing"
 import { it } from "../../../core/test/lib/effect"
 import { ACPCatalog } from "../../src/acp/catalog"
-import { buildAgent, planAgent, startWire, testModel, type Wire, type WireOptions } from "./wire-fixture"
+import { buildAgent, makeClient, planAgent, startWire, testModel, type Wire, type WireOptions } from "./wire-fixture"
 
 describe("acp catalog service", () => {
   it.effect("coalesces reloads requested during a reload into one more load", () => {
@@ -32,7 +31,7 @@ describe("acp catalog service", () => {
           yield* Fiber.joinAll(queued)
 
           expect(reads(acp, "agent")).toBe(3)
-          expect((yield* catalog.get("/workspace")).defaultModeID).toBe("plan")
+          expect<string>((yield* catalog.get("/workspace")).defaultModeID).toBe("plan")
         }),
     )
   })
@@ -73,7 +72,7 @@ describe("acp catalog service", () => {
         const loaded = yield* Fiber.join(loading)
 
         expect(retriedAt).toBeGreaterThanOrEqual(25)
-        expect(loaded.defaultModel).toEqual({ providerID: "test", id: "test-model", variant: "default" })
+        expect<unknown>(loaded.defaultModel).toEqual({ providerID: "test", id: "test-model", variant: "default" })
       }),
     ),
   )
@@ -105,7 +104,10 @@ function withCatalog<A, E>(options: WireOptions, body: (acp: Wire) => Effect.Eff
   ).pipe(
     Effect.flatMap((acp) =>
       body(acp).pipe(
-        Effect.provideServiceEffect(ACPCatalog.Service, ACPCatalog.make(OpenCode.make({ baseUrl: acp.server.url }))),
+        Effect.provideServiceEffect(
+          ACPCatalog.Service,
+          makeClient(acp.server.url).pipe(Effect.flatMap(ACPCatalog.make)),
+        ),
       ),
     ),
   )

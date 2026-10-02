@@ -1,10 +1,7 @@
 import type { CancelNotification, PromptRequest, PromptResponse, RequestError } from "@agentclientprotocol/sdk"
-import {
-  isSessionNotFoundError,
-  type CommandInfo,
-  type OpenCodeClient,
-  type OpenCodeEvent,
-} from "@opencode/client/promise"
+import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
+import type { Command } from "@opencode/schema/command"
+import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import {
@@ -19,19 +16,20 @@ import {
   Option,
   Queue,
   Ref,
+  Schema,
   Scope,
   Stream,
 } from "effect"
 import { access, constants } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
 import { builtinCommands, type ACPCatalog, type Catalog } from "./catalog"
+import { ACPClient } from "./client"
 import { currentModel } from "./config-option"
 import type { ACPConnection } from "./connection"
 import { linkReference, promptContentToParts, type PromptPart } from "./content"
 import { ACPElicitation } from "./elicitation"
 import { ACPError } from "./error"
 import { ACPPermission } from "./permission"
-import { ACPPromise } from "./promise"
 import type { ACPService } from "./service"
 import type { ACPSessions, Attached } from "./sessions"
 import { ACPTranslate } from "./translate"
@@ -66,7 +64,7 @@ type PreparedPrompt = {
   readonly files: Array<{ readonly uri: string; readonly name?: string }>
   readonly synthetic: ReadonlyArray<string>
   readonly slash?: { readonly name: string; readonly args: string }
-  readonly command?: CommandInfo
+  readonly command?: Command.Info
 }
 
 type PermissionAsk = Extract<ACPTranslate.Output, { readonly _tag: "PermissionAsk" }>
@@ -99,10 +97,9 @@ export const make = Effect.fnUntraced(function* (input: {
     const subscriptionScope = yield* Scope.fork(scope)
     const subscription: Subscription = {
       scope: subscriptionScope,
-      events: yield* Stream.fromAsyncIterable(input.client.event.subscribe(), (cause) => cause).pipe(
-        Stream.toQueue({ capacity: "unbounded" }),
-        Scope.provide(subscriptionScope),
-      ),
+      events: yield* input.client.event
+        .subscribe()
+        .pipe(Stream.toQueue({ capacity: "unbounded" }), Scope.provide(subscriptionScope)),
       asks: yield* Queue.unbounded<Effect.Effect<void, ACPError.Error | RequestError>>(),
       cancelled: yield* Deferred.make<void>(),
       forms: new Map(),
@@ -121,7 +118,7 @@ export const make = Effect.fnUntraced(function* (input: {
   const take = (subscription: Subscription) =>
     Queue.take(subscription.events).pipe(
       Effect.catch((error) =>
-        Cause.isDone(error) ? Effect.fail(new ACPError.ServerUnavailableError()) : ACPPromise.classify(error),
+        Cause.isDone(error) ? Effect.fail(new ACPError.ServerUnavailableError()) : ACPClient.classify(error),
       ),
     )
 
@@ -210,56 +207,52 @@ export const make = Effect.fnUntraced(function* (input: {
   const submit = Effect.fnUntraced(function* (attached: Attached, prompt: PreparedPrompt) {
     const sessionID = attached.id
     if (prompt.synthetic.length > 0) {
-      yield* ACPPromise.promise((signal) =>
-        input.client.session.synthetic(
-          {
-            sessionID,
-            text: prompt.synthetic.join("\n\n"),
-            description: "ACP embedded context",
-            delivery: "steer",
-            resume: false,
-          },
-          { signal },
-        ),
-      )
+      yield* input.client.session
+        .synthetic({
+          sessionID,
+          text: prompt.synthetic.join("\n\n"),
+          description: "ACP embedded context",
+          delivery: "steer",
+          resume: false,
+        })
+        .pipe(Effect.catch(ACPClient.classify))
     }
     if (prompt.start.type === "compaction") {
-      yield* ACPPromise.promise((signal) =>
-        input.client.session.compact({ sessionID, id: prompt.start.id }, { signal }),
-      )
+      yield* input.client.session.compact({ sessionID, id: prompt.start.id }).pipe(Effect.catch(ACPClient.classify))
       return
     }
     const command = prompt.command
     if (command) {
-      yield* ACPPromise.promise((signal) =>
-        input.client.session.command(
-          { sessionID, name: command.name, text: prompt.slash?.args ?? "", files: prompt.files, delivery: "steer" },
-          { signal },
-        ),
-      )
+      yield* input.client.session
+        .command({
+          sessionID,
+          name: command.name,
+          text: prompt.slash?.args ?? "",
+          files: prompt.files,
+          delivery: "steer",
+        })
+        .pipe(Effect.catch(ACPClient.classify))
       return
     }
-    yield* ACPPromise.promise((signal) =>
-      input.client.session.prompt(
-        { sessionID, id: prompt.start.id, text: prompt.text, files: prompt.files, delivery: "steer" },
-        { signal },
-      ),
-    )
+    yield* input.client.session
+      .prompt({ sessionID, id: prompt.start.id, text: prompt.text, files: prompt.files, delivery: "steer" })
+      .pipe(Effect.catch(ACPClient.classify))
   })
 
-  const interruptServer = (sessionID: string) =>
-    ACPPromise.promise(() => input.client.session.interrupt({ sessionID })).pipe(Effect.ignoreCause)
+  const interruptServer = (sessionID: Session.ID) =>
+    input.client.session.interrupt({ sessionID }).pipe(Effect.ignoreCause)
 
   // Rejects pending asks, interrupts the server once, then forwards its wind-down until the terminal event or the
   // timeout. Tools and a compaction still open at the timeout are settled so the client never shows them running.
   const windDown = Effect.fnUntraced(function* (
+    attached: Attached,
     subscription: Subscription,
     ctx: ACPTranslate.Context,
     state: Ref.Ref<ACPTranslate.TurnState>,
     events: Fiber.Fiber<ACPTranslate.Terminal, Failure>,
   ) {
     yield* Deferred.succeed(subscription.cancelled, undefined)
-    yield* interruptServer(ctx.sessionID)
+    yield* interruptServer(attached.id)
     if (!(yield* Ref.get(state)).started) return
     if (Option.isSome(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)))) return
     yield* Fiber.interrupt(events)
@@ -289,7 +282,7 @@ export const make = Effect.fnUntraced(function* (input: {
             yield* submit(attached, prompt)
             if (prompt.command) return "succeeded" as const
             return yield* Fiber.join(events)
-          }).pipe(Effect.onInterrupt(() => windDown(subscription, ctx, state, events)))
+          }).pipe(Effect.onInterrupt(() => windDown(attached, subscription, ctx, state, events)))
         }).pipe(Effect.scoped),
       (subscription, exit) => handoff(attached, subscription, ctx, state, exit),
     )
@@ -335,9 +328,7 @@ export const make = Effect.fnUntraced(function* (input: {
       const current = currentModel(catalog, yield* Ref.get(attached.selection))
       const model = catalog.models.find((item) => item.providerID === current.providerID && item.id === current.id)
       if (!model?.limit.context) return
-      const info = yield* ACPPromise.promise((signal) =>
-        input.client.session.get({ sessionID: attached.id }, { signal }),
-      )
+      const info = yield* input.client.session.get({ sessionID: attached.id }).pipe(Effect.catch(ACPClient.classify))
       yield* input.connection.sessionUpdate({
         sessionId: attached.id,
         update: {
@@ -401,10 +392,12 @@ export const make = Effect.fnUntraced(function* (input: {
     }),
     close: Effect.fn("cli.acp.turn.close")(function* (sessionID) {
       if (FiberMap.hasUnsafe(turns, sessionID)) return yield* FiberMap.remove(turns, sessionID)
-      yield* ACPPromise.promise(() =>
-        input.client.session.interrupt({ sessionID }).catch((error) => {
-          if (!isSessionNotFoundError(error)) throw error
-        }),
+      // A malformed ID names no session.
+      const id = Schema.decodeUnknownOption(Session.ID)(sessionID)
+      if (Option.isNone(id)) return
+      yield* input.client.session.interrupt({ sessionID: id.value }).pipe(
+        Effect.catchTag("SessionNotFoundError", () => Effect.void),
+        Effect.catch(ACPClient.classify),
       )
     }),
   })
@@ -419,7 +412,7 @@ function aborted(signal: AbortSignal) {
   })
 }
 
-function preparePrompt(catalog: Catalog, parts: readonly PromptPart[], messageID: string): PreparedPrompt {
+function preparePrompt(catalog: Catalog, parts: readonly PromptPart[], messageID: SessionMessage.ID): PreparedPrompt {
   const visible = parts.filter((part) => part.type !== "text" || (!part.synthetic && !part.ignored))
   const synthetic = parts.flatMap((part) => (part.type === "text" && part.synthetic ? [part.text] : []))
   const text = visible.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
@@ -439,7 +432,7 @@ function referenceUnreadableFile(part: PromptPart) {
   )
 }
 
-function turnStart(messageID: string, slash: PreparedPrompt["slash"]): ACPTranslate.TurnStart {
+function turnStart(messageID: SessionMessage.ID, slash: PreparedPrompt["slash"]): ACPTranslate.TurnStart {
   if (slash && builtinCommands.get(slash.name)?.start === "compaction") return { type: "compaction", id: messageID }
   return { type: "input", id: messageID }
 }

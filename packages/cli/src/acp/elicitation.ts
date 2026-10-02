@@ -4,13 +4,14 @@ import type {
   ElicitationSchema,
   EnumOption,
 } from "@agentclientprotocol/sdk"
-import { isFormAlreadySettledError, isFormNotFoundError, type OpenCodeClient } from "@opencode/client/promise"
+import type { OpenCodeClient } from "@opencode/client/effect"
 import { Form } from "@opencode/schema/form"
+import { Session } from "@opencode/schema/session"
 import { Cause, Effect, Option, Schema } from "effect"
 import type { ACPConnection } from "./connection"
 import type { ACPService } from "./service"
 
-/** A form as the event stream carries it, with an unbranded ID. */
+/** A form with an unbranded ID. */
 export type AskedForm = Omit<Form.Info, "id"> & { readonly id: string }
 type InputField = Exclude<Form.Field, Form.ExternalField>
 type SelectField = Form.StringField | Form.MultiselectField
@@ -24,7 +25,7 @@ const ToolSource = Schema.Struct({ tool: Schema.Struct({ id: Schema.String }) })
 type Input = {
   readonly client: OpenCodeClient
   readonly connection: ACPConnection.Interface
-  readonly form: AskedForm
+  readonly form: Form.Info
   readonly requestedSchema: ElicitationSchema
   readonly clientSessionID: string
   readonly child?: { readonly id: string; readonly title?: string }
@@ -62,10 +63,14 @@ export const UnshownQuestionMessage =
   "The question couldn't be shown to the user in this client. Continue without an answer: make reasonable assumptions and state them, or ask the user in your reply if you can't proceed."
 
 /** Cancels a form, interrupting its session when the server can't cancel it. */
-function cancel(client: OpenCodeClient, form: AskedForm, message?: string) {
-  return settle(() => client.session.form.cancel({ sessionID: form.sessionID, formID: form.id, message })).pipe(
+function cancel(client: OpenCodeClient, form: Form.Info, message?: string) {
+  return client.session.form.cancel({ sessionID: form.sessionID, formID: form.id, message }).pipe(
+    Effect.catchTag(["FormAlreadySettledError", "FormNotFoundError"], () => Effect.void),
     Effect.catch(() =>
-      Effect.tryPromise(() => client.session.interrupt({ sessionID: form.sessionID })).pipe(Effect.ignore),
+      Schema.decodeUnknownEffect(Session.ID)(form.sessionID).pipe(
+        Effect.flatMap((sessionID) => client.session.interrupt({ sessionID })),
+        Effect.ignore,
+      ),
     ),
   )
 }
@@ -99,7 +104,7 @@ export function requestedSchema(form: AskedForm, capabilities: ACPService.Capabi
  * Cancels a form that `requestedSchema` won't show. A question is cancelled with a message the question tool returns
  * to the model, so the turn continues instead of ending as interrupted; other forms are cancelled silently.
  */
-export function cancelUnshown(client: OpenCodeClient, form: AskedForm) {
+export function cancelUnshown(client: OpenCodeClient, form: Form.Info) {
   return cancel(client, form, form.metadata?.kind === QuestionKind ? UnshownQuestionMessage : undefined)
 }
 
@@ -132,22 +137,14 @@ const ask = Effect.fnUntraced(function* (input: Input) {
 function respond(input: Input, outcome: Outcome) {
   if (outcome === "settled") return Effect.void
   if (outcome === "cancel") return cancel(input.client, input.form)
-  return settle(() =>
-    input.client.session.form.reply({ sessionID: input.form.sessionID, formID: input.form.id, answer: outcome }),
-  ).pipe(
-    Effect.catch((cause) =>
-      Effect.logWarning("ACP form reply failed", cause).pipe(Effect.andThen(cancel(input.client, input.form))),
-    ),
-  )
-}
-
-// A form already answered or cancelled elsewhere needs nothing more.
-function settle(evaluate: () => Promise<void>) {
-  return Effect.tryPromise({ try: evaluate, catch: (cause) => cause }).pipe(
-    Effect.catch((cause) =>
-      isFormAlreadySettledError(cause) || isFormNotFoundError(cause) ? Effect.void : Effect.fail(cause),
-    ),
-  )
+  return input.client.session.form
+    .reply({ sessionID: input.form.sessionID, formID: input.form.id, answer: outcome })
+    .pipe(
+      Effect.catchTag(["FormAlreadySettledError", "FormNotFoundError"], () => Effect.void),
+      Effect.catch((cause) =>
+        Effect.logWarning("ACP form reply failed", cause).pipe(Effect.andThen(cancel(input.client, input.form))),
+      ),
+    )
 }
 
 function credentialLike(field: Form.Field) {

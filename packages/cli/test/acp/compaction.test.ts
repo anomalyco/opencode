@@ -9,6 +9,7 @@ import {
   childCreated,
   delivered,
   durableEvent,
+  enqueued,
   ephemeralEvent,
   interrupted,
   makeSession,
@@ -594,7 +595,7 @@ async function compactTurn(
   )
   const id = decodeCompact(request.body).id
   acp.server.send(...turn(acp.sessionId, id, ...events(acp.sessionId, id)))
-  held.resolve(Response.json({ data: {} }))
+  held.resolve(enqueued(acp.sessionId, id, "compaction", {}))
   return { acp, id, response: await response }
 }
 

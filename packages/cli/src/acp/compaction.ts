@@ -1,6 +1,6 @@
 import type { SessionUpdate } from "@agentclientprotocol/sdk"
-import type { EventSubscribeOutput, SessionMessageInfo, SessionStructuredError } from "@opencode/client/promise"
-import { Event } from "@opencode/schema/event"
+import type { OpenCodeEvent } from "@opencode/client/effect"
+import type { SessionError } from "@opencode/schema/session-error"
 import { SessionMessage } from "@opencode/schema/session-message"
 
 const MarkerMeta = "opencode/compaction"
@@ -20,14 +20,14 @@ type Compaction =
       readonly status: "failed"
       readonly messageId: string
       readonly reason: "auto" | "manual"
-      readonly error: SessionStructuredError
+      readonly error: SessionError.Error
     }
 
 /** Each session's compaction that has started and not yet settled, by session ID. */
 export type Tracked = ReadonlyMap<string, Started>
 
 type LifecycleEvent = Extract<
-  EventSubscribeOutput,
+  OpenCodeEvent,
   { readonly type: "session.compaction.started" | "session.compaction.ended" | "session.compaction.failed" }
 >
 type OpeningEvent = Extract<
@@ -92,7 +92,7 @@ export function abandon(started: Started, standard: boolean) {
 }
 
 /** A settled compaction as one terminal update. A running one has no live turn on this connection to settle it. */
-export function replay(message: Extract<SessionMessageInfo, { type: "compaction" }>, standard: boolean) {
+export function replay(message: Extract<SessionMessage.Info, { type: "compaction" }>, standard: boolean) {
   if (message.status === "running") return undefined
   const base = { messageId: message.id, reason: message.reason }
   return update(
@@ -106,7 +106,7 @@ export function replay(message: Extract<SessionMessageInfo, { type: "compaction"
 function open(event: OpeningEvent): Started {
   return {
     status: "started",
-    messageId: event.data.inputID ?? SessionMessage.ID.fromEvent(Event.ID.make(event.id)),
+    messageId: event.data.inputID ?? SessionMessage.ID.fromEvent(event.id),
     reason: event.data.reason,
   }
 }
@@ -140,7 +140,7 @@ function update(compaction: Compaction, standard: boolean): SessionUpdate {
 }
 
 // Core reports a defect as `compaction.failed` with the pretty-printed cause, whose stack trace spans several lines.
-function errorMessage(error: SessionStructuredError) {
+function errorMessage(error: SessionError.Error) {
   if (!error.message || (error.type === "compaction.failed" && error.message.includes("\n"))) return "Compaction failed"
   return error.message
 }

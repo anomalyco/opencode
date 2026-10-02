@@ -1,4 +1,7 @@
-import type { CommandInfo, ModelInfo, ModelRef, OpenCodeClient, OpenCodeEvent } from "@opencode/client/promise"
+import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
+import type { Agent } from "@opencode/schema/agent"
+import type { Command } from "@opencode/schema/command"
+import type { Model } from "@opencode/schema/model"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Context, Deferred, Effect, Exit, Schedule, Schema, Semaphore, Stream, SubscriptionRef } from "effect"
 import type { ConfigOptionProvider } from "./config-option"
@@ -10,12 +13,12 @@ export const builtinCommands = new Map([
 
 export type Catalog = {
   readonly providers: ConfigOptionProvider[]
-  readonly models: ModelInfo[]
-  readonly defaultModel: ModelRef
-  readonly modes: Array<{ id: string; name: string; description?: string }>
-  readonly defaultModeID: string
+  readonly models: ReadonlyArray<Model.Info>
+  readonly defaultModel: Model.Ref
+  readonly modes: ReadonlyArray<{ id: Agent.ID; name: string; description?: string }>
+  readonly defaultModeID: Agent.ID
   /** Server commands, without those shadowed by a built-in. */
-  readonly commands: CommandInfo[]
+  readonly commands: ReadonlyArray<Command.Info>
 }
 
 export class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatalogNotReadyError", {
@@ -82,7 +85,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
     })
 
   // Subscribe before the first read so an update between the read and the subscription is not lost.
-  yield* Stream.fromAsyncIterable(client.event.subscribe(), (cause) => cause).pipe(
+  yield* client.event.subscribe().pipe(
     Stream.runForEach((event) => {
       if (event.type === "server.connected") return Deferred.succeed(connected, undefined)
       if (!reloadOn.has(event.type)) return Effect.void
@@ -151,16 +154,15 @@ const load = (client: OpenCodeClient, cwd: string) =>
 
 const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   const location = { directory: cwd }
-  const [modelResult, defaultResult, agentResult, commandResult] = yield* Effect.tryPromise({
-    try: (signal) =>
-      Promise.all([
-        client.model.list({ location }, { signal }),
-        client.model.default({ location }, { signal }),
-        client.agent.list({ location }, { signal }),
-        client.command.list({ location }, { signal }),
-      ]),
-    catch: (cause) => new LoadError({ cause }),
-  })
+  const [modelResult, defaultResult, agentResult, commandResult] = yield* Effect.all(
+    [
+      client.model.list({ location }),
+      client.model.default({ location }),
+      client.agent.list({ location }),
+      client.command.list({ location }),
+    ],
+    { concurrency: "unbounded" },
+  ).pipe(Effect.mapError((cause) => new LoadError({ cause })))
   const models = modelResult.data.filter((model) => model.enabled)
   const preferred = defaultResult.data
   // Parallel reads can straddle initialization; select only from this model list.
@@ -186,7 +188,7 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   } satisfies Catalog
 })
 
-function providers(models: readonly ModelInfo[]): ConfigOptionProvider[] {
+function providers(models: ReadonlyArray<Model.Info>): ConfigOptionProvider[] {
   return Array.from(new Set(models.map((model) => model.providerID)))
     .toSorted()
     .map((providerID) => ({

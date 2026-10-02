@@ -227,16 +227,16 @@ describe("acp prompt turns over the wire", () => {
   })
 
   test.each<{ name: string; stopReason: StopReason; events: (sessionID: string) => OpenCodeEvent[] }>([
-    { name: "a normal stop", stopReason: "end_turn", events: (id) => [stepEnded(id, "msg"), succeeded(id)] },
+    { name: "a normal stop", stopReason: "end_turn", events: (id) => [stepEnded(id, "msg_1"), succeeded(id)] },
     {
       name: "a length-limited step",
       stopReason: "max_tokens",
-      events: (id) => [stepEnded(id, "msg", { finish: "length" }), succeeded(id)],
+      events: (id) => [stepEnded(id, "msg_1", { finish: "length" }), succeeded(id)],
     },
     {
       name: "a content-filtered step",
       stopReason: "refusal",
-      events: (id) => [stepEnded(id, "msg", { finish: "content-filter" }), succeeded(id)],
+      events: (id) => [stepEnded(id, "msg_1", { finish: "content-filter" }), succeeded(id)],
     },
     {
       name: "a content-filter failure",

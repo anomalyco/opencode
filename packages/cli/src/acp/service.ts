@@ -1,12 +1,11 @@
-import {
-  isInvalidRequestError,
-  isSessionNotFoundError,
-  type ModelRef,
-  type OpenCodeClient,
-  type SessionMessageInfo,
-} from "@opencode/client/promise"
+import type { OpenCodeClient } from "@opencode/client/effect"
+import { SessionsCursor } from "@opencode/protocol/groups/session"
+import { Model } from "@opencode/schema/model"
+import { AbsolutePath } from "@opencode/schema/schema"
+import { Session } from "@opencode/schema/session"
+import type { SessionMessage } from "@opencode/schema/session-message"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Effect, Option, Ref, Result, Stream } from "effect"
+import { DateTime, Effect, Option, Ref, Result, Schema, Stream } from "effect"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import type {
   AuthenticateRequest,
@@ -39,11 +38,11 @@ import type {
 } from "@agentclientprotocol/sdk"
 import { OPENCODE_VERSION } from "../version"
 import type { ACPCatalog, Catalog } from "./catalog"
+import { ACPClient } from "./client"
 import { configOptions, currentModel, DEFAULT_VARIANT_VALUE, parseModelSelection } from "./config-option"
 import type { ACPConnection } from "./connection"
 import { ACPDirectories } from "./directories"
 import { ACPError } from "./error"
-import { ACPPromise } from "./promise"
 import type { ACPSessions, Attached } from "./sessions"
 import { ACPTranslate } from "./translate"
 import type { ACPTurn } from "./turn"
@@ -113,40 +112,46 @@ export function make(input: {
   })
 
   // Both selectors update the selection before switching on the server, so the echoed event diffs to no change.
-  const selectModel = Effect.fnUntraced(function* (attached: Attached, model: ModelRef) {
+  const selectModel = Effect.fnUntraced(function* (attached: Attached, model: Model.Ref) {
     yield* Ref.update(attached.selection, (selection) => ({ ...selection, model }))
-    yield* ACPPromise.promise(() => input.client.session.switchModel({ sessionID: attached.id, model }))
+    yield* input.client.session.switchModel({ sessionID: attached.id, model }).pipe(Effect.catch(ACPClient.classify))
   })
 
   const selectMode = Effect.fnUntraced(function* (attached: Attached, modeID: string) {
     const catalog = yield* input.catalog.get(attached.cwd)
-    if (!catalog.modes.some((mode) => mode.id === modeID)) return yield* new ACPError.InvalidModeError({ mode: modeID })
-    yield* Ref.update(attached.selection, (selection) => ({ ...selection, modeID }))
-    yield* ACPPromise.promise(() => input.client.session.switchAgent({ sessionID: attached.id, agent: modeID }))
+    const mode = catalog.modes.find((item) => item.id === modeID)
+    if (!mode) return yield* new ACPError.InvalidModeError({ mode: modeID })
+    yield* Ref.update(attached.selection, (selection) => ({ ...selection, modeID: mode.id }))
+    yield* input.client.session
+      .switchAgent({ sessionID: attached.id, agent: mode.id })
+      .pipe(Effect.catch(ACPClient.classify))
   })
 
-  const getSession = Effect.fnUntraced(function* (sessionID: string, cwd: string) {
-    const session = yield* ACPPromise.promise(() => input.client.session.get({ sessionID }))
+  const getSession = Effect.fnUntraced(function* (sessionId: string, cwd: string) {
+    const sessionID = yield* decodeSessionID(sessionId)
+    const session = yield* input.client.session.get({ sessionID }).pipe(Effect.catch(ACPClient.classify))
     if (FSUtil.resolve(cwd) !== FSUtil.resolve(session.location.directory))
-      return yield* new ACPError.SessionDirectoryMismatchError({ sessionId: sessionID, cwd })
+      return yield* new ACPError.SessionDirectoryMismatchError({ sessionId, cwd })
     return session
   })
 
   const replay = Effect.fnUntraced(function* (attached: Attached) {
     const capabilities = yield* Ref.get(input.capabilities)
     yield* Stream.paginate(undefined, (cursor: string | undefined) =>
-      ACPPromise.promise(() =>
-        cursor
-          ? input.client.message.list({ sessionID: attached.id, limit: 200, cursor })
-          : input.client.message.list({ sessionID: attached.id, limit: 200, order: "asc" }),
-      ).pipe(Effect.map((page) => [page.data, Option.fromNullishOr(page.cursor.next)] as const)),
+      (cursor
+        ? input.client.message.list({ sessionID: attached.id, limit: 200, cursor })
+        : input.client.message.list({ sessionID: attached.id, limit: 200, order: "asc" })
+      ).pipe(
+        Effect.catch(ACPClient.classify),
+        Effect.map((page) => [page.data, Option.fromNullishOr(page.cursor.next)] as const),
+      ),
     ).pipe(Stream.runForEach((message) => replayMessage(attached, message, capabilities)))
   })
 
   // A message that fails to translate keeps the updates before the failure and does not stop the replay.
   const replayMessage = Effect.fnUntraced(function* (
     attached: Attached,
-    message: SessionMessageInfo,
+    message: SessionMessage.Info,
     capabilities: Capabilities,
   ) {
     const updates = ACPTranslate.replayMessage(message, attached.cwd, capabilities)
@@ -201,12 +206,9 @@ export function make(input: {
       // Load before creating so a catalog failure leaves no session behind. Agent and model stay unset
       // so the server resolves its defaults after plugins activate.
       yield* input.catalog.get(params.cwd)
-      const created = yield* ACPPromise.promise(() =>
-        input.client.session.create({
-          location: { directory: params.cwd },
-          ...ACPDirectories.grant(directories),
-        }),
-      )
+      const created = yield* input.client.session
+        .create({ location: { directory: AbsolutePath.make(params.cwd) }, ...ACPDirectories.grant(directories) })
+        .pipe(Effect.catch(ACPClient.classify))
       const attached = yield* input.sessions.attach(created, params.cwd, params.mcpServers)
       return yield* currentOptions(attached).pipe(
         Effect.map((configOptions) => ({ sessionId: attached.id, configOptions })),
@@ -225,14 +227,14 @@ export function make(input: {
       )
     }),
     listSessions: Effect.fnUntraced(function* (params) {
-      const page = yield* ACPPromise.promise(() =>
-        input.client.session.list({
-          ...(params.cwd ? { directory: params.cwd } : {}),
+      const page = yield* input.client.session
+        .list({
+          ...(params.cwd ? { directory: AbsolutePath.make(params.cwd) } : {}),
           order: "desc",
           limit: 100,
-          ...(params.cursor ? { cursor: params.cursor } : {}),
-        }),
-      )
+          ...(params.cursor ? { cursor: Schema.decodeSync(SessionsCursor)(params.cursor) } : {}),
+        })
+        .pipe(Effect.catch(ACPClient.classify))
       return {
         sessions: page.data.map((session) => {
           const additionalDirectories = ACPDirectories.list(session)
@@ -240,21 +242,24 @@ export function make(input: {
             sessionId: session.id,
             cwd: session.location.directory,
             ...(additionalDirectories.length > 0 ? { additionalDirectories } : {}),
-            title: withTimestampedFallback(session),
-            updatedAt: new Date(session.time.updated).toISOString(),
+            title: withTimestampedFallback({
+              ...session,
+              time: { created: DateTime.toEpochMillis(session.time.created) },
+            }),
+            updatedAt: DateTime.formatIso(session.time.updated),
           }
         }),
         ...(page.cursor.next ? { nextCursor: page.cursor.next } : {}),
       }
     }),
     deleteSession: Effect.fnUntraced(function* (params) {
-      // A malformed ID fails the server's path decode, and the session ID is the only path param.
-      yield* ACPPromise.promise(() =>
-        input.client.session.remove({ sessionID: params.sessionId }).catch((error) => {
-          if (isSessionNotFoundError(error) || (isInvalidRequestError(error) && error.kind === "Params")) return
-          throw error
-        }),
-      )
+      // A malformed ID names no session.
+      const sessionID = Schema.decodeUnknownOption(Session.ID)(params.sessionId)
+      if (Option.isSome(sessionID))
+        yield* input.client.session.remove({ sessionID: sessionID.value }).pipe(
+          Effect.catchTag("SessionNotFoundError", () => Effect.void),
+          Effect.catch(ACPClient.classify),
+        )
       yield* input.sessions.detach(params.sessionId)
       return {}
     }),
@@ -275,7 +280,8 @@ export function make(input: {
     }),
     forkSession: Effect.fnUntraced(function* (params) {
       const directories = yield* ACPDirectories.parse(params.cwd, params.additionalDirectories)
-      const forked = yield* ACPPromise.promise(() => input.client.session.fork({ sessionID: params.sessionId }))
+      const sessionID = yield* decodeSessionID(params.sessionId)
+      const forked = yield* input.client.session.fork({ sessionID }).pipe(Effect.catch(ACPClient.classify))
       // Forks copy the source session's rules, so the request list replaces any inherited grants.
       yield* ACPDirectories.activate(input.client, forked, directories)
       const attached = yield* input.sessions.attach(forked, forked.location.directory, params.mcpServers ?? [])
@@ -301,29 +307,36 @@ export function make(input: {
   }
 }
 
-const requireModel = Effect.fnUntraced(function* (catalog: Catalog, modelID: string, current: ModelRef) {
+// The client rejects a malformed ID before sending it, so it is rejected here as the server would.
+function decodeSessionID(sessionId: string) {
+  return Schema.decodeUnknownEffect(Session.ID)(sessionId).pipe(
+    Effect.mapError((error) => new ACPError.InvalidRequestError({ message: error.message })),
+  )
+}
+
+const requireModel = Effect.fnUntraced(function* (catalog: Catalog, modelID: string, current: Model.Ref) {
   const selected = parseModelSelection(modelID, catalog.providers)
   const model = catalog.models.find(
     (item) => item.providerID === selected.model.providerID && item.id === selected.model.modelID,
   )
   if (!model) return yield* new ACPError.InvalidModelError({ providerId: selected.model.providerID, modelId: modelID })
-  if (selected.variant && !model.variants.some((variant) => variant.id === selected.variant))
-    return yield* new ACPError.InvalidEffortError({ effort: selected.variant })
+  const selectedVariant = model.variants.find((variant) => variant.id === selected.variant)
+  if (selected.variant && !selectedVariant) return yield* new ACPError.InvalidEffortError({ effort: selected.variant })
   const variant =
-    selected.variant ??
+    selectedVariant?.id ??
     (current.providerID === model.providerID &&
     current.id === model.id &&
     (current.variant === DEFAULT_VARIANT_VALUE || model.variants.some((variant) => variant.id === current.variant))
       ? current.variant
       : undefined)
-  return { providerID: model.providerID, id: model.id, variant } satisfies ModelRef
+  return { providerID: model.providerID, id: model.id, variant } satisfies Model.Ref
 })
 
-const requireEffort = Effect.fnUntraced(function* (catalog: Catalog, effort: string, current: ModelRef) {
+const requireEffort = Effect.fnUntraced(function* (catalog: Catalog, effort: string, current: Model.Ref) {
   const model = catalog.models.find((item) => item.providerID === current.providerID && item.id === current.id)
   if (!model || (effort !== DEFAULT_VARIANT_VALUE && !model.variants.some((variant) => variant.id === effort)))
     return yield* new ACPError.InvalidEffortError({ effort })
-  return { ...current, variant: effort } satisfies ModelRef
+  return { ...current, variant: Model.VariantID.make(effort) } satisfies Model.Ref
 })
 
 export * as ACPService from "./service"

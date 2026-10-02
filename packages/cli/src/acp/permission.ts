@@ -1,15 +1,17 @@
 import type { PermissionOption, ToolCallLocation } from "@agentclientprotocol/sdk"
-import type { EventSubscribeOutput, OpenCodeClient, PermissionReplyInput } from "@opencode/client/promise"
+import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
+import type { Permission } from "@opencode/schema/permission"
+import type { Session } from "@opencode/schema/session"
 import { Patch } from "@opencode/util/patch"
 import { applyPatch } from "diff"
 import { Cause, Effect, Option, Schema } from "effect"
+import { ACPClient } from "./client"
 import type { ACPConnection } from "./connection"
-import { ACPPromise } from "./promise"
 import { ACPTranslate } from "./translate"
 import { absolutePath, filePath, patchHunks, pendingToolCall, stringValue, toLocations, type ToolInput } from "./tool"
 
-type PermissionEvent = Extract<EventSubscribeOutput, { type: "permission.asked" }>
+type PermissionEvent = Extract<OpenCodeEvent, { type: "permission.asked" }>
 type Tool = { readonly id: string; readonly name: string; readonly input: ToolInput }
 type Preview = ReturnType<typeof diff>
 
@@ -17,7 +19,7 @@ type Input = {
   readonly client: OpenCodeClient
   readonly connection: ACPConnection.Interface
   readonly event: PermissionEvent
-  readonly sessionID: string
+  readonly sessionID: Session.ID
   readonly clientSessionID: string
   readonly cwd: string
   readonly tool?: Tool
@@ -79,10 +81,10 @@ const ask = Effect.fnUntraced(function* (input: Input) {
   return selected === "once" || selected === "always" ? selected : "reject"
 })
 
-function respond(input: Input, decision: PermissionReplyInput["decision"]) {
-  return ACPPromise.promise(() =>
-    input.client.permission.reply({ sessionID: input.sessionID, requestID: input.event.data.id, decision }),
-  )
+function respond(input: Input, decision: Permission.Reply) {
+  return input.client.permission
+    .reply({ sessionID: input.sessionID, requestID: input.event.data.id, decision })
+    .pipe(Effect.catch(ACPClient.classify))
 }
 
 function prefixedTitle(prefix: string | undefined, title: string | undefined) {

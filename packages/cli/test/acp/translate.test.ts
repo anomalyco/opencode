@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import type { OpenCodeEvent } from "@opencode/client/promise"
+import { OpenCodeEvent, type OpenCodeEventEncoded } from "@opencode/protocol/groups/event"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Schema } from "effect"
 import { ACPTranslate } from "../../src/acp/translate"
 import {
   childCreated,
@@ -20,16 +22,16 @@ const root = "ses_root"
 const ctx: ACPTranslate.Context = {
   sessionID: root,
   cwd: "/workspace",
-  start: { type: "input", id: "msg_input" },
+  start: { type: "input", id: SessionMessage.ID.make("msg_input") },
   childUpdates: false,
   compaction: false,
   mode: "turn",
 }
 
-function run(events: ReadonlyArray<OpenCodeEvent>, context = ctx, state = ACPTranslate.initial) {
+function run(events: ReadonlyArray<OpenCodeEventEncoded>, context = ctx, state = ACPTranslate.initial) {
   return events.reduce<{ state: ACPTranslate.TurnState; outputs: ACPTranslate.Output[]; terminal?: string }>(
     (acc, event, index) => {
-      const next = ACPTranslate.step(acc.state, { ...event, id: `evt_${index + 1}` }, context)
+      const next = ACPTranslate.step(acc.state, decodeEvent({ ...event, id: `evt_${index + 1}` }), context)
       return {
         state: next.state,
         outputs: [...acc.outputs, ...next.outputs],
@@ -40,7 +42,9 @@ function run(events: ReadonlyArray<OpenCodeEvent>, context = ctx, state = ACPTra
   )
 }
 
-function started(...events: OpenCodeEvent[]) {
+const decodeEvent = Schema.decodeUnknownSync(OpenCodeEvent)
+
+function started(...events: OpenCodeEventEncoded[]) {
   return run([delivered(root, "msg_input"), ...events])
 }
 

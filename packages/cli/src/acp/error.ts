@@ -72,8 +72,6 @@ const Errors = Schema.Union([
 
 export type Error = typeof Errors.Type
 
-export const is = Schema.is(Errors)
-
 export function toRequestError(error: Error): RequestError {
   switch (error._tag) {
     case "ACPSessionNotFoundError":

@@ -5,15 +5,13 @@ import {
   type CreateElicitationRequest,
   type CreateElicitationResponse,
   type JsonRpcId,
-  type RequestError,
+  RequestError,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionNotification,
   type Stream,
 } from "@agentclientprotocol/sdk"
 import { Context, Deferred, Effect } from "effect"
-import type { ACPError } from "./error"
-import { ACPPromise } from "./promise"
 
 /**
  * Completes once the response to the request being handled is written, so messages sent afterwards follow it.
@@ -24,19 +22,16 @@ export const Responded = Context.Reference<Effect.Effect<void>>("@opencode/cli/a
 })
 
 export interface Interface {
-  readonly sessionUpdate: (params: SessionNotification) => Effect.Effect<void, ACPError.Error | RequestError>
+  readonly sessionUpdate: (params: SessionNotification) => Effect.Effect<void, RequestError>
   /** Interruption cancels the client's request. */
   readonly requestPermission: (
     params: RequestPermissionRequest,
-  ) => Effect.Effect<RequestPermissionResponse, ACPError.Error | RequestError>
-  readonly extNotification: (
-    method: string,
-    params: Record<string, unknown>,
-  ) => Effect.Effect<void, ACPError.Error | RequestError>
+  ) => Effect.Effect<RequestPermissionResponse, RequestError>
+  readonly extNotification: (method: string, params: Record<string, unknown>) => Effect.Effect<void, RequestError>
   /** Interruption cancels the client's request. */
   readonly createElicitation: (
     params: CreateElicitationRequest,
-  ) => Effect.Effect<CreateElicitationResponse, ACPError.Error | RequestError>
+  ) => Effect.Effect<CreateElicitationResponse, RequestError>
   /** Tracks an incoming request from now on and returns its `Responded`. */
   readonly responded: (requestId: JsonRpcId) => Effect.Effect<void>
 }
@@ -65,14 +60,14 @@ export function make(app: AgentApp, stream: Stream) {
   return {
     agent,
     connection: Service.of({
-      sessionUpdate: (params) => ACPPromise.promise(() => agent.client.notify(methods.client.session.update, params)),
+      sessionUpdate: (params) => promise(() => agent.client.notify(methods.client.session.update, params)),
       requestPermission: (params) =>
-        ACPPromise.promise((signal) =>
+        promise((signal) =>
           agent.client.request(methods.client.session.requestPermission, params, { cancellationSignal: signal }),
         ),
-      extNotification: (method, params) => ACPPromise.promise(() => agent.client.notify(method, params)),
+      extNotification: (method, params) => promise(() => agent.client.notify(method, params)),
       createElicitation: (params) =>
-        ACPPromise.promise((signal) =>
+        promise((signal) =>
           agent.client.request(methods.client.elicitation.create, params, { cancellationSignal: signal }),
         ),
       responded: (requestId) => {
@@ -82,6 +77,13 @@ export function make(app: AgentApp, stream: Stream) {
       },
     }),
   }
+}
+
+// The client's rejections stay typed; any other rejection is a defect.
+function promise<A>(evaluate: (signal: AbortSignal) => Promise<A>) {
+  return Effect.tryPromise({ try: evaluate, catch: (cause) => cause }).pipe(
+    Effect.catch((cause) => (cause instanceof RequestError ? Effect.fail(cause) : Effect.die(cause))),
+  )
 }
 
 export * as ACPConnection from "./connection"

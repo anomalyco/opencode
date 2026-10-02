@@ -31,7 +31,7 @@ describe("acp turn events over the wire", () => {
       onPrompt: ({ sessionID, id }) => [
         textDelta(sessionID, "msg_before", "before admission"),
         delivered("ses_other", id),
-        delivered(sessionID, "input_other"),
+        delivered(sessionID, "msg_other"),
         textDelta(sessionID, "msg_wrong_input", "wrong input"),
         delivered(sessionID, id),
         textDelta("ses_other", "msg_other", "other session"),

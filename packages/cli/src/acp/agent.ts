@@ -9,12 +9,12 @@ import {
   type JsonRpcId,
   type Stream,
 } from "@agentclientprotocol/sdk"
-import type { OpenCodeClient } from "@opencode/client/promise"
+import type { OpenCodeClient } from "@opencode/client/effect"
 import { Cause, Deferred, Effect, Ref, type Scope } from "effect"
 import { ACPCatalog } from "./catalog"
+import { ACPClient } from "./client"
 import { ACPConnection } from "./connection"
 import { ACPError } from "./error"
-import { ACPPromise } from "./promise"
 import { ACPService } from "./service"
 import { ACPSessions } from "./sessions"
 import { ACPTurn } from "./turn"
@@ -34,7 +34,7 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
         (ctx: AgentHandlerContext<Params>) =>
           Deferred.await(ready).pipe(Effect.flatMap((service) => call(service, ctx))),
         Effect.catchTags({
-          ACPCatalogLoadError: (error) => ACPPromise.classify(error.cause),
+          ACPCatalogLoadError: (error) => ACPClient.classify(error.cause),
           ACPCatalogNotReadyError: (error) => Effect.die(error),
         }),
         Effect.mapError((error) => (error instanceof RequestError ? error : ACPError.toRequestError(error))),

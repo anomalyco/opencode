@@ -170,7 +170,7 @@ describe("acp additional directories over the wire", () => {
     await acp.request("session/resume", { cwd: "/workspace", sessionId: "ses_saved", additionalDirectories: [] })
 
     const create = acp.server.requests.find((request) => request.method === "POST" && request.path === "/api/session")
-    expect(create?.body).toEqual({ location: { directory: "/workspace" } })
+    expect(create?.body).toMatchObject({ location: { directory: "/workspace" }, permissions: null, metadata: null })
     expect(acp.server.sessions.get(created.sessionId)?.permissions).toBeUndefined()
     expect(updates(acp)).toEqual([])
     expect(

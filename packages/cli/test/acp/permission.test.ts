@@ -295,7 +295,7 @@ describe("acp permissions over the wire", () => {
     expect(acp.permissions.map((request) => request.toolCall.toolCallId)).toEqual(["perm_failed", "perm_next"])
     expect(decisions(acp)).toEqual([["perm_next", "once"]])
     expect(acp.logs.map((log) => ({ message: log.message, cause: Cause.squash(log.cause) }))).toMatchObject([
-      { message: ["ACP permission reply failed"], cause: { name: "ClientError", reason: "UnexpectedStatus" } },
+      { message: ["ACP permission reply failed"], cause: { _tag: "ClientError" } },
     ])
   })
 

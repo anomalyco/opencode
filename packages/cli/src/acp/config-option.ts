@@ -1,5 +1,6 @@
 import type { SessionConfigOption } from "@agentclientprotocol/sdk"
-import type { ModelRef } from "@opencode/client/promise"
+import type { Agent } from "@opencode/schema/agent"
+import type { Model } from "@opencode/schema/model"
 import { builtinCommands, type Catalog } from "./catalog"
 
 export const DEFAULT_VARIANT_VALUE = "default"
@@ -29,8 +30,8 @@ export type ModelSelection = {
 
 /** A session's model and mode. Unset fields follow the catalog defaults. */
 export type Selection = {
-  readonly model?: ModelRef
-  readonly modeID?: string
+  readonly model?: Model.Ref
+  readonly modeID?: Agent.ID
 }
 
 export function currentModel(catalog: Catalog, selection: Selection) {
