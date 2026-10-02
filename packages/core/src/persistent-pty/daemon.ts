@@ -156,14 +156,14 @@ export interface DaemonTransport {
 }
 
 export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport")(function* (
-  initial: string,
+  root: string,
+  initialName: string,
   binary: () => Promise<string> = () => Promise.resolve(process.env.OPENCODE_PTY_BIN || "opencode-pty"),
   inherited?: Handoff,
 ) {
   const startup = Semaphore.makeUnsafe(1)
-  // Runtime directories are siblings under one root; the daemon is named by its directory.
-  const root = path.dirname(path.resolve(initial))
-  let directory = initial
+  // Each daemon owns the runtime directory `<root>/<name>`; names are generated IDs.
+  let name = initialName
   let registration: Registration | undefined
   let owner: Awaited<ReturnType<typeof openOwner>> | undefined
   let closed = false
@@ -198,7 +198,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       }),
     )
 
-  const discover = Effect.fn("PersistentPty.daemon.discover")(function* () {
+  const discover = Effect.fn("PersistentPty.daemon.discover")(function* (directory = path.join(root, name)) {
     const value = yield* Effect.tryPromise({
       try: () => readFile(path.join(directory, "service.json"), "utf8"),
       catch: (cause) => failure("connect", cause),
@@ -232,7 +232,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
         new Promise<ReturnType<typeof spawn>>((resolve, reject) => {
           const child = spawn(
             executable,
-            ["daemon", "--runtime-dir", path.dirname(directory), "--name", path.basename(directory)],
+            ["daemon", "--runtime-dir", root, "--name", name],
             { detached: true, stdio: "ignore" },
           )
           child.once("spawn", () => {
@@ -288,7 +288,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     owner?.socket.destroy()
     owner = undefined
     registration = undefined
-    directory = path.join(root, crypto.randomUUID())
+    name = crypto.randomUUID()
   }
 
   const connect = Effect.fn("PersistentPty.daemon.connect")(function* (shouldStart: boolean) {
@@ -370,7 +370,12 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       )
       if (response.type !== "handoff")
         return yield* Effect.fail(new DaemonError({ kind: "protocol", message: "Expected PTY handoff ticket" }))
-      return { directory, instanceID: registered.instance_id, ticket: response.ticket, expiresAt: response.expires_at }
+      return {
+        directory: path.join(root, name),
+        instanceID: registered.instance_id,
+        ticket: response.ticket,
+        expiresAt: response.expires_at,
+      }
     }),
   )
 
@@ -400,11 +405,13 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     yield* Effect.gen(function* () {
       if (inherited.expiresAt <= Date.now())
         return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart handoff expired" }))
-      directory = inherited.directory
-      found = yield* discover()
+      // Older releases put the daemon directory outside the root; its directory name is still the name.
+      name = path.basename(inherited.directory)
+      found = yield* discover(inherited.directory)
       if (found.instance_id !== inherited.instanceID)
         return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart daemon changed" }))
-      if (path.dirname(path.resolve(directory)) !== root) directory = yield* migrate(directory, root)
+      if (path.resolve(inherited.directory) !== path.resolve(root, name))
+        yield* migrate(inherited.directory, path.join(root, name))
       yield* claim(found, inherited.ticket)
     }).pipe(
       Effect.catchCause((cause) =>
@@ -425,8 +432,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
 
 // Older releases kept registrations in purgeable temp directories. Renaming keeps the lock file's
 // inode, so the still-running daemon keeps holding its lock in the new location.
-const migrate = Effect.fn("PersistentPty.daemon.migrate")(function* (directory: string, root: string) {
-  const target = path.join(root, path.basename(directory))
+const migrate = Effect.fn("PersistentPty.daemon.migrate")(function* (directory: string, target: string) {
   yield* Effect.tryPromise({
     try: async () => {
       await mkdir(target, { recursive: true, mode: 0o700 })
@@ -435,7 +441,6 @@ const migrate = Effect.fn("PersistentPty.daemon.migrate")(function* (directory: 
     },
     catch: (cause) => failure("registration", cause),
   })
-  return target
 })
 
 async function openOwner(registration: Registration, ticket: string | undefined, signal: AbortSignal) {

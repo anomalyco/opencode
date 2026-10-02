@@ -126,7 +126,8 @@ const makeLayer = (options: Options = {}) =>
       const runFork = Effect.runForkWith(context)
       let binary: Promise<string> | undefined
       const daemon = yield* makeDaemonTransport(
-        path.join(options.root ?? path.join(global.state, "pty"), crypto.randomUUID()),
+        options.root ?? path.join(global.state, "pty"),
+        crypto.randomUUID(),
         () =>
           (binary ??= resolveBinary(global.bin).catch((error) => {
             binary = undefined
