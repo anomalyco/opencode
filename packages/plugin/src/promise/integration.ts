@@ -88,6 +88,8 @@ export interface IntegrationDomain extends Omit<IntegrationApi, "wellknown"> {
   readonly connection: {
     readonly active: (integrationID: string) => Promise<ConnectionInfo | undefined>
     readonly resolve: (connection: ConnectionInfo) => Promise<Credential.Value | undefined>
+    /** Makes a saved credential the active connection of its integration. */
+    readonly activate: (credentialID: string) => Promise<void>
     /** Reports a problem with a connection, such as a required sign-in; `undefined` clears it. */
     readonly status: (input: {
       readonly integrationID: string
