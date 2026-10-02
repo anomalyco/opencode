@@ -67,6 +67,8 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/cerebras", () => import("@opencode/ai/providers/cerebras")],
   ["@opencode/ai/providers/cloudflare-ai-gateway", () => import("@opencode/ai/providers/cloudflare-ai-gateway")],
   ["@opencode/ai/providers/cloudflare-workers-ai", () => import("@opencode/ai/providers/cloudflare-workers-ai")],
+  ["@opencode/ai/providers/cohere", () => import("@opencode/ai/providers/cohere")],
+  ["@opencode/ai/providers/cohere/chat", () => import("@opencode/ai/providers/cohere/chat")],
   ["@opencode/ai/providers/deepinfra", () => import("@opencode/ai/providers/deepinfra")],
   ["@opencode/ai/providers/deepseek", () => import("@opencode/ai/providers/deepseek")],
   ["@opencode/ai/providers/digitalocean", () => import("@opencode/ai/providers/digitalocean")],

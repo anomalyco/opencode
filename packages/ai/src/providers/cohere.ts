@@ -8,16 +8,15 @@ import type { ProviderPackage } from "../provider-package.js"
 
 export const id = ProviderID.make("cohere")
 const COMPATIBILITY_BASE_URL = "https://api.cohere.ai/compatibility/v1"
-export type ProviderOptions = CohereChat.ProviderOptionsInput & {
-  readonly reasoningEffort?: OpenString<"none" | "high">
-}
+export type ChatOptionsInput = { readonly reasoningEffort?: OpenString<"none" | "high"> }
+export type ProviderOptions = CohereChat.ProviderOptionsInput & ChatOptionsInput
 export type LanguageModelOptions = Omit<RouteDefaultsInput, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     readonly baseURL?: string
     readonly providerOptions?: ProviderOptions
   }
-export type Settings = ProviderPackage.Settings &
-  ProviderOptions & { readonly apiKey?: string; readonly baseURL?: string }
+export type Settings<Options = CohereChat.ProviderOptionsInput> = ProviderPackage.Settings &
+  Options & { readonly apiKey?: string; readonly baseURL?: string }
 
 export const route = CohereChat.route
 export const chatRoute = Route.make({
@@ -39,7 +38,7 @@ export const configure = (input: LanguageModelOptions = {}) => {
     id,
     model: (modelID: string | ModelID) => native.model<CohereChat.ProviderOptionsInput>({ id: modelID }),
     chat: (modelID: string | ModelID) =>
-      chat.model<{ readonly reasoningEffort?: OpenString<"none" | "high"> }>({
+      chat.model<ChatOptionsInput>({
         id: modelID,
         compatibility: {
           maxTokensField: "max_tokens",
