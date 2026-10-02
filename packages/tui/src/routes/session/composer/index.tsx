@@ -2,6 +2,7 @@ import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../../../context/theme"
+import { useData } from "../../../context/data"
 import { SplitBorder } from "../../../ui/border"
 import { Keymap } from "../../../context/keymap"
 import { SubagentsTab } from "./subagents-tab"
@@ -9,6 +10,9 @@ import { ShellTab } from "./shell-tab"
 import { TerminalsTab } from "./terminals-tab"
 import { useConfig } from "../../../config"
 import { ComposerContext, type ComposerTab } from "./context"
+import { PromptMetadataRow } from "../../../component/prompt/metadata"
+import { Locale } from "../../../util/locale"
+import { normalizeModelVariant } from "../../../model-preference"
 
 export { useComposerTab, type ComposerHint } from "./context"
 
@@ -22,6 +26,7 @@ export type ComposerProps = {
 
 export function Composer(props: ComposerProps) {
   const theme = useTheme()
+  const data = useData()
   const config = useConfig().data
 
   const [store, setStore] = createStore({
@@ -32,6 +37,21 @@ export function Composer(props: ComposerProps) {
   const tabList = createMemo(() => Object.values(store.tabs))
   const activeTab = createMemo(() => tabList().find((t) => t.id === store.active))
   const footerHints = createMemo(() => activeTab()?.hints?.() ?? [])
+  const childModel = createMemo(() => {
+    const session = data.session.get(props.sessionID)
+    if (!session?.parentID || !session.model) return
+    const selected = session.model
+    const model = data.location.model
+      .list(session.location)
+      ?.find((item) => item.providerID === selected.providerID && item.id === selected.id)
+    const provider = data.location.provider.list(session.location)?.find((item) => item.id === selected.providerID)
+    return {
+      agent: session.agent ? Locale.titlecase(session.agent) : "Subagent",
+      model: model?.name ?? `${selected.id} (unavailable)`,
+      provider: provider?.name ?? selected.providerID,
+      variant: normalizeModelVariant(selected.variant),
+    }
+  })
 
   // Set active tab when opened
   createEffect(() => {
@@ -154,6 +174,25 @@ export function Composer(props: ComposerProps) {
                 </text>
               </Show>
             </box>
+            <Show when={childModel()}>
+              {(model) => (
+                <box paddingLeft={1} flexShrink={0} minWidth={0}>
+                  <PromptMetadataRow
+                    mode="normal"
+                    agent={model().agent}
+                    auto={false}
+                    model={model().model}
+                    provider={model().provider}
+                    variant={model().variant}
+                    muted={false}
+                    highlight={theme.text.base}
+                    agentAlpha={1}
+                    modelAlpha={1}
+                    variantAlpha={1}
+                  />
+                </box>
+              )}
+            </Show>
           </box>
         </box>
       </box>
