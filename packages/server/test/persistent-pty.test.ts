@@ -312,6 +312,43 @@ smoke(
 )
 
 smoke(
+  "uses the configured shell for terminals created without a command",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory("xdg")
+      const configured = path.join(fixture.root, "configured-shell")
+      yield* Effect.promise(async () => {
+        await fs.writeFile(configured, "#!/bin/sh\nprintf configured-shell; exec cat\n")
+        await fs.chmod(configured, 0o755)
+      })
+      const server = yield* ServerProcess.start<never, never>({
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        fs: { filewatcher: false },
+        config: { content: JSON.stringify({ shell: configured }) },
+      })
+      const base = HttpServer.formatAddress(server.address)
+      const sessionID = Session.ID.make("ses_persistent_pty_configured_shell")
+      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
+      const terminal = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          args: [],
+          cwd: fixture.root,
+          title: "configured shell",
+          env: {},
+        })).data,
+      )
+      expect(terminal.command).toBe(configured)
+      expect(yield* waitForText(base, terminal.id, "configured-shell")).toContain("configured-shell")
+      yield* request(base, "DELETE", `/api/experimental/persistent-pty/${terminal.id}`)
+    }),
+  20_000,
+)
+
+smoke(
   "isolates servers sharing a database and preserves terminals only through explicit restart handoff",
   () =>
     Effect.gen(function* () {
