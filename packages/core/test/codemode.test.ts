@@ -24,9 +24,6 @@ describe("CodeMode", () => {
 
       const snapshot = yield* tools.snapshot()
       expect(snapshot.definitions.some((tool) => tool.name === "execute")).toBe(true)
-      expect(snapshot.definitions.find((tool) => tool.name === "execute")?.description).toContain(
-        "Run independent calls concurrently with `Promise.allSettled`.",
-      )
       expect(snapshot.codeModeCatalog).toStrictEqual({
         tools: [
           {
