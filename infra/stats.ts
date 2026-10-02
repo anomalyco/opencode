@@ -87,6 +87,10 @@ const statsSyncConfig = new sst.Linkable("StatsSyncConfig", {
   },
 })
 
+// Comma-separated model IDs kept off the public stats site. A secret, so excluding
+// an unreleased model does not publish its name in git.
+const statsHiddenModels = new sst.Secret("StatsHiddenModels", "")
+
 const r2SqlAuthToken = new sst.Secret("R2SqlAuthToken")
 const r2Sql = new sst.Linkable("R2Sql", {
   properties: {
@@ -109,7 +113,7 @@ export const statSync = new sst.aws.Service("StatsSyncService", {
     dockerfile: "packages/stats/server/Dockerfile",
   },
   command: ["bun", "src/stat-sync.ts"],
-  link: [database, r2Sql, r2SqlAuthToken, statsSyncConfig],
+  link: [database, r2Sql, r2SqlAuthToken, statsHiddenModels, statsSyncConfig],
   scaling: {
     min: 1,
     max: 1,

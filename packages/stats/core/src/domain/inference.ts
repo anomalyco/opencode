@@ -26,7 +26,12 @@ import {
 } from "./stat"
 
 export type StatDimension = "model" | "provider" | "geo" | "geo_model"
-export type StatsQuerySource = { namespace: string; table: string; dataset: string }
+export type StatsQuerySource = {
+  namespace: string
+  table: string
+  dataset: string
+  hiddenModels?: readonly string[]
+}
 export type RetentionQuery = { cohortDates: string[]; query: string }
 type StatsQueryFamily = "usage" | "geo"
 
@@ -50,6 +55,7 @@ export function buildStatsQueries(
     namespace: Resource.R2Sql.namespace,
     table: Resource.R2Sql.table,
     dataset: Resource.StatsSyncConfig.dataset,
+    hiddenModels: hiddenStatModels(),
   }
   return [...statPeriods("week", periodStart, periodEnd), ...statPeriods("day", periodStart, periodEnd)].flatMap(
     (period) => [buildStatsQuery(period, source, "usage", catalog), buildStatsQuery(period, source, "geo", catalog)],
@@ -66,6 +72,7 @@ export function buildRetentionQueries(
     namespace: Resource.R2Sql.namespace,
     table: Resource.R2Sql.table,
     dataset: Resource.StatsSyncConfig.dataset,
+    hiddenModels: hiddenStatModels(),
   }
   const periods = retentionPeriods(periodStart, periodEnd)
   // Bound the user-level joins to one activity week and its return week.
@@ -144,7 +151,7 @@ WITH normalized AS (
   FROM normalized
   WHERE activity_week IS NOT NULL
     AND user_key <> ''
-    AND lower(model) NOT IN (${[...EXCLUDED_MODELS].map(sqlString).join(", ")})
+    AND lower(model) NOT IN (${excludedModels(source).map(sqlString).join(", ")})
 ), model_usage AS (
   SELECT
     activity_week AS cohort_date,
@@ -329,7 +336,7 @@ WITH normalized AS (
     cost_output_microcents,
     cost_total_microcents
   FROM normalized
-  WHERE lower(model) NOT IN (${[...EXCLUDED_MODELS].map(sqlString).join(", ")})
+  WHERE lower(model) NOT IN (${excludedModels(source).map(sqlString).join(", ")})
 )
 SELECT
   ${sqlString(period.grain)} AS grain,
@@ -446,6 +453,17 @@ function number(data: R2SqlData, key: string) {
 
 function sqlIdentifier(value: string) {
   return `"${value.replace(/"/g, '""')}"`
+}
+
+export function hiddenStatModels() {
+  return Resource.StatsHiddenModels.value
+    .split(",")
+    .map((model) => model.trim().toLowerCase())
+    .filter(Boolean)
+}
+
+function excludedModels(source: StatsQuerySource) {
+  return [...EXCLUDED_MODELS, ...(source.hiddenModels ?? [])]
 }
 
 function sqlString(value: string) {
