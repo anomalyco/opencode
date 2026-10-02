@@ -126,6 +126,26 @@ test("spells Cloudflare AI Gateway variants for their upstream routes", () => {
   ])
 })
 
+test("spells xAI Responses variants with catalog effort levels", () => {
+  const supports: Variant.Support[] = [{ type: "effort", values: ["low", "medium", "high", "xhigh"] }]
+  expect(resolve(model("@opencode/ai/providers/xai", "grok-4.6"), supports)).toEqual(
+    ["low", "medium", "high", "xhigh"].map((effort) => ({
+      id: effort,
+      settings: { reasoningEffort: effort, reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    })),
+  )
+  expect(resolve(model("@opencode/ai/providers/xai", "grok-4.3"), [{ type: "effort", values: ["none", "low"] }])).toEqual([
+    {
+      id: "none",
+      settings: { reasoningEffort: "none", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    },
+    { id: "low", settings: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] } },
+  ])
+  expect(resolve(model("@opencode/ai/providers/xai", "grok-4.6"), [{ type: "effort" }]).map((item) => item.id)).toEqual([
+    "low", "medium", "high",
+  ])
+})
+
 test("spells Chat Completions variants for direct providers", () => {
   expect(
     resolve(model("@opencode/ai/providers/deepseek", "deepseek-v4-flash"), [
@@ -244,7 +264,49 @@ test("caps Alibaba thinking budget variants at 64k", () => {
   ])
 })
 
+test("spells Workers AI thinking controls through the chat template", () => {
+  const pkg = "@opencode/ai/providers/cloudflare-workers-ai"
+  const off = { body: { chat_template_kwargs: { enable_thinking: false, thinking: false } } }
+  const on = { body: { chat_template_kwargs: { enable_thinking: true, thinking: true } } }
+  expect(
+    resolve(model(pkg, "@cf/deepseek-ai/deepseek-v4-flash-0731"), [
+      { type: "effort", values: ["none", "low", "high", "max"] },
+    ]),
+  ).toEqual([
+    { id: "none", ...off },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+    { id: "max", settings: { reasoningEffort: "max" } },
+  ])
+  expect(resolve(model(pkg, "@cf/zai-org/glm-4.7-flash"), [{ type: "toggle" }])).toEqual([
+    { id: "none", ...off },
+    { id: "thinking", ...on },
+  ])
+  expect(
+    resolve(model(pkg, "@cf/qwen/qwen3.8-27b"), [
+      { type: "toggle" },
+      { type: "effort", values: ["low", "medium", "xhigh"] },
+    ]),
+  ).toEqual([
+    { id: "none", ...off },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "medium", settings: { reasoningEffort: "medium" } },
+    { id: "xhigh", settings: { reasoningEffort: "xhigh" } },
+  ])
+})
+
 test("spells Chat Completions variants for hosting providers", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/digitalocean", "openai-gpt-5-nano", undefined, "digitalocean"), [
+      { type: "effort", values: ["minimal", "low", "medium", "high"] },
+    ]),
+  ).toEqual([
+    { id: "minimal", settings: { reasoningEffort: "minimal" } },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "medium", settings: { reasoningEffort: "medium" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+
   expect(
     resolve(model("@opencode/ai/providers/openai-compatible", "deepseek-ai/deepseek-v4-pro", undefined, "nvidia"), [
       { type: "effort", values: ["none", "high", "max"] },

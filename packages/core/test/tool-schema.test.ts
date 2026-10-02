@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, SchemaGetter } from "effect"
 import { z } from "zod"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
@@ -51,7 +51,7 @@ test("Effect tool schemas use exact optional keys and flatten compatible constra
     description: "Constraints",
     input: Schema.Struct({
       offset: Schema.optionalKey(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
-      code: Schema.String.check(Schema.isPattern(/^a/), Schema.isPattern(/z$/)),
+      code: Schema.String.check(Schema.isPattern(/^a/u), Schema.isPattern(/z$/u)),
     }),
     execute: () => Effect.succeed({ content: "unused" }),
   }
@@ -106,6 +106,53 @@ test("empty input normalization preserves explicit Effect overrides and raw JSON
       definition({ ...tool, input: checked }).inputSchema,
     )
   }
+})
+
+test("empty input normalization follows the encoded side of transformed Effect inputs", async () => {
+  const token = Schema.Struct({ token: Schema.String })
+  // Callers send `{}`; the handler receives a token.
+  const defaulted = Schema.Struct({}).pipe(
+    Schema.decodeTo(token, {
+      decode: SchemaGetter.transform(() => ({ token: "default" })),
+      encode: SchemaGetter.transform(() => ({})),
+    }),
+  )
+  // Callers send a token; the handler receives an empty struct.
+  const reversed = token.pipe(
+    Schema.decodeTo(Schema.Struct({}), {
+      decode: SchemaGetter.transform(() => ({})),
+      encode: SchemaGetter.transform(() => ({ token: "default" })),
+    }),
+  )
+  const tool = (input: Schema.Codec<unknown, unknown>): Info => ({
+    name: "transformed",
+    description: "Transformed input",
+    input,
+    execute: (value) => Effect.succeed({ content: JSON.stringify(value) }),
+  })
+  const empty = { type: "object", properties: {}, additionalProperties: false }
+
+  expect(definition(tool(defaulted)).inputSchema).toEqual(empty)
+  expect(definition(tool(defaulted.annotate({ identifier: "Defaulted" }))).inputSchema).toEqual(empty)
+  expect(definition(tool(reversed)).inputSchema).toEqual({
+    type: "object",
+    properties: { token: { type: "string" } },
+    required: ["token"],
+    additionalProperties: false,
+  })
+  expect(await Effect.runPromise(execute(tool(defaulted), {}, context))).toMatchObject({
+    content: [{ type: "text", text: JSON.stringify({ token: "default" }) }],
+  })
+})
+
+test("empty input normalization leaves checked encoded structs as Effect emits them", () => {
+  const tool: Info = {
+    name: "checked",
+    description: "Checked empty struct",
+    input: Schema.Struct({}).check(Schema.isMinProperties(1)),
+    execute: () => Effect.succeed({ content: "unused" }),
+  }
+  expect(definition(tool).inputSchema).toEqual({ not: { type: "null" }, minProperties: 1 })
 })
 
 test("empty input normalization leaves nested empty structs unchanged", () => {

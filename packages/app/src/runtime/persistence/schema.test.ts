@@ -110,16 +110,25 @@ describe("persistence schemas", () => {
     expect(Schema.encodeSync(schema)(state)).toEqual({ enabled: true })
   })
 
-  test("defaults missing and invalid fields without discarding valid siblings", () => {
+  test("defaults missing and invalid fields without discarding valid siblings and keeps codecs on writes", () => {
     const schema = Schema.Struct({
       enabled: Persistence.fallback(Schema.Boolean, () => true),
       label: Persistence.fallback(Schema.String, () => "default"),
+      amount: Persistence.fallback(Schema.NumberFromString.check(Schema.isFinite()), () => 7),
     })
     const decode = Schema.decodeUnknownSync(schema)
-    expect(decode({})).toEqual({ enabled: true, label: "default" })
-    expect(decode({ enabled: "false", label: "saved" })).toEqual({ enabled: true, label: "saved" })
-    expect(decode({ enabled: undefined, label: null })).toEqual({ enabled: true, label: "default" })
-    expect(Schema.encodeSync(schema)(decode({}))).toEqual({ enabled: true, label: "default" })
+    expect(decode({})).toEqual({ enabled: true, label: "default", amount: 7 })
+    expect(decode({ enabled: "false", label: "saved", amount: "invalid" })).toEqual({
+      enabled: true,
+      label: "saved",
+      amount: 7,
+    })
+    expect(decode({ enabled: undefined, label: null, amount: "12" })).toEqual({
+      enabled: true,
+      label: "default",
+      amount: 12,
+    })
+    expect(Schema.encodeSync(schema)(decode({}))).toEqual({ enabled: true, label: "default", amount: "7" })
   })
 
   test("optional recovery keeps fields optional without adding an undefined default", () => {
@@ -137,16 +146,6 @@ describe("persistence schemas", () => {
     expect(() =>
       Schema.decodeUnknownSync(Schema.Struct({ value: Schema.optional(number) }))({ value: "invalid" }),
     ).toThrow()
-  })
-
-  test("fallbacks use decoded values and retain the codec on writes", () => {
-    const schema = Persistence.struct({
-      value: Persistence.fallback(Schema.NumberFromString.check(Schema.isFinite()), () => 7),
-    })
-    const decode = Schema.decodeUnknownSync(schema)
-    expect(decode({})).toEqual({ value: 7 })
-    expect(decode({ value: "invalid" })).toEqual({ value: 7 })
-    expect(Schema.encodeSync(schema)(decode({}))).toEqual({ value: "7" })
   })
 
   test("records default to fresh mutable objects and keep entry recovery explicit", () => {

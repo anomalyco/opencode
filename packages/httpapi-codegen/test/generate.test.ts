@@ -11,7 +11,7 @@ import {
   HttpApiMiddleware,
   HttpApiSchema,
   OpenApi,
-} from "effect/unstable/httpapi"
+} from "effect/http-api"
 import { format } from "prettier"
 import {
   compile as compileContract,

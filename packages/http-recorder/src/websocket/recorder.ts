@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node-shared"
 import { Deferred, Effect, Exit, Layer, Ref, Scope, Semaphore } from "effect"
-import { Socket } from "effect/unstable/socket"
+import { Socket } from "effect/socket"
 import { fileSystem, type Interface, Service } from "../cassette/store.js"
 import type { SocketRecorderOptions } from "../options.js"
 import { make, type Redactor } from "../redaction/redactor.js"

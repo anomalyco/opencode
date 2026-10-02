@@ -1,30 +1,52 @@
 import { expect, test } from "bun:test"
 import { authServerName } from "./remote"
 
+const contributed = {
+  type: "extension",
+  key: "ssh:production",
+  extension: "ssh",
+  state: "ready",
+  connecting: false,
+  authenticationRequired: false,
+  managed: true,
+  http: { url: "http://127.0.0.1:4096" },
+} as const
+
 test("SSH disclosure uses the remote identity even with a loopback proxy", () => {
-  expect(authServerName({ type: "ssh", host: "production.example", http: { url: "http://127.0.0.1:4096" } })).toBe(
-    "production.example",
-  )
-  expect(
-    authServerName({
-      type: "ssh",
-      host: "production.example",
-      displayName: "Production server",
-      http: { url: "http://127.0.0.1:4096" },
-    }),
-  ).toBe("Production server")
+  expect(authServerName({ ...contributed, displayName: "Production server" })).toBe("Production server")
 })
 
-test("local Desktop and loopback HTTP connections do not show remote disclosure", () => {
-  expect(authServerName({ type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } })).toBeUndefined()
-  for (const host of ["localhost", "127.0.0.1", "[::1]"]) {
-    expect(authServerName({ type: "http", http: { url: `http://${host}:4096` } })).toBeUndefined()
-  }
-})
-
-test("WSL and remote HTTP connections show their server identity", () => {
-  expect(
-    authServerName({ type: "sidecar", variant: "wsl", distro: "Ubuntu", http: { url: "http://127.0.0.1:4096" } }),
-  ).toBe("Ubuntu")
-  expect(authServerName({ type: "http", http: { url: "https://production.example" } })).toBe("production.example")
+test.each([
+  {
+    name: "local Desktop",
+    server: { type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } } as const,
+    expected: undefined,
+  },
+  {
+    name: "localhost HTTP",
+    server: { type: "http", http: { url: "http://localhost:4096" } } as const,
+    expected: undefined,
+  },
+  {
+    name: "IPv4 loopback HTTP",
+    server: { type: "http", http: { url: "http://127.0.0.1:4096" } } as const,
+    expected: undefined,
+  },
+  {
+    name: "IPv6 loopback HTTP",
+    server: { type: "http", http: { url: "http://[::1]:4096" } } as const,
+    expected: undefined,
+  },
+  {
+    name: "WSL",
+    server: { ...contributed, key: "wsl:Ubuntu", extension: "wsl", displayName: "Ubuntu" } as const,
+    expected: "Ubuntu",
+  },
+  {
+    name: "remote HTTP",
+    server: { type: "http", http: { url: "https://production.example" } } as const,
+    expected: "production.example",
+  },
+])("remote disclosure for a $name connection names $expected", ({ server, expected }) => {
+  expect(authServerName(server)).toBe(expected)
 })

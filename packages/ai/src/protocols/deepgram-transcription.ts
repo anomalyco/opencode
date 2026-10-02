@@ -1,11 +1,12 @@
 import { Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientResponse } from "effect/http"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequestFor } from "../transcription.js"
 import { ProviderShared } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
+import { SpeakerTurns } from "./utils/speaker-turns.js"
 
 const route = MediaProtocol.identity({ id: "deepgram-transcription", name: "Deepgram", provider: "deepgram" })
 export const DEFAULT_BASE_URL = "https://api.deepgram.com"
@@ -115,16 +116,6 @@ const speaker = (value: number | undefined) => (value === undefined ? undefined 
 
 const wordText = (word: typeof Word.Type) => word.punctuated_word ?? word.word
 
-// Utterances split on pauses, not speakers: the v2 diarizer labels a whole utterance with one speaker even when its
-// words change speaker, so segments split each utterance at speaker changes.
-const speakerTurns = (words: ReadonlyArray<typeof Word.Type>) =>
-  words.reduce<Array<Array<typeof Word.Type>>>((turns, word) => {
-    const last = turns.at(-1)
-    if (last === undefined || last[0].speaker !== word.speaker) return [...turns, [word]]
-    last.push(word)
-    return turns
-  }, [])
-
 const decodeResponse = Effect.fn("DeepgramTranscription.decodeResponse")(function* (
   response: HttpClientResponse.HttpClientResponse,
 ) {
@@ -136,6 +127,8 @@ const decodeResponse = Effect.fn("DeepgramTranscription.decodeResponse")(functio
   const requestID = output.value.metadata?.request_id
   return new TranscriptionResponse({
     text: alternative.transcript,
+    // Utterances split on pauses, not speakers: the v2 diarizer labels a whole utterance with one speaker even when
+    // its words change speaker, so segments split each utterance at speaker changes.
     segments: output.value.results.utterances?.flatMap((utterance) =>
       utterance.words === undefined || utterance.words.length === 0
         ? [
@@ -146,7 +139,7 @@ const decodeResponse = Effect.fn("DeepgramTranscription.decodeResponse")(functio
               speaker: speaker(utterance.speaker),
             },
           ]
-        : speakerTurns(utterance.words).map((turn) => ({
+        : SpeakerTurns.group(utterance.words, (word) => word.speaker).map((turn) => ({
             text: turn.map(wordText).join(" "),
             startSeconds: turn[0].start,
             endSeconds: turn[turn.length - 1].end,

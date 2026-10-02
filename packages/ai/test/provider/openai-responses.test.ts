@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Layer, Logger, Ref, Schema, Stream } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Headers, HttpClientRequest } from "effect/http"
 import {
   Media,
   LLM,
@@ -3804,6 +3804,8 @@ describe("OpenAI Responses route", () => {
           name: "lookup",
           arguments: '{"query":"news"}',
         },
+        { type: "function_call_output", call_id: "call_1", output: "Tool result missing" },
+        { type: "function_call_output", call_id: "call_2", output: "Tool result missing" },
       ])
     }),
   )
@@ -4098,15 +4100,13 @@ describe("OpenAI Responses route", () => {
       ])
 
       const prepared = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
-      expect(prepared.body.input).toEqual([
-        {
-          type: "function_call",
-          id: "fc_item_1",
-          call_id: "call_1",
-          name: "lookup",
-          arguments: '{"query":"weather"}',
-        },
-      ])
+      expect(prepared.body.input[0]).toEqual({
+        type: "function_call",
+        id: "fc_item_1",
+        call_id: "call_1",
+        name: "lookup",
+        arguments: '{"query":"weather"}',
+      })
     }),
   )
 
@@ -4993,6 +4993,42 @@ describe("OpenAI Responses route", () => {
         reason: { _tag: "ProviderInternal" },
         message: "server_error: Upstream model unavailable",
       })
+    }),
+  )
+
+  it.effect("retains the token-sharing HTTP 429 body for retry hooks", () =>
+    Effect.gen(function* () {
+      const body = JSON.stringify({
+        error: { code: "subscription_sharing_usage_limit_exceeded", message: "Rate limit exceeded" },
+      })
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(body, { status: 429, headers: { "content-type": "application/json" } })),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({ reason: { _tag: "RateLimit", http: { status: 429 }, body } })
+    }),
+  )
+
+  it.effect("retains the token-sharing response.failed event for retry hooks", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents({
+              type: "response.failed",
+              response: {
+                id: "resp_usage_limit",
+                error: { code: "subscription_sharing_usage_limit_exceeded", message: "Rate limit exceeded" },
+              },
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error).toMatchObject({ reason: { _tag: "RateLimit" } })
+      expect(error.reason.body).toContain("subscription_sharing_usage_limit_exceeded")
     }),
   )
 

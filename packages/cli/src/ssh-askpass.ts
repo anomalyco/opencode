@@ -1,6 +1,6 @@
 import { NodeSocket } from "@effect/platform-node"
 import { Effect, Schema, Stdio, Stream } from "effect"
-import { Socket } from "effect/unstable/socket"
+import { Socket } from "effect/socket"
 
 const Response = Schema.fromJsonString(Schema.Struct({ value: Schema.NullOr(Schema.String) }))
 const Port = Schema.NumberFromString.check(Schema.isInt(), Schema.isGreaterThan(0), Schema.isLessThanOrEqualTo(65535))

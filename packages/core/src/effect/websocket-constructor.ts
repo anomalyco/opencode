@@ -3,8 +3,8 @@ import { NodeWS } from "@effect/platform-node/NodeSocket"
 import { HttpProxyAgent } from "http-proxy-agent"
 import { HttpsProxyAgent } from "https-proxy-agent"
 import { Layer } from "effect"
-import { Headers } from "effect/unstable/http"
-import { Socket } from "effect/unstable/socket"
+import { Headers } from "effect/http"
+import { Socket } from "effect/socket"
 
 interface WebSocketOptions {
   readonly headers?: Headers.Headers

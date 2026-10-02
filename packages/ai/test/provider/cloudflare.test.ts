@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect, Schema } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import { LLM, LLMEvent } from "../../src/index.js"
 import { CloudflareAIGateway } from "../../src/providers/cloudflare-ai-gateway.js"
 import { CloudflareWorkersAI } from "../../src/providers/cloudflare-workers-ai.js"
@@ -39,9 +39,16 @@ describe("Cloudflare", () => {
       )
 
       expect(responses.route).toBe("cloudflare-ai-gateway-responses")
-      expect(responses.body).toMatchObject({ model: "openai/gpt-5.4", stream: true })
+      expect(responses.model.route.endpoint.baseURL).toBe(
+        "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/openai",
+      )
+      expect(responses.body).toMatchObject({ model: "gpt-5.4", stream: true })
       expect(messages.route).toBe("cloudflare-ai-gateway-messages")
-      expect(messages.body).toMatchObject({ model: "anthropic/claude-haiku-4-5" })
+      expect(messages.model.route.endpoint.baseURL).toBe(
+        "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/anthropic/v1",
+      )
+      expect(messages.body).toMatchObject({ model: "claude-haiku-4-5" })
+      expect(chat.model.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1")
       expect(chat.route).toBe("cloudflare-ai-gateway-chat")
       expect(chat.body).toMatchObject({ model: "xai/grok-4.6", stream: true })
       expect(workers.route).toBe("cloudflare-ai-gateway-chat")
@@ -97,6 +104,54 @@ describe("Cloudflare", () => {
       )
 
       expect(response.text).toBe("Hello")
+    }),
+  )
+
+  it.effect("posts Claude and OpenAI models to the provider-native gateway endpoints", () =>
+    Effect.gen(function* () {
+      const gateway = CloudflareAIGateway.configure({ accountId: "test-account", apiKey: "test-token", cacheTtl: 300 })
+      const requests: Array<Request> = []
+      const capture = dynamicResponse((input) =>
+        Effect.gen(function* () {
+          requests.push(yield* HttpClientRequest.toWeb(input.request).pipe(Effect.orDie))
+          return input.respond("", { status: 500 })
+        }),
+      )
+      yield* LLM.generate(LLM.request({ model: gateway.model("anthropic/claude-sonnet-4.6"), prompt: "Hi" })).pipe(
+        Effect.provide(capture),
+        Effect.ignore,
+      )
+      yield* LLM.generate(LLM.request({ model: gateway.model("openai/gpt-5-nano"), prompt: "Hi" })).pipe(
+        Effect.provide(capture),
+        Effect.ignore,
+      )
+
+      expect(requests.map((request) => request.url)).toEqual([
+        "https://gateway.ai.cloudflare.com/v1/test-account/default/anthropic/v1/messages",
+        "https://gateway.ai.cloudflare.com/v1/test-account/default/openai/responses",
+      ])
+      requests.forEach((request) => {
+        expect(request.headers.get("cf-aig-authorization")).toBe("Bearer test-token")
+        expect(request.headers.get("authorization")).toBeNull()
+        expect(request.headers.get("x-api-key")).toBeNull()
+        expect(request.headers.get("cf-aig-gateway-id")).toBeNull()
+        expect(request.headers.get("cf-aig-cache-ttl")).toBe("300")
+      })
+    }),
+  )
+
+  it.effect("sends the default gateway ID to the REST API", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: CloudflareAIGateway.configure({ accountId: "test-account", apiKey: "test-token" }).model(
+            "workers-ai/@cf/meta/llama-3.3-70b-instruct",
+          ),
+          prompt: "Say hello.",
+        }),
+      )
+
+      expect(prepared.model.route.defaults.headers).toMatchObject({ "cf-aig-gateway-id": "default" })
     }),
   )
 
@@ -160,12 +215,13 @@ describe("Cloudflare", () => {
           model: CloudflareAIGateway.configure({
             baseURL: "https://gateway.proxy.test/v1",
             apiKey: "test-token",
-          }).model("xai/grok-4.6"),
+          }).model("anthropic/claude-sonnet-4.6"),
           prompt: "Say hello.",
         }),
       )
 
       expect(prepared.model.route.endpoint.baseURL).toBe("https://gateway.proxy.test/v1")
+      expect(prepared.body).toMatchObject({ model: "anthropic/claude-sonnet-4.6" })
     }),
   )
 

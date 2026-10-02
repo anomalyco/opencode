@@ -16,22 +16,11 @@ import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/lang
 import { ServerConnection, ServersProvider } from "@/runtime/server/registry"
 import { SettingsProvider } from "@/settings/model"
 import { TabsProvider } from "@/shell/tabs/tabs"
-import { WslServersProvider } from "@/servers/wsl/context"
-import { SshProvider } from "@/servers/ssh/context"
-import { SshRestore } from "@/servers/ssh/restore"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
+import { ExtensionRoot } from "@/runtime/extension/root"
 
 export { preloadRoute }
-
-declare global {
-  interface Window {
-    api?: {
-      setTitlebar?: (theme: { mode: "light" | "dark"; scheme?: "system" | "light" | "dark" }) => Promise<void>
-      exportDebugLogs?: () => Promise<string>
-    }
-  }
-}
 
 function QueryProvider(props: ParentProps) {
   const client = new QueryClient({
@@ -68,7 +57,6 @@ export function AppBaseProviders(
       <Font />
       <ThemeProvider
         onThemeApplied={(_, mode, scheme) => {
-          void window.api?.setTitlebar?.({ mode, scheme })
           props.onThemeApplied?.(mode, scheme)
         }}
       >
@@ -81,13 +69,11 @@ export function AppBaseProviders(
               }}
             >
               <QueryProvider>
-                <WslServersProvider>
-                  <DialogProvider>
-                    <SshProvider>
-                      <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
-                    </SshProvider>
-                  </DialogProvider>
-                </WslServersProvider>
+                <DialogProvider>
+                  <ExtensionRoot>
+                    <FileComponentProvider component={File}>{props.children}</FileComponentProvider>
+                  </ExtensionRoot>
+                </DialogProvider>
               </QueryProvider>
             </ErrorBoundary>
           </UiI18nBridge>
@@ -113,7 +99,6 @@ export function AppInterface(props: {
         <BodyTypography />
         <CommandProvider>
           <DesktopCommands />
-          <SshRestore />
           <HighlightsProvider>
             {props.children}
             {rootProps.children}

@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import { Image, ImageClient, LLM, LLMEvent, LLMRequest, Media, Message, ToolDefinition } from "../../src/index.js"
 import { Meta } from "../../src/providers/meta.js"
 import { MetaMessages } from "../../src/protocols/meta-messages.js"
@@ -33,7 +33,12 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
       output_config: { effort: "low" },
       tools: [
         { type: "web_search", name: "web_search", user_location: { type: "approximate", country: "US" } },
-        { name: "lookup", description: "Lookup", input_schema: { type: "object" } },
+        {
+          name: "lookup",
+          description: "Lookup",
+          input_schema: { type: "object" },
+          cache_control: { type: "ephemeral" },
+        },
       ],
     })
     const entrypoint = yield* Effect.promise(() => import("@opencode/ai/providers/meta/messages"))

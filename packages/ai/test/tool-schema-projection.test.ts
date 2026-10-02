@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Schema } from "effect"
+import { Effect, Schema, SchemaGetter } from "effect"
 import { LLM } from "../src/index.js"
 import { AnthropicMessages, Gemini, OpenAIChat, OpenAIResponses } from "../src/protocols.js"
 import { ToolSchemaProjection } from "../src/protocols/utils/tool-schema.js"
@@ -7,6 +7,27 @@ import { Tool, toDefinitions } from "../src/tool.js"
 import { Auth } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { it } from "./lib/effect.js"
+
+const Token = Schema.Struct({ token: Schema.String })
+const token = {
+  type: "object",
+  properties: { token: { type: "string" } },
+  required: ["token"],
+  additionalProperties: false,
+}
+const fromEmpty = {
+  decode: SchemaGetter.transform(() => ({ token: "default" })),
+  encode: SchemaGetter.transform(() => ({})),
+}
+// Callers send `{}`; the handler receives a token.
+const defaulted = Schema.Struct({}).pipe(Schema.decodeTo(Token, fromEmpty))
+// Callers send a token; the handler receives an empty struct.
+const reversed = Token.pipe(
+  Schema.decodeTo(Schema.Struct({}), {
+    decode: SchemaGetter.transform(() => ({})),
+    encode: SchemaGetter.transform(() => ({ token: "default" })),
+  }),
+)
 
 describe("tool schema projections", () => {
   test("only normalizes typed empty input structs, preserving raw schemas and output schemas", () => {
@@ -45,6 +66,42 @@ describe("tool schema projections", () => {
     expect(definitions[1]?.inputSchema).toEqual(raw)
   })
 
+  test("normalizes inputs whose encoded side is an unchecked empty struct", () => {
+    const definitions = Tool.toDefinitions({
+      defaulted: Tool.make({ description: "Defaulted", parameters: defaulted, success: defaulted }),
+      named: Tool.make({
+        description: "Named",
+        parameters: defaulted.annotate({ identifier: "Defaulted" }),
+        success: Schema.String,
+      }),
+      encodedMetadata: Tool.make({
+        description: "Encoded metadata",
+        parameters: Schema.Struct({})
+          .annotate({ identifier: "Ping", title: "Ping", description: "No arguments" })
+          .pipe(Schema.decodeTo(Token, fromEmpty)),
+        success: Schema.String,
+      }),
+      decodedCheck: Tool.make({
+        description: "Decoded check",
+        parameters: defaulted.check(Schema.makeFilter(() => true, { toJsonSchema: () => ({ minProperties: 1 }) })),
+        success: Schema.String,
+      }),
+      reversed: Tool.make({ description: "Reversed", parameters: reversed, success: Schema.String }),
+      encodedCheck: Tool.make({
+        description: "Encoded check",
+        parameters: Schema.Struct({}).check(Schema.isMinProperties(1)),
+        success: Schema.String,
+      }),
+    })
+    expect(definitions[0]?.inputSchema).toEqual(empty)
+    expect(definitions[0]?.outputSchema).toEqual({ not: { type: "null" } })
+    expect(definitions[1]?.inputSchema).toEqual(empty)
+    expect(definitions[2]?.inputSchema).toEqual({ ...empty, title: "Ping", description: "No arguments" })
+    expect(definitions[3]?.inputSchema).toEqual(empty)
+    expect(definitions[4]?.inputSchema).toEqual(token)
+    expect(definitions[5]?.inputSchema).toEqual({ not: { type: "null" }, minProperties: 1 })
+  })
+
   const empty = { type: "object", properties: {}, additionalProperties: false }
   const nonempty = {
     type: "object",
@@ -53,27 +110,29 @@ describe("tool schema projections", () => {
     additionalProperties: false,
   }
   const raw = { type: "object", properties: { value: { type: "number" } }, additionalProperties: true }
+  const names = ["ping", "lookup", "raw", "reversed"]
+  const schemas = [empty, nonempty, raw, token]
 
   for (const scenario of [
     {
       route: OpenAIChat.route,
-      tools: [empty, nonempty, raw].map((parameters, index) => ({
+      tools: schemas.map((parameters, index) => ({
         type: "function",
-        function: { name: ["ping", "lookup", "raw"][index], parameters },
+        function: { name: names[index], parameters },
       })),
     },
     {
       route: OpenAIResponses.route,
-      tools: [empty, nonempty, raw].map((parameters, index) => ({
+      tools: schemas.map((parameters, index) => ({
         type: "function",
-        name: ["ping", "lookup", "raw"][index],
+        name: names[index],
         parameters,
       })),
     },
     {
       route: AnthropicMessages.route,
-      tools: [empty, nonempty, raw].map((input_schema, index) => ({
-        name: ["ping", "lookup", "raw"][index],
+      tools: schemas.map((input_schema, index) => ({
+        name: names[index],
         input_schema,
       })),
     },
@@ -81,8 +140,8 @@ describe("tool schema projections", () => {
       route: Gemini.route,
       tools: [
         {
-          functionDeclarations: [empty, nonempty, raw].map((parametersJsonSchema, index) => ({
-            name: ["ping", "lookup", "raw"][index],
+          functionDeclarations: schemas.map((parametersJsonSchema, index) => ({
+            name: names[index],
             parametersJsonSchema,
           })),
         },
@@ -97,6 +156,8 @@ describe("tool schema projections", () => {
         name: "named and described",
         schema: Schema.Struct({}).annotate({ identifier: "Ping", description: "No arguments" }),
       },
+      { name: "encoded", schema: defaulted },
+      { name: "named encoded", schema: defaulted.annotate({ identifier: "Ping" }) },
     ]) {
       it.effect(
         `${scenario.route.id} prepares ${input.name} empty Effect Struct tools alongside nonempty and raw schemas`,
@@ -120,6 +181,12 @@ describe("tool schema projections", () => {
                     execute: (input) => Effect.succeed(input.query),
                   }),
                   raw: Tool.make({ description: "Raw", jsonSchema: raw, execute: () => Effect.succeed("raw") }),
+                  reversed: Tool.make({
+                    description: "Reversed",
+                    parameters: reversed,
+                    success: Schema.String,
+                    execute: () => Effect.succeed("reversed"),
+                  }),
                 }),
               }),
             )

@@ -3,11 +3,11 @@ import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
-import { HttpOptions, ProviderID, type CacheHint, type ModelID, type OpenString } from "../schema/index.js"
+import { HttpOptions, ProviderID, type ModelID, type OpenString } from "../schema/index.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { SystemOne } from "../experimental/system-one.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
-import { newBreakpoints, ttlBucket } from "../protocols/utils/cache.js"
+import { cacheControl } from "../protocols/utils/cache.js"
 import { isRecord, ProviderShared } from "../protocols/shared.js"
 
 export const id = ProviderID.make("openrouter")
@@ -130,18 +130,6 @@ export const protocol = Protocol.make({
   },
   stream: OpenAIChat.protocol.stream,
 })
-
-const cacheControl = () => {
-  const breakpoints = newBreakpoints(4)
-  return (cache: CacheHint | undefined) => {
-    if (cache === undefined || breakpoints.remaining === 0) return undefined
-    breakpoints.remaining -= 1
-    return {
-      type: "ephemeral" as const,
-      ...(ttlBucket(cache.ttlSeconds) === "1h" ? { ttl: "1h" } : {}),
-    }
-  }
-}
 
 // OpenRouter forwards `reasoning.max_tokens` as the upstream thinking budget. Upstreams such as Anthropic and Alibaba
 // reject one that is not below the output limit; 1,024 is Anthropic's minimum budget.

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Stream } from "effect"
-import { Socket } from "effect/unstable/socket"
+import { Socket } from "effect/socket"
 import { LLM, LLMRequest, Message, ToolRuntime } from "../../src/index.js"
 import {
   LLMClient,

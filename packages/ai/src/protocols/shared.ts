@@ -1,6 +1,6 @@
 import { Tool } from "@opencode/schema/tool"
 import { Effect, Option, Schema } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Headers, HttpClientRequest } from "effect/http"
 import { Media } from "../media.js"
 import {
   InvalidProviderOutputError,

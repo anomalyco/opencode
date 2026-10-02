@@ -1,0 +1,15 @@
+export default {
+  "tab.title": "Pregled",
+  "tab.count.one": "{{count}} datoteka je izmijenjena",
+  "tab.count.few": "{{count}} datoteke su izmijenjene",
+  "tab.count.other": "{{count}} datoteka je izmijenjeno",
+  "mobile.title.one": "Izmjena",
+  "mobile.title.few": "Izmjene",
+  "mobile.title.other": "Izmjene",
+  "empty.git": "Još nema promjena koje nisu commitovane",
+  "empty.branch": "Još nema promjena na grani",
+  "git.title": "Kreiraj Git repozitorij",
+  "git.description": "Prati, pregledaj i poništi promjene u ovom projektu",
+  loadingChanges: "Učitavanje izmjena…",
+  noChanges: "Nema izmjena",
+}

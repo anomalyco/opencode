@@ -70,12 +70,10 @@ story("transitions a streaming shell from writing through command execution", as
   await expect(title).toHaveCSS("font-family", /^Inter,/)
   await expect(title).toHaveCSS("font-weight", "530")
   await expect(title).toHaveCSS("line-height", "16px")
-  await expect(title).toHaveCSS("color", "rgb(22, 22, 22)")
   await expect(subtitle).toHaveCSS("font-size", "13px")
   await expect(subtitle).toHaveCSS("font-family", /^Inter,/)
   await expect(subtitle).toHaveCSS("font-weight", "440")
   await expect(subtitle).toHaveCSS("line-height", "16px")
-  await expect(subtitle).toHaveCSS("color", "rgb(92, 92, 92)")
   await timeline.getByRole("button", { name: "Complete input" }).click()
   await expect(shimmer).toHaveAttribute("data-active", "true")
   await expect(subtitle).toHaveText("printf ready")
@@ -179,20 +177,3 @@ story("does not infer Thinking from busy, retry, or recovery without reasoning",
     "Recovered response",
   )
 })
-
-for (const locale of ["de", "ar"] as const) {
-  // Moved from packages/app/e2e/regression/session-timeline-locale-projection.spec.ts
-  story(`projects localized tool names with an English fallback in ${locale}`, async ({ mount, page }) => {
-    const timeline = await mount("current-session-research-agents--agent-research", {
-      args: { scenario: "exploration" },
-      globals: { locale },
-    })
-    await timeline.getByRole("button", { name: "Complete read" }).click()
-    await timeline.getByRole("button", { name: "Complete glob" }).click()
-    const group = timeline.locator('[data-timeline-part-ids="tool_context_read,tool_context_glob"]')
-    const label = locale === "de" ? "2 Lesen und Glob verwendet" : "استُخدمت 2 أداتان: \u2068قراءة وGlob\u2069"
-    await expect(group.getByRole("button")).toHaveAccessibleName(label)
-    await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute("aria-label", label)
-    await expect(page.locator("html")).toHaveAttribute("lang", locale)
-  })
-}

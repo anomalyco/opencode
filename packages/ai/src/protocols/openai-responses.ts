@@ -1,5 +1,6 @@
-import { Effect, Encoding, Schema } from "effect"
-import { Headers } from "effect/unstable/http"
+import { Effect, Schema } from "effect"
+import { Base64 } from "effect/encoding"
+import { Headers } from "effect/http"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
@@ -143,14 +144,15 @@ const adapter = {
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 
-// GPT-6 Astra, Sol, and Luna accept `configuration_update` only in standard mode (not `reasoning.mode: "pro"` or
-// `-pro` slugs), and never alongside automatic `context_management` compaction.
+// GPT-6 and later default to `configuration_update` support, except in `reasoning.mode: "pro"`
+// or alongside automatic `context_management` compaction.
 const supportsEffortUpdates = (request: LLMRequest) => {
   if (request.providerOptions?.contextManagement !== undefined) return false
   if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(request.http?.body?.reasoning)) return false
   const override = request.model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
-  return /(?:^|\/)gpt-6-(?:astra|sol|luna)$/i.test(request.model.id)
+  const match = /(?:^|\/)gpt-(\d+)(?:\.\d+)?(?:-|$)/i.exec(request.model.id)
+  return match !== null && Number(match[1]) >= 6
 }
 
 const nativeImageToolInput = (tool: ToolDefinition) => {
@@ -248,7 +250,7 @@ const checkpointBody = {
 const hostedToolResult = Effect.fn("OpenAIResponses.hostedToolResult")(function* (item: ResponsesHostedTools.Item) {
   const isError = item.error !== undefined && item.error !== null
   if (item.type === "image_generation_call" && item.result) {
-    yield* Effect.fromResult(Encoding.decodeBase64(item.result)).pipe(
+    yield* Effect.fromResult(Base64.decode(item.result)).pipe(
       Effect.mapError((cause) =>
         ProviderShared.eventError(ADAPTER, "OpenAI Responses returned invalid image base64", undefined, cause),
       ),

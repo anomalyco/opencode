@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Exit, Fiber, FiberSet, Layer } from "effect"
-import { Socket } from "effect/unstable/socket"
+import { Socket } from "effect/socket"
 import { existsSync } from "node:fs"
 import { HttpRecorder } from "../src"
 import { layerSocketWithMode } from "../src/websocket/recorder"

@@ -17,6 +17,7 @@ import { AgentPlugin } from "@opencode/core/plugin/agent"
 import { AbsolutePath } from "@opencode/core/schema"
 import { ConfigMigrateV1 } from "@opencode/core/v1/config/migrate"
 import { ConfigAgentV1 } from "@opencode/core/v1/config/agent"
+import { ConfigV1 } from "@opencode/core/v1/config/config"
 import { advance, drain } from "../lib/clock"
 import { tmpdir, tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"
@@ -24,6 +25,7 @@ import { agentHost, host } from "../plugin/host"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Agent.node, Bus.node, FSUtil.node, Global.node])))
 const decode = Schema.decodeUnknownSync(Info)
+const decodeV1 = Schema.decodeUnknownSync(ConfigV1.Info)
 const defaultPermissions = (global: Global.Interface): Permission.Ruleset => [
   ...Agent.Info.default(Agent.ID.make("test")).permissions,
   { action: "external_directory", resource: path.join(global.data, "shell", "*", "*"), effect: "allow" },
@@ -119,6 +121,15 @@ permissions:
     }
   }
 
+  it.live("keeps Markdown legacy permission precedence in source order", () =>
+    Effect.gen(function* () {
+      const agent = yield* loadMarkdownAgent('permission:\n  "*": allow\n  bash: ask\n  edit: deny')
+      expect(Permission.evaluate("shell", "ls", agent.permissions).effect).toBe("ask")
+      expect(Permission.evaluate("edit", "example.txt", agent.permissions).effect).toBe("deny")
+      expect(Permission.evaluate("webfetch", "*", agent.permissions).effect).toBe("allow")
+    }),
+  )
+
   for (const variant of [undefined, "high"]) {
     it.live(`loads Markdown legacy temperature ${variant ? "with" : "without"} a separate variant`, () =>
       Effect.gen(function* () {
@@ -171,26 +182,28 @@ permissions:
         new Document({
           type: "document",
           info: decode(
-            ConfigMigrateV1.migrate({
-              permission: {
-                bash: "ask",
-                edit: "ask",
-                webfetch: "ask",
-                read: {
-                  "*": "allow",
-                  "*.env": "deny",
-                  "*.env.*": "deny",
-                  "*.env.example": "allow",
-                  "*.dev.vars": "deny",
-                  "~/.local/share/opencode/mcp-auth.json": "deny",
-                  "$HOME/.local/share/opencode/mcp-auth.json": "deny",
+            ConfigMigrateV1.migrate(
+              decodeV1({
+                permission: {
+                  bash: "ask",
+                  edit: "ask",
+                  webfetch: "ask",
+                  read: {
+                    "*": "allow",
+                    "*.env": "deny",
+                    "*.env.*": "deny",
+                    "*.env.example": "allow",
+                    "*.dev.vars": "deny",
+                    "~/.local/share/opencode/mcp-auth.json": "deny",
+                    "$HOME/.local/share/opencode/mcp-auth.json": "deny",
+                  },
+                  external_directory: {
+                    "*": "ask",
+                    "~/.local/share/opencode/*": "deny",
+                  },
                 },
-                external_directory: {
-                  "*": "ask",
-                  "~/.local/share/opencode/*": "deny",
-                },
-              },
-            }),
+              }),
+            ),
           ),
         }),
         new Document({
@@ -752,27 +765,29 @@ function loadHomePermissions(home: string) {
       new Document({
         type: "document",
         info: decode(
-          ConfigMigrateV1.migrate({
-            permission: {
-              external_directory: {
-                "~/p/**": "allow",
-                "/some/~/path": "deny",
-                "$HOMELESS/**": "deny",
+          ConfigMigrateV1.migrate(
+            decodeV1({
+              permission: {
+                external_directory: {
+                  "~/p/**": "allow",
+                  "/some/~/path": "deny",
+                  "$HOMELESS/**": "deny",
+                },
+                bash: {
+                  "$HOME/private/**": "deny",
+                },
               },
-              bash: {
-                "$HOME/private/**": "deny",
-              },
-            },
-            agent: {
-              build: {
-                permission: {
-                  external_directory: {
-                    "$HOME/cache/**": "deny",
+              agent: {
+                build: {
+                  permission: {
+                    external_directory: {
+                      "$HOME/cache/**": "deny",
+                    },
                   },
                 },
               },
-            },
-          }),
+            }),
+          ),
         ),
       }),
     ]

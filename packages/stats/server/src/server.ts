@@ -1,7 +1,7 @@
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer"
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime"
 import { Config, Layer } from "effect"
-import { HttpRouter } from "effect/unstable/http"
+import { HttpRouter } from "effect/http"
 import { createServer } from "node:http"
 import { Ingest } from "./ingest"
 import { Routes } from "./router"

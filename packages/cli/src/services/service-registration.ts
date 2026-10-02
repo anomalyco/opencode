@@ -3,8 +3,8 @@ export * as ServiceRegistration from "./service-registration"
 import { Service, type Info } from "@opencode/client/effect/service"
 import path from "node:path"
 import { Effect, FileSystem, Schedule, Schema } from "effect"
-import { HttpServer } from "effect/unstable/http"
-import { NetAddress } from "effect/unstable/net"
+import { HttpServer } from "effect/http"
+import { NetAddress } from "effect/net"
 import { OPENCODE_VERSION } from "../version"
 
 const infoJson = Schema.fromJsonString(Service.Info)

@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Ref, Schema, Stream } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import {
   Media,
   HttpOptions,
@@ -469,6 +469,45 @@ describe("OpenAI Chat route", () => {
         stream_options: { include_usage: true },
         store: false,
       })
+    }),
+  )
+
+  it.effect("replays Gemini thought signatures as tool call extra content", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user("Weather in Paris and Tokyo?"),
+            Message.assistant([
+              ToolCallPart.make({
+                id: "call_1",
+                name: "lookup",
+                input: { city: "Paris" },
+                providerMetadata: { openai: { extraContent: { google: { thought_signature: "sig_1" } } } },
+              }),
+              ToolCallPart.make({ id: "call_2", name: "lookup", input: { city: "Tokyo" } }),
+            ]),
+            Message.tool({ id: "call_1", name: "lookup", result: "Sunny" }),
+            Message.tool({ id: "call_2", name: "lookup", result: "Rainy" }),
+          ],
+        }),
+      )
+
+      const assistant = prepared.body.messages[1]
+      expect(assistant?.role === "assistant" ? assistant.tool_calls : undefined).toEqual([
+        {
+          id: "call_1",
+          type: "function",
+          function: { name: "lookup", arguments: encodeJson({ city: "Paris" }) },
+          extra_content: { google: { thought_signature: "sig_1" } },
+        },
+        {
+          id: "call_2",
+          type: "function",
+          function: { name: "lookup", arguments: encodeJson({ city: "Tokyo" }) },
+        },
+      ])
     }),
   )
 
@@ -1218,21 +1257,19 @@ describe("OpenAI Chat route", () => {
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
-      expect(replay.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: null,
-          reasoning: "thinking",
-          reasoning_details: details,
-          tool_calls: [
-            {
-              id: "call_1",
-              type: "function",
-              function: { name: "lookup", arguments: '{"query":"weather"}' },
-            },
-          ],
-        },
-      ])
+      expect(replay.body.messages[0]).toEqual({
+        role: "assistant",
+        content: null,
+        reasoning: "thinking",
+        reasoning_details: details,
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: { name: "lookup", arguments: '{"query":"weather"}' },
+          },
+        ],
+      })
     }),
   )
 
@@ -1335,18 +1372,16 @@ describe("OpenAI Chat route", () => {
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
-      expect(replay.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: null,
-          tool_calls: [{ id: "call_1", type: "function", function: { name: "get_time", arguments: "{}" } }],
-          reasoning_content: "Let me think",
-          reasoning_details: [
-            { type: "summary", summary: "Plan tools" },
-            { type: "encrypted", encrypted: "opaque" },
-          ],
-        },
-      ])
+      expect(replay.body.messages[0]).toEqual({
+        role: "assistant",
+        content: null,
+        tool_calls: [{ id: "call_1", type: "function", function: { name: "get_time", arguments: "{}" } }],
+        reasoning_content: "Let me think",
+        reasoning_details: [
+          { type: "summary", summary: "Plan tools" },
+          { type: "encrypted", encrypted: "opaque" },
+        ],
+      })
     }),
   )
 
@@ -1801,6 +1836,78 @@ describe("OpenAI Chat route", () => {
           providerMetadata: undefined,
         },
         { type: "finish", reason: { normalized: "tool-calls", raw: "tool_calls" }, usage: undefined },
+      ])
+    }),
+  )
+
+  it.effect("preserves Gemini thought signatures on streamed parallel tool calls", () =>
+    Effect.gen(function* () {
+      // Gemini's OpenAI-compatible endpoint omits `index`, streams each call whole,
+      // and signs only the first call of a parallel batch.
+      const body = sseEvents(
+        deltaChunk({
+          role: "assistant",
+          tool_calls: [
+            {
+              extra_content: { google: { thought_signature: "sig_1" } },
+              id: "call_1",
+              type: "function",
+              function: { name: "lookup", arguments: '{"city":"Paris"}' },
+            },
+          ],
+        }),
+        deltaChunk({
+          role: "assistant",
+          tool_calls: [{ id: "call_2", type: "function", function: { name: "lookup", arguments: '{"city":"Tokyo"}' } }],
+        }),
+        deltaChunk({}, "stop"),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.filter(LLMEvent.is.toolCall)).toEqual([
+        {
+          type: "tool-call",
+          id: "call_1",
+          name: "lookup",
+          input: { city: "Paris" },
+          providerExecuted: undefined,
+          providerMetadata: { openai: { extraContent: { google: { thought_signature: "sig_1" } } } },
+        },
+        {
+          type: "tool-call",
+          id: "call_2",
+          name: "lookup",
+          input: { city: "Tokyo" },
+          providerExecuted: undefined,
+          providerMetadata: undefined,
+        },
+      ])
+    }),
+  )
+
+  it.effect("keeps extra content that arrives before the tool identity", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({
+          tool_calls: [
+            { index: 0, extra_content: { google: { thought_signature: "sig_1" } }, function: { arguments: "{" } },
+          ],
+        }),
+        deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: "}" } }] }),
+        deltaChunk({}, "tool_calls"),
+      )
+      const response = yield* LLMClient.generate(
+        LLMRequest.update(request, {
+          tools: [ToolDefinition.make({ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } })],
+        }),
+      ).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.events.filter(LLMEvent.is.toolCall).map((event) => event.providerMetadata)).toEqual([
+        { openai: { extraContent: { google: { thought_signature: "sig_1" } } } },
       ])
     }),
   )

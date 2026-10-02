@@ -2,7 +2,7 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Cause, Effect } from "effect"
-import { HttpApiBuilder } from "effect/unstable/httpapi"
+import { HttpApiBuilder } from "effect/http-api"
 import { Api } from "../api"
 
 export const LocationHandler = HttpApiBuilder.group(Api, "server.location", (handlers) =>

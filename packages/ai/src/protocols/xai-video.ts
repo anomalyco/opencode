@@ -1,5 +1,5 @@
 import { Effect, Schema } from "effect"
-import type { HttpClientResponse } from "effect/unstable/http"
+import type { HttpClientResponse } from "effect/http"
 import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
@@ -64,6 +64,13 @@ const STATUS = {
   failed: "failed",
   expired: "expired",
 } as const satisfies Record<string, Status>
+
+// Documented video error codes; `service_unavailable`, `internal_error`, and unknown codes are provider-side.
+const FAILURE = {
+  invalid_argument: "InvalidRequest",
+  failed_precondition: "InvalidRequest",
+  permission_denied: "Authentication",
+} as const satisfies Record<string, MediaProtocol.Failure>
 
 // ---------------------------------------------------------------------------
 // 5. Request body construction
@@ -143,6 +150,7 @@ const decodeResult = Effect.fn("XAIVideo.decodeResult")(function* (
     return yield* output.ended(
       "failed",
       `${route.name} generation failed${code === undefined ? "" : ` (${code})`}${message === undefined ? "" : `: ${message}`}`,
+      MediaProtocol.failure(FAILURE, code),
     )
   }
   if (status !== "completed")

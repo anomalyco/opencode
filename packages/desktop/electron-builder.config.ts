@@ -31,7 +31,7 @@ async function signWindows(configuration: { path: string }) {
   )
 }
 
-export function macSignOptions(options: CustomMacSignOptions): CustomMacSignOptions {
+function macSignOptions(options: CustomMacSignOptions): CustomMacSignOptions {
   return {
     ...options,
     optionsForFile: (file) => {

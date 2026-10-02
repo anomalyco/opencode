@@ -1,8 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
-import { Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
-import { Arbitrary } from "effect/unstable/arbitrary"
+import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { Directory, Document, Event, Info } from "@opencode/schema/config"
 import { ConfigModel } from "@opencode/schema/config/model"
@@ -13,6 +12,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Credential } from "@opencode/core/credential"
 import { ConfigMigrateV1 } from "@opencode/core/v1/config/migrate"
 import { ConfigV1 } from "@opencode/core/v1/config/config"
+import { ConfigPermissionV1 } from "@opencode/core/v1/config/permission"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Bus } from "@opencode/core/bus"
@@ -30,6 +30,7 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)
 const selection = Schema.decodeUnknownSync(ConfigModel.Selection)
+const decodeV1 = Schema.decodeUnknownSync(ConfigV1.Info)
 
 function inFixture(root: string, target: string) {
   const relative = path.relative(root, target)
@@ -636,11 +637,8 @@ describe("Config", () => {
       Arbitrary.checkEffect(
         Arbitrary.schema(ConfigV1.Info),
         (info) => {
-          const parsed = Schema.decodeUnknownSync(ConfigV1.Info)(
-            Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
-              Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(info),
-            ),
-          )
+          const json = Schema.fromJsonString(Schema.toCodecJson(ConfigV1.Info))
+          const parsed = Schema.decodeUnknownSync(json)(Schema.encodeUnknownSync(json)(info))
           Schema.decodeUnknownSync(Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
           return true
         },
@@ -867,16 +865,79 @@ describe("Config", () => {
     })
   }
 
+  // Effect leaves decoded key order unspecified, but these maps' order is user-visible: agents cycle
+  // in this order, the first matching formatter wins, and providers fold aliases in sequence.
+  test("decodes configuration maps in source order", () => {
+    const keys = ["zeta", "build", "alpha", "plan", "mid"]
+    const map = <A>(value: A) => Object.fromEntries(keys.map((key) => [key, value]))
+    const normalized = ConfigNormalize.normalize({
+      agents: map({}),
+      formatter: map({ command: ["fmt"], extensions: [".ts"] }),
+      providers: map({}),
+      commands: map({ template: "run" }),
+    })
+    if (normalized.type !== "normalized") throw new Error("expected normalized config")
+    const info = Schema.decodeUnknownSync(Info)(normalized.encoded, { errors: "all", onExcessProperty: "ignore" })
+    expect(Object.keys(info.agents ?? {})).toEqual(keys)
+    expect(Object.keys(typeof info.formatter === "object" ? info.formatter : {})).toEqual(keys)
+    expect(Object.keys(info.providers ?? {})).toEqual(keys)
+    expect(Object.keys(info.commands ?? {})).toEqual(keys)
+  })
+
+  test("decodes v1 permissions in source order at every level", () => {
+    const decode = Schema.decodeUnknownSync(ConfigPermissionV1.Info)
+    expect(decode({ "*": "allow", custom: "deny", bash: { "git *": "ask", "*": "deny" }, edit: "deny" })).toEqual([
+      ["*", "allow"],
+      ["custom", "deny"],
+      [
+        "bash",
+        [
+          ["git *", "ask"],
+          ["*", "deny"],
+        ],
+      ],
+      ["edit", "deny"],
+    ])
+    expect(decode("ask")).toEqual([["*", "ask"]])
+    for (const invalid of [["allow"], { bash: ["allow"] }, { question: { "*": "allow" } }, { read: null }])
+      expect(() => decode(invalid)).toThrow()
+  })
+
+  test("migrates top-level, tool, and agent permissions in source order", () => {
+    const migrated = ConfigMigrateV1.migrate(
+      decodeV1({
+        tools: { "*": false, read: true },
+        permission: { "*": "deny", bash: "ask", read: "allow" },
+        agent: { build: { tools: { write: false, read: true }, permission: { "*": "allow", edit: "allow" } } },
+      }),
+    )
+    expect(migrated.permissions).toEqual([
+      { action: "*", resource: "*", effect: "deny" },
+      { action: "read", resource: "*", effect: "allow" },
+      { action: "*", resource: "*", effect: "deny" },
+      { action: "shell", resource: "*", effect: "ask" },
+      { action: "read", resource: "*", effect: "allow" },
+    ])
+    // An agent's permission overrides its tools in place, like Object.assign.
+    expect(migrated.agents?.build?.permissions).toEqual([
+      { action: "edit", resource: "*", effect: "allow" },
+      { action: "read", resource: "*", effect: "allow" },
+      { action: "*", resource: "*", effect: "allow" },
+    ])
+  })
+
   test("normalizes renamed permission actions when migrating v1 permissions", () => {
     expect(
-      ConfigMigrateV1.migrate({
-        permission: {
-          task: "ask",
-          bash: { "git status": "allow", "*": "deny" },
-          write: "deny",
-          read: "allow",
-        },
-      }).permissions,
+      ConfigMigrateV1.migrate(
+        decodeV1({
+          permission: {
+            task: "ask",
+            bash: { "git status": "allow", "*": "deny" },
+            write: "deny",
+            read: "allow",
+          },
+        }),
+      ).permissions,
     ).toEqual([
       { action: "subagent", resource: "*", effect: "ask" },
       { action: "shell", resource: "git status", effect: "allow" },

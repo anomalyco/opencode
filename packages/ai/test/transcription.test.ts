@@ -1,9 +1,9 @@
 import { describe, expect } from "bun:test"
 import { Effect, Fiber, Layer, Stream } from "effect"
 import * as TestClock from "effect/testing/TestClock"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import { Media, Transcription, TranscriptionClient, type TranscriptionEvent } from "../src/index.js"
-import { AssemblyAI, Deepgram, Google, OpenAI } from "../src/providers.js"
+import { AssemblyAI, Deepgram, ElevenLabs, Google, OpenAI } from "../src/providers.js"
 import { it } from "./lib/effect.js"
 import { dynamicResponse, json, observe, type Call } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
@@ -34,6 +34,9 @@ const formFields = (call: Call) =>
 
 const assemblyai = AssemblyAI.configure({ apiKey: "aai-key", baseURL: "https://assemblyai.test" }).transcription(
   "universal-3-5-pro",
+)
+const elevenlabs = ElevenLabs.configure({ apiKey: "test", baseURL: "https://elevenlabs.test" }).transcription(
+  "scribe_v2",
 )
 
 describe("Transcription", () => {
@@ -456,6 +459,115 @@ describe("Transcription", () => {
           speakers_expected: 2,
         },
       ])
+    }),
+  )
+
+  it.effect("rejects ElevenLabs prompts, webhooks, per-channel transcripts, and untimed diarization", () =>
+    Effect.gen(function* () {
+      const errors = yield* Effect.all(
+        [
+          Transcription.generate({ model: elevenlabs, audio, prompt: "OpenCode" }),
+          Transcription.generate({ model: elevenlabs, audio, providerOptions: { webhook: true } }),
+          Transcription.generate({ model: elevenlabs, audio, http: { body: { use_multi_channel: true } } }),
+          Transcription.generate({
+            model: elevenlabs,
+            audio,
+            diarize: true,
+            providerOptions: { timestamps_granularity: "none" },
+          }),
+          Transcription.generate({
+            model: elevenlabs,
+            audio: Media.ref("file_1", { provider: "elevenlabs", mediaType: "audio/mpeg" }),
+          }),
+        ].map((effect) => Effect.flip(effect)),
+      )
+      expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
+        [
+          ["UnsupportedOperation", "media.prompt"],
+          ["UnsupportedOperation", "transcription.webhook"],
+          ["UnsupportedOperation", "transcription.multichannel"],
+          ["UnsupportedOperation", "media.timestamps"],
+          ["InvalidRequest", false],
+        ],
+      )
+    }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
+  )
+
+  it.effect("sends ElevenLabs URL audio as source_url and groups diarized words into speaker turns", () =>
+    Effect.gen(function* () {
+      const calls: Array<Call> = []
+      const token = (text: string, type: string, start: number, end: number, speaker_id?: string) => ({
+        text,
+        type,
+        start,
+        end,
+        speaker_id,
+        logprob: 0,
+      })
+      const response = yield* Transcription.generate({
+        model: elevenlabs,
+        audio: Media.url("https://a.test/call.mp3"),
+        language: "en",
+        speakers: 2,
+        providerOptions: { keyterms: ["OpenCode", "Scribe"], tag_audio_events: true, diarize: false },
+      }).pipe(
+        Effect.provide(
+          layer((input) =>
+            observe(calls, input).pipe(
+              Effect.as(
+                json(input, {
+                  language_code: "ENG",
+                  text: "Ready? (laughs) Yes. Go",
+                  words: [
+                    token("Ready?", "word", 0, 0.5, "speaker_0"),
+                    token(" ", "spacing", 0.5, 0.6, "speaker_0"),
+                    token("(laughs)", "audio_event", 0.6, 1, "speaker_0"),
+                    token(" ", "spacing", 1, 1.1, "speaker_0"),
+                    token("Yes.", "word", 1.2, 1.5, "speaker_1"),
+                    token(" ", "spacing", 1.5, 1.6, "speaker_1"),
+                    token("Go", "word", 1.6, 1.9, "speaker_0"),
+                  ],
+                  transcription_id: "tr_1",
+                  audio_duration_secs: 2,
+                }),
+              ),
+            ),
+          ),
+        ),
+      )
+
+      // `observe` re-encodes the FormData with a new boundary, so read the boundary from the sent body.
+      const boundary = /^--(\S+)/.exec(calls[0].body)?.[1]
+      const form = yield* Effect.promise(() =>
+        new Response(calls[0].body, {
+          headers: { "content-type": `multipart/form-data; boundary=${boundary}` },
+        }).formData(),
+      )
+      expect(calls[0].url).toBe("https://elevenlabs.test/v1/speech-to-text")
+      expect(calls[0].headers.get("xi-api-key")).toBe("test")
+      expect(Array.from(form.entries())).toEqual([
+        ["model_id", "scribe_v2"],
+        ["source_url", "https://a.test/call.mp3"],
+        ["language_code", "en"],
+        ["diarize", "true"],
+        ["num_speakers", "2"],
+        ["keyterms", "OpenCode"],
+        ["keyterms", "Scribe"],
+        ["tag_audio_events", "true"],
+      ])
+      expect(response.segments).toEqual([
+        { text: "Ready?", startSeconds: 0, endSeconds: 0.5, speaker: "speaker_0" },
+        { text: "Yes.", startSeconds: 1.2, endSeconds: 1.5, speaker: "speaker_1" },
+        { text: "Go", startSeconds: 1.6, endSeconds: 1.9, speaker: "speaker_0" },
+      ])
+      expect(response.words?.map((word) => [word.text, word.speaker, word.confidence])).toEqual([
+        ["Ready?", "speaker_0", 1],
+        ["Yes.", "speaker_1", 1],
+        ["Go", "speaker_0", 1],
+      ])
+      expect(response.language).toBe("eng")
+      expect(response.usage).toEqual({ type: "seconds", seconds: 2 })
+      expect(response.providerMetadata).toEqual({ elevenlabs: { transcriptionId: "tr_1" } })
     }),
   )
 

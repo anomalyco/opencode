@@ -14,13 +14,13 @@ import { FileDiff } from "../file-diff.js"
 
 const Timestamp = Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))
 
-export const MessageID = Schema.String.check(Schema.isStartsWith("msg")).pipe(
+export const MessageID = Schema.String.check(Schema.isStartingWith("msg")).pipe(
   Schema.brand("SessionV1.MessageID"),
   statics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "msg_" + ascending()) })),
 )
 export type MessageID = typeof MessageID.Type
 
-export const PartID = Schema.String.check(Schema.isStartsWith("prt")).pipe(
+export const PartID = Schema.String.check(Schema.isStartingWith("prt")).pipe(
   Schema.brand("SessionV1.PartID"),
   statics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "prt_" + ascending()) })),
 )

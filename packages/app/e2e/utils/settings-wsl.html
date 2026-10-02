@@ -8,7 +8,16 @@
     <script type="module">
       import { mount } from "./settings-wsl.fixture.tsx"
       const query = new URLSearchParams(location.search)
-      mount({ server: query.get("server"), mode: query.get("mode") })
+      mount({
+        server: query.get("server"),
+        mode: query.get("mode"),
+        wsl: query.get("wsl"),
+        restart: query.get("restart"),
+        path: query.get("path"),
+        ssh: query.get("ssh"),
+        storage: query.get("storage"),
+        hold: query.get("hold"),
+      })
     </script>
   </body>
 </html>

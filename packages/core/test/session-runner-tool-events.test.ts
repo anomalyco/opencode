@@ -667,3 +667,29 @@ test("content-filter finish preserves partial streamed text and never ends the s
     error: { type: "provider.content-filter" },
   })
 })
+
+test("content-filter failure explains the refusal when the provider gives a reason", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.stepFinish({
+        index: 0,
+        reason: {
+          normalized: "content-filter",
+          raw: "refusal",
+          category: "cyber",
+          explanation: "This request was declined because it could enable cyber harm.",
+        },
+      }),
+    ),
+  )
+  await Effect.runPromise(publisher.publishStepFailure())
+
+  expect(published.at(-1)?.data).toMatchObject({
+    error: {
+      type: "provider.content-filter",
+      message: "Provider blocked the response (cyber): This request was declined because it could enable cyber harm.",
+    },
+  })
+})

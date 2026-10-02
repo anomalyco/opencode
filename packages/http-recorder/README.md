@@ -30,7 +30,7 @@ Effect `4.0.0-beta.107` currently contains unresolved symbols in its published d
 ```ts
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/http"
 import { HttpRecorder } from "@opencode/http-recorder"
 
 const User = Schema.Struct({
@@ -112,7 +112,7 @@ Real applications often select WebSocket URLs inside domain services. Effect rep
 import { NodeSocket } from "@effect/platform-node"
 import { it } from "@effect/vitest"
 import { Effect, Layer } from "effect"
-import { Socket } from "effect/unstable/socket"
+import { Socket } from "effect/socket"
 import { HttpRecorder } from "@opencode/http-recorder"
 
 const roundTrip = Effect.fn("Echo.roundTrip")(function* (url: string, message: string) {

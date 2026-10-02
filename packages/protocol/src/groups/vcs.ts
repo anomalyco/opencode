@@ -3,7 +3,7 @@ import { Location } from "@opencode/schema/location"
 import { NonNegativeInt, PositiveInt, optional } from "@opencode/schema/schema"
 import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 import { ServiceUnavailableError } from "../errors.js"
 

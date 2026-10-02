@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/client",
-  "version": "2.0.18",
+  "version": "2.0.21",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -37,7 +37,7 @@
     "@opencode/protocol": "workspace:*"
   },
   "peerDependencies": {
-    "effect": "4.0.0-rc.117",
+    "effect": "4.0.0-rc.118",
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {

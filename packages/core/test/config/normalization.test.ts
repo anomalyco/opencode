@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Duration, Effect, Schema } from "effect"
-import { Arbitrary } from "effect/unstable/arbitrary"
+import { Arbitrary, Duration, Effect, Schema } from "effect"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Info } from "@opencode/schema/config"
 
@@ -238,6 +237,30 @@ describe("ConfigNormalize", () => {
       { action: "subagent", resource: "*", effect: "allow" },
       { action: "native", resource: "*", effect: "deny" },
     ])
+  })
+
+  test.each(["agent", "mode"])("preserves legacy %s permission source order", (key) => {
+    const permission = { "*": "allow", bash: "ask", custom: "deny", edit: "deny" }
+    expect(normalized({ [key]: { build: { permission } } }).encoded.agents).toMatchObject({
+      build: {
+        permissions: [
+          { action: "*", resource: "*", effect: "allow" },
+          { action: "shell", resource: "*", effect: "ask" },
+          { action: "custom", resource: "*", effect: "deny" },
+          { action: "edit", resource: "*", effect: "deny" },
+        ],
+      },
+    })
+    expect(
+      normalized({ [key]: { review: { permission: { "*": "deny", read: "allow" } } } }).encoded.agents,
+    ).toMatchObject({
+      review: {
+        permissions: [
+          { action: "*", resource: "*", effect: "deny" },
+          { action: "read", resource: "*", effect: "allow" },
+        ],
+      },
+    })
   })
 
   test("redacts permission resource keys from invalid diagnostics", () => {

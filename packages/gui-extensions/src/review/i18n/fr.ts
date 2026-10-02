@@ -1,0 +1,15 @@
+export default {
+  "tab.title": "Revue",
+  "tab.count.one": "{{count}} fichier modifié",
+  "tab.count.many": "{{count}} fichiers modifiés",
+  "tab.count.other": "{{count}} fichiers modifiés",
+  "mobile.title.one": "Modification",
+  "mobile.title.many": "Modifications",
+  "mobile.title.other": "Modifications",
+  "empty.git": "Aucune modification non validée pour l'instant",
+  "empty.branch": "Aucune modification de branche pour l'instant",
+  "git.title": "Créer un dépôt Git",
+  "git.description": "Suivre, examiner et annuler les modifications dans ce projet",
+  loadingChanges: "Chargement des modifications…",
+  noChanges: "Aucune modification",
+}

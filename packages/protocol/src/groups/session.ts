@@ -14,8 +14,9 @@ import {
   statics,
 } from "@opencode/schema/schema"
 import { Event } from "@opencode/schema/event"
-import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { Context, Effect, Result, Schema, SchemaGetter, SchemaParser, Struct } from "effect"
+import { Base64Url } from "effect/encoding"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
 import {
   ConflictError,
   CommandExecutionError,
@@ -98,12 +99,13 @@ const invalidCursor = "Invalid cursor" as const
 export const SessionsCursor = Schema.String.pipe(
   Schema.brand("SessionsCursor"),
   statics((schema) => {
-    const make = schema.make.bind(schema)
+    // Read the default constructor without caching it on the schema, so `make` can be replaced.
+    const make = SchemaParser.make(schema)
     return {
-      make: (input: typeof SessionsCursorInput.Type) => make(Encoding.encodeBase64Url(encodeSessionsCursor(input))),
+      make: (input: typeof SessionsCursorInput.Type) => make(Base64Url.encode(encodeSessionsCursor(input))),
       parse: (input: string) =>
         Effect.suspend(() => {
-          const result = Encoding.decodeBase64UrlString(input)
+          const result = Base64Url.decodeString(input)
           return Result.isFailure(result)
             ? Effect.fail(invalidCursor)
             : decodeSessionsCursor(result.success).pipe(Effect.mapError(() => invalidCursor))
@@ -220,6 +222,7 @@ export const makeSessionGroup = <
       HttpApiEndpoint.post("session.create", "/api/session", {
         payload: Schema.Struct({
           id: Session.ID.pipe(Schema.optional),
+          parentID: Session.ID.pipe(Schema.optional),
           title: Schema.String.pipe(Schema.optional),
           agent: Agent.ID.pipe(Schema.optional),
           model: Model.Ref.pipe(Schema.optional),
@@ -228,11 +231,13 @@ export const makeSessionGroup = <
           permissions: Permission.Ruleset.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: PublicSessionInfo }),
+        error: SessionNotFoundError,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.create",
           summary: "Create session",
-          description: "Create a session at the requested location.",
+          description:
+            "Create a session at the requested location. A parentID creates a linked child session at its parent's location.",
         }),
       ),
     )
@@ -855,6 +860,7 @@ export const makeSessionGroup = <
     .add(
       HttpApiEndpoint.delete("session.form.cancel", "/api/session/:sessionID/form/:formID", {
         params: { sessionID: Schema.String, formID: Form.ID },
+        query: Schema.Struct({ message: Schema.optional(Schema.String) }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, FormAlreadySettledError, FormNotFoundError],
       })
@@ -863,7 +869,7 @@ export const makeSessionGroup = <
           OpenApi.annotations({
             identifier: "session.form.cancel",
             summary: "Cancel form",
-            description: "Cancel a pending form.",
+            description: "Cancel a pending form, optionally telling the asker why it was not answered.",
           }),
         ),
     )

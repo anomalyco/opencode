@@ -26,8 +26,10 @@ const request = Evaluation.request({
 const result = EvaluationClient.evaluate(request)
 type Result = Success<typeof result>
 type Choice = Assert<Equal<Result["answers"]["topic"]["choice"], "billing" | "support">>
+type Confidence = Assert<Equal<Result["answers"]["topic"]["confidence"], number | undefined>>
 type ClientRequirements = Assert<Equal<Requirements<typeof result>, Service>>
 void (true satisfies Choice)
+void (true satisfies Confidence)
 void (true satisfies ClientRequirements)
 
 Effect.gen(function* () {

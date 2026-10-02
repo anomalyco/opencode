@@ -16,7 +16,7 @@ import {
   toolPart,
   userMessage,
   waitForVisualSettle,
-} from "./fixture"
+} from "../../utils/timeline"
 
 test("expands and collapses a long completed shell without overlap", async ({ page }, testInfo) => {
   const shellID = "prt_interaction_01_shell"

@@ -102,7 +102,7 @@ export class Generation<Response> {
     return settled.pipe(
       // Non-completed terminal states also go through `result` so the route can surface its provider failure body.
       Effect.flatMap((generation) => generation.result()),
-      Effect.timeoutOrElse({ duration: timeout, orElse: () => this.timeoutError(timeout) }),
+      Effect.timeoutOrElse({ duration: timeout, orElse: () => timeoutError(this.id, timeout) }),
     )
   }
 
@@ -123,20 +123,7 @@ export class Generation<Response> {
       Clock.currentTimeMillis.pipe(
         Effect.map((start) => {
           const deadline = start + Duration.toMillis(timeout)
-          // Fail before polling once the deadline has passed: a fast status request could otherwise win the zero-budget
-          // race and schedule another zero-delay poll.
-          const refresh = Clock.currentTimeMillis.pipe(
-            Effect.flatMap((now) =>
-              now >= deadline
-                ? this.timeoutError(timeout)
-                : this.refresh().pipe(
-                    Effect.timeoutOrElse({
-                      duration: Duration.millis(deadline - now),
-                      orElse: () => this.timeoutError(timeout),
-                    }),
-                  ),
-            ),
-          )
+          const refresh = within(this.refresh(), this.id, timeout, deadline)
           const schedule = this.schedule(options?.poll).pipe(
             Schedule.modifyDelay((meta) =>
               Effect.succeed(Duration.min(meta.duration, Duration.millis(Math.max(0, deadline - meta.now)))),
@@ -157,15 +144,6 @@ export class Generation<Response> {
     return { type: "generation-progress", id: this.id, progress: this.progress }
   }
 
-  private timeoutError(timeout: Duration.Duration) {
-    return new AIError({
-      reason: new TimeoutError({
-        message: `Generation ${this.id} did not finish within ${Duration.format(timeout)}`,
-        timeoutMs: Duration.toMillis(timeout),
-      }),
-    })
-  }
-
   private poll(poll: Poll | undefined) {
     return this.refresh().pipe(
       Effect.repeat({ schedule: this.schedule(poll), until: (generation) => generation.terminal }),
@@ -177,12 +155,53 @@ export class Generation<Response> {
   }
 }
 
+/** `events` followed by the expanded result, with the result fetch bounded by the same `poll.timeout` deadline. */
 export const resultEvents = <Response, A>(
   generation: Generation<Response>,
   expand: (response: Response) => ReadonlyArray<A>,
   options?: AwaitOptions,
-): Stream.Stream<Observation | A, AIError> =>
-  generation.events(options).pipe(
-    Stream.filter((event): event is Observation => event.type !== "generation-finished"),
-    Stream.concat(Stream.fromIterableEffect(Effect.map(generation.result(), expand))),
+): Stream.Stream<Observation | A, AIError> => {
+  const timeout = Duration.fromInputUnsafe(options?.poll?.timeout ?? DEFAULT_POLL_TIMEOUT)
+  return Stream.unwrap(
+    Clock.currentTimeMillis.pipe(
+      Effect.map((start) =>
+        generation.events(options).pipe(
+          Stream.filter((event): event is Observation => event.type !== "generation-finished"),
+          Stream.concat(
+            Stream.fromIterableEffect(
+              within(generation.result(), generation.id, timeout, start + Duration.toMillis(timeout)).pipe(
+                Effect.map(expand),
+              ),
+            ),
+          ),
+        ),
+      ),
+    ),
   )
+}
+
+/**
+ * Run `effect` within the time left until `deadline`. Fails before starting once the deadline has passed: a fast
+ * request could otherwise win the zero-budget race and schedule another zero-delay poll.
+ */
+const within = <A>(effect: Effect.Effect<A, AIError>, id: string, timeout: Duration.Duration, deadline: number) =>
+  Clock.currentTimeMillis.pipe(
+    Effect.flatMap((now) =>
+      now >= deadline
+        ? Effect.fail(timeoutError(id, timeout))
+        : effect.pipe(
+            Effect.timeoutOrElse({
+              duration: Duration.millis(deadline - now),
+              orElse: () => Effect.fail(timeoutError(id, timeout)),
+            }),
+          ),
+    ),
+  )
+
+const timeoutError = (id: string, timeout: Duration.Duration) =>
+  new AIError({
+    reason: new TimeoutError({
+      message: `Generation ${id} did not finish within ${Duration.format(timeout)}`,
+      timeoutMs: Duration.toMillis(timeout),
+    }),
+  })

@@ -1,8 +1,8 @@
-import { Service, type Endpoint } from "@opencode/client/effect/service"
+import { Service } from "@opencode/client/effect/service"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Deferred, Effect, Schema, Stream } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { randomBytes } from "node:crypto"
 import { selfCommand } from "../util/process"
 
@@ -53,7 +53,8 @@ const makeEndpoint = Effect.fn("cli.standalone.endpoint")(
       url: ready.url,
       auth: { type: "basic" as const, username: "opencode", password },
       pid: proc.pid,
-    } satisfies Endpoint & { readonly pid: number }
+      exited: proc.exitCode,
+    }
   },
   Effect.provide(LayerNode.compile(CrossSpawnSpawner.node)),
 )

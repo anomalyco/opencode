@@ -53,6 +53,7 @@ import { usePromptMove } from "./move"
 import { resolvePastedAttachments } from "./local-attachment"
 import { locationKey, useData } from "../../context/data"
 import { useLocation } from "../../context/location"
+import { useArgs } from "../../context/args"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { useInteractivity } from "../../context/interactivity"
 import { abbreviateHome } from "../../runtime"
@@ -206,6 +207,7 @@ export function Prompt(props: PromptProps) {
   const directoryRecents = useDirectoryRecents()
   const keymapCommands = Keymap.useCommands()
   const currentLocation = useLocation()
+  const args = useArgs()
   const config = useConfig().data
   const dialog = useDialog()
   const toast = useToast()
@@ -1229,7 +1231,9 @@ export function Prompt(props: PromptProps) {
       // a local session record synchronously, so the navigation below happens
       // immediately — enter feels sent even while the create round-trip is in
       // flight. Sends against the new session gate on the request.
+      const newSessionID = args.takeNewSessionID()
       const created = data.session.create({
+        id: newSessionID,
         location: directory ? { directory } : location,
         agent: agent.id,
         model: {
@@ -1238,6 +1242,7 @@ export function Prompt(props: PromptProps) {
           variant,
         },
       })
+      if (newSessionID !== undefined) created.request.catch(() => args.restoreNewSessionID(newSessionID))
       sessionID = created.id
       session = data.session.get(created.id)
       newSession = {

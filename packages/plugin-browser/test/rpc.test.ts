@@ -21,6 +21,10 @@ test("browser input bounds and optional fields survive the wire", () => {
   expect(() => decode({ type: "console", tabID, level: "verbose" })).toThrow()
   expect(() => decode({ type: "wait", tabID, condition: "load", timeoutMs: -1 })).toThrow()
   expect(() => decode({ type: "click", tabID: "another-tab", ref: "e1" })).toThrow()
+  expect(decode({ type: "evaluate", tabID, ref: "@e5", script: "(element) => element.id" })).toMatchObject({
+    ref: "@e5",
+  })
+  expect(() => decode({ type: "evaluate", tabID, ref: "button", script: "(element) => element.id" })).toThrow()
   expect(() => decode({ type: "network.list", tabID, resourceType: "imaginary" })).toThrow()
 })
 
@@ -119,4 +123,14 @@ test("network RPC is bounded bytes and does not add model tools", () => {
     }),
   ).toThrow()
   expect(() => Schema.decodeUnknownSync(Browser.TunnelTarget)({ host: "localhost", port: 0 })).toThrow()
+})
+
+test("browser ID patterns survive JSON Schema export for model tool definitions", () => {
+  const exported = (schema: Schema.Top) => {
+    const document = Schema.toJsonSchemaDocument(schema)
+    return Object.values(document.definitions)[0] ?? document.schema
+  }
+  expect(exported(Browser.TabID)).toMatchObject({ type: "string", pattern: "^tab_[a-f0-9-]{36}$" })
+  expect(exported(Browser.Ref)).toMatchObject({ type: "string", pattern: "^@?e[1-9][0-9]*$" })
+  expect(exported(Browser.FileID)).toMatchObject({ type: "string", pattern: "^file_[a-f0-9-]{36}$" })
 })

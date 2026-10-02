@@ -2,12 +2,12 @@ export * as Git from "./git.js"
 
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { ChildProcess } from "effect/unstable/process"
+import { ChildProcess } from "effect/process"
 import { AbsolutePath, RelativePath } from "./schema.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import { AppProcess } from "@opencode/util/process"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { File } from "./file.js"
+import { FileDiff } from "@opencode/schema/file-diff"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { VcsPatch } from "./vcs/patch.js"
 import { gitExecutable } from "./util/git-executable.js"
@@ -152,7 +152,7 @@ export interface Interface {
       to: TreeID
       context?: number
       paths?: readonly RelativePath[]
-    }) => Effect.Effect<readonly File.Diff[], OperationError>
+    }) => Effect.Effect<readonly FileDiff.Info[], OperationError>
     readonly restore: (input: {
       repository: Repository
       files: ReadonlyMap<RelativePath, TreeID>
@@ -571,7 +571,7 @@ const layer = Layer.effect(
           additions: stat?.additions ?? 0,
           deletions: stat?.deletions ?? 0,
           patch: stat?.binary ? "" : (patches.get(entry.file) ?? VcsPatch.emptyPatch(entry.file)),
-        } satisfies File.Diff
+        } satisfies FileDiff.Info
       })
     })
 

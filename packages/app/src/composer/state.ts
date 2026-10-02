@@ -9,7 +9,6 @@ import {
   DEFAULT_PROMPT,
   contextItemKey,
   type ContextItem,
-  type FileContextItem,
   type Prompt,
   type PromptModel,
 } from "./schema"
@@ -23,6 +22,8 @@ export type {
   FileAttachmentPart,
   FileContextItem,
   ImageAttachmentPart,
+  NoteComment,
+  NoteContextItem,
   PathAttachmentPart,
   Prompt,
   PromptModel,
@@ -38,7 +39,7 @@ type InitialPrompt = {
 }
 
 export function isCommentItem(item: ContextItem | (ContextItem & { key: string })) {
-  return item.type === "file" && !!item.comment?.trim()
+  return !!item.comment?.trim()
 }
 
 function createComposerActions(setStore: SetStoreFunction<ComposerStore>) {
@@ -121,23 +122,24 @@ function createComposerStateValue(store: ComposerStore, setStore: SetStoreFuncti
         setStore("context", "items", (items) => items.filter((x) => x.key !== key))
         clearRetry()
       },
-      removeComment(path: string, commentID: string) {
-        setStore("context", "items", (items) =>
-          items.filter((item) => !(item.type === "file" && item.path === path && item.commentID === commentID)),
-        )
+      /** Removes the file comment or note with this commentID. */
+      removeComment(commentID: string) {
+        setStore("context", "items", (items) => items.filter((item) => item.commentID !== commentID))
         clearRetry()
       },
-      updateComment(path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) {
+      /** Edits the file comment or note with this commentID; only file comments carry a preview. */
+      updateComment(commentID: string, next: { readonly comment?: string; readonly preview?: string }) {
         setStore("context", "items", (items) =>
           items.map((item) => {
-            if (item.type !== "file" || item.path !== path || item.commentID !== commentID) return item
-            const value = { ...item, ...next }
+            if (item.commentID !== commentID) return item
+            const value =
+              item.type === "file" ? { ...item, ...next } : { ...item, comment: next.comment ?? item.comment }
             return { ...value, key: contextItemKey(value) }
           }),
         )
         clearRetry()
       },
-      replaceComments(items: FileContextItem[]) {
+      replaceComments(items: ContextItem[]) {
         setStore("context", "items", (current) => [
           ...current.filter((item) => !isCommentItem(item)),
           ...items.map((item) => ({ ...item, key: contextItemKey(item) })),

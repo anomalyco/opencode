@@ -208,6 +208,8 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
     const projectOptions = data.project
       .list()
       .filter((project) => project.canonical !== "/")
+      // Historical project identities can share a checkout. The list is newest-active first.
+      .filter((project, index, projects) => projects.findIndex((item) => item.canonical === project.canonical) === index)
       .map((project) => ({ directory: project.canonical, project }))
       .map((item) => {
         const title =

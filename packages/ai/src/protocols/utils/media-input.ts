@@ -1,4 +1,5 @@
-import { Effect, Encoding } from "effect"
+import { Effect } from "effect"
+import { Base64 } from "effect/encoding"
 import { Media } from "../../media.js"
 import type { MediaProtocol } from "../../route/media-protocol.js"
 import { mergeJsonRecords, type AIError, type ProviderID } from "../../schema/index.js"
@@ -10,7 +11,7 @@ export const inlineBytes = (route: string, asset: Media.Asset): Effect.Effect<Ui
   if (asset.source.type === "bytes") return Effect.succeed(asset.source.data)
   const inline = asset.inline()
   if (!inline) return Effect.fail(ProviderShared.inlineRequired(route, asset))
-  return Effect.fromResult(Encoding.decodeBase64(inline.base64)).pipe(
+  return Effect.fromResult(Base64.decode(inline.base64)).pipe(
     Effect.mapError((cause) => ProviderShared.invalidRequest(`${route} media contains invalid base64 data`, cause)),
   )
 }
@@ -52,7 +53,7 @@ export const decodedAsset = (
   mediaType: string | undefined,
   options?: Media.AssetOptions,
 ) =>
-  Effect.fromResult(Encoding.decodeBase64(data)).pipe(
+  Effect.fromResult(Base64.decode(data)).pipe(
     Effect.mapError((cause) => invalid(`${label} contains invalid base64 data`, cause)),
     Effect.map((bytes) => Media.bytes(bytes, mediaType, options)),
   )
@@ -71,8 +72,9 @@ export const imageOutput = (
 }
 
 /**
- * Append multipart text fields: strings as-is, other values as JSON, or arrays as repeated `key[]` parts with
- * `repeatArrays`. `overlay` keys in `reserved` are dropped so `http.body` cannot replace route-owned fields.
+ * Append multipart text fields: strings as-is, other values as JSON, or scalar arrays as one part per item with
+ * `repeatArrays`, named `key[]` or `key`. `overlay` keys in `reserved` are dropped so `http.body` cannot replace
+ * route-owned fields.
  */
 export const appendFields = (
   form: FormData,
@@ -80,13 +82,13 @@ export const appendFields = (
   options: {
     readonly overlay?: Record<string, unknown>
     readonly reserved: ReadonlySet<string>
-    readonly repeatArrays?: true
+    readonly repeatArrays?: "key[]" | "key"
   },
 ) => {
   const overlay = Object.entries(options.overlay ?? {}).filter(([key]) => !options.reserved.has(key))
   Object.entries(mergeJsonRecords(fields, Object.fromEntries(overlay)) ?? {}).forEach(([key, value]) => {
-    if (Array.isArray(value) && options.repeatArrays)
-      return value.forEach((item) => form.append(`${key}[]`, String(item)))
+    if (Array.isArray(value) && value.every(isScalar) && options.repeatArrays !== undefined)
+      return value.forEach((item) => form.append(options.repeatArrays === "key[]" ? `${key}[]` : key, String(item)))
     form.append(key, typeof value === "string" ? value : encodeJson(value))
   })
 }

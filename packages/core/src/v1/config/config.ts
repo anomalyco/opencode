@@ -125,7 +125,7 @@ export const Info = Schema.Struct({
   }),
   layout: Schema.optional(ConfigLayoutV1.Layout).annotate({ description: "@deprecated Always uses stretch layout." }),
   permission: Schema.optional(ConfigPermissionV1.Info),
-  tools: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
+  tools: Schema.optional(ConfigPermissionV1.Entries(Schema.Boolean)),
   attachment: Schema.optional(ConfigAttachmentV1.Info).annotate({
     description: "Attachment processing configuration, including image size limits and resizing behavior",
   }),

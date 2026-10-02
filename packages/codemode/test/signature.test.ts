@@ -774,7 +774,7 @@ describe("JSDoc signatures in catalogs and search results", () => {
       source: "Effect",
       schema: Schema.Struct({
         count: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0), Schema.isLessThanOrEqualTo(10)),
-        name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20), Schema.isPattern(/^[a-z]+$/)),
+        name: Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(20), Schema.isPattern(/^[a-z]+$/u)),
         labels: Schema.Array(Schema.String.check(Schema.isMinLength(1))).check(
           Schema.isMinLength(1),
           Schema.isMaxLength(5),

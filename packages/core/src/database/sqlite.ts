@@ -2,9 +2,9 @@ export * as Sqlite from "./sqlite.js"
 
 import { Context, Effect, Fiber, Scope, Semaphore, Stream } from "effect"
 import { identity } from "effect/Function"
-import { SqlClient, Statement } from "effect/unstable/sql"
-import type { Connection } from "effect/unstable/sql/SqlConnection"
-import type { SqlError } from "effect/unstable/sql/SqlError"
+import { SqlClient, Statement } from "effect/sql"
+import type { Connection } from "effect/sql/SqlConnection"
+import type { SqlError } from "effect/sql/SqlError"
 
 export class Native extends Context.Service<Native, unknown>()("@opencode/core/database/SqliteNative") {}
 

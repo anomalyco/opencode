@@ -1,4 +1,6 @@
 import type { SessionConfigOption } from "@agentclientprotocol/sdk"
+import type { ModelRef } from "@opencode/client/promise"
+import { builtinCommands, type Catalog } from "./catalog"
 
 export const DEFAULT_VARIANT_VALUE = "default"
 
@@ -23,6 +25,34 @@ export type ConfigOptionMode = {
 export type ModelSelection = {
   model: { providerID: string; modelID: string }
   variant?: string
+}
+
+/** A session's model and mode. Unset fields follow the catalog defaults. */
+export type Selection = {
+  readonly model?: ModelRef
+  readonly modeID?: string
+}
+
+export function currentModel(catalog: Catalog, selection: Selection) {
+  return selection.model ?? catalog.defaultModel
+}
+
+export function configOptions(catalog: Catalog, selection: Selection) {
+  const model = currentModel(catalog, selection)
+  return buildConfigOptions({
+    providers: catalog.providers,
+    currentModel: { providerID: model.providerID, modelID: model.id },
+    currentVariant: model.variant,
+    modes: catalog.modes,
+    currentModeId: selection.modeID ?? catalog.defaultModeID,
+  })
+}
+
+export function availableCommands(catalog: Catalog) {
+  return [
+    ...catalog.commands.map((command) => ({ name: command.name, description: command.description ?? "" })),
+    ...Array.from(builtinCommands, ([name, command]) => ({ name, description: command.description })),
+  ]
 }
 
 export function buildConfigOptions(input: {

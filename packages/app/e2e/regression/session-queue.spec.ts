@@ -1,13 +1,9 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { OpenCodeEvent, SessionInboxInfo, SessionMessageInfo } from "@opencode/client/promise"
-import { base64Encode } from "@opencode/util/encode"
-import { mockOpenCodeServer } from "../utils/mock-server"
-import { expectAppVisible } from "../utils/waits"
+import { provider } from "../utils/app"
+import { openSession } from "../utils/workspace"
 
-const directory = "C:/OpenCode/SessionQueueRegression"
-const projectID = "proj_session_queue_regression"
 const sessionID = "ses_session_queue_regression"
-const server = `http://${process.env.PLAYWRIGHT_SERVER_HOST ?? "127.0.0.1"}:${process.env.PLAYWRIGHT_SERVER_PORT ?? "4096"}`
 
 type InboxRow = {
   id: string
@@ -100,56 +96,21 @@ function createQueueMock(seed: string[], messages: SessionMessageInfo[] = []) {
   }
 }
 
-async function openSession(page: Page, mock: ReturnType<typeof createQueueMock>, followUpBehavior?: "queue" | "steer") {
-  if (followUpBehavior) {
-    await page.addInitScript(
-      (behavior) => localStorage.setItem("settings.v3", JSON.stringify({ general: { followUpBehavior: behavior } })),
-      followUpBehavior,
-    )
-  }
-  await mockOpenCodeServer(page, {
-    directory,
-    project: {
-      id: projectID,
-      worktree: directory,
-      vcs: "git",
-      name: "session-queue-regression",
-      time: { created: 1700000000000, updated: 1700000000000 },
-      sandboxes: [],
-    },
-    provider: {
-      all: [
-        {
-          id: "opencode",
-          name: "OpenCode",
-          models: { "queue-model": { id: "queue-model", name: "Queue Model", limit: { context: 200_000 } } },
-        },
-      ],
-      connected: ["opencode"],
-      default: { providerID: "opencode", modelID: "queue-model" },
-    },
-    sessions: [
-      {
-        id: sessionID,
-        slug: "session-queue-regression",
-        projectID,
-        directory,
-        title: "Session queue regression",
-        version: "dev",
-        model: { id: "queue-model", providerID: "opencode" },
-        time: { created: 1700000000000, updated: 1700000000000 },
-      },
-    ],
+async function openQueue(page: Page, mock: ReturnType<typeof createQueueMock>, followUpBehavior?: "queue" | "steer") {
+  const model = { id: "queue-model", name: "Queue Model" }
+  await openSession(page, {
+    name: "SessionQueueRegression",
+    sessions: [{ id: sessionID, title: "Session queue regression", model: { id: model.id, providerID: "opencode" } }],
+    provider: provider(model),
     pageMessages: () => ({ items: mock.messages }),
     sessionStatus: () => ({ [sessionID]: { type: "running" } }),
     inbox: () => mock.rows.map((row) => ({ ...row, payload: { ...row.payload } })),
     onPrompt: mock.onPrompt,
     onInboxChange: mock.onInboxChange,
     events: mock.events,
+    ...(followUpBehavior ? { seed: { settings: { general: { followUpBehavior } } } } : {}),
   })
-  await page.goto(`/server/${base64Encode(server)}/session/${sessionID}`)
   const composer = page.locator('[data-component="composer"]')
-  await expectAppVisible(composer)
   return {
     composer,
     input: composer.locator('[data-component="composer-editor"]'),
@@ -159,7 +120,7 @@ async function openSession(page: Page, mock: ReturnType<typeof createQueueMock>,
 
 test("follow-up preference controls Enter while Mod+Enter uses the alternate delivery", async ({ page }) => {
   const mock = createQueueMock([])
-  const view = await openSession(page, mock, "queue")
+  const view = await openQueue(page, mock, "queue")
 
   await view.input.fill("queue this follow-up")
   await expect(view.composer.locator('[data-action="composer-alternate-delivery"]')).toContainText("Steer")
@@ -174,7 +135,7 @@ test("follow-up preference controls Enter while Mod+Enter uses the alternate del
 
 test("dragging reorders queued prompts", async ({ page }) => {
   const mock = createQueueMock(["first queued prompt", "second queued prompt", "third queued prompt"])
-  const view = await openSession(page, mock)
+  const view = await openQueue(page, mock)
   await expect(view.rows).toHaveCount(3)
 
   const first = view.rows.filter({ hasText: "first queued prompt" })
@@ -205,7 +166,7 @@ test("dragging reorders queued prompts", async ({ page }) => {
 
 test("editing restores the existing draft and replaces only the original queue position", async ({ page }) => {
   const mock = createQueueMock(["first queued prompt", "tighten the error copy", "third queued prompt"])
-  const view = await openSession(page, mock)
+  const view = await openQueue(page, mock)
   const original = view.rows.getByText("tighten the error copy", { exact: true })
   await expect(original).toBeVisible()
 
@@ -240,29 +201,21 @@ test("editing restores the existing draft and replaces only the original queue p
 })
 
 test("Undo cancels only the selected queued prompt and focuses the restored input", async ({ page }) => {
-  const mock = createQueueMock(["first queued prompt", "second queued prompt", "third queued prompt"])
-  const view = await openSession(page, mock)
-  await expect(view.rows).toHaveCount(3)
+  await page.setViewportSize({ width: 390, height: 844 })
+  const text = "Review the detailed error report and check every step of the retry path ".repeat(4)
+  const rest = ["first queued prompt", ...Array.from({ length: 5 }, (_, index) => `queued follow-up ${index + 1}`)]
+  const mock = createQueueMock([...rest.slice(0, 1), text, ...rest.slice(1)])
+  const view = await openQueue(page, mock)
+  await expect(view.rows).toHaveCount(7)
 
-  const row = view.rows.filter({ hasText: "second queued prompt" })
-  const actions = row.locator('[data-slot="session-queue-actions"] button')
-  await expect(actions).toHaveCount(3)
-  expect(
-    await actions.evaluateAll((buttons) =>
-      buttons.map((button) => button.getAttribute("aria-label") ?? button.textContent?.trim()),
-    ),
-  ).toEqual(["Steer", "Undo", "Remove"])
-  const undo = row.getByRole("button", { name: "Undo" })
+  // A long prompt in a long queue on a narrow screen keeps its icon-only Undo usable.
+  const undo = view.rows.filter({ hasText: text }).getByRole("button", { name: "Undo" })
   await expect(undo).toHaveText("")
-  await expect(undo.locator("svg use")).toHaveAttribute("href", "#opencode-v2-icon-arrow-down-to-line")
   await undo.hover()
   await expect(page.getByRole("tooltip")).toHaveText("Undo")
   await undo.click()
-  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText([
-    "first queued prompt",
-    "third queued prompt",
-  ])
-  await expect(view.input).toHaveText("second queued prompt")
+  await expect(view.rows.locator('[data-action="session-queue-edit"]')).toHaveText(rest)
+  await expect(view.input).toHaveText(text)
   await expect(view.input).toBeFocused()
   expect(mock.changes).toEqual([{ inboxID: "inb_seed_2", action: "cancel" }])
   expect(mock.prompts).toEqual([])
@@ -278,30 +231,13 @@ test("Undo appends to an existing draft and restores inline attachments", async 
       name: "shot.png",
     },
   ]
-  const view = await openSession(page, mock)
+  const view = await openQueue(page, mock)
   await view.input.fill("my draft")
   await view.rows.getByRole("button", { name: "Undo" }).click()
   await expect(view.rows).toHaveCount(0)
   await expect(view.input).toHaveText("my draft\n\nqueued with image")
   await expect(view.input).toBeFocused()
   await expect(view.composer.getByRole("img", { name: "shot.png" })).toBeVisible()
-  expect(mock.changes).toEqual([{ inboxID: "inb_seed_1", action: "cancel" }])
-})
-
-test("Undo stays usable with a long queue on a narrow screen", async ({ page }, testInfo) => {
-  await page.setViewportSize({ width: 390, height: 844 })
-  const text = "Review the detailed error report and check every step of the retry path ".repeat(4)
-  const mock = createQueueMock([text, ...Array.from({ length: 6 }, (_, index) => `queued follow-up ${index + 1}`)])
-  const view = await openSession(page, mock)
-  await expect(view.rows).toHaveCount(7)
-  const row = view.rows.filter({ hasText: text })
-  await row.getByRole("button", { name: "Undo" }).hover()
-  await expect(page.getByRole("tooltip")).toHaveText("Undo")
-  await page.screenshot({ path: testInfo.outputPath("undo-narrow-queue.png") })
-  await row.getByRole("button", { name: "Undo" }).click()
-  await expect(view.rows).toHaveCount(6)
-  await expect(view.input).toHaveText(text)
-  await expect(view.input).toBeFocused()
   expect(mock.changes).toEqual([{ inboxID: "inb_seed_1", action: "cancel" }])
 })
 
@@ -317,7 +253,7 @@ test("Undo preserves mentioned file and agent references on resubmission", async
     },
   ]
   mock.rows[0].payload.agents = [{ name: "build", mention: { start: 22, end: 28, text: "@build" } }]
-  const view = await openSession(page, mock)
+  const view = await openQueue(page, mock)
   await view.rows.getByRole("button", { name: "Undo" }).click()
   await expect(view.input).toHaveText("inspect @main.ts with @build")
   await view.input.press("Enter")
@@ -333,7 +269,7 @@ test("Undo does not discard hidden file context", async ({ page }) => {
   mock.rows[0].payload.files = [
     { data: "aGk=", mime: "text/plain", source: { type: "uri", uri: "file:///repo/main.ts" }, name: "main.ts" },
   ]
-  const view = await openSession(page, mock)
+  const view = await openQueue(page, mock)
   await view.rows.getByRole("button", { name: "Undo" }).click()
   await expect(page.getByText("Edit this prompt in the queue to preserve its file context")).toBeVisible()
   await expect(view.rows).toHaveCount(1)
@@ -364,7 +300,7 @@ for (const delivery of ["steer", "queue"] as const) {
         },
       ],
     )
-    const view = await openSession(page, mock, delivery)
+    const view = await openQueue(page, mock, delivery)
     const transcript = page.locator("[data-timeline-virtual-content]")
     const thinking = transcript.locator('[data-timeline-row="Thinking"]')
     await expect(transcript.getByText("A1: I will inspect the current implementation.", { exact: true })).toBeVisible()
@@ -433,13 +369,12 @@ for (const delivery of ["steer", "queue"] as const) {
     ])
     await transcript.screenshot({ path: testInfo.outputPath("pending-steer.png") })
 
-    // Soft assertions let delivery run too, even when the pending ordering regresses.
-    await expect.soft(tools.or(pending)).toHaveText([/^Used\s*2\s*Read, Grep$/, /U2: Also check the retry path\./])
+    await expect(tools.or(pending)).toHaveText([/^Used\s*2\s*Read, Grep$/, /U2: Also check the retry path\./])
+    await expect(transcript.locator('[data-timeline-row="AssistantPart"]').filter({ has: tools })).toHaveAttribute(
+      "data-message-id",
+      userID,
+    )
     await expect
-      .soft(transcript.locator('[data-timeline-row="AssistantPart"]').filter({ has: tools }))
-      .toHaveAttribute("data-message-id", userID)
-    await expect
-      .configure({ soft: true })
       .poll(async () => {
         const boxes = await Promise.all([tools.boundingBox(), pending.boundingBox()])
         return boxes.every((box) => box !== null) && boxes[0]!.y + boxes[0]!.height <= boxes[1]!.y

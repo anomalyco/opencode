@@ -1,0 +1,17 @@
+export default {
+  "tab.title": "Revízia",
+  "tab.count.one": "{{count}} súbor zmenený",
+  "tab.count.few": "{{count}} súbory zmenené",
+  "tab.count.many": "{{count}} súboru zmeneného",
+  "tab.count.other": "{{count}} súborov zmenených",
+  "mobile.title.one": "Zmena",
+  "mobile.title.few": "Zmeny",
+  "mobile.title.many": "Zmeny",
+  "mobile.title.other": "Zmeny",
+  "empty.git": "Zatiaľ žiadne neuložené zmeny",
+  "empty.branch": "Zatiaľ žiadne zmeny vetvy",
+  "git.title": "Vytvoriť Git repozitár",
+  "git.description": "Sledujte, kontrolujte a vracajte zmeny v tomto projekte",
+  loadingChanges: "Načítavam zmeny…",
+  noChanges: "Žiadne zmeny",
+}

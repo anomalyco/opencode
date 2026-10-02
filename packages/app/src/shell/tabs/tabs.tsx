@@ -4,6 +4,7 @@ import { createSimpleContext } from "@opencode/ui/context"
 import { createStore, produce } from "solid-js/store"
 import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/runtime/persistence/storage"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
+import { useExtensionServers } from "@/runtime/extension/servers"
 import { createEffect, getOwner, onCleanup, startTransition } from "solid-js"
 import { useLocation, useNavigate, useParams } from "@solidjs/router"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -35,8 +36,8 @@ export type PendingSession = {
 
 export type TabInfo = typeof TabStorage.Info.Type
 
-export type TabPane = "terminal" | "review"
-export type TabPaneSize = "terminalHeight" | "sessionWidth"
+export type TabPane = "dock" | "side"
+export type TabPaneSize = "dockHeight" | "sessionWidth"
 
 export const draftHref = (draftID: string) => `/new-session?draftId=${encodeURIComponent(draftID)}`
 
@@ -68,6 +69,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
   gate: false,
   init: () => {
     const servers = useServers()
+    const extensions = useExtensionServers()
     const platform = usePlatform()
     const [store, setStore, _, ready] = persisted(Persist.window("tabs"), TabStorage.Tabs, [])
     const [recent, setRecent, , recentReady] = persisted(Persist.window("tabs.recent"), TabStorage.Recent, {
@@ -138,9 +140,13 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     onCleanup(memory.dispose)
 
+    // A contributed server that is unlisted or whose extension is down is still known: only its removal drops its tabs.
+    const known = () =>
+      new Set<string>([...servers.list.map(ServerConnection.key), ...extensions.entries().map((item) => item.key)])
+
     createEffect(() => {
       if (!ready() || !recentReady()) return
-      const serversSet = new Set(servers.list.map(ServerConnection.key))
+      const serversSet = known()
       const next = store.filter((tab) => serversSet.has(tab.server))
       if (next.length !== store.length) {
         for (const tab of store) {
@@ -166,7 +172,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
 
     createEffect(() => {
       if (!closedReady()) return
-      const serversSet = new Set(servers.list.map(ServerConnection.key))
+      const serversSet = known()
       const next = closed.filter((entry) => serversSet.has(entry.tab.server))
       if (next.length !== closed.length) setClosed(() => next)
     })

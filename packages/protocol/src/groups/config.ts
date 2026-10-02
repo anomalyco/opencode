@@ -1,7 +1,7 @@
 import { Config } from "@opencode/schema/config"
 import { ConfigShell } from "@opencode/schema/config/shell"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { LocationQuery, locationQueryOpenApi } from "./location.js"
 
 export const ConfigGroup = HttpApiGroup.make("server.config")

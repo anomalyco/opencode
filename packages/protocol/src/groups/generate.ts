@@ -1,6 +1,6 @@
 import { Model } from "@opencode/schema/model"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { InvalidRequestError, ServiceUnavailableError } from "../errors.js"
 
 export const GenerateGroup = HttpApiGroup.make("server.generate")

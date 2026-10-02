@@ -11,7 +11,6 @@ import type { FormInfo, PermissionRequest, SessionStatus } from "@opencode/clien
 import type { SessionDocument } from "@opencode/session-ui/document"
 import { CurrentSessionProviders, STORY_MODEL } from "@opencode/session-ui/storybook"
 import { SessionTimeline } from "@opencode/session-ui/timeline"
-import { SessionReviewEmptyChangesV2 } from "@opencode/session-ui/v2/session-review-empty-changes-v2"
 import { createComposerEditor } from "@/composer/editor/interaction"
 import type { ComposerPersistedState } from "@/composer/types"
 import { Button } from "@opencode/ui/button"
@@ -20,9 +19,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import { Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
-import { ReviewPanelView } from "@/session/review/panel"
-import { createReviewPanelState } from "@/session/review/panel-state"
-import { TerminalSurface } from "@/session/terminal/surface"
 import type { WebSearchRequestModel } from "./requests/websearch"
 
 const modelReady = Object.assign(() => true, { promise: undefined }) satisfies ModelSelection["ready"]
@@ -274,9 +270,7 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
                     id="review-panel"
                     class="min-w-0 flex-1 flex flex-col gap-2 border-l border-border-weak-base md:max-w-[52%]"
                   >
-                    <div class="min-h-0 flex-1">
-                      <SessionReviewPane diffs={props.document.diffs} />
-                    </div>
+                    <div class="min-h-0 flex-1" />
                     <Show when={props.terminal}>{(terminal) => <SessionTerminalPreview terminal={terminal()} />}</Show>
                   </aside>
                 </Show>
@@ -292,29 +286,33 @@ function SessionSurfaceState(props: SessionPreviewProps & { onReset: () => void 
   )
 }
 
+// A static copy of the dock frame the extension host draws around the terminal panel.
 function SessionTerminalPreview(props: { terminal: NonNullable<SessionPreviewProps["terminal"]> }) {
   return (
-    <TerminalSurface
-      label={props.terminal.title}
-      opened
-      desktop
-      stacked
-      height="220px"
-      contentHeight="220px"
-      pane={220}
-      max={360}
-      resizing={false}
-      onResizeStart={() => undefined}
-      onResize={() => undefined}
-      onCollapse={() => undefined}
+    <aside
+      id="terminal-panel"
+      data-component="terminal-panel"
+      data-opened="true"
+      data-size-animated="true"
+      role="region"
+      aria-label={props.terminal.title}
+      aria-hidden="false"
+      class="relative shrink-0 overflow-hidden bg-v2-background-bg-base w-full rounded-[10px] shadow-[var(--v2-elevation-raised)] will-change-[height]"
+      style={{ height: "220px", "--terminal-panel-height": "220px" }}
     >
-      <div class="h-10 shrink-0 flex items-center border-b border-border-weaker-base px-3 text-13-medium text-text-strong">
-        {props.terminal.title}
+      <div
+        data-slot="terminal-panel-content"
+        class="absolute inset-x-0 top-0 flex flex-col overflow-hidden"
+        style={{ height: "220px" }}
+      >
+        <div class="h-10 shrink-0 flex items-center border-b border-border-weaker-base px-3 text-13-medium text-text-strong">
+          {props.terminal.title}
+        </div>
+        <pre dir="ltr" class="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-12-regular text-text-base">
+          {props.terminal.lines.join("\n")}
+        </pre>
       </div>
-      <pre dir="ltr" class="min-h-0 flex-1 overflow-auto px-4 py-3 font-mono text-12-regular text-text-base">
-        {props.terminal.lines.join("\n")}
-      </pre>
-    </TerminalSurface>
+    </aside>
   )
 }
 
@@ -353,28 +351,5 @@ function SessionSurfaceHeader(props: {
         </Button>
       </div>
     </header>
-  )
-}
-
-function SessionReviewPane(props: { diffs: SessionDocument["diffs"] }) {
-  const language = useLanguage()
-  const review = createReviewPanelState()
-  const [state, setState] = createStore({
-    active: props.diffs[0]?.file,
-    diffStyle: "unified" as "unified" | "split",
-  })
-  return (
-    <ReviewPanelView
-      title={language.t("ui.sessionReview.title.lastTurn")}
-      empty={<SessionReviewEmptyChangesV2 />}
-      diffs={props.diffs}
-      diffsReady
-      activeFile={state.active}
-      onSelectFile={(file) => setState("active", file)}
-      diffStyle={state.diffStyle}
-      onDiffStyleChange={(value) => setState("diffStyle", value)}
-      state={review}
-      fileList="flat"
-    />
   )
 }

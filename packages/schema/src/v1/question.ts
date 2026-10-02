@@ -7,7 +7,7 @@ import { statics } from "../schema.js"
 import { SessionID } from "../session-id.js"
 import { SessionV1 } from "./session.js"
 
-export const ID = Schema.String.check(Schema.isStartsWith("que")).pipe(
+export const ID = Schema.String.check(Schema.isStartingWith("que")).pipe(
   Schema.brand("QuestionV1.ID"),
   statics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "que_" + ascending()) })),
 )

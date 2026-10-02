@@ -24,13 +24,14 @@ import type { Agent } from "@opencode/schema/agent"
 import type { Model } from "@opencode/schema/model"
 import type { Content } from "@opencode/schema/tool"
 import { Cause, Context, Effect, Layer, Result, Stream } from "effect"
-import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { App } from "../app.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Tool } from "../tool.js"
+import { SessionAffinity } from "./affinity.js"
 import { SessionModelTransport } from "./model-transport.js"
 import { SessionProviderContext } from "./provider-context.js"
 import { SessionRunnerModel } from "./runner/model.js"
@@ -46,6 +47,8 @@ const IMAGE_REMOVED =
 const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
 // Used when the catalog has no output limit for the model.
 const OUTPUT_TOKEN_FALLBACK = 32_000
+// No reply needs more, however much the model allows.
+const OUTPUT_TOKEN_MAX = 256_000
 // A summary never needs more, and a request asking for more cannot be shrunk to fit a window the catalog overstates.
 const SUMMARY_OUTPUT_MAX = 32_000
 // Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
@@ -87,7 +90,7 @@ const outputLimit = (
   kind: "primary" | "compaction",
   inputTokens?: Input["inputTokens"],
 ) => {
-  const model = limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK
+  const model = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, OUTPUT_TOKEN_MAX)
   const requested = kind === "compaction" ? Math.min(model, SUMMARY_OUTPUT_MAX) : model
   if (inputTokens === undefined || limit.context <= 0) return requested
   const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
@@ -268,17 +271,19 @@ export const layer = Layer.effect(
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
-      const affinity = session.parentID ?? session.fork?.sessionID ?? session.id
+      const affinity = SessionAffinity.get(session)
       const base = LLM.request({
         model: model.model,
         http: {
           headers: {
-            "x-session-affinity": session.id,
-            "X-Session-Id": session.id,
+            "x-opencode-session-id": session.id,
+            ...(session.parentID ? { "x-opencode-parent-session-id": session.parentID } : {}),
+            "x-session-affinity": affinity,
+            "X-Session-Id": affinity,
             ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
             "User-Agent": App.useragent(app),
             "x-opencode-project": session.projectID,
-            "x-opencode-session": session.id,
+            "x-opencode-session": affinity,
             "x-opencode-client": app.name,
           },
         },

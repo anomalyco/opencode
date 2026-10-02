@@ -93,22 +93,21 @@ function experimental(info: typeof ConfigV1.Info.Type) {
   }
 }
 
-function permissions(info?: ConfigPermissionV1.Info, tools?: Readonly<Record<string, boolean>>) {
-  const rules: Array<{ action: string; resource: string; effect: ConfigPermissionV1.Action }> = Object.entries(
-    tools ?? {},
-  ).map(([action, enabled]) => ({
-    action: normalizeAction(action),
-    resource: "*",
-    effect: enabled ? ("allow" as const) : ("deny" as const),
-  }))
-  for (const [key, rule] of Object.entries(info ?? {})) {
-    if (!rule) continue
+function permissions(info?: ConfigPermissionV1.Info, tools?: ReadonlyArray<readonly [string, boolean]>) {
+  const rules: Array<{ action: string; resource: string; effect: ConfigPermissionV1.Action }> = (tools ?? []).map(
+    ([action, enabled]) => ({
+      action: normalizeAction(action),
+      resource: "*",
+      effect: enabled ? "allow" : "deny",
+    }),
+  )
+  for (const [key, rule] of info ?? []) {
     const action = normalizeAction(key)
     if (typeof rule === "string") {
       rules.push({ action, resource: "*", effect: rule })
       continue
     }
-    rules.push(...Object.entries(rule).map(([resource, effect]) => ({ action, resource, effect })))
+    rules.push(...rule.map(([resource, effect]) => ({ action, resource, effect })))
   }
   return rules.length ? rules : undefined
 }
