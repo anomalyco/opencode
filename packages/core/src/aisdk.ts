@@ -135,16 +135,21 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
   delete options.transport
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
-    const ctl = new AbortController()
-    // Covers only the wait for response headers; wrapSSE takes over once the body streams.
+    // A plain AbortSignal.timeout would keep running into the body stream, so the header limit uses
+    // a timer that is cleared once headers arrive. The whole-request limit is meant to span the body.
+    const headers = new AbortController()
     const headerTimer =
       timeouts.headerTimeout === false
         ? undefined
-        : setTimeout(() => ctl.abort(new Error(HEADER_TIMEOUT_MESSAGE)), timeouts.headerTimeout)
+        : setTimeout(() => headers.abort(new Error(HEADER_TIMEOUT_MESSAGE)), timeouts.headerTimeout)
+    const chunks = new AbortController()
     opts.signal = AbortSignal.any(
-      [opts.signal, ctl.signal, timeouts.timeout ? AbortSignal.timeout(timeouts.timeout) : undefined].filter(
-        (item): item is AbortSignal => item !== undefined && item !== null,
-      ),
+      [
+        opts.signal,
+        headers.signal,
+        chunks.signal,
+        timeouts.timeout ? AbortSignal.timeout(timeouts.timeout) : undefined,
+      ].filter((item): item is AbortSignal => item !== undefined && item !== null),
     )
 
     if (typeof opts.body === "string" && model.body !== undefined) {
@@ -162,7 +167,7 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
         : send(input, { ...opts, timeout: false })
     ).finally(() => clearTimeout(headerTimer))
     if (timeouts.chunkTimeout === false) return res
-    return wrapSSE(res, timeouts.chunkTimeout, ctl)
+    return wrapSSE(res, timeouts.chunkTimeout, chunks)
   }
 
   return options
