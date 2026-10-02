@@ -301,6 +301,31 @@ export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArra
   return [...new Map(flat.map((tool) => [tool.name, tool])).values()]
 }
 
+export const flattenToolChoice = (
+  toolChoice: NonNullable<LLMRequest["toolChoice"]>,
+  tools: ReadonlyArray<ToolEntry>,
+) => {
+  if (toolChoice.type !== "tool" || toolChoice.name === undefined) return toolChoice
+  const names = new Map<string, string | undefined>()
+  const winners = new Map<string, string>()
+  const collect = (entries: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string> = []) => {
+    entries.forEach((tool) => {
+      const current = [...path, tool.name]
+      if (tool.type === "namespace") return collect(tool.tools, current)
+      const qualified = current.join(".")
+      const flat = current.join("_")
+      // Dotted components can make distinct paths share a qualified name.
+      names.set(qualified, !names.has(qualified) || names.get(qualified) === flat ? flat : undefined)
+      // flattenTools keeps the last definition for each flattened name.
+      winners.set(flat, qualified)
+    })
+  }
+  collect(tools)
+  const name = names.get(toolChoice.name)
+  if (name === undefined || name === toolChoice.name || winners.get(name) !== toolChoice.name) return toolChoice
+  return { ...toolChoice, name }
+}
+
 export const flattenToolRequest = (request: LLMRequest) => {
   const messages = request.messages.map((message) => {
     const content = message.content.map((part) => {
@@ -311,11 +336,14 @@ export const flattenToolRequest = (request: LLMRequest) => {
       ? message
       : new Message({ ...message, content })
   })
+  const messagesUnchanged = messages.every((message, index) => message === request.messages[index])
+  const toolChoice = request.toolChoice ? flattenToolChoice(request.toolChoice, request.tools) : undefined
   return {
     tools: flattenTools(request.tools),
-    request: messages.every((message, index) => message === request.messages[index])
-      ? request
-      : LLMRequest.update(request, { messages }),
+    request:
+      messagesUnchanged && toolChoice === request.toolChoice
+        ? request
+        : LLMRequest.update(request, { messages, toolChoice }),
   }
 }
 

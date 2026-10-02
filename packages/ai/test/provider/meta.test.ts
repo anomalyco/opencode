@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { Headers } from "effect/unstable/http"
-import { Auth, LLM, LLMClient } from "../../src/index.js"
+import { Auth, LLM, LLMClient, ToolDefinition, ToolNamespace } from "../../src/index.js"
 import { Meta } from "../../src/providers/index.js"
 import { OpenAIChat } from "../../src/protocols/openai-chat.js"
 import { OpenResponses } from "../../src/protocols/open-responses.js"
@@ -31,6 +31,50 @@ it.effect("Meta composes baseline protocols with provider-owned endpoints and de
     expect(compiled.protocol).toBe("meta-responses")
     expect(compiled.body).toMatchObject({ store: false, include: ["reasoning.encrypted_content"] })
     expect(compiled.body.reasoning).toBeUndefined()
+  }),
+)
+
+it.effect("Meta Responses flattens a namespaced forced tool choice", () =>
+  Effect.gen(function* () {
+    const model = Meta.configure({ apiKey: "fixture" }).responses("muse-spark-1.3")
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model,
+        prompt: "Look up a customer.",
+        tools: [
+          ToolNamespace.make({
+            name: "crm",
+            tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+          }),
+        ],
+        toolChoice: "crm.lookup",
+      }),
+    )
+
+    expect(prepared.body.tools).toMatchObject([{ type: "function", name: "crm_lookup" }])
+    expect(prepared.body.tool_choice).toEqual({ type: "function", name: "crm_lookup" })
+  }),
+)
+
+it.effect("Meta Messages flattens a namespaced forced tool choice through Anthropic lowering", () =>
+  Effect.gen(function* () {
+    const model = Meta.configure({ apiKey: "fixture" }).messages("muse-spark-1.3")
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model,
+        prompt: "Look up a customer.",
+        tools: [
+          ToolNamespace.make({
+            name: "crm",
+            tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+          }),
+        ],
+        toolChoice: { type: "tool", name: "crm.lookup", disableParallelToolUse: true },
+      }),
+    )
+
+    expect(prepared.body.tools).toMatchObject([{ name: "crm_lookup" }])
+    expect(prepared.body.tool_choice).toEqual({ type: "tool", name: "crm_lookup", disable_parallel_tool_use: true })
   }),
 )
 

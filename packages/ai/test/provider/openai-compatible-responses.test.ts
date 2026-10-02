@@ -194,6 +194,7 @@ describe("Open Responses-compatible route", () => {
               ],
             },
           ],
+          toolChoice: "acme.billing.lookup",
         }),
       )
 
@@ -213,6 +214,7 @@ describe("Open Responses-compatible route", () => {
           strict: false,
         },
       ])
+      expect(prepared.body.tool_choice).toEqual({ type: "function", name: "acme_billing_lookup" })
     }),
   )
 

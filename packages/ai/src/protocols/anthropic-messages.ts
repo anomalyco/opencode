@@ -1034,7 +1034,10 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const flattened = ProviderShared.flattenToolRequest(updates.request)
   const tools = flattened.tools.length === 0 ? undefined : flattened.tools.map((tool) => lowerTool(breakpoints, tool))
   // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
-  const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
+  const toolChoice =
+    tools === undefined || !flattened.request.toolChoice
+      ? undefined
+      : yield* lowerToolChoice(flattened.request.toolChoice)
   const systemParts = request.system.filter((part) => part.text.length > 0)
   const system =
     systemParts.length === 0

@@ -8,7 +8,9 @@ import {
   LLMRequest,
   Message,
   ToolCallPart,
+  ToolChoice,
   ToolDefinition,
+  ToolNamespace,
   Usage,
   Media,
 } from "../../src/index.js"
@@ -734,6 +736,25 @@ describe("Anthropic Messages route", () => {
         },
       ])
       expect(prepared.body.tool_choice).toEqual({ type: "none" })
+    }),
+  )
+
+  it.effect("flattens a namespaced forced tool choice", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(request, {
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+            }),
+          ],
+          toolChoice: ToolChoice.make({ type: "tool", name: "crm.lookup", disableParallelToolUse: true }),
+        }),
+      )
+
+      expect(prepared.body.tools).toMatchObject([{ name: "crm_lookup" }])
+      expect(prepared.body.tool_choice).toEqual({ type: "tool", name: "crm_lookup", disable_parallel_tool_use: true })
     }),
   )
 

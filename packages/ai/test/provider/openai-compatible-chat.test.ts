@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMRequest, Message, ToolCallPart, ToolChoice, ToolDefinition, ToolNamespace } from "../../src/index.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as OpenAICompatibleChat from "../../src/protocols/openai-compatible-chat.js"
@@ -190,6 +190,156 @@ describe("OpenAI-compatible Chat route", () => {
         stream: true,
         stream_options: { include_usage: true },
       })
+    }),
+  )
+
+  it.effect("flattens only defined namespaced forced tool choices", () =>
+    Effect.gen(function* () {
+      const tools = [
+        ToolNamespace.make({
+          name: "crm",
+          tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+        }),
+      ]
+      const prepare = (name: string) =>
+        compileRequest(
+          LLM.request({
+            model,
+            prompt: "Look up a customer.",
+            tools,
+            toolChoice: ToolChoice.named(name),
+          }),
+        )
+      const prepared = yield* prepare("crm.lookup")
+      const unknown = yield* prepare("crm.missing")
+
+      expect(prepared.body.tools).toMatchObject([{ function: { name: "crm_lookup" } }])
+      expect(prepared.body.tool_choice).toEqual({ type: "function", function: { name: "crm_lookup" } })
+      expect(unknown.body.tool_choice).toEqual({ type: "function", function: { name: "crm.missing" } })
+    }),
+  )
+
+  it.effect("does not force a different tool when a root name shadows a namespaced tool", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Look up a customer.",
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Read customer", inputSchema: {} })],
+            }),
+            ToolDefinition.make({ name: "crm_lookup", description: "Delete customer", inputSchema: {} }),
+          ],
+          toolChoice: "crm.lookup",
+        }),
+      )
+
+      expect(prepared.body.tools).toMatchObject([{ function: { name: "crm_lookup", description: "Delete customer" } }])
+      expect(prepared.body.tool_choice).toEqual({ type: "function", function: { name: "crm.lookup" } })
+    }),
+  )
+
+  it.effect("flattens a namespaced choice when its definition survives a name collision", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Look up a customer.",
+          tools: [
+            ToolDefinition.make({ name: "crm_lookup", description: "Delete customer", inputSchema: {} }),
+            ToolNamespace.make({
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Read customer", inputSchema: {} })],
+            }),
+          ],
+          toolChoice: "crm.lookup",
+        }),
+      )
+
+      expect(prepared.body.tools).toMatchObject([{ function: { name: "crm_lookup", description: "Read customer" } }])
+      expect(prepared.body.tool_choice).toEqual({ type: "function", function: { name: "crm_lookup" } })
+    }),
+  )
+
+  it.effect("keeps forced choices aligned with nested flattened-name collision winners", () =>
+    Effect.gen(function* () {
+      const tools = [
+        ToolNamespace.make({
+          name: "acme",
+          tools: [
+            ToolDefinition.make({ name: "billing_lookup", description: "Read billing", inputSchema: {} }),
+            ToolNamespace.make({
+              name: "billing",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Update billing", inputSchema: {} })],
+            }),
+          ],
+        }),
+      ]
+      const shadowed = yield* compileRequest(
+        LLM.request({ model, prompt: "Read billing.", tools, toolChoice: "acme.billing_lookup" }),
+      )
+      const surviving = yield* compileRequest(
+        LLM.request({ model, prompt: "Update billing.", tools, toolChoice: "acme.billing.lookup" }),
+      )
+
+      expect(shadowed.body.tools).toMatchObject([
+        { function: { name: "acme_billing_lookup", description: "Update billing" } },
+      ])
+      expect(shadowed.body.tool_choice).toEqual({ type: "function", function: { name: "acme.billing_lookup" } })
+      expect(surviving.body.tool_choice).toEqual({ type: "function", function: { name: "acme_billing_lookup" } })
+    }),
+  )
+
+  it.effect("preserves an ambiguous choice shared by a literal root name and a namespace path", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Look up a customer.",
+          tools: [
+            ToolDefinition.make({ name: "crm.lookup", description: "Root tool", inputSchema: {} }),
+            ToolNamespace.make({
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Namespaced tool", inputSchema: {} })],
+            }),
+          ],
+          toolChoice: "crm.lookup",
+        }),
+      )
+
+      expect(prepared.body.tools).toMatchObject([
+        { function: { name: "crm.lookup", description: "Root tool" } },
+        { function: { name: "crm_lookup", description: "Namespaced tool" } },
+      ])
+      expect(prepared.body.tool_choice).toEqual({ type: "function", function: { name: "crm.lookup" } })
+    }),
+  )
+
+  it.effect("preserves a qualified choice when dotted leaf names make its namespace path ambiguous", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Look up billing.",
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              tools: [
+                ToolDefinition.make({ name: "billing.lookup", description: "Dotted leaf", inputSchema: {} }),
+                ToolNamespace.make({
+                  name: "billing",
+                  tools: [ToolDefinition.make({ name: "lookup", description: "Nested leaf", inputSchema: {} })],
+                }),
+              ],
+            }),
+          ],
+          toolChoice: "crm.billing.lookup",
+        }),
+      )
+
+      expect(prepared.body.tool_choice).toEqual({ type: "function", function: { name: "crm.billing.lookup" } })
     }),
   )
 

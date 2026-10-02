@@ -16,6 +16,7 @@ import {
   ToolCallPart,
   ToolChoice,
   ToolDefinition,
+  ToolNamespace,
   ToolRuntime,
 } from "../../src/index.js"
 import { LLMClient } from "../../src/route.js"
@@ -321,6 +322,26 @@ describe("Bedrock Converse route", () => {
           ],
           toolChoice: { any: {} },
         },
+      })
+    }),
+  )
+  it.effect("flattens a namespaced forced tool choice", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLMRequest.update(baseRequest, {
+          tools: [
+            ToolNamespace.make({
+              name: "crm",
+              tools: [ToolDefinition.make({ name: "lookup", description: "Look up a customer", inputSchema: {} })],
+            }),
+          ],
+          toolChoice: ToolChoice.named("crm.lookup"),
+        }),
+      )
+
+      expect(prepared.body.toolConfig).toMatchObject({
+        tools: [{ toolSpec: { name: "crm_lookup" } }],
+        toolChoice: { tool: { name: "crm_lookup" } },
       })
     }),
   )
