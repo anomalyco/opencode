@@ -139,7 +139,7 @@ Prepare the changelog, version bump, tag, and release notes.
 
 All frontmatter is optional at runtime. Add a clear `description` when the model should discover the skill; skills without one are not advertised.
 
-`opencode/autoinvoke: false` only hides the skill from the model's available list. The skill remains registered and can still be loaded explicitly by ID. `disable-model-invocation: true` is accepted for compatibility with skills written for Claude Code and Cursor; when both are set, `opencode/autoinvoke` wins. V2 accepts portability fields such as `license` and `compatibility` but does not interpret them.
+`opencode/autoinvoke: false` only hides the skill from the model's available list. The skill remains registered and can still be loaded explicitly by ID. When both `disable-model-invocation` and `opencode/autoinvoke` are set, `opencode/autoinvoke` wins. V2 accepts portability fields such as `license` and `compatibility` but does not interpret them.
 
 ## IDs
 

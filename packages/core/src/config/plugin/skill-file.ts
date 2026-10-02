@@ -26,7 +26,6 @@ const metadataBoolean = (metadata: unknown, key: string) => {
   return booleanValue((metadata as Record<string, unknown>)[key])
 }
 
-// Matches the boolean spellings Claude Code accepts in skill frontmatter.
 const booleanValue = (value: unknown) => {
   if (typeof value === "boolean") return value
   if (typeof value === "number") return value === 1 ? true : value === 0 ? false : undefined
@@ -47,7 +46,6 @@ export function parse(directory: string, filepath: string, content: string): Par
     path.dirname(filepath) === directory && path.basename(filepath) !== "SKILL.md"
       ? path.basename(filepath, ".md")
       : path.basename(path.dirname(filepath))
-  // `disable-model-invocation` is the Claude Code / Cursor spelling of `opencode/autoinvoke: false`.
   const disableModelInvocation = booleanValue(frontmatter["disable-model-invocation"])
   const autoinvoke =
     metadataBoolean(frontmatter.metadata, "opencode/autoinvoke") ??
