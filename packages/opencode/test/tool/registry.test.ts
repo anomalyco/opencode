@@ -257,6 +257,81 @@ describe("tool.registry", () => {
     }),
   )
 
+  // Regression for #48112: a custom tool whose module fails to import must be
+  // skipped (with a logged error) instead of failing the whole registry and
+  // every prompt in the session.
+  it.instance("skips a custom tool that fails to import without breaking the registry", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tool = path.join(test.directory, ".opencode", "tool")
+      yield* Effect.promise(() => fs.mkdir(tool, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tool, "broken.ts"),
+          [
+            'import { nope } from "./does-not-exist.ts"',
+            "export default {",
+            "  description: 'broken tool',",
+            "  args: {},",
+            "  execute: async () => nope,",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tool, "hello.ts"),
+          [
+            "export default {",
+            "  description: 'hello tool',",
+            "  args: {},",
+            "  execute: async () => 'hello world',",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      expect(ids).toContain("read")
+      expect(ids).toContain("hello")
+      expect(ids).not.toContain("broken")
+    }),
+  )
+
+  // Regression for #48112: custom tools mirror the built-in convention of
+  // importing `.txt` descriptions. The shipped binary inlines those at build
+  // time, so the runtime loader has to serve them for custom tools.
+  it.instance("loads custom tools that import .txt descriptions", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const tool = path.join(test.directory, ".opencode", "tool")
+      yield* Effect.promise(() => fs.mkdir(tool, { recursive: true }))
+      yield* Effect.promise(() => Bun.write(path.join(tool, "description.txt"), "description from a text file"))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tool, "described.ts"),
+          [
+            'import DESCRIPTION from "./description.txt"',
+            "export default {",
+            "  description: DESCRIPTION,",
+            "  args: {},",
+            "  execute: async () => 'ok',",
+            "}",
+            "",
+          ].join("\n"),
+        ),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((t) => t.id === "described")
+      if (!loaded) throw new Error("described tool was not loaded")
+      expect(loaded.description).toBe("description from a text file")
+    }),
+  )
+
   // Same regression, plugin entry point. The original reports (#27451, #27630)
   // came in through `plugin.list()` — `oh-my-opencode` was registering a tool
   // with `args: undefined` and crashing every message submit. The file-scan

@@ -32,6 +32,7 @@ import { ApplyPatchTool } from "./apply_patch"
 import { Glob } from "@opencode-ai/core/util/glob"
 import path from "path"
 import { pathToFileURL } from "url"
+import { readFileSync } from "node:fs"
 import { Effect, Layer, Context } from "effect"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
@@ -189,8 +190,13 @@ const layer = Layer.effect(
           const namespace = path.basename(match, path.extname(match))
           // `match` is an absolute filesystem path from `Glob.scanSync(..., { absolute: true })`.
           // Import it as `file://` so Node on Windows accepts the dynamic import.
-          const mod = yield* Effect.promise(() => import(pathToFileURL(match).href))
-          for (const [id, def] of Object.entries(mod)) {
+          const loaded = yield* Effect.promise(() => loadCustomTool(match))
+          if (!loaded.ok) {
+            // A single broken custom tool must not take down the whole registry (#48112).
+            yield* Effect.logError("failed to load custom tool", { path: match, error: String(loaded.error) })
+            continue
+          }
+          for (const [id, def] of Object.entries(loaded.mod)) {
             if (!isPluginTool(def)) continue
             custom.push(fromPlugin(id === "default" ? namespace : `${namespace}_${id}`, def))
           }
@@ -422,6 +428,59 @@ function normalizeZodJsonSchema(value: unknown): unknown {
 
 function isJsonSchemaObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
+}
+
+// Custom tools are plain ESM files imported at runtime. Built-in tools can import
+// `.txt` files because the build inlines them, but runtime module loaders reject
+// that extension (Node: ERR_UNKNOWN_FILE_EXTENSION), so a custom tool that mirrors
+// the built-in pattern fails to load (#48112). On the first such failure, register
+// a Node module hook that serves `.txt` as a module with the file contents as its
+// default export, then retry the import.
+let textImportsSupported: boolean | undefined
+
+async function ensureTextImports() {
+  if (textImportsSupported !== undefined) return textImportsSupported
+  textImportsSupported = false
+  // Imported dynamically: runtimes without the hook API don't export it, and a
+  // static named import would fail to link there.
+  const hooks = await import("node:module").catch(() => undefined)
+  const registerHooks = hooks?.registerHooks
+  if (typeof registerHooks !== "function") return textImportsSupported
+  try {
+    registerHooks({
+      load(url, context, nextLoad) {
+        if (!url.endsWith(".txt")) return nextLoad(url, context)
+        return {
+          format: "module",
+          source: `export default ${JSON.stringify(readFileSync(new URL(url), "utf8"))}`,
+          shortCircuit: true,
+        }
+      },
+    })
+    textImportsSupported = true
+  } catch {
+    // Runtimes without module hooks, or with text imports already built in.
+  }
+  return textImportsSupported
+}
+
+function isTextImportError(error: unknown) {
+  if (!(error instanceof Error)) return false
+  const code = (error as { code?: unknown }).code
+  return code === "ERR_UNKNOWN_FILE_EXTENSION" && error.message.includes(".txt")
+}
+
+async function loadCustomTool(file: string) {
+  const url = pathToFileURL(file).href
+  const first = await import(url).then(
+    (mod) => ({ ok: true as const, mod: mod as Record<string, unknown> }),
+    (error: unknown) => ({ ok: false as const, error }),
+  )
+  if (first.ok || !isTextImportError(first.error) || !(await ensureTextImports())) return first
+  return import(url).then(
+    (mod) => ({ ok: true as const, mod: mod as Record<string, unknown> }),
+    (error: unknown) => ({ ok: false as const, error }),
+  )
 }
 
 export const node = LayerNode.make({
