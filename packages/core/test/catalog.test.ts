@@ -350,4 +350,31 @@ describe("CatalogV2", () => {
       expect(yield* catalog.provider.get(providerID)).toBeUndefined()
     }),
   )
+
+  it.effect("filters denied providers from available without waiting for reload", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const policy = yield* Policy.Service
+      const allowedID = ProviderV2.ID.make("allowed")
+      const blockedID = ProviderV2.ID.make("blocked")
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(allowedID, () => {})
+        catalog.provider.update(blockedID, () => {})
+        catalog.model.update(allowedID, ModelV2.ID.make("model"), () => {})
+        catalog.model.update(blockedID, ModelV2.ID.make("model"), () => {})
+      })
+
+      expect(
+        (yield* catalog.provider.available()).map((provider) => provider.id).sort(),
+      ).toEqual([allowedID, blockedID].sort())
+
+      yield* policy.load([
+        new Policy.Info({ effect: "deny", action: "provider.use", resource: "*" }),
+        new Policy.Info({ effect: "allow", action: "provider.use", resource: "allowed" }),
+      ])
+
+      expect((yield* catalog.provider.available()).map((provider) => provider.id)).toEqual([allowedID])
+      expect((yield* catalog.model.available()).map((model) => model.providerID)).toEqual([allowedID])
+    }),
+  )
 })

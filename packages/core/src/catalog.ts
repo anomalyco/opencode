@@ -183,9 +183,15 @@ const layer = Layer.effect(
 
         available: Effect.fn("CatalogV2.provider.available")(function* () {
           const active = new Map((yield* integrations.list()).map((integration) => [integration.id, integration]))
-          return (yield* result.provider.all()).filter((provider) =>
+          const candidates = (yield* result.provider.all()).filter((provider) =>
             available(provider, active.get(provider.integrationID ?? Integration.ID.make(provider.id))),
           )
+          if (!policy.hasStatements()) return candidates
+          const allowed: ProviderV2.Info[] = []
+          for (const provider of candidates) {
+            if ((yield* policy.evaluate("provider.use", provider.id, "allow")) !== "deny") allowed.push(provider)
+          }
+          return allowed
         }),
       },
 
