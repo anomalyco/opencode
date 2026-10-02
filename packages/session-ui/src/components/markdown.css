@@ -267,6 +267,21 @@
     text-underline-offset: 2px;
   }
 
+  a.file-ref {
+    color: inherit;
+    text-decoration: none;
+    text-decoration-color: color-mix(in oklch, var(--markdown-inline-code-path-color) 50%, transparent);
+  }
+
+  a.file-ref:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
+  a.file-ref > code {
+    cursor: pointer;
+  }
+
   /* Tables */
   table {
     width: 100%;
