@@ -19,9 +19,13 @@ export const name = "websearch"
 export const NO_RESULTS = "No search results found. Please try a different query."
 export const EXA_URL = "https://mcp.exa.ai/mcp"
 export const PARALLEL_URL = "https://search.parallel.ai/mcp"
+export const TINYFISH_URL = "https://agent.tinyfish.ai/mcp"
 export const MAX_NUM_RESULTS = 20
 export const MAX_CONTEXT_CHARACTERS = 50_000
 export const MAX_RESPONSE_BYTES = 256 * 1024
+// Streamable HTTP MCP servers return this header on `initialize`; TinyFish
+// requires it on post-`initialize` requests such as `tools/call`.
+const MCP_SESSION_ID_HEADER = "mcp-session-id"
 
 /**
  * Provider-independent local web search retained in V2 core for launch parity.
@@ -31,7 +35,7 @@ export const MAX_RESPONSE_BYTES = 256 * 1024
  */
 export const description = `Search the web using the session's local web search provider. Use this for current information beyond knowledge cutoff.
 
-This is a provider-independent local tool backed by Exa or Parallel. Provider-hosted web search tools are separate and execute at the model provider.
+This is a provider-independent local tool backed by Exa, Parallel, or TinyFish. Provider-hosted web search tools are separate and execute at the model provider.
 
 Optional controls support result count, live crawling ('fallback' or 'preferred'), search type ('auto', 'fast', or 'deep'), and maximum context characters.
 
@@ -56,15 +60,17 @@ export const Input = Schema.Struct({
   ),
 })
 
-export const Provider = Schema.Literals(["exa", "parallel"])
+export const Provider = Schema.Literals(["exa", "parallel", "tinyfish"])
 export type Provider = typeof Provider.Type
 
 export interface Config {
   readonly provider?: Provider
   readonly enableExa: boolean
   readonly enableParallel: boolean
+  readonly enableTinyfish: boolean
   readonly exaApiKey?: string
   readonly parallelApiKey?: string
+  readonly tinyfishApiKey?: string
 }
 
 export class ConfigService extends Context.Service<ConfigService, Config>()("@opencode/v2/WebSearchConfig") {}
@@ -73,13 +79,17 @@ export class ConfigService extends Context.Service<ConfigService, Config>()("@op
 export const defaultConfigLayer = Layer.sync(ConfigService, () =>
   ConfigService.of({
     provider:
-      process.env.OPENCODE_WEBSEARCH_PROVIDER === "exa" || process.env.OPENCODE_WEBSEARCH_PROVIDER === "parallel"
+      process.env.OPENCODE_WEBSEARCH_PROVIDER === "exa" ||
+      process.env.OPENCODE_WEBSEARCH_PROVIDER === "parallel" ||
+      process.env.OPENCODE_WEBSEARCH_PROVIDER === "tinyfish"
         ? process.env.OPENCODE_WEBSEARCH_PROVIDER
         : undefined,
     enableExa: truthy("OPENCODE_EXPERIMENTAL") || truthy("OPENCODE_ENABLE_EXA") || truthy("OPENCODE_EXPERIMENTAL_EXA"),
     enableParallel: truthy("OPENCODE_ENABLE_PARALLEL") || truthy("OPENCODE_EXPERIMENTAL_PARALLEL"),
+    enableTinyfish: truthy("OPENCODE_ENABLE_TINYFISH") || truthy("OPENCODE_EXPERIMENTAL_TINYFISH"),
     exaApiKey: process.env.EXA_API_KEY,
     parallelApiKey: process.env.PARALLEL_API_KEY,
+    tinyfishApiKey: process.env.TINYFISH_API_KEY,
   }),
 )
 
@@ -87,12 +97,17 @@ export const configNode = makeLocationNode({ service: ConfigService, layer: defa
 
 export function selectProvider(
   sessionID: string,
-  flags: Pick<Config, "enableExa" | "enableParallel"> = { enableExa: false, enableParallel: false },
+  flags: Pick<Config, "enableExa" | "enableParallel" | "enableTinyfish"> = {
+    enableExa: false,
+    enableParallel: false,
+    enableTinyfish: false,
+  },
   override?: Provider,
 ): Provider {
   if (override) return override
   if (flags.enableParallel) return "parallel"
   if (flags.enableExa) return "exa"
+  if (flags.enableTinyfish) return "tinyfish"
   return Number.parseInt(checksum(sessionID) ?? "0", 36) % 2 === 0 ? "exa" : "parallel"
 }
 
@@ -134,6 +149,19 @@ const ParallelArgs = Schema.Struct({
   search_queries: Schema.Array(Schema.String),
   session_id: Schema.String,
 })
+const TinyfishArgs = Schema.Struct({
+  query: Schema.String,
+})
+const McpInitializeRequest = Schema.Struct({
+  jsonrpc: Schema.Literal("2.0"),
+  id: Schema.Literal(0),
+  method: Schema.Literal("initialize"),
+  params: Schema.Struct({
+    protocolVersion: Schema.String,
+    capabilities: Schema.Struct({}),
+    clientInfo: Schema.Struct({ name: Schema.String, version: Schema.String }),
+  }),
+})
 const McpRequest = <F extends Schema.Struct.Fields>(args: Schema.Struct<F>) =>
   Schema.Struct({
     jsonrpc: Schema.Literal("2.0"),
@@ -141,6 +169,15 @@ const McpRequest = <F extends Schema.Struct.Fields>(args: Schema.Struct<F>) =>
     method: Schema.Literal("tools/call"),
     params: Schema.Struct({ name: Schema.String, arguments: args }),
   })
+
+export const mcpSessionIdFromHeaders = (headers: Record<string, string>) => {
+  const direct = headers[MCP_SESSION_ID_HEADER]
+  if (direct) return direct
+  for (const key of Object.keys(headers)) {
+    if (key.toLowerCase() === MCP_SESSION_ID_HEADER) return headers[key]
+  }
+  return undefined
+}
 
 const exaUrl = (apiKey: string | undefined) => {
   if (!apiKey) return EXA_URL
@@ -184,6 +221,51 @@ const callMcp = <F extends Schema.Struct.Fields>(
     )
   })
 
+const initializeMcpSession = (http: HttpClient.HttpClient, url: string, headers: Record<string, string>) =>
+  Effect.gen(function* () {
+    const request = yield* HttpClientRequest.post(url).pipe(
+      HttpClientRequest.accept("application/json, text/event-stream"),
+      HttpClientRequest.setHeaders(headers),
+      HttpClientRequest.schemaBodyJson(McpInitializeRequest)({
+        jsonrpc: "2.0" as const,
+        id: 0 as const,
+        method: "initialize" as const,
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "opencode", version: InstallationVersion },
+        },
+      }),
+    )
+    const response = yield* HttpClient.filterStatusOk(http).execute(request)
+    const sessionId = mcpSessionIdFromHeaders(response.headers)
+    // Drain the initialize body so the connection can be reused; the payload itself is not needed.
+    yield* collectBoundedResponseBody(response, MAX_RESPONSE_BYTES, () => new Error("initialize response exceeded limit"))
+    if (!sessionId) return yield* Effect.fail(new Error("TinyFish initialize did not return Mcp-Session-Id"))
+    return sessionId
+  }).pipe(
+    Effect.timeoutOrElse({
+      duration: Duration.seconds(10),
+      orElse: () => Effect.fail(new Error("TinyFish initialize timed out")),
+    }),
+  )
+
+const callTinyfishMcp = (http: HttpClient.HttpClient, query: string, apiKey: string | undefined) =>
+  Effect.gen(function* () {
+    const baseHeaders: Record<string, string> = {
+      "User-Agent": `opencode/${InstallationVersion}`,
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    }
+    // TinyFish uses Streamable HTTP MCP: `initialize` returns `Mcp-Session-Id`
+    // which must accompany post-`initialize` requests such as `tools/call`,
+    // otherwise the server rejects the call with HTTP 400.
+    const sessionId = yield* initializeMcpSession(http, TINYFISH_URL, baseHeaders)
+    return yield* callMcp(http, TINYFISH_URL, "search", TinyfishArgs, { query }, {
+      ...baseHeaders,
+      "Mcp-Session-Id": sessionId,
+    })
+  })
+
 const Output = Schema.Struct({
   provider: Provider,
   text: Schema.String,
@@ -225,22 +307,24 @@ const layer = Layer.effectDiscard(
                       livecrawl: input.livecrawl || "fallback",
                       contextMaxCharacters: input.contextMaxCharacters,
                     })
-                  : yield* callMcp(
-                      http,
-                      PARALLEL_URL,
-                      "web_search",
-                      ParallelArgs,
-                      {
-                        objective: input.query,
-                        search_queries: [input.query],
-                        session_id: context.sessionID,
-                        // V2 invocation context does not safely expose the model yet.
-                      },
-                      {
-                        "User-Agent": `opencode/${InstallationVersion}`,
-                        ...(config.parallelApiKey ? { Authorization: `Bearer ${config.parallelApiKey}` } : {}),
-                      },
-                    )
+                  : provider === "tinyfish"
+                    ? yield* callTinyfishMcp(http, input.query, config.tinyfishApiKey)
+                    : yield* callMcp(
+                        http,
+                        PARALLEL_URL,
+                        "web_search",
+                        ParallelArgs,
+                        {
+                          objective: input.query,
+                          search_queries: [input.query],
+                          session_id: context.sessionID,
+                          // V2 invocation context does not safely expose the model yet.
+                        },
+                        {
+                          "User-Agent": `opencode/${InstallationVersion}`,
+                          ...(config.parallelApiKey ? { Authorization: `Bearer ${config.parallelApiKey}` } : {}),
+                        },
+                      )
               return {
                 provider,
                 text: text ?? NO_RESULTS,
