@@ -26,8 +26,8 @@ available.
 ```
 
 An object also enables the built-ins and lets you override them or add custom
-formatters. Within one file, an empty object is equivalent to `true`; see
-[multiple configs](#multiple-configs) for how they differ across files.
+formatters. An empty object preserves inherited formatter settings, while `true`
+resets them to the built-ins.
 
 ```jsonc title="opencode.jsonc"
 {
@@ -200,38 +200,3 @@ as disabled.
   },
 }
 ```
-
-## Multiple configs
-
-OpenCode applies `formatter` from each [config file](/config) from lowest to
-highest precedence. Object values combine, so a project formatter does not
-replace a global one with a different name.
-
-```jsonc title="~/.config/opencode/opencode.jsonc"
-{
-  "formatter": {
-    "markdown": {
-      "command": ["deno", "fmt", "$FILE"],
-      "extensions": [".md"],
-    },
-  },
-}
-```
-
-```jsonc title=".opencode/opencode.jsonc"
-{
-  "formatter": {
-    "biome": {
-      "extensions": [".ts"],
-    },
-  },
-}
-```
-
-- A later entry with the same name overrides only the fields it sets, including
-  `disabled: false` to re-enable a formatter.
-- `command` and `extensions` replace earlier arrays; `environment` merges by
-  variable name.
-- `true` or `false` discards formatter entries from lower-precedence files.
-  An empty object keeps them.
-- A file that omits `formatter` leaves it unchanged.
