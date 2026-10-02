@@ -2731,11 +2731,12 @@ export const isShellNotFoundError = (value: unknown): value is ShellNotFoundErro
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ShellNotFoundError"
 
 export type WorktreeError = {
+  readonly _tag: "WorktreeError"
   readonly name: "WorktreeError"
   readonly data: { readonly message: string; readonly forceRequired?: boolean | undefined }
 }
 export const isWorktreeError = (value: unknown): value is WorktreeError =>
-  typeof value === "object" && value !== null && "name" in value && value["name"] === "WorktreeError"
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "WorktreeError"
 
 export type ServerInfoOutput = ServerInfo
 
