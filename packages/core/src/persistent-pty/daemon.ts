@@ -157,13 +157,13 @@ export interface DaemonTransport {
 
 export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport")(function* (
   root: string,
-  initialName: string,
+  initialID: string,
   binary: () => Promise<string> = () => Promise.resolve(process.env.OPENCODE_PTY_BIN || "opencode-pty"),
   inherited?: Handoff,
 ) {
   const startup = Semaphore.makeUnsafe(1)
-  // Each daemon owns the runtime directory `<root>/<name>`; names are generated IDs.
-  let name = initialName
+  // Each daemon owns the runtime directory `<root>/<id>`.
+  let id = initialID
   let registration: Registration | undefined
   let owner: Awaited<ReturnType<typeof openOwner>> | undefined
   let closed = false
@@ -198,7 +198,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       }),
     )
 
-  const discover = Effect.fn("PersistentPty.daemon.discover")(function* (directory = path.join(root, name)) {
+  const discover = Effect.fn("PersistentPty.daemon.discover")(function* (directory = path.join(root, id)) {
     const value = yield* Effect.tryPromise({
       try: () => readFile(path.join(directory, "service.json"), "utf8"),
       catch: (cause) => failure("connect", cause),
@@ -232,7 +232,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
         new Promise<ReturnType<typeof spawn>>((resolve, reject) => {
           const child = spawn(
             executable,
-            ["daemon", "--runtime-dir", root, "--name", name],
+            ["daemon", "--runtime-dir", root, "--name", id],
             { detached: true, stdio: "ignore" },
           )
           child.once("spawn", () => {
@@ -288,7 +288,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     owner?.socket.destroy()
     owner = undefined
     registration = undefined
-    name = crypto.randomUUID()
+    id = crypto.randomUUID()
   }
 
   const connect = Effect.fn("PersistentPty.daemon.connect")(function* (shouldStart: boolean) {
@@ -371,7 +371,7 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       if (response.type !== "handoff")
         return yield* Effect.fail(new DaemonError({ kind: "protocol", message: "Expected PTY handoff ticket" }))
       return {
-        directory: path.join(root, name),
+        directory: path.join(root, id),
         instanceID: registered.instance_id,
         ticket: response.ticket,
         expiresAt: response.expires_at,
@@ -380,13 +380,13 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
   )
 
   const subscribe = Effect.fn("PersistentPty.daemon.subscribe")(function* (
-    id: number,
+    terminalID: number,
     input: Parameters<DaemonTransport["subscribe"]>[1],
   ) {
     const attempt = Effect.gen(function* () {
       const current = yield* connect(false)
       return yield* Effect.tryPromise({
-        try: () => subscribePromise(current, id, input),
+        try: () => subscribePromise(current, terminalID, input),
         catch: (cause) => (cause instanceof DaemonError ? cause : failure("connect", cause)),
       }).pipe(
         Effect.catch((error) => {
@@ -405,13 +405,13 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
     yield* Effect.gen(function* () {
       if (inherited.expiresAt <= Date.now())
         return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart handoff expired" }))
-      // Older releases put the daemon directory outside the root; its directory name is still the name.
-      name = path.basename(inherited.directory)
+      // Older releases put the daemon directory outside the root; its directory name is still the ID.
+      id = path.basename(inherited.directory)
       found = yield* discover(inherited.directory)
       if (found.instance_id !== inherited.instanceID)
         return yield* Effect.fail(new DaemonError({ kind: "registration", message: "PTY restart daemon changed" }))
-      if (path.resolve(inherited.directory) !== path.resolve(root, name))
-        yield* migrate(inherited.directory, path.join(root, name))
+      if (path.resolve(inherited.directory) !== path.resolve(root, id))
+        yield* migrate(inherited.directory, path.join(root, id))
       yield* claim(found, inherited.ticket)
     }).pipe(
       Effect.catchCause((cause) =>
