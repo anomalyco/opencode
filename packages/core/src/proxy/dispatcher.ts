@@ -80,6 +80,9 @@ export function makeAuthHeader(
     if (!proxy) return undefined
     const ctx: ProxyAuthContext = { proxy, target, username: settings.username, password: settings.password }
     const native = await loadNative()
+    if (!deps.providers && !native && (settings.auth === "negotiate" || settings.auth === "ntlm")) {
+      throw new ProxyAuthError("missing-native", { proxy: proxy.origin })
+    }
     const selected = deps.providers ?? selectProviders(settings.auth, challenges, native)
     for (const provider of selected) {
       const challenge = challenges.find((entry) => entry.split(/\s/, 1)[0].toLowerCase() === provider.scheme) ?? provider.scheme
@@ -98,12 +101,14 @@ export async function openTunnel(
 ): Promise<Tunnel> {
   const challenges = new Set<string>()
   for (let round = 0; round < MAX_AUTH_ROUNDS; round++) {
-    const header = challenges.size ? await authHeader([...challenges], target.origin) : undefined
+    const attempted = challenges.size > 0
+    const header = attempted ? await authHeader([...challenges], target.origin) : undefined
     const result = await connectOnce(proxy, target, header)
     if ("socket" in result) return result
     for (const scheme of result.challenges) challenges.add(scheme)
     if (header) throw new ProxyAuthError("rejected", { proxy: proxy.origin })
-    if (challenges.size === 0) throw new ProxyAuthError("no-credentials", { proxy: proxy.origin })
+    // A challenge arrived but no provider could produce credentials for it.
+    if (attempted) throw new ProxyAuthError("no-credentials", { proxy: proxy.origin })
   }
   throw new ProxyAuthError("rounds-exceeded", { proxy: proxy.origin })
 }
@@ -166,13 +171,15 @@ async function requestAbsoluteForm(
 ): Promise<Response> {
   const challenges = new Set<string>()
   for (let round = 0; round < MAX_AUTH_ROUNDS; round++) {
-    const header = challenges.size ? await authHeader([...challenges], target.origin) : undefined
+    const attempted = challenges.size > 0
+    const header = attempted ? await authHeader([...challenges], target.origin) : undefined
     const response = await sendAbsolute(proxy, target, request, header)
     if (response.status !== 407) return response
     for (const scheme of challengesOf(response.headers.get("proxy-authenticate") ?? undefined)) challenges.add(scheme)
     response.body?.cancel()
     if (header) throw new ProxyAuthError("rejected", { proxy: proxy.origin })
-    if (challenges.size === 0) throw new ProxyAuthError("no-credentials", { proxy: proxy.origin })
+    // A challenge arrived but no provider could produce credentials for it.
+    if (attempted) throw new ProxyAuthError("no-credentials", { proxy: proxy.origin })
   }
   throw new ProxyAuthError("rounds-exceeded", { proxy: proxy.origin })
 }
