@@ -47,6 +47,9 @@ export class ServiceFailureError extends Schema.TaggedErrorClass<ServiceFailureE
   safeMessage: Schema.String,
   service: Schema.optional(Schema.String),
   errorName: Schema.optional(Schema.String),
+  statusCode: Schema.optional(Schema.Number),
+  isRetryable: Schema.optional(Schema.Boolean),
+  responseHeaders: Schema.optional(Schema.Record(Schema.String, Schema.String)),
 }) {}
 
 export type Error =
@@ -86,6 +89,9 @@ export function toRequestError(error: Error) {
         {
           ...(error.service ? { service: error.service } : {}),
           ...(error.errorName ? { errorName: error.errorName } : {}),
+          ...(error.statusCode !== undefined ? { statusCode: error.statusCode } : {}),
+          ...(error.isRetryable !== undefined ? { isRetryable: error.isRetryable } : {}),
+          ...(error.responseHeaders ? { responseHeaders: error.responseHeaders } : {}),
         },
         error.safeMessage,
       )

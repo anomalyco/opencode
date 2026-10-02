@@ -1441,7 +1441,48 @@ describe("ACP service sessions", () => {
 
     expect(error.code).toBe(-32603)
     expect(error.message).toBe("Internal error: Provider request failed")
-    expect(error.data).toEqual({ service: "session", errorName: "APIError" })
+    expect(error.data).toEqual({ service: "session", errorName: "APIError", isRetryable: false })
+  })
+
+  it("passes the provider status and response headers of API errors to the client", async () => {
+    const responseHeaders = { "retry-after": "3600", "x-ratelimit-remaining": "0" }
+    const { service } = makeService([], {
+      prompt: () =>
+        Promise.resolve({
+          data: {
+            info: assistantInfo(
+              { input: 8, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+              {
+                name: "APIError",
+                data: {
+                  message: "Rate limit exceeded",
+                  statusCode: 429,
+                  isRetryable: true,
+                  responseHeaders,
+                  responseBody: '{"error":"rate limited"}',
+                },
+              },
+            ),
+          },
+        }),
+    })
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    const error = await Effect.runPromise(
+      service
+        .prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "hello" }] })
+        .pipe(Effect.mapError(ACPError.toRequestError), Effect.flip),
+    )
+
+    expect(error.code).toBe(-32603)
+    expect(error.message).toBe("Internal error: Rate limit exceeded")
+    expect(error.data).toEqual({
+      service: "session",
+      errorName: "APIError",
+      statusCode: 429,
+      isRetryable: true,
+      responseHeaders,
+    })
   })
 
   it("maps aborted assistant prompt errors to cancelled", async () => {

@@ -884,6 +884,13 @@ const promptResponse = Effect.fn("ACP.promptResponse")(function* (
     service: "session",
     safeMessage: promptErrorMessage(info.error),
     errorName: info.error.name,
+    ...(info.error.name === "APIError"
+      ? {
+          statusCode: info.error.data.statusCode,
+          isRetryable: info.error.data.isRetryable,
+          responseHeaders: info.error.data.responseHeaders,
+        }
+      : {}),
   })
 })
 
