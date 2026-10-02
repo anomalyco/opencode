@@ -1,0 +1,463 @@
+---
+title: SDK
+description: Типобезпечний JS-клієнт для сервера opencode.
+---
+
+import config from "../../../../config.mjs"
+export const typesUrl = `${config.github}/blob/dev/packages/sdk/js/src/gen/types.gen.ts`
+
+JS/TS SDK від opencode надає типобезпечний клієнт для взаємодії з сервером.
+Використовуйте його для створення інтеграцій та програмного керування opencode.
+
+[Дізнайтеся більше](/docs/server) про те, як працює сервер. Приклади дивіться у [проєктах](/docs/ecosystem#projects), створених спільнотою.
+
+---
+
+## Встановлення
+
+Встановіть SDK з npm:
+
+```bash
+npm install @opencode-ai/sdk
+```
+
+---
+
+## Створення клієнта
+
+Створіть екземпляр opencode:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const { client } = await createOpencode()
+```
+
+Це запускає і сервер, і клієнт
+
+#### Параметри
+
+| Параметр    | Тип           | Опис                        | За замовчуванням |
+| ----------- | ------------- | --------------------------- | ---------------- |
+| `hostname`  | `string`      | Ім'я хоста сервера          | `127.0.0.1`      |
+| `port`      | `number`      | Порт сервера                | `4096`           |
+| `signal`    | `AbortSignal` | Сигнал для скасування       | `undefined`      |
+| `timeout`   | `number`      | Тайм-аут у мс для запуску   | `5000`           |
+| `config`    | `Config`      | Об'єкт конфігурації         | `{}`             |
+
+---
+
+## Конфігурація
+
+Ви можете передати об'єкт конфігурації для налаштування поведінки. Екземпляр все одно зчитує ваш `opencode.json`, але ви можете перевизначити або додати конфігурацію безпосередньо:
+
+```javascript
+import { createOpencode } from "@opencode-ai/sdk"
+
+const opencode = await createOpencode({
+  hostname: "127.0.0.1",
+  port: 4096,
+  config: {
+    model: "anthropic/claude-3-5-sonnet-20241022",
+  },
+})
+
+console.log(`Сервер запущено за адресою ${opencode.server.url}`)
+
+opencode.server.close()
+```
+
+## Тільки клієнт
+
+Якщо у вас вже запущено екземпляр opencode, ви можете створити клієнтський екземпляр для підключення до нього:
+
+```javascript
+import { createOpencodeClient } from "@opencode-ai/sdk"
+
+const client = createOpencodeClient({
+  baseUrl: "http://localhost:4096",
+})
+```
+
+#### Параметри
+
+| Параметр        | Тип        | Опис                               | За замовчуванням        |
+| --------------- | ---------- | ---------------------------------- | ----------------------- |
+| `baseUrl`       | `string`   | URL сервера                        | `http://localhost:4096` |
+| `fetch`         | `function` | Власна реалізація fetch            | `globalThis.fetch`      |
+| `parseAs`       | `string`   | Метод парсингу відповіді           | `auto`                  |
+| `responseStyle` | `string`   | Стиль повернення: `data` або `fields` | `fields`             |
+| `throwOnError`  | `boolean`  | Викидати помилки замість повернення | `false`                 |
+
+---
+
+## Типи
+
+SDK включає визначення TypeScript для всіх типів API. Імпортуйте їх безпосередньо:
+
+```typescript
+import type { Session, Message, Part } from "@opencode-ai/sdk"
+```
+
+Усі типи генеруються зі специфікації OpenAPI сервера та доступні у <a href={typesUrl}>файлі типів</a>.
+
+---
+
+## Помилки
+
+SDK може викидати помилки, які ви можете перехоплювати та обробляти:
+
+```typescript
+try {
+  await client.session.get({ path: { id: "invalid-id" } })
+} catch (error) {
+  console.error("Не вдалося отримати сесію:", (error as Error).message)
+}
+```
+
+---
+
+## Структурований вивід
+
+Ви можете запитати структурований JSON-вивід від моделі, вказавши `format` з JSON-схемою. Модель використовуватиме інструмент `StructuredOutput` для повернення валідованого JSON, що відповідає вашій схемі.
+
+### Базове використання
+
+```typescript
+const result = await client.session.prompt({
+  path: { id: sessionId },
+  body: {
+    parts: [{ type: "text", text: "Досліди Anthropic та надай інформацію про компанію" }],
+    format: {
+      type: "json_schema",
+      schema: {
+        type: "object",
+        properties: {
+          company: { type: "string", description: "Назва компанії" },
+          founded: { type: "number", description: "Рік заснування" },
+          products: {
+            type: "array",
+            items: { type: "string" },
+            description: "Основні продукти",
+          },
+        },
+        required: ["company", "founded"],
+      },
+    },
+  },
+})
+
+// Доступ до структурованого виводу
+console.log(result.data.info.structured_output)
+// { company: "Anthropic", founded: 2021, products: ["Claude", "Claude API"] }
+```
+
+### Типи форматів виводу
+
+| Тип           | Опис                                                         |
+| ------------- | ------------------------------------------------------------ |
+| `text`        | За замовчуванням. Стандартна текстова відповідь (без структурованого виводу) |
+| `json_schema` | Повертає валідований JSON, що відповідає наданій схемі       |
+
+### Формат JSON Schema
+
+При використанні `type: 'json_schema'` вкажіть:
+
+| Поле         | Тип             | Опис                                                       |
+| ------------ | --------------- | ---------------------------------------------------------- |
+| `type`       | `'json_schema'` | Обов'язкове. Вказує режим JSON-схеми                       |
+| `schema`     | `object`        | Обов'язкове. Об'єкт JSON Schema, що визначає структуру виводу |
+| `retryCount` | `number`        | Необов'язкове. Кількість повторів валідації (за замовчуванням: 2) |
+
+### Обробка помилок
+
+Якщо моделі не вдається створити правильний структурований вивід після всіх повторів, відповідь міститиме `StructuredOutputError`:
+
+```typescript
+if (result.data.info.error?.name === "StructuredOutputError") {
+  console.error("Не вдалося створити структурований вивід:", result.data.info.error.message)
+  console.error("Спроби:", result.data.info.error.retries)
+}
+```
+
+### Рекомендації
+
+1. **Надавайте чіткі описи** у властивостях схеми, щоб допомогти моделі зрозуміти, які дані витягувати
+2. **Використовуйте `required`** для вказівки обов'язкових полів
+3. **Тримайте схеми сфокусованими** — складні вкладені схеми можуть бути складнішими для правильного заповнення моделлю
+4. **Встановлюйте відповідний `retryCount`** — збільшуйте для складних схем, зменшуйте для простих
+
+---
+
+## API
+
+SDK надає всі API сервера через типобезпечний клієнт.
+
+---
+
+### Global
+
+| Метод             | Опис                          | Відповідь                            |
+| ----------------- | ----------------------------- | ------------------------------------ |
+| `global.health()` | Перевірка стану та версії сервера | `{ healthy: true, version: string }` |
+
+---
+
+#### Приклади
+
+```javascript
+const health = await client.global.health()
+console.log(health.data.version)
+```
+
+---
+
+### App
+
+| Метод          | Опис                  | Відповідь                                   |
+| -------------- | --------------------- | ------------------------------------------- |
+| `app.log()`    | Запис у журнал        | `boolean`                                   |
+| `app.agents()` | Список усіх агентів   | <a href={typesUrl}><code>Agent[]</code></a> |
+
+---
+
+#### Приклади
+
+```javascript
+// Запис у журнал
+await client.app.log({
+  body: {
+    service: "my-app",
+    level: "info",
+    message: "Операцію завершено",
+  },
+})
+
+// Список доступних агентів
+const agents = await client.app.agents()
+```
+
+---
+
+### Project
+
+| Метод               | Опис                | Відповідь                                      |
+| ------------------- | ------------------- | ---------------------------------------------- |
+| `project.list()`    | Список усіх проєктів | <a href={typesUrl}><code>Project[]</code></a>  |
+| `project.current()` | Поточний проєкт     | <a href={typesUrl}><code>Project</code></a>    |
+
+---
+
+#### Приклади
+
+```javascript
+// Список усіх проєктів
+const projects = await client.project.list()
+
+// Поточний проєкт
+const currentProject = await client.project.current()
+```
+
+---
+
+### Path
+
+| Метод        | Опис               | Відповідь                                |
+| ------------- | ------------------ | ---------------------------------------- |
+| `path.get()`  | Отримати поточний шлях | <a href={typesUrl}><code>Path</code></a> |
+
+---
+
+#### Приклади
+
+```javascript
+// Отримати інформацію про поточний шлях
+const pathInfo = await client.path.get()
+```
+
+---
+
+### Config
+
+| Метод                | Опис                                   | Відповідь                                                                                             |
+| -------------------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `config.get()`       | Отримати інформацію про конфігурацію   | <a href={typesUrl}><code>Config</code></a>                                                            |
+| `config.providers()` | Список провайдерів та моделей за замовчуванням | `{ providers: `<a href={typesUrl}><code>Provider[]</code></a>`, default: { [key: string]: string } }` |
+
+---
+
+#### Приклади
+
+```javascript
+const config = await client.config.get()
+
+const { providers, default: defaults } = await client.config.providers()
+```
+
+---
+
+### Sessions
+
+| Метод                                                      | Опис                                  | Примітки                                                                                                                                                                                                                    |
+| ---------------------------------------------------------- | ------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `session.list()`                                           | Список сесій                          | Повертає <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                                      |
+| `session.get({ path })`                                    | Отримати сесію                        | Повертає <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                        |
+| `session.children({ path })`                               | Список дочірніх сесій                 | Повертає <a href={typesUrl}><code>Session[]</code></a>                                                                                                                                                                      |
+| `session.create({ body })`                                 | Створити сесію                        | Повертає <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                        |
+| `session.delete({ path })`                                 | Видалити сесію                        | Повертає `boolean`                                                                                                                                                                                                          |
+| `session.update({ path, body })`                           | Оновити властивості сесії             | Повертає <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                        |
+| `session.init({ path, body })`                             | Проаналізувати додаток та створити `AGENTS.md` | Повертає `boolean`                                                                                                                                                                                          |
+| `session.abort({ path })`                                  | Перервати запущену сесію              | Повертає `boolean`                                                                                                                                                                                                          |
+| `session.share({ path })`                                  | Поділитися сесією                     | Повертає <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                        |
+| `session.unshare({ path })`                                | Скасувати спільний доступ до сесії    | Повертає <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                        |
+| `session.summarize({ path, body })`                        | Підсумувати сесію                     | Повертає `boolean`                                                                                                                                                                                                          |
+| `session.messages({ path })`                               | Список повідомлень у сесії            | Повертає `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}[]`                                                                                                    |
+| `session.message({ path })`                                | Деталі повідомлення                   | Повертає `{ info: `<a href={typesUrl}><code>Message</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                                      |
+| `session.prompt({ path, body })`                           | Надіслати повідомлення-запит          | `body.noReply: true` повертає UserMessage (лише контекст). За замовчуванням повертає <a href={typesUrl}><code>AssistantMessage</code></a> з відповіддю AI. Підтримує `body.outputFormat` для [структурованого виводу](#structured-output) |
+| `session.command({ path, body })`                          | Надіслати команду в сесію             | Повертає `{ info: `<a href={typesUrl}><code>AssistantMessage</code></a>`, parts: `<a href={typesUrl}><code>Part[]</code></a>`}`                                                                                             |
+| `session.shell({ path, body })`                            | Виконати команду оболонки             | Повертає <a href={typesUrl}><code>AssistantMessage</code></a>                                                                                                                                                               |
+| `session.revert({ path, body })`                           | Відкотити повідомлення                | Повертає <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                        |
+| `session.unrevert({ path })`                               | Відновити відкочені повідомлення      | Повертає <a href={typesUrl}><code>Session</code></a>                                                                                                                                                                        |
+| `postSessionByIdPermissionsByPermissionId({ path, body })` | Відповісти на запит дозволу           | Повертає `boolean`                                                                                                                                                                                                          |
+
+---
+
+#### Приклади
+
+```javascript
+// Створення та керування сесіями
+const session = await client.session.create({
+  body: { title: "Моя сесія" },
+})
+
+const sessions = await client.session.list()
+
+// Надіслати повідомлення-запит
+const result = await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    model: { providerID: "anthropic", modelID: "claude-3-5-sonnet-20241022" },
+    parts: [{ type: "text", text: "Привіт!" }],
+  },
+})
+
+// Вставити контекст без відповіді AI (корисно для плагінів)
+await client.session.prompt({
+  path: { id: session.id },
+  body: {
+    noReply: true,
+    parts: [{ type: "text", text: "Ви — корисний помічник." }],
+  },
+})
+```
+
+---
+
+### Files
+
+| Метод                       | Опис                           | Відповідь                                                                                   |
+| --------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------- |
+| `find.text({ query })`      | Пошук тексту у файлах          | Масив об'єктів збігів з `path`, `lines`, `line_number`, `absolute_offset`, `submatches`     |
+| `find.files({ query })`     | Пошук файлів і каталогів за назвою | `string[]` (шляхи)                                                                          |
+| `find.symbols({ query })`   | Пошук символів робочої області | <a href={typesUrl}><code>Symbol[]</code></a>                                                |
+| `file.read({ query })`      | Читання файлу                   | `{ type: "raw" \| "patch", content: string }`                                                |
+| `file.status({ query? })`   | Статус відстежуваних файлів     | <a href={typesUrl}><code>File[]</code></a>                                                  |
+
+`find.files` підтримує кілька необов'язкових полів запиту:
+
+- `type`: `"file"` або `"directory"`
+- `directory`: перевизначити корінь проєкту для пошуку
+- `limit`: максимальна кількість результатів (1–200)
+
+---
+
+#### Приклади
+
+```javascript
+// Пошук та читання файлів
+const textResults = await client.find.text({
+  query: { pattern: "function.*opencode" },
+})
+
+const files = await client.find.files({
+  query: { query: "*.ts", type: "file" },
+})
+
+const directories = await client.find.files({
+  query: { query: "packages", type: "directory", limit: 20 },
+})
+
+const content = await client.file.read({
+  query: { path: "src/index.ts" },
+})
+```
+
+---
+
+### TUI
+
+| Метод                          | Опис                      | Відповідь  |
+| ------------------------------ | ------------------------- | ---------- |
+| `tui.appendPrompt({ body })`   | Додати текст до запиту    | `boolean`  |
+| `tui.openHelp()`               | Відкрити довідку          | `boolean`  |
+| `tui.openSessions()`           | Відкрити вибір сесій      | `boolean`  |
+| `tui.openThemes()`             | Відкрити вибір тем        | `boolean`  |
+| `tui.openModels()`             | Відкрити вибір моделей    | `boolean`  |
+| `tui.submitPrompt()`           | Надіслати поточний запит  | `boolean`  |
+| `tui.clearPrompt()`            | Очистити запит            | `boolean`  |
+| `tui.executeCommand({ body })` | Виконати команду          | `boolean`  |
+| `tui.showToast({ body })`      | Показати сповіщення       | `boolean`  |
+
+---
+
+#### Приклади
+
+```javascript
+// Керування інтерфейсом TUI
+await client.tui.appendPrompt({
+  body: { text: "Додати це до запиту" },
+})
+
+await client.tui.showToast({
+  body: { message: "Завдання виконано", variant: "success" },
+})
+```
+
+---
+
+### Auth
+
+| Метод               | Опис                        | Відповідь  |
+| ------------------- | --------------------------- | ---------- |
+| `auth.set({ ... })` | Встановити облікові дані    | `boolean`  |
+
+---
+
+#### Приклади
+
+```javascript
+await client.auth.set({
+  path: { id: "anthropic" },
+  body: { type: "api", key: "your-api-key" },
+})
+```
+
+---
+
+### Events
+
+| Метод               | Опис                    | Відповідь                 |
+| ------------------- | ----------------------- | ------------------------- |
+| `event.subscribe()` | Потік подій від сервера | Потік подій від сервера   |
+
+---
+
+#### Приклади
+
+```javascript
+// Прослуховування подій у реальному часі
+const events = await client.event.subscribe()
+for await (const event of events.stream) {
+  console.log("Подія:", event.type, event.properties)
+}
+```
