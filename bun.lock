@@ -133,6 +133,7 @@
         "@opentui/solid": "catalog:",
         "@parcel/watcher": "2.5.1",
         "@silvia-odwyer/photon-node": "0.3.4",
+        "diff": "catalog:",
         "effect": "catalog:",
         "immer": "11.1.4",
         "jsonc-parser": "3.3.1",

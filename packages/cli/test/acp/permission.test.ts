@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { AnyRequest, RequestPermissionResponse } from "@agentclientprotocol/sdk"
+import { createTwoFilesPatch } from "diff"
 import { Cause } from "effect"
 import fs from "node:fs/promises"
 import path from "node:path"
@@ -31,6 +32,10 @@ describe("acp permissions over the wire", () => {
         turn(
           sessionID,
           id,
+          toolStarted(sessionID, "call_once", "shell"),
+          toolCalled(sessionID, "call_once", { command: "printf hello" }),
+          toolStarted(sessionID, "call_always", "read"),
+          toolCalled(sessionID, "call_always", { path: "/workspace/file.ts" }),
           permissionAsked(sessionID, "perm_once", {
             action: "shell",
             metadata: { command: "printf hello" },
@@ -101,8 +106,84 @@ describe("acp permissions over the wire", () => {
     expect(acp.permissions[0]?.toolCall).toMatchObject({
       title: "/tmp/outside",
       locations: [{ path: "/tmp/outside/a.ts" }],
-      rawInput: { filepath: "/tmp/outside/a.ts", parentDir: "/tmp/outside" },
     })
+    expect(acp.permissions[0]?.toolCall).not.toHaveProperty("rawInput")
+  })
+
+  test("locates path resources without glob patterns when the ask has no tool locations", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          permissionAsked(sessionID, "perm_external", {
+            action: "external_directory",
+            resources: ["/tmp/outside/*", "/tmp/other/*", "/tmp/outside/*"],
+            metadata: {},
+          }),
+          permissionAsked(sessionID, "perm_read", {
+            action: "read",
+            resources: ["src/[slug].ts", "src/{a,b}.ts", "**/*.ts", "src/?.ts"],
+          }),
+          permissionAsked(sessionID, "perm_search", { action: "websearch", resources: ["acp spec"] }),
+        ),
+      permission: allowOnce,
+    })
+
+    await acp.prompt(acp.sessionId, "hello")
+
+    expect(acp.permissions.map((request) => request.toolCall.locations)).toEqual([
+      [{ path: "/tmp/outside" }, { path: "/tmp/other" }],
+      [{ path: path.resolve("/workspace", "src/[slug].ts") }, { path: path.resolve("/workspace", "src/{a,b}.ts") }],
+      [],
+    ])
+  })
+
+  test("asks under the permission ID when ACP does not track the asking tool call", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          permissionAsked(sessionID, "perm_untracked", {
+            source: { type: "tool", messageID: "msg_tools", id: "call_untracked" },
+          }),
+        ),
+      permission: allowOnce,
+    })
+
+    await acp.prompt(acp.sessionId, "hello")
+
+    expect(acp.permissions.map((request) => request.toolCall.toolCallId)).toEqual(["perm_untracked"])
+    expect(acp.permissions[0]?.toolCall).not.toHaveProperty("rawInput")
+  })
+
+  test("asks about a tracked tool call with its own input", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          toolStarted(sessionID, "call_read", "read"),
+          toolCalled(sessionID, "call_read", { path: "/workspace/file.ts" }),
+          permissionAsked(sessionID, "perm_read", {
+            action: "read",
+            metadata: { files: ["file.ts"] },
+            source: { type: "tool", messageID: "msg_read", id: "call_read" },
+          }),
+        ),
+      permission: allowOnce,
+    })
+
+    await acp.prompt(acp.sessionId, "hello")
+
+    const running = acp.updates.flatMap((item) =>
+      item.update.sessionUpdate === "tool_call_update" && item.update.status === "in_progress"
+        ? [item.update.rawInput]
+        : [],
+    )
+    expect(running).toEqual([{ path: "/workspace/file.ts" }])
+    expect(acp.permissions[0]?.toolCall).toMatchObject({ toolCallId: "call_read", rawInput: running[0] })
   })
 
   test("routes foreground child permissions through the parent ACP session", async () => {
@@ -113,9 +194,10 @@ describe("acp permissions over the wire", () => {
           id,
           childCreated("ses_child", sessionID, "Review code"),
           durableEvent("session.execution.started", { sessionID: "ses_child" }),
+          toolStarted("ses_child", "call_child", "read"),
+          toolCalled("ses_child", "call_child", { path: "/workspace/child.ts" }),
           permissionAsked("ses_child", "perm_child", {
             action: "read",
-            metadata: { path: "/workspace/child.ts" },
             source: { type: "tool", messageID: "msg_child", id: "call_child" },
           }),
           succeeded("ses_child"),
@@ -125,11 +207,17 @@ describe("acp permissions over the wire", () => {
 
     await acp.prompt(acp.sessionId, "hello")
 
+    const childMeta = {
+      "opencode/child-session": { id: "ses_child", parentID: acp.sessionId, depth: 1, title: "Review code" },
+    }
     expect(acp.permissions).toHaveLength(1)
     expect(acp.permissions[0]).toMatchObject({
       sessionId: acp.sessionId,
-      toolCall: { toolCallId: "ses_child:call_child", title: "Review code: /workspace/child.ts" },
+      toolCall: { toolCallId: "ses_child:call_child", title: "Review code: /workspace/child.ts", _meta: childMeta },
     })
+    expect(
+      acp.updates.flatMap((item) => (item.update.sessionUpdate === "tool_call" ? [item.update._meta] : [])),
+    ).toEqual([childMeta])
     expect(acp.server.replies).toEqual([{ sessionID: "ses_child", requestID: "perm_child", decision: "once" }])
   })
 
@@ -149,10 +237,17 @@ describe("acp permissions over the wire", () => {
     )
     await acp.until(() => acp.server.replies.length === 1, "background permission reply")
 
+    const childMeta = {
+      "opencode/child-session": { id: "ses_background", parentID: acp.sessionId, depth: 1, title: "Research" },
+    }
     expect(acp.permissions).toMatchObject([
       {
         sessionId: acp.sessionId,
-        toolCall: { toolCallId: "ses_background:perm_background", title: "Research: /workspace/notes.md" },
+        toolCall: {
+          toolCallId: "ses_background:perm_background",
+          title: "Research: /workspace/notes.md",
+          _meta: childMeta,
+        },
       },
     ])
     expect(acp.server.replies).toEqual([
@@ -353,27 +448,24 @@ describe("acp permissions over the wire", () => {
 })
 
 describe("acp edit previews over the wire", () => {
-  test("previews edits during approval", async () => {
+  test("previews core's edit diff during approval", async () => {
     await using dir = await tmpdir()
     const file = path.join(dir.path, "file.ts")
-    await fs.writeFile(file, "before")
+    await fs.writeFile(file, "one\r\ntwo\r\n")
     await using acp = await startWire({
-      onPrompt: ({ sessionID, id }) => [
-        delivered(sessionID, id),
-        toolStarted(sessionID, "call_edit", "edit"),
-        toolCalled(sessionID, "call_edit", { path: "file.ts", oldString: "before", newString: "after" }),
-        permissionAsked(sessionID, "perm_edit", {
-          action: "edit",
-          source: { type: "tool", messageID: "msg_edit", id: "call_edit" },
-        }),
-      ],
-      onPermissionReply: async ({ sessionID }) => {
-        await fs.writeFile(file, "after")
-        return [
-          toolSucceeded(sessionID, "call_edit", { files: [{ file: "file.ts" }], replacements: 1 }, "edited"),
-          succeeded(sessionID),
-        ]
-      },
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          toolStarted(sessionID, "call_edit", "edit"),
+          toolCalled(sessionID, "call_edit", { path: "file.ts", oldString: "one\ntwo", newString: "one\nthree" }),
+          permissionAsked(sessionID, "perm_edit", {
+            action: "edit",
+            resources: ["file.ts"],
+            metadata: { files: [fileDiff("file.ts", "one\r\ntwo\r\n", "one\r\nthree\r\n")] },
+            source: { type: "tool", messageID: "msg_edit", id: "call_edit" },
+          }),
+        ),
       permission: allowOnce,
     })
     await acp.initialize()
@@ -385,7 +477,7 @@ describe("acp edit previews over the wire", () => {
       title: "file.ts",
       kind: "edit",
       locations: [{ path: file }],
-      content: [{ type: "diff", path: file, oldText: "before", newText: "after" }],
+      content: [{ type: "diff", path: file, oldText: "one\r\ntwo\r\n", newText: "one\r\nthree\r\n" }],
     })
   })
 
@@ -443,6 +535,85 @@ describe("acp edit previews over the wire", () => {
         { type: "diff", path: path.join(dir.path, "second.ts"), oldText: "alpha\n", newText: "beta\n" },
       ],
     })
+  })
+
+  test("previews added files as new and deleted files as empty", async () => {
+    await using dir = await tmpdir()
+    await fs.writeFile(path.join(dir.path, "gone.ts"), "gone\n")
+    const patchText = ["*** Begin Patch", "*** Add File: added.ts", "+one", "*** End Patch"].join("\n")
+    await using acp = await startWire({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          toolStarted(sessionID, "call_write", "write"),
+          toolCalled(sessionID, "call_write", { path: "written.ts", content: "two\n" }),
+          permissionAsked(sessionID, "perm_write", {
+            action: "edit",
+            metadata: { files: [fileDiff("written.ts", "", "two\n", "added")] },
+            source: { type: "tool", messageID: "msg_write", id: "call_write" },
+          }),
+          toolStarted(sessionID, "call_patch", "patch"),
+          toolCalled(sessionID, "call_patch", { patchText }),
+          permissionAsked(sessionID, "perm_patch", {
+            action: "edit",
+            source: { type: "tool", messageID: "msg_patch", id: "call_patch" },
+          }),
+          permissionAsked(sessionID, "perm_delete", {
+            action: "edit",
+            metadata: { files: [fileDiff("gone.ts", "gone\n", "", "deleted")] },
+          }),
+        ),
+      permission: allowOnce,
+    })
+    await acp.initialize()
+    const session = await acp.newSession(dir.path)
+
+    await acp.prompt(session.sessionId, "hello")
+
+    expect(acp.permissions.map((request) => request.toolCall.content)).toEqual([
+      [{ type: "diff", path: path.join(dir.path, "written.ts"), oldText: null, newText: "two\n" }],
+      [{ type: "diff", path: path.join(dir.path, "added.ts"), oldText: null, newText: "one\n" }],
+      [{ type: "diff", path: path.join(dir.path, "gone.ts"), oldText: "gone\n", newText: "" }],
+    ])
+  })
+
+  test("asks without previews when core's diff no longer applies or the file cannot be read", async () => {
+    await using dir = await tmpdir()
+    await fs.writeFile(path.join(dir.path, "file.ts"), "changed\n")
+    await fs.mkdir(path.join(dir.path, "folder"))
+    await using acp = await startWire({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          permissionAsked(sessionID, "perm_stale", {
+            action: "edit",
+            resources: ["file.ts"],
+            metadata: { files: [fileDiff("file.ts", "one\n", "two\n")] },
+          }),
+          permissionAsked(sessionID, "perm_folder", {
+            action: "edit",
+            resources: ["folder"],
+            metadata: { files: [fileDiff("folder", "one\n", "two\n")] },
+          }),
+        ),
+      permission: allowOnce,
+    })
+    await acp.initialize()
+    const session = await acp.newSession(dir.path)
+
+    await acp.prompt(session.sessionId, "hello")
+
+    expect(acp.permissions.map((request) => request.toolCall)).toMatchObject([
+      { kind: "edit", locations: [{ path: path.join(dir.path, "file.ts") }] },
+      { kind: "edit", locations: [{ path: path.join(dir.path, "folder") }] },
+    ])
+    expect(acp.permissions.map((request) => request.toolCall.content)).toEqual([undefined, undefined])
+    expect(decisions(acp)).toEqual([
+      ["perm_stale", "once"],
+      ["perm_folder", "once"],
+    ])
   })
 
   test("asks without previews when a patch does not apply to the current file", async () => {
@@ -562,4 +733,8 @@ describe("acp edit previews over the wire", () => {
 
 function decisions(acp: Wire) {
   return acp.server.replies.map((reply) => [reply.requestID, reply.decision])
+}
+
+function fileDiff(file: string, before: string, after: string, status: "added" | "deleted" | "modified" = "modified") {
+  return { file, patch: createTwoFilesPatch(file, file, before, after), additions: 1, deletions: 1, status }
 }

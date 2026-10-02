@@ -45,22 +45,48 @@ describe("acp content conversion", () => {
     ])
   })
 
-  test("image block with http URI becomes a file part", () => {
+  test("image block with only a data URL URI becomes a file part", () => {
+    expect(
+      contentBlockToParts({ type: "image", data: "", mimeType: "image/png", uri: "data:image/png;base64,AAAA" }),
+    ).toEqual([{ type: "file", url: "data:image/png;base64,AAAA", filename: "image", mime: "image/png" }])
+  })
+
+  test("image block with only an http URI becomes a markdown link", () => {
     expect(
       contentBlockToParts({
         type: "image",
         data: "",
         mimeType: "image/jpeg",
-        uri: "http://example.com/assets/photo.jpg",
+        uri: "https://example.com/assets/photo.jpg",
       }),
-    ).toEqual([
-      {
-        type: "file",
-        url: "http://example.com/assets/photo.jpg",
-        filename: "photo.jpg",
-        mime: "image/jpeg",
-      },
+    ).toEqual([{ type: "text", text: "[photo.jpg](https://example.com/assets/photo.jpg)" }])
+    expect(
+      contentBlockToParts({ type: "image", data: "", mimeType: "image/png", uri: "https://example.com/" }),
+    ).toEqual([{ type: "text", text: "[image](https://example.com/)" }])
+    expect(
+      contentBlockToParts({ type: "image", data: "", mimeType: "image/png", uri: "http://example.com/a.png" }),
+    ).toEqual([{ type: "text", text: "[a.png](http://example.com/a.png)" }])
+  })
+
+  test("image block with only a URI of another scheme or a bare path becomes a markdown link", () => {
+    expect(contentBlockToParts({ type: "image", data: "", mimeType: "image/png", uri: "ftp://host/a.png" })).toEqual([
+      { type: "text", text: "[a.png](ftp://host/a.png)" },
     ])
+    expect(contentBlockToParts({ type: "image", data: "", mimeType: "image/png", uri: "assets/b.png" })).toEqual([
+      { type: "text", text: "[b.png](assets/b.png)" },
+    ])
+  })
+
+  test("image block with only a file URI becomes a file part", () => {
+    expect(
+      contentBlockToParts({ type: "image", data: "", mimeType: "image/png", uri: "file:///tmp/screenshot.png" }),
+    ).toEqual([{ type: "file", url: "file:///tmp/screenshot.png", filename: "screenshot.png", mime: "image/png" }])
+  })
+
+  test("image block with only a zed path becomes a file part named after the path", () => {
+    expect(
+      contentBlockToParts({ type: "image", data: "", mimeType: "image/png", uri: "zed://file?path=/tmp/shot.png" }),
+    ).toEqual([{ type: "file", url: pathToFileURL("/tmp/shot.png").href, filename: "shot.png", mime: "image/png" }])
   })
 
   test("resource_link file URL becomes a file part with name and fallback mime", () => {

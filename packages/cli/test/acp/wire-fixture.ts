@@ -8,6 +8,7 @@ import {
   type AgentRequestParamsByMethod,
   type AgentRequestResponsesByMethod,
   type AnyMessage,
+  type CompactionCapabilities,
   type ContentBlock,
   type CreateElicitationRequest,
   type CreateElicitationResponse,
@@ -164,6 +165,7 @@ export type InitializeOptions = {
   readonly childSessionUpdates?: boolean
   readonly terminalAuth?: boolean
   readonly elicitation?: boolean
+  readonly compaction?: CompactionCapabilities | null
 }
 
 export const testModel = {
@@ -370,6 +372,7 @@ export function permissionAsked(
   id: string,
   input: {
     readonly action?: string
+    readonly resources?: EventData<"permission.asked">["resources"]
     readonly metadata?: EventData<"permission.asked">["metadata"]
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
   } = {},
@@ -378,7 +381,7 @@ export function permissionAsked(
     id,
     sessionID,
     action: input.action ?? "shell",
-    resources: ["*"],
+    resources: input.resources ?? ["*"],
     metadata: input.metadata ?? { command: "printf hello" },
     ...(input.source ? { source: input.source } : {}),
   })
@@ -490,6 +493,7 @@ export async function startWire(options: WireOptions = {}) {
       clientCapabilities: {
         ...(capabilities.writeTextFile ? { fs: { writeTextFile: true, readTextFile: false } } : {}),
         ...(capabilities.elicitation ? { elicitation: { form: {} } } : {}),
+        ...(capabilities.compaction !== undefined ? { session: { compaction: capabilities.compaction } } : {}),
         _meta: {
           ...(capabilities.childSessionUpdates ? { "opencode/child-session-updates": true } : {}),
           ...(capabilities.terminalAuth ? { "terminal-auth": true } : {}),
@@ -565,7 +569,7 @@ function startServer(options: WireOptions, changed: () => void) {
   const selections: Selection[] = []
   const interrupts: string[] = []
   const replies: Array<{ readonly sessionID: string; readonly requestID: string; readonly decision: string }> = []
-  const cancelledForms: Array<{ readonly sessionID: string; readonly formID: string }> = []
+  const cancelledForms: Array<{ readonly sessionID: string; readonly formID: string; readonly message?: string }> = []
   const repliedForms: FormReply[] = []
   const mcp: Array<{ readonly name: string; readonly directory?: string; readonly config: unknown }> = []
   const fake = {
@@ -827,8 +831,8 @@ function startServer(options: WireOptions, changed: () => void) {
         }),
       },
       "/api/session/:sessionID/form/:formID": {
-        DELETE: route(async (req) => {
-          const form = { sessionID: req.params.sessionID, formID: req.params.formID }
+        DELETE: route(async (req, query) => {
+          const form = { sessionID: req.params.sessionID, formID: req.params.formID, message: query.message }
           fake.cancelledForms.push(form)
           await emit(options.onFormCancel?.(form))
           return noContent()

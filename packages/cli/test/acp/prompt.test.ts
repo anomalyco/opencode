@@ -142,6 +142,44 @@ describe("acp prompt turns over the wire", () => {
     ])
   })
 
+  test("attaches local image links and references remote or unreadable ones in place", async () => {
+    await using dir = await tmpdir()
+    const local = pathToFileURL(path.join(dir.path, "local.png")).href
+    const missing = pathToFileURL(path.join(dir.path, "missing.png")).href
+    await Bun.write(path.join(dir.path, "local.png"), "png")
+    await using acp = await startSession()
+
+    const response = await acp.prompt(acp.sessionId, [
+      { type: "text", text: "compare" },
+      { type: "image", data: "", mimeType: "image/png", uri: "https://example.com/remote.png" },
+      { type: "image", data: "", mimeType: "image/png", uri: local },
+      { type: "image", data: "", mimeType: "image/png", uri: missing },
+    ])
+
+    expect(response.stopReason).toBe("end_turn")
+    expect(acp.server.submissions).toEqual([
+      expect.objectContaining({
+        kind: "prompt",
+        text: `compare\n[remote.png](https://example.com/remote.png)\n[missing.png](${missing})`,
+        files: [{ uri: local, name: "local.png" }],
+      }),
+    ])
+  })
+
+  test("rejects an image with neither data nor uri as invalid params", async () => {
+    await using acp = await startSession()
+
+    expect(
+      await rpcError(
+        acp.prompt(acp.sessionId, [
+          { type: "text", text: "look" },
+          { type: "image", data: "", mimeType: "image/png" },
+        ]),
+      ),
+    ).toMatchObject({ code: -32602, message: expect.stringContaining("image content has no data or uri") })
+    expect(acp.server.submissions).toEqual([])
+  })
+
   test("returns turn usage and publishes current context usage with cumulative session cost", async () => {
     const assistantTokens = { input: 100, output: 40, reasoning: 7, cache: { read: 11, write: 13 } }
     await using acp = await startSession({

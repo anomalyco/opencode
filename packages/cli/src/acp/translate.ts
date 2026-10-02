@@ -6,17 +6,16 @@ import type {
   SessionStructuredError,
   TokenUsageInfo,
 } from "@opencode/client/promise"
-import { Event } from "@opencode/schema/event"
-import { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
+import { ACPCompaction } from "./compaction"
 import { partsToContentChunks, type ReplayPart } from "./content"
 import { ACPError } from "./error"
+import type { ACPService } from "./service"
 import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate, type ToolInput } from "./tool"
 
 export const ChildSessionUpdatesCapability = "opencode/child-session-updates"
 export const ChildSessionUpdateMethod = "opencode/session/child_update"
 const RetryMeta = "opencode/retry"
-const CompactionMeta = "opencode/compaction"
 
 export type TurnStart = { readonly type: "input" | "compaction"; readonly id: string }
 
@@ -27,6 +26,8 @@ export type Context = {
   readonly cwd: string
   readonly start: TurnStart
   readonly childUpdates: boolean
+  /** Whether the client advertised `session.compaction`, so compactions use the standard session updates. */
+  readonly compaction: boolean
   /** A background consumer follows open children after the parent turn ends; it never writes `session/update`. */
   readonly mode: "turn" | "background"
 }
@@ -72,7 +73,7 @@ export type TurnState = {
   readonly started: boolean
   readonly tools: ReadonlyMap<string, Tool>
   readonly retries: ReadonlyMap<string, RetryStatus>
-  readonly compactions: ReadonlyMap<string, string>
+  readonly compactions: ACPCompaction.Tracked
   readonly children: ReadonlyMap<string, ChildSession>
   readonly openChildren: ReadonlySet<string>
   /** Forms asked of the client that the server has not yet answered or cancelled. */
@@ -108,18 +109,6 @@ export type Step = {
   readonly state: TurnState
   readonly outputs: ReadonlyArray<Output>
   readonly terminal?: Terminal
-}
-
-type CompactionEvent = Extract<
-  EventSubscribeOutput,
-  { readonly type: "session.compaction.started" | "session.compaction.ended" | "session.compaction.failed" }
->
-
-type CompactionMarker = {
-  readonly status: "started" | "completed" | "failed"
-  readonly messageId: string
-  readonly reason: "auto" | "manual"
-  readonly error?: SessionStructuredError
 }
 
 export const initial: TurnState = {
@@ -207,11 +196,20 @@ export function step(state: TurnState, event: EventSubscribeOutput, ctx: Context
     case "session.compaction.started":
     case "session.compaction.ended":
     case "session.compaction.failed": {
-      const compacted = compactionMarker(event, state.compactions)
-      return {
-        state: { ...state, compactions: compacted.compactions },
-        outputs: compacted.marker ? send(compactionUpdate(compacted.marker)) : [],
-      }
+      const applied = ACPCompaction.apply(
+        event,
+        state.compactions,
+        ACPCompaction.usesStandardUpdates(ctx, child !== undefined),
+      )
+      return { state: { ...state, compactions: applied.tracked }, outputs: applied.updates.flatMap(send) }
+    }
+    case "session.compaction.delta": {
+      const update = ACPCompaction.chunk(
+        state.compactions.get(eventSessionID),
+        event.data.text,
+        ACPCompaction.usesStandardUpdates(ctx, child !== undefined),
+      )
+      return { state, outputs: update ? send(update) : [] }
     }
     case "session.text.delta":
       return {
@@ -378,29 +376,42 @@ export function response(state: TurnState, sessionID: string, terminal: Terminal
   return { stopReason, ...(usage ? { usage } : {}), _meta: retry ? { [RetryMeta]: retry } : {} }
 }
 
-/** Fails the tools a cancelled turn left open, for when the server's wind-down never reports them. */
-export function abandonTools(state: TurnState, ctx: Context): Step {
+/**
+ * Fails the tools and cancels the session's compaction a cancelled turn left open, for when the server's wind-down
+ * never reports them. Child compactions are left to the consumer that follows children after the turn.
+ */
+export function abandon(state: TurnState, ctx: Context): Step {
+  const compaction = state.compactions.get(ctx.sessionID)
   return {
-    state: { ...state, tools: new Map() },
-    outputs: [...state.tools.values()].flatMap((tool) =>
-      route(ctx, state.children.get(tool.sessionID), {
-        sessionUpdate: "tool_call_update",
-        ...errorToolUpdate({
-          toolCallId: tool.id,
-          toolName: tool.name,
-          input: tool.input,
-          metadata: tool.metadata,
-          content: [],
-          error: "Cancelled",
-          cwd: ctx.cwd,
+    state: { ...state, tools: new Map(), compactions: without(state.compactions, ctx.sessionID) },
+    outputs: [
+      ...[...state.tools.values()].flatMap((tool) =>
+        route(ctx, state.children.get(tool.sessionID), {
+          sessionUpdate: "tool_call_update",
+          ...errorToolUpdate({
+            toolCallId: tool.id,
+            toolName: tool.name,
+            input: tool.input,
+            metadata: tool.metadata,
+            content: [],
+            error: "Cancelled",
+            cwd: ctx.cwd,
+          }),
         }),
-      }),
-    ),
+      ),
+      ...(compaction
+        ? route(ctx, undefined, ACPCompaction.abandon(compaction, ACPCompaction.usesStandardUpdates(ctx, false)))
+        : []),
+    ],
   }
 }
 
 /** Lazy, so a message that fails to translate part way still replays the updates before the failure. */
-export function* replayMessage(message: SessionMessageInfo, cwd: string): Generator<SessionUpdate> {
+export function* replayMessage(
+  message: SessionMessageInfo,
+  cwd: string,
+  capabilities: ACPService.Capabilities,
+): Generator<SessionUpdate> {
   if (message.type === "user") {
     yield { sessionUpdate: "user_message_chunk", messageId: message.id, content: { type: "text", text: message.text } }
     const files: ReplayPart[] = (message.files ?? []).map((file) => ({
@@ -413,14 +424,9 @@ export function* replayMessage(message: SessionMessageInfo, cwd: string): Genera
       yield { sessionUpdate: "user_message_chunk", messageId: message.id, ...chunk }
     return
   }
-  // A running compaction has no live turn on this connection to settle it, so replay only settled ones.
-  if (message.type === "compaction" && message.status !== "running") {
-    yield compactionUpdate({
-      status: message.status,
-      messageId: message.id,
-      reason: message.reason,
-      ...(message.status === "failed" ? { error: message.error } : {}),
-    })
+  if (message.type === "compaction") {
+    const update = ACPCompaction.replay(message, capabilities.compaction)
+    if (update) yield update
     return
   }
   if (message.type !== "assistant") return
@@ -567,40 +573,18 @@ function toolKey(sessionID: string, id: string) {
   return `${sessionID}:${id}`
 }
 
-// Message IDs follow core's compaction message projection, so live markers match replayed ones.
-function compactionMarker(event: CompactionEvent, compactions: ReadonlyMap<string, string>) {
-  const sessionID = event.data.sessionID
-  if (event.type === "session.compaction.started") {
-    const messageId = event.data.inputID ?? SessionMessage.ID.fromEvent(Event.ID.make(event.id))
-    const marker: CompactionMarker = { status: "started", messageId, reason: event.data.reason }
-    return { marker, compactions: new Map(compactions).set(sessionID, messageId) }
-  }
-  const tracked = compactions.get(sessionID)
-  const remaining = without(compactions, sessionID)
-  if (event.type === "session.compaction.ended") {
-    const marker: CompactionMarker | undefined = tracked
-      ? { status: "completed", messageId: tracked, reason: event.data.reason }
-      : undefined
-    return { marker, compactions: remaining }
-  }
-  // Automatic compaction can fail before it starts, for example when there is nothing to compact yet.
-  const marker: CompactionMarker = {
-    status: "failed",
-    messageId: tracked ?? event.data.inputID ?? SessionMessage.ID.fromEvent(Event.ID.make(event.id)),
-    reason: event.data.reason,
-    error: event.data.error,
-  }
-  return { marker, compactions: remaining }
-}
-
-function compactionUpdate(marker: CompactionMarker): SessionUpdate {
-  return { sessionUpdate: "session_info_update", _meta: { [CompactionMeta]: marker } }
-}
-
 function projectChildUpdate(update: SessionUpdate, child: ChildSession) {
   const projected = { ...update }
-  projected._meta = {
-    ...projected._meta,
+  projected._meta = { ...projected._meta, ...childSessionMeta(child) }
+  if (projected.sessionUpdate === "tool_call" || projected.sessionUpdate === "tool_call_update") {
+    projected.toolCallId = `${child.id}:${projected.toolCallId}`
+    if (projected.title && child.title) projected.title = `${child.title}: ${projected.title}`
+  }
+  return projected
+}
+
+export function childSessionMeta(child: ChildSession) {
+  return {
     "opencode/child-session": {
       id: child.id,
       parentID: child.parentID,
@@ -608,11 +592,6 @@ function projectChildUpdate(update: SessionUpdate, child: ChildSession) {
       ...(child.title ? { title: child.title } : {}),
     },
   }
-  if (projected.sessionUpdate === "tool_call" || projected.sessionUpdate === "tool_call_update") {
-    projected.toolCallId = `${child.id}:${projected.toolCallId}`
-    if (projected.title && child.title) projected.title = `${child.title}: ${projected.title}`
-  }
-  return projected
 }
 
 function matchesStart(event: EventSubscribeOutput, start: TurnStart) {
