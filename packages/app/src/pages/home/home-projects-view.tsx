@@ -335,7 +335,8 @@ function HomeProjectList(props: HomeProjectListProps) {
       onDragEnd={(event) => {
         const source = event.operation.source
         if (event.canceled || !isSortable(source)) return
-        if (source.initialIndex !== source.index) props.onMoveProject(props.server, source.id.toString(), source.index)
+        if (source.initialIndex === source.index) return
+        props.onMoveProject(props.server, source.id.toString(), source.index)
         if (props.selection().server !== ServerConnection.key(props.server))
           props.onSelectProject(props.server, source.id.toString())
       }}
