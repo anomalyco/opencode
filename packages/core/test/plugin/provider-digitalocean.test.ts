@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Clock, Effect, Schedule } from "effect"
 import { TestClock } from "effect/testing"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"

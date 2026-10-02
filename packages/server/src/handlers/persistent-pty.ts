@@ -7,9 +7,9 @@ import {
   PTY_CONNECT_TOKEN_HEADER_VALUE,
 } from "@opencode/protocol/groups/persistent-pty"
 import { Effect, Queue, Semaphore } from "effect"
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
-import { Socket } from "effect/unstable/socket"
+import { HttpServerRequest, HttpServerResponse } from "effect/http"
+import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
+import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { runPtySocket } from "./pty-socket"
@@ -124,7 +124,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
           if (!Number.isSafeInteger(cursor) || cursor < 0) return HttpServerResponse.empty({ status: 400 })
 
           const socket = yield* Effect.orDie(ctx.request.upgrade)
-          const write = yield* socket.writer
+          const writer = yield* socket.writer
           const outbox = yield* Queue.unbounded<string | Uint8Array | Socket.CloseEvent>()
           const input = yield* Semaphore.make(1)
           let attachment: PersistentPty.Attachment | undefined
@@ -187,16 +187,17 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
           const drain = Effect.gen(function* () {
             while (true) {
               const item = yield* Queue.take(outbox)
-              yield* write(item)
+              yield* writer.write(item)
               if (item instanceof Socket.CloseEvent) return
             }
           })
 
-          yield* runPtySocket(
-            drain,
-            socket.runRaw(
-              (message) =>
-                input.withPermit(
+          const receive = Effect.gen(function* () {
+            const reader = yield* socket.reader
+            yield* onOpen
+            while (true) {
+              for (const message of yield* reader.pull) {
+                yield* input.withPermit(
                   Effect.suspend(() => {
                     if (!attachment) return Effect.void
                     const data = typeof message === "string" ? Buffer.from(message) : message
@@ -219,11 +220,12 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
                     if (type === 0) return pty.control(ctx.params.ptyID, attachmentID, cols, rows).pipe(Effect.ignore)
                     return pty.input(ctx.params.ptyID, attachmentID, cols, rows, data.subarray(5)).pipe(Effect.ignore)
                   }),
-                ),
-              { onOpen },
-            ),
-            () => attachment?.detach(),
-          ).pipe(
+                )
+              }
+            }
+          }).pipe(Effect.scoped)
+
+          yield* runPtySocket(drain, receive, () => attachment?.detach()).pipe(
             Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
             Effect.orDie,
           )

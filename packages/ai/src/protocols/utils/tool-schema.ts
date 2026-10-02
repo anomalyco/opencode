@@ -63,6 +63,9 @@ const objectRoot = (schema: JsonSchema): JsonSchema => {
     schema.anyOf.some((branch) => isRecord(branch) && branch.type === "object" && Object.keys(branch).length === 1)
   )
     return { type: "object", ...Object.fromEntries(Object.entries(schema).filter(([key]) => key !== "anyOf")) }
+  // Effect 4 represents an empty Struct as `not: { type: "null" }`; an object root already excludes null.
+  if (isRecord(schema.not) && schema.not.type === "null" && Object.keys(schema.not).length === 1)
+    return { type: "object", ...Object.fromEntries(Object.entries(schema).filter(([key]) => key !== "not")) }
   return { type: "object", ...schema }
 }
 

@@ -43,8 +43,8 @@ export type DeepMutable<T> = T extends string | number | boolean | bigint | symb
  * Nominal wrapper for scalar types. The class itself is a valid schema —
  * pass it directly to `Schema.decodeUnknownSync`, `Schema.decodeEffect`, etc.
  *
- * The runtime value remains an unwrapped primitive. `Schema.brand` supplies
- * the primitive schema behavior and constructor validation, while the class
+ * The runtime value remains an unwrapped primitive. The underlying schema
+ * supplies primitive behavior and constructor validation, while the class
  * supplies the nominal TypeScript identity.
  * Apply checks and annotations to the underlying schema before wrapping it;
  * schema rebuild operations intentionally return the underlying schema shape.
@@ -83,7 +83,8 @@ export function Newtype<Self>() {
       declare readonly _newtype: Tag
     }
 
-    Object.setPrototypeOf(Base, schema.pipe(Schema.brand(tag)))
+    // The class carries the nominal type; Effect 4's brand is type-only and no longer stores the tag on the schema.
+    Object.setPrototypeOf(Base, schema)
     return Base as unknown as NewtypeSchema<Self, Tag, S>
   }
 }

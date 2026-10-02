@@ -92,7 +92,8 @@
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
     "@types/which": "3.0.4",
-    "drizzle-kit": "catalog:"
+    "drizzle-kit": "catalog:",
+    "fast-check": "4.9.0"
   },
   "dependencies": {
     "@ai-sdk/cohere": "3.0.27",

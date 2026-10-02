@@ -54,7 +54,7 @@
     "electron-builder": "26.15.7",
     "electron-vite": "6.0.0-beta.1",
     "solid-js": "catalog:",
-    "typescript": "~5.6.2",
+    "typescript": "catalog:",
     "vite": "8.2.2"
   },
   "optionalDependencies": {

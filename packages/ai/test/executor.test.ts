@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Ref, Stream } from "effect"
-import { Headers, HttpClientError, HttpClientRequest } from "effect/unstable/http"
+import { Headers, HttpClientError, HttpClientRequest } from "effect/http"
 import { LLM, AIError, HttpContext, InvalidProviderOutputError, TransportError } from "../src/index.js"
 import { LLMClient, RequestExecutor, WebSocketTransport, type WebSocketChannelExecutor } from "../src/route.js"
 import { route } from "../src/protocols/openai-chat.js"

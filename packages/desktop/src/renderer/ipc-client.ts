@@ -1,5 +1,5 @@
 import type { Effect } from "effect"
-import type { RpcMessage } from "effect/unstable/rpc"
+import type { RpcMessage } from "effect/rpc"
 import type { DesktopRpcClient } from "../shared/ipc-rpc"
 import type { DesktopEvent } from "../shared/ipc-rpc/events"
 import { IpcTransportPort, omitUndefined } from "../shared/ipc-transport"

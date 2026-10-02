@@ -2,7 +2,7 @@ import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Deferred, Duration, Effect, Option, Schema, Semaphore, Stream } from "effect"
-import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server, ServerResponse } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"

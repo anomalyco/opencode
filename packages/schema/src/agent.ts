@@ -10,10 +10,10 @@ import { PositiveInt, statics } from "./schema.js"
 
 const Updated = ephemeral({ type: "agent.updated", schema: {} })
 
-export const ID = Schema.String.pipe(Schema.brand("Agent.ID"))
+export const ID = Schema.String.pipe(Schema.brand("Agent.ID"), Schema.annotate({ identifier: "Agent.ID" }))
 export type ID = typeof ID.Type
 
-export const Name = Schema.String.pipe(Schema.brand("Agent.Name"))
+export const Name = Schema.String.pipe(Schema.brand("Agent.Name"), Schema.annotate({ identifier: "Agent.Name" }))
 export type Name = typeof Name.Type
 
 export const Color = Schema.String.annotate({ identifier: "Agent.Color" })

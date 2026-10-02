@@ -45,13 +45,13 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.integration.oauth)).toEqual(["connect", "status", "complete", "cancel"])
   expect(Object.keys(client.integration.command)).toEqual(["connect", "status", "cancel"])
   expect(Object.keys(client.websearch)).toEqual(["providers", "query"])
-  expect(Object.keys(client.file)).toEqual(["read", "list", "find"])
-  expect(Object.keys(client.vcs)).toEqual(["get", "base", "status", "branches", "diff"])
+  expect(Object.keys(client.file)).toEqual(["read", "list", "find", "write"])
+  expect(Object.keys(client.vcs)).toEqual(["get", "base", "status", "branch", "diff"])
   expect(Object.keys(client.pty)).toEqual(["list", "create", "get", "update", "remove", "connect"])
   expect(Object.keys(client.pty.connect)).toEqual(["token"])
   expect(Object.keys(client.experimental)).toEqual(["persistentPty"])
   expect(client.experimental.persistentPty.read).toBeFunction()
-  expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "timeout", "output", "remove"])
+  expect(Object.keys(client.shell)).toEqual(["list", "create", "get", "output", "remove"])
   expect(Object.keys(client.project)).toEqual(["list", "update"])
   expect(Object.keys(client.worktree)).toEqual(["list", "create", "remove", "refresh"])
 })
@@ -995,7 +995,7 @@ test("session methods use the public HTTP contract", async () => {
     ["POST", "http://localhost:3000/api/experimental/session/ses_test/wait"],
     ["GET", "http://localhost:3000/api/session/ses_test/context"],
     ["GET", "http://localhost:3000/api/experimental/session/ses_test/log?after=0"],
-    ["POST", "http://localhost:3000/api/session/ses_test/interrupt?continue=true"],
+    ["POST", "http://localhost:3000/api/session/ses_test/interrupt"],
     ["GET", "http://localhost:3000/api/session/ses_test/message/msg_model"],
   ])
   const viewBody = requests.find((request) => request.url.endsWith("/api/session/ses_test/view"))?.init?.body

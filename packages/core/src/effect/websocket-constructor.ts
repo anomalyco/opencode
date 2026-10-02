@@ -3,11 +3,10 @@ import { NodeWS } from "@effect/platform-node/NodeSocket"
 import { HttpProxyAgent } from "http-proxy-agent"
 import { HttpsProxyAgent } from "https-proxy-agent"
 import { Layer } from "effect"
-import { Headers } from "effect/unstable/http"
-import { Socket } from "effect/unstable/socket"
+import { Socket } from "effect/socket"
 
 interface WebSocketOptions {
-  readonly headers?: Headers.Headers
+  readonly headers?: Readonly<Record<string, string>>
   readonly protocols?: string | Array<string>
 }
 
@@ -48,10 +47,9 @@ const proxy = (value: string, environment: Environment = process.env) => {
   )
 }
 
-const constructorOptions = (input: string | Array<string> | undefined): WebSocketOptions => {
+const constructorOptions = (input: Socket.WebSocketConstructorOptions | undefined): WebSocketOptions => {
   if (typeof input === "string" || Array.isArray(input)) return { protocols: input }
-  // AI routes pass handshake options through Effect's browser-shaped constructor.
-  return (input ?? {}) as WebSocketOptions
+  return input ?? {}
 }
 
 const proxyAgent = (url: string, selectedProxy: string | undefined) => {

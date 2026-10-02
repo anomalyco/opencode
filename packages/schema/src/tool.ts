@@ -8,7 +8,7 @@ import type { SessionMessage } from "./session-message.js"
 
 export type Metadata = Readonly<Record<string, any>>
 
-export const CallID = Schema.String.pipe(Schema.brand("Tool.CallID"))
+export const CallID = Schema.String.pipe(Schema.brand("Tool.CallID"), Schema.annotate({ identifier: "Tool.CallID" }))
 export type CallID = typeof CallID.Type
 
 export interface Context {

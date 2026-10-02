@@ -1,6 +1,6 @@
 import { Worktree } from "@opencode/schema/worktree"
 import { Schema } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, HttpApiSchema, OpenApi } from "effect/http-api"
 import { Project } from "@opencode/schema/project"
 import { ProjectNotFoundError } from "../errors.js"
 

@@ -3,7 +3,8 @@ import type { RpcClient } from "@opencode/client/effect/api"
 import type { Session } from "@opencode/schema/session"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { BrowserProxy } from "@opencode/plugin-browser/proxy"
-import { Effect, Encoding } from "effect"
+import { Effect } from "effect"
+import { Base64 } from "effect/encoding"
 
 export type BrowserNetwork = Effect.Success<ReturnType<typeof createBrowserNetwork>>
 
@@ -24,7 +25,7 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
         write: (tunnelID, data, end, signal) =>
           Effect.runPromise(
             input.rpc["tunnel.write"](
-              { ...input.attachment, tunnelID, data: Encoding.encodeBase64(data), end },
+              { ...input.attachment, tunnelID, data: Base64.encode(data), end },
               options,
             ),
             { signal },

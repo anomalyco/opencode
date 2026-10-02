@@ -6,7 +6,7 @@ import {
   HttpClientError,
   HttpClientRequest,
   HttpClientResponse,
-} from "effect/unstable/http"
+} from "effect/http"
 import { fileSystem, Service } from "../cassette/store.js"
 import type { RecorderOptions } from "../options.js"
 import { make, redactUrl, type Redactor } from "../redaction/redactor.js"

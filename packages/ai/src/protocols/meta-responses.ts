@@ -1,4 +1,5 @@
-import { Effect, Encoding, Schema } from "effect"
+import { Effect, Schema } from "effect"
+import { Base64 } from "effect/encoding"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { LLMEvent, LLMRequest, Message, ToolResultPart } from "../schema/index.js"
@@ -135,7 +136,7 @@ const HOSTED_TOOLS = {
           "Meta returned an image without data",
           ProviderShared.encodeJson(raw),
         )
-      const data = yield* Effect.fromResult(Encoding.decodeBase64(item.result)).pipe(
+      const data = yield* Effect.fromResult(Base64.decode(item.result)).pipe(
         Effect.mapError((cause) =>
           ProviderShared.eventError(
             ADAPTER,

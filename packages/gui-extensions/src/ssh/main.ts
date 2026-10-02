@@ -1,6 +1,6 @@
 import { NodeServices } from "@effect/platform-node"
 import { Effect, Exit, Fiber, Layer, ManagedRuntime, Schema, Scope, Stream } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { FetchHttpClient } from "effect/http"
 import { Cli, MainStorage, Windows, type Setup } from "../sdk/main"
 import { SshFailure } from "./command"
 import { Ssh, SshConfig } from "./contract"

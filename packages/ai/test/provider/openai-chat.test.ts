@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect, Ref, Schema, Stream } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import {
   Media,
   HttpOptions,

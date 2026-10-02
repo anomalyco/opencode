@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Context, DateTime, Effect, Stream } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import {
   AbsolutePath,
   Agent,
@@ -249,7 +249,7 @@ test("session methods retain decoded Effect inputs and outputs", async () => {
     const created = yield* client.session.create({
       location: Location.Ref.make({ directory: AbsolutePath.make("/tmp/project") }),
     })
-    yield* client.session.view({ sessionID: Session.ID.make("ses_test"), idle: session.data.time.idle })
+    yield* client.session.view({ sessionID: Session.ID.make("ses_test"), idle: DateTime.makeUnsafe(session.data.time.idle) })
     yield* client.session.switchAgent({ sessionID: Session.ID.make("ses_test"), agent: Agent.ID.make("build") })
     yield* client.session.switchModel({
       sessionID: Session.ID.make("ses_test"),

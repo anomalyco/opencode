@@ -1,4 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
+import { extendSchema } from "@opencode/schema/schema"
 import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
@@ -142,7 +143,7 @@ const imageEventTagged = Schema.Union([
   ImageOutputEvent,
   ImageFinishEvent,
 ]).pipe(Schema.toTaggedUnion("type"))
-export const ImageEvent = Object.assign(imageEventTagged, {
+export const ImageEvent = extendSchema(imageEventTagged, {
   is: {
     generationQueued: imageEventTagged.guards["generation-queued"],
     generationProgress: imageEventTagged.guards["generation-progress"],

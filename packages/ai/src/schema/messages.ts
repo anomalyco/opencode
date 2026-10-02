@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { extendSchema } from "@opencode/schema/schema"
 import { Tool } from "@opencode/schema/tool"
 import {
   CacheHint,
@@ -28,7 +29,7 @@ export type SystemPart = Schema.Schema.Type<typeof systemPartSchema>
 
 const makeSystemPart = (text: string): SystemPart => ({ type: "text", text })
 
-export const SystemPart = Object.assign(systemPartSchema, {
+export const SystemPart = extendSchema(systemPartSchema, {
   make: makeSystemPart,
   content: (input?: string | SystemPart | ReadonlyArray<SystemPart>) => {
     if (input === undefined) return []
@@ -76,7 +77,7 @@ const toolResultValueSchema = Schema.Union([
 export type ToolResultValue = Schema.Schema.Type<typeof toolResultValueSchema>
 const isToolResultValue = Schema.is(toolResultValueSchema)
 
-export const ToolResultValue = Object.assign(toolResultValueSchema, {
+export const ToolResultValue = extendSchema(toolResultValueSchema, {
   is: isToolResultValue,
   make: (value: unknown, type: ToolResultValue["type"] = "json"): ToolResultValue => {
     if (isToolResultValue(value)) return value
@@ -90,7 +91,7 @@ export interface ToolOutput {
   readonly content: ReadonlyArray<Tool.Content>
 }
 
-export const ToolOutput = Object.assign(
+export const ToolOutput = extendSchema(
   Schema.Struct({
     structured: Schema.Unknown,
     content: Schema.Array(Tool.Content),
@@ -127,7 +128,7 @@ const toolResultText = (value: unknown) => {
   }
 }
 
-export const ToolCallPart = Object.assign(
+export const ToolCallPart = extendSchema(
   Schema.Struct({
     type: Schema.Literal("tool-call"),
     id: Schema.String,
@@ -145,7 +146,7 @@ export const ToolCallPart = Object.assign(
 )
 export type ToolCallPart = Schema.Schema.Type<typeof ToolCallPart>
 
-export const ToolResultPart = Object.assign(
+export const ToolResultPart = extendSchema(
   Schema.Struct({
     type: Schema.Literal("tool-result"),
     id: Schema.String,
@@ -209,7 +210,7 @@ const compactionPartSchema = Schema.Struct({
   )
   .annotate({ identifier: "LLM.Content.Compaction" })
 export type CompactionPart = typeof compactionPartSchema.Type
-export const CompactionPart = Object.assign(compactionPartSchema, {
+export const CompactionPart = extendSchema(compactionPartSchema, {
   make: (input: Omit<CompactionPart, "type" | "encrypted" | "text"> & CompactionContent): CompactionPart =>
     Schema.decodeUnknownSync(compactionPartSchema)({ type: "compaction", ...input }),
 })
@@ -326,7 +327,7 @@ export type ToolNamespaceEntryInput = ToolNamespaceInput & { readonly type: "nam
 
 export const ToolNamespace: Schema.Codec<ToolNamespace> & {
   readonly make: (input: ToolNamespace | ToolNamespaceInput) => ToolNamespace
-} = Object.assign(
+} = extendSchema(
   Schema.Struct({
     type: Schema.Literal("namespace"),
     name: Schema.String,
@@ -346,7 +347,7 @@ export type ToolEntry = ToolDefinition | ToolNamespace
 export type ToolEntryInput = ToolDefinition.Input | ToolNamespaceEntryInput
 export const ToolEntry: Schema.Codec<ToolEntry> & {
   readonly make: (input: ToolEntryInput) => ToolEntry
-} = Object.assign(
+} = extendSchema(
   Schema.Union([ToolDefinition, ToolNamespace]).pipe(
     Schema.toTaggedUnion("type"),
     Schema.annotate({ identifier: "LLM.ToolEntry" }),

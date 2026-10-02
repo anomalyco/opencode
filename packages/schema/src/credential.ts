@@ -10,6 +10,7 @@ import { Form } from "./form.js"
 
 export const ID = Schema.String.pipe(
   Schema.brand("Credential.ID"),
+  Schema.annotate({ identifier: "Credential.ID" }),
   statics((schema) => ({ create: () => schema.make("cred_" + ascending()) })),
 )
 export type ID = typeof ID.Type

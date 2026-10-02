@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import { NodeSocket } from "@effect/platform-node"
 import { Deferred, Effect, Fiber, Layer, Queue, Scope, Exit } from "effect"
+import { Socket } from "effect/socket"
 import { testEffect } from "../../../core/test/lib/effect"
 import { createAskpass } from "./askpass"
 
@@ -13,15 +14,14 @@ const request = Effect.fn("test.askpass.request")(function* (
 ) {
   const socket = yield* NodeSocket.makeNet({ host: "127.0.0.1", port: Number(env.OPENCODE_SSH_ASKPASS_PORT) })
   const write = yield* socket.writer
+  const pull = yield* Socket.readerString(socket)
   const result = { text: "" }
   yield* Effect.all(
     [
-      socket
-        .runString((text) => {
-          result.text += text
-        })
-        .pipe(Effect.ignore),
-      write(JSON.stringify({ token: env.OPENCODE_SSH_ASKPASS_TOKEN, text, confirm }) + "\n").pipe(Effect.ignore),
+      Effect.forever(
+        pull.pipe(Effect.tap((chunks) => Effect.sync(() => chunks.forEach((chunk) => (result.text += chunk))))),
+      ).pipe(Effect.ignore),
+      write.write(JSON.stringify({ token: env.OPENCODE_SSH_ASKPASS_TOKEN, text, confirm }) + "\n").pipe(Effect.ignore),
     ],
     { concurrency: "unbounded" },
   )

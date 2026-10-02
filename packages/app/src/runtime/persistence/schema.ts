@@ -23,14 +23,23 @@ export function withInitial<S extends Schema.ConstraintCodec<object, unknown>>(
   initial: NoInfer<S["Type"]>,
 ) {
   const schema = isMigrated(definition) ? definition.current : definition
-  const read = isMigrated(definition)
-    ? SchemaParser.decodeUnknownResult(definition.read, { onExcessProperty: "preserve" })
-    : Result.succeed<unknown>
+  const read = isMigrated(definition) ? SchemaParser.decodeUnknownResult(definition.read) : Result.succeed<unknown>
   const encode = Schema.encodeUnknownSync(schema)
   return Schema.Unknown.pipe(
     Schema.decode<Schema.Unknown>({
-      decode: SchemaGetter.transformOrFail((value) =>
-        Effect.fromResult(Result.map(read(value), (stored) => merge(initial, recover(schema.ast, stored, initial)))),
+      decode: SchemaGetter.transformEffect((value) =>
+        Effect.fromResult(
+          Result.map(read(value), (stored) =>
+            merge(
+              initial,
+              recover(
+                schema.ast,
+                Predicate.isObject(value) && Predicate.isObject(stored) ? { ...value, ...stored } : stored,
+                initial,
+              ),
+            ),
+          ),
+        ),
       ),
       encode: SchemaGetter.transform((value) => encode(value)),
     }),

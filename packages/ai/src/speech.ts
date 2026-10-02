@@ -1,4 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
+import { extendSchema } from "@opencode/schema/schema"
 import { ProgressEvent, QueuedEvent } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
@@ -141,7 +142,7 @@ const speechEventTagged = Schema.Union([
   SpeechTimestampsEvent,
   SpeechFinishEvent,
 ]).pipe(Schema.toTaggedUnion("type"))
-export const SpeechEvent = Object.assign(speechEventTagged, {
+export const SpeechEvent = extendSchema(speechEventTagged, {
   is: {
     generationQueued: speechEventTagged.guards["generation-queued"],
     generationProgress: speechEventTagged.guards["generation-progress"],

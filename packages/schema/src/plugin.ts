@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { ephemeral, inventory } from "./event.js"
 import { optional } from "./schema.js"
 
-export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"))
+export const ID = Schema.String.pipe(Schema.brand("Plugin.ID"), Schema.annotate({ identifier: "Plugin.ID" }))
 export type ID = typeof ID.Type
 
 export const Source = Schema.Union([

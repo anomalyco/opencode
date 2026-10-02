@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { extendSchema } from "@opencode/schema/schema"
 import { LLM } from "@opencode/schema/llm"
 import { ContentBlockID, ToolCallID } from "./ids.js"
 import {
@@ -339,7 +340,7 @@ const toolCallID = (value: ToolCallID | string) => ToolCallID.make(value)
  * Lets consumers write `events.filter(LLMEvent.is.toolCall)` instead of
  * `events.filter(LLMEvent.guards["tool-call"])`.
  */
-export const LLMEvent = Object.assign(llmEventTagged, {
+export const LLMEvent = extendSchema(llmEventTagged, {
   compaction: CompactionPart.make,
   stepStart: StepStart.make,
   textStart: (input: WithID<TextStart, ContentBlockID>) => TextStart.make({ ...input, id: contentBlockID(input.id) }),

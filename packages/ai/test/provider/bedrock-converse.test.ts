@@ -1,8 +1,9 @@
 import { EventStreamCodec } from "@smithy/eventstream-codec"
 import { fromUtf8, toUtf8 } from "@smithy/util-utf8"
 import { describe, expect } from "bun:test"
-import { Effect, Encoding, Ref, Schema, Stream } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { Effect, Ref, Schema, Stream } from "effect"
+import { Base64 } from "effect/encoding"
+import { HttpClientRequest } from "effect/http"
 import {
   Media,
   CacheHint,
@@ -866,7 +867,7 @@ describe("Bedrock Converse route", () => {
           reason: { _tag: "InvalidProviderOutput", classification: "incomplete-stream" },
           message: `Incomplete Bedrock Converse event-stream frame: ${partial.length} buffered bytes remain at end of stream`,
         })
-        expect(error.reason.body).toBe(Encoding.encodeBase64(partial))
+        expect(error.reason.body).toBe(Base64.encode(partial))
       }
     }),
   )

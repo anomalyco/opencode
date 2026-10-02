@@ -1,6 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { Duration, Schema } from "effect"
-import { FastCheck } from "effect/testing"
+import { Arbitrary, Duration, Effect, Schema } from "effect"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Info } from "@opencode/schema/config"
 
@@ -80,16 +79,14 @@ describe("ConfigNormalize", () => {
   })
 
   test("preserves arbitrary JSON-round-tripped native configuration", () => {
-    FastCheck.assert(
-      FastCheck.property(Schema.toArbitrary(Info)(FastCheck), (info) => {
-        const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
-        const result = normalized(source)
-        expect(Schema.decodeUnknownSync(Info)(result.encoded)).toEqual(
-          Schema.decodeUnknownSync(Info)(withoutEmptyCompatibilityContainers(source)),
-        )
-      }),
-      { numRuns: 100 },
-    )
+    const infos = Effect.runSync(Arbitrary.sampleEffect(Arbitrary.schema(Info), { count: 100 }))
+    for (const info of infos) {
+      const source = JSON.parse(JSON.stringify(Schema.encodeSync(Info)(info)))
+      const result = normalized(source)
+      expect(Schema.decodeUnknownSync(Info)(result.encoded)).toEqual(
+        Schema.decodeUnknownSync(Info)(withoutEmptyCompatibilityContainers(source)),
+      )
+    }
   })
 
   test("merges named maps by entry and gives valid native entries precedence", () => {

@@ -2,7 +2,7 @@ export * as Git from "./git.js"
 
 import path from "path"
 import { Context, Effect, Layer, Schema } from "effect"
-import { ChildProcess } from "effect/unstable/process"
+import { ChildProcess } from "effect/process"
 import { AbsolutePath, RelativePath } from "./schema.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import { AppProcess } from "@opencode/util/process"

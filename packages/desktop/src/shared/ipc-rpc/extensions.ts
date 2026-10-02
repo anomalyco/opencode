@@ -1,6 +1,6 @@
 import { Schema } from "effect"
-import { Rpc, RpcGroup } from "effect/unstable/rpc"
-import { Transferable } from "effect/unstable/workers"
+import { Rpc, RpcGroup } from "effect/rpc"
+import { Transferable } from "effect/workers"
 
 const text = (maximum: number) => Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(maximum))
 const id = text(256)

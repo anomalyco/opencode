@@ -11,7 +11,7 @@ import { ID, Info, Model, Ref } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { Npm } from "@opencode/util/npm"
 import { Effect, Layer } from "effect"
-import { HttpClient, HttpClientResponse } from "effect/unstable/http"
+import { HttpClient, HttpClientResponse } from "effect/http"
 import { testEffect } from "./lib/effect"
 
 const selected = Info.make({

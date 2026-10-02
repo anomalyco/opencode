@@ -1,6 +1,6 @@
 import { Project } from "@opencode/schema/project"
 import { Schema, Struct } from "effect"
-import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { ProjectNotFoundError } from "../errors.js"
 
 const root = "/api/project"

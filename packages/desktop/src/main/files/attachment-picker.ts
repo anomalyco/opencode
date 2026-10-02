@@ -42,7 +42,7 @@ export function readAttachment(filePath: string, maxBytes = MAX_ATTACHMENT_BYTES
       const fs = yield* FileSystem.FileSystem
       const file = yield* fs.open(filePath, { flag: "r" })
       const info = yield* file.stat
-      if (info.size > FileSystem.Size(maxBytes))
+      if (info.size > BigInt(maxBytes))
         throw new Error(nativeT("desktop.picker.error.sizeLimit", { limit: MAX_ATTACHMENT_BYTES / 1024 / 1024 }))
 
       const bytes = new Uint8Array(Number(info.size))

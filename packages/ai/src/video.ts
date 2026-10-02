@@ -1,4 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
+import { extendSchema } from "@opencode/schema/schema"
 import { Generation, ProgressEvent, QueuedEvent, type AwaitOptions } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
@@ -136,7 +137,7 @@ export const VideoFinishEvent = Schema.Struct({
 const videoEventTagged = Schema.Union([QueuedEvent, ProgressEvent, VideoOutputEvent, VideoFinishEvent]).pipe(
   Schema.toTaggedUnion("type"),
 )
-export const VideoEvent = Object.assign(videoEventTagged, {
+export const VideoEvent = extendSchema(videoEventTagged, {
   is: {
     generationQueued: videoEventTagged.guards["generation-queued"],
     generationProgress: videoEventTagged.guards["generation-progress"],

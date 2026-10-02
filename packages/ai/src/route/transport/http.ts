@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { Headers, HttpClientRequest } from "effect/unstable/http"
+import { Headers, HttpClientRequest } from "effect/http"
 import { Auth } from "../auth.js"
 import { render as renderEndpoint } from "../endpoint.js"
 import { Framing } from "../framing.js"

@@ -14,8 +14,8 @@ import {
   Scope,
   Stream,
 } from "effect"
-import { HttpClient } from "effect/unstable/http"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { HttpClient } from "effect/http"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import type { SshConfig, SshHttp, SshItem, SshStart, SshState } from "./contract"
 import { createAskpass } from "./askpass"
 import { bootstrap } from "./bootstrap"
@@ -337,7 +337,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
 
 const freePort = Effect.gen(function* () {
   const server = yield* NodeSocketServer.make({ host: "127.0.0.1", port: 0 })
-  if (server.address._tag !== "TcpAddress") return yield* Effect.fail(new SshFailure("connection"))
+  if (server.address._tag !== "InetAddressV4") return yield* Effect.fail(new SshFailure("connection"))
   return server.address.port
 }).pipe(Effect.scoped)
 
