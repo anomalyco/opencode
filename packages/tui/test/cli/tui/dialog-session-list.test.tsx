@@ -247,7 +247,7 @@ test.each([
     app
       .captureSpans()
       .lines.find((line) => line.spans.some((span) => span.text.includes(title)))
-      ?.spans.find((span) => span.text.includes("•") || span.text.includes("△"))?.fg
+      ?.spans.find((span) => span.text.includes("●") || span.text.includes("△"))?.fg
 
   try {
     await app.waitForFrame((frame) => frame.includes("Question") && frame.includes("Idle"))
@@ -265,7 +265,7 @@ test.each([
         row(frame, "Question").includes("Answer required") && row(frame, "Permission").includes("Permission required"),
     )
     for (const title of ["Question", "Permission"]) {
-      expect(row(after, title)).toContain(title === "Permission" ? "△" : "•")
+      expect(row(after, title)).toContain(title === "Permission" ? "△" : "●")
       expect(spinning(row(after, title))).toBe(false)
     }
     expect(color("Question")?.toInts()).toEqual(theme.text.feedback.info.base.toInts())
@@ -277,7 +277,7 @@ test.each([
     permission("per_child", "ses_child")
     const blocked = await app.waitForFrame((frame) => row(frame, "Question").includes("Permission required"))
     expect(row(blocked, "Question")).toContain("△")
-    expect(row(blocked, "Question")).not.toContain("•")
+    expect(row(blocked, "Question")).not.toContain("●")
     expect(color("Question")?.toInts()).toEqual(theme.text.feedback.warning.base.toInts())
     for (const reply of ["once", "always", "reject"] as const) {
       permission("per_child", "ses_child")
@@ -318,7 +318,7 @@ test.each([
     })
     const idle = await app.waitForFrame((frame) => !row(frame, "Question").includes("required"))
     expect(spinning(row(idle, "Question"))).toBe(false)
-    expect(row(idle, "Question")).not.toContain("•")
+    expect(row(idle, "Question")).not.toContain("●")
     expect(row(idle, "Question")).not.toContain("△")
   } finally {
     app.renderer.destroy()

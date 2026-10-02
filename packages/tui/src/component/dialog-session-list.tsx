@@ -176,7 +176,7 @@ export function DialogSessionList() {
         gutter: attention
           ? () => (
               <text fg={theme.text.feedback[attention === "permission" ? "warning" : "info"].base}>
-                {attention === "permission" ? "△" : "•"}
+                {attention === "permission" ? "△" : "●"}
               </text>
             )
           : data.session.status(session.id) === "running" ||
