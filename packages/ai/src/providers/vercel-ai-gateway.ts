@@ -9,13 +9,10 @@ import {
   EvaluationRounding,
 } from "../experimental/evaluation.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
-import { MetaResponses } from "../protocols/meta-responses.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
-import { OpenAIResponses } from "../protocols/openai-responses.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { ProviderShared } from "../protocols/shared.js"
 import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
-import { XAIResponses } from "../protocols/xai-responses.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
@@ -124,7 +121,6 @@ const route = <Body, Event, State>(input: {
     defaults: input.defaults,
   })
 
-const responsesDefaults = { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } }
 const messagesRoute = route({
   id: "vercel-ai-gateway-messages",
   protocol: AnthropicMessages.protocol,
@@ -133,37 +129,13 @@ const messagesRoute = route({
   framing: AnthropicMessages.framing,
   defaults: { headers: { "anthropic-version": "2023-06-01" } },
 })
-const openAIResponsesRoute = route({
-  id: "vercel-ai-gateway-openai-responses",
-  protocol: OpenAIResponses.protocol,
-  api: "responses",
-  path: "/responses",
-  framing: Framing.sse,
-  defaults: responsesDefaults,
-})
-const metaResponsesRoute = route({
-  id: "vercel-ai-gateway-meta-responses",
-  protocol: MetaResponses.protocol,
-  api: "responses",
-  path: "/responses",
-  framing: Framing.sse,
-  defaults: responsesDefaults,
-})
-const xaiResponsesRoute = route({
-  id: "vercel-ai-gateway-xai-responses",
-  protocol: XAIResponses.protocol,
-  api: "responses",
-  path: "/responses",
-  framing: Framing.sse,
-  defaults: responsesDefaults,
-})
 const responsesRoute = route({
   id: "vercel-ai-gateway-responses",
   protocol: OpenResponses.protocol,
   api: "responses",
   path: "/responses",
   framing: Framing.sse,
-  defaults: { providerOptions: { store: false } },
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
 })
 const chatRoute = route({
   id: "vercel-ai-gateway-chat",
@@ -173,14 +145,7 @@ const chatRoute = route({
   framing: OpenAIChat.framing,
 })
 
-export const routes = [
-  messagesRoute,
-  openAIResponsesRoute,
-  metaResponsesRoute,
-  xaiResponsesRoute,
-  responsesRoute,
-  chatRoute,
-]
+export const routes = [messagesRoute, responsesRoute, chatRoute]
 
 const Request = Schema.StructWithRest(
   Schema.Struct({
@@ -217,16 +182,8 @@ export const configure = (input: Options = {}) => {
       // Recorded Gateway translations for non-Claude models return thinking with empty signatures.
       compatibility: { requireSignature: modelID.startsWith("anthropic/") },
     })
-  const responses = (modelID: string | ModelID) => {
-    const selected = modelID.startsWith("openai/")
-      ? openAIResponsesRoute
-      : modelID.startsWith("meta/")
-        ? metaResponsesRoute
-        : modelID.startsWith("spacexai/")
-          ? xaiResponsesRoute
-          : responsesRoute
-    return selected.with(configured).model<ProviderOptionsInput>({ id: modelID })
-  }
+  const responses = (modelID: string | ModelID) =>
+    responsesRoute.with(configured).model<ProviderOptionsInput>({ id: modelID })
   const chat = (modelID: string | ModelID) =>
     chatRoute
       .with(configured)
