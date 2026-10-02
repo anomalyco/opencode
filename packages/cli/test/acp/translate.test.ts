@@ -22,6 +22,7 @@ const ctx: ACPTranslate.Context = {
   cwd: "/workspace",
   start: { type: "input", id: "msg_input" },
   childUpdates: false,
+  compaction: false,
   mode: "turn",
 }
 
@@ -164,7 +165,7 @@ describe("acp turn translation", () => {
       failed("ses_child", { type: "aborted", message: "interrupted" }),
     )
 
-    const abandoned = ACPTranslate.abandonTools(result.state, ctx)
+    const abandoned = ACPTranslate.abandon(result.state, ctx)
 
     expect(abandoned.state.tools.size).toBe(0)
     expect(updates(abandoned.outputs)).toEqual([
@@ -177,6 +178,6 @@ describe("acp turn translation", () => {
       }),
       expect.objectContaining({ toolCallId: "ses_child:call_child", status: "failed", title: "Explore: read" }),
     ])
-    expect(ACPTranslate.abandonTools(abandoned.state, ctx).outputs).toEqual([])
+    expect(ACPTranslate.abandon(abandoned.state, ctx).outputs).toEqual([])
   })
 })

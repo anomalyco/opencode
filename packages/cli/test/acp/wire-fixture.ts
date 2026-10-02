@@ -8,6 +8,7 @@ import {
   type AgentRequestParamsByMethod,
   type AgentRequestResponsesByMethod,
   type AnyMessage,
+  type CompactionCapabilities,
   type ContentBlock,
   type CreateElicitationRequest,
   type CreateElicitationResponse,
@@ -164,6 +165,7 @@ export type InitializeOptions = {
   readonly childSessionUpdates?: boolean
   readonly terminalAuth?: boolean
   readonly elicitation?: boolean
+  readonly compaction?: CompactionCapabilities | null
 }
 
 export const testModel = {
@@ -491,6 +493,7 @@ export async function startWire(options: WireOptions = {}) {
       clientCapabilities: {
         ...(capabilities.writeTextFile ? { fs: { writeTextFile: true, readTextFile: false } } : {}),
         ...(capabilities.elicitation ? { elicitation: { form: {} } } : {}),
+        ...(capabilities.compaction !== undefined ? { session: { compaction: capabilities.compaction } } : {}),
         _meta: {
           ...(capabilities.childSessionUpdates ? { "opencode/child-session-updates": true } : {}),
           ...(capabilities.terminalAuth ? { "terminal-auth": true } : {}),

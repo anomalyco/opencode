@@ -53,7 +53,11 @@ export const AuthMethodID = "opencode-login"
 export type Failure = ACPError.Error | RequestError | ACPCatalog.Error
 
 /** What the client advertised in `initialize`. */
-export type Capabilities = { readonly childSessionUpdates: boolean; readonly formElicitation: boolean }
+export type Capabilities = {
+  readonly childSessionUpdates: boolean
+  readonly formElicitation: boolean
+  readonly compaction: boolean
+}
 
 export interface Interface {
   readonly initialize: (input: InitializeRequest) => Effect.Effect<InitializeResponse>
@@ -139,7 +143,7 @@ export function make(input: {
 
   // A message that fails to translate keeps the updates before the failure and does not stop the replay.
   const replayMessage = Effect.fnUntraced(function* (attached: Attached, message: SessionMessageInfo) {
-    const updates = ACPTranslate.replayMessage(message, attached.cwd)
+    const updates = ACPTranslate.replayMessage(message, attached.cwd, (yield* Ref.get(input.capabilities)).compaction)
     while (true) {
       const next = yield* Effect.result(Effect.try(() => updates.next()))
       if (Result.isFailure(next))
@@ -152,9 +156,11 @@ export function make(input: {
   return {
     initialize: Effect.fnUntraced(function* (params) {
       const elicitation = params.clientCapabilities?.elicitation
+      const compaction = params.clientCapabilities?.session?.compaction
       yield* Ref.set(input.capabilities, {
         childSessionUpdates: params.clientCapabilities?._meta?.[ACPTranslate.ChildSessionUpdatesCapability] === true,
         formElicitation: elicitation?.form !== undefined && elicitation.form !== null,
+        compaction: compaction !== undefined && compaction !== null,
       })
       const authMethod: AuthMethod = {
         description: "Run `opencode auth login` in the terminal",

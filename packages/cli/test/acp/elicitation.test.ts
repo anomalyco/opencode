@@ -45,7 +45,7 @@ const questions = (sessionID: string, id = "frm_question", tool = "call_question
     },
   })
 
-const capable = { childSessionUpdates: false, formElicitation: true }
+const capable = { childSessionUpdates: false, formElicitation: true, compaction: false }
 
 const form = (
   fields: ACPElicitation.AskedForm["fields"],

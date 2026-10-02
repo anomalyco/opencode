@@ -27,6 +27,8 @@ export type Context = {
   readonly cwd: string
   readonly start: TurnStart
   readonly childUpdates: boolean
+  /** Whether the client advertised `session.compaction`, so compactions use the standard session updates. */
+  readonly compaction: boolean
   /** A background consumer follows open children after the parent turn ends; it never writes `session/update`. */
   readonly mode: "turn" | "background"
 }
@@ -72,7 +74,7 @@ export type TurnState = {
   readonly started: boolean
   readonly tools: ReadonlyMap<string, Tool>
   readonly retries: ReadonlyMap<string, RetryStatus>
-  readonly compactions: ReadonlyMap<string, string>
+  readonly compactions: ReadonlyMap<string, TrackedCompaction>
   readonly children: ReadonlyMap<string, ChildSession>
   readonly openChildren: ReadonlySet<string>
   /** Forms asked of the client that the server has not yet answered or cancelled. */
@@ -115,12 +117,21 @@ type CompactionEvent = Extract<
   { readonly type: "session.compaction.started" | "session.compaction.ended" | "session.compaction.failed" }
 >
 
-type CompactionMarker = {
+type Compaction = {
   readonly status: "started" | "completed" | "failed"
   readonly messageId: string
   readonly reason: "auto" | "manual"
   readonly error?: SessionStructuredError
+  /** Empty when the compaction kept no readable summary, as with a provider's encrypted compaction. */
+  readonly summary?: string
+  /** Whether summary chunks were sent, which an update without a summary then clears. */
+  readonly streamed?: boolean
 }
+
+type TrackedCompaction = { readonly messageId: string; readonly streamed: boolean }
+
+// Core reports a cancelled or interrupted compaction as a failure with one of these error types.
+const CompactionCancelled = new Set(["aborted", "compaction.interrupted"])
 
 export const initial: TurnState = {
   started: false,
@@ -210,7 +221,22 @@ export function step(state: TurnState, event: EventSubscribeOutput, ctx: Context
       const compacted = compactionMarker(event, state.compactions)
       return {
         state: { ...state, compactions: compacted.compactions },
-        outputs: compacted.marker ? send(compactionUpdate(compacted.marker)) : [],
+        outputs: compacted.marker ? send(compactionUpdate(compacted.marker, standardCompaction(ctx, child))) : [],
+      }
+    }
+    case "session.compaction.delta": {
+      const tracked = state.compactions.get(eventSessionID)
+      if (!tracked || !standardCompaction(ctx, child)) return { state, outputs: [] }
+      return {
+        state: {
+          ...state,
+          compactions: new Map(state.compactions).set(eventSessionID, { ...tracked, streamed: true }),
+        },
+        outputs: send({
+          sessionUpdate: "compaction_summary_chunk",
+          compactionId: tracked.messageId,
+          content: { type: "text", text: event.data.text },
+        }),
       }
     }
     case "session.text.delta":
@@ -378,29 +404,51 @@ export function response(state: TurnState, sessionID: string, terminal: Terminal
   return { stopReason, ...(usage ? { usage } : {}), _meta: retry ? { [RetryMeta]: retry } : {} }
 }
 
-/** Fails the tools a cancelled turn left open, for when the server's wind-down never reports them. */
-export function abandonTools(state: TurnState, ctx: Context): Step {
+/**
+ * Fails the tools and cancels the session's compaction a cancelled turn left open, for when the server's wind-down
+ * never reports them. Child compactions are left to the consumer that follows children after the turn.
+ */
+export function abandon(state: TurnState, ctx: Context): Step {
+  const compaction = ctx.compaction ? state.compactions.get(ctx.sessionID) : undefined
   return {
-    state: { ...state, tools: new Map() },
-    outputs: [...state.tools.values()].flatMap((tool) =>
-      route(ctx, state.children.get(tool.sessionID), {
-        sessionUpdate: "tool_call_update",
-        ...errorToolUpdate({
-          toolCallId: tool.id,
-          toolName: tool.name,
-          input: tool.input,
-          metadata: tool.metadata,
-          content: [],
-          error: "Cancelled",
-          cwd: ctx.cwd,
+    state: {
+      ...state,
+      tools: new Map(),
+      compactions: compaction ? without(state.compactions, ctx.sessionID) : state.compactions,
+    },
+    outputs: [
+      ...[...state.tools.values()].flatMap((tool) =>
+        route(ctx, state.children.get(tool.sessionID), {
+          sessionUpdate: "tool_call_update",
+          ...errorToolUpdate({
+            toolCallId: tool.id,
+            toolName: tool.name,
+            input: tool.input,
+            metadata: tool.metadata,
+            content: [],
+            error: "Cancelled",
+            cwd: ctx.cwd,
+          }),
         }),
-      }),
-    ),
+      ),
+      ...(compaction
+        ? route(ctx, undefined, {
+            sessionUpdate: "compaction_update",
+            compactionId: compaction.messageId,
+            status: "cancelled",
+            ...(compaction.streamed ? { summary: null } : {}),
+          })
+        : []),
+    ],
   }
 }
 
 /** Lazy, so a message that fails to translate part way still replays the updates before the failure. */
-export function* replayMessage(message: SessionMessageInfo, cwd: string): Generator<SessionUpdate> {
+export function* replayMessage(
+  message: SessionMessageInfo,
+  cwd: string,
+  compaction: boolean,
+): Generator<SessionUpdate> {
   if (message.type === "user") {
     yield { sessionUpdate: "user_message_chunk", messageId: message.id, content: { type: "text", text: message.text } }
     const files: ReplayPart[] = (message.files ?? []).map((file) => ({
@@ -415,12 +463,15 @@ export function* replayMessage(message: SessionMessageInfo, cwd: string): Genera
   }
   // A running compaction has no live turn on this connection to settle it, so replay only settled ones.
   if (message.type === "compaction" && message.status !== "running") {
-    yield compactionUpdate({
-      status: message.status,
-      messageId: message.id,
-      reason: message.reason,
-      ...(message.status === "failed" ? { error: message.error } : {}),
-    })
+    yield compactionUpdate(
+      {
+        status: message.status,
+        messageId: message.id,
+        reason: message.reason,
+        ...(message.status === "failed" ? { error: message.error } : { summary: message.summary }),
+      },
+      compaction,
+    )
     return
   }
   if (message.type !== "assistant") return
@@ -568,33 +619,68 @@ function toolKey(sessionID: string, id: string) {
 }
 
 // Message IDs follow core's compaction message projection, so live markers match replayed ones.
-function compactionMarker(event: CompactionEvent, compactions: ReadonlyMap<string, string>) {
+function compactionMarker(event: CompactionEvent, compactions: ReadonlyMap<string, TrackedCompaction>) {
   const sessionID = event.data.sessionID
   if (event.type === "session.compaction.started") {
     const messageId = event.data.inputID ?? SessionMessage.ID.fromEvent(Event.ID.make(event.id))
-    const marker: CompactionMarker = { status: "started", messageId, reason: event.data.reason }
-    return { marker, compactions: new Map(compactions).set(sessionID, messageId) }
+    const marker: Compaction = { status: "started", messageId, reason: event.data.reason }
+    return { marker, compactions: new Map(compactions).set(sessionID, { messageId, streamed: false }) }
   }
   const tracked = compactions.get(sessionID)
   const remaining = without(compactions, sessionID)
   if (event.type === "session.compaction.ended") {
-    const marker: CompactionMarker | undefined = tracked
-      ? { status: "completed", messageId: tracked, reason: event.data.reason }
+    const marker: Compaction | undefined = tracked
+      ? {
+          status: "completed",
+          messageId: tracked.messageId,
+          reason: event.data.reason,
+          summary: event.data.text,
+          streamed: tracked.streamed,
+        }
       : undefined
     return { marker, compactions: remaining }
   }
   // Automatic compaction can fail before it starts, for example when there is nothing to compact yet.
-  const marker: CompactionMarker = {
+  const marker: Compaction = {
     status: "failed",
-    messageId: tracked ?? event.data.inputID ?? SessionMessage.ID.fromEvent(Event.ID.make(event.id)),
+    messageId: tracked?.messageId ?? event.data.inputID ?? SessionMessage.ID.fromEvent(Event.ID.make(event.id)),
     reason: event.data.reason,
     error: event.data.error,
+    streamed: tracked?.streamed,
   }
   return { marker, compactions: remaining }
 }
 
-function compactionUpdate(marker: CompactionMarker): SessionUpdate {
-  return { sessionUpdate: "session_info_update", _meta: { [CompactionMeta]: marker } }
+// A child compaction projected onto the parent session would mark a compaction of the parent's own context.
+function standardCompaction(ctx: Context, child: ChildSession | undefined) {
+  return ctx.compaction && (!child || ctx.childUpdates)
+}
+
+function compactionUpdate(compaction: Compaction, standard: boolean): SessionUpdate {
+  if (!standard) {
+    const marker = {
+      status: compaction.status,
+      messageId: compaction.messageId,
+      reason: compaction.reason,
+      ...(compaction.error ? { error: compaction.error } : {}),
+    }
+    return { sessionUpdate: "session_info_update", _meta: { [CompactionMeta]: marker } }
+  }
+  const status = compactionStatus(compaction)
+  return {
+    sessionUpdate: "compaction_update",
+    compactionId: compaction.messageId,
+    status,
+    ...(compaction.summary ? { summary: [{ type: "text", text: compaction.summary }] } : {}),
+    ...(!compaction.summary && compaction.streamed ? { summary: null } : {}),
+    ...(status === "failed" && compaction.error ? { error: compaction.error.message } : {}),
+  }
+}
+
+function compactionStatus(compaction: Compaction) {
+  if (compaction.status === "started") return "in_progress"
+  if (compaction.status === "completed") return "completed"
+  return compaction.error && CompactionCancelled.has(compaction.error.type) ? "cancelled" : "failed"
 }
 
 function projectChildUpdate(update: SessionUpdate, child: ChildSession) {

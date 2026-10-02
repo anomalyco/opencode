@@ -251,7 +251,7 @@ export const make = Effect.fnUntraced(function* (input: {
     ACPPromise.promise(() => input.client.session.interrupt({ sessionID })).pipe(Effect.ignoreCause)
 
   // Rejects pending asks, interrupts the server once, then forwards its wind-down until the terminal event or the
-  // timeout. Tools still open at the timeout are reported failed so the client never shows them running.
+  // timeout. Tools and a compaction still open at the timeout are settled so the client never shows them running.
   const windDown = Effect.fnUntraced(function* (
     subscription: Subscription,
     ctx: ACPTranslate.Context,
@@ -263,7 +263,7 @@ export const make = Effect.fnUntraced(function* (input: {
     if (!(yield* Ref.get(state)).started) return
     if (Option.isSome(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)))) return
     yield* Fiber.interrupt(events)
-    const abandoned = ACPTranslate.abandonTools(yield* Ref.get(state), ctx)
+    const abandoned = ACPTranslate.abandon(yield* Ref.get(state), ctx)
     yield* Ref.set(state, abandoned.state)
     yield* Effect.forEach(abandoned.outputs, (output) => interpret(subscription, ctx, output), { discard: true }).pipe(
       Effect.ignore,
@@ -355,14 +355,15 @@ export const make = Effect.fnUntraced(function* (input: {
   const run = Effect.fn("cli.acp.turn.run")(function* (
     attached: Attached,
     prompt: PreparedPrompt,
-    childUpdates: boolean,
+    capabilities: ACPService.Capabilities,
   ) {
     const state = yield* Ref.make(ACPTranslate.initial)
     const ctx: ACPTranslate.Context = {
       sessionID: attached.id,
       cwd: attached.cwd,
       start: prompt.start,
-      childUpdates,
+      childUpdates: capabilities.childSessionUpdates,
+      compaction: capabilities.compaction,
       mode: "turn",
     }
     const exit = yield* Effect.exit(Effect.interruptible(execute(attached, prompt, ctx, state)))
@@ -373,7 +374,7 @@ export const make = Effect.fnUntraced(function* (input: {
     prompt: Effect.fn("cli.acp.turn.prompt")(function* (params, signal) {
       const attached = yield* input.sessions.require(params.sessionId)
       const catalog = yield* input.catalog.get(attached.cwd)
-      const childUpdates = (yield* Ref.get(input.capabilities)).childSessionUpdates
+      const capabilities = yield* Ref.get(input.capabilities)
       if (params.prompt.some((block) => block.type === "image" && !block.data && !block.uri)) {
         return yield* new ACPError.InvalidRequestError({ message: "image content has no data or uri", field: "prompt" })
       }
@@ -391,7 +392,7 @@ export const make = Effect.fnUntraced(function* (input: {
             }),
           )
         }
-        const forked = Effect.runForkWith(fiber.context)(run(attached, prompt, childUpdates), { uninterruptible: true })
+        const forked = Effect.runForkWith(fiber.context)(run(attached, prompt, capabilities), { uninterruptible: true })
         FiberMap.setUnsafe(turns, attached.id, forked)
         return Effect.succeed(forked)
       })
