@@ -2,6 +2,7 @@ import type { Argv, InferredOptionTypes } from "yargs"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import type { Config } from "@/config/config"
 import { Effect } from "effect"
+import { fixedPortForCwd } from "./fixed-port"
 
 const options = {
   port: {
@@ -66,7 +67,11 @@ export function resolveNetworkOptionsNoConfig(args: NetworkOptions, config?: Con
   const mdnsDomainExplicitlySet = hasArg("--mdns-domain")
   const mdns = mdnsExplicitlySet ? args.mdns : (config?.server?.mdns ?? args.mdns)
   const mdnsDomain = mdnsDomainExplicitlySet ? args["mdns-domain"] : (config?.server?.mdnsDomain ?? args["mdns-domain"])
-  const port = portExplicitlySet ? args.port : (config?.server?.port ?? args.port)
+  const port = portExplicitlySet
+    ? args.port === -1
+      ? fixedPortForCwd(process.cwd())
+      : args.port
+    : (config?.server?.port ?? args.port)
   const hostname = hostnameExplicitlySet
     ? args.hostname
     : mdns && !config?.server?.hostname
