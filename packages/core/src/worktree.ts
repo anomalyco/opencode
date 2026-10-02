@@ -17,7 +17,6 @@ import { Project } from "./project.js"
 import { Worktree } from "@opencode/schema/worktree"
 import { WorktreeTable } from "./worktree/sql.js"
 import { canonical, DirectoryUnavailableError } from "./worktree/directory.js"
-import { WorktreeGit } from "./worktree/git.js"
 import type { EffectDrizzleSqlite } from "./database/drizzle.js"
 import { ProjectTable } from "./project/sql.js"
 import { AppProcess } from "@opencode/util/process"
@@ -111,7 +110,6 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const processService = yield* AppProcess.Service
     const locations = yield* LocationServiceMap.Service
-    const gitStrategy = yield* WorktreeGit.make
     const project = Effect.fnUntraced(function* (projectID: Project.ID) {
       const row = yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, projectID)).get().pipe(Effect.orDie)
       if (!row) return yield* new Project.NotFoundError({ projectID })
@@ -341,7 +339,7 @@ const layer = Layer.effect(
 export const node: LayerNode.Provider<Service, never, typeof Node.tags.values.global> = Node.makeGlobalNode({
   service: Service,
   layer,
-  deps: [FSUtil.node, Git.node, Bus.node, Database.node, AppProcess.node, LocationServiceMap.node],
+  deps: [FSUtil.node, Bus.node, Database.node, AppProcess.node, LocationServiceMap.node],
 })
 
 function operationError(strategy: StrategyID, operation: string, error: unknown) {
