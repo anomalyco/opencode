@@ -9,7 +9,6 @@ import type {
 import { Event } from "@opencode/schema/event"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
-import { Option, Schema } from "effect"
 import { partsToContentChunks, type ReplayPart } from "./content"
 import { ACPError } from "./error"
 import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate, type ToolInput } from "./tool"
@@ -18,7 +17,6 @@ export const ChildSessionUpdatesCapability = "opencode/child-session-updates"
 export const ChildSessionUpdateMethod = "opencode/session/child_update"
 const RetryMeta = "opencode/retry"
 const CompactionMeta = "opencode/compaction"
-const FormToolSource = Schema.Struct({ tool: Schema.Struct({ id: Schema.String }) })
 
 export type TurnStart = { readonly type: "input" | "compaction"; readonly id: string }
 
@@ -29,10 +27,7 @@ export type Context = {
   readonly cwd: string
   readonly start: TurnStart
   readonly childUpdates: boolean
-  /**
-   * A background consumer follows open children after the parent turn ends; it never forwards their updates as
-   * `session/update`.
-   */
+  /** A background consumer follows open children after the parent turn ends; it never writes `session/update`. */
   readonly mode: "turn" | "background"
 }
 
@@ -42,8 +37,6 @@ type Tool = {
   readonly name: string
   readonly input: ToolInput
   readonly metadata: Record<string, unknown>
-  /** Whether the client received this tool call, as a `session/update` or a child update with the same ID. */
-  readonly sent: boolean
 }
 
 type RetryStatus = {
@@ -101,15 +94,13 @@ export type Output =
       readonly event: PermissionEvent
       readonly tool?: Tool
       readonly child?: ChildSession
-      /** The client never received the asking tool call, so the ask announces its own. */
-      readonly announce: boolean
     }
   | {
       readonly _tag: "FormAsk"
       readonly form: FormEvent["data"]["form"]
       readonly child?: ChildSession
-      /** The asking tool call, when the client received it. */
-      readonly toolCallId?: string
+      /** Whether the form's session sends its tool calls to the client as `session/update` tool calls. */
+      readonly toolCallSent: boolean
     }
   | { readonly _tag: "FormSettled"; readonly formID: string }
 
@@ -164,15 +155,22 @@ export function step(state: TurnState, event: EventSubscribeOutput, ctx: Context
   const send = (update: SessionUpdate) => route(ctx, child, update)
 
   if (event.type === "permission.asked" && (event.data.sessionID === ctx.sessionID || child)) {
-    const tool = askingTool(state, event.data.sessionID, event.data.source?.id)
-    return { state, outputs: [{ _tag: "PermissionAsk", event, tool, child, announce: !tool?.sent }] }
+    const tool = event.data.source?.id
+      ? state.tools.get(toolKey(event.data.sessionID, event.data.source.id))
+      : undefined
+    return { state, outputs: [{ _tag: "PermissionAsk", event, tool, child }] }
   }
   if (event.type === "form.created" && (event.data.form.sessionID === ctx.sessionID || child)) {
-    const source = Schema.decodeUnknownOption(FormToolSource)(event.data.form.metadata)
-    const tool = askingTool(state, event.data.form.sessionID, Option.getOrUndefined(source)?.tool.id)
     return {
       state: { ...state, forms: new Set(state.forms).add(event.data.form.id) },
-      outputs: [{ _tag: "FormAsk", form: event.data.form, child, ...(tool?.sent ? { toolCallId: tool.id } : {}) }],
+      outputs: [
+        {
+          _tag: "FormAsk",
+          form: event.data.form,
+          child,
+          toolCallSent: ctx.mode === "turn" && (!child || !ctx.childUpdates),
+        },
+      ],
     }
   }
   if ((event.type === "form.replied" || event.type === "form.cancelled") && state.forms.has(event.data.id)) {
@@ -239,7 +237,7 @@ export function step(state: TurnState, event: EventSubscribeOutput, ctx: Context
           ...state,
           tools: new Map(state.tools).set(
             toolKey(event.data.sessionID, event.data.id),
-            newTool(event.data.sessionID, event.data.id, event.data.name, reachesClient(ctx, child)),
+            newTool(event.data.sessionID, event.data.id, event.data.name),
           ),
         },
         outputs: send({
@@ -254,8 +252,10 @@ export function step(state: TurnState, event: EventSubscribeOutput, ctx: Context
       }
     case "session.tool.called": {
       const key = toolKey(event.data.sessionID, event.data.id)
-      const current = state.tools.get(key) ?? newTool(event.data.sessionID, event.data.id)
-      const tool = { ...current, input: event.data.input, sent: current.sent || reachesClient(ctx, child) }
+      const tool = {
+        ...(state.tools.get(key) ?? newTool(event.data.sessionID, event.data.id)),
+        input: event.data.input,
+      }
       return {
         state: { ...state, tools: new Map(state.tools).set(key, tool) },
         outputs: send({
@@ -488,25 +488,15 @@ export function* replayMessage(message: SessionMessageInfo, cwd: string): Genera
   }
 }
 
-function newTool(sessionID: string, id: string, name = "tool", sent = false): Tool {
-  return { sessionID, id, name, input: {}, metadata: {}, sent }
-}
-
-function askingTool(state: TurnState, sessionID: string, id: string | undefined) {
-  return id ? state.tools.get(toolKey(sessionID, id)) : undefined
+function newTool(sessionID: string, id: string, name = "tool"): Tool {
+  return { sessionID, id, name, input: {}, metadata: {} }
 }
 
 function route(ctx: Context, child: ChildSession | undefined, update: SessionUpdate): Output[] {
-  if (!reachesClient(ctx, child)) return []
-  if (!child) return [{ _tag: "SessionUpdate", update }]
+  if (!child) return ctx.mode === "turn" ? [{ _tag: "SessionUpdate", update }] : []
   const projected = projectChildUpdate(update, child)
   if (ctx.childUpdates) return childStatus(ctx, child, { type: "update", update: projected })
-  return [{ _tag: "SessionUpdate", update: projected }]
-}
-
-// A background consumer forwards only child updates, and only through the child-update extension.
-function reachesClient(ctx: Context, child: ChildSession | undefined) {
-  return ctx.mode === "turn" || (child !== undefined && ctx.childUpdates)
+  return ctx.mode === "turn" ? [{ _tag: "SessionUpdate", update: projected }] : []
 }
 
 function childStatus(ctx: Context, child: ChildSession, value: ChildSessionEvent): Output[] {

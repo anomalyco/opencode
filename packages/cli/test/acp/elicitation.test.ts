@@ -435,7 +435,6 @@ describe("acp elicitation over the wire", () => {
         delivered(sessionID, id),
         childCreated("ses_child", sessionID, "Review code"),
         durableEvent("session.execution.started", { sessionID: "ses_child" }),
-        toolStarted("ses_child", "call_child", "question"),
         questions("ses_child", "frm_child", "call_child"),
       ],
       elicitation: () => accept({ q0: "Node" }),
@@ -449,13 +448,12 @@ describe("acp elicitation over the wire", () => {
     expect(acp.server.repliedForms).toEqual([{ sessionID: "ses_child", formID: "frm_child", answer: { q0: "Node" } }])
   })
 
-  test("refers to a child tool call the client received as a child update", async () => {
+  test("omits the tool call when the child's tool calls only reach the client as child updates", async () => {
     await using acp = await startSession({
       capabilities: { elicitation: true, childSessionUpdates: true },
       onPrompt: ({ sessionID, id }) => [
         delivered(sessionID, id),
         childCreated("ses_child", sessionID, "Review code"),
-        toolStarted("ses_child", "call_child", "question"),
         questions("ses_child", "frm_child", "call_child"),
       ],
       elicitation: () => accept({ q0: "Node" }),
@@ -463,27 +461,8 @@ describe("acp elicitation over the wire", () => {
     })
 
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
-    expect(acp.childUpdates).toContainEqual(
-      expect.objectContaining({
-        type: "update",
-        update: expect.objectContaining({ toolCallId: "ses_child:call_child" }),
-      }),
-    )
-    expect(acp.elicitations).toMatchObject([
-      { sessionId: acp.sessionId, toolCallId: "ses_child:call_child", message: "Review code: Questions" },
-    ])
-  })
-
-  test("omits the tool call when the client never received it", async () => {
-    await using acp = await startSession({
-      capabilities: { elicitation: true },
-      onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), questions(sessionID)],
-      elicitation: () => accept({ q0: "Node" }),
-      onFormReply: ({ sessionID }) => [succeeded(sessionID)],
-    })
-
-    expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
     expect(acp.elicitations).toHaveLength(1)
+    expect(acp.elicitations[0]).toMatchObject({ sessionId: acp.sessionId, message: "Review code: Questions" })
     expect(acp.elicitations[0]).not.toHaveProperty("toolCallId")
   })
 })

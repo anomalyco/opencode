@@ -141,8 +141,6 @@ export type WireOptions = {
     signal: AbortSignal,
   ) => CreateElicitationResponse | Promise<CreateElicitationResponse>
   readonly cancelDrainTimeout?: Duration.Input
-  /** Holds each agent message until the returned promise resolves; the agent writes messages one at a time. */
-  readonly outgoing?: (message: AnyMessage) => Promise<void> | void
 }
 
 type FormReply = {
@@ -410,20 +408,11 @@ export async function startWire(options: WireOptions = {}) {
   const agentToClient = new TransformStream<Uint8Array, Uint8Array>()
   const logs: Array<Pick<Logger.Options<unknown>, "message" | "cause">> = []
   const agentScope = Scope.makeUnsafe()
-  const agentStream = ndJsonStream(agentToClient.writable, clientToAgent.readable)
-  const agentWriter = agentStream.writable.getWriter()
   const agentConnection = await Effect.runPromise(
-    ACP.connect(OpenCode.make({ baseUrl: server.url }), {
-      readable: agentStream.readable,
-      writable: new WritableStream<AnyMessage>({
-        write: async (message) => {
-          await options.outgoing?.(message)
-          await agentWriter.write(message)
-        },
-        close: () => agentWriter.close(),
-        abort: (reason) => agentWriter.abort(reason),
-      }),
-    }).pipe(
+    ACP.connect(
+      OpenCode.make({ baseUrl: server.url }),
+      ndJsonStream(agentToClient.writable, clientToAgent.readable),
+    ).pipe(
       Scope.provide(agentScope),
       (effect) =>
         options.cancelDrainTimeout === undefined

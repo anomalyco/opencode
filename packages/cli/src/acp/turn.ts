@@ -143,7 +143,6 @@ export const make = Effect.fnUntraced(function* (input: {
         cwd: ctx.cwd,
         tool: ask.tool,
         child: ask.child,
-        announce: ask.announce,
       },
       Deferred.await(subscription.cancelled),
     )
@@ -175,7 +174,7 @@ export const make = Effect.fnUntraced(function* (input: {
                 requestedSchema,
                 clientSessionID: ctx.sessionID,
                 child: output.child,
-                toolCallId: output.toolCallId,
+                toolCallSent: output.toolCallSent,
                 settled: Deferred.await(settled),
               },
               Deferred.await(subscription.cancelled),
@@ -251,8 +250,8 @@ export const make = Effect.fnUntraced(function* (input: {
   const interruptServer = (sessionID: string) =>
     ACPPromise.promise(() => input.client.session.interrupt({ sessionID })).pipe(Effect.ignoreCause)
 
-  // Rejects pending asks, interrupts the server once, then forwards its wind-down. The asks settle before the turn
-  // does, so the client sees their updates before the prompt response.
+  // Rejects pending asks, interrupts the server once, then forwards its wind-down until the terminal event or the
+  // timeout. Tools still open at the timeout are reported failed so the client never shows them running.
   const windDown = Effect.fnUntraced(function* (
     subscription: Subscription,
     ctx: ACPTranslate.Context,
@@ -261,18 +260,7 @@ export const make = Effect.fnUntraced(function* (input: {
   ) {
     yield* Deferred.succeed(subscription.cancelled, undefined)
     yield* interruptServer(ctx.sessionID)
-    if ((yield* Ref.get(state)).started) yield* drain(subscription, ctx, state, events)
-    yield* asksSettled(subscription)
-  })
-
-  // Forwards the wind-down until the terminal event or the timeout. Tools still open at the timeout are reported
-  // failed so the client never shows them running.
-  const drain = Effect.fnUntraced(function* (
-    subscription: Subscription,
-    ctx: ACPTranslate.Context,
-    state: Ref.Ref<ACPTranslate.TurnState>,
-    events: Fiber.Fiber<ACPTranslate.Terminal, Failure>,
-  ) {
+    if (!(yield* Ref.get(state)).started) return
     if (Option.isSome(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)))) return
     yield* Fiber.interrupt(events)
     const abandoned = ACPTranslate.abandonTools(yield* Ref.get(state), ctx)

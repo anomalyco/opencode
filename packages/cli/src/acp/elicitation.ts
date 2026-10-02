@@ -18,6 +18,7 @@ type SelectField = Form.StringField | Form.MultiselectField
 // Form mode must not collect secrets, so only forms from flows known not to ask for credentials are elicited.
 const ElicitedKind = Schema.Struct({ kind: Schema.Literals(["question", "websearch.provider"]) })
 const Credential = /password|passphrase|secret|token|api[_-]?key|credential|private[_-]?key/i
+const ToolSource = Schema.Struct({ tool: Schema.Struct({ id: Schema.String }) })
 
 type Input = {
   readonly client: OpenCodeClient
@@ -26,8 +27,8 @@ type Input = {
   readonly requestedSchema: ElicitationSchema
   readonly clientSessionID: string
   readonly child?: { readonly id: string; readonly title?: string }
-  /** The asking tool call, when the client received it. */
-  readonly toolCallId?: string
+  /** Whether the asking tool call reached the client as a `session/update` tool call. */
+  readonly toolCallSent: boolean
   /** Completes once the form is answered or cancelled elsewhere. */
   readonly settled: Effect.Effect<void>
 }
@@ -103,12 +104,12 @@ export function answer(form: AskedForm, response: CreateElicitationResponse): Fo
 }
 
 const ask = Effect.fnUntraced(function* (input: Input) {
+  const source = input.toolCallSent ? Schema.decodeUnknownOption(ToolSource)(input.form.metadata) : Option.none()
+  const toolCallID = Option.getOrUndefined(Option.map(source, (metadata) => metadata.tool.id))
   const response = yield* input.connection.createElicitation({
     mode: "form",
     sessionId: input.clientSessionID,
-    ...(input.toolCallId
-      ? { toolCallId: input.child ? `${input.child.id}:${input.toolCallId}` : input.toolCallId }
-      : {}),
+    ...(toolCallID ? { toolCallId: input.child ? `${input.child.id}:${toolCallID}` : toolCallID } : {}),
     message: input.child?.title ? `${input.child.title}: ${input.form.title}` : input.form.title,
     requestedSchema: input.requestedSchema,
   })
