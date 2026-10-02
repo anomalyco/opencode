@@ -65,6 +65,22 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
       providerMetadata,
     })
   }
+  // Incomplete tool calls (pending/running) never reached a durable settlement,
+  // e.g. a provider transport decode error mid-stream left only a partial input.
+  // Synthesize an error result so every tool-call has a paired tool-result and
+  // the next drain does not fail schema validation or brick the session.
+  return ToolResultPart.make({
+    id: tool.id,
+    name: tool.name,
+    result: {
+      error: { type: "unknown", message: "Tool execution was interrupted" },
+      content: [],
+      structured: {},
+    },
+    resultType: "error",
+    providerExecuted: tool.provider?.executed,
+    providerMetadata,
+  })
 }
 
 const assistant = (message: SessionMessage.Assistant, model: Model) => {

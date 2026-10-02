@@ -199,6 +199,26 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
   const failAssistant = Effect.fnUntraced(function* (message: string) {
     if (assistantFailed) return
     yield* flush()
+    // A provider transport decode error mid tool-call leaves a partial input
+    // that never reached tool-call (no execution fiber to settle it). Fail
+    // those uncalled tools now so they do not linger as pending and poison
+    // the next drain with a dangling tool-call.
+    const error = { type: "unknown" as const, message }
+    for (const [callID, tool] of tools) {
+      if (tool.settled || tool.called) continue
+      tool.settled = true
+      yield* events.publish(SessionEvent.Tool.Failed, {
+        sessionID: input.sessionID,
+        timestamp: yield* timestamp,
+        assistantMessageID: tool.assistantMessageID,
+        callID,
+        error,
+        provider: {
+          executed: tool.providerExecuted,
+          ...(tool.providerMetadata === undefined ? {} : { metadata: tool.providerMetadata }),
+        },
+      })
+    }
     const assistantMessageID = yield* startAssistant()
     assistantActive = false
     assistantFailed = true
@@ -206,7 +226,7 @@ export const createLLMEventPublisher = (events: EventV2.Interface, input: Input)
       sessionID: input.sessionID,
       timestamp: yield* timestamp,
       assistantMessageID,
-      error: { type: "unknown", message },
+      error,
     })
   })
 
