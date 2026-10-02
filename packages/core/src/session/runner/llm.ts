@@ -124,6 +124,7 @@ const layer = Layer.effect(
                     return yield* compaction.compact({
                       reason: "manual",
                       inputID: pending.id,
+                      summaryModel: yield* context.selectCompaction(selected.session),
                       context: {
                         session: selected.session,
                         agent: selected.agent,
@@ -214,7 +215,8 @@ const layer = Layer.effect(
         // Reuse boundary preparation once; retries refresh context without delivering more input.
         const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
         initial = undefined
-        const compacted = yield* compaction.compact({ reason: "auto", context: loaded })
+        const summaryModel = yield* context.selectCompaction(loaded.session)
+        const compacted = yield* compaction.compact({ reason: "auto", context: loaded, summaryModel })
         if (compacted.status === "failed") return yield* new StepFailedError({ error: compacted.error })
         if (compacted.status === "completed") {
           assistantMessageID = SessionMessage.ID.create()
@@ -262,7 +264,7 @@ const layer = Layer.effect(
           recoverOverflow: Effect.suspend(() =>
             recoverOverflow
               ? compaction
-                  .compact({ reason: "overflow", context: loaded })
+                  .compact({ reason: "overflow", context: loaded, summaryModel })
                   .pipe(Effect.map((result) => result.status === "completed"))
               : Effect.succeed(false),
           ),

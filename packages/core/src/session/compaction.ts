@@ -47,11 +47,16 @@ export type Editor = {
   configure: (settings: Partial<Settings>) => void
 }
 
-export type Trigger =
+type Source =
   /** `overflow`: the provider just rejected this context as too long. */
   | { readonly reason: "auto" | "overflow"; readonly context: SessionContext.Loaded }
   /** `inputID` is the `/compact` inbox item, whose message shows the outcome. */
   | { readonly reason: "manual"; readonly context: SessionContext.Loaded; readonly inputID: SessionMessage.ID }
+
+export type Trigger = Source & {
+  /** The compaction agent's model. Summaries are written with it; the session model still decides when to compact. */
+  readonly summaryModel?: SessionContext.Loaded["model"]
+}
 
 export type Outcome =
   /** Only `auto` skips: the context fits, or automatic compaction is off. */
@@ -212,14 +217,22 @@ export const layer = Layer.effect(
       const budget =
         trigger.reason === "overflow" ? Math.min(cap, Math.floor(estimateContext(context) * SHRINK_STEPS[0])) : cap
 
-      const compaction =
-        context.model.compaction?.type === "native"
-          ? compactNatively(trigger, budget, settings.keep)
-          : summarize(trigger, budget, settings.keep)
+      // A native window belongs to the session's provider, so only summaries move to the compaction model.
+      const native = context.model.compaction?.type === "native"
+      const summary =
+        native || !trigger.summaryModel ? trigger : { ...trigger, context: { ...context, model: trigger.summaryModel } }
+      const compaction = native
+        ? compactNatively(trigger, budget, settings.keep)
+        : summarize(
+            summary,
+            // The summary request must also fit the compaction model's window.
+            Math.min(budget, calculateCeiling(summary.context.model.limit, settings.buffer)),
+            settings.keep,
+          )
       return yield* compaction.pipe(
         Effect.matchEffect({
-          onSuccess: (result) => publish(trigger, result),
-          onFailure: (failure) => publish(trigger, failure),
+          onSuccess: (result) => publish(summary, result),
+          onFailure: (failure) => publish(summary, failure),
         }),
       )
     })

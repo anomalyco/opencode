@@ -2099,6 +2099,28 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
+  scenario(
+    "summarizes with the compaction agent's model and keeps the session model for later requests",
+    function* (s) {
+      const agents = yield* Agent.Service
+      yield* agents.transform((editor) =>
+        editor.update(Agent.ID.make("compaction"), (agent) => {
+          agent.model = Model.Ref.make({ id: ID.make("replacement"), providerID: Provider.ID.make("fake") })
+        }),
+      )
+      yield* s.runPrompt("First")
+      yield* s.llm.push(TestLLM.text("## Objective\n- summary", "compaction-model-summary"))
+      yield* s.session.compact({ sessionID })
+      yield* s.resume
+      yield* s.runPrompt("Second")
+
+      expect(s.requests.map((request) => request.model)).toEqual([model, replacementModel, model])
+      expect((yield* s.messages).find((message) => message.type === "compaction")).toMatchObject({
+        model: { id: "replacement", providerID: "fake" },
+      })
+    },
+  )
+
   scenario("moves the epoch at compaction and narrates later changes", function* (s) {
     yield* s.runPrompt("First")
     s.systemBaseline = "Changed before compaction"

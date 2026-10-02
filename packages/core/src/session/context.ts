@@ -65,6 +65,8 @@ export interface Interface {
       }
     | undefined
   >
+  /** Resolves the model the compaction agent summarizes with. Undefined when none is configured or it is unavailable. */
+  readonly selectCompaction: (session: SessionSchema.Info) => Effect.Effect<SessionRunnerModel.Resolved | undefined>
   readonly request: SessionModelRequest.Interface
 }
 
@@ -116,6 +118,12 @@ const layer = Layer.effect(
       const selected = preferred ?? primary
       if (!selected) return
       return { agent, primary, selected }
+    })
+
+    const selectCompaction = Effect.fn("SessionContext.selectCompaction")(function* (session: SessionSchema.Info) {
+      const agent = yield* agents.get(Agent.ID.make("compaction"))
+      if (!agent?.model) return
+      return yield* resolveModel({ ...session, model: agent.model }).pipe(Effect.orElseSucceed(() => undefined))
     })
 
     const select = Effect.fn("SessionContext.select")(function* (sessionID: SessionSchema.ID) {
@@ -178,7 +186,7 @@ const layer = Layer.effect(
       }
     })
 
-    return Service.of({ select, load, resolveModel, selectTitle, request })
+    return Service.of({ select, load, resolveModel, selectTitle, selectCompaction, request })
   }),
 )
 
