@@ -1223,7 +1223,50 @@ const gateway = CloudflareAIGateway.configure({
 }).model("workers-ai/@cf/meta/llama-3.1-8b-instruct")
 ```
 
-Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock, Azure OpenAI, Baseten, Cerebras, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, Fireworks, Groq, Mistral, OpenRouter, TogetherAI, and xAI. Z.ai currently exposes image generation. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
+Included LLM providers: OpenAI, Anthropic, Google (Gemini), Google Vertex, Amazon Bedrock, Azure OpenAI, Baseten, Cerebras, Cloudflare AI Gateway, Cloudflare Workers AI, DeepInfra, DeepSeek, Fireworks, Groq, Mistral, OpenRouter, TogetherAI, Vercel AI Gateway, and xAI. Z.ai currently exposes image generation. Generic Chat Completions, Responses, and Anthropic Messages-compatible entrypoints support custom endpoints.
+
+### Vercel AI Gateway
+
+Gateway supports Messages, Responses, and Chat directly, without the AI SDK transport:
+
+```ts
+import { VercelAIGateway } from "@opencode/ai/providers"
+
+const gateway = VercelAIGateway.configure({
+  // Optional: otherwise reads AI_GATEWAY_API_KEY, then VERCEL_OIDC_TOKEN.
+  apiKey,
+  providerOptions: {
+    gateway: { only: ["anthropic", "bedrock"], caching: "auto" },
+  },
+})
+
+gateway.model("anthropic/claude-sonnet-5.5") // Messages
+gateway.model("openai/gpt-6-luna") // Responses
+gateway.model("meta/muse-spark-1.3") // Responses
+gateway.model("spacexai/grok-4.7") // Responses
+gateway.chat("anthropic/claude-sonnet-5.5") // Explicit Chat override
+gateway.responses("google/gemini-3.8-flash") // Explicit Responses override
+gateway.messages("openai/gpt-6-luna") // Explicit Messages override
+```
+
+Default routing sends `openai/gpt-*`, `meta/muse-*`, and `spacexai/grok-*` to Responses; everything else uses Messages. Full Gateway model IDs stay unchanged. Package entrypoints are also available at `@opencode/ai/providers/vercel-ai-gateway/{messages,responses,chat}` with flat `model(id, settings)` inputs.
+
+Set `providerOptions.reasoningEffort` for named effort. Messages lowers it to `thinking` plus `output_config.effort`, Responses to `reasoning.effort`, and Chat to `reasoning_effort`.
+
+```ts
+LLM.request({
+  model: gateway.messages("anthropic/claude-sonnet-5.5"),
+  prompt: "Review this algorithm.",
+  generation: { maxTokens: 4096 },
+  providerOptions: { thinking: { type: "enabled", budgetTokens: 2048 } },
+})
+```
+
+Messages and Chat accept `thinking` for on/off or token-budget controls. Native upstream settings go under `upstream`, for example `upstream: { google: { thinkingConfig: ... } }`.
+
+Gateway controls go under `providerOptions.gateway`. Gateway caching is enabled unless the request uses `cache: "none"`. Responses also accepts `cacheTTL` and `cacheAnchorItems`. `promptCacheKey` is sent as `x-session-affinity`.
+
+Gateway metadata from `provider_metadata.gateway` is retained on the finish event's `providerMetadata.gateway`. Existing experimental evaluation remains available.
 
 Each named provider owns its module, endpoint, authentication, and route setup. Providers with the same wire format compose the shared protocol directly:
 

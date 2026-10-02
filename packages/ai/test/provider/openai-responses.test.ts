@@ -3129,23 +3129,45 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("rejects a reasoning item that starts before the previous item ends", () =>
+  it.effect("allows reasoning items to overlap until their output items finish", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.generate(request).pipe(
+      const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
-              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_1" } },
-              { type: "response.reasoning_summary_text.delta", item_id: "rs_1", summary_index: 0, delta: "First" },
-              { type: "response.output_item.added", item: { type: "reasoning", id: "rs_2" } },
+              { type: "response.output_item.added", output_index: 0, item: { type: "reasoning", id: "rs_1" } },
+              { type: "response.output_item.added", output_index: 1, item: { type: "reasoning", id: "rs_2" } },
+              {
+                type: "response.output_item.added",
+                output_index: 2,
+                item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "" },
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 2,
+                item: { type: "function_call", id: "fc_1", call_id: "call_1", name: "lookup", arguments: "{}" },
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 0,
+                item: { type: "reasoning", id: "rs_1", encrypted_content: "first", summary: [] },
+              },
+              {
+                type: "response.output_item.done",
+                output_index: 1,
+                item: { type: "reasoning", id: "rs_2", encrypted_content: "second", summary: [] },
+              },
+              { type: "response.completed", response: { id: "resp_1", output: [] } },
             ),
           ),
         ),
-        Effect.flip,
       )
 
-      expect(error.reason._tag).toBe("InvalidProviderOutput")
-      expect(error.message).toContain("started reasoning before the previous item ended")
+      expect(response.message.content).toMatchObject([
+        { type: "reasoning", providerMetadata: { openai: { itemId: "rs_1", reasoningEncryptedContent: "first" } } },
+        { type: "reasoning", providerMetadata: { openai: { itemId: "rs_2", reasoningEncryptedContent: "second" } } },
+        { type: "tool-call", id: "call_1", name: "lookup", input: {} },
+      ])
     }),
   )
 

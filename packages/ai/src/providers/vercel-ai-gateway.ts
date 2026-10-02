@@ -8,19 +8,32 @@ import {
   EvaluationResponse,
   EvaluationRounding,
 } from "../experimental/evaluation.js"
+import { AnthropicMessages } from "../protocols/anthropic-messages.js"
+import { OpenAIChat } from "../protocols/openai-chat.js"
+import { OpenResponses } from "../protocols/open-responses.js"
+import { ProviderShared } from "../protocols/shared.js"
+import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
+import type { ProviderPackage } from "../provider-package.js"
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
+import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Endpoint } from "../route/endpoint.js"
+import { Framing } from "../route/framing.js"
 import {
   AIError,
   HttpContext,
   HttpOptions,
   InvalidProviderOutputError,
   InvalidRequestError,
+  LLMRequest,
   ModelID,
   ProviderID,
   ProviderMetadata,
   Usage,
 } from "../schema/index.js"
+import { VercelAIGatewayOptions, type ProviderOptionsInput } from "./vercel-ai-gateway-options.js"
+
+export type { GatewayOptions, ProviderOptionsInput } from "./vercel-ai-gateway-options.js"
 
 export const id = ProviderID.make("vercel-ai-gateway")
 const baseURL = "https://ai-gateway.vercel.sh/v1"
@@ -34,11 +47,105 @@ export interface EvaluationOptions {
   }>
 }
 
-export type Options = ProviderAuthOption<"optional"> & {
-  readonly baseURL?: string
-  readonly headers?: Record<string, string>
-  readonly http?: HttpOptions.Input
-}
+export type Options = Omit<RouteDefaultsInput, "providerOptions"> &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+    readonly providerOptions?: ProviderOptionsInput
+  }
+
+export type Settings = ProviderPackage.Settings & ProviderOptionsInput & { readonly apiKey?: string }
+
+const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(VercelAIGatewayOptions.Options))
+const ChatThinking = Schema.Union([
+  Schema.Struct({ type: Schema.Literals(["adaptive", "disabled"]) }),
+  Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Number }),
+])
+const decodeChatThinking = ProviderShared.validateWith(Schema.decodeUnknownEffect(ChatThinking))
+
+const prepare = (api: "messages" | "responses" | "chat") =>
+  Effect.fn("VercelAIGateway.prepare")(function* (request: LLMRequest) {
+    const options = yield* decodeOptions(request.providerOptions ?? {})
+    const thinking =
+      api === "chat" && request.providerOptions?.thinking !== undefined
+        ? yield* decodeChatThinking(request.providerOptions.thinking)
+        : undefined
+    const effort = options.reasoningEffort
+    const providerOptions =
+      api === "messages" && effort !== undefined
+        ? {
+            ...request.providerOptions,
+            effort: effort === "none" ? undefined : effort,
+            thinking: request.providerOptions?.thinking ?? { type: effort === "none" ? "disabled" : "adaptive" },
+          }
+        : request.providerOptions
+    return {
+      request: LLMRequest.update(request, { providerOptions }),
+      body: {
+        ...(thinking === undefined
+          ? {}
+          : {
+              reasoning: {
+                enabled: thinking.type !== "disabled",
+                ...(thinking.type === "enabled" ? { max_tokens: thinking.budgetTokens } : {}),
+              },
+            }),
+        providerOptions: {
+          ...options.upstream,
+          gateway: { ...(request.cache === "none" ? {} : { caching: "auto" }), ...options.gateway },
+        },
+        ...(api === "responses" && options.cacheTTL !== undefined ? { cache_ttl: options.cacheTTL } : {}),
+        ...(api === "responses" && options.cacheAnchorItems !== undefined
+          ? { cache_anchor_items: options.cacheAnchorItems }
+          : {}),
+      },
+    }
+  })
+
+const route = <Body, Event, State>(input: {
+  readonly id: string
+  readonly protocol: Parameters<typeof gatewayProtocol<Body, Event, State>>[0]
+  readonly api: "messages" | "responses" | "chat"
+  readonly path: string
+  readonly framing: typeof Framing.sse | typeof AnthropicMessages.framing | typeof OpenAIChat.framing
+  readonly defaults?: RouteDefaultsInput
+}) =>
+  Route.make({
+    id: input.id,
+    provider: id,
+    providerMetadataKey: id,
+    protocol: gatewayProtocol(input.protocol, { id: input.id, prepare: prepare(input.api) }),
+    endpoint: Endpoint.path(input.path, { baseURL }),
+    framing: input.framing,
+    headers: ({ request }): Record<string, string> =>
+      request.promptCacheKey ? { "x-session-affinity": request.promptCacheKey } : {},
+    defaults: input.defaults,
+  })
+
+const messagesRoute = route({
+  id: "vercel-ai-gateway-messages",
+  protocol: AnthropicMessages.protocol,
+  api: "messages",
+  path: "/messages",
+  framing: AnthropicMessages.framing,
+  defaults: { headers: { "anthropic-version": "2023-06-01" } },
+})
+const responsesRoute = route({
+  id: "vercel-ai-gateway-responses",
+  protocol: OpenResponses.protocol,
+  api: "responses",
+  path: "/responses",
+  framing: Framing.sse,
+  defaults: { providerOptions: { store: false, include: ["reasoning.encrypted_content"] } },
+})
+const chatRoute = route({
+  id: "vercel-ai-gateway-chat",
+  protocol: OpenAIChat.protocol,
+  api: "chat",
+  path: "/chat/completions",
+  framing: OpenAIChat.framing,
+})
+
+export const routes = [messagesRoute, responsesRoute, chatRoute]
 
 const Request = Schema.StructWithRest(
   Schema.Struct({
@@ -63,6 +170,26 @@ const Response = Schema.Struct({
 })
 
 export const configure = (input: Options = {}) => {
+  const { apiKey: _apiKey, auth: _auth, baseURL: endpoint, ...defaults } = input
+  const configured = {
+    ...defaults,
+    endpoint: { baseURL: endpoint ?? baseURL },
+    auth: AuthOptions.bearer(input, ["AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN"]),
+  }
+  const messages = (modelID: string | ModelID) =>
+    messagesRoute.with(configured).model<ProviderOptionsInput>({
+      id: modelID,
+      // Recorded Gateway translations for non-Claude models return thinking with empty signatures.
+      compatibility: { requireSignature: modelID.startsWith("anthropic/") },
+    })
+  const responses = (modelID: string | ModelID) =>
+    responsesRoute.with(configured).model<ProviderOptionsInput>({ id: modelID })
+  const chat = (modelID: string | ModelID) =>
+    chatRoute
+      .with(configured)
+      .model<ProviderOptionsInput>({ id: modelID, compatibility: { reasoningField: "reasoning" } })
+  const model = (modelID: string | ModelID) =>
+    /^(openai\/gpt-|meta\/muse-|spacexai\/grok-)/.test(modelID) ? responses(modelID) : messages(modelID)
   const evaluation = (modelID: string | ModelID) =>
     EvaluationModel.make<EvaluationOptions>({
       id: modelID,
@@ -139,10 +266,28 @@ export const configure = (input: Options = {}) => {
           }),
       },
     })
-  return { id, experimental: { evaluation }, configure }
+  return { id, model, messages, responses, chat, experimental: { evaluation }, configure }
 }
 
 export const provider = configure()
 export const experimental = provider.experimental
+export const messages = provider.messages
+export const responses = provider.responses
+export const chat = provider.chat
+
+export const model: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
+  fromSettings(settings).model(modelID)
+export const messagesModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
+  fromSettings(settings).messages(modelID)
+export const responsesModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (
+  modelID,
+  settings,
+) => fromSettings(settings).responses(modelID)
+export const chatModel: ProviderPackage.Definition<Settings, ProviderOptionsInput>["model"] = (modelID, settings) =>
+  fromSettings(settings).chat(modelID)
+
+function fromSettings({ apiKey, baseURL, headers, body, ...providerOptions }: Settings) {
+  return configure({ apiKey, baseURL, headers, http: { body }, providerOptions })
+}
 
 export * as VercelAIGateway from "./vercel-ai-gateway.js"
