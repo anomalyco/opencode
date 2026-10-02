@@ -38,6 +38,7 @@ const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
 // prefix caching, Gemini's implicit + out-of-band CachedContent). Skip the
 // whole policy pass for these — emitting hints would be harmless but pointless.
 const RESPECTS_INLINE_HINTS = new Set([
+  "alibaba-chat",
   "alibaba-messages",
   "anthropic-messages",
   "anthropic-compatible-messages",
@@ -55,11 +56,12 @@ const RESPECTS_INLINE_HINTS = new Set([
 // OpenRouter upstreams other than Anthropic and Alibaba Qwen cache without breakpoints. Gemini uses only the last
 // breakpoint, so a conversation-tail breakpoint writes a new cache every step and costs more than none. Qwen ignores
 // breakpoints on tool definitions and caches tools with the system prompt.
+const QWEN: CachePolicyObject = { system: true, messages: { tail: 1 } }
 const openRouterPolicy = (modelID: string): CachePolicyObject => {
   // `~anthropic/claude-sonnet-latest` style IDs are OpenRouter aliases for the latest model in a family.
   const id = modelID.replace(/^~/, "")
   if (id.startsWith("anthropic/")) return AUTO
-  if (id.startsWith("qwen/")) return { system: true, messages: { tail: 1 } }
+  if (id.startsWith("qwen/")) return QWEN
   return NONE
 }
 
@@ -171,7 +173,9 @@ export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   const policy =
     request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto")
       ? openRouterPolicy(request.model.id)
-      : resolve(request.cache)
+      : request.model.route.id === "alibaba-chat" && (request.cache === undefined || request.cache === "auto")
+        ? QWEN
+        : resolve(request.cache)
   if (!policy.tools && !policy.system && !policy.messages) return request
 
   const hint = makeHint(policy.ttlSeconds)
