@@ -26,6 +26,7 @@ import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
+import { McpCooldown } from "@opencode/core/mcp/cooldown"
 import { McpStdio } from "@opencode/core/mcp/stdio"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -235,7 +236,10 @@ function resourceServer(
           state.urls.push(request.url)
           const session = request.headers.get("mcp-session-id")
           if (session !== null && !state.sessions.includes(session)) state.sessions.push(session)
-          const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+          const body: unknown =
+            request.method === "POST" && request.headers.get("content-type")?.includes("application/json")
+              ? await request.clone().json()
+              : undefined
           if (typeof body === "object" && body !== null && "method" in body && body.method === "initialize") {
             state.initializations += 1
           }
@@ -975,6 +979,429 @@ test("applies configured MCP timeouts to resource operations", async () => {
   )
   await expect(read).rejects.toThrow("Request timed out")
 })
+
+testEffect(Layer.empty).live("MCP cooldown suppresses repeated initialization after HTTP 429", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({
+      respond: () => new Response("rate limited", { status: 429, headers: { "retry-after": "60" } }),
+    })
+    const config = new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false })
+    const first = yield* connect("first", config, import.meta.dir).pipe(Effect.flip)
+    expect(first.message).toContain("HTTP 429")
+    expect(first.message).toContain("rate limited")
+    expect(server.state.urls).toHaveLength(1)
+
+    const second = yield* connect("second", config, import.meta.dir).pipe(Effect.flip)
+    expect(second.message).toContain("HTTP 429")
+    expect(server.state.urls).toHaveLength(1)
+  }),
+)
+
+test("MCP cooldown parses Retry-After without capping advertised delays", () => {
+  const now = Date.parse("Thu, 01 Jan 2026 00:00:00 GMT")
+  for (const [header, expected] of [
+    ["0", 0n],
+    [" 2 ", 2_000n],
+    ["86400", 86_400_000n],
+    [
+      "999999999999999999999999999999999999999999999999999999999999999999999999",
+      999999999999999999999999999999999999999999999999999999999999999999999999000n,
+    ],
+    ["Thu, 01 Jan 2026 00:00:02 GMT", 2_000n],
+    ["Thursday, 01-Jan-26 00:00:02 GMT", 2_000n],
+    ["Thu Jan  1 00:00:02 2026", 2_000n],
+    ["Wed, 31 Dec 2025 23:59:59 GMT", 0n],
+  ] as const) {
+    expect(McpCooldown.delay(header, now)).toBe(expected)
+  }
+  for (const header of [null, "", "garbage", "-1", "+2", "1.5", "Infinity", "NaN", "2 seconds", "Jan 1, 2026"]) {
+    expect(McpCooldown.delay(header, now)).toBe(1_000n)
+  }
+})
+
+for (const timezone of ["America/Los_Angeles", "Asia/Tokyo"]) {
+  test(`MCP cooldown parses asctime as GMT in ${timezone}`, async () => {
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "-e",
+        `import { McpCooldown } from ${JSON.stringify(path.join(import.meta.dir, "../src/mcp/cooldown.ts"))}; console.log(String(McpCooldown.delay("Thu Jan  1 00:00:02 2026", Date.parse("Thu, 01 Jan 2026 00:00:00 GMT"))))`,
+      ],
+      env: { ...process.env, TZ: timezone },
+      timeout: 2_000,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    expect(await child.exited).toBe(0)
+    expect((await new Response(child.stdout).text()).trim()).toBe("2000")
+  })
+}
+
+test("MCP cooldown rejects invalid HTTP-date calendars", () => {
+  const now = Date.parse("Thu, 01 Jan 2026 00:00:00 GMT")
+  for (const header of [
+    "Tue, 31 Feb 2026 00:00:02 GMT",
+    "Tuesday, 31-Feb-26 00:00:02 GMT",
+    "Tue Feb 31 00:00:02 2026",
+    "Sun, 29 Feb 2026 00:00:02 GMT",
+    "Thu, 01 Jan 2026 24:00:02 GMT",
+    "Thu, 01 Jan 2026 00:60:02 GMT",
+    "Thu, 01 Jan 2026 00:00:60 GMT",
+    "Foo, 01 Jan 2026 00:00:02 GMT",
+  ]) {
+    expect(String(McpCooldown.delay(header, now))).toBe("1000")
+  }
+})
+
+test("MCP cooldown keeps overflowing advertised delays finite and exact", () => {
+  expect(String(McpCooldown.delay("9007199254740992", 0))).toBe("9007199254740992000")
+  expect(McpCooldown.delay("Sat, 29 Feb 2020 00:00:02 GMT", Date.parse("Sat, 29 Feb 2020 00:00:00 GMT"))).toBe(2_000n)
+})
+
+test("MCP cooldown resolves obsolete years at the exact fifty-year boundary", () => {
+  const now = Date.parse("Thu, 01 Jan 2026 00:00:00 GMT")
+  expect(McpCooldown.delay("Wednesday, 01-Jan-76 00:00:00 GMT", now)).toBe(
+    BigInt(Date.parse("Wed, 01 Jan 2076 00:00:00 GMT") - now),
+  )
+  expect(McpCooldown.delay("Thursday, 01-Jan-76 00:00:02 GMT", now)).toBe(0n)
+})
+
+testEffect(Layer.empty).live("MCP cooldown preserves the original auto-negotiation probe rejection", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({
+      respond: () => new Response("original probe rejection", { status: 429, headers: { "retry-after": "60" } }),
+    })
+    const config = new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "auto" })
+    const error = yield* connect("auto", config, import.meta.dir).pipe(Effect.flip)
+    expect(error.message).toContain("HTTP 429")
+    expect(error.message).toContain("original probe rejection")
+    expect(server.state.urls).toHaveLength(1)
+    expect(server.state.initializations).toBe(0)
+  }),
+)
+
+testEffect(Layer.empty).live("MCP cooldown leaves healthy auto-negotiation fallback intact", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer()
+    const config = new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "auto" })
+    const connection = yield* connect("auto-healthy", config, import.meta.dir)
+    expect(connection.modern).toBe(false)
+    expect(yield* connection.tools()).toHaveLength(1)
+    expect(server.state.initializations).toBe(1)
+  }),
+)
+
+testEffect(Layer.empty).live("MCP cooldown gates huge finite delays without timer overflow", () =>
+  Effect.gen(function* () {
+    const header = "9007199254740992"
+    const server = yield* resourceServer({
+      respond: () => new Response(null, { status: 429, headers: { "retry-after": header } }),
+    })
+    const url = new URL(server.url)
+    const send = McpCooldown.wrap(url, url, fetch)
+    yield* Effect.promise(() => send(url))
+    const blocked = yield* Effect.promise(() => send(url))
+    expect(blocked.status).toBe(429)
+    const remaining = BigInt(blocked.headers.get("retry-after") ?? "0")
+    expect(remaining >= BigInt(header)).toBe(true)
+    expect(remaining <= BigInt(header) + 1n).toBe(true)
+    expect(server.state.urls).toHaveLength(1)
+  }),
+)
+
+testEffect(Layer.empty).live("MCP cooldown maintenance does not keep the process alive", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({
+      respond: () => new Response(null, { status: 429, headers: { "retry-after": "9007199254740992" } }),
+    })
+    const child = Bun.spawn({
+      cmd: [
+        process.execPath,
+        "-e",
+        `import { McpCooldown } from ${JSON.stringify(path.join(import.meta.dir, "../src/mcp/cooldown.ts"))}; const url = new URL(${JSON.stringify(server.url)}); await McpCooldown.wrap(url, url, fetch)(url); console.log("done")`,
+      ],
+      env: process.env,
+      timeout: 2_000,
+      stdout: "pipe",
+      stderr: "pipe",
+    })
+    yield* Effect.addFinalizer(() => Effect.sync(() => child.kill()))
+    expect(yield* Effect.promise(() => child.exited)).toBe(0)
+    expect((yield* Effect.promise(() => new Response(child.stdout).text())).trim()).toBe("done")
+  }),
+)
+
+for (const entry of [
+  { name: "delta seconds", header: () => "1" },
+  { name: "HTTP date", header: () => new Date(Date.now() + 2_000).toUTCString() },
+  { name: "missing", header: () => undefined },
+  { name: "malformed", header: () => "1.5" },
+]) {
+  testEffect(Layer.empty).live(`MCP cooldown releases only later explicit requests: ${entry.name}`, () =>
+    Effect.gen(function* () {
+      const header = entry.header()
+      const server = yield* resourceServer({
+        respond: () =>
+          new Response("original rejection", { status: 429, headers: header ? { "retry-after": header } : {} }),
+      })
+      const url = new URL(server.url)
+      const send = McpCooldown.wrap(url, url, fetch)
+      const first = yield* Effect.promise(() => send(url))
+      expect(first.status).toBe(429)
+      expect(first.headers.get("retry-after")).toBe(header ?? null)
+      expect(yield* Effect.promise(() => first.text())).toBe("original rejection")
+      const blocked = yield* Effect.promise(() => send(url))
+      expect(blocked.status).toBe(429)
+      expect(yield* Effect.promise(() => blocked.text())).toContain("cooldown")
+      expect(server.state.urls).toHaveLength(1)
+      yield* Effect.sleep("100 millis")
+      yield* Effect.promise(() => send(url))
+      expect(server.state.urls).toHaveLength(1)
+      yield* Effect.sleep("2100 millis")
+      expect(server.state.urls).toHaveLength(1)
+      yield* Effect.promise(() => send(url))
+      expect(server.state.urls).toHaveLength(2)
+    }),
+  )
+}
+
+testEffect(Layer.empty).live("MCP cooldown shares configured, synthetic and fallback URLs across credentials", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({
+      respond: () => new Response("rate limited", { status: 429, headers: { "retry-after": "60" } }),
+    })
+    const config = (url: string, codemode?: boolean) =>
+      new ConfigMCP.Remote({ type: "remote", url, oauth: false, codemode, headers: { authorization: `Bearer ${url}` } })
+    yield* connect("synthetic", config(server.url), import.meta.dir).pipe(Effect.flip)
+    yield* connect("direct", config(server.url, false), import.meta.dir).pipe(Effect.flip)
+    yield* connect("explicit", config(server.url + "?codemode=false"), import.meta.dir).pipe(Effect.flip)
+    expect(server.state.urls).toHaveLength(1)
+    expect(server.state.urls[0]).toBe(server.url + "?codemode=false")
+
+    const query = server.url + "?source=hello%20world&tag=a&tag=b"
+    yield* connect("encoded-synthetic", config(query), import.meta.dir).pipe(Effect.flip)
+    yield* connect("encoded-direct", config(query, false), import.meta.dir).pipe(Effect.flip)
+    yield* connect("encoded-explicit", config(query + "&codemode=false"), import.meta.dir).pipe(Effect.flip)
+    yield* connect("normalized-direct", config(query.replace("%20", "+"), false), import.meta.dir).pipe(Effect.flip)
+    expect(server.state.urls).toHaveLength(2)
+  }),
+)
+
+testEffect(Layer.empty).live("MCP cooldown covers a 429 from the configured URL after query fallback", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({
+      respond: (request) =>
+        new URL(request.url).searchParams.has("codemode")
+          ? new Response(null, { status: 404 })
+          : new Response("fallback rate limited", { status: 429, headers: { "retry-after": "60" } }),
+    })
+    const config = new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false })
+    const first = yield* connect("first", config, import.meta.dir).pipe(Effect.flip)
+    expect(first.message).toContain("fallback rate limited")
+    yield* connect("second", config, import.meta.dir).pipe(Effect.flip)
+    expect(server.state.urls).toEqual([server.url + "?codemode=false", server.url])
+  }),
+)
+
+testEffect(Layer.empty).live("MCP cooldown gates connected clients and never replays a mutating tool", () =>
+  Effect.gen(function* () {
+    let limited = false
+    let attempts = 0
+    const server = yield* resourceServer({
+      modern: true,
+      respond: async (request) => {
+        if (!limited || request.method !== "POST") return
+        const body: unknown = await request.clone().json()
+        if (typeof body === "object" && body !== null && "method" in body && body.method === "tools/call") attempts += 1
+        return new Response("mutation rejected", { status: 429, headers: { "retry-after": "1" } })
+      },
+    })
+    const config = new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol: "2026-07-28" })
+    const first = yield* connect("first", config, import.meta.dir)
+    const second = yield* connect("second", config, import.meta.dir)
+    limited = true
+    const original = yield* first.callTool({ name: "echo", args: { mutate: true } }).pipe(Effect.flip)
+    expect(original.message).toContain("mutation rejected")
+    expect(original.message).toContain("HTTP 429")
+    const sent = server.state.urls.length
+    const blocked = yield* second.tools().pipe(Effect.flip)
+    expect(blocked.message).toContain("cooldown")
+    yield* second.callTool({ name: "echo" }).pipe(Effect.flip)
+    yield* first.resources().pipe(Effect.flip)
+    expect(server.state.urls).toHaveLength(sent)
+    yield* Effect.sleep("1100 millis")
+    expect(attempts).toBe(1)
+    expect(server.state.toolCalls).toHaveLength(0)
+    limited = false
+    yield* second.callTool({ name: "echo" })
+    expect(server.state.toolCalls).toHaveLength(1)
+  }),
+)
+
+testEffect(Layer.empty).live("MCP cooldown captures tools/list 429 and keeps shutdown bounded", () =>
+  Effect.gen(function* () {
+    let limited = false
+    const server = yield* resourceServer({
+      respond: (request) =>
+        limited && request.method === "POST"
+          ? new Response("catalog rejected", { status: 429, headers: { "retry-after": "86400" } })
+          : undefined,
+    })
+    const started = performance.now()
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const config = new ConfigMCP.Remote({
+          type: "remote",
+          url: server.url,
+          oauth: false,
+          timeout: new ConfigMCP.Timeout({ startup: 100, catalog: 100, execution: 100 }),
+        })
+        const connection = yield* connect("catalog", config, import.meta.dir)
+        limited = true
+        const original = yield* connection.tools().pipe(Effect.flip)
+        expect(original.message).toContain("catalog rejected")
+        const sent = server.state.urls.length
+        yield* connection.prompts().pipe(Effect.flip)
+        yield* connection.callTool({ name: "echo" }).pipe(Effect.flip)
+        yield* connect("startup", config, import.meta.dir).pipe(Effect.flip)
+        expect(server.state.urls).toHaveLength(sent)
+      }),
+    )
+    expect(performance.now() - started).toBeLessThan(1_000)
+    expect(server.state.toolLists).toBe(0)
+  }),
+)
+
+testEffect(Layer.empty).live("MCP cooldown leaves OAuth, other paths, queries and origins independent", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({
+      respond: () => new Response(null, { status: 429, headers: { "retry-after": "60" } }),
+    })
+    const other = yield* resourceServer({ respond: () => new Response("healthy") })
+    const endpoint = new URL("mcp?tenant=one", server.url)
+    const send = McpCooldown.wrap(endpoint, endpoint, fetch)
+    yield* Effect.promise(() => send(endpoint))
+    yield* Effect.promise(() => send(endpoint))
+    expect(server.state.urls).toHaveLength(1)
+    const oauth = new URL("token", server.url)
+    yield* Effect.promise(() =>
+      send(oauth, { method: "POST", body: new URLSearchParams({ grant_type: "refresh_token" }) }),
+    )
+    yield* Effect.promise(() =>
+      send(oauth, { method: "POST", body: new URLSearchParams({ grant_type: "refresh_token" }) }),
+    )
+    const query = new URL("mcp?tenant=two", server.url)
+    yield* Effect.promise(() => McpCooldown.wrap(query, query, fetch)(query))
+    const path = new URL("other-mcp?tenant=one", server.url)
+    yield* Effect.promise(() => McpCooldown.wrap(path, path, fetch)(path))
+    const origin = new URL("mcp?tenant=one", other.url)
+    const response = yield* Effect.promise(() => McpCooldown.wrap(origin, origin, fetch)(origin))
+    expect(response.status).toBe(200)
+    expect(server.state.urls).toHaveLength(5)
+    expect(other.state.urls).toHaveLength(1)
+  }),
+)
+
+testEffect(Layer.empty).live("MCP cooldown preserves aborts before local rejection", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer({
+      respond: () => new Response(null, { status: 429, headers: { "retry-after": "60" } }),
+    })
+    const url = new URL(server.url)
+    const send = McpCooldown.wrap(url, url, fetch)
+    yield* Effect.promise(() => send(url))
+    const controller = new AbortController()
+    const reason = new Error("cancelled by caller")
+    controller.abort(reason)
+    const error = yield* Effect.tryPromise({
+      try: () => send(url, { signal: controller.signal }),
+      catch: (error) => error,
+    }).pipe(Effect.flip)
+    expect(error).toBe(reason)
+    expect(server.state.urls).toHaveLength(1)
+  }),
+)
+
+testEffect(Layer.empty).live("MCP cooldown forwards in-flight cancellation and deadlines", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>()
+    const server = yield* resourceServer({
+      respond: () => {
+        Deferred.doneUnsafe(started, Exit.void)
+        return new Promise<Response>(() => {})
+      },
+    })
+    const url = new URL(server.url)
+    const send = McpCooldown.wrap(url, url, fetch)
+    const controller = new AbortController()
+    const pending = send(url, { signal: controller.signal })
+    yield* Deferred.await(started)
+    controller.abort()
+    const aborted = yield* Effect.tryPromise({ try: () => pending, catch: (error) => error }).pipe(Effect.flip)
+    expect(aborted).toHaveProperty("name", "AbortError")
+    const deadline = yield* Effect.tryPromise((signal) => send(url, { signal })).pipe(
+      Effect.timeout("50 millis"),
+      Effect.flip,
+    )
+    expect(deadline).toHaveProperty("_tag", "TimeoutError")
+    expect(server.state.urls).toHaveLength(2)
+  }),
+)
+
+testEffect(Layer.empty).live("MCP cooldown retains the longest concurrent Retry-After", () =>
+  Effect.gen(function* () {
+    const release = yield* Deferred.make<void>()
+    const started = yield* Deferred.make<void>()
+    const server = yield* resourceServer({
+      respond: async (request) => {
+        if (request.headers.has("x-short")) {
+          Deferred.doneUnsafe(started, Exit.void)
+          await Effect.runPromise(Deferred.await(release))
+        }
+        return new Response(null, {
+          status: 429,
+          headers: { "retry-after": request.headers.has("x-short") ? "0" : "60" },
+        })
+      },
+    })
+    const url = new URL(server.url)
+    const send = McpCooldown.wrap(url, url, fetch)
+    const short = send(url, { headers: { "x-short": "true" } })
+    yield* Deferred.await(started)
+    yield* Effect.promise(() => send(url))
+    yield* Deferred.succeed(release, undefined)
+    yield* Effect.promise(() => short)
+    const blocked = yield* Effect.promise(() => send(url))
+    expect(blocked.status).toBe(429)
+    expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(50)
+    expect(server.state.urls).toHaveLength(2)
+  }),
+)
+
+testEffect(Layer.empty).live("MCP cooldown does not serialize healthy traffic behind an SSE stream", () =>
+  Effect.gen(function* () {
+    const listening = yield* Deferred.make<void>()
+    const server = yield* resourceServer({
+      respond: (request) => {
+        if (request.method === "GET") Deferred.doneUnsafe(listening, Exit.void)
+        return undefined
+      },
+    })
+    const connection = yield* connect(
+      "healthy",
+      new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }),
+      import.meta.dir,
+    )
+    yield* Deferred.await(listening).pipe(Effect.timeout("1 second"))
+    const [tools, resources] = yield* Effect.all([connection.tools(), connection.resources()], {
+      concurrency: "unbounded",
+    }).pipe(Effect.timeout("1 second"))
+    expect(tools).toHaveLength(1)
+    expect(resources).toHaveLength(0)
+    expect(server.state.toolLists).toBe(1)
+    expect(server.state.resourceLists).toBe(1)
+  }),
+)
 
 for (const entry of [
   { name: "default", query: "", codemode: undefined, expected: "?codemode=false" },

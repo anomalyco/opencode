@@ -30,6 +30,7 @@ import { Cause, Effect, Exit, Schema } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { McpStdio } from "./stdio.js"
+import { McpCooldown } from "./cooldown.js"
 
 const DEFAULT_STARTUP_TIMEOUT = 30_000
 const DEFAULT_CATALOG_TIMEOUT = 30_000
@@ -191,10 +192,17 @@ export const connect = Effect.fnUntraced(function* (
       )
     }
 
+    // Capture the first probe 429 before the SDK replaces transport handlers during protocol handover.
+    let probeRejection: SdkHttpError | undefined
+    if (config.protocol === "auto") {
+      transport.onerror = (error) => {
+        if (error instanceof SdkHttpError && error.status === 429) probeRejection ??= error
+      }
+    }
     yield* Effect.tryPromise({
       try: (signal) =>
         client.connect(transport, { timeout: config.timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT, signal }),
-      catch: (error) => error,
+      catch: (error) => (error instanceof SdkHttpError && error.status === 429 ? (probeRejection ?? error) : error),
     }).pipe(Effect.onError(() => Effect.promise(() => transport.close()).pipe(Effect.ignore)))
     return client
   })
@@ -245,11 +253,12 @@ export const connect = Effect.fnUntraced(function* (
     const url = new URL(config.url)
     const addedCodemode = config.codemode !== false && !url.searchParams.has("codemode")
     if (addedCodemode) url.searchParams.set("codemode", "false")
+    const limitedFetch = McpCooldown.wrap(new URL(config.url), url, fetch)
     const open = (url: URL) => {
       session.transport = new StreamableHTTPClientTransport(url, {
         requestInit: config.headers ? { headers: config.headers } : undefined,
         authProvider,
-        fetch,
+        fetch: limitedFetch,
       })
       return initialize(session.transport)
     }
