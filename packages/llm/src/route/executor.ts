@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Layer, Random } from "effect"
+import { Cause, Context, Effect, Layer, Option, Random, Schema } from "effect"
 import {
   FetchHttpClient,
   Headers,
@@ -23,6 +23,7 @@ import {
   UnknownProviderReason,
 } from "../schema"
 import { isContextOverflow } from "../provider-error"
+import { isRecord } from "../utils/record"
 
 export interface Interface {
   readonly execute: (
@@ -222,6 +223,26 @@ const responseHttp = (input: {
     rateLimit: input.rateLimit,
   })
 
+const stubBodyJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+
+// Identical 400 stub bytes (`{"model":"..."}`) replay as 200/400/200, so the
+// gateway occasionally emits a model-echo stub without any client error
+// signal. Treat only that shape as transient; real 400s carry `error` or
+// `message` and must stay non-retryable InvalidRequest.
+const isTransient400Stub = (body: string) => {
+  const trimmed = body.trim()
+  if (trimmed.length === 0) return true
+  const decoded = stubBodyJson(trimmed)
+  if (Option.isNone(decoded)) return false
+  if (decoded.value === null) return true
+  if (Array.isArray(decoded.value)) return decoded.value.length === 0
+  if (!isRecord(decoded.value)) return false
+  if ("error" in decoded.value) return false
+  if ("message" in decoded.value) return false
+  if (Object.keys(decoded.value).length === 0) return true
+  return "model" in decoded.value
+}
+
 const statusReason = (input: {
   readonly status: number
   readonly message: string
@@ -257,6 +278,14 @@ const statusReason = (input: {
     input.status === 413 ||
     input.status === 422
   ) {
+    if (input.status === 400 && isTransient400Stub(body)) {
+      return new ProviderInternalReason({
+        message: input.message,
+        status: input.status,
+        retryAfterMs: input.retryAfterMs,
+        http: input.http,
+      })
+    }
     return new InvalidRequestReason({
       message: input.message,
       classification: isContextOverflow(body) ? "context-overflow" : undefined,
