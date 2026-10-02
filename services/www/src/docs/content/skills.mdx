@@ -135,10 +135,11 @@ Prepare the changelog, version bump, tag, and release notes.
 | `slash`                        | Set to `false` to hide the skill from interactive command catalogs |
 | `metadata.opencode/slash`      | Boolean or `"true"`/`"false"`; overrides `slash`                   |
 | `metadata.opencode/autoinvoke` | Set to `false` to omit the skill from the model's available list   |
+| `disable-model-invocation`     | Set to `true` for the same effect as `opencode/autoinvoke: false`  |
 
 All frontmatter is optional at runtime. Add a clear `description` when the model should discover the skill; skills without one are not advertised.
 
-`opencode/autoinvoke: false` only hides the skill from the model's available list. The skill remains registered and can still be loaded explicitly by ID. V2 accepts portability fields such as `license` and `compatibility` but does not interpret them.
+`opencode/autoinvoke: false` only hides the skill from the model's available list. The skill remains registered and can still be loaded explicitly by ID. `disable-model-invocation: true` is accepted for compatibility with skills written for Claude Code and Cursor; when both are set, `opencode/autoinvoke` wins. V2 accepts portability fields such as `license` and `compatibility` but does not interpret them.
 
 ## IDs
 
