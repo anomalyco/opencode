@@ -22,6 +22,7 @@ function fixture(
   name = "@opencode/cli",
   failCleanup = false,
   releasePackage = name,
+  formula?: string,
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -29,20 +30,30 @@ function fixture(
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-updater-" })
     const execPath = process.execPath
     const modules = path.join(root, "node_modules")
-    const executable = path.join(modules, "@opencode", "cli", "bin", "opencode")
+    const executable = formula
+      ? path.join(root, "Cellar", formula, "2.0.20", "bin", "opencode")
+      : path.join(modules, "@opencode", "cli", "bin", "opencode")
     yield* fs.makeDirectory(path.dirname(executable), { recursive: true })
     yield* fs.writeFileString(executable, "binary")
-    yield* fs.writeFileString(
-      path.join(modules, "@opencode", "cli", "package.json"),
-      JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
-    )
+    if (!formula)
+      yield* fs.writeFileString(
+        path.join(modules, "@opencode", "cli", "package.json"),
+        JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
+      )
+    const requests: string[] = []
     // The updater uses global fetch; scope this replacement to each install test.
     yield* Effect.acquireRelease(
       Effect.sync(() =>
         spyOn(globalThis, "fetch").mockImplementation(
-          Object.assign(async () => Response.json({ version: "2.3.4", metadata: { package: releasePackage } }), {
-            preconnect: fetch.preconnect,
-          }),
+          Object.assign(
+            async (input: string | URL | Request) => {
+              const url = input instanceof Request ? input.url : input.toString()
+              requests.push(url)
+              if (new URL(url).hostname === "formulae.brew.sh") return Response.json({ versions: { stable: "2.0.21" } })
+              return Response.json({ version: "2.3.4", metadata: { package: releasePackage } })
+            },
+            { preconnect: fetch.preconnect },
+          ),
         ),
       ),
       (request) => Effect.sync(() => request.mockRestore()),
@@ -106,7 +117,7 @@ function fixture(
         }),
       ),
     )
-    return { updater, commands, global, fs, executable }
+    return { updater, commands, requests, global, fs, executable }
   })
 }
 
@@ -280,6 +291,37 @@ it.live("vp detection ignores no-match output that repeats the package name", ()
     expect(yield* test.updater.method()).toBeUndefined()
   }),
 )
+
+it.live("Homebrew Core installs check and upgrade the Core formula", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "anomalyco/tap/opencode-v2", "opencode")
+    expect(yield* test.updater.method()).toBe("brew")
+    expect(yield* test.updater.latest()).toBe("2.0.21")
+    yield* test.updater.upgrade("brew", "2.0.21")
+    expect(test.commands).toEqual([["brew", "upgrade", "opencode"]])
+    // An explicitly selected method keeps its own release source.
+    expect(yield* test.updater.latest("npm")).toBe("2.3.4")
+    expect(test.requests).toEqual([
+      "https://formulae.brew.sh/api/formula/opencode.json",
+      "https://opencode.ai/update/api/local/cli/npm?current=local",
+    ])
+  }),
+)
+;["opencode-v2", "opencode-beta"].forEach((formula) => {
+  it.live(`Homebrew tap installs of ${formula} use the published tap formula`, () =>
+    Effect.gen(function* () {
+      const test = yield* fixture(() => ({}), "@opencode/cli", false, `anomalyco/tap/${formula}`, formula)
+      expect(yield* test.updater.method()).toBe("brew")
+      expect(yield* test.updater.latest()).toBe("2.3.4")
+      yield* test.updater.upgrade("brew", "2.3.4")
+      expect(test.commands).toEqual([["brew", "upgrade", `anomalyco/tap/${formula}`]])
+      expect(test.requests).toEqual([
+        "https://opencode.ai/update/api/local/cli/homebrew?current=local",
+        "https://opencode.ai/update/api/local/cli/homebrew?current=local",
+      ])
+    }),
+  )
+})
 
 // Links are named opencode-upgrade-<pid>-<random>.exe; read them from inside the installer run.
 const links = (directory: string) =>
