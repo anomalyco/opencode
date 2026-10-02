@@ -134,7 +134,7 @@ describe("acp permissions over the wire", () => {
 
     expect(acp.permissions.map((request) => request.toolCall.locations)).toEqual([
       [{ path: "/tmp/outside" }, { path: "/tmp/other" }],
-      [{ path: "/workspace/src/[slug].ts" }, { path: "/workspace/src/{a,b}.ts" }],
+      [{ path: path.resolve("/workspace", "src/[slug].ts") }, { path: path.resolve("/workspace", "src/{a,b}.ts") }],
       [],
     ])
   })
