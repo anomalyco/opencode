@@ -78,6 +78,11 @@ function prepareOptions(model: ModelV2.Info, pkg: string) {
     ...model.request.body,
   }
   if (model.api.type === "aisdk" && model.api.url) options.baseURL = model.api.url
+  // Forward custom headers (e.g. migrated `Authorization: Bearer <authToken>`
+  // from V1 configs) so `createAnthropic` and other SDK factories receive them.
+  if (Object.keys(model.request.headers).length > 0) {
+    options.headers = { ...options.headers, ...model.request.headers }
+  }
 
   const customFetch = options.fetch
   const chunkTimeout = options.chunkTimeout
