@@ -1317,7 +1317,7 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
   const base: Model = {
     id: ModelV2.ID.make(model.id),
     providerID: ProviderV2.ID.make(provider.id),
-    name: model.name,
+    name: model.name ?? model.id,
     family: model.family,
     api: {
       id: model.id,
@@ -1333,9 +1333,9 @@ function fromModelsDevModel(provider: ModelsDev.Provider, model: ModelsDev.Model
     options: {},
     cost: cost(model.cost),
     limit: {
-      context: model.limit.context,
-      input: model.limit.input,
-      output: model.limit.output,
+      context: model.limit?.context ?? 0,
+      input: model.limit?.input,
+      output: model.limit?.output ?? 0,
     },
     capabilities: {
       temperature: model.temperature ?? false,
