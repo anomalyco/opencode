@@ -3,6 +3,7 @@ import { OpenCodeEvent, type OpenCodeEventEncoded } from "@opencode/protocol/gro
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { Schema } from "effect"
+import path from "node:path"
 import { ACPTranslate } from "../../src/acp/translate"
 import {
   assistantMessage,
@@ -230,7 +231,7 @@ const rows: Row[] = [
           sessionUpdate: "tool_call_update",
           status: "in_progress",
           title: "printf done",
-          locations: [{ path: "/workspace/sub" }],
+          locations: [{ path: path.resolve("/workspace", "sub") }],
           rawInput: { command: "printf done", workdir: "sub" },
         },
         { sessionUpdate: "tool_call_update", status: "in_progress" },
