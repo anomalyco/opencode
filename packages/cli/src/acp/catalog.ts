@@ -56,7 +56,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
   const entries = new Map<string, Deferred.Deferred<Entry, Error>>()
   const connected = yield* Deferred.make<void>()
 
-  // A reload covers every request made before it starts, so requests queued behind a running one share one load.
+  // Requests queued behind a running load share the next one.
   const reload = (entry: Entry) =>
     Effect.suspend(() => {
       const target = ++entry.requested
@@ -137,7 +137,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
 
 const load = (client: OpenCodeClient, cwd: string) =>
   read(client, cwd).pipe(
-    // Some providers discover models in the background after plugin startup begins.
+    // Providers may still be discovering models after startup.
     Effect.retry({
       while: (error) => error._tag === "ACPCatalogNotReadyError",
       schedule: Schedule.spaced("25 millis").pipe(Schedule.upTo({ duration: "5 seconds" })),
@@ -158,7 +158,7 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   ).pipe(Effect.mapError((cause) => new LoadError({ cause })))
   const models = modelResult.data.filter((model) => model.enabled)
   const preferred = defaultResult.data
-  // Parallel reads can straddle initialization; select only from this model list.
+  // The parallel default read can name a model missing from this list.
   const defaultModel = preferred
     ? models.find((model) => model.providerID === preferred.providerID && model.id === preferred.id)
     : models[0]

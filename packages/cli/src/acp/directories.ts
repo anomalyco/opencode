@@ -11,7 +11,7 @@ import { ACPError } from "./error"
 const key = "opencode.acp.additionalDirectories"
 const decodeStored = Schema.decodeUnknownOption(Schema.Array(Schema.String))
 
-// Glob characters are rejected because permission resources would treat them as wildcards.
+// Permission resources treat `*` and `?` as wildcards.
 export const parse = Effect.fnUntraced(function* (cwd: string, directories: readonly string[] = []) {
   const invalid = directories.find((directory) => !isAbsolute(directory) || /[*?]/.test(directory))
   if (invalid !== undefined) return yield* new ACPError.InvalidAdditionalDirectoryError({ directory: invalid })

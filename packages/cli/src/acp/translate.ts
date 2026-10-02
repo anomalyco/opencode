@@ -369,7 +369,7 @@ export function response(state: TurnState, sessionID: string, terminal: Terminal
   return { stopReason, ...(usage ? { usage } : {}), _meta: retry ? { [RetryMeta]: retry } : {} }
 }
 
-// Child compactions are left to the background consumer that follows children after the turn.
+// Child compactions are left to the background consumer.
 export function abandon(state: TurnState, ctx: Context): Step {
   const compaction = state.compactions.get(ctx.sessionID)
   return {

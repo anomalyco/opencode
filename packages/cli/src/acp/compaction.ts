@@ -5,7 +5,6 @@ import { SessionMessage } from "@opencode/schema/session-message"
 
 const MarkerMeta = "opencode/compaction"
 
-/** Message IDs follow core's compaction message projection, so live compactions match replayed ones. */
 export type Started = { readonly status: "started"; readonly messageId: string; readonly reason: "auto" | "manual" }
 
 type Compaction =
@@ -36,7 +35,7 @@ type OpeningEvent = Extract<
 
 const Cancelled = new Set(["aborted", "compaction.interrupted"])
 
-// A child compaction on the parent session keeps the marker; a standard update would read as the parent's own.
+// Without child updates, a child's standard update would read as the parent's own.
 export function usesStandardUpdates(
   ctx: { readonly compaction: boolean; readonly childUpdates: boolean },
   child: boolean,
@@ -63,7 +62,7 @@ export function apply(event: LifecycleEvent, tracked: Tracked, standard: boolean
     }
     return { tracked: remaining, updates: [update(completed, standard)] }
   }
-  // Automatic compaction can fail before it starts; a standard client still sees it open before it settles.
+  // Auto compaction can fail without a started event; open it first for standard clients.
   const started = current ?? open(event)
   const failed: Compaction = { ...started, status: "failed", reason: event.data.reason, error: event.data.error }
   return {
@@ -81,7 +80,7 @@ export function abandon(started: Started, standard: boolean) {
   return update({ ...started, status: "failed", error: { type: "aborted", message: "Compaction cancelled" } }, standard)
 }
 
-// A running compaction has no live turn on this connection to settle it, so it is not replayed.
+// Nothing on this connection would settle a replayed running compaction.
 export function replay(message: Extract<SessionMessage.Info, { type: "compaction" }>, standard: boolean) {
   if (message.status === "running") return undefined
   const base = { messageId: message.id, reason: message.reason }
@@ -93,6 +92,7 @@ export function replay(message: Extract<SessionMessage.Info, { type: "compaction
   )
 }
 
+// Matches core's compaction message ID, so live and replayed compactions line up.
 function open(event: OpeningEvent): Started {
   return {
     status: "started",

@@ -15,8 +15,8 @@ export type AskedForm = Omit<Form.Info, "id"> & { readonly id: string }
 type InputField = Exclude<Form.Field, Form.ExternalField>
 type SelectField = Form.StringField | Form.MultiselectField
 
-// Form mode must not collect secrets, so only forms from flows known not to ask for credentials are elicited.
 const QuestionKind = "question"
+// Form mode must not collect secrets; elicit only flows known to be credential-free.
 const ElicitedKind = Schema.Struct({ kind: Schema.Literals([QuestionKind, "websearch.provider"]) })
 const Credential = /password|passphrase|secret|token|api[_ -]?key|credential|private[_ -]?key/i
 const ToolSource = Schema.Struct({ tool: Schema.Struct({ id: Schema.String }) })

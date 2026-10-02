@@ -47,7 +47,7 @@ export const make = Effect.fnUntraced(function* (input: {
 }) {
   const scope = yield* Effect.scope
   const sessions = new Map<string, Entry>()
-  // Kept across re-attachment so resuming with the same servers does not add them again.
+  // Outlives entries so re-attaching does not re-add servers.
   const registeredMcp = new Map<string, Set<string>>()
   const connected = yield* Deferred.make<void>()
 
@@ -139,8 +139,7 @@ export const make = Effect.fnUntraced(function* (input: {
       if (replaced) yield* Scope.close(replaced.scope, Exit.void)
       yield* registerMcp(entry.attached, mcpServers).pipe(Effect.onError(() => remove(session.id, entry)))
       const responded = yield* ACPConnection.Responded
-      // `changes` emits the latest catalog first, so a reload since `current` is still pushed. One fold applies
-      // catalog and selection changes so pushes leave the client on the latest pair.
+      // `changes` replays the latest catalog, so a reload since `current` still pushes; one fold keeps catalog and selection consistent.
       yield* Effect.gen(function* () {
         yield* responded
         yield* sendCommands(session.id, current)

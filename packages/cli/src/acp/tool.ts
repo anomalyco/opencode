@@ -109,7 +109,6 @@ export function completedToolUpdate(input: {
   readonly cwd: string
 }): ToolCallUpdate {
   const normalized = toolContent(input.content)
-  // Read's model content is a JSON page envelope; show the clean text instead.
   const firstText = input.content.find((part) => part.type === "text")
   const read = input.toolName.toLocaleLowerCase() === "read" && firstText ? readDisplayText(firstText.text) : undefined
   const images = normalized.filter((part) => part.type === "content" && part.content.type === "image")

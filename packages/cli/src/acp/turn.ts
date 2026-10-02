@@ -63,7 +63,7 @@ type PermissionAsk = Extract<ACPTranslate.Output, { readonly _tag: "PermissionAs
 type Subscription = {
   readonly scope: Scope.Closeable
   readonly events: Queue.Dequeue<OpenCodeEvent, unknown>
-  /** Asks run one at a time in order without holding back the event stream. */
+  /** Asks run serially off the event stream. */
   readonly asks: Queue.Queue<Effect.Effect<void, ACPError.Error | RequestError>>
   readonly cancelled: Deferred.Deferred<void>
   readonly forms: Map<string, Deferred.Deferred<void>>
@@ -81,7 +81,7 @@ export const make = Effect.fnUntraced(function* (input: {
   const turns = yield* FiberMap.make<string, PromptResponse, Failure>()
 
   const subscribe = Effect.fnUntraced(function* () {
-    // Parented, so it still closes when the session scope it is handed to is already gone.
+    // Parented to the service scope; the session scope may already be closed.
     const subscriptionScope = yield* Scope.fork(scope)
     const subscription: Subscription = {
       scope: subscriptionScope,
@@ -281,7 +281,7 @@ export const make = Effect.fnUntraced(function* (input: {
     const close = Scope.close(subscription.scope, Exit.void)
     if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) return yield* close
     if ((yield* Ref.get(state)).openChildren.size === 0) return yield* close
-    // Children that outlive a cancelled turn were not cancelled, so their asks still go to the client.
+    // Children outlive a cancelled turn, so their asks still reach the client.
     const cancelled = yield* Deferred.make<void>()
     const background = consume({ ...subscription, cancelled }, { ...ctx, mode: "background" }, state).pipe(
       Effect.ignore,
@@ -353,7 +353,7 @@ export const make = Effect.fnUntraced(function* (input: {
         concurrency: "unbounded",
       })
       const prompt = preparePrompt(catalog, parts, SessionMessage.ID.create())
-      // Check and register in one synchronous step.
+      // Synchronous, so concurrent prompts for one session cannot both register.
       const turn = yield* Effect.withFiber((fiber) => {
         if (FiberMap.hasUnsafe(turns, attached.id)) {
           return Effect.fail(
