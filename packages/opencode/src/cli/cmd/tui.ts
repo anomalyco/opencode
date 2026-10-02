@@ -14,7 +14,7 @@ import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
-import open from "open"
+import { openUrl } from "@opencode-ai/core/open"
 import { sessionDeepLink } from "./session-deep-link"
 
 declare global {
@@ -259,11 +259,11 @@ export const TuiThreadCommand = cmd({
         if (!external || !args.open) return
         if (openedSession === sessionID || !sessionID.startsWith("ses_")) return
         openedSession = sessionID
-        open(sessionDeepLink(transport.url, sessionID)).catch(() => {})
+        openUrl(sessionDeepLink(transport.url, sessionID)).catch(() => {})
       }
 
       if (external && args.open) {
-        open(transport.url).catch(() => {})
+        openUrl(transport.url).catch(() => {})
       }
 
       try {
