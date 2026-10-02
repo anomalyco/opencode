@@ -79,7 +79,9 @@ describe("SessionModelRequest.unsupportedParts", () => {
         }),
       ),
     ]
-    expect(unsupportedParts(messages, capabilities(["text", "image"]))).toBe(messages)
+    const result = unsupportedParts(messages, capabilities(["text", "image"]))
+    expect(result).toHaveLength(messages.length)
+    result.forEach((message, index) => expect(message).toBe(messages[index]))
   })
 
   test("rebuilds only messages with unsupported media", () => {

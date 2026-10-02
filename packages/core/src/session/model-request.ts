@@ -139,31 +139,31 @@ const mediaBytes = (media: Media.Asset) => {
   return 0
 }
 
-const mapSame = <T>(items: ReadonlyArray<T>, fn: (item: T) => T) => {
-  const mapped = items.map(fn)
-  return mapped.every((item, index) => item === items[index]) ? items : mapped
-}
-
-/** Replaces media with the returned text; unchanged messages and the array keep their identity. */
+/** Replaces media with the returned text; messages without replacements are returned unchanged. */
 const replaceMedia = (
   messages: LLMRequest["messages"],
   replace: (media: { mime: string; name: string | undefined; bytes: () => number }) => string | undefined,
 ) =>
-  mapSame(messages, (message) => {
-    const content = mapSame(message.content, (part) => {
+  messages.map((message) => {
+    const content = message.content.map((part) => {
       if (part.type === "media") {
         const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
         return text === undefined ? part : Message.text(text)
       }
       if (part.type !== "tool-result" || part.result.type !== "content") return part
-      const value = mapSame(part.result.value, (item): Content => {
+      const result = part.result
+      const value = result.value.map((item): Content => {
         if (item.type !== "file") return item
         const text = replace({ mime: item.mime, name: item.name, bytes: () => Buffer.byteLength(item.uri) })
         return text === undefined ? item : { type: "text", text }
       })
-      return value === part.result.value ? part : { ...part, result: { ...part.result, value } }
+      return value.every((item, index) => item === result.value[index])
+        ? part
+        : { ...part, result: { ...result, value } }
     })
-    return content === message.content ? message : new Message({ ...message, content })
+    return content.every((part, index) => part === message.content[index])
+      ? message
+      : new Message({ ...message, content })
   })
 
 export const unsupportedParts = (messages: LLMRequest["messages"], capabilities: Model.Capabilities) =>
