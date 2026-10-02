@@ -25,7 +25,7 @@ for (const custom of [false, true]) {
     await expect(tooltip.locator('[data-slot="keybind-v2-label"]')).toHaveText(
       custom ? ["F8"] : mac ? ["⇧", "⌘", "Y"] : ["Ctrl", "Shift", "Y"],
     )
-    for (const id of [fixture.targetID, fixture.sourceID]) {
+    for (const id of [fixture.sourceID, fixture.targetID, fixture.sourceID]) {
       await page.locator(`[data-titlebar-tab-link][href="${sessionHref(id)}"]`).click()
       const messages = id === fixture.sourceID ? fixture.expected.sourceMessageIDs : fixture.expected.targetMessageIDs
       await expect(

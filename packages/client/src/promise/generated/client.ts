@@ -240,6 +240,8 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  VcsInitInput,
+  VcsInitOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsBaseInput,
@@ -2040,6 +2042,18 @@ export function make(options: ClientOptions) {
         ),
     },
     vcs: {
+      init: (input?: VcsInitInput, requestOptions?: RequestOptions) =>
+        request<VcsInitOutput>(
+          {
+            method: "POST",
+            path: `/api/vcs/init`,
+            query: { location: input?.["location"], provider: input?.["provider"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 409, 501, 503],
+            empty: true,
+          },
+          requestOptions,
+        ),
       get: (input?: VcsGetInput, requestOptions?: RequestOptions) =>
         request<VcsGetOutput>(
           {

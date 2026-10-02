@@ -1,4 +1,4 @@
-import { batch, createEffect, createSignal, getOwner, on, onCleanup, runWithOwner, untrack } from "solid-js"
+import { batch, createEffect, createRoot, createSignal, getOwner, on, onCleanup, runWithOwner, untrack } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { Browser } from "@opencode/plugin-browser/rpc"
@@ -24,6 +24,8 @@ type Live = {
   connection: Connection
   registration?: Registration
   revision: number
+  /** Strip writes waiting for the session's location, without which the strip cannot be written. */
+  held: { mirror?: () => void; focus?: Browser.TabID }
   dispose: () => void
 }
 
@@ -77,6 +79,7 @@ export function createModel(ctx: Context) {
     const entry: Live = {
       ref,
       revision: 0,
+      held: {},
       dispose: () => undefined,
       connection: createConnection({
         client,
@@ -89,7 +92,13 @@ export function createModel(ctx: Context) {
         target: () => ({ server: ref.server.id, session: ref.id }),
         // Focus requests write to the owning session's panel even while another shell tab is routed,
         // so the side panel and browser tab are already selected when the user returns to it.
-        focus: (tabID) => layout.open(key(tabID), ref, { select: true }),
+        focus: (tabID) => {
+          if (!ref.location) {
+            entry.held.focus = tabID
+            return
+          }
+          layout.open(key(tabID), ref, { select: true })
+        },
         preview: (path) => preview(ref, path),
         inspect: (event) => inspectors.get(id)?.forEach((listener) => listener(event)),
         change: (next, mirror) => {
@@ -119,7 +128,8 @@ export function createModel(ctx: Context) {
               }),
             )
             // After the store: closing a strip tab asks this model whether the desktop still has it.
-            mirror()
+            if (ref.location) return mirror()
+            entry.held.mirror = mirror
           })
         },
         strip: {
@@ -144,8 +154,25 @@ export function createModel(ctx: Context) {
         if (event.data.sessionID === ref.id) entry.connection.wake()
       }),
     ])
+    // Mirrors the desktop's inventory and focus requests into the strip: writes held while the session's location was
+    // unknown land once the server reports it.
+    const unwatch = createRoot((dispose) => {
+      createEffect(() => {
+        if (!ref.location) return
+        untrack(() =>
+          batch(() => {
+            const held = entry.held
+            entry.held = {}
+            held.mirror?.()
+            if (held.focus) layout.open(key(held.focus), ref, { select: true })
+          }),
+        )
+      })
+      return dispose
+    }, owner)
     if (!ref.pending) entry.connection.wake()
     entry.dispose = () => {
+      unwatch()
       unsubscribe?.forEach((dispose) => dispose())
       entry.connection.dispose()
     }
@@ -199,6 +226,13 @@ export function createModel(ctx: Context) {
   const attached = (session: Session) => {
     const value = attachment(session)
     return value?.registration !== undefined || !!value?.browser
+  }
+  // The desktop has not answered with its first inventory yet: the routed session is about to attach, or it registered
+  // and waits.
+  const pending = (session: SessionRef) => {
+    const value = attachment(session)
+    if (!value) return !state.unsupported[session.server.id] && session.server.compatible && !session.pending
+    return value.registration !== undefined && !value.browser && !value.error
   }
   const available = (session: SessionRef) =>
     !state.unsupported[session.server.id] && !!session.id && session.server.compatible && !layout.narrow()
@@ -263,8 +297,13 @@ export function createModel(ctx: Context) {
     open(session: SessionRef) {
       if (available(session)) command(session, { type: "tabs.open" })
     },
-    /** Tab IDs to list in the side panel: the desktop's inventory, limited to tabs stored in the strip. */
-    tabs(session: Session, open: readonly string[]) {
+    pending,
+    /**
+     * Tab IDs to list in the side panel: the desktop's inventory, limited to tabs stored in the strip. Until the first
+     * inventory arrives, the stored tabs, so a restored selection holds; that inventory then prunes the ones it lacks.
+     */
+    tabs(session: SessionRef, open: readonly string[]) {
+      if (pending(session)) return open
       if (!attached(session)) return []
       return attachment(session)?.browser?.tabs.flatMap((item) => (open.includes(item.id) ? [item.id] : [])) ?? []
     },

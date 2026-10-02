@@ -2270,6 +2270,13 @@ export interface WorktreeApi<E = never> {
   readonly refresh: WorktreeRefreshOperation<E>
 }
 
+export type VcsInitInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly provider?: string | undefined
+}
+export type VcsInitOutput = void
+export type VcsInitOperation<E = never> = (input?: VcsInitInput) => Effect.Effect<VcsInitOutput, E>
+
 export type VcsGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type VcsGetOutput = { readonly location: Location.PublicRef; readonly data: Vcs.Info }
 export type VcsGetOperation<E = never> = (input?: VcsGetInput) => Effect.Effect<VcsGetOutput, E>
@@ -2300,6 +2307,7 @@ export type VcsDiffOutput = { readonly location: Location.PublicRef; readonly da
 export type VcsDiffOperation<E = never> = (input: VcsDiffInput) => Effect.Effect<VcsDiffOutput, E>
 
 export interface VcsApi<E = never> {
+  readonly init: VcsInitOperation<E>
   readonly get: VcsGetOperation<E>
   readonly base: VcsBaseOperation<E>
   readonly status: VcsStatusOperation<E>

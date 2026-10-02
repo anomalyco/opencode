@@ -1,5 +1,5 @@
 import { showToast } from "@opencode/ui/toast"
-import { createEffect, createRoot, lazy, Suspense, untrack, type JSX } from "solid-js"
+import { createEffect, createMemo, createRoot, lazy, Suspense, untrack, type JSX } from "solid-js"
 import { App, Command, Dialogs, Layout, Menu, onIdle, Server, Style, type ServerEntry, type Setup } from "../sdk"
 import { Ssh, type SshConfig, type SshItem } from "./contract"
 import { SshCover, type SshOffer } from "./cover"
@@ -9,8 +9,9 @@ import { createSshController } from "./state"
 const loadDialog = () => import("./dialog")
 
 const setup: Setup = (ctx) => {
+  const app = ctx.use(App)
   // SSH lives in the desktop main process.
-  if (ctx.use(App).platform !== "desktop") return
+  if (app.platform !== "desktop") return
   const remote = ctx.use(Ssh)
   const layout = ctx.use(Layout)
   const dialog = ctx.use(Dialogs)
@@ -39,7 +40,9 @@ const setup: Setup = (ctx) => {
       ),
     error: () => showToast({ variant: "error", title: ctx.t("common.requestFailed") }),
   })
-  const offer: SshOffer = { selection: undefined, offered: false }
+  // A visit to the routed page: a new token each time another tab or page is routed, whether or not a cover shows.
+  const visit = createMemo(() => ({ path: app.path() }))
+  const offer: SshOffer = { visit: undefined }
   const styled = { added: false }
   const byKey = (key: string) => (key.startsWith("ssh:") ? ssh.item(key.slice(4)) : undefined)
 
@@ -83,7 +86,7 @@ const setup: Setup = (ctx) => {
           <Row row={row} id={id} ssh={ssh} />
         </Suspense>
       ),
-      cover: (input) => <SshCover id={id} tab={() => input.tab} ssh={ssh} offer={offer} />,
+      cover: () => <SshCover id={id} visit={visit()} ssh={ssh} offer={offer} />,
     }
   }
 

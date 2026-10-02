@@ -1,12 +1,10 @@
-{ callPackage, path }:
+{ lib, pkgs, electronPin }:
 let
-  version = (builtins.fromJSON (builtins.readFile ../packages/desktop/package.json)).devDependencies.electron;
+  # Nixpkgs owns the release hashes, so bumping the pin no longer means editing this repo. Only the
+  # major is delegated, so what gets built trails the pin whenever nixpkgs has not shipped it yet.
+  # That is safe: the bundle ships one native addon, node-pty's Node-API prebuild, and
+  # only the win32 WSL runtime loads it, so nothing in the main process binds the
+  # Electron ABI.
+  major = lib.versions.major electronPin;
 in
-(callPackage (path + "/pkgs/development/tools/electron/binary/generic.nix") { }) version {
-  # Electron 42.10.1 SHASUMS256.txt; update with the desktop package version.
-  aarch64-linux = "20e68d6c4e47f3ebf59de7c6b1f8b8bec6a6ebda6a451132f9b465f3f13ce467";
-  x86_64-linux = "2452b27112d92387471fa2488aafac85d79ea3f2ee1216c0abd5150d6c12362b";
-  aarch64-darwin = "ac7194a3dfd81930ba35355c01620262c1254752859b42dcb8f4b9e4d174a871";
-  # fetchzip hashes the unpacked headers, not the release tarball.
-  headers = "sha256-4eUy3BZVvxTl7KUOsxio7769lL6ag/ecbeK+qLURWMI=";
-}
+pkgs."electron_${major}-bin" or (throw "nixpkgs ${lib.version} carries no prebuilt electron ${major}: run `nix flake update nixpkgs`, or pin a major nixpkgs still carries")

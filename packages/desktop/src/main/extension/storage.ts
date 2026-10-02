@@ -3,7 +3,10 @@ import { Option, Schema } from "effect"
 import type { StateStore } from "../storage/state"
 import { getStore } from "../storage/store"
 
-/** Each extension's values live in the `state` table under `extension.<id>`, stored as canonical JSON. */
+/**
+ * Each extension's values live in the `state` table under `extension.<id>`, stored as canonical JSON. Writes are rare,
+ * so each one reaches the database before it returns and survives a crash.
+ */
 export function createMainStorage(state: StateStore, id: string): MainStorage {
   const name = namespace(id)
   return {
@@ -28,12 +31,14 @@ export function createMainStorage(state: StateStore, id: string): MainStorage {
         },
         set(value) {
           state.set(name, key, JSON.stringify(Schema.encodeSync(codec)(value)))
+          state.flush()
           cached.value = { current: value }
         },
         remove() {
           // The old copy goes too, or the next read would import it again.
           legacy?.remove()
           if (state.get(name, key) !== null) state.delete(name, key)
+          state.flush()
           cached.value = { current: options.initial }
         },
       }

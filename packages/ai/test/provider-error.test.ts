@@ -15,6 +15,7 @@ describe("provider error classification", () => {
       "Prompt has 5,958,968 tokens, but the configured context size is 256,000 tokens",
       "Range of input length should be [1, 129024]",
       "Too many tokens",
+      "Input validation error: `inputs` tokens + `max_new_tokens` must be <= 131073. Given: 600035 `inputs` tokens and 16 `max_new_tokens`",
       "Token limit exceeded",
     ]
 

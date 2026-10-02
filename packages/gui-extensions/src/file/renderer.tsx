@@ -75,8 +75,12 @@ const setup: Setup = (ctx) => {
     const state = layout.state(`file:${id}`, session)
     return state === "active" || state === "visible"
   }
-  const open = (session: SessionView, path: string, options?: { readonly preview?: boolean }) => {
-    layout.open(key(session, path), session, options?.preview ? { preview: true } : undefined)
+  const open = (
+    session: SessionView,
+    path: string,
+    options?: { readonly preview?: boolean; readonly background?: boolean },
+  ) => {
+    layout.open(key(session, path), session, options)
     void session.file.sync(path)
   }
 
@@ -194,7 +198,7 @@ const setup: Setup = (ctx) => {
     list(session, stored) {
       const cache = tabsOf(session)
       return stored.flatMap((id) => {
-        if (id === OPEN) return layout.narrow() ? [] : [launcher]
+        if (id === OPEN) return [launcher]
         if (!isFileTab(id)) return []
         const existing = cache.get(id)
         if (existing) return [existing]
@@ -339,7 +343,7 @@ const setup: Setup = (ctx) => {
         const path = session.file.resolve(link.href)
         if (!path) return
         batch(() => {
-          open(session, path)
+          open(session, path, { background: link.background })
           shared.tree.setTab("all")
         })
         return
@@ -351,13 +355,15 @@ const setup: Setup = (ctx) => {
         pane.open(session, workspaceFileUrl(session.file.root, path))
         return
       }
-      // Agent-driven opens (browser previews) select the tab without switching the narrow-screen view.
-      const background = layout.narrow() && link.background
       // Inline paths are guessed from text, so confirm the file exists before a tab appears for it.
       // Always reread: V2 publishes no workspace file change events, so a cached copy can be stale.
       void session.file.sync(path, { force: true }).then(() => {
         if (!session.file.get(path)?.loaded) return
-        layout.open(key(session, path), session, background ? { select: true } : undefined)
+        batch(() => {
+          layout.open(key(session, path), session, { background: link.background })
+          // A tapped link switches the narrow-screen view; the side region still opens for when the window is wide.
+          if (layout.narrow() && !layout.side.opened(session)) layout.side.toggle(session)
+        })
       })
     },
   })

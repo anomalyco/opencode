@@ -448,8 +448,8 @@ function openComment(
       })
     })
   }
-  // The extension that owns the comment's origin reveals it (the review diff or a file tab).
-  links.open({ href: item.path, origin: item.commentOrigin, exact: true, session })
+  // The extension that owns the comment's origin reveals it (the review diff or a file tab), keeping the conversation.
+  links.open({ href: item.path, origin: item.commentOrigin, exact: true, background: true, session })
   if (item.commentOrigin === "review") return queueFocus()
   void Promise.resolve(files.load(item.path)).finally(() => queueFocus())
 }

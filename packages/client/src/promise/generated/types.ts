@@ -437,6 +437,8 @@ export type McpProtocol = "legacy" | "auto" | "2026-07-28"
 
 export type ConfigWorktree = { directory: string }
 
+export type ConfigModelCapabilities = { tools?: boolean; input?: Array<string>; output?: Array<string> }
+
 export type ConfigShellOption = { path: string; name: string; acceptable: boolean }
 
 export type SessionMessageLocationSwitched = {
@@ -475,14 +477,16 @@ export type ConfigModelSettings = { compaction?: ProviderCompaction } & { [x: st
 
 export type ProviderSettings = {
   timeout?: number | false
-  chunkTimeout?: number
+  headerTimeout?: number | false
+  chunkTimeout?: number | false
   compaction?: ProviderCompaction
   transport?: ProviderTransport
 } & { [x: string]: any }
 
 export type ConfigProviderSettings = {
   timeout?: number | false
-  chunkTimeout?: number
+  headerTimeout?: number | false
+  chunkTimeout?: number | false
   compaction?: ProviderCompaction
   transport?: ProviderTransport
 } & { [x: string]: JsonValue | null }
@@ -2157,7 +2161,7 @@ export type ConfigEntry =
                 settings?: ConfigModelSettings
                 headers?: { [x: string]: string }
                 body?: { [x: string]: JsonValue }
-                capabilities?: ModelCapabilities
+                capabilities?: ConfigModelCapabilities
                 variants?: Array<{
                   id: string
                   settings?: ConfigModelSettings
@@ -2731,11 +2735,20 @@ export const isShellNotFoundError = (value: unknown): value is ShellNotFoundErro
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ShellNotFoundError"
 
 export type WorktreeError = {
+  readonly _tag: "WorktreeError"
   readonly name: "WorktreeError"
   readonly data: { readonly message: string; readonly forceRequired?: boolean | undefined }
 }
 export const isWorktreeError = (value: unknown): value is WorktreeError =>
-  typeof value === "object" && value !== null && "name" in value && value["name"] === "WorktreeError"
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "WorktreeError"
+
+export type VcsInitNotSupportedError = {
+  readonly _tag: "VcsInitNotSupportedError"
+  readonly providerID: string
+  readonly message: string
+}
+export const isVcsInitNotSupportedError = (value: unknown): value is VcsInitNotSupportedError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "VcsInitNotSupportedError"
 
 export type ServerInfoOutput = ServerInfo
 
@@ -6489,6 +6502,19 @@ export type WorktreeRemoveOutput = void
 export type WorktreeRefreshInput = { readonly projectID: { readonly projectID: string }["projectID"] }
 
 export type WorktreeRefreshOutput = void
+
+export type VcsInitInput = {
+  readonly location?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly provider?: string | undefined
+  }["location"]
+  readonly provider?: {
+    readonly location?: { readonly directory?: string | undefined } | undefined
+    readonly provider?: string | undefined
+  }["provider"]
+}
+
+export type VcsInitOutput = void
 
 export type VcsGetInput = {
   readonly location?: { readonly location?: { readonly directory?: string | undefined } | undefined }["location"]

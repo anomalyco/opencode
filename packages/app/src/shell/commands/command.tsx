@@ -89,6 +89,8 @@ export interface CommandOption {
   keybind?: KeybindConfig
   slash?: string
   slashArguments?: boolean
+  /** Listed right after the option whose slash name this is, when one is registered. */
+  slashAfter?: string
   suggested?: boolean
   /** Listed when the command palette opens without a query. Host commands are listed by id instead. */
   featured?: boolean
@@ -143,6 +145,22 @@ export function activeCommandRegistrations(registrations: CommandRegistration[])
     if (keys.has(entry.key)) return false
     keys.add(entry.key)
     return true
+  })
+}
+
+// Each option with `slashAfter` follows the first option with that slash name, so a command from another
+// registration can sit inside that registration's slash list.
+function placeAfterSlash(options: CommandOption[]) {
+  const anchors = new Map<string, CommandOption>()
+  options.forEach((option) => {
+    if (option.slash && !option.slashAfter && !anchors.has(option.slash)) anchors.set(option.slash, option)
+  })
+  const moved = options.filter((option) => option.slashAfter && anchors.has(option.slashAfter))
+  if (moved.length === 0) return options
+  return options.flatMap((option) => {
+    if (moved.includes(option)) return []
+    if (!option.slash || anchors.get(option.slash) !== option) return [option]
+    return [option, ...moved.filter((item) => item.slashAfter === option.slash)]
   })
 }
 
@@ -313,7 +331,7 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
         }
       }
 
-      return all
+      return placeAfterSlash(all)
     })
 
     createEffect(() => {

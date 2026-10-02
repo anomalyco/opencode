@@ -171,6 +171,7 @@ describe("Groq recorded", () => {
         expect(response.text).not.toContain("<think>")
         expect(response.reasoning.length).toBeGreaterThan(0)
         expect(response.events.some(LLMEvent.is.reasoningDelta)).toBe(true)
+        expect(response.usage?.providerMetadata).toHaveProperty("groq")
         expectUsage(response)
       }),
     60_000,
