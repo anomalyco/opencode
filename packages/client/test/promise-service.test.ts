@@ -100,53 +100,15 @@ test("waits for a live contender when another native contender fails", async () 
   expect(endpoint.url).toBe(info.url)
 })
 
-test("replaces a failed registered service once", async () => {
-  await using fixture = await serviceFixture()
-  const registration = fixture.registration
-  const failed = fixture.spawn("failed-owner")
-  await fixture.waitForFile()
-  const original = await Bun.file(registration).json()
-
-  const endpoint = await ensure({ file: registration, version: "test", command: fixture.command("graceful") })
-  const replacement = await Bun.file(registration).json()
-  fixture.track(replacement.pid)
-
-  expect(await failed.exited).toBe(130)
-  expect(replacement.pid).not.toBe(original.pid)
-  expect(endpoint.url).toBe(replacement.url)
-})
-
-test("replaces a service it started when that boot fails", async () => {
-  await using fixture = await serviceFixture()
-  const registration = fixture.registration
-
-  const endpoint = await ensure({ file: registration, version: "test", command: fixture.command("failed-once") })
-  const replacement = await Bun.file(registration).json()
-  fixture.track(replacement.pid)
-
-  expect(endpoint.url).toBe(replacement.url)
-})
-
-test("reports a failed service it started when the replacement also fails", async () => {
-  await using fixture = await serviceFixture()
-  const registration = fixture.registration
-
-  await expect(
-    ensure({ file: registration, version: "test", command: fixture.command("failed-owner") }),
-  ).rejects.toThrow("Background service failed to start")
-  fixture.track((await Bun.file(registration).json()).pid)
-})
-
-test("reports a failed registered service when its replacement also fails", async () => {
+test("reports a failed registered service", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration
   fixture.spawn("failed-owner")
   await fixture.waitForFile()
 
-  await expect(
-    ensure({ file: registration, version: "test", command: fixture.command("failed-owner") }),
-  ).rejects.toThrow("Background service failed to start")
-  fixture.track((await Bun.file(registration).json()).pid)
+  await expect(ensure({ file: registration, version: "test", command: [] })).rejects.toThrow(
+    "Background service failed to start",
+  )
 })
 
 test("reports a bounded contender stderr tail with native promises", async () => {

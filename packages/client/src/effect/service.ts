@@ -56,7 +56,6 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   const contenders = new Set<ServiceContender>()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
-  let replacedFailure = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
@@ -101,21 +100,8 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
         return Option.some(service)
       }
-      if (compatible && service.state === "failed") {
-        // Replace a service stuck after a failed boot once, so one bad start never needs a manual restart.
-        if (replacedFailure) return yield* Effect.fail(new Error("Background service failed to start"))
-        replacedFailure = true
-        yield* Effect.logWarning("Background service failed to start; replacing it")
-        // A contender this call spawned exits when terminated; that exit is not a startup failure.
-        contenders.forEach((contender) => {
-          if (contender.child.pid !== service.info.pid) return
-          contender.release()
-          contenders.delete(contender)
-        })
-        yield* terminate(service.info, options, timing)
-        lastSpawn = 0
-        return Option.none<LocalService>()
-      }
+      if (compatible && service.state === "failed")
+        return yield* Effect.fail(new Error("Background service failed to start"))
       if (compatible) return Option.none<LocalService>()
       yield* announce("version-mismatch", service.version)
       if (service.state !== "ready")

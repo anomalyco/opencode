@@ -36,7 +36,6 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const contenders = new Set<ServiceContender>()
   let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
-  let replacedFailure = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
 
@@ -82,20 +81,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           await PtyHandoff.complete(options.file ?? fallback(), service.info)
           return service.endpoint
         }
-        if (compatible && service.state === "failed") {
-          // Replace a service stuck after a failed boot once, so one bad start never needs a manual restart.
-          if (replacedFailure) throw new Error("Background service failed to start")
-          replacedFailure = true
-          console.warn("Background service failed to start; replacing it")
-          // A contender this call spawned exits when terminated; that exit is not a startup failure.
-          contenders.forEach((contender) => {
-            if (contender.child.pid !== service.info.pid) return
-            contender.release()
-            contenders.delete(contender)
-          })
-          await terminate(service.info, options, timing)
-          lastSpawn = 0
-        }
+        if (compatible && service.state === "failed") throw new Error("Background service failed to start")
         if (!compatible) {
           announce("version-mismatch", service.version)
           if (service.state !== "ready")
