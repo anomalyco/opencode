@@ -5,6 +5,7 @@ import { TabsInfoPopup } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { usePlatform } from "@/context/platform"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
+import { SDKNotificationToasts } from "@/pages/layout/sdk-notification-toasts"
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
@@ -43,6 +44,7 @@ export default function NewLayout(props: ParentProps) {
       </main>
       {import.meta.env.DEV && state.debugTools && <DebugBar inline />}
       <TabsInfoPopup />
+      <SDKNotificationToasts />
       <ToastRegion v2 />
     </div>
   )
