@@ -10,8 +10,12 @@ export const ServerInfo = Schema.Struct({
   paths: Schema.Struct({
     tmp: Schema.String,
   }),
-  // Optional so clients still decode servers that predate this field.
-  persistentPty: Schema.optional(Schema.Boolean),
+  // Optional at every level so clients still decode servers that predate a capability.
+  capabilities: Schema.optional(
+    Schema.Struct({
+      persistentPty: Schema.optional(Schema.Boolean),
+    }),
+  ),
 }).annotate({ identifier: "ServerInfo" })
 export type ServerInfo = typeof ServerInfo.Type
 

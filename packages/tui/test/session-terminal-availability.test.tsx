@@ -28,7 +28,14 @@ test.each([
   const calls = createFetch((url) => {
     requests.push(url.pathname)
     if (url.pathname === "/api/info")
-      return json({ version: "test", pid: 0, urls: [], paths: { tmp: "/tmp" }, persistentPty: input.reported })
+      return json({
+        version: "test",
+        pid: 0,
+        urls: [],
+        paths: { tmp: "/tmp" },
+        // Servers that predate capabilities omit the whole object.
+        capabilities: input.reported === undefined ? undefined : { persistentPty: input.reported },
+      })
     if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
     if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
     if (url.pathname === `/api/session/${session.id}/message`) return json({ data: [message], cursor: {} })

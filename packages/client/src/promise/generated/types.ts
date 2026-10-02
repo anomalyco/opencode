@@ -5,7 +5,7 @@ export type ServerInfo = {
   pid: number
   urls: Array<string>
   paths: { tmp: string }
-  persistentPty?: boolean | undefined
+  capabilities?: { persistentPty?: boolean | undefined } | undefined
 }
 
 export type PairingCode = { code: string; expires_in: number }

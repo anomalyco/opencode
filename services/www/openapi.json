@@ -17436,10 +17436,23 @@
             "required": ["tmp"],
             "additionalProperties": false
           },
-          "persistentPty": {
+          "capabilities": {
             "anyOf": [
               {
-                "type": "boolean"
+                "type": "object",
+                "properties": {
+                  "persistentPty": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
               },
               {
                 "type": "null"

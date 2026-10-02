@@ -94,7 +94,7 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
     if (url.pathname === "/experimental/capabilities") return json({ backgroundSubagents: true })
     if (url.pathname === "/path") return json({ home: "", state: "", config: "", worktree, directory })
     if (url.pathname === "/api/info")
-      return json({ version: "test", pid: 0, urls: [], paths: { tmp: "/tmp" }, persistentPty: true })
+      return json({ version: "test", pid: 0, urls: [], paths: { tmp: "/tmp" }, capabilities: { persistentPty: true } })
     if (url.pathname === "/api/location")
       return json({ directory, project: { id: "proj_test", directory: worktree, canonical: worktree } })
     if (url.pathname === "/api/plugin")

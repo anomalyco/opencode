@@ -63,7 +63,7 @@ export const { use: useSessionTerminals, provider: SessionTerminalsProvider } = 
           .info()
           .then((info) => {
             // Servers that predate the field omit it; keep offering terminals as clients did before.
-            setAvailable(info.persistentPty !== false)
+            setAvailable(info.capabilities?.persistentPty !== false)
             if (!available()) return
             Object.keys(terminals).forEach((sessionID) => {
               void refresh(sessionID).catch((error) =>
