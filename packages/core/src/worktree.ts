@@ -1,5 +1,4 @@
 export * as Worktree from "./worktree.js"
-import type { FileSystemDirectory } from "./filesystem/directory.js"
 
 import { Context, Effect, Layer, Schema } from "effect"
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm"
@@ -68,7 +67,7 @@ export class StrategyUnavailableError extends Schema.TaggedError<StrategyUnavail
 ) {}
 
 export type Error =
-  | FileSystemDirectory.Error
+  | FSUtil.DirectoryError
   | Project.NotFoundError
   | SourceDirectoryNotFoundError
   | DestinationExistsError

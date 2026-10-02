@@ -1,5 +1,4 @@
 export * as SessionMove from "./move.js"
-import type { FileSystemDirectory } from "../filesystem/directory.js"
 
 import type { Session } from "@opencode/schema/session"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -50,7 +49,7 @@ export interface Interface {
     | DestinationNotFoundError
     | DestinationNotDirectoryError
     | DestinationUnavailableError
-    | FileSystemDirectory.Error
+    | FSUtil.DirectoryError
   >
 }
 

@@ -11,7 +11,6 @@ import { FileMutation } from "./file-mutation.js"
 import { Environment } from "./environment/index.js"
 import { Formatter } from "./formatter.js"
 import { FileSystem } from "./filesystem.js"
-import { FileSystemDirectory } from "./filesystem/directory.js"
 import { FSUtil } from "@opencode/util/fs-util"
 import { FileSystemSearch } from "./filesystem/search.js"
 import { Generate } from "./generate.js"
@@ -116,7 +115,7 @@ const nodes = [
 export const graph = LayerNode.group(nodes)
 
 export type Services = LayerNode.Output<typeof graph>
-export type Error = FileSystemDirectory.Error
+export type Error = FSUtil.DirectoryError
 
 export interface Options {
   // Plugins this instance is born with; empty and absent are equivalent.
@@ -162,7 +161,8 @@ export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Ser
     Effect.gen(function* () {
       // Validate before project/config discovery can turn directory access failures into defects.
       if (!ref.workspaceID)
-        yield* FileSystemDirectory.resolve(ref.directory).pipe(
+        yield* FSUtil.Service.pipe(
+          Effect.flatMap((fs) => fs.realDirectory(ref.directory)),
           Effect.provide(LayerNode.compile(FSUtil.node, { replacements: options.replacements })),
         )
       return LayerNode.compile(graph, { replacements, shared: Node.tags.values.global })
@@ -175,8 +175,7 @@ export function layer(ref: Location.Ref, options: Options = {}): Layer.Layer<Ser
           Effect.failCause(cause).pipe(
             Effect.catch(
               (error): Effect.Effect<never, Error> =>
-                error instanceof FileSystemDirectory.DirectoryNotFoundError ||
-                error instanceof FileSystemDirectory.DirectoryAccessDeniedError
+                error instanceof FSUtil.DirectoryNotFoundError || error instanceof FSUtil.DirectoryAccessDeniedError
                   ? Effect.fail(error)
                   : Effect.die(error),
             ),

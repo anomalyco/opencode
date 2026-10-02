@@ -1,3 +1,4 @@
+import type { FSUtil } from "@opencode/util/fs-util"
 import { describe, expect, test } from "bun:test"
 import { AIError, TransportError } from "@opencode/ai"
 import { Database } from "@opencode/core/database/database"
@@ -9,7 +10,6 @@ import { Job } from "@opencode/core/job"
 import { KV } from "@opencode/core/kv"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
-import type { FileSystemDirectory } from "@opencode/core/filesystem/directory"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -1372,7 +1372,7 @@ function buildExecution(
         () =>
           // The local execution test only needs the Session runner from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-          runner as unknown as Layer.Layer<LocationServices, FileSystemDirectory.Error>,
+          runner as unknown as Layer.Layer<LocationServices, FSUtil.DirectoryError>,
       ),
     )
     return yield* Layer.buildWithScope(

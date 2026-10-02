@@ -1,9 +1,9 @@
+import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { DirectoryNotFoundError, DirectoryAccessDeniedError, InvalidRequestError } from "@opencode/protocol/errors"
-import { FileSystemDirectory } from "@opencode/core/filesystem/directory"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
@@ -19,14 +19,13 @@ export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddle
 export function directoryErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return effect.pipe(
     Effect.catchIf(
-      (error): error is Extract<E, FileSystemDirectory.Error> =>
-        error instanceof FileSystemDirectory.DirectoryNotFoundError ||
-        error instanceof FileSystemDirectory.DirectoryAccessDeniedError,
+      (error): error is Extract<E, FSUtil.DirectoryError> =>
+        error instanceof FSUtil.DirectoryNotFoundError || error instanceof FSUtil.DirectoryAccessDeniedError,
       (error): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> =>
         Effect.fail(
-          error instanceof FileSystemDirectory.DirectoryNotFoundError
-            ? new DirectoryNotFoundError({ directory: error.directory, message: error.message })
-            : new DirectoryAccessDeniedError({ directory: error.directory, message: error.message }),
+          error instanceof FSUtil.DirectoryNotFoundError
+            ? new DirectoryNotFoundError({ directory: AbsolutePath.make(error.directory), message: error.message })
+            : new DirectoryAccessDeniedError({ directory: AbsolutePath.make(error.directory), message: error.message }),
         ),
     ),
   )

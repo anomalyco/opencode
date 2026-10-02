@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import type { FSUtil } from "@opencode/util/fs-util"
 import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
@@ -26,7 +27,6 @@ import { SessionInboxTable, SessionMessageTable, SessionTable } from "@opencode/
 import { SessionStore } from "@opencode/core/session/store"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import type { LocationServices } from "@opencode/core/location-services"
-import type { FileSystemDirectory } from "@opencode/core/filesystem/directory"
 import { Image } from "@opencode/core/image"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -84,7 +84,7 @@ const locations = makeGlobalNode({
               restore: () => Effect.void,
             }),
             Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
-          ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FileSystemDirectory.Error>,
+          ).pipe(Layer.fresh) as unknown as Layer.Layer<LocationServices, FSUtil.DirectoryError>,
       )
     }),
   ),

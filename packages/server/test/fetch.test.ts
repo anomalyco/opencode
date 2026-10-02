@@ -9,6 +9,7 @@ import { Effect, Layer, PlatformError, Schedule, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Session } from "@opencode/schema/session"
+import { blockRealPath } from "../../core/test/fixture/realpath"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerFetch } from "../src/fetch"
@@ -56,13 +57,7 @@ for (const input of [
         { ...options, config: { directory: config.path } },
         {
           overrides: [
-            FSUtil.node.replace(
-              Layer.succeed(FSUtil.Service, {
-                ...filesystem,
-                realPath: (target) =>
-                  blocked.has(target) && input.code !== "ENOENT" ? Effect.fail(cause) : filesystem.realPath(target),
-              }),
-            ),
+            blockRealPath(filesystem, (target) => (blocked.has(target) && input.code !== "ENOENT" ? cause : undefined)),
           ],
         },
       )

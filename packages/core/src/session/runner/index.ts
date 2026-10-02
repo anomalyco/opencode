@@ -1,5 +1,6 @@
 export * as SessionRunner from "./index.js"
 
+import type { FSUtil } from "@opencode/util/fs-util"
 import type { AIError } from "@opencode/ai"
 import { Context, Data, Effect } from "effect"
 import { SessionSchema } from "../schema.js"
@@ -7,7 +8,6 @@ import type { Promotable } from "../inbox.js"
 import type { AgentNotFoundError, MessageDecodeError, StepFailedError } from "../error.js"
 import { SessionRunnerModel } from "./model.js"
 import type { Instructions } from "../../instructions/index.js"
-import type { FileSystemDirectory } from "../../filesystem/directory.js"
 
 export type RunError =
   | AIError
@@ -16,7 +16,7 @@ export type RunError =
   | AgentNotFoundError
   | StepFailedError
   | Instructions.InitializationBlocked
-  | FileSystemDirectory.Error
+  | FSUtil.DirectoryError
 
 export type Continuation = { readonly step: number }
 

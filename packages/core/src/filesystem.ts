@@ -7,8 +7,6 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "./location.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
 import { FileSystemSearch } from "./filesystem/search.js"
-import { FileSystemDirectory } from "./filesystem/directory.js"
-export { DirectoryNotFoundError, DirectoryAccessDeniedError } from "./filesystem/directory.js"
 import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
 
@@ -89,7 +87,7 @@ const baseLayer = Layer.effect(
     // configured directory as canonical; local placements keep symlink
     // canonicalization. This skip is boot-only: resolve/read/list below still
     // access the host filesystem per operation (tracked in #44568).
-    const root = location.workspaceID ? location.directory : yield* FileSystemDirectory.resolve(location.directory)
+    const root = location.workspaceID ? location.directory : yield* fs.realDirectory(location.directory)
     const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
       const absolute = path.resolve(location.directory, input ?? ".")
       if (!FSUtil.contains(location.directory, absolute))

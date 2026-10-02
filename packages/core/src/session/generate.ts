@@ -1,6 +1,6 @@
 export * as SessionGenerate from "./generate.js"
-import type { FileSystemDirectory } from "../filesystem/directory.js"
 
+import type { FSUtil } from "@opencode/util/fs-util"
 import { LLMClient, Message, type AIError } from "@opencode/ai"
 import { Effect } from "effect"
 import { Database } from "../database/database.js"
@@ -20,7 +20,7 @@ export type Error =
   | Instructions.InitializationBlocked
   | SessionRunnerModel.Error
   | AIError
-  | FileSystemDirectory.Error
+  | FSUtil.DirectoryError
 
 /** Generates text from current Session context without mutating the Session. */
 export const generate = Effect.fn("SessionGenerate.generate")(function* (input: {

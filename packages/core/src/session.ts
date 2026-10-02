@@ -12,7 +12,6 @@ import { SessionMessage } from "./session/message.js"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { Bus } from "./bus.js"
 import { Instance } from "./instance/service.js"
-import type { FileSystemDirectory } from "./filesystem/directory.js"
 import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
@@ -148,7 +147,7 @@ export interface Interface {
     readonly context?: number
   }) => Effect.Effect<
     readonly FileDiff.Info[],
-    NotFoundError | MessageNotFoundError | TurnRangeError | Snapshot.Error | FileSystemDirectory.Error
+    NotFoundError | MessageNotFoundError | TurnRangeError | Snapshot.Error | FSUtil.DirectoryError
   >
   /**
    * Durable admitted session work not yet visible in projected history,
@@ -199,7 +198,7 @@ export interface Interface {
     agents?: PromptInput.Prompt["agents"]
     skills?: PromptInput.Prompt["skills"]
     delivery?: SessionInbox.Delivery
-  }) => Effect.Effect<void, NotFoundError | Command.NotFoundError | Command.ExecutionError | FileSystemDirectory.Error>
+  }) => Effect.Effect<void, NotFoundError | Command.NotFoundError | Command.ExecutionError | FSUtil.DirectoryError>
   readonly shell: (
     input: Parameters<Session.Handle["shell"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["shell"]>
@@ -224,11 +223,11 @@ export interface Interface {
       files?: boolean
     }) => Effect.Effect<
       SessionSchema.Revert,
-      NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error | FileSystemDirectory.Error
+      NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error | FSUtil.DirectoryError
     >
     readonly clear: (
       sessionID: SessionSchema.ID,
-    ) => Effect.Effect<void, NotFoundError | BusyError | Snapshot.Error | FileSystemDirectory.Error>
+    ) => Effect.Effect<void, NotFoundError | BusyError | Snapshot.Error | FSUtil.DirectoryError>
     readonly commit: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError>
   }
 }

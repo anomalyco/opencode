@@ -22,6 +22,26 @@ export namespace FSUtil {
 
   export type Error = PlatformError | FileSystemError
 
+  export class DirectoryNotFoundError extends Schema.TaggedError<DirectoryNotFoundError>()(
+    "FileSystem.DirectoryNotFoundError",
+    { directory: Schema.String, cause: Schema.Defect() },
+  ) {
+    override get message() {
+      return `Directory not found: ${this.directory}`
+    }
+  }
+
+  export class DirectoryAccessDeniedError extends Schema.TaggedError<DirectoryAccessDeniedError>()(
+    "FileSystem.DirectoryAccessDeniedError",
+    { directory: Schema.String, cause: Schema.Defect() },
+  ) {
+    override get message() {
+      return `Access denied to directory: ${this.directory}`
+    }
+  }
+
+  export type DirectoryError = DirectoryNotFoundError | DirectoryAccessDeniedError
+
   export interface DirEntry {
     readonly name: string
     readonly type: "file" | "directory" | "symlink" | "other"
@@ -47,6 +67,8 @@ export namespace FSUtil {
     readonly writeWithDirs: (path: string, content: string | Uint8Array, mode?: number) => Effect.Effect<void, Error>
     readonly readDirectoryEntries: (path: string) => Effect.Effect<DirEntry[], Error>
     readonly resolve: (path: string) => Effect.Effect<string>
+    /** realPath for a directory that must be reachable; missing and denied directories fail with typed errors. */
+    readonly realDirectory: (path: string) => Effect.Effect<string, DirectoryError>
     readonly findUp: (target: string, start: string, stop?: string) => Effect.Effect<string[], Error>
     readonly up: (options: UpOptions) => Effect.Effect<string[], Error>
     readonly globUp: (pattern: string, start: string, stop?: string) => Effect.Effect<string[], Error>
@@ -106,6 +128,24 @@ export namespace FSUtil {
         return yield* fs.realPath(resolved).pipe(
           Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(resolved)),
           Effect.orDie,
+        )
+      })
+
+      const realDirectory = Effect.fn("FileSystem.realDirectory")(function* (directory: string) {
+        return yield* fs.realPath(directory).pipe(
+          Effect.catch((cause): Effect.Effect<never, DirectoryError> => {
+            if (cause.reason._tag === "NotFound") return Effect.fail(new DirectoryNotFoundError({ directory, cause }))
+            // macOS privacy denials arrive as Unknown with an EPERM cause.
+            if (
+              cause.reason._tag === "PermissionDenied" ||
+              (cause.reason._tag === "Unknown" &&
+                cause.reason.cause instanceof Error &&
+                "code" in cause.reason.cause &&
+                cause.reason.cause.code === "EPERM")
+            )
+              return Effect.fail(new DirectoryAccessDeniedError({ directory, cause }))
+            return Effect.die(cause)
+          }),
         )
       })
 
@@ -214,6 +254,7 @@ export namespace FSUtil {
         isFile,
         readDirectoryEntries,
         resolve,
+        realDirectory,
         readJson,
         writeJson,
         ensureDir,
