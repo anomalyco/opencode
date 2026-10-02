@@ -10,6 +10,24 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-02-opencode-proxy-authentication-design.md`
 
+## Execution Environment (this machine)
+
+The reporting machine sits behind the authenticating corporate gateway, which shapes how
+tests run locally. Recorded so an executor can reproduce:
+
+- Bun is pinned to `1.3.14` (root `packageManager`). Install locally, not system-wide.
+- The gateway intercepts TLS and gates some hosts on `User-Agent` (see the spec).
+  `packages/app` depends on `github:anomalyco/ghostty-web`, fetched from
+  `codeload.github.com`, which returns **403** for non-`curl/*` UAs (Bun). This is
+  the exact bug being fixed. For local work, install filtered to the packages
+  under test, e.g. `bun install --filter "@opencode-ai/core"`, and temporarily
+  drop the `ghostty-web` dependency from `packages/app` (restore before
+  finalizing). `codeload` is not needed for `core` or `opencode`.
+- Bun needs the corporate root/intermediate CAs (`NODE_EXTRA_CA_CERTS`), or
+  `NODE_TLS_REJECT_UNAUTHORIZED=0` for local-only installs.
+- The repo forbids running tests from the root (`bunfig.toml` guard); run from
+  `packages/core`.
+
 ## Global Constraints
 
 - Mechanisms: Negotiate (Kerberos/SPNEGO), NTLM fallback, Basic. Selection order for `auth: "auto"` is **Negotiate → NTLM → Basic**.
