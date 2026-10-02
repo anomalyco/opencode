@@ -120,7 +120,6 @@ Use frontmatter to name the skill and control where it appears:
 ---
 name: Git Release
 description: Prepare a repository release
-slash: true
 metadata:
   opencode/autoinvoke: false
 ---
@@ -128,14 +127,12 @@ metadata:
 Prepare the changelog, version bump, tag, and release notes.
 ```
 
-| Field                          | Behavior                                                           |
-| ------------------------------ | ------------------------------------------------------------------ |
-| `name`                         | Display name; defaults to the path-derived ID                      |
-| `description`                  | Summary used to show the skill to the model                        |
-| `slash`                        | Set to `false` to hide the skill from interactive command catalogs |
-| `metadata.opencode/slash`      | Boolean or `"true"`/`"false"`; overrides `slash`                   |
-| `metadata.opencode/autoinvoke` | Set to `false` to omit the skill from the model's available list   |
-| `disable-model-invocation`     | Set to `true` for the same effect as `opencode/autoinvoke: false`  |
+| Field                          | Behavior                                                          |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `name`                         | Display name; defaults to the path-derived ID                     |
+| `description`                  | Summary used to show the skill to the model                       |
+| `metadata.opencode/autoinvoke` | Set to `false` to omit the skill from the model's available list  |
+| `disable-model-invocation`     | Set to `true` for the same effect as `opencode/autoinvoke: false` |
 
 All frontmatter is optional at runtime. Add a clear `description` when the model should discover the skill; skills without one are not advertised.
 
@@ -197,6 +194,8 @@ OpenCode then:
 2. Checks the selected agent's `skill` permission.
 3. Adds the Markdown body, without frontmatter, to the conversation.
 4. Provides the skill's base directory and a sample of up to ten supporting file paths.
+
+To load a skill yourself, mention it in your prompt as `@skill-id`.
 
 Supporting file contents are not loaded automatically. The agent reads them when the skill directs it to do so. The file sample is available for directory-based `SKILL.md` skills; flat Markdown skills do not receive a neighboring file list.
 
