@@ -8,6 +8,8 @@ import {
   durableEvent,
   ephemeralEvent,
   failed,
+  interrupted,
+  permissionAsked,
   reasoningDelta,
   startSession,
   stepEnded,
@@ -235,6 +237,53 @@ describe("acp turn events over the wire", () => {
     expect(acp.childUpdates.some((item) => item.childSessionId === "ses_future")).toBe(false)
   })
 
+  test("keeps following open children after a cancelled turn", async () => {
+    await using acp = await startSession({
+      capabilities: { childSessionUpdates: true },
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        childCreated("ses_background", sessionID, "Background research"),
+        textDelta(sessionID, "msg_root", "working"),
+      ],
+      onInterrupt: ({ sessionID }) => [interrupted(sessionID)],
+      permission: () => ({ outcome: { outcome: "selected", optionId: "once" } }),
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
+    await acp.notify("session/cancel", { sessionId: acp.sessionId })
+    expect((await prompt).stopReason).toBe("cancelled")
+    acp.server.send(permissionAsked("ses_background", "perm_background"), interrupted("ses_background"))
+
+    await acp.until(
+      () => acp.childUpdates.some((item) => item.type === "status" && item.status === "interrupted"),
+      "background child interruption",
+    )
+    await acp.until(() => acp.server.replies.length === 1, "background permission reply")
+    expect(acp.childUpdates.map(childUpdateKind)).toEqual(["status:created", "status:interrupted"])
+    expect(acp.server.replies).toEqual([
+      { sessionID: "ses_background", requestID: "perm_background", decision: "once" },
+    ])
+  })
+
+  test("stops following background children once the session closes", async () => {
+    await using acp = await startSession({
+      capabilities: { childSessionUpdates: true },
+      onPrompt: ({ sessionID, id, text }) =>
+        text === "hello"
+          ? turn(sessionID, id, childCreated("ses_background", sessionID, "Background research"))
+          : turn(sessionID, id),
+    })
+    const other = await acp.newSession()
+
+    expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
+    await acp.request("session/close", { sessionId: acp.sessionId })
+    acp.server.send(textDelta("ses_background", "msg_late", "after close"))
+
+    expect((await acp.prompt(other.sessionId, "later")).stopReason).toBe("end_turn")
+    expect(acp.childUpdates.map(childUpdateKind)).toEqual(["status:created"])
+  })
+
   test("streams tool pending, progress, success, and failure updates", async () => {
     await using acp = await startSession({
       onPrompt: ({ sessionID, id }) =>
@@ -315,55 +364,53 @@ describe("acp turn events over the wire", () => {
 
     expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
     expect(acp.server.cancelledForms).toEqual([{ sessionID: acp.sessionId, formID: "frm_question" }])
+    expect(acp.elicitations).toEqual([])
   })
 
-  test.todo(
-    "reports locations for native edit, write, and patch tools (https://github.com/anomalyco/opencode/issues/49591)",
-    async () => {
-      const patchText = [
-        "*** Begin Patch",
-        "*** Update File: /workspace/src/c.ts",
-        "@@",
-        "-one",
-        "+two",
-        "*** End Patch",
-      ].join("\n")
-      await using acp = await startSession({
-        onPrompt: ({ sessionID, id }) =>
-          turn(
-            sessionID,
-            id,
-            toolStarted(sessionID, "call_edit", "edit"),
-            toolCalled(sessionID, "call_edit", { path: "/workspace/src/a.ts", oldString: "a", newString: "b" }),
-            toolSucceeded(sessionID, "call_edit", {}, "edited"),
-            toolStarted(sessionID, "call_write", "write"),
-            toolCalled(sessionID, "call_write", { path: "/workspace/src/b.ts", content: "b" }),
-            toolSucceeded(sessionID, "call_write", {}, "written"),
-            toolStarted(sessionID, "call_patch", "patch"),
-            toolCalled(sessionID, "call_patch", { patchText }),
-            toolSucceeded(sessionID, "call_patch", {}, "patched"),
-          ),
-      })
+  test("reports locations for native edit, write, and patch tools (https://github.com/anomalyco/opencode/issues/49591)", async () => {
+    const patchText = [
+      "*** Begin Patch",
+      "*** Update File: /workspace/src/c.ts",
+      "@@",
+      "-one",
+      "+two",
+      "*** End Patch",
+    ].join("\n")
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(
+          sessionID,
+          id,
+          toolStarted(sessionID, "call_edit", "edit"),
+          toolCalled(sessionID, "call_edit", { path: "/workspace/src/a.ts", oldString: "a", newString: "b" }),
+          toolSucceeded(sessionID, "call_edit", {}, "edited"),
+          toolStarted(sessionID, "call_write", "write"),
+          toolCalled(sessionID, "call_write", { path: "/workspace/src/b.ts", content: "b" }),
+          toolSucceeded(sessionID, "call_write", {}, "written"),
+          toolStarted(sessionID, "call_patch", "patch"),
+          toolCalled(sessionID, "call_patch", { patchText }),
+          toolSucceeded(sessionID, "call_patch", {}, "patched"),
+        ),
+    })
 
-      await acp.prompt(acp.sessionId, "hello")
+    await acp.prompt(acp.sessionId, "hello")
 
-      const locations = turnUpdates(acp.updates)
-        .filter((item) => item.update.sessionUpdate === "tool_call_update")
-        .map((item) => [
-          toolCallID(item),
-          toolStatus(item),
-          "locations" in item.update ? item.update.locations : undefined,
-        ])
-      expect(locations).toEqual([
-        ["call_edit", "in_progress", [{ path: "/workspace/src/a.ts" }]],
-        ["call_edit", "completed", [{ path: "/workspace/src/a.ts" }]],
-        ["call_write", "in_progress", [{ path: "/workspace/src/b.ts" }]],
-        ["call_write", "completed", [{ path: "/workspace/src/b.ts" }]],
-        ["call_patch", "in_progress", [{ path: "/workspace/src/c.ts" }]],
-        ["call_patch", "completed", [{ path: "/workspace/src/c.ts" }]],
+    const locations = turnUpdates(acp.updates)
+      .filter((item) => item.update.sessionUpdate === "tool_call_update")
+      .map((item) => [
+        toolCallID(item),
+        toolStatus(item),
+        "locations" in item.update ? item.update.locations : undefined,
       ])
-    },
-  )
+    expect(locations).toEqual([
+      ["call_edit", "in_progress", [{ path: "/workspace/src/a.ts" }]],
+      ["call_edit", "completed", [{ path: "/workspace/src/a.ts" }]],
+      ["call_write", "in_progress", [{ path: "/workspace/src/b.ts" }]],
+      ["call_write", "completed", [{ path: "/workspace/src/b.ts" }]],
+      ["call_patch", "in_progress", [{ path: "/workspace/src/c.ts" }]],
+      ["call_patch", "completed", [{ path: "/workspace/src/c.ts" }]],
+    ])
+  })
 })
 
 function turnUpdates(updates: readonly SessionNotification[]) {

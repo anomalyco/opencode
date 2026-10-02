@@ -9,6 +9,8 @@ import {
   type AgentRequestResponsesByMethod,
   type AnyMessage,
   type ContentBlock,
+  type CreateElicitationRequest,
+  type CreateElicitationResponse,
   type McpServer,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
@@ -27,9 +29,11 @@ import {
   type SessionMessageInfo,
   type TokenUsageInfo,
 } from "@opencode/client/promise"
+import { Form } from "@opencode/schema/form"
 import type { BunRequest } from "bun"
-import { Effect, Logger, Option, Schema } from "effect"
+import { Duration, Effect, Exit, Logger, Option, Schema, Scope } from "effect"
 import { ACP } from "../../src/acp/agent"
+import { ACPTurn } from "../../src/acp/turn"
 
 type DurableEvent = Extract<OpenCodeEvent, { durable: unknown }>
 type EphemeralEvent = Exclude<OpenCodeEvent, DurableEvent>
@@ -57,12 +61,22 @@ const SyntheticBody = Schema.Struct({
   delivery: Delivery,
   resume: Schema.optional(Schema.Boolean),
 })
-const CreateBody = Schema.Struct({ location: Schema.Struct({ directory: Schema.String }) })
+const Permissions = Schema.Array(
+  Schema.Struct({ action: Schema.String, resource: Schema.String, effect: Schema.Literals(["allow", "deny", "ask"]) }),
+)
+const Metadata = Schema.Record(Schema.String, Schema.MutableJson)
+const CreateBody = Schema.Struct({
+  location: Schema.Struct({ directory: Schema.String }),
+  permissions: Schema.optional(Permissions),
+  metadata: Schema.optional(Metadata),
+})
+const UpdateBody = Schema.Struct({ permissions: Schema.optional(Permissions), metadata: Schema.optional(Metadata) })
 const ModelBody = Schema.Struct({
   model: Schema.Struct({ providerID: Schema.String, id: Schema.String, variant: Schema.optional(Schema.String) }),
 })
 const AgentBody = Schema.Struct({ agent: Schema.String })
 const ReplyBody = Schema.Struct({ decision: Schema.Literals(["once", "always", "reject"]) })
+const FormReplyBody = Schema.Struct({ answer: Form.Answer })
 const McpBody = Schema.Struct({ config: Schema.Unknown })
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
@@ -117,10 +131,22 @@ export type WireOptions = {
     readonly decision: string
   }>
   readonly onFormCancel?: Hook<{ readonly sessionID: string; readonly formID: string }>
+  readonly onFormReply?: Hook<FormReply>
   readonly permission?: (
     request: RequestPermissionRequest,
     signal: AbortSignal,
   ) => RequestPermissionResponse | Promise<RequestPermissionResponse>
+  readonly elicitation?: (
+    request: CreateElicitationRequest,
+    signal: AbortSignal,
+  ) => CreateElicitationResponse | Promise<CreateElicitationResponse>
+  readonly cancelDrainTimeout?: Duration.Input
+}
+
+type FormReply = {
+  readonly sessionID: string
+  readonly formID: string
+  readonly answer: typeof FormReplyBody.Type.answer
 }
 
 type CatalogKind = "model" | "default" | "agent" | "command"
@@ -137,6 +163,7 @@ export type InitializeOptions = {
   readonly writeTextFile?: boolean
   readonly childSessionUpdates?: boolean
   readonly terminalAuth?: boolean
+  readonly elicitation?: boolean
 }
 
 export const testModel = {
@@ -367,6 +394,7 @@ export async function startWire(options: WireOptions = {}) {
   const permissions: RequestPermissionRequest[] = []
   const writes: WriteTextFileRequest[] = []
   const childUpdates: ChildUpdate[] = []
+  const elicitations: CreateElicitationRequest[] = []
   // Client handlers record SDK-validated params; responses wait until they have seen every earlier agent message.
   const counts = { sent: 0, handled: 0 }
   const handled = <Value>(list: Value[], value: Value) => {
@@ -378,11 +406,19 @@ export async function startWire(options: WireOptions = {}) {
   const clientToAgent = new TransformStream<Uint8Array, Uint8Array>()
   const agentToClient = new TransformStream<Uint8Array, Uint8Array>()
   const logs: Array<Pick<Logger.Options<unknown>, "message" | "cause">> = []
+  const agentScope = Scope.makeUnsafe()
   const agentConnection = await Effect.runPromise(
     ACP.connect(
       OpenCode.make({ baseUrl: server.url }),
       ndJsonStream(agentToClient.writable, clientToAgent.readable),
-    ).pipe(Effect.provide(Logger.layer([Logger.make((log) => logs.push({ message: log.message, cause: log.cause }))]))),
+    ).pipe(
+      Scope.provide(agentScope),
+      (effect) =>
+        options.cancelDrainTimeout === undefined
+          ? effect
+          : Effect.provideService(effect, ACPTurn.CancelDrainTimeout, options.cancelDrainTimeout),
+      Effect.provide(Logger.layer([Logger.make((log) => logs.push({ message: log.message, cause: log.cause }))])),
+    ),
   )
   const clientStream = ndJsonStream(clientToAgent.writable, agentToClient.readable)
   const connection = client({ name: "test" })
@@ -393,6 +429,10 @@ export async function startWire(options: WireOptions = {}) {
     .onRequest("session/request_permission", (ctx) => {
       handled(permissions, ctx.params)
       return options.permission?.(ctx.params, ctx.signal) ?? { outcome: { outcome: "cancelled" } }
+    })
+    .onRequest("elicitation/create", (ctx) => {
+      handled(elicitations, ctx.params)
+      return options.elicitation?.(ctx.params, ctx.signal) ?? { action: "cancel" }
     })
     .onRequest("fs/write_text_file", (ctx) => {
       handled(writes, ctx.params)
@@ -449,6 +489,7 @@ export async function startWire(options: WireOptions = {}) {
       protocolVersion: 1,
       clientCapabilities: {
         ...(capabilities.writeTextFile ? { fs: { writeTextFile: true, readTextFile: false } } : {}),
+        ...(capabilities.elicitation ? { elicitation: { form: {} } } : {}),
         _meta: {
           ...(capabilities.childSessionUpdates ? { "opencode/child-session-updates": true } : {}),
           ...(capabilities.terminalAuth ? { "terminal-auth": true } : {}),
@@ -465,6 +506,7 @@ export async function startWire(options: WireOptions = {}) {
     permissions,
     writes,
     childUpdates,
+    elicitations,
     request,
     until,
     initialize,
@@ -482,6 +524,7 @@ export async function startWire(options: WireOptions = {}) {
     async [Symbol.asyncDispose]() {
       connection.close()
       agentConnection.close()
+      await Effect.runPromise(Scope.close(agentScope, Exit.void))
       await server.stop()
     },
   }
@@ -523,6 +566,7 @@ function startServer(options: WireOptions, changed: () => void) {
   const interrupts: string[] = []
   const replies: Array<{ readonly sessionID: string; readonly requestID: string; readonly decision: string }> = []
   const cancelledForms: Array<{ readonly sessionID: string; readonly formID: string }> = []
+  const repliedForms: FormReply[] = []
   const mcp: Array<{ readonly name: string; readonly directory?: string; readonly config: unknown }> = []
   const fake = {
     requests,
@@ -538,6 +582,7 @@ function startServer(options: WireOptions, changed: () => void) {
     interrupts,
     replies,
     cancelledForms,
+    repliedForms,
     mcp,
     send(...events: ReadonlyArray<OpenCodeEvent>) {
       events.forEach((event) => {
@@ -566,6 +611,15 @@ function startServer(options: WireOptions, changed: () => void) {
   const notFound = (sessionID: string) =>
     Response.json({ _tag: "SessionNotFoundError", sessionID, message: "session not found" }, { status: 404 })
   const noContent = () => new Response(null, { status: 204 })
+  // Routes without session-location middleware reject a malformed ID in their path decode; routes with it name the field.
+  const pathDecodeError = {
+    _tag: "InvalidRequestError",
+    message: 'Expected a string starting with "ses"',
+    kind: "Params",
+  }
+  const fieldError = { _tag: "InvalidRequestError", message: "Invalid session ID", field: "sessionID" }
+  const malformed = (sessionID: string, body: object) =>
+    sessionID.startsWith("ses") ? undefined : Response.json(body, { status: 400 })
 
   // Handlers record facts synchronously before awaiting hooks, so waiters can observe a held request.
   const observed = (response: Response | Promise<Response>) => {
@@ -667,20 +721,39 @@ function startServer(options: WireOptions, changed: () => void) {
           return Response.json(page(sessions, query, 100))
         }),
         POST: body(CreateBody, (_req, input) =>
-          Response.json({ data: createSession(makeSession("", { cwd: input.location.directory })) }),
+          Response.json({
+            data: createSession({
+              ...makeSession("", { cwd: input.location.directory }),
+              ...(input.permissions ? { permissions: [...input.permissions] } : {}),
+              ...(input.metadata ? { metadata: input.metadata } : {}),
+            }),
+          }),
         ),
       },
       "/api/session/:sessionID": {
         GET: route((req) => {
+          const invalid = malformed(req.params.sessionID, pathDecodeError)
+          if (invalid) return invalid
           const session = fake.sessions.get(req.params.sessionID)
           return session ? Response.json({ data: session }) : notFound(req.params.sessionID)
         }),
-        DELETE: route((req) =>
-          fake.sessions.delete(req.params.sessionID) ? noContent() : notFound(req.params.sessionID),
-        ),
+        DELETE: route((req) => {
+          const invalid = malformed(req.params.sessionID, pathDecodeError)
+          if (invalid) return invalid
+          return fake.sessions.delete(req.params.sessionID) ? noContent() : notFound(req.params.sessionID)
+        }),
+        PATCH: body(UpdateBody, (req, input) => {
+          const session = fake.sessions.get(req.params.sessionID)
+          if (!session) return notFound(req.params.sessionID)
+          if (input.permissions) session.permissions = [...input.permissions]
+          if (input.metadata) session.metadata = input.metadata
+          return noContent()
+        }),
       },
       "/api/session/:sessionID/fork": {
         POST: route((req) => {
+          const invalid = malformed(req.params.sessionID, fieldError)
+          if (invalid) return invalid
           const source = fake.sessions.get(req.params.sessionID)
           if (!source) return notFound(req.params.sessionID)
           const forked = createSession(source)
@@ -761,6 +834,14 @@ function startServer(options: WireOptions, changed: () => void) {
           return noContent()
         }),
       },
+      "/api/session/:sessionID/form/:formID/reply": {
+        POST: body(FormReplyBody, async (req, input) => {
+          const reply = { sessionID: req.params.sessionID, formID: req.params.formID, answer: input.answer }
+          fake.repliedForms.push(reply)
+          await emit(options.onFormReply?.(reply))
+          return noContent()
+        }),
+      },
       "/api/experimental/mcp/:name": {
         PUT: body(McpBody, (req, input, query) => {
           fake.mcp.push({ name: req.params.name, directory: query["location[directory]"], config: input.config })
@@ -772,6 +853,11 @@ function startServer(options: WireOptions, changed: () => void) {
 
   return Object.assign(fake, {
     url: http.url.toString(),
+    /** Ends every open event stream while the server keeps answering requests. */
+    closeEvents() {
+      streams.forEach((stream) => stream.close())
+      streams.clear()
+    },
     async stop() {
       streams.forEach((stream) => stream.close())
       streams.clear()

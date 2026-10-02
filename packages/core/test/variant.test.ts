@@ -297,6 +297,17 @@ test("spells Workers AI thinking controls through the chat template", () => {
 
 test("spells Chat Completions variants for hosting providers", () => {
   expect(
+    resolve(model("@opencode/ai/providers/digitalocean", "openai-gpt-5-nano", undefined, "digitalocean"), [
+      { type: "effort", values: ["minimal", "low", "medium", "high"] },
+    ]),
+  ).toEqual([
+    { id: "minimal", settings: { reasoningEffort: "minimal" } },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "medium", settings: { reasoningEffort: "medium" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+
+  expect(
     resolve(model("@opencode/ai/providers/openai-compatible", "deepseek-ai/deepseek-v4-pro", undefined, "nvidia"), [
       { type: "effort", values: ["none", "high", "max"] },
     ]),

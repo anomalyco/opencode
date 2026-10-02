@@ -43,6 +43,8 @@ export interface MockServerConfig {
     cursor?: string
   }
   vcs?: { current: string; default: string }
+  // Initializes the mock project's VCS; without a handler this mutation answers 501.
+  onVcsInit?: (input: { directory: string; provider?: string }) => void
   vcsDiff?: unknown[] | ((input: { mode?: string }) => unknown[])
   // Benchmark latency only. Tests hold message pages with `beforeMessagesResponse`.
   messageDelay?: number
@@ -817,6 +819,24 @@ function mockHandlers(
             location: location(config),
             data: { branch: config.vcs ?? { current: "main", default: "main" } },
           }),
+        vcsInit: (ctx) => {
+          if (!config.onVcsInit) return unsupported("initialize VCS", "onVcsInit")
+          return Effect.sync(() => {
+            const url = new URL(ctx.request.url, "http://localhost")
+            const provider = url.searchParams.get("provider") ?? undefined
+            config.onVcsInit?.({ directory: requestDirectory(config, ctx.request), provider })
+            const project = config.project as { id: string; vcs?: string }
+            project.vcs = provider ?? "git"
+            state.emit([
+              {
+                id: "evt_vcs_initialized",
+                type: "worktree.updated",
+                created: Date.now(),
+                data: { projectID: project.id },
+              },
+            ])
+          }).pipe(Effect.andThen(noContent))
+        },
         vcsStatus: () => Effect.succeed({ location: location(config), data: [] }),
         vcsBranches: () => Effect.succeed({ location: location(config), data: ["main"] }),
         vcsDiff: (ctx) =>

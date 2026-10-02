@@ -13,7 +13,7 @@ import {
 
 export function useWslAddServerProbes(input: {
   state: Accessor<WslServersState | undefined>
-  api: RemoteClient<(typeof Wsl)["spec"]>
+  api: () => RemoteClient<(typeof Wsl)["spec"]>
   view: Accessor<WslAddServerView>
   adding: Accessor<boolean>
   busy: Accessor<boolean>
@@ -27,12 +27,12 @@ export function useWslAddServerProbes(input: {
       if (command.kind === "addable") {
         await runAddableProbePlan({
           plan: command.plan,
-          probeAddable: (distros) => input.api.probeAddable({ distros }),
+          probeAddable: (distros) => input.api().probeAddable({ distros }),
         })
         return
       }
-      if (command.plan.action === "probeRuntime") await input.api.probeRuntime()
-      if (command.plan.action === "refreshDistros") await input.api.refreshDistros()
+      if (command.plan.action === "probeRuntime") await input.api().probeRuntime()
+      if (command.plan.action === "refreshDistros") await input.api().refreshDistros()
     },
     onError: input.onError,
     onSettled: (_result, error, command) => {

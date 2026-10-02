@@ -29,7 +29,8 @@ afterEach(() => {
 })
 
 // The client stands in for the pane's main entry: each register is one binding with its own events.
-// `strip` stands in for the browser tab IDs the session's layout stores.
+// `strip` stands in for the browser tab IDs the session's layout stores. While `owner.located` is false the strip
+// cannot be written, so the owner holds the latest mirror, as the model does until the session's location loads.
 function fixture(strip: string[] = []) {
   const states: State[] = []
   const listeners = new Map<string, (event: PaneEvent) => void>()
@@ -45,6 +46,7 @@ function fixture(strip: string[] = []) {
   // The remote is gone while the pane's main extension reloads or is disabled.
   // An endpoint main cannot resolve, e.g. an SSH server's while it reconnects, makes register reject.
   const remote: { available: boolean; reject?: Error } = { available: true }
+  const owner: { located: boolean; held?: () => void } = { located: true }
   const client: Client = {
     register: async (input) => {
       calls.push({ input, commands: [] })
@@ -73,7 +75,8 @@ function fixture(strip: string[] = []) {
     target: () => ({ ...target }),
     change: (state, mirror) => {
       states.push(state)
-      mirror()
+      if (owner.located) return mirror()
+      owner.held = mirror
     },
     strip: {
       stored: () => strip,
@@ -91,7 +94,7 @@ function fixture(strip: string[] = []) {
   const emit = (index: number, event: PaneEvent) => listeners.get(calls[index].input.binding)?.(event)
   connection.wake()
   emit(0, { type: "state", state: browser })
-  return { connection, calls, states, target, remote, routed, highlights, closed, listeners, emit, strip }
+  return { connection, calls, states, target, remote, owner, routed, highlights, closed, listeners, emit, strip }
 }
 
 const element = {
@@ -211,6 +214,25 @@ test("only a native inventory, the first one included, closes stored tabs the de
   }
 })
 
+test("a mirror held while the strip cannot be written still adds new tabs and prunes once it lands", () => {
+  const added = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
+  const stale = `tab_${crypto.randomUUID()}`
+  const app = fixture()
+  try {
+    app.owner.located = false
+    app.strip.push(stale)
+    app.emit(0, { type: "state", state: { ...browser, tabs: [...browser.tabs, { ...browser.tabs[0], id: added }] } })
+    // A later report replaces the held mirror before the strip can be written.
+    app.emit(0, { type: "surface", tabID: added, surface: "surface-2" })
+    expect(app.strip).toEqual([tabID, stale])
+    app.owner.located = true
+    app.owner.held?.()
+    expect(app.strip).toEqual([tabID, added])
+  } finally {
+    app.connection.dispose()
+  }
+})
+
 test("a rejected registration clears itself and retries with its tabs after the backoff", async () => {
   jest.useFakeTimers()
   const app = fixture()
@@ -257,12 +279,26 @@ test("a command wakes its attachment once and is not replayed", async () => {
   }
 })
 
-test.each(["browser.pane.replaced", "browser.pane.unsupported"])("%s blocks automatic ownership recovery", (error) => {
+// Main rejects the register of a binding it closes, and that reply can overtake the closed-state event.
+test.each([
+  { error: "browser.pane.replaced", rejected: false },
+  { error: "browser.pane.unsupported", rejected: false },
+  { error: "browser.pane.replaced", rejected: true },
+  { error: "browser.pane.unsupported", rejected: true },
+])("$error blocks automatic ownership recovery (register rejected first: $rejected)", async ({ error, rejected }) => {
+  jest.useFakeTimers()
   const app = fixture()
   try {
-    app.emit(0, { type: "state", state: null, error })
+    if (rejected) {
+      app.emit(0, { type: "state", state: browser, error: "browser.pane.suspended" })
+      app.remote.reject = new Error("browser.pane.registration.closed")
+      app.connection.wake()
+      await Promise.resolve()
+    }
+    app.emit(app.calls.length - 1, { type: "state", state: null, error })
+    jest.advanceTimersByTime(30_000)
     app.connection.wake()
-    expect(app.calls).toHaveLength(1)
+    expect(app.calls).toHaveLength(rejected ? 2 : 1)
     expect(app.states.at(-1)?.error).toBe(error)
   } finally {
     app.connection.dispose()

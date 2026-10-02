@@ -2205,7 +2205,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect((yield* Ref.get(events)).some((event) => event.type === "text-delta")).toBeTrue()
-      expect(error.message).toBe("ECONNRESET: socket closed unexpectedly")
+      expect(error.message).toBe("Connection lost while reading the response: ECONNRESET: socket closed unexpectedly")
       expect(error.reason).toMatchObject({
         _tag: "Transport",
         transport: "http",
@@ -2223,7 +2223,7 @@ describe("OpenAI Chat route", () => {
         Effect.flip,
       )
 
-      expect(error.message).toBe("ECONNRESET: socket closed before output")
+      expect(error.message).toBe("Connection lost while reading the response: ECONNRESET: socket closed before output")
       expect(error.reason).toMatchObject({
         _tag: "Transport",
         transport: "http",

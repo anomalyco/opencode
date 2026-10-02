@@ -10,9 +10,10 @@ import { PlatformProvider, type Platform } from "../../src/runtime/platform/plat
 import { ServerConnection } from "../../src/runtime/server/registry"
 import { useExtensionServers } from "../../src/runtime/extension/servers"
 
-// `wsl` is the Ubuntu server's endpoint (default `server`); updating OpenCode restarts it on `restart` (default `wsl`).
-// `ssh` adds a saved SSH server `box`, ready on that endpoint with password `ssh-1`; each connect brings up a new
-// remote server with the next password (`ssh-2`, ...).
+// A desktop window. `wsl` is the Ubuntu server's endpoint (default `server`); updating OpenCode restarts it on `restart`
+// (default `wsl`). `ssh` adds a saved SSH server `box`, ready on that endpoint with password `ssh-1`; each connect
+// brings up a new remote server with the next password (`ssh-2`, ...). `storage=async` stores in localStorage behind
+// asynchronous reads like the desktop app's; reads of keys containing `hold` wait for "Load held storage".
 export function mount(input: {
   server: string
   mode: "failed" | "stopped" | "ready"
@@ -20,6 +21,8 @@ export function mount(input: {
   restart?: string | null
   path?: string | null
   ssh?: string | null
+  storage?: string | null
+  hold?: string | null
 }) {
   const root = document.getElementById("root")
   if (!root) throw new Error("Missing fixture root")
@@ -27,14 +30,28 @@ export function mount(input: {
   history.set({ value: input.path ?? "/settings", replace: true, scroll: false })
   const endpoint = { url: input.wsl ?? input.server }
   const ready = () => ({ kind: "ready" as const, url: endpoint.url, password: null })
+  const held = Promise.withResolvers<void>()
+  const storage = (name?: string) => {
+    const item = (key: string) => (name ? `${name}:${key}` : key)
+    return {
+      getItem: async (key: string) => {
+        if (input.hold && key.includes(input.hold)) await held.promise
+        return localStorage.getItem(item(key))
+      },
+      setItem: async (key: string, value: string) => localStorage.setItem(item(key), value),
+      removeItem: async (key: string) => localStorage.removeItem(item(key)),
+    }
+  }
   render(() => {
     const [store, setStore] = createStore<{
       calls: string[]
+      connects: number
       available: boolean
       state: WslServersState
       ssh: SshState
     }>({
       calls: [],
+      connects: 0,
       available: true,
       ssh: {
         revision: 0,
@@ -95,7 +112,6 @@ export function mount(input: {
         revision: state.revision + 1,
         servers: state.servers.map((server) => ({ ...server, ...item })),
       }))
-    const connects = { count: 1 }
     const methods: Record<string, Record<string, (input: { id?: string; name?: string }) => unknown>> = {
       wsl: {
         // Like main: stops the distro's server, updates OpenCode, then starts the server again on a new endpoint.
@@ -126,8 +142,8 @@ export function mount(input: {
       ssh: {
         // Like main: a connect opens a new tunnel to a remote server with a new password.
         start() {
-          connects.count += 1
-          setSsh({ stage: "ready", http: { url: input.ssh ?? "", password: `ssh-${connects.count}` } })
+          setStore("connects", (count) => count + 1)
+          setSsh({ stage: "ready", http: { url: input.ssh ?? "", password: `ssh-${store.connects + 1}` } })
           return store.ssh.revision
         },
       },
@@ -175,6 +191,7 @@ export function mount(input: {
       notify: async () => undefined,
       restart: unused,
       extensions: bridge,
+      ...(input.storage === "async" ? { storage } : {}),
     }
     function Interface() {
       const extensions = useExtensionServers()
@@ -220,6 +237,22 @@ export function mount(input: {
               }}
             >
               Drop SSH tunnel
+            </button>
+            {/* A background reconnect that needs a password, as main reports it to every window. */}
+            <button
+              type="button"
+              onClick={() => {
+                setSsh({ stage: "authentication" })
+                publish("ssh")
+              }}
+            >
+              Require SSH sign-in
+            </button>
+            <output aria-label="SSH connects">{store.connects}</output>
+          </Show>
+          <Show when={input.hold}>
+            <button type="button" onClick={() => held.resolve()}>
+              Load held storage
             </button>
           </Show>
           <Interface />

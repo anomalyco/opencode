@@ -29,7 +29,10 @@ export function createConnection(input: {
   client: () => Client | undefined
   listen: (binding: string, listener: (event: PaneEvent) => void) => () => void
   target: () => { server: string; session: string }
-  /** `mirror` applies the state's tabs to the strip; call it right after storing the state, in the same batch. */
+  /**
+   * `mirror` applies the current tabs to the strip; call it right after storing the state, in the same batch, or
+   * later once the strip can be written. A mirror that never runs leaves the strip's tabs as they are.
+   */
   change: (state: ConnectionState, mirror: () => void) => void
   /** The session's strip: the browser tab IDs it stores, and quietly adding or removing one. */
   strip: {
@@ -48,29 +51,35 @@ export function createConnection(input: {
   let retry: ReturnType<typeof setTimeout> | undefined
   // A registration was wanted while the pane's remote was gone; it registers once the remote is back.
   let lost = false
-  // Tab IDs of the last inventory, to tell new tabs from ones the user just closed.
+  // Tab IDs of the last inventory the strip received, to tell new tabs from ones the user just closed.
   let known: readonly Browser.TabID[] | undefined
-  // Reports the state with a mirror of its tabs into the strip, applied after the state so closing a strip tab already
-  // finds the desktop's answer. Only tabs new since the last inventory are added, so a tab the user just closed is not
-  // reopened before the desktop confirms. Only a native inventory removes: it closes every stored tab it lacks, so the
-  // desktop decides which tabs exist, while suspended, unavailable, and restoring states keep the tabs they will restore.
-  const publish = (native = false) => {
+  // A native inventory the strip has not received yet; the next mirror that runs prunes with it.
+  let pruning = false
+  // Mirrors the tabs into the strip, applied after the state so closing a strip tab already finds the desktop's answer.
+  // Only tabs new since the last mirrored inventory are added, so a tab the user just closed is not reopened before
+  // the desktop confirms. Only a native inventory removes: it closes every stored tab it lacks, so the desktop decides
+  // which tabs exist, while suspended, unavailable, and restoring states keep the tabs they will restore.
+  const mirror = () => {
     const previous = new Set<string>(known ?? [])
     const ids = state.browser?.tabs.map((tab) => tab.id)
+    const prune = pruning
     known = ids
-    input.change({ ...state }, () => {
-      if (!ids) return
-      if (native) {
-        const listed = new Set<string>(ids)
-        input.strip
-          .stored()
-          .filter((tabID) => !listed.has(tabID))
-          .forEach((tabID) => input.strip.close(tabID))
-      }
-      ids.forEach((tabID) => {
-        if (!previous.has(tabID)) input.strip.open(tabID)
-      })
+    pruning = false
+    if (!ids) return
+    if (prune) {
+      const listed = new Set<string>(ids)
+      input.strip
+        .stored()
+        .filter((tabID) => !listed.has(tabID))
+        .forEach((tabID) => input.strip.close(tabID))
+    }
+    ids.forEach((tabID) => {
+      if (!previous.has(tabID)) input.strip.open(tabID)
     })
+  }
+  const publish = (native = false) => {
+    pruning ||= native
+    input.change({ ...state }, mirror)
   }
   // The pane itself is unreachable while its main extension restarts or is disabled, and main drops every
   // binding without reporting it. Keep the tabs, like an idle eviction, and register again when it returns.
@@ -145,7 +154,12 @@ export function createConnection(input: {
         state.error = event.error
         publish(true)
       },
-      (error) => (unavailable(error) ? suspend(registration) : reopen(registration)),
+      (error) => {
+        if (unavailable(error)) return suspend(registration)
+        // Main closed a binding it took; its closed-state event decides, whichever of the two arrives first.
+        if (error instanceof Error && error.message === "browser.pane.registration.closed") return
+        reopen(registration)
+      },
     )
     state.registration = registration
     state.surfaces = {}

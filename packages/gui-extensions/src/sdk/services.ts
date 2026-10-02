@@ -218,14 +218,25 @@ export interface Layout {
   /** Stored layout (tabs, scroll) has loaded. */
   ready(): boolean
   /**
-   * Panel keys are `${extension}:${tab id}`. Works for sessions that are not mounted. On narrow screens, opening a
-   * tab its panel does not list stores nothing and only selects the panel's mobile view.
+   * Panel keys are `${extension}:${tab id}`. Works for sessions that are not mounted. On narrow screens, a plain or
+   * `preview` open selects the panel's mobile view and closes the dock; opening a tab its panel does not list, or a
+   * launcher, stores nothing. A launcher is never selected on narrow screens, but a stored one stays the preview slot.
    */
   open(
     key: string,
     session: SessionRef,
-    /** `select`: append at the end if missing and select it, leaving the preview tab alone. */
-    options?: { readonly preview?: boolean; readonly focus?: boolean; readonly select?: boolean },
+    /**
+     * `select`: append at the end if missing and select it, leaving the preview tab alone. Like `background`, it keeps
+     * the narrow-screen view and the dock and opens the side region.
+     * `background`: on narrow screens, keep the current view and the dock, and open the side region so the tab
+     * shows when the window is wide.
+     */
+    options?: {
+      readonly preview?: boolean
+      readonly focus?: boolean
+      readonly select?: boolean
+      readonly background?: boolean
+    },
   ): void
   close(key: string, session: SessionRef): void
   /** Closing the last panel the side region was opened for also closes the region. */

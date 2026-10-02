@@ -26,8 +26,8 @@ function translate(language: Context, value: AddServerText) {
 }
 
 interface DialogWslServerProps {
-  api: RemoteClient<(typeof Wsl)["spec"]>
-  state: () => WslServersState | undefined
+  api: RemoteClient<(typeof Wsl)["spec"]> | undefined
+  state: WslServersState | undefined
 }
 
 export function DialogAddWslServer(props: DialogWslServerProps) {
@@ -43,7 +43,7 @@ export function DialogAddWslServer(props: DialogWslServerProps) {
 
   return (
     <Show
-      when={props.state()}
+      when={controller.state()}
       fallback={
         <Dialog fit class="settings-wsl-dialog">
           <div class="settings-wsl-loading">
@@ -245,7 +245,12 @@ export function DialogAddWslServer(props: DialogWslServerProps) {
 function useWslAddServerController(props: DialogWslServerProps) {
   const language = useExtension()
   const dialog = useDialog()
-  const api = props.api
+  // Without its main side, WSL reads as unavailable and every action fails, as when the desktop could not start it.
+  const api = () => {
+    const client = props.api
+    if (!client) throw new Error(language.t("error.unavailable"))
+    return client
+  }
   const [store, setStore] = createStore({
     view: "main" as "main" | "catalog",
     selectedDistro: null as string | null,
@@ -253,7 +258,7 @@ function useWslAddServerController(props: DialogWslServerProps) {
     catalogTarget: null as string | null,
     adding: false,
   })
-  const current = props.state
+  const current = createMemo(() => (props.api ? props.state : unavailable(language.t("error.unavailable"))))
   const viewModel = (probingAddable: boolean) =>
     addServerViewModel({
       state: current(),
@@ -297,14 +302,14 @@ function useWslAddServerController(props: DialogWslServerProps) {
   const refreshDistros = () => {
     void run(async () => {
       probes.resetProbeFailure()
-      await api.refreshDistros()
+      await api().refreshDistros()
     })
   }
 
   const installDistro = (name: string) => {
     void run(async () => {
       probes.resetProbeFailure()
-      await api.installDistro({ name })
+      await api().installDistro({ name })
       setStore("view", "main")
     })
   }
@@ -328,12 +333,12 @@ function useWslAddServerController(props: DialogWslServerProps) {
     const action = button.action
     if (!distro || !action) return
     if (action === "install-opencode") {
-      await run(() => api.installOpencode({ name: distro }))
+      await run(() => api().installOpencode({ name: distro }))
       return
     }
     setStore("adding", true)
     try {
-      await api.addServer({ distro })
+      await api().addServer({ distro })
       dialog.close()
     } catch (err) {
       requestError(language, err)
@@ -343,6 +348,7 @@ function useWslAddServerController(props: DialogWslServerProps) {
   }
 
   return {
+    state: current,
     model,
     runtimeError: () => current()?.runtime?.error ?? null,
     view: () => store.view,
@@ -355,7 +361,7 @@ function useWslAddServerController(props: DialogWslServerProps) {
     closeCatalog,
     refreshDistros,
     installCatalogDistro,
-    installWsl: () => void run(() => api.installWsl()),
+    installWsl: () => void run(() => api().installWsl()),
     runPrimary: () => void runPrimary(),
     close: () => dialog.close(),
   }
@@ -437,4 +443,17 @@ function requestError(language: Context, err: unknown) {
     title: language.t("common.requestFailed"),
     description: err instanceof Error ? err.message : String(err),
   })
+}
+
+function unavailable(error: string): WslServersState {
+  return {
+    runtime: { available: false, version: null, error },
+    installed: [],
+    online: [],
+    distroProbes: {},
+    opencodeChecks: {},
+    pendingRestart: false,
+    servers: [],
+    job: null,
+  }
 }

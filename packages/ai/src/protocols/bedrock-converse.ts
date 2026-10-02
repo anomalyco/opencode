@@ -319,6 +319,9 @@ const lowerToolResult = Effect.fn("BedrockConverse.lowerToolResult")(function* (
   } satisfies BedrockToolResultBlock
 })
 
+// Keep Claude and Nova tool-result images inline; put other models' images beside the result.
+const keepToolImagesInline = (id: string) => id.includes("anthropic.claude-") || id.includes("amazon.nova-")
+
 const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
   request: LLMRequest,
   breakpoints: BedrockCache.Breakpoints,
@@ -328,8 +331,19 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
   // Mistral can reject replay IDs even when they satisfy Converse's broader ID syntax.
   const normalizeID = request.model.id.includes("mistral.") ? MistralToolID.normalizer(request) : (id: string) => id
   const providerMetadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const hoistImages = !keepToolImagesInline(request.model.id)
+  // Bedrock expects parallel tool results before any images hoisted beside them.
+  const pendingImages: BedrockMedia.ImageBlock[] = []
+  const flushImages = () => {
+    if (pendingImages.length === 0) return
+    const previous = messages.at(-1)
+    if (previous?.role === "user")
+      messages[messages.length - 1] = { role: "user", content: [...previous.content, ...pendingImages] }
+    pendingImages.length = 0
+  }
 
   for (const message of request.messages) {
+    if (message.role !== "tool") flushImages()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("Bedrock Converse", message)
       const content = textWithCache(breakpoints, part.text, part.cache)
@@ -403,7 +417,22 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
     for (const part of message.content) {
       if (!ProviderShared.supportsContent(part, ["tool-result"]))
         return yield* ProviderShared.unsupportedContent("Bedrock Converse", "tool", ["tool-result"])
-      content.push(yield* lowerToolResult(part, documentNames, normalizeID))
+      const result = yield* lowerToolResult(part, documentNames, normalizeID)
+      const images: BedrockMedia.ImageBlock[] = hoistImages
+        ? result.toolResult.content.filter((item) => "image" in item)
+        : []
+      const nonImageContent = result.toolResult.content.filter((item) => !("image" in item))
+      content.push(
+        images.length === 0
+          ? result
+          : {
+              toolResult: {
+                ...result.toolResult,
+                content: nonImageContent.length > 0 ? nonImageContent : [{ text: "See attached image." }],
+              },
+            },
+      )
+      pendingImages.push(...images)
       const cachePoint = BedrockCache.block(breakpoints, part.cache)
       if (cachePoint) content.push(cachePoint)
     }
@@ -413,6 +442,7 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
     else messages.push({ role: "user", content })
   }
 
+  flushImages()
   return messages
 })
 

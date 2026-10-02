@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
@@ -147,6 +147,14 @@ describe("Permission", () => {
       expect(yield* service.list()).toEqual([])
     }),
   )
+
+  test("matches Windows rule resources against slash-normalized file access resources", () => {
+    const rules: Permission.Ruleset = [
+      { action: "external_directory", resource: "C:\\Users\\x\\proj\\*", effect: "allow" },
+    ]
+    expect(Permission.evaluate("external_directory", "C:/Users/x/proj/src/*", rules).effect).toBe("allow")
+    expect(Permission.evaluate("external_directory", "C:/Users/x/other/*", rules).effect).toBe("ask")
+  })
 
   it.effect("allows managed output reads without granting external directory access", () =>
     Effect.gen(function* () {

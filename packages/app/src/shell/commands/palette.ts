@@ -64,7 +64,7 @@ export function createCommandPaletteFileOpener(onOpenFile?: (path: string) => vo
   const extensions = useExtensionAttachment()
 
   return (path: string) => {
-    links.open({ href: path, exact: true, session: extensions.current() })
+    links.open({ href: path, exact: true, background: true, session: extensions.current() })
     onOpenFile?.(path)
   }
 }

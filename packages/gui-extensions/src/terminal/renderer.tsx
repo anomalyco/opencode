@@ -1,4 +1,4 @@
-import { createEffect, createMemo, lazy, on } from "solid-js"
+import { createEffect, createMemo, lazy, on, Suspense } from "solid-js"
 import { App, Command, Layout, onIdle, Panel, Sessions, Storage, type Setup } from "../sdk"
 import { createTerminalModel, type TerminalWorkspace } from "./model"
 
@@ -43,7 +43,7 @@ const setup: Setup = (ctx) => {
       section: "terminal",
       featured: true,
       bind: "ctrl+`",
-      slash: { name: "terminal" },
+      slash: { name: "terminal", after: "open" },
       editable: true,
       enabled: routed(),
       run() {
@@ -107,6 +107,10 @@ const setup: Setup = (ctx) => {
   const TerminalPanel = lazy(() => import("./panel"))
   // Warms the panel chunk so the first dock open has no blank frame. ghostty-web still loads on the first terminal.
   ctx.cleanup(onIdle(() => void TerminalPanel.preload()))
+  // A dock stored open renders with its session at startup, so its chunk loads with the app, not when it idles.
+  createEffect(() => {
+    if (sessions.list().some((session) => layout.dock.opened(session))) void TerminalPanel.preload()
+  })
   // Stable objects with live titles, so a locale change never remounts the dock's terminals.
   const tab = {
     id: "main",
@@ -126,7 +130,9 @@ const setup: Setup = (ctx) => {
     },
     list: () => [tab],
     render: (_tab, session) => (
-      <TerminalPanel model={model} session={session} onClose={() => layout.close(DOCK, session)} />
+      <Suspense>
+        <TerminalPanel model={model} session={session} onClose={() => layout.close(DOCK, session)} />
+      </Suspense>
     ),
   })
 }

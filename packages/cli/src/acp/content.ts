@@ -171,7 +171,11 @@ function resourceLinkToPart(link: ResourceLink): PromptPart {
         mime: link.mimeType ?? "text/plain",
       }
   }
-  return { type: "text", text: link.uri }
+  return linkReference(link.name, link.uri)
+}
+
+export function linkReference(name: string | undefined, uri: string): PromptPart {
+  return { type: "text", text: name ? `[${name}](${uri})` : uri }
 }
 
 function filenameFromUri(uri: string | undefined): string | undefined {

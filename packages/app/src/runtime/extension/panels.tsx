@@ -137,9 +137,12 @@ export function createRegion(input: { region: Panel["region"]; view: SessionView
     ]
   })
 
+  // Narrow screens never select a launcher: a stored one falls back like a missing tab.
+  const desktop = createMediaQuery("(min-width: 768px)")
   const active = createMemo(() => {
     const value = input.tabs().active()
-    if (value && strip().some((entry) => entry.key === value)) return value
+    if (value && strip().some((entry) => entry.key === value && (desktop() || entry.tab.kind !== "launcher")))
+      return value
     return strip()
       .filter((entry) => entry.tab.fallback !== undefined)
       .reduce<RegionEntry | undefined>(
@@ -157,10 +160,13 @@ export function createRegion(input: { region: Panel["region"]; view: SessionView
     }),
   )
 
+  // Hidden tabs keep their place in the strip for selection, focus, and close, but draw no trigger.
+  const drawn = createMemo(() => strip().filter((entry) => !entry.tab.hidden))
+
   return {
     entries,
-    /** Strip order by key. Renders iterate keys so a provider's fresh tab objects never remount a trigger. */
-    keys: createMemo(() => strip().map((entry) => entry.key), [], { equals: same }),
+    /** Drawn strip order by key. Renders iterate keys so a provider's fresh tab objects never remount a trigger. */
+    keys: createMemo(() => drawn().map((entry) => entry.key), [], { equals: same }),
     entry: (key: string) => byKey().get(key),
     active,
     selected: createMemo(() => {
@@ -171,7 +177,7 @@ export function createRegion(input: { region: Panel["region"]; view: SessionView
     /** An extension's tab ids in the stored strip. */
     openFor: (extension: string) =>
       stored().flatMap((key) => (key.startsWith(`${extension}:`) ? [key.slice(extension.length + 1)] : [])),
-    lead: () => !!strip().find((entry) => entry.tab.kind !== "pinned")?.tab.first,
+    lead: () => !!drawn().find((entry) => entry.tab.kind !== "pinned")?.tab.first,
     select(key: string) {
       input.tabs().setActive(key)
     },
@@ -219,7 +225,7 @@ export function RegionContent(props: {
                 <div
                   id={member()?.tab.dom?.panel}
                   role="tabpanel"
-                  aria-labelledby={active() ? member()?.tab.dom?.tab : undefined}
+                  aria-labelledby={active() && !member()?.tab.hidden ? member()?.tab.dom?.tab : undefined}
                   data-slot="tabs-content"
                   class="h-full min-h-0 overflow-hidden"
                   classList={{ hidden: !active() }}
@@ -251,7 +257,7 @@ export function RegionContent(props: {
                 <div
                   id={entry()?.tab.dom?.panel}
                   role="tabpanel"
-                  aria-labelledby={entry()?.tab.dom?.tab}
+                  aria-labelledby={entry()?.tab.hidden ? undefined : entry()?.tab.dom?.tab}
                   tabIndex={entry()?.tab.tabbable ? 0 : undefined}
                   data-slot="tabs-content"
                   class="flex flex-col h-full overflow-hidden contain-strict"

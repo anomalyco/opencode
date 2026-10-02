@@ -45,7 +45,7 @@ export const layer = Layer.effect(
 
     setExtensionAssets((request, url) => extensionAsset(storage.db, request, url))
 
-    // Like the updater: flush and dispose everything first, then hand off (quitAndInstall) or relaunch.
+    // Disposes every extension but the caller (the host keeps it), then hands off (e.g. quitAndInstall) or relaunches.
     const restart = async (handoff?: () => void | Promise<void>) => {
       setAppQuitting()
       await runPromise(lifecycle.prepareToRestart)

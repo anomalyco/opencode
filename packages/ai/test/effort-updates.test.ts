@@ -197,9 +197,15 @@ describe("Anthropic Messages effort updates", () => {
     ["anthropic/claude-opus-5", true],
     ["claude-fable-5-1", true],
     ["claude-mythos-5-1", true],
+    ["claude-opus-5-5", true],
+    ["claude-sonnet-5-5", true],
+    ["anthropic/claude-sonnet-5-5", true],
+    ["claude-sonnet-6", true],
+    ["claude-haiku-6", true],
     ["claude-fable-5", false],
     ["claude-opus-4-8", false],
     ["claude-sonnet-5", false],
+    ["claude-sonnet-5-20260801", false],
     ["kimi-k2.5", false],
   ] as const) {
     it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>

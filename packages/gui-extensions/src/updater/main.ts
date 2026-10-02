@@ -8,7 +8,7 @@ import { make } from "./machine"
 const setup: Setup = async (ctx) => {
   const app = ctx.use(MainApp)
   const enabled = app.packaged && app.channel !== "dev"
-  // Holds no resources, so the restart handoff can still log after this extension is disposed.
+  // Holds no resources, so it needs no cleanup.
   const context = logContext(app.log)
   const runPromise = Effect.runPromiseWith(context)
   const runFork = Effect.runForkWith(context)

@@ -123,6 +123,10 @@ const setup: Setup = (ctx) => {
           <span class="max-w-40 truncate">{text()}</span>
         </div>
       ),
+      // Listed only to hold the restored selection until the desktop's first inventory names the tab.
+      get hidden() {
+        return !model()?.tab({ key: session }, id)
+      },
       group: "browser",
       dom: { tab: `session-side-panel-browser-tab-${id}`, panel: "session-side-panel-browser-tabpanel" },
     }
@@ -133,7 +137,8 @@ const setup: Setup = (ctx) => {
     id: "main",
     region: "side",
     list(session, open) {
-      const ids = model()?.tabs(session, open) ?? []
+      // While the model loads, the stored tabs hold the strip and its selection, as before the first inventory.
+      const ids = model()?.tabs(session, open) ?? open
       if (ids.length === 0) {
         tabs.delete(session.key)
         return []
@@ -143,12 +148,15 @@ const setup: Setup = (ctx) => {
       tabs.set(session.key, next)
       return [...next.values()]
     },
+    // The pane shows nothing until the desktop's first inventory names its tabs.
     render: (tab, session) => (
       <Show when={model()}>
         {(value) => (
-          <Suspense>
-            <SessionBrowserPane tab={tab} session={session} model={value()} />
-          </Suspense>
+          <Show when={!value().pending(session)}>
+            <Suspense>
+              <SessionBrowserPane tab={tab} session={session} model={value()} />
+            </Suspense>
+          </Show>
         )}
       </Show>
     ),

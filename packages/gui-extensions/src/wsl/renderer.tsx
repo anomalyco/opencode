@@ -32,16 +32,13 @@ const setup: Setup = (ctx) => {
   }
   const byKey = (key: string) => state()?.servers.find((item) => `wsl:${item.config.distro}` === key)
 
-  const add = () => {
-    const api = remote()
-    if (!api) return
+  const add = () =>
     void loadDialog().then((module) => {
       if (ctx.signal.aborted) return
       if (!styled.added) ctx.add(Style, module.css)
       styled.added = true
-      dialog.push(() => <module.DialogAddWslServer api={api} state={state} />)
+      dialog.push(() => <module.DialogAddWslServer api={remote()} state={state()} />)
     })
-  }
 
   const entry = (item: WslServerItem): ServerEntry => {
     const runtime = item.runtime

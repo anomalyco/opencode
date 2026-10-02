@@ -81,7 +81,9 @@ export function createExtensionServices() {
   const platform = usePlatform()
   const dialog = useDialog()
   const language = useLanguage()
-  const narrow = createMediaQuery("(max-width: 767px)")
+  // The session screen's breakpoint, negated, so no fractional width is both narrow and desktop.
+  const desktop = createMediaQuery("(min-width: 768px)")
+  const narrow = () => !desktop()
   const [attached, setAttached] = createSignal<Attached>()
   const removed = new Set<(value: { server: string; directory: string }) => void>()
   const memory = new Map<string, readonly [Store<object>, (mutation: (draft: object) => void) => void]>()
@@ -286,12 +288,11 @@ export function createExtensionAttachment(services: ExtensionServices) {
   const host = useExtensionHost()
   const command = useCommand()
   const location = useLocation()
-  const narrow = createMediaQuery("(max-width: 767px)")
+  const desktop = createMediaQuery("(min-width: 768px)")
+  const narrow = () => !desktop()
   const views = new Map<string, SessionView>()
   const [mounted, setMounted] = createStore({ revision: 0 })
   const refs = new Map<string, SessionRef>()
-  // The panel whose toggle opened a session's side region, by session key.
-  const openedFor = new Map<string, string>()
 
   const connection = (id: string) => global.servers.list().find((item) => ServerConnection.key(item) === id)
 
@@ -371,11 +372,15 @@ export function createExtensionAttachment(services: ExtensionServices) {
     return Array.from(refs.values())
   })
 
-  const current = createMemo(() => {
+  const routed = createMemo(() => {
     const value = route()
-    if (value.type !== "session") return
+    return value.type === "session" ? `${value.server}\n${value.sessionId}` : undefined
+  })
+  const current = createMemo(() => {
+    const key = routed()
+    if (!key) return
     void mounted.revision
-    return views.get(`${value.server}\n${value.sessionId}`)
+    return views.get(key)
   })
 
   const scope = (id: string) => {
@@ -398,13 +403,19 @@ export function createExtensionAttachment(services: ExtensionServices) {
   const sideOpened = (session: SessionRef) => !!tabs.pane(shellTab(session), "side")
   const dockOpened = (session: SessionRef) => !!tabs.pane(shellTab(session), "dock")
   const setDock = (session: SessionRef, opened: boolean) => tabs.setPane(shellTab(session), "dock", opened)
-  // However the side region closes, it forgets its opener, so a region reopened any other way belongs to the user.
-  createEffect(() => {
-    const open = new Set(sessions().flatMap((session) => (sideOpened(session) ? [session.key] : [])))
-    Array.from(openedFor.keys()).forEach((key) => {
-      if (!open.has(key)) openedFor.delete(key)
-    })
-  })
+  // A token per session whose side region is open, new each time the region opens.
+  const sideVisits = createMemo<ReadonlyMap<string, object>>(
+    (previous) =>
+      new Map(
+        sessions().flatMap((session) =>
+          sideOpened(session) ? [[session.key, previous.get(session.key) ?? {}] as const] : [],
+        ),
+      ),
+    new Map(),
+  )
+  // The panel whose toggle opened a side region, by the region's token. However the region closes, it reopens with
+  // a new token, so a region reopened any other way belongs to the user.
+  const openedFor = new WeakMap<object, string>()
 
   // Keys are `${extension}:${tab id}`; the extension's panel decides the region.
   const provider = (key: string) => {
@@ -417,19 +428,18 @@ export function createExtensionAttachment(services: ExtensionServices) {
     return view?.key === session.key ? view : undefined
   }
 
-  // The narrow-screen view belongs to the routed, mounted session: it resets to the conversation when that session
-  // changes or unmounts (e.g. on Home). The dock's view follows the dock's own per-session state instead.
-  const [mobile, setMobile] = createStore({ session: undefined as string | undefined, view: "session" })
-  createEffect(
-    on(
-      () => current()?.key,
-      (key) => {
-        if (key !== mobile.session) setMobile({ session: undefined, view: "session" })
-      },
-    ),
+  // Counts routing visits: each change of the routed session, including to none (e.g. Home), starts the next one.
+  const visit = createMemo(on(routed, (_key, _previous, count: number = 0) => count + 1))
+  // The narrow-screen view belongs to the routed, mounted session for one visit, and reads as the conversation once
+  // another visit starts. A view selected for a session that is not routed (e.g. a file link that opens Files on
+  // another session) belongs to the next visit, which the navigation that follows starts. The dock's view follows
+  // the dock's own per-session state instead.
+  const [mobile, setMobile] = createStore({ session: undefined as string | undefined, view: "session", visit: 0 })
+  const mobileView = createMemo(() =>
+    mobile.session === current()?.key && mobile.visit === visit() ? mobile.view : "session",
   )
-  const mobileView = createMemo(() => (mobile.session === current()?.key ? mobile.view : "session"))
-  const selectMobile = (session: SessionRef, view: string) => setMobile({ session: session.key, view })
+  const selectMobile = (session: SessionRef, view: string) =>
+    setMobile({ session: session.key, view, visit: session.key === routed() ? visit() : visit() + 1 })
 
   // The side tabs a mounted session lists right now, plus `adding` as if it were stored; unmounted sessions have none.
   const listed = (session: SessionRef, value: string, adding?: string) => {
@@ -449,20 +459,17 @@ export function createExtensionAttachment(services: ExtensionServices) {
     )
   }
 
-  const open = (
-    key: string,
-    session: SessionRef,
-    options?: { readonly preview?: boolean; readonly focus?: boolean; readonly select?: boolean },
-  ) => {
+  const open = (key: string, session: SessionRef, options?: Parameters<Layout["open"]>[2]) => {
     const item = provider(key)
     if (item?.value.region === "dock") return setDock(session, true)
     const value = stateKey(session)
     if (!value) return
     // focus: false adds the tab quietly: no selection, no region change, no preview replacement.
     if (options?.focus === false && !options.preview) return layout.panel.append(value, key)
+    // A select keeps the narrow-screen view and dock, as a background open does, and opens the side region too.
     if (options?.select)
       return batch(() => {
-        if (!narrow()) tabs.setPane(shellTab(session), "side", true)
+        tabs.setPane(shellTab(session), "side", true)
         layout.panel.append(value, key)
         layout.panel.focus(value, key)
       })
@@ -471,13 +478,14 @@ export function createExtensionAttachment(services: ExtensionServices) {
     const launchers = new Set(known.flatMap((entry) => (entry.tab.kind === "launcher" ? [entry.key] : [])))
     const first = known.some((entry) => entry.key === key && entry.tab.first)
     batch(() => {
-      if (narrow()) {
+      if (narrow() && !options?.background) {
         setDock(session, false)
         if (item?.value.mobile) selectMobile(session, `${item.extension}:${item.value.id}`)
-        // A tab its panel does not list on narrow screens stays unstored: the open only selects the panel's view.
-        if (mountedView(session) && !known.some((entry) => entry.key === key)) return
+        // A tab its panel does not list, or a launcher, stays unstored: the open only selects the panel's view.
+        if (mountedView(session) && !known.some((entry) => entry.key === key && entry.tab.kind !== "launcher")) return
       }
-      if (!narrow()) tabs.setPane(shellTab(session), "side", true)
+      // A background open keeps the narrow-screen view, but its tab still shows once the window is wide.
+      if (!narrow() || options?.background) tabs.setPane(shellTab(session), "side", true)
       // Pinned tabs are listed without being stored; opening one only selects it.
       if (known.some((entry) => entry.key === key && entry.tab.kind === "pinned")) return layout.panel.focus(value, key)
       if (options?.preview) return layout.panel.preview(value, key, launchers)
@@ -569,19 +577,21 @@ export function createExtensionAttachment(services: ExtensionServices) {
         if (provider(key)?.value.region === "dock") return setDock(session, !dockOpened(session))
         const value = stateKey(session)
         if (!value) return
+        const region = sideVisits().get(session.key)
         if (state(key, session) === "visible") {
           batch(() => {
             close(key, session)
             // Closing the last panel the region was opened for also closes the region.
-            if (openedFor.get(session.key) === key && layout.panel.state(value).all.length === 0)
+            if (region && openedFor.get(region) === key && layout.panel.state(value).all.length === 0)
               tabs.setPane(shellTab(session), "side", false)
           })
           return
         }
-        const opening = !sideOpened(session)
-        if (!opening) openedFor.delete(session.key)
+        // A panel opened into an open region makes the region the user's.
+        if (region) openedFor.delete(region)
         open(key, session)
-        if (opening && sideOpened(session)) openedFor.set(session.key, key)
+        const opened = sideVisits().get(session.key)
+        if (!region && opened) openedFor.set(opened, key)
       },
       state,
       stored(extension, session) {

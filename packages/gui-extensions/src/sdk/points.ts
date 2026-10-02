@@ -14,7 +14,12 @@ export interface Command {
   /** Section of Settings > Shortcuts that lists the command. Defaults to general. */
   readonly section?: "general" | "session" | "navigation" | "model" | "terminal" | "prompt"
   readonly bind?: string
-  readonly slash?: { readonly name: string; readonly arguments?: true }
+  readonly slash?: {
+    readonly name: string
+    readonly arguments?: true
+    /** Lists this entry right after the slash entry with this name, e.g. "open", when one is present. */
+    readonly after?: string
+  }
   /** Keep out of the command palette. */
   readonly hidden?: true
   readonly suggested?: boolean
@@ -68,6 +73,11 @@ export interface PanelTab {
   readonly group?: string
   /** Struck through, e.g. a file that no longer exists. */
   readonly missing?: boolean
+  /**
+   * Listed and selectable, but not drawn in the strip; for a restored tab whose content is not known yet. Selection,
+   * `focus`, and closing the selected tab still apply to it.
+   */
+  readonly hidden?: boolean
   /**
    * The workspace path of the file the tab shows. The host lists these as the session's open files: recent
    * files, the line selection `context.addSelection` adds, and reloads when the file changes on disk.
@@ -216,7 +226,10 @@ export interface Link {
   readonly origin?: string
   /** The path is a known workspace file (e.g. a palette result), not a guess from text. */
   readonly exact?: boolean
-  /** Opened by the agent rather than the user (e.g. a browser preview); must not switch the narrow-screen view. */
+  /**
+   * Must not switch the narrow-screen view: the agent opened it (e.g. a browser preview), or the user opened it from
+   * where they stay (e.g. a palette pick or a composer chip). Handlers pass it to `Layout.open`.
+   */
   readonly background?: boolean
   /** Workspace-relative directory the link was written in. */
   readonly base?: string

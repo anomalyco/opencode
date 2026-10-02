@@ -124,6 +124,9 @@ export function createHost(input: {
   const reloads = new Map<string, number>()
   const closed = new Set<(win: BrowserWindow) => void>()
   const status = { sequence: 0, disposed: false, menubarQueued: false }
+  // Extensions running a restart handoff. Disposal skips them, so a failed handoff leaves them working and a
+  // successful one keeps their state and menu items until the app has quit.
+  const restarting = new Set<string>()
 
   const broadcast = (event: DesktopEvent) => getMainWindows().forEach((win) => emitIpcEvent(win.webContents, event))
   const changed = () => broadcast(new ExtensionsChanged({ list: installed() }))
@@ -219,13 +222,17 @@ export function createHost(input: {
     }
   }
 
-  const mainApp: MainApp = {
+  const mainApp = {
     version: VERSION,
     channel: CHANNEL,
     packaged: app.isPackaged,
     server,
-    restart: input.restart,
     log: (level, message, data) => input.write(level, message, data ?? {}),
+  } satisfies Omit<MainApp, "restart">
+
+  const restart = (id: string, handoff?: () => void | Promise<void>) => {
+    restarting.add(id)
+    return input.restart(handoff).finally(() => restarting.delete(id))
   }
 
   const loader = (id: string): (() => Promise<Loaded>) | undefined => {
@@ -341,7 +348,7 @@ export function createHost(input: {
       ],
       [MainStorage.id, createMainStorage(input.state, id)],
       [Cli.id, input.cli],
-      [MainApp.id, mainApp],
+      [MainApp.id, { ...mainApp, restart: (handoff) => restart(id, handoff) } satisfies MainApp],
     ])
 
     function add<T>(point: Point<T>, item: T | (() => T | undefined)): Cleanup {
@@ -796,13 +803,18 @@ export function createHost(input: {
       if (!file) throw new ExtensionError("notFound")
       return file.toString("utf8")
     },
-    /** Disposes every main extension; quitting awaits their async cleanups. */
+    /** Disposes every main extension but one running a restart handoff; quitting awaits their async cleanups. */
     async dispose() {
       status.disposed = true
       stopWindows()
       stopLocale()
-      // Every extension with an instance or a queued step stops; quitting waits for each lifecycle to settle.
-      await Promise.all([...new Set([...active.keys(), ...queues.keys()])].map((id) => deactivate(id)))
+      // Every other extension with an instance or a queued step stops; quitting waits for each lifecycle to settle.
+      // The menu is not rebuilt from here on (`publishMenubar`), so a restarting extension's items stay in it.
+      await Promise.all(
+        [...new Set([...active.keys(), ...queues.keys()])]
+          .filter((id) => !restarting.has(id))
+          .map((id) => deactivate(id)),
+      )
     },
   }
 }

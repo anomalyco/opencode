@@ -183,6 +183,35 @@ test("keeps a narrow session composer contained when invoking a built-in", async
   await expect(editor).toHaveText("keep me")
 })
 
+test("lists slash commands in their built-in order", async ({ page }) => {
+  const { editor } = await openSession(page, {
+    name: "ComposerSlash",
+    provider: NO_PROVIDER,
+    commands: [
+      { name: "init", description: "Create AGENTS.md" },
+      { name: "review", description: "Review changes" },
+    ],
+    // A sent message enables /undo, /compact and /fork.
+    pageMessages: () => ({ items: [{ id: "msg_slash", type: "user", text: "Hello", time: { created: T0 } }] }),
+  })
+  await editor.fill("/")
+  await expect(page.locator('[data-component="composer-suggestions"] [data-suggestion-id] bdi')).toHaveText([
+    "/init",
+    "/review",
+    "/new",
+    "/undo",
+    "/compact",
+    "/fork",
+    "/export",
+    "/open",
+    "/terminal",
+    "/mcp",
+    "/model",
+    "/connect",
+    "/btw",
+  ])
+})
+
 const followUp = "Add follow-up, / for commands, @ for context…"
 for (const row of [
   { state: "an idle", copy: "Ask anything, / for commands, @ for context…" },

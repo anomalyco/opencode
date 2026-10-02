@@ -5,6 +5,9 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import type { SurfaceProps, Surfaces } from "@opencode/gui-extensions/sdk"
 import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
 
+const geometry =
+  /^(inset|left|right|top|bottom|translate|transform|scale|rotate|margin|padding|flex|grid|gap|row-gap|column-gap)|(^|-)(width|height)$/
+
 type Input = {
   readonly bridge: Bridge | undefined
   readonly zoom: () => number
@@ -164,6 +167,14 @@ function SurfaceView(props: SurfaceProps & { input: Input; bridge: Bridge }) {
   // animation frame keeps the native view in step with a pane drag.
   createResizeObserver(() => element, measure)
   createEventListener(window, "resize", () => schedule(300))
+  // A layout transition elsewhere, such as the chat column's width while the side pane opens, can
+  // move the box without resizing it. Track it from when it actually runs, and settle on its end.
+  createEventListener(document, "transitionrun", (event) => {
+    if (geometry.test(event.propertyName)) schedule(300)
+  })
+  createEventListener(document, ["transitionend", "transitioncancel"], (event) => {
+    if (geometry.test(event.propertyName)) schedule()
+  })
   // Floating content portals directly into <body>; keep measuring briefly so
   // the positioner has settled before the overlap check runs.
   const portals = new MutationObserver(() => schedule(300))

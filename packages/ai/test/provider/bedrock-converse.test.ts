@@ -648,6 +648,177 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("hoists tool-result images beside the result for Bedrock GPT models", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
+            "global.openai.gpt-6-sol",
+          ),
+          messages: [
+            Message.user("What is in this image?"),
+            Message.assistant([ToolCallPart.make({ id: "tool_1", name: "read", input: {} })]),
+            Message.tool({
+              id: "tool_1",
+              name: "read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Image loaded." },
+                  { type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" },
+                  { type: "file", uri: "data:application/pdf;base64,QkI=", mime: "application/pdf", name: "note.pdf" },
+                ],
+              },
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages[2]).toEqual({
+        role: "user",
+        content: [
+          {
+            toolResult: {
+              toolUseId: "tool_1",
+              content: [
+                { text: "Image loaded." },
+                { text: 'Attached file "note.pdf" has document label "note".' },
+                { document: { format: "pdf", name: "note", source: { bytes: "QkI=" } } },
+              ],
+              status: "success",
+            },
+          },
+          { image: { format: "png", source: { bytes: "AAAA" } } },
+        ],
+      })
+    }),
+  )
+
+  it.effect("hoists tool-result images for other Bedrock model families", () =>
+    Effect.gen(function* () {
+      for (const id of [
+        "qwen.qwen3-vl-235b-a22b",
+        "global.xai.grok-4.7",
+        "global.moonshotai.kimi-k3",
+        "us.meta.llama4-scout-17b-instruct-v1:0",
+      ]) {
+        const prepared = yield* compileRequest(
+          LLM.request({
+            model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
+              id,
+            ),
+            messages: [
+              Message.assistant([ToolCallPart.make({ id: "tool_1", name: "read", input: {} })]),
+              Message.tool({
+                id: "tool_1",
+                name: "read",
+                result: {
+                  type: "content",
+                  value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
+                },
+              }),
+            ],
+            cache: "none",
+          }),
+        )
+        expect(prepared.body.messages[1]).toEqual({
+          role: "user",
+          content: [
+            { toolResult: { toolUseId: "tool_1", content: [{ text: "See attached image." }], status: "success" } },
+            { image: { format: "png", source: { bytes: "AAAA" } } },
+          ],
+        })
+      }
+    }),
+  )
+  ;["global.anthropic.claude-sonnet-4-5-20250929-v1:0", "us.amazon.nova-pro-v1:0"].forEach((id) => {
+    it.effect(`keeps ${id} tool images inside the result`, () =>
+      Effect.gen(function* () {
+        const prepared = yield* compileRequest(
+          LLM.request({
+            model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
+              id,
+            ),
+            messages: [
+              Message.assistant([ToolCallPart.make({ id: "tool_1", name: "read", input: {} })]),
+              Message.tool({
+                id: "tool_1",
+                name: "read",
+                result: {
+                  type: "content",
+                  value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
+                },
+              }),
+            ],
+            cache: "none",
+          }),
+        )
+
+        expect(prepared.body.messages[1]).toEqual({
+          role: "user",
+          content: [
+            {
+              toolResult: {
+                toolUseId: "tool_1",
+                content: [{ image: { format: "png", source: { bytes: "AAAA" } } }],
+                status: "success",
+              },
+            },
+          ],
+        })
+      }),
+    )
+  })
+
+  it.effect("keeps parallel tool results before hoisted images and gives image-only results text", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: AmazonBedrock.configure({ baseURL: "https://bedrock-runtime.test", apiKey: "test-bearer" }).model(
+            "global.openai.gpt-6-sol",
+          ),
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "tool_1", name: "first", input: {} }),
+              ToolCallPart.make({ id: "tool_2", name: "second", input: {} }),
+            ]),
+            Message.tool({
+              id: "tool_1",
+              name: "first",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,AAAA", mime: "image/png" }],
+              },
+            }),
+            Message.tool({
+              id: "tool_2",
+              name: "second",
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Second image." },
+                  { type: "file", uri: "data:image/jpeg;base64,BBBB", mime: "image/jpeg" },
+                ],
+              },
+            }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages[1]).toEqual({
+        role: "user",
+        content: [
+          { toolResult: { toolUseId: "tool_1", content: [{ text: "See attached image." }], status: "success" } },
+          { toolResult: { toolUseId: "tool_2", content: [{ text: "Second image." }], status: "success" } },
+          { image: { format: "png", source: { bytes: "AAAA" } } },
+          { image: { format: "jpeg", source: { bytes: "BBBB" } } },
+        ],
+      })
+    }),
+  )
+
   it.effect("decodes text-delta + messageStop + metadata usage from binary event stream", () =>
     Effect.gen(function* () {
       const body = eventStreamBody(

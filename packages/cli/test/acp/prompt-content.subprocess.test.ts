@@ -56,7 +56,22 @@ describe("acp prompt content subprocess", () => {
       }),
     )
 
+    const missing = expectOk(
+      await acp.request<PromptResponse>("session/prompt", {
+        sessionId: session.sessionId,
+        prompt: [
+          { type: "text", text: "Use this missing file." },
+          {
+            type: "resource_link",
+            uri: pathToFileURL(path.join(fixture.home, "missing.md")).href,
+            name: "missing.md",
+          },
+        ],
+      }),
+    )
+
     expect(linked.stopReason).toBe("end_turn")
-    expect(fixture.llm.requests.length).toBeGreaterThanOrEqual(3)
+    expect(missing.stopReason).toBe("end_turn")
+    expect(fixture.llm.requests.length).toBeGreaterThanOrEqual(4)
   }, 60_000)
 })

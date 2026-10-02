@@ -62,7 +62,10 @@ export interface MainApp {
   readonly channel: string
   readonly packaged: boolean
   server(id: string): MainServer | undefined
-  /** Flushes state and marks the app as quitting, then runs handoff (e.g. quitAndInstall) or relaunches. */
+  /**
+   * Marks the app as quitting and disposes every other extension, then runs handoff (e.g. quitAndInstall) or
+   * relaunches. The caller stays active through the handoff and keeps running when it fails (the promise rejects).
+   */
   restart(handoff?: () => void | Promise<void>): Promise<void>
   /** Writes to the desktop log file (included in exported debug logs). */
   log(level: "debug" | "info" | "warn" | "error", message: string, data?: Record<string, unknown>): void

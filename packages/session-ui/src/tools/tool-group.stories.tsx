@@ -168,11 +168,14 @@ export const StickyHeader = {
         class="relative w-full max-w-[1030px] overflow-y-auto bg-v2-background-bg-base"
         style={{ height: `${args.height}px`, "--sticky-accordion-top": "48px" }}
       >
-        <div class="sticky top-0 z-30 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base)_48px,transparent)] pb-4 pe-3 ps-2.5">
-          <div class="flex h-12 items-center px-1 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base">
-            Trace stacked review history
+        <div class="pointer-events-none sticky top-0 z-30 w-full pb-4">
+          <div class="pointer-events-auto bg-v2-background-bg-base pe-3 ps-2.5">
+            <div class="flex h-12 items-center px-1 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-base">
+              Trace stacked review history
+            </div>
           </div>
         </div>
+        <div class="pointer-events-none sticky top-12 z-[5] -mt-4 h-4 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base),transparent)]" />
         <div class="px-6" style={{ "padding-bottom": `${args.height}px` }}>
           <CurrentSessionProviders document={storyDocument(stickyParts.filter((part) => part.type === "tool"))}>
             <CurrentContextToolGroup

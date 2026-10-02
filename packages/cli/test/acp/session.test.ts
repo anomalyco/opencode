@@ -1,7 +1,17 @@
 import { describe, expect, test } from "bun:test"
-import type { McpServer } from "@agentclientprotocol/sdk"
+import type { McpServer, SessionNotification } from "@agentclientprotocol/sdk"
+import { Schema } from "effect"
 import { currentValue } from "./select-options"
-import { makeSession, rpcError, secondModel, startSession, startWire } from "./wire-fixture"
+import {
+  ephemeralEvent,
+  makeSession,
+  rpcError,
+  secondModel,
+  startSession,
+  startWire,
+  testModel,
+  type Wire,
+} from "./wire-fixture"
 
 describe("acp session lifecycle over the wire", () => {
   test("initialize advertises capabilities and terminal auth only when the client asks", async () => {
@@ -16,7 +26,7 @@ describe("acp session lifecycle over the wire", () => {
         loadSession: true,
         mcpCapabilities: { http: true, sse: false },
         promptCapabilities: { embeddedContext: true, image: true },
-        sessionCapabilities: { close: {}, delete: {}, fork: {}, list: {}, resume: {} },
+        sessionCapabilities: { additionalDirectories: {}, close: {}, delete: {}, fork: {}, list: {}, resume: {} },
         _meta: { "opencode/child-session-updates": true },
       },
       agentInfo: { name: "OpenCode" },
@@ -54,7 +64,13 @@ describe("acp session lifecycle over the wire", () => {
     ])
     expect(await acp.waitForUpdate((item) => item.update.sessionUpdate === "available_commands_update")).toEqual({
       sessionId: result.sessionId,
-      update: { sessionUpdate: "available_commands_update", availableCommands: [{ name: "review", description: "" }] },
+      update: {
+        sessionUpdate: "available_commands_update",
+        availableCommands: [
+          { name: "review", description: "" },
+          { name: "compact", description: "Compact the session" },
+        ],
+      },
     })
   })
 
@@ -70,7 +86,7 @@ describe("acp session lifecycle over the wire", () => {
     expect(acp.server.selections).toEqual([])
   })
 
-  test("loads and forks with paginated replay while resume does not replay", async () => {
+  test("loads with paginated replay while resume and fork do not replay", async () => {
     await using acp = await startWire()
     const history = Array.from({ length: 201 }, (_, index) => ({
       id: `msg_${index}`,
@@ -116,7 +132,7 @@ describe("acp session lifecycle over the wire", () => {
           : [],
       )
     expect(replayed("ses_loaded")).toEqual(history.map((message) => message.id))
-    expect(replayed(forked.sessionId)).toEqual(history.map((message) => message.id))
+    expect(replayed(forked.sessionId)).toEqual([])
     expect(replayed("ses_resume")).toEqual([])
     expect(
       acp.updates.find((item) => item.sessionId === "ses_loaded" && item.update.sessionUpdate === "user_message_chunk")
@@ -126,6 +142,67 @@ describe("acp session lifecycle over the wire", () => {
       messageId: "msg_0",
       content: { type: "text", text: "message 0" },
     })
+  })
+
+  test("publishes a session's commands after the response that attaches it", async () => {
+    await using acp = await startWire()
+    acp.server.sessions.set("ses_loaded", makeSession("ses_loaded"))
+    acp.server.messages.set("ses_loaded", [{ id: "msg_0", type: "user", text: "hello", time: { created: 0 } }])
+    await acp.initialize()
+    const params = { cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] }
+
+    expect(await untilCommands(acp, () => acp.newSession())).toEqual(["response", "available_commands_update"])
+    expect(await untilCommands(acp, () => acp.request("session/load", params))).toEqual([
+      "user_message_chunk",
+      "response",
+      "available_commands_update",
+    ])
+    expect(await untilCommands(acp, () => acp.request("session/resume", params))).toEqual([
+      "response",
+      "available_commands_update",
+    ])
+    expect(await untilCommands(acp, () => acp.request("session/fork", params))).toEqual([
+      "response",
+      "available_commands_update",
+    ])
+  })
+
+  test("does not publish commands for a session closed before its load responds", async () => {
+    const held = Promise.withResolvers<undefined>()
+    await using acp = await startWire({
+      fetch: (request) => (request.path === "/api/session/ses_loaded/message" ? held.promise : undefined),
+    })
+    acp.server.sessions.set("ses_loaded", makeSession("ses_loaded"))
+    await acp.initialize()
+
+    const loaded = acp.request("session/load", { cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })
+    await acp.until(() => acp.server.requests.some((item) => item.path === "/api/session/ses_loaded/message"))
+    await acp.request("session/close", { sessionId: "ses_loaded" })
+    held.resolve(undefined)
+    await loaded
+    // A later session's commands follow the load response, giving a stray update time to arrive.
+    const created = await acp.newSession()
+    await acp.until(() => acp.updates.some(isCommands), "commands for the later session")
+
+    expect(acp.updates.filter(isCommands).map((item) => item.sessionId)).toEqual([created.sessionId])
+  })
+
+  test("detaches a session whose load fails after attaching", async () => {
+    await using acp = await startWire({
+      fetch: (request) =>
+        request.path === "/api/session/ses_loaded/message" ? new Response(null, { status: 500 }) : undefined,
+    })
+    acp.server.sessions.set("ses_loaded", makeSession("ses_loaded"))
+    await acp.initialize()
+
+    expect(
+      await rpcError(acp.request("session/load", { cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })),
+    ).toMatchObject({ code: -32603 })
+    expect(
+      await rpcError(
+        acp.request("session/set_config_option", { sessionId: "ses_loaded", configId: "mode", value: "plan" }),
+      ),
+    ).toMatchObject({ code: -32602, data: { sessionId: "ses_loaded" } })
   })
 
   test("lists server-backed pages for the requested cwd", async () => {
@@ -174,11 +251,45 @@ describe("acp session lifecycle over the wire", () => {
     expect(await acp.request("session/delete", { sessionId: acp.sessionId })).toEqual({})
     expect(acp.server.sessions.has(acp.sessionId)).toBe(false)
     expect(await acp.request("session/delete", { sessionId: acp.sessionId })).toEqual({})
+    expect(await acp.request("session/delete", { sessionId: "ses_never_created" })).toEqual({})
+    expect(await acp.request("session/delete", { sessionId: "never-created" })).toEqual({})
     expect(
       await rpcError(
         acp.request("session/set_config_option", { sessionId: acp.sessionId, configId: "effort", value: "high" }),
       ),
     ).toMatchObject({ code: -32602, data: { sessionId: acp.sessionId } })
+  })
+
+  test("rejects malformed session IDs as invalid params", async () => {
+    await using acp = await startWire()
+    await acp.initialize()
+    const params = { cwd: "/workspace", sessionId: "never-created", mcpServers: [] }
+
+    expect(await rpcError(acp.request("session/load", params))).toEqual({
+      code: -32602,
+      message: 'Invalid params: Expected a string starting with "ses"',
+      data: {},
+    })
+    expect(await rpcError(acp.request("session/fork", params))).toEqual({
+      code: -32602,
+      message: "Invalid params: Invalid session ID",
+      data: { field: "sessionID" },
+    })
+    expect(acp.logs).toEqual([])
+  })
+
+  test("rejects forking an unknown session as session not found", async () => {
+    await using acp = await startWire()
+    await acp.initialize()
+
+    expect(
+      await rpcError(acp.request("session/fork", { cwd: "/workspace", sessionId: "ses_unknown", mcpServers: [] })),
+    ).toEqual({
+      code: -32602,
+      message: "Invalid params: session not found: ses_unknown",
+      data: { sessionId: "ses_unknown" },
+    })
+    expect(acp.logs).toEqual([])
   })
 
   test("converts MCP configs and deduplicates registrations per session and config", async () => {
@@ -220,4 +331,58 @@ describe("acp session lifecycle over the wire", () => {
       config: { type: "remote", url: "https://example.com/mcp", headers: { Authorization: "Bearer x" }, oauth: false },
     })
   })
+  test("leaves a session detached when re-attaching it fails", async () => {
+    const broken: McpServer = { name: "broken", command: "bun", args: [], env: [] }
+    await using acp = await startWire({
+      fetch: (request) =>
+        request.method === "PUT" && request.path === "/api/experimental/mcp/broken"
+          ? new Response(null, { status: 500 })
+          : undefined,
+    })
+    await acp.initialize()
+    const failed = await acp.newSession()
+    const other = await acp.newSession()
+    await acp.until(() => acp.updates.filter(isCommands).length === 2, "initial commands")
+
+    expect(
+      await rpcError(
+        acp.request("session/resume", { cwd: "/workspace", sessionId: failed.sessionId, mcpServers: [broken] }),
+      ),
+    ).toMatchObject({ code: -32603 })
+    const since = acp.updates.length
+    acp.server.catalog.models = [testModel]
+    acp.server.send(ephemeralEvent("model.updated", {}))
+    await acp.until(() => acp.updates.length > since, "config options for the attached session")
+
+    expect(acp.updates.slice(since).map((item) => item.sessionId)).toEqual([other.sessionId])
+    expect(
+      await rpcError(
+        acp.request("session/set_config_option", { sessionId: failed.sessionId, configId: "mode", value: "plan" }),
+      ),
+    ).toMatchObject({ code: -32602, data: { sessionId: failed.sessionId } })
+  })
 })
+
+const isSessionUpdate = Schema.is(
+  Schema.Struct({
+    method: Schema.Literal("session/update"),
+    params: Schema.Struct({ update: Schema.Struct({ sessionUpdate: Schema.String }) }),
+  }),
+)
+
+function isCommands(item: SessionNotification) {
+  return item.update.sessionUpdate === "available_commands_update"
+}
+
+// Labels what the agent sends from the request until the commands that follow it, in wire order.
+async function untilCommands(acp: Wire, send: () => Promise<unknown>) {
+  const start = acp.received.length
+  await send()
+  return acp.until(() => {
+    const labels = acp.received.slice(start).map((message) => {
+      if (isSessionUpdate(message)) return message.params.update.sessionUpdate
+      return "method" in message ? message.method : "response"
+    })
+    return labels.includes("available_commands_update") && labels
+  }, "available commands")
+}

@@ -37,6 +37,17 @@ test("mobile files browse, comment, search, and close tabs", async ({ page }) =>
   await expect.poll(() => fullWidth(comment)).toBe(true)
 
   await page.setViewportSize({ width: 390, height: 844 })
+  // Its composer chip reveals the comment without leaving the conversation.
+  const session = navigation.getByRole("tab", { name: "Session", exact: true })
+  await session.click()
+  await page
+    .locator('[data-component="composer-attachments"]')
+    .getByText("Full-width file comment", { exact: true })
+    .click()
+  await expect(session).toHaveAttribute("aria-selected", "true")
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeVisible()
+  await navigation.getByRole("tab", { name: "Files", exact: true }).click()
+  await expect(files.getByText("contents:first.ts", { exact: true })).toBeVisible()
   const filter = files.getByRole("combobox", { name: "Filter files", exact: true })
   await expect(filter).toBeHidden()
   await files.getByRole("button", { name: "All files", exact: true }).click()
