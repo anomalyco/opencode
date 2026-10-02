@@ -10,6 +10,8 @@ import { availableCommands, configOptions, type Selection } from "./config-optio
 import { ACPConnection } from "./connection"
 import { ACPError } from "./error"
 
+export type SupportedMcpServer = Exclude<McpServer, { readonly type: "acp" }>
+
 export type Attached = {
   readonly id: Session.ID
   readonly cwd: string
@@ -25,13 +27,15 @@ export interface Interface {
   readonly attach: (
     session: Session.Info,
     cwd: string,
-    mcpServers: readonly McpServer[],
+    mcpServers: readonly SupportedMcpServer[],
   ) => Effect.Effect<
     { readonly attached: Attached; readonly configOptions: SessionConfigOption[] },
     ACPError.Error | RequestError | ACPCatalog.Error
   >
   /** Closes the session scope. No-op when the session is not attached. */
   readonly detach: (sessionID: string) => Effect.Effect<void>
+  /** Closes this attachment. No-op once the session has been re-attached or detached. */
+  readonly release: (attached: Attached) => Effect.Effect<void>
   readonly require: (sessionID: string) => Effect.Effect<Attached, ACPError.SessionNotFoundError>
   /** Forks work into this attachment's scope, so it ends on detach or re-attach. Fails once the attachment is gone. */
   readonly fork: (attached: Attached, effect: Effect.Effect<void>) => Effect.Effect<void, ACPError.SessionNotFoundError>
@@ -74,7 +78,7 @@ export const make = Effect.fnUntraced(function* (input: {
         event.type === "session.model.selected" ? { model: event.data.model } : { modeID: event.data.agent },
       )
     }),
-    Effect.ignore,
+    Effect.ignoreCause({ log: true, message: "ACP selection event stream ended" }),
     Effect.ensuring(Deferred.succeed(connected, undefined)),
     Effect.forkScoped,
   )
@@ -97,7 +101,7 @@ export const make = Effect.fnUntraced(function* (input: {
     if (!isDeepStrictEqual(next.commands, previous.commands)) yield* sendCommands(attached.id, next)
   })
 
-  const registerMcp = (attached: Attached, servers: readonly McpServer[]) =>
+  const registerMcp = (attached: Attached, servers: readonly SupportedMcpServer[]) =>
     Effect.suspend(() => {
       const registered = registeredMcp.get(attached.id) ?? new Set<string>()
       registeredMcp.set(attached.id, registered)
@@ -175,6 +179,10 @@ export const make = Effect.fnUntraced(function* (input: {
       const entry = sessions.get(sessionID)
       if (entry) yield* remove(sessionID, entry)
     }),
+    release: Effect.fn("cli.acp.sessions.release")(function* (attached) {
+      const entry = sessions.get(attached.id)
+      if (entry?.attached === attached) yield* remove(attached.id, entry)
+    }),
     require: Effect.fn("cli.acp.sessions.require")(function* (sessionID) {
       const entry = sessions.get(sessionID)
       if (!entry) return yield* new ACPError.SessionNotFoundError({ sessionId: sessionID })
@@ -188,9 +196,8 @@ export const make = Effect.fnUntraced(function* (input: {
   })
 })
 
-function mcpConfig(server: McpServer) {
+function mcpConfig(server: SupportedMcpServer) {
   if ("type" in server) {
-    if (server.type === "acp") throw new Error("MCP-over-ACP is not supported")
     return new Mcp.RemoteConfig({
       type: "remote",
       url: server.url,

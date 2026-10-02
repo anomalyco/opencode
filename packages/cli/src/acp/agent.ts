@@ -35,7 +35,8 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
           Deferred.await(ready).pipe(Effect.flatMap((service) => call(service, ctx))),
         Effect.catchTags({
           ACPCatalogLoadError: (error) => ACPClient.classify(error.cause),
-          ACPCatalogNotReadyError: (error) => Effect.die(error),
+          ACPCatalogNotReadyError: (error) =>
+            Effect.fail(RequestError.internalError({ errorName: error._tag }, error.message)),
         }),
         Effect.mapError((error) => (error instanceof RequestError ? error : ACPError.toRequestError(error))),
         Effect.tapCauseIf(Cause.hasDies, (cause) => Effect.logError("ACP request failed", cause)),

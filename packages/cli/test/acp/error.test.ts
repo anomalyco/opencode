@@ -110,6 +110,6 @@ describe("acp error boundary over the wire", () => {
       message: "Internal error: OpenCode server is unavailable",
       data: { errorName: "ServerUnavailable" },
     })
-    expect(acp.logs).toEqual([])
+    expect(acp.logs.filter((log) => Cause.hasDies(log.cause))).toEqual([])
   })
 })

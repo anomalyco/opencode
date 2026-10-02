@@ -9,6 +9,7 @@ import {
   childCreated,
   delivered,
   durableEvent,
+  ephemeralEvent,
   interrupted,
   permissionAsked,
   startSession,
@@ -444,6 +445,42 @@ describe("acp permissions over the wire", () => {
       ["perm_pending", "reject"],
       ["perm_queued", "reject"],
     ])
+  })
+
+  test("withdraws a permission request settled elsewhere and still asks the remaining one", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        permissionAsked(sessionID, "perm_elsewhere"),
+        permissionAsked(sessionID, "perm_remaining"),
+      ],
+      onPermissionReply: ({ sessionID }) => [succeeded(sessionID)],
+      permission: (_request, signal) =>
+        acp.permissions.length === 1
+          ? new Promise((resolve) => {
+              signal.addEventListener("abort", () => resolve({ outcome: { outcome: "cancelled" } }), { once: true })
+            })
+          : allowOnce(),
+    })
+
+    const prompt = acp.prompt(acp.sessionId, "hello")
+    await acp.until(() => acp.permissions.length === 1, "permission request")
+    acp.server.send(
+      ephemeralEvent("permission.replied", { sessionID: acp.sessionId, requestID: "perm_elsewhere", reply: "always" }),
+    )
+
+    expect(await prompt).toMatchObject({ stopReason: "end_turn" })
+    expect(acp.permissions.map((request) => request.toolCall.toolCallId)).toEqual(["perm_elsewhere", "perm_remaining"])
+    expect(decisions(acp)).toEqual([["perm_remaining", "once"]])
+    const asked = acp.received.find(
+      (message): message is AnyRequest =>
+        "method" in message && "id" in message && message.method === "session/request_permission",
+    )
+    expect(acp.received).toContainEqual({
+      jsonrpc: "2.0",
+      method: "$/cancel_request",
+      params: { requestId: asked?.id },
+    })
   })
 })
 

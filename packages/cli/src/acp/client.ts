@@ -1,5 +1,5 @@
 import { ClientError } from "@opencode/client/effect"
-import { InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
+import { InvalidCursorError, InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
 import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
 import { HttpClientError } from "effect/unstable/http"
@@ -17,6 +17,8 @@ export function classify(error: unknown): Effect.Effect<never, ACPError.Error> {
     return Effect.fail(new ACPError.SessionNotFoundError({ sessionId: error.sessionID }))
   if (error instanceof InvalidRequestError)
     return Effect.fail(new ACPError.InvalidRequestError({ message: error.message, field: error.field }))
+  if (error instanceof InvalidCursorError)
+    return Effect.fail(new ACPError.InvalidRequestError({ message: error.message, field: "cursor" }))
   return Effect.die(error)
 }
 

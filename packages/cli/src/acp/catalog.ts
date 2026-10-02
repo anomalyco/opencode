@@ -97,7 +97,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
         { discard: true },
       )
     }),
-    Effect.ignore,
+    Effect.ignoreCause({ log: true, message: "ACP catalog event stream ended" }),
     Effect.ensuring(Deferred.succeed(connected, undefined)),
     Effect.forkScoped,
   )

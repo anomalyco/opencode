@@ -75,6 +75,8 @@ export type TurnState = {
   readonly openChildren: ReadonlySet<string>
   /** Forms asked of the client that the server has not yet answered or cancelled. */
   readonly forms: ReadonlySet<string>
+  /** Permissions asked of the client that the server has not yet reported replied. */
+  readonly permissions: ReadonlySet<string>
   readonly finish?: SessionMessage.Assistant["finish"]
   readonly usage?: { readonly turn: TokenUsage.Info; readonly last: TokenUsage.Info }
   readonly stepError?: SessionError.Error
@@ -101,6 +103,7 @@ export type Output =
       readonly toolCallSent: boolean
     }
   | { readonly _tag: "FormSettled"; readonly formID: string }
+  | { readonly _tag: "PermissionSettled"; readonly requestID: string }
 
 export type Step = {
   readonly state: TurnState
@@ -116,6 +119,7 @@ export const initial: TurnState = {
   children: new Map(),
   openChildren: new Set(),
   forms: new Set(),
+  permissions: new Set(),
 }
 
 export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step {
@@ -144,7 +148,18 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
     const tool = event.data.source?.id
       ? state.tools.get(toolKey(event.data.sessionID, event.data.source.id))
       : undefined
-    return { state, outputs: [{ _tag: "PermissionAsk", event, tool, child }] }
+    return {
+      state: { ...state, permissions: new Set(state.permissions).add(event.data.id) },
+      outputs: [{ _tag: "PermissionAsk", event, tool, child }],
+    }
+  }
+  if (event.type === "permission.replied" && state.permissions.has(event.data.requestID)) {
+    const permissions = new Set(state.permissions)
+    permissions.delete(event.data.requestID)
+    return {
+      state: { ...state, permissions },
+      outputs: [{ _tag: "PermissionSettled", requestID: event.data.requestID }],
+    }
   }
   if (event.type === "form.created" && (event.data.form.sessionID === ctx.sessionID || child)) {
     return {

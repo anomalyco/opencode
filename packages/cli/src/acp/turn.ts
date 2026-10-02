@@ -78,6 +78,8 @@ type Subscription = {
   readonly cancelled: Deferred.Deferred<void>
   /** Completed per asked form once the server reports it answered or cancelled. */
   readonly forms: Map<string, Deferred.Deferred<void>>
+  /** Completed per asked permission once the server reports it replied. */
+  readonly permissions: Map<string, Deferred.Deferred<void>>
 }
 
 export const make = Effect.fnUntraced(function* (input: {
@@ -102,6 +104,7 @@ export const make = Effect.fnUntraced(function* (input: {
       asks: yield* Queue.unbounded<Effect.Effect<void, ACPError.Error | RequestError>>(),
       cancelled: yield* Deferred.make<void>(),
       forms: new Map(),
+      permissions: new Map(),
     }
     yield* Queue.take(subscription.asks).pipe(
       Effect.flatten,
@@ -128,7 +131,12 @@ export const make = Effect.fnUntraced(function* (input: {
     yield* Deferred.await(settled)
   })
 
-  const reply = (subscription: Subscription, ctx: ACPTranslate.Context, ask: PermissionAsk) =>
+  const reply = (
+    subscription: Subscription,
+    ctx: ACPTranslate.Context,
+    ask: PermissionAsk,
+    settled: Deferred.Deferred<void>,
+  ) =>
     ACPPermission.reply(
       {
         client: input.client,
@@ -139,6 +147,7 @@ export const make = Effect.fnUntraced(function* (input: {
         cwd: ctx.cwd,
         tool: ask.tool,
         child: ask.child,
+        settled: Deferred.await(settled),
       },
       Deferred.await(subscription.cancelled),
     )
@@ -150,9 +159,13 @@ export const make = Effect.fnUntraced(function* (input: {
       case "ChildUpdate":
         return input.connection
           .extNotification(ACPTranslate.ChildSessionUpdateMethod, output.update)
-          .pipe(Effect.ignoreCause)
+          .pipe(Effect.ignoreCause({ log: true }))
       case "PermissionAsk":
-        return Queue.offer(subscription.asks, reply(subscription, ctx, output)).pipe(Effect.asVoid)
+        return Effect.gen(function* () {
+          const settled = yield* Deferred.make<void>()
+          subscription.permissions.set(output.event.data.id, settled)
+          yield* Queue.offer(subscription.asks, reply(subscription, ctx, output, settled))
+        })
       case "FormAsk":
         return Effect.gen(function* () {
           const capabilities = yield* Ref.get(input.capabilities)
@@ -183,6 +196,12 @@ export const make = Effect.fnUntraced(function* (input: {
           subscription.forms.delete(output.formID)
           return settled ? Deferred.succeed(settled, undefined) : Effect.void
         })
+      case "PermissionSettled":
+        return Effect.suspend(() => {
+          const settled = subscription.permissions.get(output.requestID)
+          subscription.permissions.delete(output.requestID)
+          return settled ? Deferred.succeed(settled, undefined) : Effect.void
+        })
     }
   }
 
@@ -193,8 +212,10 @@ export const make = Effect.fnUntraced(function* (input: {
   ) {
     while (true) {
       const event = yield* take(subscription)
-      const next = ACPTranslate.step(yield* Ref.get(state), event, ctx)
-      yield* Ref.set(state, next.state)
+      const next = yield* Ref.modify(state, (current) => {
+        const step = ACPTranslate.step(current, event, ctx)
+        return [step, step.state]
+      })
       yield* Effect.forEach(next.outputs, (output) => interpret(subscription, ctx, output), { discard: true })
       if (next.terminal) {
         yield* asksSettled(subscription)
@@ -239,7 +260,7 @@ export const make = Effect.fnUntraced(function* (input: {
   })
 
   const interruptServer = (sessionID: Session.ID) =>
-    input.client.session.interrupt({ sessionID }).pipe(Effect.ignoreCause)
+    input.client.session.interrupt({ sessionID }).pipe(Effect.ignoreCause({ log: true }))
 
   // Rejects pending asks, interrupts the server once, then forwards its wind-down until the terminal event or the
   // timeout. Tools and a compaction still open at the timeout are settled so the client never shows them running.
@@ -252,7 +273,7 @@ export const make = Effect.fnUntraced(function* (input: {
     yield* Deferred.succeed(subscription.cancelled, undefined)
     yield* interruptServer(ctx.sessionID)
     if (!(yield* Ref.get(state)).started) return
-    if (Option.isSome(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)))) return
+    if (Option.exists(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)), Exit.isSuccess)) return
     yield* Fiber.interrupt(events)
     const abandoned = ACPTranslate.abandon(yield* Ref.get(state), ctx)
     yield* Ref.set(state, abandoned.state)
@@ -337,7 +358,7 @@ export const make = Effect.fnUntraced(function* (input: {
         },
       })
     },
-    (effect) => Effect.ignoreCause(effect),
+    (effect) => Effect.ignoreCause(effect, { log: true }),
   )
 
   // Forked uninterruptible: interruption reaches only `execute`, so the fiber still settles with a response.
