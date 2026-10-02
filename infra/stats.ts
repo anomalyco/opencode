@@ -1,4 +1,4 @@
-import { lakeAthenaWorkgroup, lakeCatalog, lakeCluster, lakeQueryPermissions, lakeRegion, tableBucket } from "./lake"
+import { lakeCluster, tableBucket } from "./lake"
 import { EMAILOCTOPUS_API_KEY } from "./app"
 import { domain } from "./stage"
 
@@ -11,7 +11,7 @@ const inferenceNamespace = new aws.s3tables.Namespace("LakeInferenceNamespace", 
   tableBucketArn: tableBucket.arn,
 })
 
-const inferenceEventTable = new aws.s3tables.Table(
+new aws.s3tables.Table(
   "LakeInferenceEventTable",
   {
     name: "event",
@@ -88,17 +88,6 @@ const inferenceEventTable = new aws.s3tables.Table(
   },
   { deleteBeforeReplace: $app.stage !== "production", ignoreChanges: ["metadata"] },
 )
-
-export const inferenceEvent = new sst.Linkable("InferenceEvent", {
-  properties: {
-    region: lakeRegion,
-    catalog: lakeCatalog,
-    database: inferenceNamespace.namespace,
-    table: inferenceEventTable.name,
-    tableBucket: tableBucket.name,
-    workgroup: lakeAthenaWorkgroup.name,
-  },
-})
 
 ////////////////
 // DATABASE
@@ -203,10 +192,7 @@ export const statSync = new sst.aws.Service("StatsSyncService", {
     dockerfile: "packages/stats/server/Dockerfile",
   },
   command: ["bun", "src/stat-sync.ts"],
-  // Keep the legacy Athena link and IAM permissions during the first R2-backed
-  // release so reverting the application code remains a one-deploy rollback.
-  link: [database, inferenceEvent, r2Sql, r2SqlAuthToken, statsSyncConfig],
-  permissions: lakeQueryPermissions,
+  link: [database, r2Sql, r2SqlAuthToken, statsSyncConfig],
   scaling: {
     min: 1,
     max: 1,

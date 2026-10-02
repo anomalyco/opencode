@@ -1,8 +1,6 @@
-import { deployAws, domain } from "./stage"
+import { domain } from "./stage"
 import { EMAILOCTOPUS_API_KEY } from "./app"
 import { SECRET } from "./secret"
-
-const lake = deployAws ? await import("./lake") : undefined
 
 ////////////////
 // DATABASE
@@ -253,7 +251,7 @@ const SALESFORCE_INSTANCE_URL = new sst.Secret("SALESFORCE_INSTANCE_URL")
 
 const logProcessor = new sst.cloudflare.Worker("LogProcessor", {
   handler: "packages/console/function/src/log-processor.ts",
-  link: [SECRET.HoneycombApiKey, ...(lake?.lakeIngest ? [lake.lakeIngest] : [])],
+  link: [SECRET.HoneycombApiKey],
 })
 
 new sst.cloudflare.x.SolidStart("Console", {
@@ -283,6 +281,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     ZEN_LITE_PRICE,
     new sst.Secret("ZEN_LIMITS"),
     new sst.Secret("ZEN_SESSION_SECRET"),
+    new sst.Secret("CLOUDFLARE_ACCESS_CLIENT_ID"),
     ...ZEN_MODELS,
     ...($dev
       ? [

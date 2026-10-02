@@ -1,0 +1,62 @@
+name: models-snapshot
+
+permissions:
+  contents: write
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 12 * * *"
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    if: github.repository == 'anomalyco/opencode'
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+          ref: v2
+
+      # The refresh script only needs `fetch`; skip the monorepo install.
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version-file: package.json
+
+      - name: Setup git committer
+        uses: ./.github/actions/setup-git-committer
+        with:
+          opencode-app-id: ${{ vars.OPENCODE_APP_ID }}
+          opencode-app-secret: ${{ secrets.OPENCODE_APP_SECRET }}
+
+      - name: Refresh snapshot
+        run: bun packages/core/script/update-models-snapshot.ts
+
+      - name: Commit changes
+        run: |
+          set -euo pipefail
+
+          FILE="packages/core/src/models-dev/snapshot.txt"
+
+          if [ -z "$(git status --short -- "$FILE")" ]; then
+            echo "No changes to commit"
+            echo "### models.dev snapshot" >> "$GITHUB_STEP_SUMMARY"
+            echo "Status: no changes" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          git add "$FILE"
+          git commit -m "chore(core): refresh bundled models.dev snapshot"
+
+          git pull --rebase --autostash origin v2
+          git push origin HEAD:v2 --no-verify
+
+          echo "### models.dev snapshot" >> "$GITHUB_STEP_SUMMARY"
+          echo "Status: committed $(git rev-parse --short HEAD)" >> "$GITHUB_STEP_SUMMARY"
