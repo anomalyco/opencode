@@ -1147,11 +1147,15 @@ const layer = Layer.effect(
           }
 
           if (task?.type === "compaction") {
+            const markerID = task.messageID
+            const markerIndex = msgs.findIndex((m) => m.info.id === markerID)
+            const history = markerIndex >= 0 ? msgs.slice(0, markerIndex + 1) : msgs
+            const hasNewerUser = lastUser.id !== markerID
             const result = yield* compaction.process({
-              messages: msgs,
-              parentID: lastUser.id,
+              messages: history,
+              parentID: markerID,
               sessionID,
-              auto: task.auto,
+              auto: hasNewerUser ? false : task.auto,
               overflow: task.overflow,
             })
             if (result === "stop") break

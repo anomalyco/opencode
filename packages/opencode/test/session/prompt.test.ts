@@ -704,6 +704,58 @@ it.instance("loop stops provider overflow instead of auto-compacting when disabl
   }),
 )
 
+for (const preserve of [0, 8000]) {
+  it.instance(`resumed compaction preserves its marker and newer user input (${preserve})`, () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        compaction: { preserve_recent_tokens: preserve },
+      }))
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const compact = yield* SessionCompaction.Service
+      const chat = yield* sessions.create({ title: "Pinned" })
+      const old = yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        parts: [{ type: "text", text: "OLD_HISTORY_SENTINEL" }],
+      })
+      yield* compact.create({ sessionID: chat.id, agent: "build", model: ref, auto: true })
+      const before = yield* sessions.messages({ sessionID: chat.id })
+      const marker = before.find((m) => m.parts.some((p) => p.type === "compaction"))!
+      yield* llm.hang
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* awaitWithTimeout(llm.wait(1), "compaction did not start", "10 seconds")
+      yield* prompt.cancel(chat.id)
+      const aborted = yield* Fiber.join(fiber)
+      expect(aborted.info).toMatchObject({ agent: "compaction", error: { name: "MessageAbortedError" } })
+      const newer = yield* prompt.prompt({
+        sessionID: chat.id,
+        agent: "build",
+        model: ref,
+        noReply: true,
+        parts: [{ type: "text", text: "NEW_REQUEST_SENTINEL" }],
+      })
+      yield* llm.push(reply().text("Condensed history").stop())
+      yield* llm.push(reply().text("Completed new request").stop())
+      yield* prompt.loop({ sessionID: chat.id })
+      const messages = yield* sessions.messages({ sessionID: chat.id })
+      const summaries = messages.filter((m) => m.info.role === "assistant" && m.info.summary && !m.info.error)
+      expect(summaries).toHaveLength(1)
+      const visible = yield* MessageV2.filterCompactedEffect(chat.id)
+      expect(visible.some((m) => m.info.id === old.info.id)).toBe(false)
+      expect(visible.some((m) => m.info.id === newer.info.id)).toBe(true)
+      const hits = yield* llm.hits
+      expect(summaries[0].info).toMatchObject({ parentID: marker.info.id })
+      expect(hits).toHaveLength(3)
+      expect(JSON.stringify(hits[2])).not.toContain("OLD_HISTORY_SENTINEL")
+      expect(JSON.stringify(hits[2])).toContain("NEW_REQUEST_SENTINEL")
+    }),
+  )
+}
+
 noLLMServer.instance.skip(
   "prompt emits v2 prompted and synthetic events (v2 projector disabled)",
   () =>
