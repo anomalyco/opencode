@@ -853,7 +853,7 @@ export const dict = {
   "settings.general.row.shell.title": "Shell do terminal",
   "settings.general.row.shell.description":
     "Escolha a shell usada no terminal. As shells compatíveis também são usadas nas chamadas de ferramentas do agente.",
-  "settings.general.row.shell.autoDefault": "Automático (padrão)",
+  "settings.general.row.shell.autoDefault": "Automático (predefinido)",
   "settings.general.row.shell.terminalOnly": "só no terminal",
   "settings.general.row.appearance.title": "Aparência",
   "settings.general.row.appearance.description": "Personalize como o OpenCode aparece no seu dispositivo",
