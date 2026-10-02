@@ -44,6 +44,8 @@ interface FetchDecompressionError extends Error {
 }
 
 export const SYNTHETIC_ATTACHMENT_PROMPT = "Attached media from tool result:"
+export const SYNTHETIC_RETAINED_TAIL_PROMPT =
+  "The messages below are the most recent part of the conversation, preserved verbatim after the summary above."
 export { isMedia }
 
 function truncateToolOutput(text: string, maxChars?: number) {
@@ -135,6 +137,9 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
+  const summaries = new Set<string>(
+    input.flatMap((msg) => (msg.info.role === "assistant" && msg.info.summary ? [msg.info.id] : [])),
+  )
   // Track media from tool results that need to be injected as user messages
   // for providers that don't support that media type in tool results.
   //
@@ -380,6 +385,18 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
         }
       }
       if (assistantMessage.parts.length > 0) {
+        // filterCompacted places the retained tail right after the compaction summary. When the
+        // tail was split mid-turn it starts with an assistant message, and providers merge
+        // consecutive assistant messages (Anthropic groups them into one block). That moves the
+        // tail's signed thinking blocks behind the summary content, so the API rejects every
+        // following request with "thinking blocks ... cannot be modified". Keep them separate.
+        const previous = result.at(-1)
+        if (previous?.role === "assistant" && summaries.has(previous.id))
+          result.push({
+            id: MessageID.ascending(),
+            role: "user",
+            parts: [{ type: "text", text: SYNTHETIC_RETAINED_TAIL_PROMPT }],
+          })
         result.push(assistantMessage)
         // Inject pending media as a user message for providers that don't support
         // media (images, PDFs) in tool results

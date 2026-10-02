@@ -1343,6 +1343,120 @@ describe("session.message-v2.toModelMessage", () => {
     expect(texts.map((t) => t.text)).toStrictEqual(["", "answer"])
   })
 
+  test("separates the compaction summary from a retained tail that starts mid-turn", async () => {
+    const tool = (messageID: string, id: string, callID: string) => ({
+      ...basePart(messageID, id),
+      type: "tool",
+      callID,
+      tool: "bash",
+      state: {
+        status: "completed",
+        input: { cmd: "ls" },
+        output: "ok",
+        title: "Bash",
+        metadata: {},
+        time: { start: 0, end: 1 },
+      },
+    })
+    // Stream order (newest first), as consumed by filterCompacted. The tail starts at m-tail,
+    // an assistant step in the middle of the m-turn user turn.
+    const stream: SessionV1.WithParts[] = [
+      {
+        info: userInfo("m-continue"),
+        parts: [
+          { ...basePart("m-continue", "k1"), type: "text", text: "Continue", synthetic: true },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: { ...assistantInfo("m-summary", "m-compact"), summary: true, finish: "stop" },
+        parts: [
+          { ...basePart("m-summary", "s1"), type: "step-start" },
+          {
+            ...basePart("m-summary", "s2"),
+            type: "reasoning",
+            text: "summary-thinking",
+            metadata: { anthropic: { signature: "sig-summary" } },
+          },
+          { ...basePart("m-summary", "s3"), type: "text", text: "summary" },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: userInfo("m-compact"),
+        parts: [
+          { ...basePart("m-compact", "c1"), type: "compaction", auto: true, tail_start_id: "m-tail" },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo("m-tail", "m-turn"),
+        parts: [
+          { ...basePart("m-tail", "t1"), type: "step-start" },
+          {
+            ...basePart("m-tail", "t2"),
+            type: "reasoning",
+            text: "tail-thinking",
+            metadata: { anthropic: { signature: "sig-tail" } },
+          },
+          tool("m-tail", "t3", "call-tail"),
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo("m-head", "m-turn"),
+        parts: [tool("m-head", "h1", "call-head")] as SessionV1.Part[],
+      },
+      {
+        info: userInfo("m-turn"),
+        parts: [{ ...basePart("m-turn", "u1"), type: "text", text: "do the work" }] as SessionV1.Part[],
+      },
+    ]
+
+    const history = MessageV2.filterCompacted(stream)
+    expect(history.map((msg): string => msg.info.id)).toStrictEqual(["m-compact", "m-summary", "m-tail", "m-continue"])
+
+    const result = await MessageV2.toModelMessages(history, model)
+
+    expect(result.map((msg) => msg.role)).toStrictEqual(["user", "assistant", "user", "assistant", "tool", "user"])
+    expect(result[2]).toStrictEqual({
+      role: "user",
+      content: [{ type: "text", text: MessageV2.SYNTHETIC_RETAINED_TAIL_PROMPT }],
+    })
+    expect(result[3].content).toStrictEqual([
+      {
+        type: "reasoning",
+        text: "tail-thinking",
+        providerOptions: { anthropic: { signature: "sig-tail" } },
+      },
+      {
+        type: "tool-call",
+        toolCallId: "call-tail",
+        toolName: "bash",
+        input: { cmd: "ls" },
+        providerExecuted: undefined,
+      },
+    ])
+  })
+
+  test("does not separate a compaction summary that is followed by a user message", async () => {
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo("m-compact"),
+        parts: [{ ...basePart("m-compact", "c1"), type: "compaction", auto: true }] as SessionV1.Part[],
+      },
+      {
+        info: { ...assistantInfo("m-summary", "m-compact"), summary: true, finish: "stop" },
+        parts: [{ ...basePart("m-summary", "s1"), type: "text", text: "summary" }] as SessionV1.Part[],
+      },
+      {
+        info: userInfo("m-continue"),
+        parts: [{ ...basePart("m-continue", "k1"), type: "text", text: "Continue" }] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+
+    expect(result.map((msg) => msg.role)).toStrictEqual(["user", "assistant", "user"])
+    expect(result[2].content).toStrictEqual([{ type: "text", text: "Continue" }])
+  })
+
   test("leaves empty text alone in assistant messages without reasoning", async () => {
     const assistantID = "m-assistant-no-reasoning"
     const input: SessionV1.WithParts[] = [
