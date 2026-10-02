@@ -17,7 +17,7 @@ import type { Argv } from "yargs"
 import path from "path"
 import { pathToFileURL } from "url"
 import { open } from "node:fs/promises"
-import { Effect } from "effect"
+import { Effect, Schema } from "effect"
 import { UI } from "../ui"
 import { effectCmd } from "../effect-cmd"
 import { EOL } from "os"
@@ -177,6 +177,10 @@ export const RunCommand = effectCmd({
         default: "default",
         describe: "format: default (formatted) or json (raw JSON events)",
       })
+      .option("output-schema", {
+        type: "string",
+        describe: "JSON schema for the response, as inline JSON or a local file path",
+      })
       .option("file", {
         alias: ["f"],
         type: "string",
@@ -293,6 +297,10 @@ export const RunCommand = effectCmd({
         die("--mini cannot be used with --command")
       }
 
+      if (args["output-schema"] !== undefined && (interactive || args.command)) {
+        die("--output-schema cannot be used with --mini or --command")
+      }
+
       if (interactive && args._?.[0] !== "mini") {
         die("--mini must be used without the run subcommand")
       }
@@ -346,6 +354,14 @@ export const RunCommand = effectCmd({
       const attachHeaders = args.attach
         ? ServerAuth.headers({ password: args.password, username: args.username })
         : undefined
+      const schema =
+        args["output-schema"] !== undefined
+          ? Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
+              args["output-schema"].trimStart().startsWith("{")
+                ? args["output-schema"]
+                : await Bun.file(path.resolve(args.attach ? root : (directory ?? root), args["output-schema"])).text(),
+            )
+          : undefined
       const attachSDK = (dir?: string) => {
         return createOpencodeClient({
           baseUrl: args.attach!,
@@ -752,6 +768,7 @@ export const RunCommand = effectCmd({
 
               if (part.type === "text" && part.time?.end) {
                 if (emit("text", { part })) continue
+                if (schema) continue
                 const text = part.text.trim()
                 if (!text) continue
                 if (!process.stdout.isTTY) {
@@ -768,6 +785,10 @@ export const RunCommand = effectCmd({
                 const text = part.text.trim()
                 if (!text) continue
                 const line = `Thinking: ${text}`
+                if (schema) {
+                  UI.println(line)
+                  continue
+                }
                 if (process.stdout.isTTY) {
                   UI.empty()
                   UI.println(`${UI.Style.TEXT_DIM}\u001b[3m${line}\u001b[0m${UI.Style.TEXT_NORMAL}`)
@@ -866,12 +887,27 @@ export const RunCommand = effectCmd({
             agent,
             model,
             variant: args.variant,
+            format: schema ? { type: "json_schema", schema } : undefined,
             parts: [...files, { type: "text", text: message }],
           })
           if (result.error) {
             if (!emit("error", { error: result.error })) UI.error(formatRunError(result.error))
             process.exitCode = 1
             return
+          }
+          if (schema) {
+            const info = result.data?.info
+            if (info?.role !== "assistant" || info.structured === undefined) {
+              const error = info?.role === "assistant" ? info.error : undefined
+              if (!emit("error", { error: error ?? { message: "Model did not produce structured output" } })) {
+                UI.error(error ? formatRunError(error) : "Model did not produce structured output")
+              }
+              process.exitCode = 1
+              return
+            }
+            if (!emit("structured_output", { output: info.structured })) {
+              process.stdout.write(JSON.stringify(info.structured) + EOL)
+            }
           }
           await finish()
           return
@@ -993,6 +1029,8 @@ export async function runMini(input: MiniCommandInput) {
     model: input.model,
     agent: input.agent,
     format: "default",
+    "output-schema": undefined,
+    outputSchema: undefined,
     file: undefined,
     title: undefined,
     attach: input.attach,

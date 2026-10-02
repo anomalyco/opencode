@@ -360,6 +360,14 @@ opencode serve
 opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 ```
 
+Use `--output-schema` to require a JSON result. Pass an inline JSON Schema or a path to a local schema file:
+
+```bash
+opencode run --output-schema schema.json "Summarize the project"
+```
+
+The result is written to stdout as one JSON value. With `--format json`, the event stream includes a `structured_output` event whose `output` field holds the result. The command exits with a nonzero status if no structured result is returned. Schema files are read locally, including with `--attach`. This flag cannot be combined with `--mini` or `--command`.
+
 #### Flags
 
 | Flag                                     | Short | Description                                                                |
@@ -373,6 +381,7 @@ opencode run --attach http://localhost:4096 "Explain async/await in JavaScript"
 | <nobr><code>{"--agent"}</code></nobr>    |       | Agent to use                                                               |
 | <nobr><code>{"--file"}</code></nobr>     | `-f`  | File(s) to attach to message                                               |
 | <nobr><code>{"--format"}</code></nobr>   |       | Format: default (formatted) or json (raw JSON events)                      |
+| <nobr><code>{"--output-schema"}</code></nobr> | | JSON Schema as inline JSON or a path to a local file |
 | <nobr><code>{"--title"}</code></nobr>    |       | Title for the session (uses truncated prompt if no value provided)         |
 | <nobr><code>{"--attach"}</code></nobr>   |       | Attach to a running opencode server (e.g., http://localhost:4096)          |
 | <nobr><code>{"--password"}</code></nobr> | `-p`  | Basic auth password (defaults to `OPENCODE_SERVER_PASSWORD`)               |
