@@ -13,6 +13,10 @@ describe("provider error classification", () => {
       "Prompt has 5,958,968 tokens, but the configured context size is 256,000 tokens",
       "Too many tokens",
       "Token limit exceeded",
+      "Too many images in request: 31 > 30",
+      "too many images in request: 33 > 30",
+      "Maximum number of images exceeded",
+      "Image limit exceeded",
     ]
 
     expect(messages.every(isContextOverflow)).toBe(true)
@@ -24,6 +28,12 @@ describe("provider error classification", () => {
       "Rate limit exceeded, please retry after 30 seconds.",
       "Too many requests. Please slow down.",
     ]
+
+    expect(messages.some(isContextOverflow)).toBe(false)
+  })
+
+  test("does not classify throttling 'too many' messages as context overflow", () => {
+    const messages = ["Too many requests", "Throttling error: too many requests"]
 
     expect(messages.some(isContextOverflow)).toBe(false)
   })
