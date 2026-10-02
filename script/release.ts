@@ -61,7 +61,9 @@ if ((await editor.exited) !== 0) {
 const document = await Bun.file(review).text()
 const notes = document.match(/<!-- changelog:start -->\s*([\s\S]*?)\s*<!-- changelog:end -->/)
 if (!notes) throw new Error("Release review is missing its changelog markers")
-await Bun.write(changelog, `${notes[1].trim()}\n`)
+const releaseNotes = notes[1].trim()
+if (!releaseNotes) throw new Error("Release review has no changelog")
+await Bun.write(changelog, `${releaseNotes}\n`)
 
 const answer = prompt(`Trigger the ${version} release? [y/N]`)
 if (answer?.trim().toLowerCase() !== "y" && answer?.trim().toLowerCase() !== "yes") {
@@ -69,7 +71,7 @@ if (answer?.trim().toLowerCase() !== "y" && answer?.trim().toLowerCase() !== "ye
   process.exit(0)
 }
 
-await $`gh workflow run publish.yml --ref v2 ${input}`
+await $`gh workflow run publish.yml --ref v2 ${input} -f release_notes=${releaseNotes}`
 console.log(`Triggered the ${version} release`)
 
 async function generateReview(base: string) {

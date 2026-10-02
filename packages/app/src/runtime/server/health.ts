@@ -156,9 +156,9 @@ export function createServerHealth(
     // invalidates both the old result and any probe still using the old endpoint.
     const list = servers().map((conn) => ({
       key: ServerConnection.key(conn),
-      type: conn.type,
+      managed: conn.type === "extension" && conn.managed,
       http: conn.http,
-      stage: conn.type === "ssh" ? conn.stage : undefined,
+      stage: conn.type === "extension" ? conn.state : undefined,
     }))
     for (const conn of list) {
       if (conn.stage && conn.stage !== "ready") {
@@ -176,7 +176,7 @@ export function createServerHealth(
         continue
       }
       const endpoint = cacheKey(conn.http)
-      if (conn.type === "ssh" && endpoints.get(conn.key) !== endpoint) {
+      if (conn.managed && endpoints.get(conn.key) !== endpoint) {
         setStatus(conn.key, reconcile({ healthy: false, checking: true }))
       }
       endpoints.set(conn.key, endpoint)

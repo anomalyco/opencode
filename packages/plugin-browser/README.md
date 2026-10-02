@@ -38,8 +38,8 @@ pure and does not load any of these runtime modules.
 ## Tests
 
 Run `bun test` and `bun typecheck` from this package for its contract checks.
-Native browser coverage lives with the desktop implementation
-(`packages/desktop/test/browser-native.test.ts`), not in this package.
+The desktop implementation is the built-in `browser` GUI extension
+(`packages/gui-extensions/src/browser`); its URL policy tests live there, not in this package.
 
 ## RPC
 

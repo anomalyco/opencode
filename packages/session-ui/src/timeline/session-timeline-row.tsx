@@ -5,7 +5,6 @@ import type {
   SessionStatus,
 } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
-import { Tooltip } from "@opencode/ui/tooltip"
 import { For, Show, createMemo, type Accessor, type JSX } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
@@ -15,6 +14,7 @@ import {
   SessionAssistantContent,
   SessionContextToolGroup,
   SessionFileToolGroup,
+  SessionReadToolGroup,
   SessionShellMessage,
   SessionUserMessage,
   currentContentDefaultOpen,
@@ -206,6 +206,26 @@ export function createSessionTimelineRowRenderer(input: {
             input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key
           }
           onOpenChange={(open) => input.disclosure.set(key(), open)}
+          onSizeChange={onSizeChange}
+        />
+      )
+    }
+
+    if (row().group.type === "read") {
+      const tools = createMemo(() => {
+        const group = row().group
+        if (group.type !== "read") return []
+        const contents = indexGroupContents(group.refs)
+        return group.refs.flatMap((ref) => {
+          const content = contents.get(ref.messageID)?.get(ref.partID)
+          return content?.type === "tool" ? [content] : []
+        })
+      })
+      return (
+        <SessionReadToolGroup
+          tools={tools()}
+          open={input.disclosure.value(row().group.key)}
+          onOpenChange={(open) => input.disclosure.set(row().group.key, open)}
           onSizeChange={onSizeChange}
         />
       )
@@ -522,25 +542,12 @@ export function createSessionTimelineRowRenderer(input: {
           }
         >
           {(message) => (
-            <div
-              data-slot="session-timeline-notice"
-              data-type="location-switched"
-              class={`flex h-7 w-full min-w-0 items-center gap-2 py-1 text-[13px] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint ${inset()}`}
-            >
-              <Tooltip
-                appearance="compact"
-                placement="top"
-                value={i18n.t("ui.sessionTimeline.notice.movedTooltip")}
-                class="shrink-0"
-                triggerTabIndex={0}
-              >
-                <bdi data-slot="session-timeline-notice-label" dir="auto" class="font-[530]">
-                  {i18n.t("ui.sessionTimeline.notice.movedTo")}
-                </bdi>
-              </Tooltip>{" "}
-              <bdi data-slot="session-timeline-notice-value" dir="ltr" class="min-w-0 truncate font-[440]">
-                {message().location.directory}
-              </bdi>
+            <div data-slot="session-timeline-notice" data-type="location-switched" class={`w-full py-2 ${inset()}`}>
+              <TimelineSeparator
+                label={i18n.t("ui.sessionTimeline.notice.movedTo")}
+                value={message().location.directory}
+                tooltip={i18n.t("ui.sessionTimeline.notice.movedTooltip")}
+              />
             </div>
           )}
         </Show>

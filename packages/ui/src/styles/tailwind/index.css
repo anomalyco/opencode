@@ -10,6 +10,7 @@
 @source not "../../../../desktop/src/renderer/**/*.test.{ts,tsx}";
 @source "../../../../enterprise/src";
 @source "../../../../session-ui/src";
+@source "../../../../gui-extensions/src";
 @source not "../../../../session-ui/src/**/*.test.{ts,tsx}";
 @source "../../../../storybook";
 @source "../../../src";

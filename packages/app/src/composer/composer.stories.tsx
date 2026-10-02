@@ -279,6 +279,34 @@ export const MixedAttachments = {
   ),
 }
 
+export const BrowserElementComment = {
+  render: () => (
+    <ComposerStory
+      prompt={text("Tidy up the settings page")}
+      comments={[
+        {
+          type: "note",
+          key: "note:story:c=save",
+          origin: "story",
+          label: "button.btn.primary",
+          icon: "select-element",
+          subject:
+            'the "button.btn.primary" element in browser tab tab_00000000-0000-4000-8000-000000000000 at http://localhost:5173/settings (role button; accessible name "Save changes"; selector "#settings > form > button.btn.primary")',
+          comment: "Match the secondary button height",
+          commentID: "save",
+        },
+        {
+          type: "file",
+          key: "comment:src/app.tsx",
+          path: "src/app.tsx",
+          selection: { startLine: 12, startChar: 0, endLine: 14, endChar: 0 },
+          comment: "Keep the normal flow flat",
+        },
+      ]}
+    />
+  ),
+}
+
 export const ModelAndVariant = { render: () => <ComposerStory prompt={text("Compare both variants")} /> }
 
 export const SlashSuggestions = { render: () => <ComposerStory suggestions="command" /> }

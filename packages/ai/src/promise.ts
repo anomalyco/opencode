@@ -42,7 +42,7 @@ export type GenerationHandle<Response> = Snapshot & {
   /** Serializable JSON; pass it back to `resume` from another process. */
   readonly token: unknown
   readonly await: (options?: AwaitOptions & RunOptions) => Promise<Response>
-  /** Status observations until the first terminal one, polling like `await`; abort ends iteration without throwing. */
+  /** Status observations until the first terminal one, polling like `await`; abort throws `signal.reason`. */
   readonly events: (options?: AwaitOptions & RunOptions) => AsyncIterable<Event>
   /** The result without polling; fails when the generation has not completed. */
   readonly result: (options?: RunOptions) => Promise<Response>
@@ -50,15 +50,16 @@ export type GenerationHandle<Response> = Snapshot & {
   readonly cancel: (options?: RunOptions) => Promise<void>
 }
 
+// Fails with `signal.reason` so aborted calls reject and aborted streams throw like `fetch`: an `AbortError` by default.
 const abortEffect = (signal: AbortSignal | undefined) =>
   signal === undefined
     ? Effect.never
-    : Effect.callback<void>((resume) => {
+    : Effect.callback<never, unknown>((resume) => {
         if (signal.aborted) {
-          resume(Effect.void)
+          resume(Effect.fail(signal.reason))
           return
         }
-        const onAbort = () => resume(Effect.void)
+        const onAbort = () => resume(Effect.fail(signal.reason))
         signal.addEventListener("abort", onAbort, { once: true })
         return Effect.sync(() => signal.removeEventListener("abort", onAbort))
       })
@@ -68,14 +69,14 @@ export const make = (options: Options = {}) => {
 
   /** Run any package Effect (for example `LLMClient.compact(...)`) inside this runtime. */
   const run = <A, E>(effect: Effect.Effect<A, E, Services>, options?: RunOptions) =>
-    runtime.runPromise(effect, { signal: options?.signal })
+    runtime.runPromise(Effect.raceFirst(effect, abortEffect(options?.signal)))
 
   const iterate = <A, E>(stream: Stream.Stream<A, E, Services>, options?: RunOptions): AsyncIterable<A> =>
     Stream.toAsyncIterable(
       Stream.unwrap(
         runtime.contextEffect.pipe(
           Effect.map(
-            (context): Stream.Stream<A, E> =>
+            (context): Stream.Stream<A, unknown> =>
               stream.pipe(Stream.interruptWhen(abortEffect(options?.signal)), Stream.provideContext(context)),
           ),
         ),

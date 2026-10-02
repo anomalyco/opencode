@@ -1,6 +1,18 @@
 import { Tabs } from "@opencode/ui/tabs"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { createEffect, createMemo, on, onCleanup, onMount, Show, Switch, Match, type Accessor } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  lazy,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Suspense,
+  Switch,
+  Match,
+  type Accessor,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -10,7 +22,7 @@ import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { LocalProject } from "@/shell/state/layout"
 import { useServerCollectionController } from "@/servers/registry/controller"
-import { AddServerMenu } from "@/servers/wsl/settings"
+import { AddServerMenu } from "@/servers/registry/add-menu"
 import { DialogServer } from "@/servers/connect/dialog"
 import { LocationProvider } from "@/workspaces/location"
 import { SettingsGeneral } from "./general/general"
@@ -18,12 +30,10 @@ import { SettingsAppearance } from "./appearance/appearance"
 import { experimentalSettingsAvailable, SettingsExperimental } from "./experimental/experimental"
 import { SettingsKeybinds } from "./keybinds/keybinds"
 import { SettingsNotifications } from "./notifications/notifications"
-import { SettingsPairing } from "./pairing/pairing"
 import { SettingsProviders } from "./providers/providers"
 import { SettingsModels } from "./models/models"
 import { SettingsServerGeneral } from "./servers/servers"
 import { useSettingsServers, useSettingsServersLoaded, type SettingsServer } from "./servers/inventory"
-import { isSshConnecting } from "@/servers/ssh/types"
 import { SettingsWorkspaces } from "./workspaces/workspaces"
 import { useWorkspacesPrefetch } from "./workspaces/queries"
 import { SettingsProjects } from "./workspaces/projects"
@@ -37,14 +47,18 @@ import { useSettingsSurface } from "./surface"
 import { settingsViewRedirect } from "./route"
 import { pageIcons } from "./pages"
 import { revealSettingsSearch } from "./search-reveal"
+import { ExtensionSettingPages } from "@/runtime/extension/setting-view"
 import "@/settings/settings.css"
+
+const GuiExtensionsSettings = import.meta.env.DEV
+  ? lazy(() => import("@/runtime/extension/setting-dev").then((module) => ({ default: module.GuiExtensionsSettings })))
+  : undefined
 
 const rootClientTabs = [
   { value: "general", icon: pageIcons.general, label: "settings.tab.preferences" },
   { value: "appearance", icon: pageIcons.appearance, label: "settings.general.section.appearance" },
   { value: "notifications", icon: pageIcons.notifications, label: "settings.tab.notifications" },
   { value: "shortcuts", icon: pageIcons.shortcuts, label: "settings.tab.shortcuts" },
-  { value: "pairing", icon: pageIcons.pairing, label: "settings.pairing.title" },
 ] as const
 
 const serverTabs = [
@@ -57,6 +71,9 @@ const serverTabs = [
 
 const experimentalTab = [
   { value: "experimental", icon: pageIcons.experimental, label: "settings.tab.experimental" },
+] as const
+const guiExtensionsTab = [
+  { value: "gui-extensions", icon: pageIcons["gui-extensions"], label: "settings.guiExtensions.title" },
 ] as const
 const aboutTab = [{ value: "about", icon: pageIcons.about, label: "settings.tab.about" }] as const
 
@@ -139,7 +156,7 @@ export function SettingsScreen() {
       servers: servers().map((item) => ({
         key: item.key,
         connected: !!item.connection,
-        starting: item.wsl?.runtime.kind === "starting" || (!!item.ssh && isSshConnecting(item.ssh.stage)),
+        starting: item.source?.entry.state === "starting",
       })),
     })
     if (next?.type === "back") surface.back()
@@ -220,10 +237,13 @@ function RootSettings() {
     return connectionFor(list(), layout.home.selection().server)
   })
   const sourceDirectory = useSettingsDirectory(sourceServer)
+  // Development builds list the built-in GUI extensions of this window.
+  const guiExtensions = !!GuiExtensionsSettings && platform.platform === "desktop"
   createEffect(() => {
     const view = surface.view()
-    if (experimentalSettingsAvailable || view.type !== "root" || view.tab !== "experimental") return
-    surface.open("general")
+    if (view.type !== "root") return
+    if (view.tab === "experimental" && !experimentalSettingsAvailable) surface.open("general")
+    if (view.tab === "gui-extensions" && !guiExtensions) surface.open("general")
   })
   const addServer = () =>
     void dialog.push(() => (
@@ -231,14 +251,19 @@ function RootSettings() {
     ))
   const groups = createMemo<SettingsNavGroup[]>(() => [
     {
-      items: rootClientTabs
-        .filter((item) => item.value !== "pairing" || !!platform.pair)
-        .map((item) => ({ ...item, label: language.t(item.label) })),
+      items: [
+        ...rootClientTabs.map((item) => ({ ...item, label: language.t(item.label) })),
+        ...surface.extensions.pages().map((item) => ({
+          value: item.value.id,
+          icon: item.value.icon ?? pageIcons.extensions,
+          label: item.value.title,
+        })),
+      ],
     },
     ...(multiple()
       ? [
           {
-            label: language.t("status.popover.tab.servers"),
+            label: language.t("settings.tab.servers"),
             action: <AddServerMenu compact onAddServer={addServer} />,
             items: ordered().map((server) => ({
               value: `server:${server.key}`,
@@ -263,6 +288,7 @@ function RootSettings() {
     ...(experimentalSettingsAvailable
       ? [{ items: experimentalTab.map((item) => ({ ...item, label: language.t(item.label) })) }]
       : []),
+    ...(guiExtensions ? [{ items: guiExtensionsTab.map((item) => ({ ...item, label: language.t(item.label) })) }] : []),
     { items: aboutTab.map((item) => ({ ...item, label: language.t(item.label) })) },
   ])
 
@@ -303,12 +329,17 @@ function RootSettings() {
       <Tabs.Content value="shortcuts" class="settings-panel">
         <SettingsKeybinds active={surface.view().tab === "shortcuts"} />
       </Tabs.Content>
-      <Tabs.Content value="pairing" class="settings-panel">
-        <SettingsPairing />
-      </Tabs.Content>
+      <ExtensionSettingPages />
       <Tabs.Content value="experimental" class="settings-panel">
         <SettingsExperimental />
       </Tabs.Content>
+      {GuiExtensionsSettings && guiExtensions && (
+        <Tabs.Content value="gui-extensions" class="settings-panel">
+          <Suspense>
+            <GuiExtensionsSettings />
+          </Suspense>
+        </Tabs.Content>
+      )}
       <Tabs.Content value="about" class="settings-panel settings-about">
         <SettingsAbout active={surface.view().tab === "about"} />
       </Tabs.Content>

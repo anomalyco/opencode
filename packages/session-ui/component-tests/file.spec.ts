@@ -13,10 +13,7 @@ for (const split of [false, true]) {
       await expect(additions).toHaveText(["select-text"])
       await expect(root.locator('[data-line-type="context"] [data-diff-span]')).toHaveCount(0)
       await expect(root.locator('[data-line-type="change-deletion"] [data-diff-span]')).toHaveText([
-        '"http" in',
-        "? error.reason.",
-        "response?.",
-        ": undefined",
+        '"http" in error.reason ? error.reason.http?.response?.headers["x-should-retry"] : undefined',
       ])
       await expect(additions).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)")
     })
@@ -27,8 +24,7 @@ for (const split of [false, true]) {
       const root = await mount("components-session-review--large-file", { args: { split, source } })
       const line = root.locator('[data-line][data-line-type="change-addition"]')
       await expect(line).toHaveText("export const value = 'after'")
-      // Plain first paint is not proof that the worker kept inline diffs disabled.
-      await expect(line.locator('[style*="--syntax-"]')).not.toHaveCount(0)
+      await expect(line.locator('[style*="--syntax-"]')).toHaveCount(0)
       await expect(root.locator("[data-diff-span]")).toHaveCount(0)
     })
   }

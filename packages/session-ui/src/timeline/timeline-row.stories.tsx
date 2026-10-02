@@ -455,7 +455,7 @@ const MovedLocation = {
   render: () => (
     <CurrentSessionTimelineStory
       title="Moved Session location"
-      description="A changed working directory stays compact, truncates, and exposes its tooltip."
+      description="A changed working directory renders as a timeline divider, truncates, and exposes its tooltip."
       document={{
         ...thinkingDocument,
         status: { type: "idle" },

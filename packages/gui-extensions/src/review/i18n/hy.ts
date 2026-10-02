@@ -1,0 +1,13 @@
+export default {
+  "tab.title": "Վերանայել",
+  "tab.count.one": "{{count}} ֆայլ փոխվել է",
+  "tab.count.other": "{{count}} ֆայլեր փոխվել են",
+  "mobile.title.one": "Փոխել",
+  "mobile.title.other": "Փոփոխություններ",
+  "empty.git": "Դեռեւս չկատարված փոփոխություններ",
+  "empty.branch": "Ճյուղի փոփոխություններ դեռ չկան",
+  "git.title": "Ստեղծել Git պահոց",
+  "git.description": "Հետեւել, վերանայել և հետարկել այս նախագծի փոփոխությունները",
+  loadingChanges: "Բեռնվում են փոփոխություններ…",
+  noChanges: "Ոչ փոփոխություններ",
+}

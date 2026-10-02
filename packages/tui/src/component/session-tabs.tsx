@@ -43,6 +43,7 @@ import { TabPulse, unreadGlowIntensity } from "./tab-pulse"
 import { tint } from "../theme/color"
 import { SESSION_SIDEBAR_WIDTH, SESSION_TABS_COMPACT_BREAKPOINT } from "../ui/layout"
 import { projectName } from "../util/project"
+import { stringWidth } from "../util/string-width"
 import { marqueeCycleWidth, marqueeOverflows, marqueeTextParts } from "../util/marquee"
 import { useDialog } from "../ui/dialog"
 import { useToast } from "../ui/toast"
@@ -112,6 +113,8 @@ export const EMPTY_SESSION_TAB_STATUS: SessionTabsStatus = {
 export type SessionTabsController = Pick<ContextController, "tabs" | "current" | "select" | "close" | "move"> & {
   newTab?: () => boolean
   add?: () => void
+  recentlyClosed?: ContextController["recentlyClosed"]
+  reopen?: ContextController["reopen"]
   detail?: (sessionID: string) => string | undefined
   rename?: (sessionID: string) => void
   search?: () => void
@@ -379,11 +382,12 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
     mode: "menu",
     commands: [{ bind: "escape,ctrl+c", title: "Close tab menu", group: "Tabs", run: props.onClose }],
   }))
-  const actions = createMemo(() => {
+  const actions = createMemo<Array<{ title: string; run?: () => void }>>(() => {
     const sessionID = props.state.sessionID
     const title = props.state.title
+    const closed = (props.tabs.recentlyClosed?.() ?? []).slice(0, 10)
     return [
-      ...(props.tabs.add ? [{ title: "New tab", run: () => props.tabs.add?.() }] : []),
+      ...(sessionID && props.tabs.add ? [{ title: NEW_SESSION_TAB_TITLE, run: () => props.tabs.add?.() }] : []),
       ...(sessionID
         ? [
             {
@@ -402,15 +406,32 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
             { title: "Close", run: () => props.tabs.close(sessionID) },
           ]
         : []),
+      ...(!sessionID && props.tabs.reopen
+        ? [
+            { title: "Recently closed tabs" },
+            ...closed.map((tab) => ({
+              title: tab.title || "Untitled session",
+              run: () => props.tabs.reopen?.(tab.sessionID),
+            })),
+            ...(closed.length === 0 ? [{ title: "No recently closed tabs" }] : []),
+          ]
+        : []),
     ]
   })
   const [selected, setSelected] = createSignal<number>()
-  const top = () => Math.max(0, Math.min(props.state.y + 1, dimensions().height - actions().length))
-  const left = () => Math.max(0, Math.min(props.state.x, dimensions().width - CONTEXT_MENU_WIDTH))
+  const width = () =>
+    Math.min(
+      dimensions().width,
+      Math.max(CONTEXT_MENU_WIDTH, ...actions().map((action) => Math.min(50, stringWidth(action.title) + 2))),
+    )
+  const height = () => Math.min(actions().length, dimensions().height)
+  const top = () => Math.max(0, Math.min(props.state.y + 1, dimensions().height - height()))
+  const left = () => Math.max(0, Math.min(props.state.x, dimensions().width - width()))
   const run = (index: number) => {
     const action = actions()[index]
+    if (!action?.run) return
     props.onClose()
-    action?.run()
+    action.run()
   }
 
   return (
@@ -437,13 +458,14 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
           event.stopPropagation()
         }}
       >
-        <box
+        <scrollbox
           position="absolute"
           left={left()}
           top={top()}
-          height={actions().length}
-          width={CONTEXT_MENU_WIDTH}
-          flexDirection="column"
+          height={height()}
+          width={width()}
+          scrollX={false}
+          scrollbarOptions={{ visible: false }}
           backgroundColor={background()}
           onMouseDown={(event) => {
             if (event.button === RIGHT_MOUSE_BUTTON) props.onClose()
@@ -457,8 +479,10 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
                 width="100%"
                 paddingLeft={1}
                 paddingRight={1}
-                backgroundColor={selected() === index() ? actionHovered() : undefined}
-                onMouseOver={() => setSelected(index())}
+                height={1}
+                flexShrink={0}
+                backgroundColor={action.run && selected() === index() ? actionHovered() : undefined}
+                onMouseOver={() => setSelected(action.run ? index() : undefined)}
                 onMouseOut={() => setSelected(undefined)}
                 onMouseUp={(event) => {
                   event.preventDefault()
@@ -467,13 +491,13 @@ function TabContextMenu(props: { state: TabContextMenuState; tabs: SessionTabsCo
                   run(index())
                 }}
               >
-                <text fg={theme.text.base} selectable={false}>
+                <text fg={action.run ? theme.text.base : theme.text.muted} selectable={false} truncate>
                   {action.title}
                 </text>
               </box>
             )}
           </For>
-        </box>
+        </scrollbox>
       </box>
     </Portal>
   )

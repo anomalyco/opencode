@@ -103,7 +103,7 @@ export type TranscriptionRequestInput<Model extends TranscriptionModel = Transcr
 // Response and events
 // ---------------------------------------------------------------------------
 
-/** Speaker labels are provider-native (`A`, `0`, `spk:0`, or a known speaker name). */
+/** Speaker labels are provider-native (`A`, `0`, `spk:0`, `speaker_0`, or a known speaker name). */
 export const TranscriptionSegment = Schema.Struct({
   text: Schema.String,
   startSeconds: Schema.Number,

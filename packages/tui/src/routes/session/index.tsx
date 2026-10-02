@@ -142,6 +142,7 @@ export function Session(props: {
   promptMuted?: boolean
   sidebarVisible: boolean
   onToggleSidebar: () => void
+  terminals?: boolean
   visibleTerminalID?: string
   onTerminalPicker?: (show: (() => void) | undefined) => void
   width?: number
@@ -1472,6 +1473,7 @@ export function Session(props: {
                   }
                   setComposer("open", false)
                 }}
+                terminals={props.terminals}
                 visibleTerminalID={props.visibleTerminalID}
               />
               <Switch>
@@ -2808,7 +2810,7 @@ function Shell(props: ToolProps) {
       command={stringValue(props.input.command)}
       workdir={stringValue(props.input.workdir)}
       status={props.part.state.status}
-      background={Boolean(stringValue(props.metadata.shellID)) && props.part.state.status !== "running"}
+      background={props.part.state.status === "completed" && props.metadata.status === "running"}
       output={stringValue(props.metadata.shellID) ? undefined : props.output}
     />
   )

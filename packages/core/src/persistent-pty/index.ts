@@ -22,6 +22,7 @@ import { resolveBinary } from "#persistent-pty-binary"
 
 export type { Role, StreamEvent } from "./daemon.js"
 export { Handoff } from "@opencode/schema/persistent-pty"
+export { available } from "#persistent-pty-binary"
 
 export const Options = Schema.Struct({ handoff: Schema.optional(Handoff) })
 export type Options = typeof Options.Type

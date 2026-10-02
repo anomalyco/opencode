@@ -16,7 +16,6 @@ import { Persistence } from "@/runtime/persistence/schema"
 import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
 import { SessionTransfer } from "@opencode/schema/session-transfer"
-import { useSshAuthenticate } from "@/servers/ssh/authenticate"
 import { useRevealProject } from "./reveal"
 
 export const HomeServersSchema = Schema.Struct({
@@ -32,7 +31,7 @@ export function createHomeProjectsController(home: HomeController) {
   const settings = useSettingsSurface()
   const serverManagement = useServerActionsController()
   const global = useGlobal()
-  const authenticate = useSshAuthenticate()
+  const authenticate = ServerConnection.authenticate
   const revealProject = useRevealProject()
   const [_state, setState, _, ready] = persisted(Persist.global("home.servers"), HomeServersSchema, { collapsed: {} })
   const [state] = createResource(

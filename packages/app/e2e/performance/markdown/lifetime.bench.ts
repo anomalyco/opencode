@@ -1,8 +1,8 @@
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { benchmark, expect } from "../benchmark"
 import { mockOpenCodeServer } from "../../utils/mock-server"
-import { fixture } from "../timeline/session-timeline-stress.fixture"
-import { installStressSessionTabs, installTimelineSettings, stressSessionHref } from "../timeline/timeline-test-helpers"
+import { fixture, installStressSessionTabs, installTimelineSettings } from "../../utils/session-fixture"
+import { sessionHref } from "../../utils/app"
 import { completedAnswer } from "../../../../session-ui/performance/markdown-lifetime/answer"
 import { installMarkdownGate } from "./probe"
 
@@ -54,22 +54,22 @@ for (const size of ["typical", "large"]) {
     await installStressSessionTabs(page)
     const targetPart = `msg_2_${fixture.targetID}_assistant:text:0`
     const sourcePart = `msg_2_${fixture.sourceID}_assistant:text:0`
-    await installMarkdownGate(page, { answer, targetPart, sourcePart, href: stressSessionHref(fixture.sourceID) })
+    await installMarkdownGate(page, { answer, targetPart, sourcePart, href: sessionHref(fixture.sourceID) })
     const prefetched = page.waitForResponse((response) =>
       new URL(response.url()).pathname.endsWith(`/session/${fixture.targetID}/message`),
     )
-    await page.goto(stressSessionHref(fixture.sourceID))
+    await page.goto(sessionHref(fixture.sourceID))
     await prefetched
     const source = page.locator(`[data-timeline-part-id="${sourcePart}"] [data-component="markdown"]`)
     await expect(source).toHaveAttribute("data-markdown-ready", "")
-    await page.locator(`[data-slot="titlebar-tabs"] a[href="${stressSessionHref(fixture.targetID)}"]`).click()
+    await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(fixture.targetID)}"]`).click()
     await page.waitForFunction(() => window.markdownGate.held)
     await expect(page.locator(`[data-timeline-part-id="${targetPart}"]`)).toBeAttached()
     const cdp = await page.context().newCDPSession(page)
     await cdp.send("Performance.enable")
     const before = await cdp.send("Performance.getMetrics")
     await page.evaluate(() => window.markdownGate.arm())
-    await page.locator(`[data-slot="titlebar-tabs"] a[href="${stressSessionHref(fixture.sourceID)}"]`).click()
+    await page.locator(`[data-slot="titlebar-tabs"] a[href="${sessionHref(fixture.sourceID)}"]`).click()
     await expect(source).toHaveAttribute("data-markdown-ready", "")
     await expect(source.getByRole("heading", { name: "Current destination" })).toBeVisible()
     await expect(page.locator(`[data-timeline-part-id="${targetPart}"]`)).toHaveCount(0)

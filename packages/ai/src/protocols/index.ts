@@ -1,5 +1,6 @@
 export * as AnthropicMessages from "./anthropic-messages.js"
 export * as BedrockConverse from "./bedrock-converse.js"
+export * as CohereChat from "./cohere-chat.js"
 export * as Gemini from "./gemini.js"
 export * as MistralChat from "./mistral-chat.js"
 export * as OpenAIChat from "./openai-chat.js"

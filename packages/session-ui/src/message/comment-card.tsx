@@ -1,13 +1,18 @@
 import { createSignal, onCleanup, onMount, Show } from "solid-js"
 import { FileIcon } from "@opencode/ui/file-icon"
+import { Icon } from "@opencode/ui/icon"
 import { getFilenameTruncated } from "@opencode/util/path"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { AttachmentCard } from "./attachment-card"
 
+/** What a comment is about: lines of a file, or a labelled subject such as an element picked in a page. */
+export type CommentCardTarget =
+  | { type: "file"; path: string; selection?: { startLine: number; endLine: number } }
+  | { type: "note"; label: string; icon: string }
+
 export function CommentCard(props: {
   comment: string
-  path: string
-  selection?: { startLine: number; endLine: number }
+  target: CommentCardTarget
   active?: boolean
   title?: string
   tooltip?: boolean
@@ -49,15 +54,37 @@ export function CommentCard(props: {
         }}
         onClick={props.onClick}
       >
-        <FileIcon node={{ path: props.path, type: "file" }} />
-        <span>
-          {getFilenameTruncated(props.path, 14)}
-          <Show when={props.selection}>
-            {(sel) =>
-              sel().startLine === sel().endLine ? `:${sel().startLine}` : `:${sel().startLine}-${sel().endLine}`
-            }
-          </Show>
-        </span>
+        <Show
+          when={props.target.type === "note" ? props.target : undefined}
+          fallback={
+            <Show when={props.target.type === "file" ? props.target : undefined}>
+              {(file) => (
+                <>
+                  <FileIcon node={{ path: file().path, type: "file" }} />
+                  <span>
+                    {getFilenameTruncated(file().path, 14)}
+                    <Show when={file().selection}>
+                      {(sel) =>
+                        sel().startLine === sel().endLine
+                          ? `:${sel().startLine}`
+                          : `:${sel().startLine}-${sel().endLine}`
+                      }
+                    </Show>
+                  </span>
+                </>
+              )}
+            </Show>
+          }
+        >
+          {(note) => (
+            <>
+              <Icon name={note().icon} data-slot="attachment-card-icon" />
+              <span data-slot="attachment-card-label" dir="ltr">
+                {note().label}
+              </span>
+            </>
+          )}
+        </Show>
       </AttachmentCard>
     </Tooltip>
   )

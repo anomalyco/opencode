@@ -147,6 +147,9 @@ import type {
   McpDisconnectOutput,
   McpResourceCatalogInput,
   McpResourceCatalogOutput,
+  CredentialListOutput,
+  CredentialCreateInput,
+  CredentialCreateOutput,
   CredentialUpdateInput,
   CredentialUpdateOutput,
   CredentialActivateInput,
@@ -237,6 +240,8 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  VcsInitInput,
+  VcsInitOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsBaseInput,
@@ -574,6 +579,7 @@ export function make(options: ClientOptions) {
             path: `/api/session`,
             body: {
               id: input?.["id"],
+              parentID: input?.["parentID"],
               title: input?.["title"],
               agent: input?.["agent"],
               model: input?.["model"],
@@ -582,7 +588,7 @@ export function make(options: ClientOptions) {
               permissions: input?.["permissions"],
             },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1055,6 +1061,7 @@ export function make(options: ClientOptions) {
             {
               method: "DELETE",
               path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
+              query: { message: input["message"] },
               successStatus: 204,
               declaredStatuses: [400, 401, 404, 409],
               empty: true,
@@ -1392,6 +1399,29 @@ export function make(options: ClientOptions) {
       },
     },
     credential: {
+      list: (requestOptions?: RequestOptions) =>
+        request<{ readonly data: CredentialListOutput }>(
+          { method: "GET", path: `/api/credential`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ).then((value) => value.data),
+      create: (input: CredentialCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: CredentialCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/credential`,
+            body: {
+              id: input["id"],
+              integrationID: input["integrationID"],
+              label: input["label"],
+              value: input["value"],
+              activate: input["activate"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 409],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       update: (input: CredentialUpdateInput, requestOptions?: RequestOptions) =>
         request<CredentialUpdateOutput>(
           {
@@ -2012,6 +2042,18 @@ export function make(options: ClientOptions) {
         ),
     },
     vcs: {
+      init: (input?: VcsInitInput, requestOptions?: RequestOptions) =>
+        request<VcsInitOutput>(
+          {
+            method: "POST",
+            path: `/api/vcs/init`,
+            query: { location: input?.["location"], provider: input?.["provider"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 409, 501, 503],
+            empty: true,
+          },
+          requestOptions,
+        ),
       get: (input?: VcsGetInput, requestOptions?: RequestOptions) =>
         request<VcsGetOutput>(
           {

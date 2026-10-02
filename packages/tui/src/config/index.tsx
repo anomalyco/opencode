@@ -54,6 +54,9 @@ export const Plugin = Schema.Union([
   }),
 ])
 
+export const DiffSource = Schema.Union([Vcs.Mode, Schema.Literal("turn")])
+export type DiffSource = Schema.Schema.Type<typeof DiffSource>
+
 export const Cursor = Schema.Struct({
   style: Schema.optional(Schema.Literals(["block", "underline", "line", "default"])).annotate({
     description: "Cursor shape. Use 'default' to preserve the terminal setting",
@@ -108,8 +111,9 @@ export const Info = Schema.Struct({
   ).annotate({ description: "System notification and sound settings" }),
   diffs: Schema.optional(
     Schema.Struct({
-      source: Schema.optional(Vcs.Mode).annotate({
-        description: "Initial diff source; defaults to 'branch' (branch and uncommitted changes)",
+      source: Schema.optional(DiffSource).annotate({
+        description:
+          "Initial diff source; defaults to 'branch' (branch and uncommitted changes). 'turn' shows the session's last turn and falls back to 'branch' outside a session",
       }),
       wrap: Schema.optional(Schema.Literals(["word", "none"])).annotate({
         description: "Line wrapping behavior in diff output",
@@ -263,7 +267,6 @@ export type Resolved = Omit<Info, "attention" | "cursor" | "keybinds" | "leader"
   session: Omit<NonNullable<Info["session"]>, "new_location" | "permissions" | "tps"> & {
     new_location: "launch" | "inherit"
     permissions: "prompt" | "autoaccept"
-    terminal: boolean
     tps: boolean
   }
   tabs: {
@@ -316,8 +319,6 @@ export function resolve(
       ...input.session,
       new_location: input.session?.new_location ?? "launch",
       permissions: input.session?.permissions ?? "prompt",
-      // Persistent terminal panes need the opencode-pty daemon, which does not ship Windows binaries.
-      terminal: process.platform !== "win32",
       tps: input.session?.tps ?? true,
     },
     tabs: {

@@ -1,0 +1,16 @@
+export default {
+  "command.open": "Brauzerni oching",
+  "command.reload": "Brauzer sahifasini qayta yuklash",
+  "tab.title": "Brauzer",
+  "address.label": "Brauzer manzili",
+  "address.placeholder": "URL manzilini kiriting",
+  "action.stop": "To'xtang",
+  replaced: "Brauzer boshqaruvi boshqa ish stoli oynasiga ko'chirildi.",
+  unsupported: "Bu ish stoli ilovasi brauzer panelini qoʻllab-quvvatlamaydi.",
+  suspended: "Brauzer to'xtatildi. Qayta ulanish uchun ushbu seans bilan oʻzaro aloqada boʻling.",
+  "empty.title": "URL kiriting",
+  "empty.description": "Yoki “Ilova brauzerida ochish” so‘rovini yuboring",
+  "failed.title": "URL manziliga kirib bo‘lmadi",
+  "failed.description": "URL va ulanishingizni tekshiring, so‘ng qayta urinib ko‘ring.",
+  "action.reload": "Qayta yuklash",
+}

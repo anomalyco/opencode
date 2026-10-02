@@ -45,8 +45,6 @@ export const ResourceTemplate = Mcp.ResourceTemplate
 export type ResourceTemplate = Mcp.ResourceTemplate
 export const ResourceCatalog = Mcp.ResourceCatalog
 export type ResourceCatalog = Mcp.ResourceCatalog
-export const ResourceContentPart = Mcp.ResourceContentPart
-export type ResourceContentPart = Mcp.ResourceContentPart
 export const ResourceContent = Mcp.ResourceContent
 export type ResourceContent = Mcp.ResourceContent
 
@@ -63,6 +61,19 @@ export class ToolCallError extends Schema.TaggedError<ToolCallError>()("MCP.Tool
   tool: Schema.String,
   message: Schema.String,
 }) {}
+
+const unavailable = (server: ServerName, status: Status) => {
+  switch (status.status) {
+    case "failed":
+      return `MCP server "${server}" is not connected: ${status.error}. Reconnect it from /mcps.`
+    case "needs_auth":
+      return `MCP server "${server}" needs authentication: ${status.error}. Sign in from /mcps.`
+    case "disabled":
+      return `MCP server "${server}" is disabled.`
+    default:
+      return `MCP server "${server}" is not connected.`
+  }
+}
 
 type ServerEntry = {
   readonly config: Mcp.ServerConfig
@@ -390,10 +401,10 @@ export const layer = (options?: Options) =>
 
       const watch = (name: ServerName, entry: ServerEntry, connection: McpClient.Connection) => {
         const live = whenLive(name, entry, connection)
-        connection.onClose(() =>
+        connection.onClose((reason) =>
           live(
             Effect.gen(function* () {
-              entry.status = { status: "failed", error: "Connection closed" }
+              entry.status = { status: "failed", error: reason }
               yield* stopServer(name, entry)
               yield* bus.publish(McpEvent.StatusChanged, { server: name })
             }),
@@ -662,13 +673,18 @@ export const layer = (options?: Options) =>
             return yield* new ToolCallError({
               server: target.name,
               tool: input.name,
-              message: "MCP server is not connected",
+              message: unavailable(target.name, target.entry.status),
             })
           const result = yield* recovering(target.name, target.entry, target.entry.client, (connection) =>
             connection.callTool({ name: input.name, args: input.args, sessionID: input.sessionID }),
           ).pipe(
             Effect.mapError(
-              (error) => new ToolCallError({ server: target.name, tool: input.name, message: error.message }),
+              (error) =>
+                new ToolCallError({
+                  server: target.name,
+                  tool: input.name,
+                  message: `MCP tool "${input.name}" on server "${target.name}" failed: ${error.message}`,
+                }),
             ),
           )
           return { ...result, server: target.name, tool: input.name }

@@ -16,7 +16,6 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { createTabComposerState } from "@/composer/persistence"
 import { base64Encode } from "@opencode/util/encode"
 import { showToast } from "@/shell/notifications/toast"
-import { isTabCloseTarget } from "./tab-gesture"
 import { adjacentTabKey, mergeVisibleTabOrder } from "./tab-order"
 import type { SessionInfo } from "@opencode/client/promise"
 
@@ -297,8 +296,8 @@ export function TitlebarTabStrip(props: {
                   ? [new PointerActivationConstraints.Distance({ value: 8 })]
                   : [new PointerActivationConstraints.Distance({ value: 4 })],
               preventActivation: (event) =>
-                isTabCloseTarget(event.target) ||
-                (event.target instanceof Element && !!event.target.closest('[contenteditable="true"]')),
+                event.target instanceof Element &&
+                !!event.target.closest('[data-slot="tab-close"], [contenteditable="true"]'),
             }),
           ]}
           modifiers={[

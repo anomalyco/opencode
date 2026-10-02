@@ -1,14 +1,3 @@
-type Local = {
-  session: {
-    reset(): void
-    restore(msg: {
-      sessionID: string
-      agent: string
-      model: { providerID: string; modelID: string; variant?: string }
-    }): void
-  }
-}
-
 type ModelSelection = {
   model: {
     current(): { id: string; provider: { id: string } } | undefined
@@ -23,17 +12,6 @@ type PromptState = {
     current(): { providerID: string; modelID: string; variant?: string | null } | undefined
     set(model: { providerID: string; modelID: string; variant?: string | null }): void
   }
-}
-
-export const resetSessionModel = (local: Local) => {
-  local.session.reset()
-}
-
-export const syncSessionModel = (
-  local: Local,
-  msg: { sessionID: string; agent: string; model: { providerID: string; modelID: string; variant?: string } },
-) => {
-  local.session.restore(msg)
 }
 
 export const syncPromptModel = (local: ModelSelection, prompt: PromptState) => {

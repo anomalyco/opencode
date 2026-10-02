@@ -4,9 +4,8 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
-import { getFilename } from "@opencode/util/path"
+import { getFilename, sameDirectory } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
-import { sameDirectory } from "@/workspaces/paths"
 
 export function PromptWorkspaceSelector(props: {
   value: string

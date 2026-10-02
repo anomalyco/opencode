@@ -27,15 +27,14 @@ const referenced = (value: unknown) => sql`
 
 export function createDraftStore(
   db: Database,
-  input: { delay?: number; collectDelay?: number; onError?: (error: unknown) => void; now?: () => number } = {},
+  input: { collectDelay?: number; onError?: (error: unknown) => void } = {},
 ) {
-  const now = input.now ?? Date.now
   // Orphans left by an earlier session are collected once the window is up rather than before it:
   // the scan walks every stored document, and the usual grace keeps anything a renderer has
   // uploaded in the meantime.
-  const startup = setTimeout(() => collectBlobs(db, now() - blobGrace), input.collectDelay ?? 10_000)
+  const startup = setTimeout(() => collectBlobs(db, Date.now() - blobGrace), input.collectDelay ?? 10_000)
   startup.unref()
-  let collected = now()
+  let collected = Date.now()
   let orphans = false
   const byKey = eq(document.key, sql.placeholder("key"))
   const read = db.select({ value: document.value }).from(document).where(byKey).prepare()
@@ -46,10 +45,10 @@ export function createDraftStore(
     .onConflictDoUpdate({ target: document.key, set: { value: sql.placeholder("value") } })
     .prepare()
   const writer = createWriteBehind<string | null>({
-    delay: input.delay ?? 500,
+    delay: 500,
     onError: input.onError,
     write: (batch) => {
-      const at = now()
+      const at = Date.now()
       db.transaction(() => {
         for (const [key, value] of batch) {
           if (value === null) {
@@ -93,7 +92,7 @@ export function createDraftStore(
     },
     putBlob(data: Uint8Array) {
       const id = createHash("sha256").update(data).digest("hex")
-      const touched_at = now()
+      const touched_at = Date.now()
       db.insert(blobs)
         .values({ id, data: Buffer.from(data), touched_at })
         .onConflictDoUpdate({ target: blobs.id, set: { touched_at } })

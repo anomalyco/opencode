@@ -28,7 +28,8 @@ export type Settings = ProviderPackage.Settings &
     readonly provider?: string
   }
 
-export const routes = [AnthropicMessages.route]
+const compatibleRoute = AnthropicMessages.route.with({ id: "anthropic-compatible-messages", provider: id })
+export const routes = [compatibleRoute]
 
 const auth = (input: ProviderAuthOption<"optional">) => {
   if ("auth" in input && input.auth) return input.auth
@@ -43,7 +44,7 @@ export const configure = (input: Config) => {
       message: "Anthropic-compatible providers require a baseURL",
     })
   const { provider: _, baseURL, apiKey: _apiKey, auth: _auth, ...rest } = input
-  const route = AnthropicMessages.route.with({
+  const route = (provider === "anthropic" ? AnthropicMessages.route : compatibleRoute).with({
     ...rest,
     provider,
     endpoint: { baseURL },
