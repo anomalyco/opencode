@@ -4,18 +4,18 @@ import { Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import {
-  DirectoryNotFoundError,
-  DirectoryAccessDeniedError,
+  LocationNotFoundError,
+  LocationAccessDeniedError,
   InvalidRequestError,
   SessionNotFoundError,
 } from "@opencode/protocol/errors"
-import { directoryErrors, sessionInfo, type LocationServices } from "../location"
+import { locationErrors, sessionInfo, type LocationServices } from "../location"
 
 export class SessionLocationMiddleware extends HttpApiMiddleware.Service<
   SessionLocationMiddleware,
   { provides: LocationServices }
 >()("@opencode/HttpApiSessionLocation", {
-  error: [InvalidRequestError, SessionNotFoundError, DirectoryNotFoundError, DirectoryAccessDeniedError],
+  error: [InvalidRequestError, SessionNotFoundError, LocationNotFoundError, LocationAccessDeniedError],
 }) {}
 
 export const sessionLocationLayer = Layer.effect(
@@ -28,7 +28,7 @@ export const sessionLocationLayer = Layer.effect(
       Effect.gen(function* () {
         const route = yield* HttpRouter.RouteContext
         const session = yield* sessionInfo(sessions, route.params.sessionID)
-        return yield* effect.pipe(instances.provide(session), directoryErrors)
+        return yield* effect.pipe(instances.provide(session), locationErrors)
       }),
     )
   }),

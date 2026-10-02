@@ -1,6 +1,6 @@
 import {
-  DirectoryNotFoundError,
-  DirectoryAccessDeniedError,
+  LocationNotFoundError,
+  LocationAccessDeniedError,
   InvalidRequestError,
   SessionNotFoundError,
 } from "./errors.js"
@@ -12,12 +12,12 @@ import type { EventGroup } from "./groups/event.js"
 
 class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware>()(
   "@opencode/client/LocationMiddleware",
-  { error: [DirectoryNotFoundError, DirectoryAccessDeniedError] },
+  { error: [LocationNotFoundError, LocationAccessDeniedError] },
 ) {}
 
 class SessionLocationMiddleware extends HttpApiMiddleware.Service<SessionLocationMiddleware>()(
   "@opencode/client/SessionLocationMiddleware",
-  { error: [InvalidRequestError, SessionNotFoundError, DirectoryNotFoundError, DirectoryAccessDeniedError] },
+  { error: [InvalidRequestError, SessionNotFoundError, LocationNotFoundError, LocationAccessDeniedError] },
 ) {}
 
 type ClientApiShape = Api<

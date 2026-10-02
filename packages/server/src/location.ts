@@ -3,7 +3,7 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
-import { DirectoryNotFoundError, DirectoryAccessDeniedError, InvalidRequestError } from "@opencode/protocol/errors"
+import { LocationNotFoundError, LocationAccessDeniedError, InvalidRequestError } from "@opencode/protocol/errors"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
@@ -13,19 +13,25 @@ export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceM
 
 export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware, { provides: LocationServices }>()(
   "@opencode/HttpApiLocation",
-  { error: [DirectoryNotFoundError, DirectoryAccessDeniedError] },
+  { error: [LocationNotFoundError, LocationAccessDeniedError] },
 ) {}
 
-export function directoryErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
+export function locationErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return effect.pipe(
     Effect.catchIf(
       (error): error is Extract<E, FSUtil.DirectoryError> =>
         error instanceof FSUtil.DirectoryNotFoundError || error instanceof FSUtil.DirectoryAccessDeniedError,
-      (error): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> =>
+      (error): Effect.Effect<never, LocationNotFoundError | LocationAccessDeniedError> =>
         Effect.fail(
           error instanceof FSUtil.DirectoryNotFoundError
-            ? new DirectoryNotFoundError({ directory: AbsolutePath.make(error.directory), message: error.message })
-            : new DirectoryAccessDeniedError({ directory: AbsolutePath.make(error.directory), message: error.message }),
+            ? new LocationNotFoundError({
+                location: { directory: AbsolutePath.make(error.directory) },
+                message: `Location not found: ${error.directory}`,
+              })
+            : new LocationAccessDeniedError({
+                location: { directory: AbsolutePath.make(error.directory) },
+                message: `Access denied to location: ${error.directory}`,
+              }),
         ),
     ),
   )
@@ -78,7 +84,7 @@ export const layer = Layer.effect(
     return LocationMiddleware.of((effect) =>
       Effect.gen(function* () {
         const request = yield* HttpServerRequest.HttpServerRequest
-        return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))), directoryErrors)
+        return yield* effect.pipe(Effect.provide(locations.get(requestRef(request))), locationErrors)
       }),
     )
   }),

@@ -23,20 +23,20 @@ const options = {
 } as const
 
 for (const input of [
-  { code: "ENOENT", reason: "NotFound", status: 404, tag: "DirectoryNotFoundError", message: "Directory not found" },
+  { code: "ENOENT", reason: "NotFound", status: 404, tag: "LocationNotFoundError", message: "Location not found" },
   {
     code: "EACCES",
     reason: "PermissionDenied",
     status: 403,
-    tag: "DirectoryAccessDeniedError",
-    message: "Access denied to directory",
+    tag: "LocationAccessDeniedError",
+    message: "Access denied to location",
   },
   {
     code: "EPERM",
     reason: "Unknown",
     status: 403,
-    tag: "DirectoryAccessDeniedError",
-    message: "Access denied to directory",
+    tag: "LocationAccessDeniedError",
+    message: "Access denied to location",
   },
   { code: "EIO", reason: "Unknown", status: 500 },
 ] as const) {
@@ -97,7 +97,7 @@ for (const input of [
         if (input.status !== 500)
           expect(yield* Effect.promise(() => response.json())).toEqual({
             _tag: input.tag,
-            directory,
+            location: { directory },
             message: `${input.message}: ${directory}`,
           })
       }

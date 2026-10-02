@@ -7,7 +7,7 @@ import { Global } from "@opencode/util/global"
 import { Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
-import { directoryErrors } from "../location"
+import { locationErrors } from "../location"
 
 export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (handlers) =>
   Effect.gen(function* () {
@@ -31,7 +31,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
           return { data: { text } }
         },
         Effect.provide(services),
-        directoryErrors,
+        locationErrors,
       ),
     )
   }),

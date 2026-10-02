@@ -2,8 +2,8 @@ import { Model } from "@opencode/schema/model"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
 import {
-  DirectoryNotFoundError,
-  DirectoryAccessDeniedError,
+  LocationNotFoundError,
+  LocationAccessDeniedError,
   InvalidRequestError,
   ServiceUnavailableError,
 } from "../errors.js"
@@ -18,7 +18,7 @@ export const GenerateGroup = HttpApiGroup.make("server.generate")
       success: Schema.Struct({
         data: Schema.Struct({ text: Schema.String }),
       }).annotate({ identifier: "GenerateTextResponse" }),
-      error: [InvalidRequestError, ServiceUnavailableError, DirectoryNotFoundError, DirectoryAccessDeniedError],
+      error: [InvalidRequestError, ServiceUnavailableError, LocationNotFoundError, LocationAccessDeniedError],
     }).annotateMerge(
       OpenApi.annotations({
         identifier: "experimental.generate.text",

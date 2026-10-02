@@ -18,8 +18,8 @@ import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from 
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
   ConflictError,
-  DirectoryNotFoundError,
-  DirectoryAccessDeniedError,
+  LocationNotFoundError,
+  LocationAccessDeniedError,
   CommandExecutionError,
   CommandNotFoundError,
   FormAlreadySettledError,
@@ -382,7 +382,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ ...Location.PublicRef.fields, delivery: SessionInbox.Delivery.pipe(Schema.optional) }),
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, InvalidRequestError, DirectoryNotFoundError, DirectoryAccessDeniedError],
+        error: [SessionNotFoundError, InvalidRequestError, LocationNotFoundError, LocationAccessDeniedError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.move",
@@ -597,8 +597,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           MessageNotFoundError,
           SessionNotFoundError,
           UnknownError,
-          DirectoryNotFoundError,
-          DirectoryAccessDeniedError,
+          LocationNotFoundError,
+          LocationAccessDeniedError,
         ],
       }).annotateMerge(
         OpenApi.annotations({
