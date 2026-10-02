@@ -116,10 +116,9 @@ export function normalize(input: unknown): Result {
 
   const legacyCommands = decodeMap(input.command, ConfigCommandV1.Info, ["command"], diagnostics, decodeValue)
   diagnoseSelectionMap(input.command, ["command"], diagnostics)
-  const migratedCommands = mapValues(legacyCommands, (value) => {
-    const migrated = ConfigMigrateV1.commands({ value })?.value
-    return migrated === undefined ? undefined : canonical(ConfigCommand.Info, migrated)
-  })
+  const migratedCommands = mapValues(legacyCommands, (value) =>
+    canonical(ConfigCommand.Info, ConfigMigrateV1.migrateCommand(value)),
+  )
   const nativeCommands = decodeMap(input.commands, ConfigCommand.Info, ["commands"], diagnostics, decodeEncoded)
   mergeMap(
     encoded,

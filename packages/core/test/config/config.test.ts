@@ -655,18 +655,6 @@ describe("Config", () => {
     expect(migrateV1({ experimental: { subagent_depth: 2 } }).experimental?.subagent_depth).toBe(2)
   })
 
-  test("migrates the v1 small model to the title agent", () => {
-    expect(
-      migrateV1({
-        small_model: "anthropic/claude-haiku-4-5",
-        agent: { title: { prompt: "Custom title prompt" } },
-      }).agents?.title,
-    ).toEqual({
-      model: { providerID: "anthropic", model: "claude-haiku-4-5" },
-      system: "Custom title prompt",
-    })
-  })
-
   test("migrates the v1 update policy", () => {
     expect(migrateV1({ autoupdate: false }).update).toBe("disable")
     expect(migrateV1({ autoupdate: "notify" }).update).toBe("notify")

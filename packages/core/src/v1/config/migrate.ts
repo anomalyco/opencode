@@ -57,20 +57,14 @@ export function migrateAgent(info: ConfigAgentV1.Info) {
   )
 }
 
-export function commands(info?: Readonly<Record<string, ConfigCommandV1.Info>>) {
-  if (!info) return undefined
-  return Object.fromEntries(
-    Object.entries(info).map(([id, command]) => [
-      id,
-      {
-        template: command.template,
-        description: command.description,
-        agent: command.agent,
-        model: modelSelection(command.model, command.variant),
-        subagent: command.subtask,
-      },
-    ]),
-  )
+export function migrateCommand(command: ConfigCommandV1.Info) {
+  return {
+    template: command.template,
+    description: command.description,
+    agent: command.agent,
+    model: modelSelection(command.model, command.variant),
+    subagent: command.subtask,
+  }
 }
 
 export function modelSelection(input?: string, variant?: string) {
