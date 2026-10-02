@@ -63,7 +63,6 @@ function Group(props: GroupProps) {
 function GroupContent(props: GroupProps) {
   const ctx = use()
   const theme = useTheme()
-  const renderer = useRenderer()
   const disclosure = useDisclosure(props)
   const id = disclosure.id
   const expanded = disclosure.expanded
