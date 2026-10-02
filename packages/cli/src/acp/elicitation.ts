@@ -6,10 +6,10 @@ import type {
 } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient } from "@opencode/client/effect"
 import { Form } from "@opencode/schema/form"
-import { Session } from "@opencode/schema/session"
 import { Cause, Effect, Option, Schema } from "effect"
 import type { Capabilities } from "./capabilities"
 import { ACPChild } from "./child"
+import { ACPClient } from "./client"
 import type { ACPConnection } from "./connection"
 
 export type AskedForm = Omit<Form.Info, "id"> & { readonly id: string }
@@ -59,7 +59,7 @@ function cancel(client: OpenCodeClient, form: Form.Info, message?: string) {
   return client.session.form.cancel({ sessionID: form.sessionID, formID: form.id, message }).pipe(
     Effect.catchTag(["FormAlreadySettledError", "FormNotFoundError"], () => Effect.void),
     Effect.catch(() =>
-      Schema.decodeUnknownEffect(Session.ID)(form.sessionID).pipe(
+      ACPClient.decodeSessionID(form.sessionID).pipe(
         Effect.flatMap((sessionID) => client.session.interrupt({ sessionID })),
         Effect.ignore,
       ),
@@ -153,7 +153,8 @@ function properties(field: InputField): Array<[string, ElicitationPropertySchema
   const base = { title: field.title, description: field.description }
   switch (field.type) {
     case "string": {
-      if (!hasOptions(field)) return [[field.key, { type: "string", ...base, ...text(field), default: field.default }]]
+      if (!hasOptions(field))
+        return [[field.key, { type: "string", ...base, ...stringConstraints(field), default: field.default }]]
       const select: ElicitationPropertySchema = {
         type: "string",
         ...base,
@@ -193,13 +194,13 @@ function other(field: SelectField, description: string): [string, ElicitationPro
       type: "string",
       title: `${field.title ?? field.key} (other)`,
       description,
-      ...(field.type === "string" ? text(field) : {}),
+      ...(field.type === "string" ? stringConstraints(field) : {}),
     },
   ]
 }
 
 // Core rejects an empty string for a required field.
-function text(field: Form.StringField) {
+function stringConstraints(field: Form.StringField) {
   return {
     format: field.format,
     minLength: field.required ? Math.max(field.minLength ?? 0, 1) : field.minLength,

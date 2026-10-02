@@ -43,11 +43,11 @@ export function usesStandardUpdates(
   return ctx.compaction && (!child || ctx.childUpdates)
 }
 
-export function apply(event: LifecycleEvent, tracked: Tracked, standard: boolean) {
+export function apply(event: LifecycleEvent, tracked: Tracked, standardUpdates: boolean) {
   const sessionID = event.data.sessionID
   if (event.type === "session.compaction.started") {
     const started = open(event)
-    return { tracked: new Map(tracked).set(sessionID, started), updates: [update(started, standard)] }
+    return { tracked: new Map(tracked).set(sessionID, started), updates: [update(started, standardUpdates)] }
   }
   const current = tracked.get(sessionID)
   const remaining = new Map(tracked)
@@ -60,35 +60,41 @@ export function apply(event: LifecycleEvent, tracked: Tracked, standard: boolean
       reason: event.data.reason,
       summary: event.data.text,
     }
-    return { tracked: remaining, updates: [update(completed, standard)] }
+    return { tracked: remaining, updates: [update(completed, standardUpdates)] }
   }
   // Auto compaction can fail without a started event; open it first for standard clients.
   const started = current ?? open(event)
   const failed: Compaction = { ...started, status: "failed", reason: event.data.reason, error: event.data.error }
   return {
     tracked: remaining,
-    updates: [...(current || !standard ? [] : [update(started, standard)]), update(failed, standard)],
+    updates: [
+      ...(current || !standardUpdates ? [] : [update(started, standardUpdates)]),
+      update(failed, standardUpdates),
+    ],
   }
 }
 
-export function chunk(started: Started | undefined, text: string, standard: boolean): SessionUpdate | undefined {
-  if (!started || !standard) return undefined
+export function chunk(started: Started | undefined, text: string, standardUpdates: boolean): SessionUpdate | undefined {
+  if (!started || !standardUpdates) return undefined
   return { sessionUpdate: "compaction_summary_chunk", compactionId: started.messageId, content: { type: "text", text } }
 }
 
-export function abandon(started: Started, standard: boolean) {
-  return update({ ...started, status: "failed", error: { type: "aborted", message: "Compaction cancelled" } }, standard)
+export function abandon(started: Started, standardUpdates: boolean) {
+  return update(
+    { ...started, status: "failed", error: { type: "aborted", message: "Compaction cancelled" } },
+    standardUpdates,
+  )
 }
 
 // Nothing on this connection would settle a replayed running compaction.
-export function replay(message: Extract<SessionMessage.Info, { type: "compaction" }>, standard: boolean) {
+export function replay(message: Extract<SessionMessage.Info, { type: "compaction" }>, standardUpdates: boolean) {
   if (message.status === "running") return undefined
   const base = { messageId: message.id, reason: message.reason }
   return update(
     message.status === "failed"
       ? { ...base, status: "failed", error: message.error }
       : { ...base, status: "completed", summary: message.summary },
-    standard,
+    standardUpdates,
   )
 }
 
@@ -101,8 +107,8 @@ function open(event: OpeningEvent): Started {
   }
 }
 
-function update(compaction: Compaction, standard: boolean): SessionUpdate {
-  if (!standard) {
+function update(compaction: Compaction, standardUpdates: boolean): SessionUpdate {
+  if (!standardUpdates) {
     const marker = {
       status: compaction.status,
       messageId: compaction.messageId,
@@ -125,12 +131,12 @@ function update(compaction: Compaction, standard: boolean): SessionUpdate {
     compactionId,
     status: "failed",
     summary: null,
-    error: errorMessage(compaction.error),
+    error: displayError(compaction.error),
   }
 }
 
 // Core reports a defect as `compaction.failed` with a multi-line pretty-printed cause.
-function errorMessage(error: SessionError.Error) {
+function displayError(error: SessionError.Error) {
   if (!error.message || (error.type === "compaction.failed" && error.message.includes("\n"))) return "Compaction failed"
   return error.message
 }

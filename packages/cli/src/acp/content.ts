@@ -1,6 +1,7 @@
 import type { ContentBlock, ContentChunk, ResourceLink } from "@agentclientprotocol/sdk"
 import path from "node:path"
 import { fileURLToPath, pathToFileURL } from "node:url"
+import { Result } from "effect"
 
 export type PromptPart =
   | { readonly type: "text"; readonly text: string; readonly synthetic?: boolean; readonly ignored?: boolean }
@@ -35,22 +36,19 @@ function contentBlockToParts(block: ContentBlock): PromptPart[] {
       return [resourceLinkToPart(block)]
     case "resource":
       if ("text" in block.resource) {
-        try {
-          const parsed = new URL(block.resource.uri)
-          if (parsed.protocol === "file:") {
-            const line = parsed.hash.match(/^#L(\d+)/)?.[1]
-            const decoded = (() => {
-              try {
-                return fileURLToPath(parsed)
-              } catch {
-                return decodeURIComponent(parsed.pathname)
-              }
-            })()
-            const filepath = path.sep === "\\" ? decoded.replace(/\\/g, "/") : decoded
-            return [{ type: "text", text: `[${filepath}${line ? `:${line}` : ""}]\n${block.resource.text}` }]
-          }
-        } catch {}
-        return [{ type: "text", text: `[${block.resource.uri}]\n${block.resource.text}` }]
+        const parsed = URL.canParse(block.resource.uri) ? new URL(block.resource.uri) : undefined
+        const decoded =
+          parsed?.protocol === "file:"
+            ? Result.try(() => fileURLToPath(parsed)).pipe(
+                Result.orElse(() => Result.try(() => decodeURIComponent(parsed.pathname))),
+                Result.getOrUndefined,
+              )
+            : undefined
+        if (!parsed || decoded === undefined)
+          return [{ type: "text", text: `[${block.resource.uri}]\n${block.resource.text}` }]
+        const line = parsed.hash.match(/^#L(\d+)/)?.[1]
+        const filepath = path.sep === "\\" ? decoded.replace(/\\/g, "/") : decoded
+        return [{ type: "text", text: `[${filepath}${line ? `:${line}` : ""}]\n${block.resource.text}` }]
       }
       if (!block.resource.mimeType) return []
       return [

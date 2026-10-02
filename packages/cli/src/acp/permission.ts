@@ -1,4 +1,4 @@
-import type { PermissionOption, ToolCallLocation } from "@agentclientprotocol/sdk"
+import type { PermissionOption } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import type { Permission } from "@opencode/schema/permission"
@@ -158,12 +158,7 @@ function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyA
   }
 }
 
-function permissionLocations(
-  toolName: string,
-  input: ToolInput,
-  ask: PermissionEvent["data"],
-  cwd: string,
-): ToolCallLocation[] {
+function permissionLocations(toolName: string, input: ToolInput, ask: PermissionEvent["data"], cwd: string) {
   const locations = toLocations(toolName, input, cwd)
   if (locations.length > 0 || !PathActions.has(ask.action)) return locations
   const paths = ask.resources.flatMap((resource) => {

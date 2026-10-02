@@ -43,8 +43,8 @@ type Entry = {
   readonly cwd: string
   readonly catalog: SubscriptionRef.SubscriptionRef<Catalog>
   readonly lock: Semaphore.Semaphore
-  requested: number
-  loaded: number
+  requestedGeneration: number
+  loadedGeneration: number
 }
 
 const reloadOn = new Set<OpenCodeEvent["type"]>(["model.updated", "agent.updated", "command.updated"])
@@ -57,17 +57,17 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
   // Requests queued behind a running load share the next one.
   const reload = (entry: Entry) =>
     Effect.suspend(() => {
-      const target = ++entry.requested
+      const target = ++entry.requestedGeneration
       return entry.lock.withPermit(
         Effect.suspend(() => {
-          if (entry.loaded >= target) return Effect.void
-          const generation = entry.requested
+          if (entry.loadedGeneration >= target) return Effect.void
+          const generation = entry.requestedGeneration
           return load(client, entry.cwd).pipe(
             Effect.flatMap((next) => SubscriptionRef.set(entry.catalog, next)),
             Effect.ignore,
             Effect.andThen(
               Effect.sync(() => {
-                entry.loaded = generation
+                entry.loadedGeneration = generation
               }),
             ),
           )
@@ -101,8 +101,8 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       cwd,
       catalog: yield* SubscriptionRef.make<Catalog>(yield* load(client, cwd)),
       lock: Semaphore.makeUnsafe(1),
-      requested: 0,
-      loaded: 0,
+      requestedGeneration: 0,
+      loadedGeneration: 0,
     } satisfies Entry
   })
 
@@ -124,7 +124,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
     })
 
   return {
-    get: Effect.fn("cli.acp.catalog.get")(function* (cwd) {
+    get: Effect.fnUntraced(function* (cwd) {
       const loaded = yield* entry(cwd)
       return yield* SubscriptionRef.get(loaded.catalog)
     }),
@@ -181,7 +181,7 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   } satisfies Catalog
 })
 
-function providers(models: ReadonlyArray<Model.Info>): ConfigOptionProvider[] {
+function providers(models: ReadonlyArray<Model.Info>) {
   return Array.from(new Set(models.map((model) => model.providerID)))
     .toSorted()
     .map((providerID) => ({
