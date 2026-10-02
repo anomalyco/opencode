@@ -48,11 +48,12 @@ const SUMMARY_UPDATE_INSTRUCTIONS = `The <prior-summary> summarizes everything t
 
 When combining:
 - Carry forward objectives, constraints, user directives, decisions, and parallel workstreams from the <prior-summary> even when the <conversation> does not mention them. Drop only what is finished and no longer needed.
-- The <conversation> is more recent than the <prior-summary>. Where they conflict, the conversation wins: state the corrected fact and drop the old claim.
-- Add new progress, decisions, constraints, and context from the conversation.
-- Move completed work from "Active" to "Completed".
+- The <conversation> is strictly more recent than the <prior-summary>. Where they conflict or state diverges, the conversation wins: state the corrected fact and drop the old claim.
+- Actively reconcile every item in <prior-summary> "Work State" (Active/Blocked) and "Next Move" against tool executions, commits, edits, builds, tests, commands, and statements in <conversation>.
+- Move completed work from "Active" to "Completed". Any task, build, test, commit, PR action, or command from <prior-summary> that succeeded in <conversation> MUST be moved to "Completed" and MUST NOT remain in "Active" or "Next Move".
+- If an item in <prior-summary> "Active" or "Next Move" was executed, resolved, or rendered obsolete by subsequent conversation events, remove it from "Active" and "Next Move".
 - If a blocker has been resolved, update the summary to reflect that while keeping any details still needed to continue the work.
-- Update "Objective" and "Next Move" to reflect the current work state.`
+- Update "Objective" and "Next Move" to reflect only remaining, unexecuted work for the current work state. Never leave completed actions in "Next Move".`
 
 type Entry = {
   readonly seq: number

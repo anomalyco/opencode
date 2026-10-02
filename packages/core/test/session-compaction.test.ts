@@ -27,7 +27,8 @@ test("compaction prompt gives update instructions for a prior summary", () => {
     "Carry forward objectives, constraints, user directives, decisions, and parallel workstreams from the <prior-summary>",
   )
   expect(prompt).toContain('Move completed work from "Active" to "Completed".')
-  expect(prompt).toContain('Update "Objective" and "Next Move" to reflect the current work state.')
+  expect(prompt).toContain('Actively reconcile every item in <prior-summary> "Work State"')
+  expect(prompt).toContain('Update "Objective" and "Next Move" to reflect only remaining, unexecuted work')
 })
 
 test("compaction describes tool media without embedding base64", () => {
