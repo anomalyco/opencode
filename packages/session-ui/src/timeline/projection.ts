@@ -263,40 +263,19 @@ export namespace Timeline {
         )
       }),
     ]
-    const groupedRows = detail
-      ? groupMessages(
-          rows,
-          detail,
-          new Set(
-            messages
-              .filter((message) => message.type === "compaction" || message.type === "model-switched")
-              .map((message) => message.id),
-          ),
-        )
-      : rows
     return {
       activeMessageID,
-      rows: groupedRows.filter((row, index) => {
-        if (status.type !== "busy" || row.userMessageID !== activeMessageID) return true
-        if (row._tag !== "AssistantPart" || row.group.type !== "context") return true
-        const previous = groupedRows[index - 1]
-        if (
-          previous?.userMessageID === activeMessageID &&
-          previous._tag !== "TurnGap" &&
-          previous._tag !== "UserMessage"
-        )
-          return true
-        if (groupedRows[index + 1]?.userMessageID === activeMessageID) return true
-        return row.group.refs.some((ref) => {
-          const message = messages.find((item) => item.id === ref.messageID)
-          return (
-            message?.type !== "assistant" ||
-            !!message.error ||
-            !!message.retry ||
-            resolveContent(message, ref.partID)?.type !== "reasoning"
+      rows: detail
+        ? groupMessages(
+            rows,
+            detail,
+            new Set(
+              messages
+                .filter((message) => message.type === "compaction" || message.type === "model-switched")
+                .map((message) => message.id),
+            ),
           )
-        })
-      }),
+        : rows,
     }
   }
 
@@ -319,15 +298,26 @@ export namespace Timeline {
     const previousUserMessage = index > 0
     const compaction = entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
     const lastContent = lastAssistant?.content.at(-1)
-    const thinking =
-      (detail ? detail.thinking.placement === "separate" : showReasoning) &&
+    const working =
       isActive &&
       status.type === "busy" &&
       lastAssistant?.time.completed === undefined &&
       !lastAssistant?.error &&
-      !lastAssistant?.retry &&
+      !lastAssistant?.retry
+    const thinking =
+      working &&
+      (detail ? detail.thinking.placement === "separate" : showReasoning) &&
       lastContent?.type === "reasoning" &&
       lastContent.time?.completed === undefined
+    // Working already covers a turn that has only thought so far.
+    const thoughtOnly =
+      working &&
+      detail?.thinking.placement === "grouped" &&
+      assistantMessages.every((message) =>
+        message.content.every(
+          (content) => content.type === "reasoning" || !isRenderable(content, showReasoning, detail),
+        ),
+      )
 
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: turnID }))
     if (userMessage) rows.push(new TimelineRow.UserMessage({ userMessageID: turnID }))
@@ -337,6 +327,7 @@ export namespace Timeline {
     // An assistant message can produce several rows because its content parts are
     // rendered separately. Notices end a segment so none of those rows cross it.
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
+      if (thoughtOnly) return
       const refs = messages.flatMap((message, messageIndex) =>
         contentEntries(message)
           .filter(
