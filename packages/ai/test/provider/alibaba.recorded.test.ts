@@ -37,7 +37,6 @@ for (const api of ["chat", "messages", "responses"] as const) {
           Effect.gen(function* () {
             const request = LLM.request({
               model: alibaba[api]("qwen3.8-max"),
-              cache: api === "chat" ? "none" : undefined,
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
               providerOptions: api === "messages" ? { effort } : { reasoningEffort: effort },
               generation: { maxTokens: 4096 },
@@ -69,7 +68,6 @@ for (const api of ["chat", "messages", "responses"] as const) {
         Effect.gen(function* () {
           const request = LLM.request({
             model: alibaba[api]("qwen3.8-max"),
-            cache: api === "chat" ? "none" : undefined,
             providerOptions:
               api === "messages"
                 ? { effort: "medium" }
