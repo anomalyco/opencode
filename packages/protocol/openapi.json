@@ -19053,6 +19053,10 @@
       "WorktreeErrorEncoded": {
         "type": "object",
         "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["WorktreeError"]
+          },
           "name": {
             "type": "string",
             "enum": ["WorktreeError"]
@@ -19078,7 +19082,7 @@
             "additionalProperties": false
           }
         },
-        "required": ["name", "data"],
+        "required": ["_tag", "name", "data"],
         "additionalProperties": false
       }
     },
