@@ -309,7 +309,6 @@ export namespace Timeline {
       (detail ? detail.thinking.placement === "separate" : showReasoning) &&
       lastContent?.type === "reasoning" &&
       lastContent.time?.completed === undefined
-    // Working already covers a turn that has only thought so far.
     const thoughtOnly =
       working &&
       detail?.thinking.placement === "grouped" &&
