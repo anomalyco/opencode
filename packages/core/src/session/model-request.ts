@@ -129,48 +129,53 @@ const mimeToModality = (mime: string) => {
 const unsupportedMedia = (mime: string, name: string | undefined, capabilities: Model.Capabilities) => {
   const modality = mimeToModality(mime)
   if (!modality || capabilities.input.some((item) => item.startsWith(modality))) return
-  return {
-    type: "text" as const,
-    text: `ERROR: Cannot read ${name ? `"${name}"` : modality} (this model does not support ${modality} input). Inform the user.`,
-  }
+  return `ERROR: Cannot read ${name ? `"${name}"` : modality} (this model does not support ${modality} input). Inform the user.`
 }
 
+// Remote and provider-referenced media carry no local payload and never count toward the inline budget.
+const mediaBytes = (media: Media.Asset) => {
+  if (media.source.type === "base64") return Buffer.byteLength(media.source.data)
+  if (media.source.type === "bytes") return Math.ceil(media.source.data.byteLength / 3) * 4
+  return 0
+}
+
+const mapSame = <T>(items: ReadonlyArray<T>, fn: (item: T) => T) => {
+  const mapped = items.map(fn)
+  return mapped.every((item, index) => item === items[index]) ? items : mapped
+}
+
+/** Replaces media with the returned text; unchanged messages and the array keep their identity. */
+const replaceMedia = (
+  messages: LLMRequest["messages"],
+  replace: (media: { mime: string; name: string | undefined; bytes: () => number }) => string | undefined,
+) =>
+  mapSame(messages, (message) => {
+    const content = mapSame(message.content, (part) => {
+      if (part.type === "media") {
+        const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
+        return text === undefined ? part : Message.text(text)
+      }
+      if (part.type !== "tool-result" || part.result.type !== "content") return part
+      const value = mapSame(part.result.value, (item): Content => {
+        if (item.type !== "file") return item
+        const text = replace({ mime: item.mime, name: item.name, bytes: () => Buffer.byteLength(item.uri) })
+        return text === undefined ? item : { type: "text", text }
+      })
+      return value === part.result.value ? part : { ...part, result: { ...part.result, value } }
+    })
+    return content === message.content ? message : new Message({ ...message, content })
+  })
+
 export const unsupportedParts = (messages: LLMRequest["messages"], capabilities: Model.Capabilities) =>
-  messages.map((message) =>
-    Message.make({
-      ...message,
-      content: message.content.map((part) => {
-        if (part.type === "media") {
-          return unsupportedMedia(part.media.mediaType, part.filename, capabilities) ?? part
-        }
-        if (part.type !== "tool-result" || part.result.type !== "content") return part
-        return {
-          ...part,
-          result: {
-            ...part.result,
-            value: part.result.value.map((item: Content) => {
-              if (item.type !== "file") return item
-              return unsupportedMedia(item.mime, item.name, capabilities) ?? item
-            }),
-          },
-        }
-      }),
-    }),
-  )
+  replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities))
 
 export const boundImages = (messages: LLMRequest["messages"]) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
-  // Remote and provider-referenced media carry no local payload and never count toward the inline budget.
-  const size = (media: Media.Asset) => {
-    if (media.source.type === "base64") return Buffer.byteLength(media.source.data)
-    if (media.source.type === "bytes") return Math.ceil(media.source.data.byteLength / 3) * 4
-    return 0
-  }
   const imageBytes = messages.reduce(
     (total, message) =>
       total +
       message.content.reduce((sum, part) => {
-        if (part.type === "media" && isImage(part.media.mediaType)) return sum + size(part.media)
+        if (part.type === "media" && isImage(part.media.mediaType)) return sum + mediaBytes(part.media)
         if (part.type !== "tool-result" || part.result.type !== "content") return sum
         return (
           sum +
@@ -186,29 +191,11 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
   if (imageBytes <= IMAGE_BYTES_TRIGGER) return messages
 
   let removed = 0
-  return messages.map((message) =>
-    Message.make({
-      ...message,
-      content: message.content.map((part) => {
-        if (part.type === "media" && isImage(part.media.mediaType) && imageBytes - removed > IMAGE_BYTES_TARGET) {
-          removed += size(part.media)
-          return Message.text(IMAGE_REMOVED)
-        }
-        if (part.type !== "tool-result" || part.result.type !== "content") return part
-        return {
-          ...part,
-          result: {
-            ...part.result,
-            value: part.result.value.map((item: Content) => {
-              if (item.type !== "file" || !isImage(item.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET) return item
-              removed += Buffer.byteLength(item.uri)
-              return { type: "text" as const, text: IMAGE_REMOVED }
-            }),
-          },
-        }
-      }),
-    }),
-  )
+  return replaceMedia(messages, (media) => {
+    if (!isImage(media.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET) return
+    removed += media.bytes()
+    return IMAGE_REMOVED
+  })
 }
 
 type Definitions = PluginHooks.Domains["session"]["context"]["tools"]
