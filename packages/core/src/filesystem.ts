@@ -32,7 +32,11 @@ export class DirectoryNotFoundError extends Schema.TaggedError<DirectoryNotFound
     directory: AbsolutePath,
     cause: Schema.Defect(),
   },
-) {}
+) {
+  override get message() {
+    return `Directory not found: ${this.directory}`
+  }
+}
 
 export class DirectoryAccessDeniedError extends Schema.TaggedError<DirectoryAccessDeniedError>()(
   "FileSystem.DirectoryAccessDeniedError",
@@ -40,7 +44,11 @@ export class DirectoryAccessDeniedError extends Schema.TaggedError<DirectoryAcce
     directory: AbsolutePath,
     cause: Schema.Defect(),
   },
-) {}
+) {
+  override get message() {
+    return `Access denied to directory: ${this.directory}`
+  }
+}
 
 export const Content = Schema.Struct({
   uri: Schema.String,

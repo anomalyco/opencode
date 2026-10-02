@@ -84,7 +84,11 @@ describe("FileSystem", () => {
           const error = Cause.findErrorOption(local.cause)
           expect(error).toMatchObject({
             _tag: "Some",
-            value: { _tag: "FileSystem.DirectoryNotFoundError", directory: missing },
+            value: {
+              _tag: "FileSystem.DirectoryNotFoundError",
+              directory: missing,
+              message: `Directory not found: ${missing}`,
+            },
           })
         }
       }),
@@ -130,7 +134,12 @@ describe("FileSystem", () => {
             if (input.denied) {
               expect(Cause.findErrorOption(result.cause)).toMatchObject({
                 _tag: "Some",
-                value: { _tag: "FileSystem.DirectoryAccessDeniedError", directory, cause },
+                value: {
+                  _tag: "FileSystem.DirectoryAccessDeniedError",
+                  directory,
+                  cause,
+                  message: `Access denied to directory: ${directory}`,
+                },
               })
               return
             }
