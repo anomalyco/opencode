@@ -226,8 +226,18 @@ export function createDialogProviderOptions() {
 }
 
 export function DialogProvider() {
+  const sync = useSync()
   const options = createDialogProviderOptions()
-  return <DialogSelect title="Connect a provider" options={options()} />
+  const [ready, setReady] = createSignal(sync.data.provider_next.all.length > 0)
+  onMount(async () => {
+    await sync.ensureProviderList().catch(() => {})
+    setReady(true)
+  })
+  return (
+    <Show when={ready()} fallback={<box paddingLeft={2} paddingRight={2}><text>Loading providers…</text></box>}>
+      <DialogSelect title="Connect a provider" options={options()} />
+    </Show>
+  )
 }
 
 interface AutoMethodProps {
@@ -404,6 +414,7 @@ function ApiMethod(props: ApiMethodProps) {
         })
         await sdk.client.instance.dispose()
         await sync.bootstrap()
+        await sync.ensureProviderList().catch(() => {})
         if (props.custom && !sync.data.provider_next.all.some((provider) => provider.id === props.providerID)) {
           toast.show({
             variant: "info",
