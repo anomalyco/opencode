@@ -64,6 +64,7 @@ const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
   ar: () => merge(import("@/i18n/ar"), import("@opencode-ai/ui/i18n/ar")),
   no: () => merge(import("@/i18n/no"), import("@opencode-ai/ui/i18n/no")),
   br: () => merge(import("@/i18n/br"), import("@opencode-ai/ui/i18n/br")),
+  pt: () => merge(import("@/i18n/pt"), import("@opencode-ai/ui/i18n/pt")),
   th: () => merge(import("@/i18n/th"), import("@opencode-ai/ui/i18n/th")),
   bs: () => merge(import("@/i18n/bs"), import("@opencode-ai/ui/i18n/bs")),
   tr: () => merge(import("@/i18n/tr"), import("@opencode-ai/ui/i18n/tr")),

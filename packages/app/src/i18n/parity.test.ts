@@ -4,6 +4,7 @@ import { desktopNativePluralCategories } from "./desktop-native"
 const appLocales = [
   "ar",
   "br",
+  "pt",
   "bs",
   "da",
   "de",
