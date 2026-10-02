@@ -1,4 +1,4 @@
-import { FinishReason, LLMEvent, ProviderMetadata, ToolResultValue } from "@opencode-ai/llm"
+import { FinishReason, LLMEvent, ModelID, ProviderMetadata, ToolResultValue } from "@opencode-ai/llm"
 import { Effect, Schema } from "effect"
 import { type streamText } from "ai"
 import { errorMessage } from "@/util/error"
@@ -105,6 +105,7 @@ export function toLLMEvents(
           LLMEvent.stepFinish({
             index: state.step++,
             reason: finishReason(event.finishReason),
+            modelID: ModelID.make(event.response.modelId),
             usage: usage(event.usage),
             providerMetadata: metadata,
           }),

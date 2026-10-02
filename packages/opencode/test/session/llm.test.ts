@@ -220,7 +220,12 @@ describe("session.llm.ai-sdk adapter", () => {
       },
       {
         type: "finish-step",
-        response: { id: "response-1", timestamp: new Date(0), modelId: "gpt-test" },
+        response: {
+          id: "response-1",
+          timestamp: new Date(0),
+          modelId: "gpt-test",
+          headers: { authorization: "must-not-be-persisted" },
+        },
         finishReason: "other",
         rawFinishReason: "other",
         usage: {
@@ -281,6 +286,7 @@ describe("session.llm.ai-sdk adapter", () => {
         type: "step-finish",
         index: 0,
         reason: "unknown",
+        modelID: "gpt-test",
         usage: {
           inputTokens: 10,
           outputTokens: 5,
@@ -303,6 +309,7 @@ describe("session.llm.ai-sdk adapter", () => {
         },
       },
     ])
+    expect(events.find((event) => event.type === "step-finish")).not.toHaveProperty("responseHeaders")
   })
 
   test("creates stable block ids when AI SDK omits them", async () => {
