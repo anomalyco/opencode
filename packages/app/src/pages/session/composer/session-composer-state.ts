@@ -102,19 +102,20 @@ export function createSessionComposerController(options?: { closeMs?: number | (
     return 400
   }
 
-  const scheduleClose = () => {
-    if (timer) window.clearTimeout(timer)
-    timer = window.setTimeout(() => {
-      setStore({ dock: false, closing: false })
-      timer = undefined
-    }, closeMs())
-  }
-
   // Keep stale turn todos from reopening if the model never clears them.
   const clear = () => {
     const id = params.id
     if (!id) return
     sync().set("todo", id, [])
+  }
+
+  const scheduleClose = () => {
+    if (timer) window.clearTimeout(timer)
+    timer = window.setTimeout(() => {
+      setStore({ dock: false, closing: false })
+      clear()
+      timer = undefined
+    }, closeMs())
   }
 
   createEffect(
