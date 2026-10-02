@@ -1,6 +1,15 @@
 export * as SessionCompaction from "./compaction"
 
-import { LLM, LLMError, LLMEvent, Message, type LLMRequest, type Model } from "@opencode-ai/llm"
+import {
+  LLM,
+  LLMError,
+  LLMEvent,
+  Message,
+  isContextOverflow,
+  isContextOverflowFailure,
+  type LLMRequest,
+  type Model,
+} from "@opencode-ai/llm"
 import { DateTime, Effect, Stream } from "effect"
 import type { Config } from "../config"
 import type { EventV2 } from "../event"
@@ -173,6 +182,13 @@ export const buildPrompt = (input: { readonly previousSummary?: string; readonly
   ].join("\n\n")
 }
 
+// Providers can surface context overflow as a bare snake_case code without a
+// human-readable message (e.g. `exceed_context_size_error`).
+const CONTEXT_SIZE_CODE = /exceed(?:ed|s|ing)?[\s_\-]*context[\s_\-]*size|context[\s_\-]*size[\s_\-]*exceed(?:ed|s|ing)?/i
+
+export const isOverflowMessage = (message: string) =>
+  CONTEXT_SIZE_CODE.test(message) || isContextOverflow(message)
+
 export const make = (dependencies: Dependencies) => {
   const config = settings(dependencies.config)
   const compactAfterOverflow = Effect.fn("SessionCompaction.compactAfterOverflow")(function* (input: Input) {
@@ -198,6 +214,8 @@ export const make = (dependencies: Dependencies) => {
 
     const chunks: string[] = []
     let failed = false
+    let overflow = false
+    let truncated = false
     const summarized = yield* dependencies.llm
       .stream(
         LLM.request({
@@ -210,15 +228,32 @@ export const make = (dependencies: Dependencies) => {
       )
       .pipe(
         Stream.runForEach((event) => {
-          if (LLMEvent.is.providerError(event)) failed = true
+          if (LLMEvent.is.providerError(event)) {
+            failed = true
+            // A summary request larger than the served context window fails
+            // here (e.g. `exceed_context_size_error`). That is an input-size
+            // problem: never mistake it for reaching the output token limit.
+            if (isContextOverflowFailure(event) || isOverflowMessage(event.message)) overflow = true
+          }
           if (LLMEvent.is.textDelta(event)) chunks.push(event.text)
+          if ((LLMEvent.is.finish(event) || LLMEvent.is.stepFinish(event)) && event.reason === "length")
+            truncated = true
           return Effect.void
         }),
         Effect.as(true),
-        Effect.catchTag("LLM.Error", () => Effect.succeed(false)),
+        Effect.catchTag("LLM.Error", (error) => {
+          if (isContextOverflowFailure(error) || isOverflowMessage(error.message)) overflow = true
+          return Effect.succeed(false)
+        }),
       )
     const summary = chunks.join("")
-    if (!summarized || failed || !summary.trim()) return false
+    // Context overflow takes precedence: the summary request never fit the
+    // served context window, so this is an input-size failure and must never
+    // be mistaken for reaching the output token limit. A `length` finish
+    // means the summary itself was cut off by the output limit, so the
+    // partial text must not be stored as a successful compaction either.
+    if (overflow) return false
+    if (!summarized || failed || truncated || !summary.trim()) return false
     yield* dependencies.events.publish(SessionEvent.Compaction.Ended, {
       sessionID: input.sessionID,
       messageID,
