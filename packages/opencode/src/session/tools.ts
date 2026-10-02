@@ -133,8 +133,23 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     })
   }
 
-  const hasMcpResourceServer = Object.values(yield* mcp.clients()).some(
-    (client) => !!client.getServerCapabilities()?.resources,
+  // A server whose tools this agent denies outright is hidden from it, so its resources must not leak back in.
+  const mcpTools = yield* mcp.tools()
+  const connected = yield* mcp.clients()
+  const deniedServers = new Set(
+    Object.entries(connected)
+      .filter((entry) => {
+        const keys = Object.keys(mcpTools).filter((key) => mcpTools[key].client === entry[1])
+        return (
+          keys.length > 0 &&
+          Permission.disabled(keys, Permission.merge(input.agent.permission, input.session.permission ?? [])).size ===
+            keys.length
+        )
+      })
+      .map((entry) => entry[0]),
+  )
+  const hasMcpResourceServer = Object.entries(connected).some(
+    (entry) => !!entry[1].getServerCapabilities()?.resources && !deniedServers.has(entry[0]),
   )
   if (hasMcpResourceServer) {
     tools[MCP_RESOURCE_TOOLS.list] = tool({
@@ -159,7 +174,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             const ctx = context(toRecord(args), opts)
             const clients = yield* mcp.clients()
             const resourceServers = Object.entries(clients)
-              .filter((entry) => !!entry[1].getServerCapabilities()?.resources)
+              .filter((entry) => !!entry[1].getServerCapabilities()?.resources && !deniedServers.has(entry[0]))
               .map((entry) => entry[0])
               .sort((a, b) => a.localeCompare(b))
             if (parsed.server && !resourceServers.includes(parsed.server)) {
@@ -186,6 +201,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
             const resources = Object.values(yield* mcp.resources(parsed.server))
             const filtered = resources
+              .filter((resource) => resourceServers.includes(resource.client))
               .filter((resource) => !parsed.server || resource.client === parsed.server)
               .toSorted((a, b) =>
                 (a.client + "\u0000" + a.name + "\u0000" + a.uri).localeCompare(
@@ -242,7 +258,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             const ctx = context(toRecord(args), opts)
             const clients = yield* mcp.clients()
             const resourceServers = Object.entries(clients)
-              .filter((entry) => !!entry[1].getServerCapabilities()?.resources)
+              .filter((entry) => !!entry[1].getServerCapabilities()?.resources && !deniedServers.has(entry[0]))
               .map((entry) => entry[0])
               .sort((a, b) => a.localeCompare(b))
             if (parsed.server && !resourceServers.includes(parsed.server)) {
@@ -269,6 +285,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
             const templates = Object.values(yield* mcp.resourceTemplates(parsed.server))
             const filtered = templates
+              .filter((template) => resourceServers.includes(template.client))
               .filter((template) => !parsed.server || template.client === parsed.server)
               .toSorted((a, b) =>
                 (a.client + "\u0000" + a.name + "\u0000" + a.uriTemplate).localeCompare(
@@ -328,6 +345,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
             const parsed = parseReadMcpResourceArgs(args)
             const ctx = context(toRecord(args), opts)
             const clients = yield* mcp.clients()
+            if (deniedServers.has(parsed.server)) {
+              throw new Error(`MCP server "${parsed.server}" is not available to this agent`)
+            }
             const client = clients[parsed.server]
             if (!client) {
               throw new Error(`MCP server "${parsed.server}" is not connected`)

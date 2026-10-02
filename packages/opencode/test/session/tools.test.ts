@@ -2,6 +2,7 @@ import { expect } from "bun:test"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Agent } from "@/agent/agent"
 import { MCP } from "@/mcp"
 import { Permission } from "@/permission"
@@ -163,5 +164,78 @@ it.effect("preserves running tool start time across metadata updates", () =>
     if (state.state.status === "running") {
       expect(state.state.time.start).toBe(100)
     }
+  }),
+)
+
+function resourceMcp() {
+  const client = () =>
+    ({ getServerCapabilities: () => ({ tools: {}, resources: {} }) }) as unknown as MCP.McpTool["client"]
+  const jira = client()
+  const docs = client()
+  const def = (name: string) => ({ name, inputSchema: { type: "object" as const, properties: {} } })
+  return MCP.Service.of({
+    clients: () => Effect.succeed({ jira, docs }),
+    tools: () =>
+      Effect.succeed({
+        jira_search: { def: def("search"), client: jira },
+        docs_lookup: { def: def("lookup"), client: docs },
+      }),
+    resources: () =>
+      Effect.succeed({
+        "jira:board": { name: "board", uri: "jira://board", client: "jira" },
+        "docs:index": { name: "index", uri: "docs://index", client: "docs" },
+      }),
+  } as Partial<MCP.Interface> as MCP.Interface)
+}
+
+const resolveWith = (permission: PermissionV1.Ruleset) =>
+  SessionTools.resolve({
+    agent: { ...agent, permission: [{ permission: "*", pattern: "*", action: "allow" }, ...permission] },
+    model,
+    session: { id: sessionID, permission: [] } as unknown as Session.Info,
+    processor: {
+      message: { id: messageID } as SessionV1.Assistant,
+      updateToolCall: () => Effect.die("unused"),
+      completeToolCall: () => Effect.void,
+    },
+    bypassAgentCheck: false,
+    messages: [],
+    promptOps: {} as never,
+  }).pipe(Effect.provideService(MCP.Service, resourceMcp()))
+
+const call = (item: { execute?: (args: never, options: never) => unknown }, args: unknown) =>
+  Effect.promise(async () =>
+    item.execute!(
+      args as never,
+      { toolCallId: callID, abortSignal: new AbortController().signal, messages: [] } as never,
+    ),
+  )
+
+it.effect("hides resources of MCP servers whose tools the agent denies", () =>
+  Effect.gen(function* () {
+    const tools = yield* resolveWith(Permission.fromConfig({ "jira_*": "deny" }))
+    const listed = (yield* call(tools.list_mcp_resources, {})) as { output: string; metadata: { servers: string[] } }
+    expect(listed.metadata.servers).toEqual(["docs"])
+    expect(listed.output).not.toContain("jira://board")
+    expect(listed.output).toContain("docs://index")
+
+    const read = yield* call(tools.read_mcp_resource, { server: "jira", uri: "jira://board" }).pipe(Effect.exit)
+    expect(String(read)).toContain('MCP server "jira" is not available to this agent')
+  }),
+)
+
+it.effect("omits MCP resource tools when the agent denies every resource server", () =>
+  Effect.gen(function* () {
+    const tools = yield* resolveWith(Permission.fromConfig({ "jira_*": "deny", "docs_*": "deny" }))
+    expect(tools.list_mcp_resources).toBeUndefined()
+    expect(tools.read_mcp_resource).toBeUndefined()
+  }),
+)
+
+it.effect("keeps MCP resources for an agent that allows the server", () =>
+  Effect.gen(function* () {
+    const tools = yield* resolveWith(Permission.fromConfig({ "jira_*": "allow" }))
+    const listed = (yield* call(tools.list_mcp_resources, {})) as { metadata: { servers: string[] } }
+    expect(listed.metadata.servers).toEqual(["docs", "jira"])
   }),
 )

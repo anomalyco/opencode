@@ -374,6 +374,28 @@ If you have a large number of MCP servers you may want to only enable them per a
 }
 ```
 
+An agent that has every tool of a server disabled never sees that server: its tool definitions, its server instructions, and its resources are all left out of the agent's context. The server still connects once, so other agents can use it.
+
+This makes a context-heavy MCP server cheap to keep around. Enable it only in a [subagent](/docs/agents#subagents) and let your primary agent delegate to it when it needs the server.
+
+```json title="opencode.json" {3-5, 8-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "tools": {
+    "my-mcp*": false
+  },
+  "agent": {
+    "my-mcp-agent": {
+      "mode": "subagent",
+      "description": "Use for anything that needs the my-mcp server.",
+      "tools": {
+        "my-mcp*": true
+      }
+    }
+  }
+}
+```
+
 ---
 
 #### Glob patterns
