@@ -430,6 +430,7 @@ describe("provider package entrypoints", () => {
 
   test("maps Google package settings onto the Gemini model", async () => {
     const Google = await import("@opencode/ai/providers/google")
+    const GoogleInteractions = await import("@opencode/ai/providers/google/interactions")
     const selected = Google.model("gemini-2.5-flash", {
       apiKey: "fixture",
       baseURL: "https://generativelanguage.test/v1beta",
@@ -443,6 +444,16 @@ describe("provider package entrypoints", () => {
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ safetySettings: [] })
     expect(selected.route.defaults.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
+    const interactions = GoogleInteractions.model("gemini-3.8-flash", {
+      apiKey: "fixture",
+      baseURL: "https://generativelanguage.test/v1beta",
+      thinkingLevel: "low",
+      store: true,
+    })
+    expect(interactions.route.id).toBe("google-interactions")
+    expect(interactions.route.endpoint.baseURL).toBe("https://generativelanguage.test/v1beta")
+    expect(interactions.route.defaults.providerOptions).toEqual({ thinkingLevel: "low", store: true })
+    expect(Google.configure().interactions("gemini-3.8-flash").route.protocol).toBe("google-interactions")
   })
 
   test("selects Vertex entrypoints with the same model contract", async () => {
