@@ -16,6 +16,26 @@ import type { FileAttachment } from "@opencode/schema/prompt"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
+// Mirrors ToolOutput.MAX_BYTES. Session shell output must obey the same bounded preview as normal
+// tool output; without this cap a large shell command is injected in full into the next model
+// request, which can exceed the context window, fail as `provider.unknown`, and strand the session.
+const SHELL_OUTPUT_MAX_BYTES = 50 * 1024
+
+/** Truncate by code point so multi-byte UTF-8 content is never split into replacement characters. */
+const truncateShellOutput = (value: string) => {
+  const total = Buffer.byteLength(value, "utf-8")
+  if (total <= SHELL_OUTPUT_MAX_BYTES) return value
+  let bytes = 0
+  let head = ""
+  for (const char of value) {
+    const size = Buffer.byteLength(char, "utf-8")
+    if (bytes + size > SHELL_OUTPUT_MAX_BYTES) break
+    head += char
+    bytes += size
+  }
+  return `${head}\n[truncated: ${total - bytes} bytes omitted]`
+}
+
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
   media: Media.base64(file.data, file.mime),
@@ -294,7 +314,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         Message.make({
           id: message.id,
           role: "user",
-          content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${message.output?.output ?? ""}`,
+          content: `The following shell command was executed by the user:\n\nCommand:\n${message.command}\n\nOutput:\n${truncateShellOutput(message.output?.output ?? "")}`,
           metadata: message.metadata,
         }),
       ]
