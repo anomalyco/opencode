@@ -1965,6 +1965,40 @@ export const HLS: Info = {
   },
 }
 
+export const GraphQL: Info = {
+  id: "graphql",
+  extensions: [".graphql", ".gql"],
+  // Gated on a GraphQL config so a stray .graphql file does not pull the server down.
+  root: StrictNearestRoot([
+    ".graphqlrc",
+    ".graphqlrc.json",
+    ".graphqlrc.yml",
+    ".graphqlrc.yaml",
+    ".graphqlrc.js",
+    ".graphqlrc.ts",
+    "graphql.config.js",
+    "graphql.config.ts",
+    "graphql.config.json",
+    "graphql.config.yml",
+    "graphql.config.yaml",
+  ]),
+  async spawn(root, _ctx, flags) {
+    let binary = which("graphql-lsp")
+    if (!binary) {
+      if (flags.disableLspDownload) return
+      const resolved = await Npm.which("graphql-language-service-cli", "graphql-lsp")
+      if (!resolved) return
+      binary = resolved
+    }
+    return {
+      // Defaults to a node IPC channel; "stream" is the stdio transport this client speaks.
+      process: spawn(binary, ["server", "-m", "stream"], {
+        cwd: root,
+      }),
+    }
+  },
+}
+
 export const JuliaLS: Info = {
   id: "julials",
   extensions: [".jl"],
