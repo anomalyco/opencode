@@ -88,6 +88,7 @@ export async function runNonInteractivePrompt(input: Input) {
   let submitted = false
   let promoted = false
   let emittedError = false
+  let executionSucceeded = false
   let permissionRejected = false
   let formCancelled = false
   let interrupted = false
@@ -210,10 +211,14 @@ export async function runNonInteractivePrompt(input: Input) {
     while (!controller.signal.aborted) {
       const next = await stream.next().catch((error) => {
         if (!emittedError) throw error
+        process.exitCode = 1
         return { done: true as const, value: undefined }
       })
       if (next.done) {
-        if (emittedError) return
+        if (emittedError) {
+          process.exitCode = 1
+          return
+        }
         throw new Error("Event stream disconnected during prompt execution")
       }
       const event = next.value
@@ -517,16 +522,15 @@ export async function runNonInteractivePrompt(input: Input) {
         if (interrupted || permissionRejected || formCancelled) continue
         flushStep()
         emittedError = true
-        process.exitCode = 1
         if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         continue
       }
       if (event.type === "session.execution.failed") {
         if (input.compatibility === "v1" && (v1InvalidOutput || permissionRejected || formCancelled)) return
         flushStep()
+        process.exitCode = 1
         if (!emittedError && !formCancelled) {
           emittedError = true
-          process.exitCode = 1
           if (!emit("error", time, { error: event.data.error })) UI.error(event.data.error.message)
         }
         return
@@ -534,16 +538,19 @@ export async function runNonInteractivePrompt(input: Input) {
       if (event.type === "session.execution.interrupted") {
         if (input.compatibility === "v1" && (permissionRejected || formCancelled)) return
         if (event.data.reason === "user" && interrupted) process.exitCode = 130
+        if (event.data.reason !== "user" && !permissionRejected && !formCancelled) process.exitCode = 1
         // A declined tool call ends the step with an interruption; it was already reported above.
         if (event.data.reason !== "user" && !emittedError && !permissionRejected && !formCancelled) {
           emittedError = true
-          process.exitCode = 1
           const error = { type: "aborted" as const, message: `Session interrupted: ${event.data.reason}` }
           if (!emit("error", time, { error })) UI.error(error.message)
         }
         return
       }
-      if (event.type === "session.execution.succeeded") return
+      if (event.type === "session.execution.succeeded") {
+        executionSucceeded = true
+        return
+      }
     }
   }
 
@@ -567,6 +574,8 @@ export async function runNonInteractivePrompt(input: Input) {
 
   const reconcile = async () => {
     const projected = await projectedMessages()
+    // Earlier failed steps can be followed by a successful continuation before the Session becomes idle.
+    const lastAssistant = projected.messages.findLast((message) => message.type === "assistant")
     for (const message of projected.messages) {
       if (message.type !== "assistant") continue
       const timestamp = message.time.completed ?? message.time.created
@@ -666,9 +675,11 @@ export async function runNonInteractivePrompt(input: Input) {
       // only a consequence of our own rejection; it was already reported above.
       if (message.error && !emittedError && !permissionRejected && !formCancelled) {
         emittedError = true
-        process.exitCode = 1
         if (!emit("error", timestamp, { error: message.error })) UI.error(message.error.message)
       }
+    }
+    if ((!lastAssistant && emittedError) || lastAssistant?.error) {
+      if (!executionSucceeded && !permissionRejected && !formCancelled) process.exitCode = 1
     }
     return {
       found: projected.found,
@@ -730,7 +741,11 @@ export async function runNonInteractivePrompt(input: Input) {
         }
         controller.abort()
         await completed?.catch(() => {})
-        if (interrupted || emittedError) return undefined
+        if (interrupted) return undefined
+        if (emittedError) {
+          process.exitCode = 1
+          return undefined
+        }
         throw error
       })
     admission = undefined
@@ -774,11 +789,13 @@ export async function runNonInteractivePrompt(input: Input) {
     ) {
       await completed
     }
-    if (!projected.found && !interrupted && !permissionRejected && !formCancelled && !emittedError) {
+    if (!projected.found && !interrupted && !permissionRejected && !formCancelled) {
       const error = prePromotionError ?? { type: "unknown", message: "Prompt was not promoted" }
-      emittedError = true
       process.exitCode = 1
-      if (!emit("error", Date.now(), { error })) UI.error(error.message)
+      if (!emittedError) {
+        emittedError = true
+        if (!emit("error", Date.now(), { error })) UI.error(error.message)
+      }
     }
   } finally {
     process.off("SIGINT", interrupt)
