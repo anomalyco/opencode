@@ -156,6 +156,7 @@ export const Definitions = {
   prompt_stash: keybind("none", "Stash prompt"),
   prompt_stash_pop: keybind("none", "Pop stashed prompt"),
   prompt_stash_list: keybind("none", "List stashed prompts"),
+  prompt_voice_push_to_talk: keybind("none", "Hold to record voice input, release to transcribe into the prompt"),
   workspace_set: keybind("none", "Set workspace"),
 
   input_clear: keybind("ctrl+c", "Clear input field"),
@@ -360,6 +361,7 @@ export const CommandMap = {
   prompt_stash: "prompt.stash",
   prompt_stash_pop: "prompt.stash.pop",
   prompt_stash_list: "prompt.stash.list",
+  prompt_voice_push_to_talk: "prompt.voice.push_to_talk",
   workspace_set: "workspace.set",
   input_clear: "prompt.clear",
   input_paste: "prompt.paste",
