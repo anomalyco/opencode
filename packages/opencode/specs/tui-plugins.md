@@ -522,10 +522,11 @@ The plugin manager is exposed as a command with title `Plugins` and value `plugi
 
 - Keybind name is `plugin_manager`.
 - Default keybind is `none`.
+- Slash name is `/plugins`, with `/plugin` as an alias.
 - It lists both internal and external plugins.
 - It toggles based on `active`.
 - Its own row is disabled only inside the manager dialog.
-- It also exposes command `plugins.install` with title `Install plugin`.
+- It also exposes command `plugins.install` with title `Install plugin` and slash name `/plugin-install`.
 - Inside the Plugins dialog, key `shift+i` opens the install prompt.
 - Install prompt asks for npm package name.
 - Scope defaults to local, and `tab` toggles local/global.
