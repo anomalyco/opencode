@@ -135,7 +135,13 @@ jobs:
 
             const linkedIssues = result.repository.pullRequest.closingIssuesReferences.totalCount;
 
-            if (linkedIssues === 0) {
+            // GitHub only populates closingIssuesReferences for PRs targeting the default branch,
+            // and pull_request_target always runs this copy, so check the body for other bases (e.g. v2).
+            const targetsDefaultBranch = pr.base.ref === context.payload.repository.default_branch;
+            const issueSection = (pr.body || '').match(/### Issue for this PR\s*\n([\s\S]*?)(?=###|$)/);
+            const hasBodyIssueRef = /(closes|fixes|resolves)\s+#\d+/i.test(issueSection ? issueSection[1] : '');
+
+            if (linkedIssues === 0 && (targetsDefaultBranch || !hasBodyIssueRef)) {
               await addLabel('needs:issue');
               await comment('issue', `Thanks for your contribution!
 
