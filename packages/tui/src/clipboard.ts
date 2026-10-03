@@ -52,12 +52,38 @@ export async function read() {
   }
 
   if (platform() === "win32" || release().includes("WSL")) {
-    const script =
-      "Add-Type -AssemblyName System.Windows.Forms; $img = [System.Windows.Forms.Clipboard]::GetImage(); if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); [System.Convert]::ToBase64String($ms.ToArray()) }"
-    const image = await command("powershell.exe", ["-NonInteractive", "-NoProfile", "-command", script]).catch(() =>
+    // GetImage()/ContainsImage() return null/false for FileDrop clipboard content
+    // (images copied via Win+Shift+S → Ctrl+C or most Windows screenshot tools).
+    // Probe GetDataObject() first: FileDrop yields a file path we can read directly;
+    // fall back to Bitmap format for raw in-memory images (e.g. Ctrl+C in Paint).
+    const script = [
+      "Add-Type -AssemblyName System.Windows.Forms",
+      "$obj = [System.Windows.Forms.Clipboard]::GetDataObject()",
+      "if ($obj -and $obj.GetDataPresent([System.Windows.Forms.DataFormats]::FileDrop)) {",
+      "  $files = $obj.GetData([System.Windows.Forms.DataFormats]::FileDrop)",
+      "  if ($files -and $files.Length -gt 0) { $files[0] }",
+      "} elseif ($obj -and $obj.GetDataPresent([System.Windows.Forms.DataFormats]::Bitmap)) {",
+      "  $img = [System.Windows.Forms.Clipboard]::GetImage()",
+      "  if ($img) { $ms = New-Object System.IO.MemoryStream; $img.Save($ms, [System.Drawing.Imaging.ImageFormat]::Png); 'data:image/png;base64,' + [System.Convert]::ToBase64String($ms.ToArray()) }",
+      "}",
+    ].join("; ")
+    const result = await command("powershell.exe", ["-NonInteractive", "-NoProfile", "-command", script]).catch(() =>
       Buffer.alloc(0),
     )
-    if (image.length) return { data: image.toString().trim(), mime: "image/png" }
+    const output = result.toString("utf8").trim()
+    if (output.startsWith("data:image/png;base64,")) {
+      return { data: output.slice("data:image/png;base64,".length), mime: "image/png" }
+    }
+    if (
+      output.length > 0 &&
+      !output.includes(" ") &&
+      /\.(png|jpe?g|webp|gif|bmp)$/i.test(output)
+    ) {
+      try {
+        const fileData = await readFile(output)
+        return { data: fileData.toString("base64"), mime: `image/${path.extname(output).slice(1).toLowerCase()}` }
+      } catch {}
+    }
   }
 
   if (platform() === "linux") {
