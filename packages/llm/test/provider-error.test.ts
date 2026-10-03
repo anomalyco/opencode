@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isContextOverflow } from "../src"
+import { InvalidRequestReason, LLMError, isContextOverflow, isStaleReasoning, isStaleReasoningFailure } from "../src"
 
 describe("provider error classification", () => {
   test("classifies provider token limit messages as context overflow", () => {
@@ -26,5 +26,40 @@ describe("provider error classification", () => {
     ]
 
     expect(messages.some(isContextOverflow)).toBe(false)
+  })
+
+  test("classifies stale encrypted reasoning errors", () => {
+    const messages = [
+      "Error from provider (Console): Upstream request failed: [invalid_request_error] reasoning `encrypted_content` was not issued to this caller",
+      "Upstream request failed: [invalid_encrypted_content] The encrypted content could not be verified. Reason: Encrypted content could not be decrypted or parsed.",
+      "Referenced reasoning item 'rs_123' was not found or has expired",
+      "Item 'rs_0a1b' of type 'reasoning' was provided without its required following item.",
+    ]
+
+    expect(messages.every(isStaleReasoning)).toBe(true)
+    expect(isStaleReasoning("prompt is too long")).toBe(false)
+  })
+
+  test("matches stale reasoning failures from classified and raw errors", () => {
+    expect(
+      isStaleReasoningFailure(
+        new LLMError({
+          module: "test",
+          method: "stream",
+          reason: new InvalidRequestReason({
+            message: "bad request",
+            classification: "stale-reasoning",
+          }),
+        }),
+      ),
+    ).toBe(true)
+    expect(
+      isStaleReasoningFailure(
+        new Error(
+          "Error from provider (Console): Upstream request failed: [invalid_request_error] reasoning `encrypted_content` was not issued to this caller",
+        ),
+      ),
+    ).toBe(true)
+    expect(isStaleReasoningFailure(new Error("prompt is too long"))).toBe(false)
   })
 })
