@@ -30,6 +30,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 
 export const use = serviceUse(Service)
 
+// A directory that decoded to U+FFFD is mojibake from an invalid base64 segment or a stale client, so never load an
+// instance for it. Falling back to the server's own directory keeps requests working instead of failing on realPath.
+function resolveDirectory(input: string): string {
+  if (input.includes("\uFFFD")) return FSUtil.resolve(process.cwd())
+  return FSUtil.resolve(input)
+}
+
 interface Entry {
   readonly deferred: Deferred.Deferred<InstanceContext>
 }
@@ -106,7 +113,7 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
     })
 
     const load = (input: LoadInput): Effect.Effect<InstanceContext> => {
-      const directory = FSUtil.resolve(input.directory)
+      const directory = resolveDirectory(input.directory)
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const existing = cache.get(directory)
@@ -124,7 +131,7 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
     }
 
     const reload = (input: LoadInput): Effect.Effect<InstanceContext> => {
-      const directory = FSUtil.resolve(input.directory)
+      const directory = resolveDirectory(input.directory)
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const previous = cache.get(directory)
