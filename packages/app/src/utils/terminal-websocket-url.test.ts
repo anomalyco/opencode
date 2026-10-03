@@ -78,3 +78,17 @@ describe("terminalWebSocketURL", () => {
     expect(url.searchParams.get("auth_token")).toBe(btoa("opencode:secret"))
   })
 })
+
+test.each(["v1", "v2"] as const)("preserves nested prefixes in %s WebSocket connections", (protocol) => {
+  const url = terminalWebSocketURL({
+    protocol,
+    url: "https://example.com/nested/proxy/service/",
+    id: "pty_test",
+    directory: "/tmp/project",
+    cursor: 42,
+    ticket: "ticket",
+  })
+  expect(url.pathname).toBe(`/nested/proxy/service${protocol === "v1" ? "" : "/api"}/pty/pty_test/connect`)
+  expect(url.protocol).toBe("wss:")
+  expect(url.searchParams.get("ticket")).toBe("ticket")
+})

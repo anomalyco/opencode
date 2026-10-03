@@ -38,3 +38,14 @@ describe("detectServerProtocol", () => {
     expect(await detectServerProtocol(server, fetcher)).toBe("v1")
   })
 })
+
+test.each(["/proxy", "/nested/proxy/service/"])("health probes keep the prefix %j", async (prefix) => {
+  const paths: string[] = []
+  const fetcher = mockFetch(async (input) => {
+    const url = new URL(input instanceof Request ? input.url : input)
+    paths.push(url.pathname)
+    return url.pathname.endsWith("/global/health") ? json({}, 404) : json({ healthy: true, pid: 1 })
+  })
+  expect(await detectServerProtocol({ url: "https://example.com" + prefix }, fetcher)).toBe("v2")
+  expect(paths).toEqual([prefix.replace(/\/+$/, "") + "/global/health", prefix.replace(/\/+$/, "") + "/api/health"])
+})
