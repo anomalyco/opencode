@@ -173,6 +173,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Bu
 
 interface Options {
   readonly beforeAggregateRead?: (aggregateID: string) => Effect.Effect<void>
+  /** Test hook after a log subscribes but before it captures the replay watermark. */
+  readonly beforeLogWatermark?: (aggregateID: string) => Effect.Effect<void>
   /** Maximum durable rows read per page while replaying or tailing an aggregate log. */
   readonly logReadPageSize?: number
   /** Retain durable event payloads for historical log reads and replay. */
@@ -192,7 +194,7 @@ export function configured(options?: Options) {
         const { SessionTable } = yield* Effect.promise(() => import("./session/sql.js"))
         const pubsub = {
           live: yield* PubSub.unbounded<Event.Payload>(),
-          durable: new Map<string, Set<PubSub.PubSub<void>>>(),
+          durable: new Map<string, Set<PubSub.PubSub<Event.Payload>>>(),
           typed: new Map<string, PubSub.PubSub<Event.Payload>>(),
         }
         const projectors = new Map<string, Subscriber[]>()
@@ -280,6 +282,16 @@ export function configured(options?: Options) {
             yield* Effect.forEach(pubsub.typed.values(), PubSub.shutdown, { discard: true })
           }),
         )
+
+        const publishLogEvents = (aggregateID: string, events: readonly Event.Payload[]) => {
+          const subscribers = pubsub.durable.get(aggregateID)
+          if (!subscribers) return Effect.void
+          return Effect.forEach(
+            events,
+            (event) => Effect.forEach(subscribers, (subscriber) => PubSub.publish(subscriber, event), { discard: true }),
+            { discard: true },
+          )
+        }
 
         function commitDurableEvent(
           definition: Event.Definition,
@@ -435,11 +447,7 @@ export function configured(options?: Options) {
                   .pipe(Effect.orDie)
                 if (committed) {
                   committed.route()
-                  yield* Effect.forEach(
-                    pubsub.durable.get(committed.aggregateID) ?? [],
-                    (wake) => PubSub.publish(wake, undefined),
-                    { discard: true },
-                  )
+                  yield* publishLogEvents(committed.aggregateID, [committed.event])
                 }
                 return committed
               }),
@@ -653,13 +661,7 @@ export function configured(options?: Options) {
                     )
                     .pipe(Effect.orDie)
                   committed.route()
-                  yield* Effect.forEach(
-                    pubsub.durable.get(aggregateID) ?? [],
-                    (wake) => PubSub.publish(wake, undefined),
-                    {
-                      discard: true,
-                    },
-                  )
+                  yield* publishLogEvents(aggregateID, committed.events)
                   yield* Effect.forEach(committed.events, (event) => notify(event, true), { discard: true })
                   return committed.events as PublishResult<I>
                 }),
@@ -807,20 +809,20 @@ export function configured(options?: Options) {
 
         const subscribeDurable = (aggregateID: string) =>
           Effect.gen(function* () {
-            const wake = yield* PubSub.sliding<void>(1)
-            const subscription = yield* PubSub.subscribe(wake)
+            const events = yield* PubSub.unbounded<Event.Payload>()
+            const subscription = yield* PubSub.subscribe(events)
             yield* Effect.acquireRelease(
               Effect.sync(() => {
-                const wakes = pubsub.durable.get(aggregateID) ?? new Set()
-                wakes.add(wake)
-                pubsub.durable.set(aggregateID, wakes)
+                const subscribers = pubsub.durable.get(aggregateID) ?? new Set()
+                subscribers.add(events)
+                pubsub.durable.set(aggregateID, subscribers)
               }),
               () =>
                 Effect.sync(() => {
-                  const wakes = pubsub.durable.get(aggregateID)
-                  wakes?.delete(wake)
-                  if (wakes?.size === 0) pubsub.durable.delete(aggregateID)
-                }).pipe(Effect.andThen(PubSub.shutdown(wake))),
+                  const subscribers = pubsub.durable.get(aggregateID)
+                  subscribers?.delete(events)
+                  if (subscribers?.size === 0) pubsub.durable.delete(aggregateID)
+                }).pipe(Effect.andThen(PubSub.shutdown(events))),
             )
             return subscription
           })
@@ -850,21 +852,42 @@ export function configured(options?: Options) {
                     ),
                   ),
                 )
-              // Subscribing before the historical read means events committed during
-              // replay either appear in the read or arrive through a post-marker wake.
-              const wakes = input.follow ? yield* subscribeDurable(input.aggregateID) : undefined
-              const target = yield* latestSequence(db, input.aggregateID)
+              // Serialize subscription and watermark capture with commits. Otherwise a commit
+              // could reach the subscription and the watermark, then be skipped by both replay
+              // (when persistence is off) and the live cursor.
+              const boundary = input.follow
+                ? yield* durableLocks.withLock(input.aggregateID)(
+                    Effect.gen(function* () {
+                      const subscription = yield* subscribeDurable(input.aggregateID)
+                      yield* (options?.beforeLogWatermark?.(input.aggregateID) ?? Effect.void)
+                      const target = yield* latestSequence(db, input.aggregateID)
+                      return { subscription, target }
+                    }),
+                  )
+                : { subscription: undefined, target: yield* latestSequence(db, input.aggregateID) }
+              const { subscription, target } = boundary
               const marker: EventLog.Synced = {
                 type: "log.synced",
                 aggregateID: input.aggregateID,
                 ...(target >= 0 ? { seq: Event.Seq.make(target) } : {}),
               }
-              const replay: Stream.Stream<LogItem> = readThrough(target).pipe(Stream.concat(Stream.make(marker)))
-              if (!wakes) return replay
-              const live: Stream.Stream<LogItem> = Stream.fromSubscription(wakes).pipe(
-                Stream.mapEffect(() => latestSequence(db, input.aggregateID)),
-                Stream.filter((target) => target > sequence),
-                Stream.flatMap((target) => readThrough(target)),
+              const synced = Stream.make(marker).pipe(
+                Stream.tap(() =>
+                  Effect.sync(() => {
+                    sequence = Math.max(sequence, target)
+                  }),
+                ),
+              )
+              const replay: Stream.Stream<LogItem> = readThrough(target).pipe(Stream.concat(synced))
+              if (!subscription) return replay
+              const live: Stream.Stream<LogItem> = Stream.fromSubscription(subscription).pipe(
+                Stream.filter((event) => {
+                  const durable = event.durable
+                  if (!durable || durable.aggregateID !== input.aggregateID || durable.seq <= sequence) return false
+                  if (!Durable.get(versionedType(event.type, durable.version))?.durable) return false
+                  sequence = durable.seq
+                  return true
+                }),
               )
               return Stream.concat(replay, live)
             }),
