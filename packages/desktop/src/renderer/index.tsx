@@ -284,6 +284,15 @@ const createPlatform = (windowState: DesktopWindowState): Platform => {
 
     wslServers: wslServersApi,
 
+    plugins: {
+      fetchCatalog: () => window.api.plugins.fetchCatalog(),
+      readConfigs: (projectDir?: string) => window.api.plugins.readConfigs(projectDir),
+      install: (name, entry, scope, projectDir) =>
+        window.api.plugins.install(name, entry, scope, projectDir),
+      remove: (name, scope, remember, projectDir) =>
+        window.api.plugins.remove(name, scope, remember, projectDir),
+    },
+
     getDisplayBackend: async () => {
       return window.api.getDisplayBackend().catch(() => null)
     },
