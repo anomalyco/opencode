@@ -21,17 +21,26 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     if (!last) {
       return {
         tokens: 0,
+        cached: 0,
         percent: null,
       }
     }
 
+    const cached = last.tokens.cache.read + last.tokens.cache.write
     const tokens =
-      last.tokens.input + last.tokens.output + last.tokens.reasoning + last.tokens.cache.read + last.tokens.cache.write
+      last.tokens.input + last.tokens.output + last.tokens.reasoning + cached
     const model = props.api.state.provider.find((item) => item.id === last.providerID)?.models[last.modelID]
     return {
       tokens,
+      cached,
       percent: model?.limit.context ? Math.round((tokens / model.limit.context) * 100) : null,
     }
+  })
+
+  const tokenText = createMemo(() => {
+    const cached = state().cached
+    if (cached === 0) return `${state().tokens.toLocaleString()} tokens`
+    return `${state().tokens.toLocaleString()} tokens (${cached.toLocaleString()} cached)`
   })
 
   return (
@@ -39,7 +48,7 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
       <text fg={theme().text}>
         <b>Context</b>
       </text>
-      <text fg={theme().textMuted}>{state().tokens.toLocaleString()} tokens</text>
+      <text fg={theme().textMuted}>{tokenText()}</text>
       <text fg={theme().textMuted}>{state().percent ?? 0}% used</text>
       <text fg={theme().textMuted}>{money.format(cost())} spent</text>
     </box>
