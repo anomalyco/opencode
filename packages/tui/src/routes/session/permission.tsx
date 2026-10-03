@@ -333,6 +333,7 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               const meta = props.request.metadata ?? {}
               const parent = typeof meta["parentDir"] === "string" ? meta["parentDir"] : undefined
               const filepath = typeof meta["filepath"] === "string" ? meta["filepath"] : undefined
+              const command = typeof meta["command"] === "string" ? meta["command"] : undefined
               const pattern = props.request.patterns?.[0]
               const derived =
                 typeof pattern === "string" ? (pattern.includes("*") ? dirname(pattern) : pattern) : undefined
@@ -345,14 +346,21 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
                 icon: "←",
                 title: `Access external directory ${dir}`,
                 body: (
-                  <Show when={patterns.length > 0}>
-                    <box paddingLeft={1} gap={1}>
-                      <text fg={theme.textMuted}>Patterns</text>
-                      <box>
-                        <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + p}</text>}</For>
+                  <>
+                    <Show when={command}>
+                      <box paddingLeft={1}>
+                        <text fg={theme.text}>{"$ " + command}</text>
                       </box>
-                    </box>
-                  </Show>
+                    </Show>
+                    <Show when={patterns.length > 0}>
+                      <box paddingLeft={1} gap={1}>
+                        <text fg={theme.textMuted}>Patterns</text>
+                        <box>
+                          <For each={patterns}>{(p) => <text fg={theme.text}>{"- " + p}</text>}</For>
+                        </box>
+                      </box>
+                    </Show>
+                  </>
                 ),
               }
             }
