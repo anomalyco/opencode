@@ -22,6 +22,53 @@ import { useRoute } from "../context/route"
 export type MoveSessionSelection = { type: "directory"; directory: string; subdirectory: boolean } | { type: "new" }
 type ProjectDirectory = ProjectDirectories[number]
 
+const RECENT_DIRECTORY_LIMIT = 5
+
+type RecentDirectorySession = {
+  parentID?: string
+  projectID: string
+  directory: string
+  time: {
+    updated: number
+    archived?: number
+  }
+}
+
+export function deriveRecentDirectories(
+  sessions: readonly RecentDirectorySession[],
+  projectID: string,
+  excluded: readonly string[],
+  candidates: readonly string[],
+  limit = RECENT_DIRECTORY_LIMIT,
+) {
+  const valid = new Set(candidates)
+  const skip = new Set(excluded)
+  const seen = new Set<string>()
+  return sessions
+    .filter((session) => !session.parentID && session.projectID === projectID && session.time.archived === undefined)
+    .toSorted((a, b) => b.time.updated - a.time.updated)
+    .flatMap((session) => {
+      const directory = session.directory
+      if (skip.has(directory) || !valid.has(directory) || seen.has(directory)) return []
+      seen.add(directory)
+      return [directory]
+    })
+    .slice(0, limit)
+}
+
+export function moveDirectoryCategory(
+  location: string,
+  root: string,
+  currentDirectory: string | undefined,
+  currentRoot: string | undefined,
+  recent: boolean,
+): "Current" | "Recent" | "Other" {
+  if (location === currentDirectory) return "Current"
+  if (recent) return "Recent"
+  if (root === currentRoot) return "Current"
+  return "Other"
+}
+
 type DialogMoveSessionProps = {
   projectID: string
   current?: MoveSessionSelection
@@ -148,9 +195,32 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
       if (b.location === b.root.directory) return 1
       return a.location.localeCompare(b.location)
     })
+    const recent = deriveRecentDirectories(
+      sync.data.session,
+      props.projectID,
+      [currentDirectory(), current].filter((directory): directory is string => directory !== undefined),
+      list.map((item) => item.location),
+    )
+    const recentOrder = new Map(recent.map((directory, index) => [directory, index]))
+    const category = (item: (typeof list)[number]) =>
+      moveDirectoryCategory(
+        item.location,
+        item.root.directory,
+        currentDirectory(),
+        current,
+        recentOrder.has(item.location),
+      )
+    const ordered = list.toSorted((a, b) => {
+      const rank = { Current: 0, Recent: 1, Other: 2 }
+      const aCategory = category(a)
+      const bCategory = category(b)
+      if (aCategory !== bCategory) return rank[aCategory] - rank[bCategory]
+      if (aCategory !== "Recent") return 0
+      return recentOrder.get(a.location)! - recentOrder.get(b.location)!
+    })
     const titleWidth = Math.max(1, Math.min(116, dimensions().width - 2) - 12)
 
-    return list.map((item) => {
+    return ordered.map((item) => {
       const title = abbreviateHome(item.location, paths.home)
       const suffix =
         item.location === item.root.directory ? undefined : path.sep + path.relative(item.root.directory, item.location)
@@ -176,7 +246,7 @@ export function DialogMoveSession(props: DialogMoveSessionProps) {
           directory: item.location,
           subdirectory: item.location !== item.root.directory,
         } as const,
-        category: item.root.directory === current ? "Current" : "Other",
+        category: category(item),
         titleWidth,
         truncateTitle: "left" as const,
       }
