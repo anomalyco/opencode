@@ -16,9 +16,24 @@ import {
   workspaceSelectionDestination,
 } from "@/workspaces/paths"
 
-export function resolveNewSessionWorktree(input: { enabled: boolean; selected?: string; fallback?: string }) {
+export function resolveNewSessionWorktree(input: {
+  enabled: boolean
+  selected?: string
+  fallback?: string
+  directory?: string
+  projectWorktree?: string
+  workspaces?: readonly string[]
+}) {
   if (!input.enabled) return "main"
   if (input.selected) return input.selected
+  const directory = input.directory
+  if (
+    directory &&
+    input.projectWorktree &&
+    !sameDirectory(directory, input.projectWorktree) &&
+    input.workspaces?.some((workspace) => sameDirectory(workspace, directory))
+  )
+    return directory
   return input.fallback ?? "main"
 }
 
@@ -144,6 +159,9 @@ export function createNewSessionWorkspaceController(input: {
       enabled: visible(),
       selected: selected(),
       fallback: fallback(),
+      directory: sdk().directory,
+      projectWorktree: currentProject()?.worktree,
+      workspaces: worktreeDirectories(),
     }),
   )
   const projectRoot = createMemo(() => currentProject()?.worktree ?? sdk().directory)
