@@ -1,5 +1,20 @@
 import { describe, expect, test } from "bun:test"
+import { taskSessionIdFromMetadata } from "./message-part-task"
 import { readPartText } from "./message-part-text"
+
+describe("taskSessionIdFromMetadata", () => {
+  test("uses state metadata when available", () => {
+    expect(taskSessionIdFromMetadata({ sessionId: "child-1" }, { sessionId: "child-2" })).toBe("child-1")
+  })
+
+  test("falls back to top-level part metadata for cancelled task cards", () => {
+    expect(taskSessionIdFromMetadata(undefined, { sessionId: "child-1" })).toBe("child-1")
+  })
+
+  test("accepts legacy sessionID casing", () => {
+    expect(taskSessionIdFromMetadata({}, { sessionID: "child-1" })).toBe("child-1")
+  })
+})
 
 describe("readPartText", () => {
   test("returns empty string when accum is undefined and part text is undefined", () => {
