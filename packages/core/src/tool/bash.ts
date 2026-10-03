@@ -41,6 +41,7 @@ const StructuredOutput = Schema.Struct({
 const Output = Schema.Struct({
   ...StructuredOutput.fields,
   output: Schema.String,
+  cwd: Schema.String,
   warnings: Schema.Array(Schema.String).pipe(Schema.optional),
 })
 
@@ -52,8 +53,10 @@ const modelOutput = (output: Output) => {
   const warnings = output.warnings?.length
     ? `\n\nWarnings:\n${output.warnings.map((warning) => `- ${warning}`).join("\n")}`
     : ""
-  if (output.timeout) return `${warnings.trimStart()}${warnings ? "\n\n" : ""}Command timed out before completion.`
-  return `${warnings.trimStart()}${warnings ? "\n\n" : ""}Command exited with code ${output.exit}.`
+  const prefix = `${warnings.trimStart()}${warnings ? "\n\n" : ""}`
+  const cwd = `\nWorking directory: ${output.cwd}`
+  if (output.timeout) return `${prefix}Command timed out before completion.${cwd}`
+  return `${prefix}Command exited with code ${output.exit}.${cwd}`
 }
 
 const isTimeout = (error: AppProcess.AppProcessError) =>
@@ -177,6 +180,7 @@ const layer = Layer.effectDiscard(
               if (!result) {
                 return {
                   output: `Command exceeded timeout of ${timeout} ms. Retry with a larger timeout if the command is expected to take longer.`,
+                  cwd: target.canonical,
                   truncated: false,
                   timeout: true,
                   ...(warnings.length ? { warnings } : {}),
@@ -190,6 +194,7 @@ const layer = Layer.effectDiscard(
               return {
                 exit: result.exitCode,
                 output: notice ? `${output}\n\n${notice}` : output,
+                cwd: target.canonical,
                 truncated: result.outputTruncated === true,
                 ...(warnings.length ? { warnings } : {}),
               }
