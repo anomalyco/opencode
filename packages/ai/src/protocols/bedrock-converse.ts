@@ -6,6 +6,7 @@ import {
   AIError,
   LLMEvent,
   Usage,
+  mergeJsonRecords,
   type CacheHint,
   type FinishReason,
   type FinishReasonDetails,
@@ -23,7 +24,7 @@ import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
 import { BedrockAuth } from "./utils/bedrock-auth.js"
 import { BedrockCache } from "./utils/bedrock-cache.js"
 import { BedrockMedia } from "./utils/bedrock-media.js"
-import { supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
+import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { MistralToolID } from "./utils/mistral-tool-id.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -458,6 +459,10 @@ const lowerSystem = (breakpoints: BedrockCache.Breakpoints, system: ReadonlyArra
 // Nova 2 rejects `maxTokens` at high reasoning effort, where its output can exceed the field's maximum. Other models
 // that take `reasoningConfig`, such as Grok on Bedrock, accept it.
 const isNova2 = (model: LanguageModel) => /\bamazon\.nova-2-/.test(model.id)
+const isSonnet55 = (model: LanguageModel) => {
+  const version = claudeVersion(model.id)
+  return version?.family === "sonnet" && version.major === 5 && version.minor === 5
+}
 const isHighReasoningEffort = Schema.is(
   Schema.Struct({
     additionalModelRequestFields: Schema.Struct({
@@ -467,23 +472,31 @@ const isHighReasoningEffort = Schema.is(
 )
 
 const Options = Schema.Struct({
-  thinking: Schema.optional(Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Number })),
+  thinking: Schema.optional(
+    Schema.Union([
+      Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Number }),
+      Schema.Struct({ type: Schema.Literal("between_tools") }),
+    ]),
+  ),
 })
 export type OptionsInput = typeof Options.Type
 const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))
 // Claude on Bedrock requires the thinking budget below `maxTokens`, with a minimum of 1,024.
 const MIN_THINKING_BUDGET = 1_024
 
-const isThinkingDisabled = Schema.is(
+const isThinkingWithoutBinding = Schema.is(
   Schema.Struct({
-    additionalModelRequestFields: Schema.Struct({ thinking: Schema.Struct({ type: Schema.Literal("disabled") }) }),
+    additionalModelRequestFields: Schema.Struct({
+      thinking: Schema.Struct({ type: Schema.Literals(["disabled", "between_tools"]) }),
+    }),
   }),
 )
 
 // Claude 5.1+ binds each thinking signature to the prefix above it. Ask Bedrock to drop the affected blocks instead of
-// failing when that prefix changes. `http.body` overlays this field by field, so callers can still override it.
+// failing when that prefix changes. `http.body` overlays this field by field; between_tools cannot carry binding.
 const applyThinkingBindingDefault = (request: LLMRequest, thinking: Readonly<Record<string, unknown>> | undefined) => {
-  if (isThinkingDisabled(request.http?.body)) return thinking
+  if (thinking?.type === "between_tools") return thinking
+  if (isThinkingWithoutBinding(request.http?.body)) return thinking
   if (!supportsThinkingBlockBinding(request.model)) return thinking
   return {
     ...(thinking ?? { type: "adaptive" as const }),
@@ -496,20 +509,24 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   const flattened = ProviderShared.flattenToolRequest(request)
   const generation = request.generation
   const options = yield* decodeOptions(request.providerOptions ?? {})
+  if (options.thinking?.type === "between_tools" && !isSonnet55(request.model))
+    return yield* ProviderShared.invalidRequest("Bedrock Converse between_tools thinking requires Claude Sonnet 5.5")
   const maxTokens =
     isNova2(request.model) && isHighReasoningEffort(request.http?.body) ? undefined : generation?.maxTokens
   const thinking = applyThinkingBindingDefault(
     request,
     options.thinking === undefined
       ? undefined
-      : {
-          type: "enabled",
-          budget_tokens: ProviderShared.fitThinkingBudget(
-            options.thinking.budgetTokens,
-            maxTokens,
-            MIN_THINKING_BUDGET,
-          ),
-        },
+      : options.thinking.type === "between_tools"
+        ? { type: "between_tools" }
+        : {
+            type: "enabled",
+            budget_tokens: ProviderShared.fitThinkingBudget(
+              options.thinking.budgetTokens,
+              maxTokens,
+              MIN_THINKING_BUDGET,
+            ),
+          },
   )
   // Bedrock-Claude shares Anthropic's 4-breakpoint cap. Spend the budget in
   // tools → system → messages order to favour the highest-impact prefixes.
@@ -545,7 +562,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
       stopSequences: generation?.stop,
     }
   })()
-  return {
+  const body = {
     modelId: request.model.id,
     messages,
     system,
@@ -563,6 +580,69 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
             ...(thinking?.block_binding === undefined ? {} : { anthropic_beta: [THINKING_BINDING_BETA] }),
           },
   }
+  if (isSonnet55(request.model)) yield* validateSonnet55Body(request, body)
+  return body
+})
+
+const validateSonnet55Body = Effect.fn("BedrockConverse.validateSonnet55Body")(function* (
+  request: LLMRequest,
+  body: Record<string, unknown>,
+) {
+  // The HTTP body overlay is merged after protocol lowering; check the request that will actually be sent.
+  const effective = mergeJsonRecords(body, request.http?.body)
+  const config = effective?.toolConfig
+  const choice = ProviderShared.isRecord(config) ? config.toolChoice : undefined
+  if (ProviderShared.isRecord(choice) && ("any" in choice || "tool" in choice))
+    return yield* ProviderShared.invalidRequest(
+      "Bedrock Converse Claude Sonnet 5.5 does not support forced tool choice; use auto instead",
+    )
+  const additional = effective?.additionalModelRequestFields
+  const thinking = ProviderShared.isRecord(additional) ? additional.thinking : undefined
+  if (ProviderShared.isRecord(thinking) && thinking.type === "enabled")
+    return yield* ProviderShared.invalidRequest(
+      "Bedrock Converse Claude Sonnet 5.5 does not support manual thinking budgets; use adaptive thinking instead",
+    )
+  if (ProviderShared.isRecord(thinking) && thinking.type === "disabled")
+    return yield* ProviderShared.invalidRequest(
+      "Bedrock Converse Claude Sonnet 5.5 does not support disabled thinking; use between_tools instead",
+    )
+  if (
+    ProviderShared.isRecord(thinking) &&
+    thinking.type === "between_tools" &&
+    ("budget_tokens" in thinking || "block_binding" in thinking || "display" in thinking)
+  )
+    return yield* ProviderShared.invalidRequest(
+      "Bedrock Converse Claude Sonnet 5.5 between_tools does not accept a budget, block binding, or display",
+    )
+  const output = ProviderShared.isRecord(additional) ? additional.output_config : undefined
+  if (
+    ProviderShared.isRecord(thinking) &&
+    thinking.type === "between_tools" &&
+    ProviderShared.isRecord(output) &&
+    (output.effort === "xhigh" || output.effort === "max")
+  )
+    return yield* ProviderShared.invalidRequest(
+      "Bedrock Converse Claude Sonnet 5.5 between_tools does not support xhigh or max effort; use adaptive thinking",
+    )
+  const inference = effective?.inferenceConfig
+  if (ProviderShared.isRecord(inference) && inference.temperature !== undefined && inference.temperature !== 1)
+    return yield* ProviderShared.invalidRequest(
+      "Bedrock Converse Claude Sonnet 5.5 does not support non-default temperature; omit temperature instead",
+    )
+  // AWS's Claude parameter reference documents 0.999 for top_p, while Anthropic's API uses 1.
+  if (
+    ProviderShared.isRecord(inference) &&
+    inference.topP !== undefined &&
+    inference.topP !== 1 &&
+    inference.topP !== 0.999
+  )
+    return yield* ProviderShared.invalidRequest(
+      "Bedrock Converse Claude Sonnet 5.5 does not support non-default topP; omit topP instead",
+    )
+  if (ProviderShared.isRecord(additional) && additional.top_k !== undefined && additional.top_k !== 0)
+    return yield* ProviderShared.invalidRequest(
+      "Bedrock Converse Claude Sonnet 5.5 does not support non-default top_k; omit topK instead",
+    )
 })
 
 // =============================================================================
