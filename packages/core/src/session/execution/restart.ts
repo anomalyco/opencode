@@ -171,7 +171,17 @@ export const layer = (options?: Options) =>
           title: recovery.description,
           notificationID: background.notificationID,
           recovery,
-          run: SubagentCompletion.finalText({ sessions, jobs, sessionID: recovery.childSessionID }),
+          // Resume through the layer-provided execution, not the global Session
+          // service, so recovery drains via the same execution instance that
+          // owns this sweep.
+          run: SubagentCompletion.finalText({
+            sessions: {
+              resume: (sessionID) => execution.resume(sessionID),
+              messages: sessions.messages,
+            },
+            jobs,
+            sessionID: recovery.childSessionID,
+          }),
         })
         yield* jobs.background(background.id)
         yield* jobs.wait({ id: background.id }).pipe(
