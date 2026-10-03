@@ -223,6 +223,7 @@ export function createChildStoreManager(input: {
             status: "loading" as const,
             agent: [],
             command: [],
+            skill: [],
             get reference() {
               return referenceQuery.isLoading ? [] : (referenceQuery.data ?? [])
             },

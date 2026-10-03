@@ -34,6 +34,7 @@ export type State = {
   status: "loading" | "partial" | "complete"
   agent: Agent[]
   command: CommandInfo[]
+  skill: { name: string; description?: string }[]
   reference: ReferenceInfo[]
   project: string
   projectMeta: ProjectMeta | undefined

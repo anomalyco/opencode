@@ -43,6 +43,7 @@ function directoryState() {
     status: "loading",
     agent: [],
     command: [],
+    skill: [],
     reference: [],
     project: "",
     projectMeta: undefined,

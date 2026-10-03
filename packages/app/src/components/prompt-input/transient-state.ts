@@ -6,6 +6,7 @@ export type PromptInputTransientState = {
   popover: "at" | "slash" | null
   slashMenu: boolean
   slashMenuQuery: string
+  slashKind: "command" | "skill"
   historyIndex: number
   savedPrompt: PromptHistoryEntry | null
   placeholder: number
@@ -19,6 +20,7 @@ function resetPromptInputTransientState(setStore: SetStoreFunction<PromptInputTr
     popover: null,
     slashMenu: false,
     slashMenuQuery: "",
+    slashKind: "command",
     historyIndex: -1,
     savedPrompt: null,
     draggingType: null,
@@ -32,6 +34,7 @@ export function createPromptInputTransientState(identity: Accessor<unknown>, pla
     popover: null,
     slashMenu: false,
     slashMenuQuery: "",
+    slashKind: "command",
     historyIndex: -1,
     savedPrompt: null,
     placeholder,

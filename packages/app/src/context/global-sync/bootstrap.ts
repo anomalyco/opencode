@@ -295,6 +295,17 @@ export const loadCommands = (
     return api.list({ location: { directory } }).then((result) => result.data)
   })
 
+export const loadSkills = (
+  directory: string,
+  legacy?: OpencodeClient,
+  protocol?: Promise<ServerProtocol>,
+): Promise<{ name: string; description?: string }[]> =>
+  retry(async () => {
+    if ((await protocol) !== "v1" || !legacy) return []
+    const result = await legacy.app.skills({ directory })
+    return (result.data ?? []).map((skill) => ({ name: skill.name, description: skill.description }))
+  })
+
 export const loadPathQuery = (
   scope: ServerScope,
   directory: string | null,
@@ -437,6 +448,11 @@ export async function bootstrapDirectory(input: {
           loadCommands(input.directory, input.api.command, input.sdk, input.protocol).then((commands) =>
             input.setStore("command", commands),
           )),
+      input.mcp &&
+        (() =>
+          loadSkills(input.directory, input.sdk, input.protocol)
+            .then((skills) => input.setStore("skill", skills))
+            .catch(() => input.setStore("skill", []))),
       () =>
         input.queryClient.fetchQuery(
           loadReferencesQuery(input.scope, input.directory, input.api.reference, input.sdk, input.protocol),
