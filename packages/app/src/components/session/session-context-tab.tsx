@@ -179,14 +179,14 @@ export function SessionContextTab() {
 
   const breakdown = createMemo(
     on(
-      () => [ctx()?.message.id, ctx()?.input, messages().length, systemPrompt()],
+      () => [ctx()?.message.id, ctx()?.ctxInput, messages().length, systemPrompt()],
       () => {
         const c = ctx()
-        if (!c?.input) return []
+        if (!c?.ctxInput) return []
         return estimateSessionContextBreakdown({
           messages: messages(),
           parts: sync().data.part as Record<string, Part[] | undefined>,
-          input: c.input,
+          input: c.ctxInput,
           systemPrompt: systemPrompt(),
         })
       },
@@ -201,15 +201,35 @@ export function SessionContextTab() {
     return language.t("context.breakdown.other")
   }
 
-  const stats = [
+  const sessionStats = [
     { label: "context.stats.session", value: () => info()?.title ?? params.id ?? "—" },
-    { label: "context.stats.messages", value: () => counts().all.toLocaleString(language.intl()) },
     { label: "context.stats.provider", value: providerLabel },
     { label: "context.stats.model", value: modelLabel },
+    {
+      label: "context.stats.messages",
+      value: () =>
+        `${counts().all.toLocaleString(language.intl())} ( ${counts().user.toLocaleString(language.intl())} / ${counts().assistant.toLocaleString(language.intl())} )`,
+    },
+    { label: "context.stats.totalTokens", value: () => formatter().number(ctx()?.sessTotal) },
+    { label: "context.stats.inputTokens", value: () => formatter().number(ctx()?.sessInput) },
+    { label: "context.stats.outputTokens", value: () => formatter().number(ctx()?.sessOutput) },
+    { label: "context.stats.reasoningTokens", value: () => formatter().number(ctx()?.sessReasoning) },
+    {
+      label: "context.stats.cacheTokens",
+      value: () =>
+        `${formatter().number(ctx()?.sessCacheRead)} / ${formatter().number(ctx()?.sessCacheWrite)}`,
+    },
+    { label: "context.stats.totalCost", value: cost },
+    { label: "context.stats.sessionCreated", value: () => formatter().time(info()?.time.created) },
+    { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
+  ] satisfies { label: string; value: () => JSX.Element }[]
+
+  const contextStats = [
     { label: "context.stats.limit", value: () => formatter().number(ctx()?.limit) },
-    { label: "context.stats.totalTokens", value: () => formatter().number(ctx()?.total) },
     { label: "context.stats.usage", value: () => formatter().percent(ctx()?.usage) },
-    { label: "context.stats.inputTokens", value: () => formatter().number(ctx()?.input) },
+    { label: "context.stats.totalTokens", value: () => formatter().number(ctx()?.ctxTotal) },
+    
+    { label: "context.stats.inputTokens", value: () => formatter().number(ctx()?.ctxInput) },
     { label: "context.stats.outputTokens", value: () => formatter().number(ctx()?.message.tokens.output) },
     { label: "context.stats.reasoningTokens", value: () => formatter().number(ctx()?.message.tokens.reasoning) },
     {
@@ -217,12 +237,8 @@ export function SessionContextTab() {
       value: () =>
         `${formatter().number(ctx()?.message.tokens.cache.read)} / ${formatter().number(ctx()?.message.tokens.cache.write)}`,
     },
-    { label: "context.stats.userMessages", value: () => counts().user.toLocaleString(language.intl()) },
-    { label: "context.stats.assistantMessages", value: () => counts().assistant.toLocaleString(language.intl()) },
-    { label: "context.stats.totalCost", value: cost },
-    { label: "context.stats.sessionCreated", value: () => formatter().time(info()?.time.created) },
-    { label: "context.stats.lastActivity", value: () => formatter().time(ctx()?.message.time.created) },
   ] satisfies { label: string; value: () => JSX.Element }[]
+
 
   const exportSession = async () => {
     const sessionID = params.id
@@ -308,10 +324,24 @@ export function SessionContextTab() {
       onScroll={handleScroll}
     >
       <div class="px-6 pt-4 pb-10 flex flex-col gap-10">
-        <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
-          <For each={stats}>
-            {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
-          </For>
+        <div class="flex flex-col gap-2">
+          <div class="text-14-regular text-text-weak">{"Session Stats:"}</div>
+          <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
+            <For each={sessionStats}>
+              {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
+            </For>
+          </div>
+        </div>
+        
+
+        <div class="flex flex-col gap-2">
+          <div class="h-0.5 w-full bg-border-base rounded-full" />
+          <div class="text-14-regular text-text-weak">{"Context Stats:"}</div>
+          <div class="grid grid-cols-1 @[32rem]:grid-cols-2 gap-4">
+            <For each={contextStats}>
+              {(stat) => <Stat label={language.t(stat.label as Parameters<typeof language.t>[0])} value={stat.value()} />}
+            </For>
+          </div>
         </div>
 
         <Show when={breakdown().length > 0}>

@@ -588,7 +588,6 @@ export const dict = {
     "OpenCode mit über 75 Anbietern verbinden, um weitere Modelle wie Claude, GPT, Gemini und andere zu nutzen",
   "session.tab.session": "Sitzung",
   "session.tab.review": "Überprüfung",
-  "session.tab.context": "Kontext",
   "session.tab.unknown": "Unbekannte Sitzung",
   "session.panel.reviewAndFiles": "Überprüfung und Dateien",
   "session.error.notFound": "Diese Sitzung wurde nicht gefunden",
