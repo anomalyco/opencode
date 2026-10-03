@@ -1,0 +1,21 @@
+{
+  "name": "diff-color-fixture",
+  "version": "1.0.0",
+  "private": true,
+  "settings": {
+    "theme": "light",
+    "fontSize": 13,
+    "lineHeight": 20,
+    "wrap": false,
+    "tabs": ["review", "files", "terminal"]
+  },
+  "features": {
+    "inlineHighlights": true,
+    "foldUnchanged": true,
+    "splitView": false
+  },
+  "limits": {
+    "maxFiles": 100,
+    "maxLineLength": 1000
+  }
+}

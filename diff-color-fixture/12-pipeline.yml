@@ -1,0 +1,19 @@
+name: review
+on:
+  push:
+    branches: [v2]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install
+        run: bun install
+      - name: Check
+        run: bun run check
+        env:
+          CI: true
+          LOG_LEVEL: info

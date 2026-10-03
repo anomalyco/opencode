@@ -1,0 +1,176 @@
+{
+  "name": "Reference",
+  "readonly": true,
+  "enabled": true,
+  "disabledGroups": {},
+  "slots": {
+    "add-row": {
+      "light": {
+        "kind": "token",
+        "token": "v2-green-600",
+        "alpha": 5
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-green-800",
+        "alpha": 10
+      }
+    },
+    "add-gutter": {
+      "light": {
+        "kind": "token",
+        "token": "v2-green-600",
+        "alpha": 5
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-green-800",
+        "alpha": 10
+      }
+    },
+    "add-inline": {
+      "light": {
+        "kind": "token",
+        "token": "v2-green-600",
+        "alpha": 20
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-green-600",
+        "alpha": 40
+      }
+    },
+    "add-bar": {
+      "light": {
+        "kind": "token",
+        "token": "v2-green-900",
+        "alpha": 100
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-green-400",
+        "alpha": 100
+      }
+    },
+    "add-number": {
+      "light": {
+        "kind": "token",
+        "token": "v2-green-900",
+        "alpha": 100
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-green-400",
+        "alpha": 100
+      }
+    },
+    "del-row": {
+      "light": {
+        "kind": "token",
+        "token": "v2-red-600",
+        "alpha": 5
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-red-600",
+        "alpha": 10
+      }
+    },
+    "del-gutter": {
+      "light": {
+        "kind": "token",
+        "token": "v2-red-600",
+        "alpha": 5
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-red-600",
+        "alpha": 10
+      }
+    },
+    "del-inline": {
+      "light": {
+        "kind": "token",
+        "token": "v2-red-600",
+        "alpha": 20
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-red-600",
+        "alpha": 40
+      }
+    },
+    "del-bar": {
+      "light": {
+        "kind": "token",
+        "token": "v2-red-800",
+        "alpha": 100
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-red-500",
+        "alpha": 100
+      }
+    },
+    "del-number": {
+      "light": {
+        "kind": "token",
+        "token": "v2-red-800",
+        "alpha": 100
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-red-500",
+        "alpha": 100
+      }
+    },
+    "number": {
+      "light": {
+        "kind": "token",
+        "token": "v2-text-text-faint",
+        "alpha": 100
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-text-text-faint",
+        "alpha": 100
+      }
+    },
+    "fold-text": {
+      "light": {
+        "kind": "token",
+        "token": "v2-text-text-faint",
+        "alpha": 100
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-text-text-faint",
+        "alpha": 100
+      }
+    },
+    "add-inline-text": {
+      "light": {
+        "kind": "token",
+        "token": "v2-green-1200",
+        "alpha": 100
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-text-text-base",
+        "alpha": 100
+      }
+    },
+    "del-inline-text": {
+      "light": {
+        "kind": "token",
+        "token": "v2-red-1200",
+        "alpha": 100
+      },
+      "dark": {
+        "kind": "token",
+        "token": "v2-text-text-base",
+        "alpha": 100
+      }
+    }
+  }
+}

@@ -1,0 +1,2 @@
+First line
+Last line without trailing newline

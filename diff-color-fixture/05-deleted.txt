@@ -1,0 +1,4 @@
+This entire tracked file will be deleted after the baseline commit.
+Only deletion tint should be present.
+No syntax colors should compete with this text.
+Last deleted row.
