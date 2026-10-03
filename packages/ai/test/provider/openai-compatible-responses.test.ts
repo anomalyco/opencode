@@ -216,23 +216,63 @@ describe("Open Responses-compatible route", () => {
     }),
   )
 
-  it.effect("flattens tool namespaces in history", () =>
+  it.effect("keeps declared tool names through flattened streaming and history replay", () =>
     Effect.gen(function* () {
       const model = configure({ apiKey: "test-key", baseURL: "https://responses.example.test/v1" }).model(
         "example-model",
       )
+      const tools = [
+        {
+          type: "namespace" as const,
+          name: "crm",
+          tools: [
+            {
+              type: "namespace" as const,
+              name: "orders",
+              tools: [ToolDefinition.make({ name: "list", description: "List orders", inputSchema: {} })],
+            },
+          ],
+        },
+      ]
+      const item = { type: "function_call", id: "fc_1", call_id: "call_1", name: "crm_orders_list", arguments: "" }
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "List orders.", tools })).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              { type: "response.output_item.added", output_index: 0, item },
+              { type: "response.output_item.done", output_index: 0, item: { ...item, arguments: "{}" } },
+              { type: "response.completed", response: { id: "resp_1" } },
+            ),
+          ),
+        ),
+      )
+
+      expect(response.events.filter((event) => event.type.startsWith("tool-"))).toEqual([
+        expect.objectContaining({ type: "tool-input-start", name: "list", namespace: "crm.orders" }),
+        expect.objectContaining({ type: "tool-input-end", name: "list", namespace: "crm.orders" }),
+        expect.objectContaining({ type: "tool-call", name: "list", namespace: "crm.orders", input: {} }),
+      ])
+
       const prepared = yield* compileRequest(
         LLM.request({
           model,
+          tools,
           messages: [
-            Message.assistant({ type: "tool-call", id: "call_1", name: "lookup", namespace: "crm", input: {} }),
-            Message.tool({ id: "call_1", name: "lookup", namespace: "crm", result: "done", resultType: "text" }),
+            response.message,
+            Message.tool({ id: "call_1", name: "list", namespace: "crm.orders", result: "done", resultType: "text" }),
           ],
         }),
       )
 
       expect(prepared.body.input).toEqual([
-        { type: "function_call", call_id: "call_1", name: "crm_lookup", namespace: undefined, arguments: "{}" },
+        {
+          type: "function_call",
+          id: "fc_1",
+          call_id: "call_1",
+          name: "crm_orders_list",
+          namespace: undefined,
+          arguments: "{}",
+        },
         { type: "function_call_output", call_id: "call_1", output: "done" },
       ])
     }),

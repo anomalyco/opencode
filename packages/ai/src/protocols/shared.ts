@@ -9,13 +9,11 @@ import {
   AIError,
   LLMRequest,
   Message,
-  ToolDefinition,
   type ContentPart,
   type MediaPart,
   type OpenString,
   type ProviderID,
   type TextPart,
-  type ToolEntry,
   type ToolResultPart,
 } from "../schema/index.js"
 import { Json, decodeJson, encodeJson } from "../utils/json.js"
@@ -286,38 +284,6 @@ export const unsupportedOperation = (input: {
       cause: input.cause,
     }),
   })
-
-/**
- * Lower namespaces to flat definitions for protocols without a native
- * namespace construct. Leaf names join their namespace path with `_` because
- * `.` is not broadly accepted in provider tool names.
- */
-export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string> = []) => {
-  const flat = tools.flatMap((tool): ReadonlyArray<ToolDefinition> => {
-    if (tool.type === "namespace") return flattenTools(tool.tools, [...path, tool.name])
-    if (path.length === 0) return [tool]
-    return [new ToolDefinition({ ...tool, name: [...path, tool.name].join("_") })]
-  })
-  return [...new Map(flat.map((tool) => [tool.name, tool])).values()]
-}
-
-export const flattenToolRequest = (request: LLMRequest) => {
-  const messages = request.messages.map((message) => {
-    const content = message.content.map((part) => {
-      if ((part.type !== "tool-call" && part.type !== "tool-result") || part.namespace === undefined) return part
-      return { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
-    })
-    return content.every((part, index) => part === message.content[index])
-      ? message
-      : new Message({ ...message, content })
-  })
-  return {
-    tools: flattenTools(request.tools),
-    request: messages.every((message, index) => message === request.messages[index])
-      ? request
-      : LLMRequest.update(request, { messages }),
-  }
-}
 
 export const matchToolChoice = <Auto, None, Required, Tool>(
   route: string,

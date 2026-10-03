@@ -67,40 +67,39 @@ const adapter = {
 
 const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: LLMRequest) {
   const key = request.model.route.providerMetadataKey ?? String(request.model.provider)
-  const projected = ProviderShared.flattenToolRequest(
-    LLMRequest.update(request, {
-      messages: request.messages.map((message) =>
-        Message.make({
-          ...message,
-          content: message.content.map((part) => {
-            if (
-              part.type !== "tool-result" ||
-              !part.providerExecuted ||
-              part.name !== "image_generation" ||
-              part.result.type !== "content" ||
-              part.providerMetadata?.[key]?.itemId !== part.id
-            )
-              return part
-            // Meta's signed image ID carries edit state; replay the handle, not the image bytes as a user message.
-            return ToolResultPart.make({
-              ...part,
-              result: {
-                type: "json",
-                value: { type: "image_generation_call", id: part.id, status: "completed", result: null },
-              },
-            })
-          }),
+  const tools = request.tools.filter((tool) => tool.type === "tool")
+  const projected = LLMRequest.update(request, {
+    messages: request.messages.map((message) =>
+      Message.make({
+        ...message,
+        content: message.content.map((part) => {
+          if (
+            part.type !== "tool-result" ||
+            !part.providerExecuted ||
+            part.name !== "image_generation" ||
+            part.result.type !== "content" ||
+            part.providerMetadata?.[key]?.itemId !== part.id
+          )
+            return part
+          // Meta's signed image ID carries edit state; replay the handle, not the image bytes as a user message.
+          return ToolResultPart.make({
+            ...part,
+            result: {
+              type: "json",
+              value: { type: "image_generation_call", id: part.id, status: "completed", result: null },
+            },
+          })
         }),
-      ),
-    }),
-  )
+      }),
+    ),
+  })
   return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))({
-    ...(yield* OpenResponses.lowerConversation(projected.request, adapter)),
+    ...(yield* OpenResponses.lowerConversation(projected, adapter)),
     ...OpenResponses.lowerGeneration(request),
     tools:
-      projected.tools.length === 0
+      tools.length === 0
         ? undefined
-        : yield* Effect.forEach(projected.tools, (tool) =>
+        : yield* Effect.forEach(tools, (tool) =>
             Effect.gen(function* () {
               if (tool.native === undefined) return yield* OpenResponses.lowerTool(NAME, tool)
               return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(tool.native.meta)

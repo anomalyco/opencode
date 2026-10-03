@@ -403,11 +403,11 @@ export const fromRequest = Effect.fn("MistralChat.fromRequest")(function* (reque
         tool: (name) => ({ type: "function" as const, function: { name } }),
       })
     : undefined
-  const flattened = ProviderShared.flattenToolRequest(request)
+  const tools = request.tools.filter((tool) => tool.type === "tool")
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(flattened.request),
-    tools: flattened.tools.length > 0 ? flattened.tools.map(lowerTool) : undefined,
+    messages: yield* lowerMessages(request),
+    tools: tools.length > 0 ? tools.map(lowerTool) : undefined,
     tool_choice: toolChoice,
     stream: true as const,
     max_tokens: request.generation?.maxTokens,

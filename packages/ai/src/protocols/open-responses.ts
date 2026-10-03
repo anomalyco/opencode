@@ -816,11 +816,11 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
-  const projected = ProviderShared.flattenToolRequest(request)
+  const tools = request.tools.filter((tool) => tool.type === "tool")
   return {
-    ...(yield* lowerConversation(projected.request, adapter)),
+    ...(yield* lowerConversation(request, adapter)),
     ...lowerGeneration(request),
-    tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter),
+    tools: tools.length === 0 ? undefined : yield* lowerTools(tools, adapter),
     tool_choice:
       allowedToolChoice(request) ??
       (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice) : undefined),

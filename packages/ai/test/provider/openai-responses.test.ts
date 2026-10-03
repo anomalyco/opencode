@@ -2432,17 +2432,28 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("preserves tool namespaces through streaming and history replay", () =>
+  it.effect("keeps declared tool names through native streaming and history replay", () =>
     Effect.gen(function* () {
+      const tools = [
+        ToolNamespace.make({
+          name: "crm",
+          tools: [
+            ToolNamespace.make({
+              name: "orders",
+              tools: [ToolDefinition.make({ name: "list", description: "List orders", inputSchema: {} })],
+            }),
+          ],
+        }),
+      ]
       const item = {
         type: "function_call",
         id: "fc_1",
         call_id: "call_1",
         namespace: "crm",
-        name: "lookup",
+        name: "orders_list",
         arguments: "",
       }
-      const response = yield* LLMClient.generate(request).pipe(
+      const response = yield* LLMClient.generate(LLM.request({ model, prompt: "List orders.", tools })).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -2466,21 +2477,22 @@ describe("OpenAI Responses route", () => {
 
       const toolEvents = response.events.filter((event) => event.type.startsWith("tool-"))
       expect(toolEvents).toEqual([
-        expect.objectContaining({ type: "tool-input-start", name: "lookup", namespace: "crm" }),
-        expect.objectContaining({ type: "tool-input-delta", name: "lookup", namespace: "crm" }),
-        expect.objectContaining({ type: "tool-input-end", name: "lookup", namespace: "crm" }),
-        expect.objectContaining({ type: "tool-call", name: "lookup", namespace: "crm", input: { id: "123" } }),
+        expect.objectContaining({ type: "tool-input-start", name: "list", namespace: "crm.orders" }),
+        expect.objectContaining({ type: "tool-input-delta", name: "list", namespace: "crm.orders" }),
+        expect.objectContaining({ type: "tool-input-end", name: "list", namespace: "crm.orders" }),
+        expect.objectContaining({ type: "tool-call", name: "list", namespace: "crm.orders", input: { id: "123" } }),
       ])
       expect(response.message.content).toEqual([
-        expect.objectContaining({ type: "tool-call", name: "lookup", namespace: "crm", input: { id: "123" } }),
+        expect.objectContaining({ type: "tool-call", name: "list", namespace: "crm.orders", input: { id: "123" } }),
       ])
 
       const prepared = yield* compileRequest(
         LLM.request({
           model,
+          tools,
           messages: [
             response.message,
-            Message.tool({ id: "call_1", name: "lookup", namespace: "crm", result: { customer: "Ada" } }),
+            Message.tool({ id: "call_1", name: "list", namespace: "crm.orders", result: { customer: "Ada" } }),
           ],
         }),
       )
@@ -2490,7 +2502,7 @@ describe("OpenAI Responses route", () => {
           id: "fc_1",
           call_id: "call_1",
           namespace: "crm",
-          name: "lookup",
+          name: "orders_list",
           arguments: '{"id":"123"}',
         },
         { type: "function_call_output", call_id: "call_1", output: '{"customer":"Ada"}' },

@@ -1,5 +1,6 @@
 import { Schema, type Effect } from "effect"
 import type { AIError, LanguageModelSanitizerCompatibility, LLMEvent, LLMRequest, ProtocolID } from "../schema/index.js"
+import type { NamespaceStyle } from "../tool-names.js"
 
 /**
  * The semantic API contract of one model server family.
@@ -45,6 +46,8 @@ export interface Protocol<Body, Frame, Event, State> {
   readonly supportsEffortUpdates?: (request: LLMRequest) => boolean
   /** Tool schema sanitizer for every model on this protocol unless the model's compatibility sets one; wrappers around another `body.from` must forward it. */
   readonly sanitizer?: LanguageModelSanitizerCompatibility
+  /** How `body.from` receives tool namespaces; defaults to `"flat"`. Wrappers around another `body.from` must forward it. */
+  readonly namespaces?: NamespaceStyle
 }
 
 export interface ProtocolBody<Body> {

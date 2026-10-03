@@ -95,7 +95,10 @@ export const protocol = Protocol.make({
 })
 
 export const compact = ResponsesCompaction.make(adapter, (request) =>
-  OpenResponses.lowerTools(ProviderShared.flattenTools(request.tools), adapter),
+  OpenResponses.lowerTools(
+    request.tools.filter((tool) => tool.type === "tool"),
+    adapter,
+  ),
 )
 
 export * as XAIResponses from "./xai-responses.js"

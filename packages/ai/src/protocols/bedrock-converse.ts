@@ -493,7 +493,7 @@ const applyThinkingBindingDefault = (request: LLMRequest, thinking: Readonly<Rec
 
 const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
-  const flattened = ProviderShared.flattenToolRequest(request)
+  const tools = request.tools.filter((tool) => tool.type === "tool")
   const generation = request.generation
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const maxTokens =
@@ -515,16 +515,16 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints(request.model.id)
   const toolConfig = (() => {
-    if (flattened.tools.length === 0) return undefined
+    if (tools.length === 0) return undefined
     return {
-      tools: lowerTools(breakpoints, flattened.tools),
+      tools: lowerTools(breakpoints, tools),
       // Converse has no native "none". Keep definitions stable for prompt
       // caching and omit only the unsupported choice.
       toolChoice,
     }
   })()
   const system = lowerSystem(breakpoints, request.system)
-  const messages = yield* lowerMessages(flattened.request, breakpoints)
+  const messages = yield* lowerMessages(request, breakpoints)
   if (breakpoints.dropped > 0) {
     yield* Effect.logWarning(
       `Bedrock Converse: dropped ${breakpoints.dropped} cache breakpoint(s); the API allows at most ${BedrockCache.BEDROCK_BREAKPOINT_CAP} per request.`,

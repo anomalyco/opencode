@@ -809,7 +809,6 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
       `OpenAI Chat reasoning field conflicts with reserved field ${reasoningField}`,
     )
   const generation = request.generation
-  const flattened = ProviderShared.flattenToolRequest(request)
   const provider = String(request.model.provider)
   const baseURL = request.model.route.endpoint.baseURL
   const detectedMaxTokensField = detectMaxTokensField(provider, baseURL)
@@ -822,16 +821,16 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const zaiToolStream =
     request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
   const hasHistory = hasToolHistory(request.messages)
-  const hasActiveTools = flattened.tools.length > 0
+  const tools = request.tools.filter((tool) => tool.type === "tool")
+  const hasActiveTools = tools.length > 0
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(flattened.request, options),
-    tools:
-      flattened.tools.length === 0
-        ? hasHistory
-          ? []
-          : undefined
-        : flattened.tools.map((tool) => lowerTool(tool, options, supportsStrictMode)),
+    messages: yield* lowerMessages(request, options),
+    tools: !hasActiveTools
+      ? hasHistory
+        ? []
+        : undefined
+      : tools.map((tool) => lowerTool(tool, options, supportsStrictMode)),
     tool_choice: hasActiveTools && request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     ...(supportsUsageInStreaming ? { stream_options: { include_usage: true } } : {}),
