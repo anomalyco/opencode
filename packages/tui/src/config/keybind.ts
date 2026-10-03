@@ -242,13 +242,16 @@ export const Definitions = {
 type KeybindName = keyof typeof Definitions
 const KeybindNames = new Set<string>(Object.keys(Definitions))
 
-export const KeybindOverrides = Schema.Struct(
-  Object.fromEntries(
-    Object.entries(Definitions).map(([name, item]) => [
-      name,
-      Schema.optional(BindingValueSchema).annotate({ description: item.description }),
-    ]),
-  ),
+const KeybindShape = Object.fromEntries(
+  Object.entries(Definitions).map(([name, item]) => [
+    name,
+    Schema.optional(BindingValueSchema).annotate({ description: item.description }),
+  ]),
+)
+
+export const KeybindOverrides = Schema.StructWithRest(
+  Schema.Struct(KeybindShape),
+  [Schema.Record(Schema.String, Schema.optional(BindingValueSchema))],
 ).annotate({ description: "TUI keybinding overrides" })
 export const Descriptions = Object.fromEntries(
   Object.entries(Definitions).map(([name, item]) => [name, item.description]),
@@ -425,7 +428,7 @@ const CommandDescriptions = Object.fromEntries(
   ]),
 ) as Record<string, string>
 
-export type Keybinds = { [K in KeybindName]: BindingValueSchema }
+export type Keybinds = { [K in KeybindName]: BindingValueSchema } & Record<string, BindingValueSchema>
 export type KeybindOverrides = Partial<Keybinds>
 export type BindingLookupView = {
   readonly bindings: readonly Binding<Renderable, KeyEvent>[]
@@ -449,18 +452,24 @@ export function defaultValue(name: KeybindName) {
 export function parse(keybinds: KeybindOverrides): Keybinds {
   const invalid = unknownKeys(keybinds)
   if (invalid.length) throw new Error(`Unrecognized keybind${invalid.length === 1 ? "" : "s"}: ${invalid.join(", ")}`)
-  return Object.fromEntries(
+  const known = Object.fromEntries(
     Object.entries(Definitions).map(([name, item]) => [
       name,
       decodeBindingValue(keybinds[name as KeybindName] ?? item.default),
     ]),
-  ) as Keybinds
+  )
+  const custom = Object.fromEntries(
+    Object.entries(keybinds)
+      .filter(([key]) => key.startsWith("/"))
+      .map(([key, value]) => [key, decodeBindingValue(value)]),
+  )
+  return { ...known, ...custom } as Keybinds
 }
 
 export const Keybinds = { parse }
 
 export function unknownKeys(input: object) {
-  return Object.keys(input).filter((key) => !KeybindNames.has(key))
+  return Object.keys(input).filter((key) => !KeybindNames.has(key) && !key.startsWith("/"))
 }
 
 export function bindingDefaults(): BindingDefaults<Renderable, KeyEvent> {
