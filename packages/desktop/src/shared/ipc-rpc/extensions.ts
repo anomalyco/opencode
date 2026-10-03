@@ -35,15 +35,20 @@ export const ExtensionFailure = Schema.Struct({ code: ExtensionErrorCode, messag
 export type ExtensionFailure = typeof ExtensionFailure.Type
 
 // Window DIPs from the renderer, zoom applied. Background is RGBA with every channel 0-255; corners
-// in that color mask the view's bottom edge to `radius`.
+// in that color mask the view's bottom edge to `radius`, redrawing the card's `border` ring along the arc.
 const channel = Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 255 }))
+const rgba = Schema.Tuple([channel, channel, channel, channel])
 export const ExtensionLayout = Schema.Struct({
   visible: Schema.Boolean,
   bounds: Schema.optionalKey(
     Schema.Struct({ x: Schema.Finite, y: Schema.Finite, width: Schema.Finite, height: Schema.Finite }),
   ),
-  background: Schema.optionalKey(Schema.Tuple([channel, channel, channel, channel])),
+  viewport: Schema.optionalKey(Schema.Struct({ width: Schema.Finite, height: Schema.Finite })),
+  background: Schema.optionalKey(rgba),
   radius: Schema.optionalKey(Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
+  border: Schema.optionalKey(
+    Schema.Struct({ color: rgba, width: Schema.Finite.check(Schema.isBetween({ minimum: 0, maximum: 10 })) }),
+  ),
 })
 
 export const ExtensionEndpoint = Schema.Struct({
