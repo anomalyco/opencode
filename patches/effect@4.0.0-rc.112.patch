@@ -1,0 +1,42 @@
+diff --git a/dist/RcMap.js b/dist/RcMap.js
+index 6e9a9ad04ec2c0fef0852cc0e6b3b1dba530a6f4..25941ed96695ef0272c2920fd6369848cdc03b0e 100644
+--- a/dist/RcMap.js
++++ b/dist/RcMap.js
+@@ -252,10 +252,12 @@ export const getOption = /*#__PURE__*/dual(2, (self, key) => Effect.uninterrupti
+ }));
+ const release = (self, key, entry) => Effect.withFiber(fiber => {
+   entry.refCount--;
++  const current = self.state._tag === "Open" ? MutableHashMap.get(self.state.map, key) : undefined;
++  const retained = current?._tag === "Some" && current.value === entry;
+   if (entry.refCount > 0) {
+     return Effect.void;
+-  } else if (self.state._tag === "Closed" || !MutableHashMap.has(self.state.map, key) || Duration.isZero(entry.idleTimeToLive)) {
+-    if (self.state._tag === "Open") {
++  } else if (self.state._tag === "Closed" || !retained || Duration.isZero(entry.idleTimeToLive)) {
++    if (self.state._tag === "Open" && retained) {
+       MutableHashMap.remove(self.state.map, key);
+     }
+     return Scope.close(entry.scope, Exit.void);
+diff --git a/src/RcMap.ts b/src/RcMap.ts
+index 67dcc147389a8fd0e8aae21b69ef58f44c295958..9c66319ddd58b0db3f84d7e5026210061e541013 100644
+--- a/src/RcMap.ts
++++ b/src/RcMap.ts
+@@ -736,14 +736,16 @@ export const getOption: {
+ const release = <K, A, E>(self: RcMap<K, A, E>, key: K, entry: State.Entry<A, E>) =>
+   Effect.withFiber((fiber) => {
+     entry.refCount--
++    const current = self.state._tag === "Open" ? MutableHashMap.get(self.state.map, key) : undefined
++    const retained = current?._tag === "Some" && current.value === entry
+     if (entry.refCount > 0) {
+       return Effect.void
+     } else if (
+       self.state._tag === "Closed"
+-      || !MutableHashMap.has(self.state.map, key)
++      || !retained
+       || Duration.isZero(entry.idleTimeToLive)
+     ) {
+-      if (self.state._tag === "Open") {
++      if (self.state._tag === "Open" && retained) {
+         MutableHashMap.remove(self.state.map, key)
+       }
+       return Scope.close(entry.scope, Exit.void)
