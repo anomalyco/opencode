@@ -106,7 +106,7 @@ export function createServerProjects<T extends ServerProjectState>(input: {
           closed.filter((worktree) => pathKey(worktree) !== key),
         )
       }
-      if (current().some((project) => project.worktree === directory)) return
+      if (current().some((project) => pathKey(project.worktree) === key)) return
       setStore("projects", scope, [{ worktree: directory, expanded: true }, ...current()])
     },
     // User-initiated close: removes the project and records it in recently closed.

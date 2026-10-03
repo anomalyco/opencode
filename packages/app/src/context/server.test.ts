@@ -197,6 +197,24 @@ describe("createServerProjects", () => {
       dispose()
     })
   })
+
+  test("dedupes open projects by normalized path", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("/repo/")
+      projects.open("/repo")
+      projects.open("C:\\repo\\")
+      projects.open("C:\\repo")
+      expect(projects.list()).toEqual([
+        { worktree: "C:\\repo\\", expanded: true },
+        { worktree: "/repo/", expanded: true },
+      ])
+      dispose()
+    })
+  })
 })
 
 describe("migrateCanonicalLocalServerState", () => {
