@@ -569,4 +569,36 @@ describe("tool.registry", () => {
       expect(ids).toContain("cowsay")
     }),
   )
+
+  it.instance("tolerates an invalid custom tool file throwing compilation or import errors", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const opencode = path.join(test.directory, ".opencode")
+      const tools = path.join(opencode, "tools")
+      yield* Effect.promise(() => fs.mkdir(tools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "invalid-tool.ts"),
+          "import { invalid } from 'non-existent-module-abc-123'\nexport default {}",
+        ),
+      )
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(tools, "valid-tool.ts"),
+          [
+            "export default {",
+            "  description: 'valid custom tool',",
+            "  args: {},",
+            "  execute: async () => 'ok',",
+            "}",
+          ].join("\n"),
+        ),
+      )
+      const registry = yield* ToolRegistry.Service
+      const ids = yield* registry.ids()
+      expect(ids).not.toContain("invalid-tool")
+      expect(ids).toContain("valid-tool")
+      expect(ids).toContain("read")
+    }),
+  )
 })
