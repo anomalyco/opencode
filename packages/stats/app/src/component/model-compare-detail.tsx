@@ -20,6 +20,7 @@ import {
 } from "../routes/compare-cards"
 import { ComparisonRadar } from "../routes/compare-radar"
 import {
+  catalogLabPath,
   catalogSlug,
   findModelCatalogEntry,
   formatCatalogLabName,
@@ -48,6 +49,7 @@ import {
 } from "../lib/comparison-pages"
 import { baseUrl } from "../lib/language"
 import { runStatsEffect } from "../stats-runtime"
+import { breadcrumbList, FormatLinks, JsonLd } from "./agent-meta"
 import { NotFoundMeta } from "./not-found-meta"
 
 const compareHeaderLinks: readonly HeaderLink[] = [
@@ -62,6 +64,7 @@ const compareFooterLinks: readonly HeaderLink[] = [
   { href: `${import.meta.env.BASE_URL}compare`, label: "Model Compare" },
   { href: `${import.meta.env.BASE_URL}#top-models`, label: "Top Models" },
   { href: `${import.meta.env.BASE_URL}#token-cost`, label: "Token Cost" },
+  { href: `${import.meta.env.BASE_URL}#methodology`, label: "Methodology" },
 ]
 const heroLabs = [
   { lab: "deepseek", label: "DeepSeek" },
@@ -204,21 +207,24 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
   const syncComparisonScroll = (source: HTMLDivElement, target: HTMLDivElement | undefined) => {
     if (target && target.scrollLeft !== source.scrollLeft) target.scrollLeft = source.scrollLeft
   }
-  const structuredData = createMemo(() =>
-    JSON.stringify({
-      "@context": "https://schema.org",
-      "@type": "WebPage",
-      name: title(),
-      description: description(),
-      url: canonicalUrl(),
-      about: models().map((model) => ({
-        "@type": "SoftwareApplication",
-        name: model.name,
-        applicationCategory: "AI model",
-        ...(model.labName ? { provider: model.labName } : {}),
-      })),
-    }),
-  )
+  const structuredData = createMemo(() => ({
+    "@context": "https://schema.org",
+    "@type": "WebPage",
+    name: title(),
+    description: description(),
+    url: canonicalUrl(),
+    about: models().map((model) => ({
+      "@type": "SoftwareApplication",
+      name: model.name,
+      applicationCategory: "AI model",
+      ...(model.labName ? { provider: model.labName } : {}),
+    })),
+    breadcrumb: breadcrumbList([
+      { name: "Data", url: new URL("/data/", baseUrl).toString() },
+      { name: "Compare", url: new URL("/data/compare", baseUrl).toString() },
+      { name: `${models()[0].name} vs ${models()[1].name}`, url: canonicalUrl() },
+    ]),
+  }))
   const updateThemePreference = (preference: ThemePreference) => {
     applyThemePreference(preference)
     setThemePreference(preference)
@@ -256,7 +262,8 @@ export default function ModelCompareDetailPage(props: ModelCompareDetailPageProp
           <Meta name="twitter:card" content="summary" />
           <Meta name="twitter:title" content={title()} />
           <Meta name="twitter:description" content={description()} />
-          <script type="application/ld+json">{structuredData()}</script>
+          <FormatLinks path={canonicalPath()} json={false} />
+          <JsonLd data={structuredData()} />
         </Show>
       </Show>
       <Header
@@ -348,9 +355,8 @@ function ComparisonHero(props: {
       </nav>
       <div data-slot="compare-detail-hero-grid">
         <h1 aria-label={`Compare ${props.models.map((model) => model.name).join(", ")}`}>
-          <span>Compare</span>
-          <HeroModelStack />
-          <span>AI models</span>
+          <span>Compare</span> <HeroModelStack /> <span>AI models</span>
+          <span data-slot="visually-hidden">: {props.models.map((model) => model.name).join(" vs ")}</span>
         </h1>
         <div data-slot="compare-detail-actions">
           <button
@@ -1033,7 +1039,7 @@ function comparisonModelLabel(model: ComparisonModel) {
 
 function providerDetailCell(model: ComparisonModel): ComparisonDetailCell {
   if (!model.labName) return textCell("")
-  return linkedTextCell(model.stats?.author ?? model.labName ?? "", labHref(model.lab))
+  return linkedTextCell(model.stats?.author ?? model.labName ?? "", catalogLabPath(model.lab))
 }
 
 function textCell(value: string): ComparisonDetailCell {
@@ -1078,10 +1084,6 @@ function retentionCell(value: RetentionEntry | null | undefined): ComparisonDeta
 function tokenCell(value: number | undefined, trend: number | undefined): ComparisonDetailCell {
   if (value === undefined) return { value: "No usage" }
   return { value: formatTokens(value), score: value, trend }
-}
-
-function labHref(lab: string) {
-  return `${import.meta.env.BASE_URL}${catalogSlug(lab)}`
 }
 
 function modelSearchText(model: ModelCatalogEntry) {

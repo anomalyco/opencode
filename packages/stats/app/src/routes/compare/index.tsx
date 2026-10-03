@@ -90,6 +90,7 @@ export default function ModelCompareIndex() {
     { href: `${import.meta.env.BASE_URL}#market-share`, label: i18n.t("nav.marketShare") },
     { href: `${import.meta.env.BASE_URL}#token-cost`, label: i18n.t("nav.tokenCost") },
     { href: `${import.meta.env.BASE_URL}#session-cost`, label: i18n.t("nav.sessionCost") },
+    { href: `${import.meta.env.BASE_URL}#methodology`, label: i18n.t("methodology.title") },
   ])
   const updateThemePreference = (preference: ThemePreference) => {
     applyThemePreference(preference)

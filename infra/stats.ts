@@ -1,93 +1,10 @@
-import { lakeCluster, tableBucket } from "./lake"
 import { EMAILOCTOPUS_API_KEY } from "./app"
 import { domain } from "./stage"
 
-////////////////
-// LAKE
-////////////////
-
-const inferenceNamespace = new aws.s3tables.Namespace("LakeInferenceNamespace", {
-  namespace: "inference",
-  tableBucketArn: tableBucket.arn,
-})
-
-new aws.s3tables.Table(
-  "LakeInferenceEventTable",
-  {
-    name: "event",
-    namespace: inferenceNamespace.namespace,
-    tableBucketArn: inferenceNamespace.tableBucketArn,
-    format: "ICEBERG",
-    metadata: {
-      iceberg: {
-        schema: {
-          fields: [
-            { name: "event_timestamp", type: "string", required: false },
-            { name: "event_date", type: "string", required: false },
-            { name: "event_type", type: "string", required: false },
-            { name: "dataset", type: "string", required: false },
-            { name: "cf_continent", type: "string", required: false },
-            { name: "cf_country", type: "string", required: false },
-            { name: "cf_city", type: "string", required: false },
-            { name: "cf_region", type: "string", required: false },
-            { name: "cf_latitude", type: "double", required: false },
-            { name: "cf_longitude", type: "double", required: false },
-            { name: "cf_timezone", type: "string", required: false },
-            { name: "duration", type: "double", required: false },
-            { name: "request_length", type: "long", required: false },
-            { name: "status", type: "int", required: false },
-            { name: "ip", type: "string", required: false },
-            { name: "is_stream", type: "boolean", required: false },
-            { name: "session", type: "string", required: false },
-            { name: "request", type: "string", required: false },
-            { name: "client", type: "string", required: false },
-            { name: "user_agent", type: "string", required: false },
-            { name: "model", type: "string", required: false },
-            { name: "model_tier", type: "string", required: false },
-            { name: "model_variant", type: "string", required: false },
-            { name: "source", type: "string", required: false },
-            { name: "provider", type: "string", required: false },
-            { name: "provider_model", type: "string", required: false },
-            { name: "llm_error_code", type: "int", required: false },
-            { name: "llm_error_message", type: "string", required: false },
-            { name: "error_response", type: "string", required: false },
-            { name: "error_type", type: "string", required: false },
-            { name: "error_message", type: "string", required: false },
-            { name: "error_cause", type: "string", required: false },
-            { name: "error_cause2", type: "string", required: false },
-            { name: "api_key", type: "string", required: false },
-            { name: "workspace", type: "string", required: false },
-            { name: "user_id", type: "string", required: false },
-            { name: "is_subscription", type: "boolean", required: false },
-            { name: "subscription", type: "string", required: false },
-            { name: "response_length", type: "long", required: false },
-            { name: "time_to_first_byte", type: "long", required: false },
-            { name: "timestamp_first_byte", type: "long", required: false },
-            { name: "timestamp_last_byte", type: "long", required: false },
-            { name: "tokens_input", type: "long", required: false },
-            { name: "tokens_output", type: "long", required: false },
-            { name: "tokens_reasoning", type: "long", required: false },
-            { name: "tokens_cache_read", type: "long", required: false },
-            { name: "tokens_cache_write_5m", type: "long", required: false },
-            { name: "tokens_cache_write_1h", type: "long", required: false },
-            { name: "cost_input_microcents", type: "long", required: false },
-            { name: "cost_output_microcents", type: "long", required: false },
-            { name: "cost_cache_read_microcents", type: "long", required: false },
-            { name: "cost_cache_write_microcents", type: "long", required: false },
-            { name: "cost_total_microcents", type: "long", required: false },
-            { name: "cost_input", type: "long", required: false },
-            { name: "cost_output", type: "long", required: false },
-            { name: "cost_cache_read", type: "long", required: false },
-            { name: "cost_cache_write_5m", type: "long", required: false },
-            { name: "cost_cache_write_1h", type: "long", required: false },
-            { name: "cost_total", type: "long", required: false },
-          ],
-        },
-      },
-    },
-  },
-  { deleteBeforeReplace: $app.stage !== "production", ignoreChanges: ["metadata"] },
-)
+// Keep the deployed names and arguments: the R2 stats sync still uses this VPC
+// and cluster after the legacy lake is removed.
+const lakeVpc = new sst.aws.Vpc("LakeVpc")
+const lakeCluster = new sst.aws.Cluster("LakeCluster", { vpc: lakeVpc })
 
 ////////////////
 // DATABASE
@@ -170,6 +87,10 @@ const statsSyncConfig = new sst.Linkable("StatsSyncConfig", {
   },
 })
 
+// Comma-separated model IDs kept off the public stats site. A secret, so excluding
+// an unreleased model does not publish its name in git.
+const statsHiddenModels = new sst.Secret("StatsHiddenModels", "")
+
 const r2SqlAuthToken = new sst.Secret("R2SqlAuthToken")
 const r2Sql = new sst.Linkable("R2Sql", {
   properties: {
@@ -192,7 +113,7 @@ export const statSync = new sst.aws.Service("StatsSyncService", {
     dockerfile: "packages/stats/server/Dockerfile",
   },
   command: ["bun", "src/stat-sync.ts"],
-  link: [database, r2Sql, r2SqlAuthToken, statsSyncConfig],
+  link: [database, r2Sql, r2SqlAuthToken, statsHiddenModels, statsSyncConfig],
   scaling: {
     min: 1,
     max: 1,

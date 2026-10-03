@@ -29,6 +29,4 @@ COPY --from=pruner /app/out/full/ ./
 
 WORKDIR /app/packages/stats/server
 
-EXPOSE 3000
-
-CMD ["bun", "src/server.ts"]
+CMD ["bun", "src/stat-sync.ts"]
