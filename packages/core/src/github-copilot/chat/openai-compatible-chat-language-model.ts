@@ -465,15 +465,11 @@ export class OpenAICompatibleChatLanguageModel implements LanguageModelV3 {
 
             const delta = choice.delta
 
-            // Capture reasoning_opaque for Copilot multi-turn reasoning
+            // Capture reasoning_opaque for Copilot multi-turn reasoning.
+            // Models with interleaved thinking (Claude) emit a new value before
+            // each tool call, so a response can carry several. Keep the latest
+            // one, which is what the Copilot VS Code client replays.
             if (delta.reasoning_opaque) {
-              if (reasoningOpaque != null) {
-                throw new InvalidResponseDataError({
-                  data: delta,
-                  message:
-                    "Multiple reasoning_opaque values received in a single response. Only one thinking part per response is supported.",
-                })
-              }
               reasoningOpaque = delta.reasoning_opaque
             }
 

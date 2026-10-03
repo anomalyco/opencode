@@ -71,6 +71,16 @@ const FIXTURES = {
     `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{}","name":"read_file"},"id":"call_reasoning_only_2","index":1,"type":"function"}]}}],"created":1769917420,"id":"opaque-only","usage":{"completion_tokens":12,"prompt_tokens":123,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":135,"reasoning_tokens":0},"model":"gemini-3-flash-preview"}`,
     `data: [DONE]`,
   ],
+
+  // Interleaved thinking (Claude): a new reasoning_opaque arrives before each tool call,
+  // so a single response carries several of them.
+  multipleReasoningOpaque: [
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","reasoning_text":"Look at the readme first.\\n"}}],"created":1769917500,"id":"interleaved","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"claude-opus-5.5"}`,
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"filePath\\":\\"/README.md\\"}","name":"read_file"},"id":"call_first","index":0,"type":"function"}],"reasoning_opaque":"opaque-first"}}],"created":1769917501,"id":"interleaved","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"claude-opus-5.5"}`,
+    `data: {"choices":[{"index":0,"delta":{"content":null,"role":"assistant","reasoning_text":"Then the manifest.\\n"}}],"created":1769917502,"id":"interleaved","usage":{"completion_tokens":0,"prompt_tokens":0,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":0,"reasoning_tokens":0},"model":"claude-opus-5.5"}`,
+    `data: {"choices":[{"finish_reason":"tool_calls","index":0,"delta":{"content":null,"role":"assistant","tool_calls":[{"function":{"arguments":"{\\"filePath\\":\\"/package.json\\"}","name":"read_file"},"id":"call_second","index":1,"type":"function"}],"reasoning_opaque":"opaque-second"}}],"created":1769917503,"id":"interleaved","usage":{"completion_tokens":42,"prompt_tokens":1200,"prompt_tokens_details":{"cached_tokens":0},"total_tokens":1242,"reasoning_tokens":84},"model":"claude-opus-5.5"}`,
+    `data: [DONE]`,
+  ],
 }
 
 function createMockFetch(chunks: string[]) {
@@ -532,6 +542,30 @@ describe("doStream", () => {
 
     const rawChunks = parts.filter((p) => p.type === "raw")
     expect(rawChunks.length).toBeGreaterThan(0)
+  })
+  test("should keep the latest reasoning_opaque when a response carries several", async () => {
+    const mockFetch = createMockFetch(FIXTURES.multipleReasoningOpaque)
+    const model = createModel(mockFetch)
+
+    const { stream } = await model.doStream({
+      prompt: TEST_PROMPT,
+      includeRawChunks: false,
+    })
+
+    const parts = await convertReadableStreamToArray(stream)
+
+    expect(parts.filter((p) => p.type === "error")).toEqual([])
+
+    expect(parts.filter((p) => p.type === "tool-call")).toMatchObject([
+      { type: "tool-call", toolCallId: "call_first", toolName: "read_file" },
+      { type: "tool-call", toolCallId: "call_second", toolName: "read_file" },
+    ])
+
+    expect(parts.at(-1)).toMatchObject({
+      type: "finish",
+      finishReason: { unified: "tool-calls" },
+      providerMetadata: { copilot: { reasoningOpaque: "opaque-second" } },
+    })
   })
 })
 

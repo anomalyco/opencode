@@ -475,6 +475,45 @@ describe("reasoning (copilot-specific)", () => {
       },
     ])
   })
+
+  test("should replay the latest reasoning_opaque from interleaved thinking", () => {
+    const result = convertToCopilotMessages([
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "reasoning",
+            text: "Look at the readme first.",
+            providerOptions: { copilot: { reasoningOpaque: "opaque-first" } },
+          },
+          {
+            type: "tool-call",
+            toolCallId: "call_first",
+            toolName: "read_file",
+            input: { filePath: "/README.md" },
+            providerOptions: { copilot: { reasoningOpaque: "opaque-first" } },
+          },
+          {
+            type: "reasoning",
+            text: "Then the manifest.",
+            providerOptions: { copilot: { reasoningOpaque: "opaque-second" } },
+          },
+          {
+            type: "tool-call",
+            toolCallId: "call_second",
+            toolName: "read_file",
+            input: { filePath: "/package.json" },
+            providerOptions: { copilot: { reasoningOpaque: "opaque-second" } },
+          },
+        ],
+      },
+    ])
+
+    expect(result[0]).toMatchObject({
+      role: "assistant",
+      reasoning_opaque: "opaque-second",
+    })
+  })
 })
 
 describe("full conversation", () => {
