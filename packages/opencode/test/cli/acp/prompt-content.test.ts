@@ -69,6 +69,28 @@ describe("opencode acp prompt content subprocess", () => {
         )
 
         expect(linked.stopReason).toBe("end_turn")
+
+        yield* Effect.promise(() =>
+          writeFile(path.join(home, "notebook.ipynb"), '{"cells":[{"cell_type":"code","source":["print(1)"]}]}'),
+        )
+        yield* llm.text("notebook accepted")
+        const notebook = expectOk(
+          yield* acp.request<PromptResponse>("session/prompt", {
+            sessionId: session.sessionId,
+            prompt: [
+              { type: "text", text: "Use this notebook." },
+              {
+                type: "resource_link",
+                uri: pathToFileURL(path.join(home, "notebook.ipynb")).href,
+                name: "notebook.ipynb",
+                mimeType: "application/x-ipynb+json",
+              },
+            ],
+          }),
+        )
+        expect(notebook.stopReason).toBe("end_turn")
+        const hits = yield* llm.hits
+        expect(JSON.stringify(hits.at(-1)?.body)).toContain("print(1)")
       }),
     60_000,
   )
