@@ -641,6 +641,8 @@ beforeAll(() => {
   state.server = Bun.serve({
     port: 0,
     async fetch(req) {
+      // Model discovery probes compatible providers at startup; it is not part of the queued exchange.
+      if (req.method === "GET" && new URL(req.url).pathname.endsWith("/models")) return Response.json({ data: [] })
       const next = state.queue.shift()
       if (!next) {
         return new Response("unexpected request", { status: 500 })
