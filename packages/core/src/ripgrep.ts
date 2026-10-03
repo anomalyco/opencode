@@ -163,6 +163,7 @@ const layer = Layer.effect(
             ...(input.hidden ? ["--hidden"] : []),
             ...(input.follow ? ["--follow"] : []),
             `--glob=${input.pattern}`,
+            ...(input.hidden ? [] : ["--glob=!**/.*"]),
             "--glob=!**/.git/**",
             ".",
           ],
