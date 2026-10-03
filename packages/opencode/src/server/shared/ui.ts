@@ -1,4 +1,5 @@
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
@@ -52,12 +53,25 @@ function notFound() {
   return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
 }
 
-function embeddedUIResponse(file: string, body: Uint8Array) {
+// Bundled UI assets emitted under assets/ carry a Vite content hash in the
+// filename (`name-<hash>.<ext>`), so they can be cached forever. Everything
+// else — index.html, the manifest, icons, the theme preload script, and the
+// verbatim public/assets files — can change between releases on the same URL
+// and must revalidate.
+const HASHED_ASSET = /\/assets\/[^/]+-[0-9A-Za-z_-]{8}\.[0-9a-z]+$/
+
+function embeddedUIResponse(file: string, body: Uint8Array, ifNoneMatch?: string) {
   const mime = FSUtil.mimeType(file)
-  const headers = new Headers({ "content-type": mime })
+  const etag = `"${createHash("sha256").update(body).digest("hex").slice(0, 32)}"`
+  const headers = new Headers({ "content-type": mime, etag, "x-opencode-version": InstallationVersion })
+  headers.set(
+    "cache-control",
+    HASHED_ASSET.test(file.replaceAll("\\", "/")) ? "public, max-age=31536000, immutable" : "no-cache",
+  )
   if (mime.startsWith("text/html")) {
     headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
   }
+  if (ifNoneMatch === etag) return HttpServerResponse.empty({ status: 304, headers })
   return HttpServerResponse.raw(body, { headers })
 }
 
@@ -65,12 +79,13 @@ export function serveEmbeddedUIEffect(
   requestPath: string,
   fs: FSUtil.Interface,
   embeddedWebUI: Record<string, string>,
+  ifNoneMatch?: string,
 ) {
   const file = embeddedWebUI[requestPath.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
   if (!file) return Effect.succeed(notFound())
 
   return fs.readFile(file).pipe(
-    Effect.map((body) => embeddedUIResponse(file, body)),
+    Effect.map((body) => embeddedUIResponse(file, body, ifNoneMatch)),
     Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(notFound())),
   )
 }
@@ -83,7 +98,8 @@ export function serveUIEffect(
     const embeddedWebUI = yield* Effect.promise(() => embeddedUI(services.disableEmbeddedWebUi))
     const path = new URL(request.url, "http://localhost").pathname
 
-    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI)
+    if (embeddedWebUI)
+      return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI, request.headers["if-none-match"])
 
     const response = yield* services.client.execute(
       HttpClientRequest.make(request.method)(upstreamURL(path), {
