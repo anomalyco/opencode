@@ -45,10 +45,16 @@ OpenCode Zen is an AI gateway that gives you access to these models.
 
 OpenCode Zen works like any other provider in OpenCode.
 
-1. You sign in to **<a href={console}>OpenCode Zen</a>**, add your billing
-   details, and copy your API key.
-2. You run the `/connect` command in the TUI, select OpenCode Zen, and paste your API key.
-3. Run `/models` in the TUI to see the list of models we recommend.
+1. Sign in to **<a href={console}>OpenCode Zen</a>** and add your billing details.
+2. Select the workspace you use for Zen, then open **Keys** in the Console. A
+   workspace owner or admin can create a service account API key. Copy the new
+   key when it is shown; its full value cannot be displayed again.
+3. Run the `/connect` command in the TUI, select OpenCode Zen, and paste your API key.
+4. Run `/models` in the TUI to see the list of models we recommend.
+
+Keys from the previous Console appear under a **Legacy: your email** service
+account in their original workspace. Their full values cannot be displayed
+again, so create a new key if you no longer have the old one.
 
 You are charged per request and you can add credits to your account.
 
