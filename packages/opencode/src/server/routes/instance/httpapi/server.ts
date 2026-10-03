@@ -20,6 +20,7 @@ import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
 import { Permission } from "@/permission"
+import { PermissionAutoApprove } from "@/permission/auto-approve"
 import { Plugin } from "@/plugin"
 import { PluginPtyEnvironment } from "@/plugin/pty-environment"
 import { InstanceStore } from "@/project/instance-store"
@@ -246,6 +247,7 @@ const app = LayerNode.group([
   SessionPrompt.node,
   Instruction.node,
   LLM.node,
+  PermissionAutoApprove.node,
   LSP.node,
   MCP.node,
   McpAuth.node,

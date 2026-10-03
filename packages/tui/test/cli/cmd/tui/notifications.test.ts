@@ -24,6 +24,8 @@ async function setup() {
     timeout: session("timeout", "Timeout session"),
   }
 
+  const visible: ((request: PermissionRequest) => void)[] = []
+
   await Notifications.tui(
     createTuiPluginApi({
       attention: {
@@ -50,6 +52,12 @@ async function setup() {
         session: {
           get: (sessionID: string) => sessions[sessionID],
         },
+        permission: {
+          onVisible: (handler: (request: PermissionRequest) => void) => {
+            visible.push(handler)
+            return () => {}
+          },
+        },
       },
     }),
     undefined,
@@ -60,6 +68,10 @@ async function setup() {
     notifications,
     emit(event: Event) {
       for (const handler of handlers.get(event.type) ?? []) handler(event)
+    },
+    /** The request reached the user - what `permission.asked` only sometimes means. */
+    visible(request: PermissionRequest) {
+      for (const handler of visible) handler(request)
     },
   }
 }
@@ -102,9 +114,19 @@ describe("internal notifications TUI plugin", () => {
     const harness = await setup()
 
     harness.emit({ id: "event-1", type: "question.asked", properties: question("question-1") })
-    harness.emit({ id: "event-2", type: "permission.asked", properties: permission("permission-1") })
+    harness.visible(permission("permission-1"))
 
     expect(harness.notifications).toEqual([questionNotification, permissionNotification])
+  })
+
+  test("does not notify for a permission the TUI never shows", async () => {
+    const harness = await setup()
+
+    harness.emit({ id: "event-1", type: "permission.asked", properties: permission("permission-1") })
+    expect(harness.notifications).toEqual([])
+
+    harness.visible(permission("permission-1"))
+    expect(harness.notifications).toEqual([permissionNotification])
   })
 
   test("dedupes pending questions and permissions until they are resolved", async () => {
@@ -119,14 +141,14 @@ describe("internal notifications TUI plugin", () => {
     })
     harness.emit({ id: "event-4", type: "question.asked", properties: question("question-1") })
 
-    harness.emit({ id: "event-5", type: "permission.asked", properties: permission("permission-1") })
-    harness.emit({ id: "event-6", type: "permission.asked", properties: permission("permission-1") })
+    harness.visible(permission("permission-1"))
+    harness.visible(permission("permission-1"))
     harness.emit({
       id: "event-7",
       type: "permission.replied",
       properties: { sessionID: "session", requestID: "permission-1", reply: "once" },
     })
-    harness.emit({ id: "event-8", type: "permission.asked", properties: permission("permission-1") })
+    harness.visible(permission("permission-1"))
 
     expect(harness.notifications).toEqual([
       questionNotification,

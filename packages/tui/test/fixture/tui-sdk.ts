@@ -59,14 +59,14 @@ export function createEventSource() {
   }
 }
 
-export type FetchHandler = (url: URL) => Response | Promise<Response> | undefined
+export type FetchHandler = (url: URL, request: Request) => Response | Promise<Response | undefined> | undefined
 
 export function createFetch(override?: FetchHandler, events?: ReturnType<typeof createEventSource>) {
   const session = [] as URL[]
   const fetch = (async (input: RequestInfo | URL) => {
     const url = new URL(input instanceof Request ? input.url : String(input))
     if (url.pathname === "/session") session.push(url)
-    const overridden = await override?.(url)
+    const overridden = await override?.(url, input instanceof Request ? input : new Request(url))
     if (overridden) return overridden
     if (url.pathname === "/api/event" && events) return events.response()
 
@@ -81,8 +81,8 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
       ].includes(url.pathname)
     )
       return json([])
-    if (["/config", "/experimental/resource", "/mcp", "/provider/auth", "/session/status"].includes(url.pathname))
-      return json({})
+    if (url.pathname === "/config") return json({ experimental: { auto_approve: true } })
+    if (["/experimental/resource", "/mcp", "/provider/auth", "/session/status"].includes(url.pathname)) return json({})
     if (url.pathname === "/config/providers") return json({ providers: {}, default: {} })
     if (url.pathname === "/experimental/console") return json({ consoleManagedProviders: [], switchableOrgCount: 0 })
     if (url.pathname === "/experimental/capabilities") return json({ backgroundSubagents: false })
@@ -97,6 +97,16 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
         location: { directory, project: { id: "proj_test", directory: worktree } },
         data: [],
       })
+    if (/^\/permission\/session\/[^/]+\/overlay$/.test(url.pathname)) {
+      const body =
+        input instanceof Request
+          ? ((await input
+              .clone()
+              .json()
+              .catch(() => ({}))) as { enabled?: boolean })
+          : ({} as { enabled?: boolean })
+      return json(body.enabled === true)
+    }
     if (url.pathname === "/project/current") return json({ id: "proj_test" })
     if (url.pathname === "/api/reference")
       return json({ location: { directory, project: { id: "proj_test", directory } }, data: [] })

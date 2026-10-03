@@ -101,6 +101,7 @@ type Opts = {
     path?: HostPluginApi["state"]["path"]
     vcs?: HostPluginApi["state"]["vcs"]
     session?: Partial<HostPluginApi["state"]["session"]>
+    permission?: Partial<HostPluginApi["state"]["permission"]>
     part?: HostPluginApi["state"]["part"]
     lsp?: HostPluginApi["state"]["lsp"]
     mcp?: HostPluginApi["state"]["mcp"]
@@ -322,6 +323,7 @@ export function createTuiPluginApi(opts: Opts = {}): HostPluginApi {
         permission: opts.state?.session?.permission ?? (() => []),
         question: opts.state?.session?.question ?? (() => []),
       },
+      permission: { onVisible: opts.state?.permission?.onVisible ?? (() => () => {}) },
       part: opts.state?.part ?? (() => []),
       lsp: opts.state?.lsp ?? (() => []),
       mcp: opts.state?.mcp ?? (() => []),
