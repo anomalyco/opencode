@@ -6,6 +6,20 @@ type SessionNode = {
   parentID?: string | null
 }
 
+/**
+ * The sessions an "open a session" menu offers: top-level ones only, deduplicated, plus the session whose exact ID the
+ * user typed even when it is a child. That ID was looked up on purpose, so dropping it for having a parent left
+ * pasting a subagent's ID with no way to open it.
+ */
+export function topLevelSessions<T extends SessionNode>(sessions: readonly T[], exactID?: string): T[] {
+  const seen = new Set<string>()
+  return sessions.filter((session) => {
+    if ((session.parentID && session.id !== exactID) || seen.has(session.id)) return false
+    seen.add(session.id)
+    return true
+  })
+}
+
 export function sessionFamily<T extends SessionNode>(sessions: readonly T[], sessionID: string) {
   const byID = new Map(sessions.map((session) => [session.id, session]))
   const current = byID.get(sessionID)
