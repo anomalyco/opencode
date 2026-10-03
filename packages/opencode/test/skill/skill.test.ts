@@ -9,12 +9,25 @@ import { Config } from "../../src/config/config"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
+import { AbsolutePath } from "@opencode-ai/core/schema"
+import { SkillV2 } from "@opencode-ai/core/skill"
 import { provideInstance, provideTmpdirInstance, testInstanceStoreLayer, tmpdir } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import path from "path"
 import fs from "fs/promises"
 
 const node = LayerNode.compile(CrossSpawnSpawner.node)
+
+const v2Skills = (skills: SkillV2.Info[]) =>
+  Layer.succeed(
+    SkillV2.Service,
+    SkillV2.Service.of({
+      transform: () => Effect.die("unexpected v2 skill transform in legacy skill tests"),
+      reload: () => Effect.void,
+      sources: () => Effect.succeed([]),
+      list: () => Effect.succeed(skills),
+    }),
+  )
 
 const it = testEffect(Layer.mergeAll(LayerNode.compile(Skill.node), node, testInstanceStoreLayer))
 const itWithoutClaudeCodeSkills = testEffect(
@@ -30,6 +43,17 @@ const itWithoutExternalSkills = testEffect(
     node,
     testInstanceStoreLayer,
   ),
+)
+const v2LocationSkills = v2Skills([
+  {
+    name: "plugin-skill",
+    description: "A skill registered by a v2 plugin.",
+    location: AbsolutePath.make("/builtin/plugin-skill.md"),
+    content: "Use plugin conventions.",
+  },
+])
+const itWithV2Skills = testEffect(
+  Layer.mergeAll(LayerNode.compile(Skill.node), v2LocationSkills, node, testInstanceStoreLayer),
 )
 
 async function createGlobalSkill(homeDir: string) {
@@ -300,6 +324,21 @@ description: A skill in the .claude/skills directory.
         Effect.gen(function* () {
           const skill = yield* Skill.Service
           expect((yield* skill.all()).filter((s) => s.location !== "<built-in>")).toEqual([])
+        }),
+      { git: true },
+    ),
+  )
+
+  itWithV2Skills.live("includes skills registered through the v2 skill service", () =>
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const skill = yield* Skill.Service
+          const list = yield* skill.all()
+          expect(list.find((item) => item.name === "plugin-skill")).toMatchObject({
+            description: "A skill registered by a v2 plugin.",
+            content: "Use plugin conventions.",
+          })
         }),
       { git: true },
     ),
