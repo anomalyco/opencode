@@ -77,20 +77,29 @@ export const effectCmd = <Args, A>(opts: EffectCmdOpts<Args, A>) =>
       // yargs typing wraps Args in ArgumentsCamelCase<WithDoubleDash<...>>; cast at the boundary.
       const args = rawArgs as unknown as WithDoubleDash<Args>
       const useInstance = typeof opts.instance === "function" ? opts.instance(args) : opts.instance !== false
-      if (!useInstance) {
-        await AppRuntime.runPromise(opts.handler(args))
-        return
-      }
-      const { InstanceStore } = await import("@/project/instance-store")
-      const { InstanceRef } = await import("@/effect/instance-ref")
-      const directory = opts.directory?.(args) ?? process.cwd()
-      const { store, ctx } = await AppRuntime.runPromise(
-        InstanceStore.Service.use((store) => store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx })))),
-      )
       try {
-        await AppRuntime.runPromise(opts.handler(args).pipe(Effect.provideService(InstanceRef, ctx)))
+        if (!useInstance) {
+          await AppRuntime.runPromise(opts.handler(args))
+          return
+        }
+        const { InstanceStore } = await import("@/project/instance-store")
+        const { InstanceRef } = await import("@/effect/instance-ref")
+        const directory = opts.directory?.(args) ?? process.cwd()
+        const { store, ctx } = await AppRuntime.runPromise(
+          InstanceStore.Service.use((store) => store.load({ directory }).pipe(Effect.map((ctx) => ({ store, ctx })))),
+        )
+        try {
+          await AppRuntime.runPromise(opts.handler(args).pipe(Effect.provideService(InstanceRef, ctx)))
+        } finally {
+          await AppRuntime.runPromise(store.dispose(ctx))
+        }
       } finally {
-        await AppRuntime.runPromise(store.dispose(ctx))
+        // effectCmd is the seam that lazily acquires AppRuntime, so it owns teardown.
+        // Disposing the ManagedRuntime releases the app layers — which flushes pending
+        // telemetry (the OTel BatchSpanProcessor's buffer) before the process exits.
+        // Keeping disposal here preserves lazy runtime init: index.ts never imports
+        // app-runtime.ts, so `--help`/`--version`/completion don't load the full runtime.
+        await AppRuntime.dispose().catch(() => {})
       }
     },
   })

@@ -23,6 +23,39 @@ describe("opencode run (non-interactive subprocess)", () => {
     60_000,
   )
 
+  // Regression for #30087: process.exit() used to kill the event loop before the
+  // OTel BatchSpanProcessor flushed. The LLM is mocked so the run is fast enough
+  // that the processor's periodic export timer never fires — the collector only
+  // sees /v1/traces if disposal (embedded server + AppRuntime) forces the flush.
+  cliIt.concurrent(
+    "flushes server telemetry before exiting",
+    ({ llm, opencode }) =>
+      Effect.gen(function* () {
+        const requests: string[] = []
+        const collector = yield* Effect.acquireRelease(
+          Effect.sync(() =>
+            Bun.serve({
+              port: 0,
+              fetch(request) {
+                requests.push(new URL(request.url).pathname)
+                return new Response(null, { status: 200 })
+              },
+            }),
+          ),
+          (server) => Effect.sync(() => server.stop(true)),
+        )
+        yield* llm.text("telemetry response")
+
+        const result = yield* opencode.run("say hi", {
+          env: { OTEL_EXPORTER_OTLP_ENDPOINT: collector.url.toString().replace(/\/$/, "") },
+        })
+
+        opencode.expectExit(result, 0)
+        expect(requests).toContain("/v1/traces")
+      }),
+    60_000,
+  )
+
   cliIt.concurrent(
     "prints each completed text part in order around a tool continuation",
     ({ llm, opencode }) =>
