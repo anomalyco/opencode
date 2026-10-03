@@ -642,6 +642,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         }),
         open(directory: string) {
           const root = rootFor(directory)
+          // The opened directory can be a registered sandbox of a known project. Load its
+          // sessions too so opening a second checkout shows that checkout, not only the
+          // stored worktree.
+          if (pathKey(directory) !== pathKey(root)) void serverSync().project.loadSessions(directory)
           if (server.projects.list().find((x) => x.worktree === root)) return
           void serverSync().project.loadSessions(root)
           server.projects.open(root)

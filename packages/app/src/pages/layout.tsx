@@ -548,9 +548,18 @@ export default function LegacyLayout(props: ParentProps) {
       if (!last) return
       await openProject(last, true)
     } else {
-      const next = list.find((project) => project.worktree === last) ?? list[0]
+      // The stored directory can be a sandbox of a project rather than its worktree.
+      // Restore that directory itself; navigateToProject keeps it when it is registered.
+      const matched = last
+        ? list.find(
+            (project) =>
+              pathKey(project.worktree) === pathKey(last) ||
+              project.sandboxes?.some((item) => pathKey(item) === pathKey(last)),
+          )
+        : undefined
+      const next = matched ?? list[0]
       if (!next) return
-      await openProject(next.worktree, true)
+      await openProject(matched && last ? last : next.worktree, true)
     }
   })
 
@@ -1174,11 +1183,9 @@ export default function LegacyLayout(props: ParentProps) {
     }
     const refreshDirs = async (target?: string) => {
       if (!target || target === root || canOpen(target)) return canOpen(target)
-      const listed = await Promise.resolve(
-        project?.id ?? serverSDK().api.project.current({ location: { directory: root } }),
-      )
+      const listed = await Promise.resolve(project?.id ?? serverSDK().api.project.current({ location: { directory } }))
         .then((value) => (typeof value === "string" ? value : value.id))
-        .then((projectID) => serverSDK().api.project.directories({ projectID, location: { directory: root } }))
+        .then((projectID) => serverSDK().api.project.directories({ projectID, location: { directory } }))
         .then((items) => items.map((item) => item.directory).filter((item) => pathKey(item) !== pathKey(root)))
         .catch(() => [] as string[])
       dirs = effectiveWorkspaceOrder(root, [root, ...listed], store.workspaceOrder[root])
@@ -1201,6 +1208,14 @@ export default function LegacyLayout(props: ParentProps) {
       setStore("lastProjectSession", root, { directory: resolved.directory, id: resolved.id, at: Date.now() })
       navigateWithSidebarReset(`/${base64Encode(resolved.directory)}/session/${resolved.id}`)
       return true
+    }
+
+    // The opened directory can be a second checkout of an already known project. When it is
+    // itself a registered directory of that project, stay on it instead of navigating back to
+    // the stored worktree.
+    if (pathKey(directory) !== pathKey(root) && (await refreshDirs(directory))) {
+      navigateWithSidebarReset(`/${base64Encode(directory)}/session`)
+      return
     }
 
     const projectSession = store.lastProjectSession[root]

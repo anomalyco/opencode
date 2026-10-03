@@ -4,6 +4,7 @@ import { ServerConnection, useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
 import { useTabs } from "@/context/tabs"
 import { toggleHomeProjectSelection } from "@/pages/layout/helpers"
+import { pathKey } from "@/utils/path-key"
 import { createEffect, createMemo } from "solid-js"
 
 export function createHomeController() {
@@ -27,7 +28,15 @@ export function createHomeController() {
     () => focusedServerCtx()?.projects.recentlyClosed() ?? layout.projects.recentlyClosed(),
   )
   const homedir = createMemo(() => focusedSync().data.path.home ?? "")
-  const selectedProject = createMemo(() => projects().find((project) => project.worktree === selection().directory))
+  const selectedProject = createMemo(() => {
+    const directory = selection().directory
+    if (!directory) return
+    return projects().find(
+      (project) =>
+        pathKey(project.worktree) === pathKey(directory) ||
+        project.sandboxes?.some((item) => pathKey(item) === pathKey(directory)),
+    )
+  })
   const newSessionProject = createMemo(
     () =>
       selectedProject() ??
@@ -111,7 +120,16 @@ export function createHomeController() {
         const conn = focusedServer()
         const project = newSessionProject()
         if (!conn || !project) return
-        openProjectNewSession(conn, project.worktree)
+        // A project groups several directories (worktree plus sandboxes). When the
+        // selection points at one of them, new sessions belong on that directory,
+        // not on the stored worktree.
+        const selected = selection().directory
+        const directory =
+          selected &&
+          [project.worktree, ...(project.sandboxes ?? [])].some((item) => pathKey(item) === pathKey(selected))
+            ? selected
+            : project.worktree
+        openProjectNewSession(conn, directory)
       },
       openProjectNewSession,
     },
