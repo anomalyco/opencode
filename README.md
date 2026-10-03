@@ -63,6 +63,7 @@ nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev
 
 > [!TIP]
 > Remove versions older than 0.1.x before installing.
+> I Am Minuku Chethan Sai (Contributer).
 
 ### Desktop App (BETA)
 
