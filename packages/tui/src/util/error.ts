@@ -134,6 +134,10 @@ export function errorFormat(error: unknown): string {
 }
 
 export function errorMessage(error: unknown): string {
+  if (named(error, "MessageOutputLengthError")) {
+    return "Response was cut off by the output token limit before completing. Increase the model's limit.output or reduce reasoning effort."
+  }
+
   if (error instanceof Error) {
     if (error.message) return error.message
     if (error.name) return error.name
