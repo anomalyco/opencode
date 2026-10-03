@@ -1,6 +1,7 @@
 import { onMount } from "solid-js"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import type { PromptInputV2Attachment, PromptInputV2Prompt } from "./types"
+import { sha256Hex } from "./sha256"
 
 const accepted = [
   "image/png",
@@ -222,9 +223,7 @@ export function createPromptInputV2Attachments(
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
 async function blobReference(file: File) {
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer())))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("")
+  const id = await sha256Hex(await file.arrayBuffer())
   return { id, url: URL.createObjectURL(file) }
 }
 const imageExtensions = new Map([

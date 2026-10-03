@@ -22,6 +22,7 @@
     "./v2/prompt-input": "./src/v2/components/prompt-input/index.tsx",
     "./v2/prompt-input/interaction": "./src/v2/components/prompt-input/interaction.ts",
     "./v2/prompt-input/store": "./src/v2/components/prompt-input/store.ts",
+"./v2/prompt-input/sha256": "./src/v2/components/prompt-input/sha256.ts",
     "./v2/prompt-input/types": "./src/v2/components/prompt-input/types.ts"
   },
   "scripts": {
