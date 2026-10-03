@@ -1,5 +1,8 @@
 import { Server } from "@modelcontextprotocol/server"
 import { StdioServerTransport } from "@modelcontextprotocol/server/stdio"
+import { appendFileSync } from "node:fs"
+
+if (process.argv[2]) appendFileSync(process.argv[2], `${process.pid}\n`)
 
 const server = new Server({ name: "output-schema", version: "1.0.0" }, { capabilities: { tools: {} } })
 
