@@ -1,4 +1,11 @@
 export const dict = {
+  "command.thinking.toggle": "Toggle reasoning display",
+  "command.thinking.toggle.description": "Show or hide the model's reasoning (thinking) in the timeline",
+  "prompt.toast.thinkingOn.title": "Reasoning shown",
+  "prompt.toast.thinkingOn.description": "Model reasoning is now displayed in the timeline. Toggle with /thinking.",
+  "prompt.toast.thinkingOff.title": "Reasoning hidden",
+  "prompt.toast.thinkingOff.description": "Model reasoning is hidden. Toggle with /thinking.",
+
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "Tệp",
   "desktop.menu.edit": "Chỉnh sửa",

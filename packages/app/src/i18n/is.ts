@@ -94,6 +94,13 @@ const desktop = [
 ]
 
 export const dict = {
+  "command.thinking.toggle": "Toggle reasoning display",
+  "command.thinking.toggle.description": "Show or hide the model's reasoning (thinking) in the timeline",
+  "prompt.toast.thinkingOn.title": "Reasoning shown",
+  "prompt.toast.thinkingOn.description": "Model reasoning is now displayed in the timeline. Toggle with /thinking.",
+  "prompt.toast.thinkingOff.title": "Reasoning hidden",
+  "prompt.toast.thinkingOff.description": "Model reasoning is hidden. Toggle with /thinking.",
+
   ...Object.fromEntries(DESKTOP_NATIVE_KEYS.map((key, index) => [key, desktop[index]])),
   "command.category.suggested": "Tillögur",
   "command.category.view": "Skoða",
