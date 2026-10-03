@@ -72,6 +72,18 @@ export type AutocompleteOption = {
   path?: string
 }
 
+/**
+ * The typed text already names a whole command, so pressing Enter should submit it rather than
+ * re-select it from the list. List entries pad `display` for column alignment, so compare against
+ * the trimmed display instead of the raw one.
+ */
+export function isCompleteCommand(value: string, options: readonly AutocompleteOption[]) {
+  const typed = value.trimEnd()
+  return options.some(
+    (option) => (option.value ?? option.display).trimEnd() === typed || (option.aliases?.includes(typed) ?? false),
+  )
+}
+
 export function Autocomplete(props: {
   value: string
   sessionID?: string
@@ -684,6 +696,14 @@ export function Autocomplete(props: {
             (store.visible === "/" && value.match(/^\S+\s+\S+\s*$/))
           ) {
             hide()
+          }
+
+          // The typed text already names a whole command, so collapse the list and let the next
+          // Enter reach the input's own submit. Unlike hide(), this leaves the text alone, because
+          // the command is complete rather than a half-typed trigger. Typing another character
+          // reopens the list through the "/" branch below.
+          if (store.visible === "/" && isCompleteCommand(value, commands())) {
+            setStore("visible", false)
           }
           return
         }
