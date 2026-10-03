@@ -1,4 +1,5 @@
 import { OpenResponsesOptions } from "./open-responses-options.js"
+import type { LLMRequest } from "../../schema/index.js"
 
 export const OpenAIReasoningEfforts = OpenResponsesOptions.ReasoningEfforts
 export type OpenAIReasoningEffort = OpenResponsesOptions.ReasoningEffort
@@ -20,5 +21,8 @@ export const OpenAIServiceTier = OpenResponsesOptions.ServiceTierSchema
 export const isReasoningEffort = (effort: unknown): effort is OpenAIReasoningEffort => typeof effort === "string"
 
 export const resolve = OpenResponsesOptions.resolve
+
+export const isNativeGpt61Sol = (request: LLMRequest, route: "openai-chat" | "openai-responses") =>
+  request.model.provider === "openai" && request.model.route.id === route && request.model.id === "gpt-6.1-sol"
 
 export * as OpenAIOptions from "./openai-options.js"

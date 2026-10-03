@@ -6,9 +6,10 @@ import { Endpoint } from "../route/endpoint.js"
 import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { LLMRequest, type ToolDefinition, type ToolEntry } from "../schema/index.js"
-import { resolveEffortUpdates } from "../effort-updates.js"
+import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import { OpenResponses } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
+import { OpenAIOptions } from "./utils/openai-options.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
 import { OpenResponsesChannel } from "./open-responses-channel.js"
@@ -210,6 +211,16 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
   )(request.providerOptions?.contextManagement)
   const options = OpenResponsesOptions.resolve(request)
   const updates = resolveEffortUpdates(request, options.reasoningEffort)
+  if (
+    OpenAIOptions.isNativeGpt61Sol(request, ADAPTER) &&
+    (updates.effort === "none" ||
+      updates.effort === "minimal" ||
+      updates.request.messages.some((message) => {
+        const effort = effortUpdate(message)?.effort
+        return effort === "none" || effort === "minimal"
+      }))
+  )
+    return yield* ProviderShared.invalidRequest("GPT-6.1 Sol reasoning effort must be low, medium, high, xhigh, or max")
   return yield* decodeBody({
     ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
     ...OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort }),

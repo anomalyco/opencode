@@ -803,6 +803,16 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
 ) {
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Route.make`.
+  const nativeSol = OpenAIOptions.isNativeGpt61Sol(request, ADAPTER)
+  if (nativeSol && (request.tools.length > 0 || hasToolHistory(request.messages)))
+    return yield* ProviderShared.invalidRequest("GPT-6.1 Sol tool calling requires the OpenAI Responses API")
+  if (nativeSol) {
+    const effort = OpenAIOptions.resolve(request).reasoningEffort
+    if (effort === "none" || effort === "minimal")
+      return yield* ProviderShared.invalidRequest(
+        "GPT-6.1 Sol reasoning effort must be low, medium, high, xhigh, or max",
+      )
+  }
   const reasoningField = request.model.compatibility?.reasoningField
   if (reasoningField && RESERVED_REASONING_FIELDS.has(reasoningField))
     return yield* ProviderShared.invalidRequest(

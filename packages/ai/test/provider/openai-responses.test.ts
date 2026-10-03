@@ -153,6 +153,54 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("rejects unsupported GPT-6.1 Sol none effort before sending Responses", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model: OpenAI.configure({ apiKey: "test" }).responses("gpt-6.1-sol"),
+          prompt: "Hello",
+          providerOptions: { reasoningEffort: "none" },
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("low, medium, high, xhigh, or max")
+    }),
+  )
+
+  it.effect("rejects unsupported GPT-6.1 Sol effort in a Responses configuration update", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model: LanguageModel.update(OpenAI.configure({ apiKey: "test" }).responses("gpt-6.1-sol"), {
+            compatibility: { supportsEffortUpdates: true },
+          }),
+          messages: [Message.user("First"), Message.effort({ previous: "low", effort: "none" }), Message.user("Next")],
+          providerOptions: { reasoningEffort: "none" },
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("low, medium, high, xhigh, or max")
+    }),
+  )
+
+  it.effect("keeps GPT-6.1 Sol Responses tool calling with supported effort", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAI.configure({ apiKey: "test" }).responses("gpt-6.1-sol"),
+          prompt: "What is the weather?",
+          tools: [ToolDefinition.make({ name: "lookup", description: "Look up weather", inputSchema: {} })],
+          providerOptions: { reasoningEffort: "low" },
+        }),
+      )
+
+      expect(prepared.body.tools).toMatchObject([{ type: "function", name: "lookup" }])
+      expect(prepared.body.reasoning?.effort).toBe("low")
+    }),
+  )
+
   it.effect("lowers the hosted OpenAI image generation tool", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

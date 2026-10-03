@@ -472,6 +472,87 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("rejects GPT-6.1 Sol tool calling on native OpenAI Chat", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model: OpenAI.configure({ apiKey: "test" }).chat("gpt-6.1-sol"),
+          prompt: "What is the weather?",
+          tools: [ToolDefinition.make({ name: "lookup", description: "Look up weather", inputSchema: {} })],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("Responses API")
+    }),
+  )
+
+  it.effect("keeps tool-free GPT-6.1 Sol Chat requests with supported effort", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAI.configure({ apiKey: "test" }).chat("gpt-6.1-sol"),
+          prompt: "Hello",
+          providerOptions: { reasoningEffort: "low" },
+        }),
+      )
+
+      expect(prepared.body.model).toBe("gpt-6.1-sol")
+      expect(prepared.body.tools).toBeUndefined()
+      expect(prepared.body.reasoning_effort).toBe("low")
+    }),
+  )
+
+  it.effect("rejects GPT-6.1 Sol Chat tool history without active tools", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model: OpenAI.configure({ apiKey: "test" }).chat("gpt-6.1-sol"),
+          messages: [
+            Message.assistant([ToolCallPart.make({ id: "call_1", name: "lookup", input: {} })]),
+            Message.tool({ id: "call_1", name: "lookup", result: "sunny" }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("Responses API")
+    }),
+  )
+
+  it.effect("rejects unsupported GPT-6.1 Sol minimal effort on native OpenAI Chat", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model: OpenAI.configure({ apiKey: "test" }).chat("gpt-6.1-sol"),
+          prompt: "Hello",
+          providerOptions: { reasoningEffort: "minimal" },
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("low, medium, high, xhigh, or max")
+    }),
+  )
+
+  it.effect("leaves compatible gateways with the same model slug to their own contract", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: OpenAICompatible.configure({ baseURL: "https://gateway.test/v1", apiKey: "test" }).model(
+            "gpt-6.1-sol",
+          ),
+          prompt: "What is the weather?",
+          tools: [ToolDefinition.make({ name: "lookup", description: "Look up weather", inputSchema: {} })],
+          providerOptions: { reasoningEffort: "none" },
+        }),
+      )
+
+      expect(prepared.body.tools).toHaveLength(1)
+      expect(prepared.body.reasoning_effort).toBe("none")
+    }),
+  )
+
   it.effect("replays Gemini thought signatures as tool call extra content", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
