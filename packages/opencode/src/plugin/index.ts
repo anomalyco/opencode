@@ -97,6 +97,11 @@ function getServerPlugin(value: unknown) {
 }
 
 function getLegacyPlugins(mod: Record<string, unknown>) {
+  if (mod.default) {
+    const defaultPlugin = getServerPlugin(mod.default)
+    if (defaultPlugin) return [defaultPlugin]
+  }
+
   const seen = new Set<unknown>()
   const result: PluginInstance[] = []
 
@@ -104,9 +109,10 @@ function getLegacyPlugins(mod: Record<string, unknown>) {
     if (seen.has(entry)) continue
     seen.add(entry)
     const plugin = getServerPlugin(entry)
-    if (!plugin) throw new TypeError("Plugin export is not a function")
-    result.push(plugin)
+    if (plugin) result.push(plugin)
   }
+
+  if (result.length === 0) throw new TypeError("Plugin export is not a function")
 
   return result
 }
