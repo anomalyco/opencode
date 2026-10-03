@@ -14,6 +14,7 @@ import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
+import { resetTerminal } from "@opencode-ai/tui/util/terminal-reset"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -296,6 +297,7 @@ export const TuiThreadCommand = cmd({
           }),
         )
       } finally {
+        resetTerminal()
         await stop()
       }
     } finally {
