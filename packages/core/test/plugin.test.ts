@@ -608,3 +608,34 @@ it.effect("refreshes expired OAuth credentials through the context during activa
     expect(refreshes).toEqual([expired])
   }),
 )
+
+it.effect("activates a saved credential through the context", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const credentials = yield* Credential.Service
+    const integrations = yield* Integration.Service
+    const integrationID = Integration.ID.make("activate-fixture")
+    const first = yield* credentials.create({
+      integrationID,
+      label: "First",
+      value: Credential.Key.make({ type: "key", key: "first" }),
+    })
+    yield* credentials.create({
+      integrationID,
+      label: "Second",
+      value: Credential.Key.make({ type: "key", key: "second" }),
+    })
+    expect(yield* integrations.connection.active(integrationID)).toMatchObject({ label: "Second" })
+
+    yield* plugins.activate([
+      {
+        id: "activate-credential",
+        revision: "1",
+        effect: (ctx) => ctx.integration.connection.activate(first.id),
+      },
+    ])
+
+    expect(yield* plugins.list()).toMatchObject([{ id: "activate-credential", state: { status: "active" } }])
+    expect(yield* integrations.connection.active(integrationID)).toMatchObject({ id: first.id, label: "First" })
+  }),
+)
