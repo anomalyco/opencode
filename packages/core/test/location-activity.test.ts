@@ -8,6 +8,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { Form } from "@opencode/core/form"
+import { Job } from "@opencode/core/job"
 import { Location } from "@opencode/core/location"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
@@ -84,6 +85,7 @@ const it = testEffect(
     LayerNode.group([
       Database.node,
       Bus.node,
+      Job.node,
       SessionStore.node,
       LocationServiceMap.node,
       SessionExecution.node,
@@ -102,6 +104,149 @@ const it = testEffect(
 )
 
 describe("LocationActivity eviction", () => {
+  it.effect("keeps a running background shell's location but evicts its idle parent location", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const map = yield* LocationServiceMap.Service
+      const jobs = yield* Job.Service
+      const parent = Session.ID.make("ses_background_parent")
+      const child = Session.ID.make("ses_background_child")
+      const shell = Session.ID.make("ses_background_shell")
+      const parentRef = LocationServiceMap.canonical({ directory: AbsolutePath.make("/parent") })
+      const shellRef = LocationServiceMap.canonical({ directory: AbsolutePath.make("/shell") })
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: parentRef.directory, sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values([
+          {
+            id: parent,
+            project_id: Project.ID.global,
+            slug: "parent",
+            directory: parentRef.directory,
+            title: "Parent",
+            version: "test",
+          },
+          {
+            id: child,
+            project_id: Project.ID.global,
+            slug: "child",
+            directory: AbsolutePath.make("/child"),
+            title: "Child",
+            version: "test",
+            parent_id: parent,
+          },
+          {
+            id: shell,
+            project_id: Project.ID.global,
+            slug: "shell",
+            directory: shellRef.directory,
+            title: "Shell",
+            version: "test",
+          },
+        ])
+        .run()
+        .pipe(Effect.orDie)
+      yield* Location.Service.pipe(Effect.provide(map.get(parentRef)), Effect.scoped)
+      yield* Location.Service.pipe(Effect.provide(map.get(shellRef)), Effect.scoped)
+
+      const shellDone = yield* Deferred.make<string>()
+      yield* jobs.start({
+        id: "background-shell",
+        type: "shell",
+        location: shellRef,
+        recovery: { kind: "shell", sessionID: shell, shellID: "background-shell", command: "sleep" },
+        run: Deferred.await(shellDone),
+      })
+      yield* jobs.background("background-shell")
+      const childDone = yield* Deferred.make<string>()
+      yield* jobs.start({
+        id: child,
+        type: "subagent",
+        recovery: {
+          kind: "subagent",
+          parentSessionID: parent,
+          childSessionID: child,
+          agent: "test",
+          description: "Child",
+        },
+        run: Deferred.await(childDone),
+      })
+      yield* jobs.background(child)
+
+      yield* TestClock.adjust("1 minute")
+      yield* TestClock.adjust("62 minutes")
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([shellRef])
+      expect((yield* jobs.get(child))?.status).toBe("running")
+      expect((yield* jobs.get("background-shell"))?.status).toBe("running")
+
+      yield* Deferred.succeed(shellDone, "done")
+      yield* jobs.wait({ id: "background-shell" })
+      yield* TestClock.adjust("62 minutes")
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
+      yield* Deferred.succeed(childDone, "done")
+    }),
+  )
+
+  it.effect("keeps a location when a background shell starts during eviction cleanup", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const bus = yield* Bus.Service
+      const map = yield* LocationServiceMap.Service
+      const execution = yield* SessionExecution.Service
+      const jobs = yield* Job.Service
+      const sessionID = Session.ID.make("ses_shell_during_cleanup")
+      const ref = LocationServiceMap.canonical({ directory: AbsolutePath.make("/cleanup") })
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: Project.ID.global, worktree: ref.directory, sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+      yield* db
+        .insert(SessionTable)
+        .values({
+          id: sessionID,
+          project_id: Project.ID.global,
+          slug: "cleanup",
+          directory: ref.directory,
+          title: "Cleanup",
+          version: "test",
+        })
+        .run()
+        .pipe(Effect.orDie)
+      const created = yield* Deferred.make<void>()
+      const unsubscribe = yield* bus.listen((event) =>
+        event.type === Form.Event.Created.type ? Deferred.succeed(created, undefined).pipe(Effect.asVoid) : Effect.void,
+      )
+      yield* Effect.addFinalizer(() => unsubscribe)
+      const running = yield* execution.resume(sessionID).pipe(Effect.exit, Effect.forkScoped)
+      yield* Deferred.await(created)
+      yield* TestClock.adjust("1 minute")
+      yield* TestClock.adjust("62 minutes")
+      expect(Array.from(yield* execution.active)).toEqual([sessionID])
+
+      const done = yield* Deferred.make<string>()
+      yield* jobs.start({
+        id: "shell-during-cleanup",
+        type: "shell",
+        location: ref,
+        recovery: { kind: "shell", sessionID, shellID: "shell-during-cleanup", command: "sleep" },
+        run: Deferred.await(done),
+      })
+      yield* jobs.background("shell-during-cleanup")
+      yield* TestClock.adjust("5 minutes")
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([ref])
+      expect((yield* Fiber.join(running))._tag).toBe("Failure")
+      yield* Deferred.succeed(done, "done")
+      yield* jobs.wait({ id: "shell-during-cleanup" })
+      yield* TestClock.adjust("62 minutes")
+      expect(Array.from(yield* RcMap.keys(map.rcMap))).toEqual([])
+    }),
+  )
+
   for (const [count, admission] of [
     [1, "none"],
     [2, "none"],

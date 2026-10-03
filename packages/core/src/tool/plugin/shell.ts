@@ -18,6 +18,7 @@ import { Shell } from "../../shell.js"
 import { ShellParse } from "../../shell/parse.js"
 import { ShellSelect } from "../../shell/select.js"
 import { ShellResult } from "../../shell/result.js"
+import { Location } from "../../location.js"
 
 export const name = "shell"
 export const DEFAULT_TIMEOUT_MS = 2 * 60 * 1_000
@@ -108,6 +109,7 @@ export const Plugin = {
     const environment = yield* Environment.Service
     const access = yield* FileAccess.Service
     const shell = yield* Shell.Service
+    const location = yield* Location.Service
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
@@ -239,6 +241,7 @@ export const Plugin = {
                 type: name,
                 title: info.command,
                 metadata: { sessionID: context.sessionID, shellID: info.id },
+                location: Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID }),
                 recovery: {
                   kind: "shell",
                   sessionID: context.sessionID,
