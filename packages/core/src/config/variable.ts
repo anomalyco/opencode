@@ -3,6 +3,7 @@ export * as ConfigVariable from "./variable.js"
 import os from "os"
 import path from "path"
 import { Effect } from "effect"
+import { visit } from "jsonc-parser"
 import { FSUtil } from "@opencode/util/fs-util"
 import { InvalidError } from "../v1/config/error.js"
 
@@ -37,6 +38,8 @@ const substituteFiles = Effect.fnUntraced(function* (input: SubstituteInput, tex
   const fs = yield* FSUtil.Service
   const configDir = input.type === "path" ? path.dirname(input.path) : input.dir
   const configSource = input.type === "path" ? input.path : input.source
+  const comments: { offset: number; length: number }[] = []
+  visit(text, { onComment: (offset, length) => comments.push({ offset, length }) })
   let out = ""
   let cursor = 0
 
@@ -45,9 +48,7 @@ const substituteFiles = Effect.fnUntraced(function* (input: SubstituteInput, tex
     const index = match.index
     out += text.slice(cursor, index)
 
-    const lineStart = text.lastIndexOf("\n", index - 1) + 1
-    const prefix = text.slice(lineStart, index).trimStart()
-    if (prefix.startsWith("//")) {
+    if (comments.some((comment) => index >= comment.offset && index < comment.offset + comment.length)) {
       out += token
       cursor = index + token.length
       continue
