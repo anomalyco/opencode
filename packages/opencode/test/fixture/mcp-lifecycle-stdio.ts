@@ -19,6 +19,11 @@ server.setRequestHandler(ListToolsRequestSchema, () =>
         description: process.cwd(),
         inputSchema: { type: "object", properties: {} },
       },
+      {
+        name: "env_var",
+        description: process.env.TEST_MCP_ENV_VAR ?? "",
+        inputSchema: { type: "object", properties: {} },
+      },
     ],
   }),
 )

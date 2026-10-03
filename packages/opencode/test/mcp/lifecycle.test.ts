@@ -216,6 +216,22 @@ it.instance(
   { init: (directory) => Effect.promise(() => Bun.$`mkdir -p ${path.join(directory, "plugins/sub")}`.quiet()) },
 )
 
+it.instance("local mcp passes configured server env to child process", () =>
+  Effect.gen(function* () {
+    const mcp = yield* MCP.Service
+    yield* mcp.add("env-server", {
+      type: "local",
+      command: [process.execPath, stdioFixture],
+      env: {
+        TEST_MCP_ENV_VAR: "passed-via-env",
+      },
+    })
+
+    const tools = yield* mcp.tools()
+    expect(tools["env-server_env_var"]?.def.description).toBe("passed-via-env")
+  }),
+)
+
 it.instance("tools() reuses cached definitions until a protocol notification", () =>
   Effect.gen(function* () {
     const server = yield* lifecycleServer({ capabilities: { tools: { listChanged: true } } })
