@@ -12,7 +12,8 @@ import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
-import { isOverflow } from "./overflow"
+import { compactionDebug, isOverflow } from "./overflow"
+import { RuntimeFlags } from "@/effect/runtime-flags"
 import { PartID } from "./schema"
 import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
@@ -94,6 +95,7 @@ const layer = Layer.effect(
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
     const database = yield* Database.Service
+    const flags = yield* RuntimeFlags.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -488,11 +490,24 @@ const layer = Layer.effect(
                 messageID: ctx.assistantMessage.parentID,
               })
               .pipe(Effect.ignore, Effect.forkIn(scope))
-            if (
-              !ctx.assistantMessage.summary &&
-              isOverflow({ cfg: yield* config.get(), tokens: usage.tokens, model: ctx.model })
-            ) {
-              ctx.needsCompaction = true
+            if (!ctx.assistantMessage.summary) {
+              const cfg = yield* config.get()
+              const compact = isOverflow({
+                cfg,
+                tokens: usage.tokens,
+                model: ctx.model,
+                outputTokenMax: flags.outputTokenMax,
+              })
+              yield* Effect.logDebug(
+                compactionDebug({
+                  cfg,
+                  model: ctx.model,
+                  tokens: usage.tokens,
+                  outputTokenMax: flags.outputTokenMax,
+                  compact,
+                }),
+              )
+              if (compact) ctx.needsCompaction = true
             }
             return
           }
@@ -726,6 +741,7 @@ export const node = LayerNode.make({
     Image.node,
     EventV2Bridge.node,
     Database.node,
+    RuntimeFlags.node,
   ],
 })
 

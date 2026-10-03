@@ -14,7 +14,7 @@ import { NotFoundError } from "@/storage/storage"
 
 import { Effect, Layer, Context } from "effect"
 import { InstanceState } from "@/effect/instance-state"
-import { isOverflow as overflow, usable } from "./overflow"
+import { compactionDebug, isOverflow as overflow, usable } from "./overflow"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -112,7 +112,7 @@ function completedCompactions(messages: SessionV1.WithParts[]) {
   })
 }
 
-function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
+export function preserveRecentBudget(input: { cfg: ConfigV1.Info; model: Provider.Model }) {
   return (
     input.cfg.compaction?.preserve_recent_tokens ??
     Math.min(MAX_PRESERVE_RECENT_TOKENS, Math.max(MIN_PRESERVE_RECENT_TOKENS, Math.floor(usable(input) * 0.25)))
@@ -204,12 +204,17 @@ const layer = Layer.effect(
       tokens: SessionV1.Assistant["tokens"]
       model: Provider.Model
     }) {
-      return overflow({
-        cfg: yield* config.get(),
+      const cfg = yield* config.get()
+      const compact = overflow({
+        cfg,
         tokens: input.tokens,
         model: input.model,
         outputTokenMax: flags.outputTokenMax,
       })
+      yield* Effect.logDebug(
+        compactionDebug({ cfg, model: input.model, tokens: input.tokens, outputTokenMax: flags.outputTokenMax, compact }),
+      )
+      return compact
     })
 
     const estimate = Effect.fn("SessionCompaction.estimate")(function* (input: {
