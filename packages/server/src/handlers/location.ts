@@ -1,9 +1,11 @@
 import { Location } from "@opencode/core/location"
+import { FileSystem } from "@opencode/core/filesystem"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Cause, Effect } from "effect"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
+import { locationErrors } from "../location"
 
 export const LocationHandler = HttpApiBuilder.group(Api, "server.location", (handlers) =>
   Effect.gen(function* () {
@@ -13,6 +15,8 @@ export const LocationHandler = HttpApiBuilder.group(Api, "server.location", (han
         "location.get",
         Effect.fn(function* () {
           const location = yield* Location.Service
+          const filesystem = yield* FileSystem.Service
+          yield* filesystem.check.pipe(locationErrors)
           return new Location.Info({
             directory: location.directory,
             project: location.project,

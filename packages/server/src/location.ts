@@ -3,7 +3,7 @@ import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
-import { LocationNotFoundError, InvalidRequestError } from "@opencode/protocol/errors"
+import { LocationNotFoundError, LocationPermissionDeniedError, InvalidRequestError } from "@opencode/protocol/errors"
 import { Effect, Layer, Schema } from "effect"
 import { HttpServerRequest } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
@@ -13,20 +13,25 @@ export type LocationServices = Layer.Success<ReturnType<(typeof LocationServiceM
 
 export class LocationMiddleware extends HttpApiMiddleware.Service<LocationMiddleware, { provides: LocationServices }>()(
   "@opencode/HttpApiLocation",
-  { error: [LocationNotFoundError] },
+  { error: [LocationNotFoundError, LocationPermissionDeniedError] },
 ) {}
 
 export function locationErrors<A, E, R>(effect: Effect.Effect<A, E, R>) {
   return effect.pipe(
     Effect.catchIf(
-      (error): error is Extract<E, FileSystem.DirectoryNotFoundError> =>
-        error instanceof FileSystem.DirectoryNotFoundError,
+      (error): error is Extract<E, FileSystem.DirectoryError> =>
+        error instanceof FileSystem.DirectoryNotFoundError || error instanceof FileSystem.DirectoryAccessDeniedError,
       (error) =>
         Effect.fail(
-          new LocationNotFoundError({
-            location: { directory: error.directory },
-            message: `Location not found: ${error.directory}`,
-          }),
+          error instanceof FileSystem.DirectoryNotFoundError
+            ? new LocationNotFoundError({
+                location: { directory: error.directory },
+                message: `Location not found: ${error.directory}`,
+              })
+            : new LocationPermissionDeniedError({
+                location: { directory: error.directory },
+                message: `Location access denied: ${error.directory}`,
+              }),
         ),
     ),
   )

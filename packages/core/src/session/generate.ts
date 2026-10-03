@@ -20,7 +20,7 @@ export type Error =
   | Instructions.InitializationBlocked
   | SessionRunnerModel.Error
   | AIError
-  | FileSystem.DirectoryNotFoundError
+  | FileSystem.DirectoryError
 
 /** Generates text from current Session context without mutating the Session. */
 export const generate = Effect.fn("SessionGenerate.generate")(function* (input: {

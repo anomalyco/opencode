@@ -68,7 +68,7 @@ const activityLocations = Layer.effect(
           workspaceID: ref.workspaceID,
           project: { id: Project.ID.global, directory: ref.directory, canonical: ref.directory },
         }),
-      ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
+      ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryError>,
     { idleTimeToLive: Duration.infinity },
   ),
 )

@@ -1372,7 +1372,7 @@ function buildExecution(
         () =>
           // The local execution test only needs the Session runner from the Location graph.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
-          runner as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
+          runner as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryError>,
       ),
     )
     return yield* Layer.buildWithScope(

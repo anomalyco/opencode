@@ -16,7 +16,7 @@ export type RunError =
   | AgentNotFoundError
   | StepFailedError
   | Instructions.InitializationBlocked
-  | FileSystem.DirectoryNotFoundError
+  | FileSystem.DirectoryError
 
 export type Continuation = { readonly step: number }
 
