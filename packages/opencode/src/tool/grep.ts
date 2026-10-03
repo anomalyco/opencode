@@ -60,9 +60,12 @@ export const GrepTool = Tool.define(
           const search = FSUtil.resolve(requested)
           const info = yield* fs.stat(search).pipe(Effect.catch(() => Effect.succeed(undefined)))
           const cwd = info?.type === "Directory" ? search : path.dirname(search)
+          if (info?.type === "File" && params.include && !fs.globMatch(params.include, path.basename(search)))
+            return empty
           const result = yield* ripgrep.grep({
             cwd,
             pattern: params.pattern,
+            file: info?.type === "File" ? path.basename(search) : undefined,
             include: params.include,
             limit: 100,
           })
