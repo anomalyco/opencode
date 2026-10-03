@@ -148,22 +148,21 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
   const measure = () => {
     if (!root) return
 
-    const scroller = document.querySelector(".scroll-view__viewport")
+    const dock = root.closest('[data-component="session-composer-dock"]')
+    if (!(dock instanceof HTMLElement) || !dock.parentElement) return
+
+    const panel = dock.parentElement
+    const scroller = panel.querySelector(".scroll-view__viewport")
     const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
     const top =
-      head instanceof HTMLElement && head.classList.contains("sticky") ? head.getBoundingClientRect().bottom : 0
-    if (!top) {
-      root.style.removeProperty("--question-prompt-max-height")
-      return
-    }
+      head instanceof HTMLElement && head.classList.contains("sticky")
+        ? head.getBoundingClientRect().bottom
+        : (dock.previousElementSibling ?? panel).getBoundingClientRect().top
 
-    const dock = root.closest('[data-component="session-composer-dock"]')
-    if (!(dock instanceof HTMLElement)) return
-
-    const dockBottom = dock.getBoundingClientRect().bottom
-    const below = Math.max(0, dockBottom - root.getBoundingClientRect().bottom)
+    const below = Math.max(0, dock.getBoundingClientRect().bottom - root.getBoundingClientRect().bottom)
     const gap = 8
-    const max = Math.max(240, Math.floor(dockBottom - top - gap - below))
+    // The dock can already overflow; use its parent's bounds to recover the available space.
+    const max = Math.max(0, Math.floor(panel.getBoundingClientRect().bottom - top - gap - below))
     root.style.setProperty("--question-prompt-max-height", `${max}px`)
   }
 
@@ -205,8 +204,7 @@ export const SessionQuestionDock: Component<{ request: FormInfo; onSubmit: () =>
     makeEventListener(window, "resize", update)
 
     const dock = root?.closest('[data-component="session-composer-dock"]')
-    const scroller = document.querySelector(".scroll-view__viewport")
-    createResizeObserver([dock, scroller], update)
+    createResizeObserver([dock, dock?.parentElement, dock?.previousElementSibling], update)
 
     onCleanup(() => {
       if (raf !== undefined) cancelAnimationFrame(raf)
