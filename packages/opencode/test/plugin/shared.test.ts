@@ -1,5 +1,19 @@
 import { describe, expect, test } from "bun:test"
-import { parsePluginSpecifier } from "../../src/plugin/shared"
+import { checkPluginCompatibility, parsePluginSpecifier } from "../../src/plugin/shared"
+
+describe("checkPluginCompatibility", () => {
+  const pkg = { dir: "/tmp/acme", pkg: "/tmp/acme/package.json", json: { engines: { opencode: ">=1.18.0" } } }
+
+  test("accepts a prerelease build newer than the required range", async () => {
+    await expect(checkPluginCompatibility("acme", "1.18.34-quickundo", pkg)).resolves.toBeUndefined()
+  })
+
+  test("rejects a prerelease build older than the required range", async () => {
+    await expect(checkPluginCompatibility("acme", "1.17.0-beta", pkg)).rejects.toThrow(
+      "Plugin requires opencode >=1.18.0 but running 1.17.0-beta",
+    )
+  })
+})
 
 describe("parsePluginSpecifier", () => {
   test("parses standard npm package without version", () => {
