@@ -118,7 +118,14 @@ export const Plugin = define({
       const skills: Skill.Info[] = []
       for (const directory of directories) {
         const files = yield* fs
-          .scan("{*.md,**/SKILL.md}", { cwd: directory, absolute: true, include: "file", symlink: true, dot: true })
+          .scan("{*.md,**/SKILL.md}", {
+            cwd: directory,
+            absolute: true,
+            include: "file",
+            symlink: true,
+            dot: true,
+            ignore: SkillFile.SCAN_IGNORE,
+          })
           .pipe(Effect.orElseSucceed(() => [] as string[]))
         for (const filepath of files.toSorted()) {
           const resolved = yield* fs.realPath(filepath).pipe(Effect.orElseSucceed(() => filepath))
