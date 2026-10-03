@@ -13,6 +13,18 @@ const STREAMING_POST_REGEX = /^\/session\/[^/]+\/(?:message|prompt_async)$/
 
 const THRESHOLD_BYTES = 1024
 
+export function compressible(contentType: string, byteLength: number) {
+  return byteLength >= THRESHOLD_BYTES && COMPRESSIBLE_CONTENT_TYPE_REGEX.test(contentType)
+}
+
+function appendVary(response: HttpServerResponse.HttpServerResponse, token: string) {
+  const vary = response.headers["vary"]
+  if (!vary) return HttpServerResponse.setHeader(response, "vary", token)
+  const tokens = vary.split(",").map((s) => s.trim().toLowerCase())
+  if (tokens.includes("*") || tokens.includes(token.toLowerCase())) return response
+  return HttpServerResponse.setHeader(response, "vary", `${vary}, ${token}`)
+}
+
 type Encoding = "gzip" | "deflate"
 
 function pickEncoding(acceptEncoding: string | undefined): Encoding | undefined {
@@ -39,7 +51,6 @@ export const compressionLayer = HttpRouter.middleware<{ handles: unknown }>()((e
 
     const body = response.body
     if (body._tag !== "Uint8Array") return response
-    if (body.body.byteLength < THRESHOLD_BYTES) return response
 
     const cacheControl = response.headers["cache-control"]
     if (cacheControl && NO_TRANSFORM_REGEX.test(cacheControl)) return response
@@ -48,17 +59,19 @@ export const compressionLayer = HttpRouter.middleware<{ handles: unknown }>()((e
     if (STREAMING_PATHS.has(path)) return response
     if (request.method === "POST" && STREAMING_POST_REGEX.test(path)) return response
 
-    const contentType = body.contentType
-    if (!COMPRESSIBLE_CONTENT_TYPE_REGEX.test(contentType)) return response
+    if (!compressible(body.contentType, body.body.byteLength)) return response
 
     const encoding = pickEncoding(request.headers["accept-encoding"])
     if (!encoding) return response
 
     const compressed = encoding === "gzip" ? gzipSync(body.body) : deflateSync(body.body)
-    return HttpServerResponse.setHeader(
-      HttpServerResponse.setBody(response, HttpBody.uint8Array(compressed, contentType)),
-      "content-encoding",
-      encoding,
+    return appendVary(
+      HttpServerResponse.setHeader(
+        HttpServerResponse.setBody(response, HttpBody.uint8Array(compressed, body.contentType)),
+        "content-encoding",
+        encoding,
+      ),
+      "Accept-Encoding",
     )
   }),
 ).layer

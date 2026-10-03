@@ -2,7 +2,9 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Effect, Stream } from "effect"
 import { HttpBody, HttpClient, HttpClientRequest, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { createHash } from "node:crypto"
+import { gzipSync } from "node:zlib"
 import { ProxyUtil } from "../proxy-util"
+import { compressible } from "../routes/instance/httpapi/middleware/compression"
 
 let embeddedUIPromise: Promise<Record<string, string> | null> | undefined
 
@@ -52,25 +54,57 @@ function notFound() {
   return HttpServerResponse.jsonUnsafe({ error: "Not Found" }, { status: 404 })
 }
 
-function embeddedUIResponse(file: string, body: Uint8Array) {
-  const mime = FSUtil.mimeType(file)
-  const headers = new Headers({ "content-type": mime })
-  if (mime.startsWith("text/html")) {
-    headers.set("content-security-policy", cspForHtml(new TextDecoder().decode(body)))
+interface EmbeddedFile {
+  raw: Uint8Array
+  mime: string
+  csp?: string
+  gzipped?: Uint8Array
+}
+
+// Embedded UI files are fixed for the process lifetime, so bodies — and their
+// gzip variants — are read and compressed once instead of per request.
+const embeddedFileCache = new Map<string, EmbeddedFile>()
+
+function embeddedUIResponse(entry: EmbeddedFile, acceptsGzip: boolean) {
+  const headers = new Headers({ "content-type": entry.mime })
+  if (entry.mime.startsWith("text/html")) {
+    entry.csp ??= cspForHtml(new TextDecoder().decode(entry.raw))
+    headers.set("content-security-policy", entry.csp)
   }
-  return HttpServerResponse.raw(body, { headers })
+  if (!compressible(entry.mime, entry.raw.byteLength)) return HttpServerResponse.raw(entry.raw, { headers })
+
+  // Compressed responses must carry Vary so shared caches don't serve a gzip
+  // body to clients that didn't send Accept-Encoding.
+  headers.set("vary", "Accept-Encoding")
+  if (!acceptsGzip) return HttpServerResponse.raw(entry.raw, { headers })
+  entry.gzipped ??= gzipSync(entry.raw)
+  headers.set("content-encoding", "gzip")
+  return HttpServerResponse.raw(entry.gzipped, { headers })
 }
 
 export function serveEmbeddedUIEffect(
   requestPath: string,
   fs: FSUtil.Interface,
   embeddedWebUI: Record<string, string>,
+  headers: Record<string, string> = {},
 ) {
-  const file = embeddedWebUI[requestPath.replace(/^\//, "")] ?? embeddedWebUI["index.html"] ?? null
+  // Only navigations (Accept: text/html) fall back to index.html; missing
+  // assets must 404 so stale clients fail fast instead of parsing HTML as JS.
+  const file =
+    embeddedWebUI[requestPath.replace(/^\//, "")] ??
+    (headers["accept"]?.includes("text/html") ? embeddedWebUI["index.html"] : null)
   if (!file) return Effect.succeed(notFound())
 
+  const acceptsGzip = headers["accept-encoding"]?.includes("gzip") ?? false
+  const cached = embeddedFileCache.get(file)
+  if (cached) return Effect.succeed(embeddedUIResponse(cached, acceptsGzip))
+
   return fs.readFile(file).pipe(
-    Effect.map((body) => embeddedUIResponse(file, body)),
+    Effect.map((body) => {
+      const entry: EmbeddedFile = { raw: body, mime: FSUtil.mimeType(file) }
+      embeddedFileCache.set(file, entry)
+      return embeddedUIResponse(entry, acceptsGzip)
+    }),
     Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(notFound())),
   )
 }
@@ -83,7 +117,7 @@ export function serveUIEffect(
     const embeddedWebUI = yield* Effect.promise(() => embeddedUI(services.disableEmbeddedWebUi))
     const path = new URL(request.url, "http://localhost").pathname
 
-    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI)
+    if (embeddedWebUI) return yield* serveEmbeddedUIEffect(path, services.fs, embeddedWebUI, request.headers)
 
     const response = yield* services.client.execute(
       HttpClientRequest.make(request.method)(upstreamURL(path), {

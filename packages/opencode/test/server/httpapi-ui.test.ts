@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto"
+import { gunzipSync } from "node:zlib"
 import { describe, expect } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { ConfigProvider, Effect, Layer, Option } from "effect"
@@ -346,6 +347,7 @@ describe("HttpApi UI fallback", () => {
           },
         },
         { "index.html": "/$bunfs/root/index.html" },
+        { accept: "text/html" },
       ).pipe(Effect.map(HttpServerResponse.toWeb))
 
       const csp = response.headers.get("content-security-policy") ?? ""
@@ -353,6 +355,101 @@ describe("HttpApi UI fallback", () => {
       expect(csp).toContain(`'sha256-${createHash("sha256").update(script).digest("base64")}'`)
       expect(csp).toContain("img-src 'self' data: https: blob:")
       expect(csp).toContain("connect-src * data: blob:")
+    }),
+  )
+
+  it.live("serves gzip-encoded embedded assets from cache", () =>
+    Effect.gen(function* () {
+      const script = new TextEncoder().encode("console.log('x');\n".repeat(200))
+      let reads = 0
+
+      const fs = yield* FSUtil.Service
+      const fakeFs = {
+        ...fs,
+        readFile: (path: string) => {
+          reads++
+          return path === "/$bunfs/root/assets/gzip.js"
+            ? Effect.succeed(script)
+            : Effect.die(`unexpected embedded UI path: ${path}`)
+        },
+      }
+      const embedded = { "assets/gzip.js": "/$bunfs/root/assets/gzip.js" }
+      const headers = { "accept-encoding": "br, gzip", accept: "*/*" }
+
+      const first = yield* serveEmbeddedUIEffect("/assets/gzip.js", fakeFs, embedded, headers).pipe(
+        Effect.map(HttpServerResponse.toWeb),
+      )
+      const second = yield* serveEmbeddedUIEffect("/assets/gzip.js", fakeFs, embedded, headers).pipe(
+        Effect.map(HttpServerResponse.toWeb),
+      )
+
+      expect(first.status).toBe(200)
+      expect(first.headers.get("content-encoding")).toBe("gzip")
+      expect(first.headers.get("vary")).toBe("Accept-Encoding")
+      expect(reads).toBe(1)
+      expect(gunzipSync(Buffer.from(yield* Effect.promise(() => first.arrayBuffer()))).toString()).toBe(
+        new TextDecoder().decode(script),
+      )
+      expect(second.headers.get("content-encoding")).toBe("gzip")
+    }),
+  )
+
+  it.live("serves raw embedded assets when the client does not accept gzip", () =>
+    Effect.gen(function* () {
+      const script = new TextEncoder().encode("console.log('x');\n".repeat(200))
+
+      const fs = yield* FSUtil.Service
+      const response = yield* serveEmbeddedUIEffect(
+        "/assets/raw.js",
+        {
+          ...fs,
+          readFile: () => Effect.succeed(script),
+        },
+        { "assets/raw.js": "/$bunfs/root/assets/raw.js" },
+        { accept: "*/*" },
+      ).pipe(Effect.map(HttpServerResponse.toWeb))
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get("content-encoding")).toBeNull()
+      expect(response.headers.get("vary")).toBe("Accept-Encoding")
+      expect(yield* responseText(response)).toBe(new TextDecoder().decode(script))
+    }),
+  )
+
+  it.live("returns 404 for missing embedded assets without serving index.html", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const response = yield* serveEmbeddedUIEffect(
+        "/assets/missing.js",
+        fs,
+        { "index.html": "/$bunfs/root/index.html" },
+        { accept: "*/*" },
+      ).pipe(Effect.map(HttpServerResponse.toWeb))
+
+      expect(response.status).toBe(404)
+      expect(response.headers.get("content-type")).not.toContain("text/html")
+    }),
+  )
+
+  it.live("serves index.html for navigations to unknown routes", () =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const response = yield* serveEmbeddedUIEffect(
+        "/session/abc",
+        {
+          ...fs,
+          readFile: (path) =>
+            path === "/$bunfs/root/index-nav.html"
+              ? Effect.succeed(new TextEncoder().encode("<html>app</html>"))
+              : Effect.die(`unexpected embedded UI path: ${path}`),
+        },
+        { "index.html": "/$bunfs/root/index-nav.html" },
+        { accept: "text/html,application/xhtml+xml" },
+      ).pipe(Effect.map(HttpServerResponse.toWeb))
+
+      expect(response.status).toBe(200)
+      expect(response.headers.get("content-type")).toContain("text/html")
+      expect(yield* responseText(response)).toBe("<html>app</html>")
     }),
   )
 
