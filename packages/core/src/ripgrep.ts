@@ -1,6 +1,6 @@
 export * as Ripgrep from "./ripgrep"
 
-import { Context, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { Context, Effect, Fiber, Layer, Schema, Semaphore, Stream } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { Entry, Match } from "@opencode-ai/schema/filesystem"
 import { makeGlobalNode } from "./effect/app-node"
@@ -18,6 +18,15 @@ import { RipgrepBinary } from "./ripgrep/binary"
 const ERROR_BYTES = 8 * 1024
 const MAX_RECORD_BYTES = 64 * 1024
 const MAX_SUBMATCHES = 100
+
+/**
+ * Bound concurrent ripgrep subprocesses. Each ripgrep process is
+ * multithreaded and buffers JSON output, so an unbounded fan-out from a
+ * single assistant message (dozens of concurrent grep/glob/find calls) can
+ * exhaust commit limits (Windows STATUS_COMMITMENT_LIMIT) and OOM the host.
+ * Queuing here keeps one shared cap across grep/glob/find callers.
+ */
+export const MAX_CONCURRENT_RIPGREP = 4
 
 const RawMatch = Schema.Struct({
   type: Schema.Literal("match"),
@@ -94,6 +103,7 @@ const layer = Layer.effect(
   Effect.gen(function* () {
     const process = yield* AppProcess.Service
     const binary = yield* RipgrepBinary.Service
+    const limiter = Semaphore.makeUnsafe(MAX_CONCURRENT_RIPGREP)
 
     const run = <A>(input: {
       readonly cwd: string
@@ -135,13 +145,19 @@ const layer = Layer.effect(
           if (input.pattern && code === 2 && isInvalidPattern(stderr)) {
             return yield* new InvalidPatternError({ pattern: input.pattern, message: stderr.trim() })
           }
-          if (code !== 0 && code !== 1 && code !== 2) {
+          // ripgrep uses 0 for matches and 1 for no matches. Any other code
+          // (including 2 for allocation/commit-limit/OOM failures) must fail
+          // promptly so tool status transitions to error instead of hanging
+          // in running or returning partial results as success.
+          if (code !== 0 && code !== 1) {
             return yield* failure(stderr.trim() || `ripgrep failed with code ${code}`)
           }
-          return { items: code === 1 ? [] : rows, truncated: false, partial: code === 2 }
+          return { items: code === 1 ? [] : rows, truncated: false, partial: false }
         }),
       )
-      const abortable = input.signal ? program.pipe(Effect.raceFirst(waitForAbort(input.signal))) : program
+      const abortable = input.signal
+        ? limiter.withPermits(1)(program).pipe(Effect.raceFirst(waitForAbort(input.signal)))
+        : limiter.withPermits(1)(program)
       return abortable.pipe(
         Effect.mapError((cause) =>
           cause instanceof Error || cause instanceof InvalidPatternError
