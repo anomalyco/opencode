@@ -78,9 +78,11 @@ export interface Interface {
   readonly prefix: (cwd: string) => Effect.Effect<string>
   readonly defaultBranch: (cwd: string) => Effect.Effect<Base | undefined>
   readonly hasHead: (cwd: string) => Effect.Effect<boolean>
+  readonly isRepo: (cwd: string) => Effect.Effect<boolean>
   readonly mergeBase: (cwd: string, base: string, head?: string) => Effect.Effect<string | undefined>
   readonly show: (cwd: string, ref: string, file: string, prefix?: string) => Effect.Effect<string>
   readonly status: (cwd: string) => Effect.Effect<Item[]>
+  readonly gitlinks: (cwd: string) => Effect.Effect<string[]>
   readonly diff: (cwd: string, ref: string) => Effect.Effect<Item[]>
   readonly stats: (cwd: string, ref: string) => Effect.Effect<Stat[]>
   readonly patch: (cwd: string, ref: string, file: string, options?: PatchOptions) => Effect.Effect<Patch>
@@ -197,6 +199,11 @@ const layer = Layer.effect(
       return result.exitCode === 0
     })
 
+    const isRepo = Effect.fn("Git.isRepo")(function* (cwd: string) {
+      const result = yield* run(["rev-parse", "--git-dir"], { cwd })
+      return result.exitCode === 0
+    })
+
     const mergeBase = Effect.fn("Git.mergeBase")(function* (cwd: string, base: string, head = "HEAD") {
       const result = yield* run(["merge-base", base, head], { cwd })
       if (result.exitCode !== 0) return
@@ -222,6 +229,16 @@ const layer = Layer.effect(
         if (!file) return []
         const code = item.slice(0, 2)
         return [{ file, code, status: kind(code) } satisfies Item]
+      })
+    })
+
+    const gitlinks = Effect.fn("Git.gitlinks")(function* (cwd: string) {
+      return nuls(yield* text(["ls-files", "--stage", "-z", "--", "."], { cwd })).flatMap((item) => {
+        const tab = item.indexOf("\t")
+        if (tab === -1 || !item.startsWith("160000 ")) return []
+        const file = item.slice(tab + 1)
+        if (!file) return []
+        return [file]
       })
     })
 
@@ -329,9 +346,11 @@ const layer = Layer.effect(
       prefix,
       defaultBranch,
       hasHead,
+      isRepo,
       mergeBase,
       show,
       status,
+      gitlinks,
       diff,
       stats,
       patch,
