@@ -1,4 +1,4 @@
-import { afterEach, expect, test } from "bun:test"
+import { afterAll, afterEach, beforeAll, expect, test } from "bun:test"
 import { mkdir, unlink } from "fs/promises"
 import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -873,7 +873,7 @@ it.instance(
     const providers = yield* list
     expect(providers[ProviderV2.ID.make("local-llm")]).toBeDefined()
     expect(providers[ProviderV2.ID.make("local-llm")].models["llama-3"].api.npm).toBe("@ai-sdk/openai-compatible")
-    expect(providers[ProviderV2.ID.make("local-llm")].options.baseURL).toBe("http://localhost:11434/v1")
+    expect(providers[ProviderV2.ID.make("local-llm")].options.baseURL).toBe("http://127.0.0.1:9/v1")
   }),
   {
     config: {
@@ -883,7 +883,7 @@ it.instance(
           npm: "@ai-sdk/openai-compatible",
           env: [],
           models: { "llama-3": { name: "Llama 3", tool_call: true, limit: { context: 8192, output: 2048 } } },
-          options: { apiKey: "not-needed", baseURL: "http://localhost:11434/v1" },
+          options: { apiKey: "not-needed", baseURL: "http://127.0.0.1:9/v1" },
         },
       },
     },
@@ -2083,6 +2083,88 @@ it.effect("opencode loader keeps paid models when config apiKey is present", () 
     expect(none).toBe(0)
     expect(keyedCount).toBeGreaterThan(0)
   }).pipe(provideMultiInstance),
+)
+
+const discoveryModelsServer = {
+  server: null as ReturnType<typeof Bun.serve> | null,
+  url: "",
+  start() {
+    if (this.server) return
+    this.server = Bun.serve({
+      port: 0,
+      async fetch(req) {
+        const url = new URL(req.url)
+        if (url.pathname === "/v1/models") {
+          return Response.json({
+            object: "list",
+            data: [
+              { id: "server-model-a", object: "model", created: 1700000000, owned_by: "test" },
+              { id: "server-model-b", object: "model" },
+              { id: "text-embedding-x", object: "model" },
+            ],
+          })
+        }
+        return new Response("not found", { status: 404 })
+      },
+    })
+    this.url = `${this.server.url.origin}/v1`
+  },
+}
+
+beforeAll(() => discoveryModelsServer.start())
+afterAll(() => discoveryModelsServer.server?.stop(true))
+
+it.instance(
+  "openai-compatible provider discovers models from baseURL",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const provider = providers[ProviderV2.ID.make("discovery-provider")]
+    expect(provider).toBeDefined()
+    // Discovered from the live server, not the stale configured list
+    expect(provider.models["server-model-a"]).toBeDefined()
+    expect(provider.models["server-model-b"]).toBeDefined()
+    expect(provider.models["text-embedding-x"]).toBeUndefined()
+    expect(provider.models["configured-but-gone"]).toBeUndefined()
+    const model = provider.models["server-model-a"]
+    expect(model.api.npm).toBe("@ai-sdk/openai-compatible")
+    expect(model.capabilities.toolcall).toBe(true)
+    expect(model.cost.input).toBe(0)
+  }),
+  {
+    config: () => ({
+      provider: {
+        "discovery-provider": {
+          name: "Discovery Provider",
+          npm: "@ai-sdk/openai-compatible",
+          options: { apiKey: "test-key", baseURL: discoveryModelsServer.url },
+          models: { "configured-but-gone": { name: "Gone" } },
+        },
+      },
+    }),
+  },
+)
+
+it.instance(
+  "openai-compatible discovery failure falls back to configured models",
+  Effect.gen(function* () {
+    const providers = yield* list
+    const provider = providers[ProviderV2.ID.make("discovery-fallback")]
+    expect(provider).toBeDefined()
+    expect(provider.models["configured-model"]).toBeDefined()
+    expect(provider.models["server-model-a"]).toBeUndefined()
+  }),
+  {
+    config: {
+      provider: {
+        "discovery-fallback": {
+          name: "Discovery Fallback",
+          npm: "@ai-sdk/openai-compatible",
+          options: { apiKey: "test-key", baseURL: "http://127.0.0.1:9/v1" },
+          models: { "configured-model": { name: "Configured Model" } },
+        },
+      },
+    },
+  },
 )
 
 it.effect("opencode loader keeps paid models when auth exists", () =>
