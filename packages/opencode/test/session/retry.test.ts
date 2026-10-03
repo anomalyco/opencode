@@ -425,6 +425,83 @@ describe("session.retry.retryable", () => {
       "Usage limit reached. It will reset in 15 minutes. To continue using this model now, enable usage from your available balance",
     )
   })
+
+  test("treats payment-required responses as terminal", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({ message: "boom", isRetryable: true, statusCode: 402 }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "boom", terminal: true })
+  })
+
+  test("treats structured quota codes as terminal", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "You exceeded your current quota",
+        isRetryable: true,
+        statusCode: 429,
+        responseBody: JSON.stringify({ error: { type: "insufficient_quota", code: "insufficient_quota" } }),
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "You exceeded your current quota",
+      terminal: true,
+    })
+  })
+
+  test("treats per-day quota violations as terminal", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "Resource has been exhausted",
+        isRetryable: true,
+        statusCode: 429,
+        responseBody: JSON.stringify({
+          error: {
+            code: 429,
+            status: "RESOURCE_EXHAUSTED",
+            details: [
+              {
+                "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+                violations: [{ quotaId: "GenerateRequestsPerDayPerProjectPerModel" }],
+              },
+            ],
+          },
+        }),
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "Resource has been exhausted",
+      terminal: true,
+    })
+  })
+
+  test("keeps per-minute quota violations retryable", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "Resource has been exhausted",
+        isRetryable: true,
+        statusCode: 429,
+        responseBody: JSON.stringify({
+          error: {
+            status: "RESOURCE_EXHAUSTED",
+            details: [{ violations: [{ quotaId: "GenerateRequestsPerMinutePerProject" }] }],
+          },
+        }),
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Resource has been exhausted" })
+  })
+
+  test("keeps plain rate limits retryable", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({ message: "rate limit exceeded", isRetryable: true, statusCode: 429 }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "rate limit exceeded" })
+  })
 })
 
 describe("session.message-v2.fromError", () => {
