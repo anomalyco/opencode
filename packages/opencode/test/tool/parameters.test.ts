@@ -10,6 +10,7 @@ import { ToolJsonSchema } from "../../src/tool/json-schema"
 // provider-compatible while tools use Effect Schema internally.
 
 import { Parameters as ApplyPatch } from "../../src/tool/apply_patch"
+import { Parameters as Browser } from "../../src/tool/browser"
 import { Parameters as Edit } from "../../src/tool/edit"
 import { Parameters as Glob } from "../../src/tool/glob"
 import { Parameters as Grep } from "../../src/tool/grep"
@@ -37,6 +38,7 @@ const toJsonSchema = ToolJsonSchema.fromSchema
 describe("tool parameters", () => {
   describe("JSON Schema (wire shape)", () => {
     test("apply_patch", () => expect(toJsonSchema(ApplyPatch)).toMatchSnapshot())
+    test("browser", () => expect(toJsonSchema(Browser)).toMatchSnapshot())
     test("bash", () => expect(toJsonSchema(Shell)).toMatchSnapshot())
     test("edit", () => expect(toJsonSchema(Edit)).toMatchSnapshot())
     test("glob", () => expect(toJsonSchema(Glob)).toMatchSnapshot())
@@ -102,6 +104,27 @@ describe("tool parameters", () => {
     })
     test("rejects non-string patchText", () => {
       expect(accepts(ApplyPatch, { patchText: 123 })).toBe(false)
+    })
+  })
+
+  describe("browser", () => {
+    test("accepts action only", () => {
+      expect(parse(Browser, { action: "open" })).toEqual({ action: "open" })
+    })
+    test("accepts navigation fields", () => {
+      const parsed = parse(Browser, { action: "goto", url: "https://example.com", timeoutMs: 5000 })
+      expect(parsed.url).toBe("https://example.com")
+      expect(parsed.timeoutMs).toBe(5000)
+    })
+    test("accepts replay with a recording path", () => {
+      const parsed = parse(Browser, { action: "replay", path: "/tmp/recording.json" })
+      expect(parsed.path).toBe("/tmp/recording.json")
+    })
+    test("rejects unknown action", () => {
+      expect(accepts(Browser, { action: "teleport" })).toBe(false)
+    })
+    test("rejects missing action", () => {
+      expect(accepts(Browser, {})).toBe(false)
     })
   })
 
