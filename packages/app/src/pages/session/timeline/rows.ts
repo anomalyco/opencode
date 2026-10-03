@@ -168,6 +168,36 @@ export namespace Timeline {
       )
     }
 
+    // The thinking row stays mounted after the turn completes (with a frozen
+    // total) instead of vanishing with the first visible output; only errors
+    // suppress it. While the turn runs it ticks live; once done the end is
+    // the latest assistant completion. It sits above the assistant output:
+    // thinking is the cause, the reply is the effect.
+    const thinkingActive = isActive && status === "busy" && !error
+    const turnStart = userMessage.time.created
+    const turnEnd = assistantMessages.reduce<number | undefined>((max, message) => {
+      const completed = message.time.completed
+      if (typeof completed !== "number") return max
+      if (max === undefined) return completed
+      return Math.max(max, completed)
+    }, undefined)
+    if (!error && typeof turnStart === "number" && (thinkingActive || turnEnd !== undefined)) {
+      const heading = assistantMessages
+        .flatMap((message) => getMessageParts(message.id))
+        .map((part) => (part.type === "reasoning" && part.text ? reasoningHeading(part.text) : undefined))
+        .find((value): value is string => !!value)
+
+      rows.push(
+        new TimelineRow.Thinking({
+          userMessageID: userMessage.id,
+          reasoningHeading: heading,
+          startedAt: turnStart,
+          endedAt: thinkingActive ? undefined : turnEnd,
+          running: thinkingActive,
+        }),
+      )
+    }
+
     let assistantGroupIndex = 0
     assistantItems.forEach((item) => {
       if (item.type === "interrupted") {
@@ -189,20 +219,6 @@ export namespace Timeline {
       )
       assistantGroupIndex += 1
     })
-
-    if (isActive && status === "busy" && !error && (showReasoning ? assistantPartRefs.length === 0 : true)) {
-      const heading = assistantMessages
-        .flatMap((message) => getMessageParts(message.id))
-        .map((part) => (part.type === "reasoning" && part.text ? reasoningHeading(part.text) : undefined))
-        .find((value): value is string => !!value)
-
-      rows.push(
-        new TimelineRow.Thinking({
-          userMessageID: userMessage.id,
-          reasoningHeading: heading,
-        }),
-      )
-    }
 
     if (isActive && status === "retry") rows.push(new TimelineRow.Retry({ userMessageID: userMessage.id }))
 

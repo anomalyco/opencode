@@ -1,8 +1,9 @@
-import { createEffect, For, Match, on, onCleanup, onMount, Show, Switch, type Accessor, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, on, onCleanup, onMount, Show, Switch, type Accessor, type JSX } from "solid-js"
 import { animate, type AnimationPlaybackControls } from "motion"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { createStore } from "solid-js/store"
 import { Collapsible } from "@opencode-ai/ui/collapsible"
+import { formatToolElapsed } from "./tool-elapsed"
 import type { IconProps } from "@opencode-ai/ui/icon"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
 
@@ -27,6 +28,13 @@ export interface BasicToolProps {
   trigger: TriggerTitle | JSX.Element | ((open: Accessor<boolean>) => JSX.Element)
   children?: JSX.Element
   status?: string
+  // Millisecond timestamps backing the per-tool elapsed badge (`· 3s`).
+  // Pending parts carry no timestamps yet; leave both unset then.
+  startedAt?: number
+  endedAt?: number
+  // Set when the caller renders its own ToolElapsed inline (e.g. shell puts
+  // it between title and command); suppresses the generic badge slots.
+  hideElapsedBadge?: boolean
   hideDetails?: boolean
   defaultOpen?: boolean
   open?: boolean
@@ -83,7 +91,68 @@ function scheduleFrameMount(fn: () => void) {
   return () => cancelAnimationFrame(frame)
 }
 
+// Live elapsed badge shared by tool rows, inline tool titles, and the turn
+// thinking indicator. Ticks once per second while `running` with no end yet;
+// frozen text once `endedAt` is set; empty while timestamps are unknown.
+// `tight` drops the leading margin for badges placed inside flex-gap
+// containers (which already space their items); the default margin is for
+// badges appended after custom trigger layouts.
+export function ToolElapsed(props: {
+  startedAt?: number
+  endedAt?: number
+  running: boolean
+  tight?: boolean
+}) {
+  const i18n = useI18n()
+  const numfmt = () => new Intl.NumberFormat(i18n.locale())
+  const formatTotal = (total: number) =>
+    total < 60
+      ? i18n.t("ui.message.duration.seconds", { count: numfmt().format(total) })
+      : i18n.t("ui.message.duration.minutesSeconds", {
+          minutes: numfmt().format(Math.floor(total / 60)),
+          seconds: numfmt().format(total % 60),
+        })
+  const [now, setNow] = createSignal(0)
+  let timer: ReturnType<typeof setInterval> | undefined
+  const ticking = () => props.running && props.startedAt !== undefined && props.endedAt === undefined
+  onMount(() => {
+    if (ticking() && timer === undefined) {
+      setNow(Date.now())
+      timer = setInterval(() => setNow(Date.now()), 1000)
+    }
+  })
+  createEffect(() => {
+    if (ticking()) {
+      if (timer === undefined) {
+        setNow(Date.now())
+        timer = setInterval(() => setNow(Date.now()), 1000)
+      }
+    } else if (timer !== undefined) {
+      clearInterval(timer)
+      timer = undefined
+    }
+  })
+  onCleanup(() => {
+    if (timer !== undefined) clearInterval(timer)
+  })
+  const text = createMemo(() => formatToolElapsed(props.startedAt, props.endedAt, now(), formatTotal))
+  return (
+    <Show when={text()}>
+      {(t) => (
+        <span data-slot="basic-tool-tool-elapsed" style={props.tight ? { "margin-left": "0" } : undefined}>
+          {t()}
+        </span>
+      )}
+    </Show>
+  )
+}
+
 export function BasicTool(props: BasicToolProps) {
+  const elapsed = (tight?: boolean) => (
+    <Show when={!props.hideElapsedBadge}>
+      <ToolElapsed startedAt={props.startedAt} endedAt={props.endedAt} running={pending()} tight={tight} />
+    </Show>
+  )
   const [state, setState] = createStore({
     open: props.defaultOpen ?? false,
     ready: !props.defer && (props.defaultOpen ?? false),
@@ -191,7 +260,13 @@ export function BasicTool(props: BasicToolProps) {
       <div data-slot="basic-tool-tool-trigger-content">
         <div data-slot="basic-tool-tool-info">
           <Switch>
-            <Match when={dynamicTrigger !== undefined}>{dynamicTrigger}</Match>
+            <Match when={dynamicTrigger !== undefined}>
+              {dynamicTrigger}
+              {/* Function triggers (e.g. shell) render custom layouts that
+                  bypass the title branch below, so the badge needs its own
+                  slot here. Branches are exclusive: no double render. */}
+              {elapsed()}
+            </Match>
             <Match when={isTriggerTitle(props.trigger) && props.trigger}>
               {(title) => (
                 <div data-slot="basic-tool-tool-info-structured">
@@ -237,6 +312,7 @@ export function BasicTool(props: BasicToolProps) {
                         </For>
                       </Show>
                     </Show>
+                    {elapsed(true)}
                   </div>
                   <Show when={!pending() && title().action}>
                     <span data-slot="basic-tool-tool-action">{title().action}</span>
@@ -244,7 +320,10 @@ export function BasicTool(props: BasicToolProps) {
                 </div>
               )}
             </Match>
-            <Match when={true}>{props.trigger as JSX.Element}</Match>
+            <Match when={true}>
+              {props.trigger as JSX.Element}
+              {elapsed()}
+            </Match>
           </Switch>
         </div>
       </div>
@@ -325,6 +404,8 @@ export function GenericTool(props: {
   status?: string
   hideDetails?: boolean
   input?: Record<string, unknown>
+  startedAt?: number
+  endedAt?: number
 }) {
   const i18n = useI18n()
 
@@ -332,6 +413,8 @@ export function GenericTool(props: {
     <BasicTool
       icon="mcp"
       status={props.status}
+      startedAt={props.startedAt}
+      endedAt={props.endedAt}
       trigger={{
         title: i18n.t("ui.basicTool.called", { tool: props.tool }),
         subtitle: label(props.input),

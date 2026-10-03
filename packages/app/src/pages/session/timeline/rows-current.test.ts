@@ -52,9 +52,11 @@ describe("current session timeline rows", () => {
     expect(result.activeMessageID).toBe("msg_3")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_1",
+      "thinking:msg_1",
       "assistant-part:msg_1:msg_2:text:0",
       "turn-gap:msg_3",
       "user-message:msg_3",
+      "thinking:msg_3",
       "assistant-part:msg_3:msg_4:reasoning:0",
     ])
   })
@@ -88,6 +90,7 @@ describe("current session timeline rows", () => {
     expect(result.activeMessageID).toBe("msg_shell")
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_shell",
+      "thinking:msg_shell",
       "assistant-part:msg_shell:msg_shell:tool",
     ])
   })
@@ -128,9 +131,11 @@ describe("current session timeline rows", () => {
 
     expect(result.rows.map(TimelineRow.key)).toEqual([
       "user-message:msg_user_1",
+      "thinking:msg_user_1",
       "assistant-part:msg_user_1:msg_assistant_1:text:0",
       "turn-gap:msg_user_2",
       "user-message:msg_user_2",
+      "thinking:msg_user_2",
       "assistant-part:msg_user_2:msg_assistant_2:text:0",
     ])
   })
@@ -168,6 +173,47 @@ describe("current session timeline rows", () => {
     ])
   })
 
+  test("thinking rows carry live timing while busy and frozen totals when done", () => {
+    const source = [
+      { id: "msg_user", type: "user", text: "q", time: { created: 10 } },
+      {
+        id: "msg_asst",
+        type: "assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+        content: [{ type: "text", text: "a" }],
+        time: { created: 11, completed: 16 },
+      },
+    ] satisfies SessionMessageInfo[]
+    const normalized = normalizeSessionMessages("ses_1", source)
+    const messages = new Map(normalized.messages.map((message) => [message.id, message]))
+    const users = normalized.messages.filter((message) => message.role === "user")
+
+    const busy = Timeline.constructSessionMessageRows(
+      source,
+      (messageID) => messages.get(messageID),
+      (messageID) => normalized.parts.get(messageID) ?? [],
+      true,
+      "busy",
+      true,
+      users,
+    )
+    const busyThinking = busy.rows.find((row) => row._tag === "Thinking")
+    expect(busyThinking).toMatchObject({ startedAt: 10, endedAt: undefined, running: true })
+
+    const done = Timeline.constructSessionMessageRows(
+      source,
+      (messageID) => messages.get(messageID),
+      (messageID) => normalized.parts.get(messageID) ?? [],
+      true,
+      "idle",
+      true,
+      users,
+    )
+    const doneThinking = done.rows.find((row) => row._tag === "Thinking")
+    expect(doneThinking).toMatchObject({ startedAt: 10, endedAt: 16, running: false })
+  })
+
   test("removes a failed assistant error when the turn continues streaming", () => {
     const source = [
       { id: "msg_user", type: "user", text: "recover", time: { created: 1 } },
@@ -202,6 +248,6 @@ describe("current session timeline rows", () => {
       normalized.messages.filter((message) => message.role === "user"),
     )
 
-    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "AssistantPart"])
+    expect(result.rows.map((row) => row._tag)).toEqual(["UserMessage", "Thinking", "AssistantPart"])
   })
 })
