@@ -12,6 +12,7 @@ import { Auth } from "../auth"
 import { Env } from "../env"
 import { applyEdits, modify } from "jsonc-parser"
 import { InstallationLocal, InstallationVersion } from "@opencode-ai/core/installation/version"
+import semver from "semver"
 import { existsSync } from "fs"
 import { Account } from "@/account/account"
 import { isRecord } from "@/util/record"
@@ -454,7 +455,12 @@ const layer = Layer.effect(
               add: [
                 {
                   name: "@opencode-ai/plugin",
-                  version: InstallationLocal ? undefined : InstallationVersion,
+                  // Only pin to a real release. A downstream build stamped with a non-semver
+                  // version (for example `0.0.0-codex/some-branch`) would otherwise become a
+                  // spec that npm-package-arg parses as a GitHub `owner/repo` shortcut, so
+                  // arborist runs `git ls-remote` on a nonexistent repository and, on Windows,
+                  // Git Credential Manager opens a "Connect to GitHub" dialog at every start.
+                  version: InstallationLocal || !semver.valid(InstallationVersion) ? undefined : InstallationVersion,
                 },
               ],
             })
