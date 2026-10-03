@@ -92,12 +92,16 @@ const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
   const httpBody = Object.hasOwn(body, "apiKey")
     ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "apiKey"))
     : body
+  // Defense in depth for the opencode-go gateway (~148k input) when the
+  // catalog still advertises 1M context (custom configs, stale cache).
+  const context =
+    model.providerID === "opencode-go" ? Math.min(model.limit.context, 148_000) : model.limit.context
   return route.with({
     provider: model.providerID,
     endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
     headers: model.request.headers,
     http: { body: httpBody },
-    limits: { context: model.limit.context, output: model.limit.output },
+    limits: { context, output: model.limit.output },
   })
 }
 

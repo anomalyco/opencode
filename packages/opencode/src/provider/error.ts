@@ -41,8 +41,24 @@ function message(providerID: ProviderV2.ID, e: APICallError) {
       return "Unknown error"
     }
 
-    if (!e.responseBody || (e.statusCode && msg !== STATUS_CODES[e.statusCode])) {
-      return msg
+    if (!e.responseBody) return msg
+
+    // When the SDK message is already specific, still surface the provider
+    // body so gateway rejection reasons (e.g. opencode-go 400s) remain
+    // diagnosable instead of being swallowed.
+    if (e.statusCode && msg !== STATUS_CODES[e.statusCode]) {
+      try {
+        const body = JSON.parse(e.responseBody)
+        const errMsg = body.message || body.error || body.error?.message
+        if (errMsg && typeof errMsg === "string" && !msg.includes(errMsg)) {
+          return `${msg}: ${errMsg}`.slice(0, 2000)
+        }
+      } catch {}
+      if (/^\s*<!doctype|^\s*<html/i.test(e.responseBody)) return msg
+      if (msg.includes(e.responseBody)) return msg
+      const excerpt =
+        e.responseBody.length <= 2000 ? e.responseBody : `${e.responseBody.slice(0, 2000)}… [truncated]`
+      return `${msg}: ${excerpt}`
     }
 
     try {
@@ -172,7 +188,12 @@ export type ParsedAPICallError =
 export function parseAPICallError(input: { providerID: ProviderV2.ID; error: APICallError }): ParsedAPICallError {
   const m = message(input.providerID, input.error)
   const body = json(input.error.responseBody)
-  if (isContextOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
+  const bodyText = typeof input.error.responseBody === "string" ? input.error.responseBody : ""
+  if (
+    isContextOverflow(m) ||
+    (bodyText ? isContextOverflow(bodyText) : false) ||
+    body?.error?.code === "context_length_exceeded"
+  ) {
     return {
       type: "context_overflow",
       message: m,
