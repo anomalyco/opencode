@@ -6,6 +6,7 @@ export default Extension.define({
   os: ["windows"],
   i18n: {
     en,
+    "en-GB": () => import("./i18n/en-GB"),
     am: () => import("./i18n/am"),
     ar: () => import("./i18n/ar"),
     az: () => import("./i18n/az"),

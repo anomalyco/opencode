@@ -34,7 +34,7 @@ story("streams user shell output and retains the saved completion", async ({ mou
 for (const [outcome, error] of [
   ["nonzero", "Command exited with code 1"],
   ["timeout", "Command timed out"],
-  ["killed", "Command cancelled"],
+  ["killed", "Command canceled"],
 ]) {
   story(`shows a direct shell ${outcome} outcome even without output`, async ({ mount }) => {
     const root = await mount("current-session-terminal-work--live-user-command", { args: { outcome, output: false } })

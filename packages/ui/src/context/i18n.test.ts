@@ -33,7 +33,7 @@ describe("pluralCategory", () => {
 })
 
 describe("dynamic source copy", () => {
-  test("keeps runtime copy for English locale tags", () => {
+  test("keeps runtime copy for US English source locale tags", () => {
     expect(
       i18n("en-US", "Dictionary copy").tDynamic("dialog.usageExceeded.freeTier.title", "Runtime {{name}}", {
         name: "copy",
@@ -41,10 +41,11 @@ describe("dynamic source copy", () => {
     ).toBe("Runtime copy")
   })
 
-  test("uses dictionary copy for non-English locales", () => {
-    expect(i18n("fr", "Texte traduit").tDynamic("dialog.usageExceeded.freeTier.title", "Runtime copy")).toBe(
-      "Texte traduit",
-    )
+  test.each([
+    ["fr", "Texte traduit"],
+    ["en-GB", "Dictionary colour"],
+  ])("uses dictionary copy for %s", (locale, copy) => {
+    expect(i18n(locale, copy).tDynamic("dialog.usageExceeded.freeTier.title", "Runtime copy")).toBe(copy)
   })
 })
 
