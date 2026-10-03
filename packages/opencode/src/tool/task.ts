@@ -14,6 +14,7 @@ import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { McpToolSearch } from "@/mcp/tool-search"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -88,6 +89,7 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const toolSearch = yield* McpToolSearch.Service
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -170,6 +172,12 @@ export const TaskTool = Tool.define(
             ),
           ],
         }))
+
+      // The child gets a fresh session id, so its MCP resolved set starts
+      // empty; seed it from the parent or every subagent starts blind.
+      // markResolved is idempotent, so this also re-seeds a resumed task_id.
+      const inherited = yield* toolSearch.resolved(ctx.sessionID)
+      yield* toolSearch.markResolved(nextSession.id, [...inherited])
 
       const msg = yield* MessageV2.get({ sessionID: ctx.sessionID, messageID: ctx.messageID }).pipe(
         Effect.provideService(Database.Service, database),

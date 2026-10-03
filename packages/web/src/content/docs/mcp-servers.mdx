@@ -124,6 +124,7 @@ Here are all the options for configuring a local MCP server.
 | `environment` | Object  |          | Environment variables to set when running the server.                                    |
 | `enabled`     | Boolean |          | Enable or disable the MCP server on startup.                                             |
 | `timeout`     | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds).      |
+| `tool_search` | String  |          | Override the global `mcp_tool_search` setting for this server. See [Tool search](#tool-search). |
 
 ---
 
@@ -161,6 +162,61 @@ The `url` is the URL of the remote MCP server and with the `headers` option you 
 | `headers` | Object  |          | Headers to send with the request.                                                   |
 | `oauth`   | Object  |          | OAuth authentication configuration. See [OAuth](#oauth) section below.              |
 | `timeout` | Number  |          | Timeout in ms for fetching tools from the MCP server. Defaults to 5000 (5 seconds). |
+| `tool_search` | String |       | Override the global `mcp_tool_search` setting for this server. See [Tool search](#tool-search). |
+
+---
+
+## Tool search
+
+By default every connected MCP server's tools are sent to the model on every
+request, which can cost a large number of tokens when you have many servers or
+rarely-used tools. Tool search keeps those tool schemas out of the prompt and
+exposes a single `search_tools` tool instead.
+
+When the model needs an MCP capability it has not used yet, it calls
+`search_tools` with a short query. Matching tools are returned by name and
+description, and each match is then registered and callable directly for the
+rest of the session.
+
+This is model-agnostic: it works with any provider or gateway because
+`search_tools` is an ordinary function tool, not a provider-specific feature.
+
+Enable it globally with the top-level `mcp_tool_search` setting:
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp_tool_search": "always"
+}
+```
+
+| Value     | Behavior                                                                                          |
+| --------- | ------------------------------------------------------------------------------------------------- |
+| `"off"`   | Disabled (default). All MCP tools are sent to the model as usual.                                  |
+| `"always"`| Always hide MCP tools behind `search_tools`.                                                       |
+| `"auto"`  | Enable only when the visible MCP surface is large enough to dominate a small model's prompt.       |
+
+Override it per server with the `tool_search` option on a [local](#options) or
+[remote](#options-1) server entry. A per-server setting takes precedence over
+the global one, so you can keep a small always-on server inline while the rest
+are searchable.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp_tool_search": "auto",
+  "mcp": {
+    "github": {
+      "type": "remote",
+      "url": "https://api.githubcopilot.com/mcp/",
+      "tool_search": "off"
+    }
+  }
+}
+```
+
+When tools are resolved through search, an `mcp.tool.resolved` event is emitted
+for observability.
 
 ---
 

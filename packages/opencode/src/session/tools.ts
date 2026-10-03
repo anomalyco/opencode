@@ -8,6 +8,7 @@ import { Permission } from "@/permission"
 import { Tool } from "@/tool/tool"
 import { ToolJsonSchema } from "@/tool/json-schema"
 import { ToolRegistry } from "@/tool/registry"
+import { McpToolSearch } from "@/mcp/tool-search"
 import { Truncate } from "@/tool/truncate"
 
 import { Plugin } from "@/plugin"
@@ -53,15 +54,22 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const permission = yield* Permission.Service
   const registry = yield* ToolRegistry.Service
   const mcp = yield* MCP.Service
+  const toolSearch = yield* McpToolSearch.Service
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
+  const ruleset = Permission.merge(input.agent.permission, input.session.permission ?? [])
 
   const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
     sessionID: input.session.id,
     abort: options.abortSignal!,
     messageID: input.processor.message.id,
     callID: options.toolCallId,
-    extra: { model: input.model, bypassAgentCheck: input.bypassAgentCheck, promptOps: input.promptOps },
+    extra: {
+      model: input.model,
+      bypassAgentCheck: input.bypassAgentCheck,
+      promptOps: input.promptOps,
+      permission: ruleset,
+    },
     agent: input.agent.name,
     messages: input.messages,
     metadata: (val) =>
@@ -84,7 +92,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
           ...req,
           sessionID: input.session.id,
           tool: { messageID: input.processor.message.id, callID: options.toolCallId },
-          ruleset: Permission.merge(input.agent.permission, input.session.permission ?? []),
+          ruleset,
         })
         .pipe(Effect.orDie),
   })
@@ -387,7 +395,25 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
 
   if (flags.experimentalCodeMode) return tools
 
-  for (const [key, entry] of Object.entries(yield* mcp.tools())) {
+  // With tool search enabled, a server's tools are hidden from the model until
+  // search_tools surfaces them (or they are called directly, which marks them
+  // resolved for the rest of the session).
+  const mcpTools = yield* mcp.tools()
+  const resolvedIds = yield* toolSearch.resolved(input.session.id)
+  // enabledFor depends only on the server, so compute it once per unique server
+  // rather than per tool, and pass the already-known visible count so the auto
+  // path does not rebuild the catalog for each server.
+  const surfaceSize = Object.keys(Permission.visibleTools(mcpTools, ruleset)).length
+  const serverEnabled = new Map(
+    yield* Effect.forEach(
+      [...new Set(Object.values(mcpTools).map((entry) => entry.server))],
+      (server) => toolSearch.enabledFor(server, surfaceSize).pipe(Effect.map((on) => [server, on] as const)),
+      { concurrency: "unbounded" },
+    ),
+  )
+
+  for (const [key, entry] of Object.entries(mcpTools)) {
+    if (serverEnabled.get(entry.server) && !resolvedIds.has(key)) continue
     const item = McpCatalog.convertTool(entry.def, entry.client, entry.timeout)
     const execute = item.execute
     if (!execute) continue
@@ -399,6 +425,9 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       run.promise(
         Effect.gen(function* () {
           const ctx = context(args, opts)
+          // A direct call is itself a resolution signal: keep the schema for the
+          // rest of the session. Idempotent for tools search already surfaced.
+          yield* toolSearch.markResolved(ctx.sessionID, [key])
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
