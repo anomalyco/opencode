@@ -1,6 +1,5 @@
 import { createData } from "@opencode/client/solid"
 import type { LocationRef } from "@opencode/client"
-import type { Plugin } from "@opencode/plugin/tui"
 import { createStore } from "solid-js/store"
 import { createSimpleContext } from "./helper"
 import { useClient } from "./client"
@@ -18,7 +17,6 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       connection: client.connection,
       directory: props.directory,
     })
-    data satisfies Plugin.Context["data"]
     const [generatingTitles, setGeneratingTitles] = createStore<Record<string, boolean | undefined>>({})
     return {
       ...data,
