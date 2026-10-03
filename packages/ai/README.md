@@ -27,6 +27,31 @@ Run `LLM.stream(...)` instead of `generate` when you want incremental `LLMEvent`
 `LLM.request(...)`. The event stream is provider-neutral — same shape across OpenAI Chat, OpenAI Responses,
 Anthropic Messages, Gemini, Bedrock Converse, and any OpenAI-compatible deployment.
 
+### Google Interactions
+
+`Google.configure({ apiKey }).interactions(modelID)` selects the Interactions API; `.model(modelID)` still selects
+GenerateContent. The package entrypoint is `@opencode/ai/providers/google/interactions`.
+
+```ts
+const model = Google.configure({ apiKey }).interactions("gemini-3.8-flash")
+const response = yield* LLM.generate({
+  model,
+  prompt: "Say hello.",
+  providerOptions: { thinkingLevel: "low", thinkingSummaries: "auto", store: true },
+})
+```
+
+Interactions supports text output, streamed function calls, native tool results, thought signatures, and multimodal
+input. Full-history replay is the default (`store: false`); implicit caching works without retained interactions.
+For server-side continuation, set `store: true` on the predecessor, read `interactionId` from the final event's
+`providerMetadata.google`, and pass `previousInteractionId` on the next request with **only new messages**. Repeat
+the system instructions and tool declarations on each request. Set `store: true` on each response you intend to
+continue from. The package does not automatically select or persist continuation IDs.
+
+Raw usage is preserved in `usage.providerMetadata.google`. `inputTokens` follows Google's top-level accounting;
+`contextTokens` uses its full `raw_prompt_token` count when supplied. These can differ substantially with server-side
+continuation. Explicit caches, hosted tools, and generated media are not supported by this initial protocol.
+
 The same configured facade names image, video, speech, and transcription models. `Image.generate` resolves the
 provider's image route from the model and returns `Media.Asset`s with lazily decoded bytes:
 
