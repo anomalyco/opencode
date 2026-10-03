@@ -27,4 +27,8 @@ describe("provider error classification", () => {
 
     expect(messages.some(isContextOverflow)).toBe(false)
   })
+
+  test("classifies opaque opencode-go model-only rejection as context overflow", () => {
+    expect(isContextOverflow('{"model":"deepseek-v4.1-flash"}')).toBe(true)
+  })
 })

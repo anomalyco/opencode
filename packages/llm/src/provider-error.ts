@@ -35,7 +35,38 @@ const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, 
 
 export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&
-  (patterns.some((pattern) => pattern.test(message)) || /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message))
+  (patterns.some((pattern) => pattern.test(message)) ||
+    /^4(00|13)\s*(status code)?\s*\(no body\)/i.test(message) ||
+    isOpaqueModelOnlyRejection(message))
+
+// opencode-go fronts multiple upstreams with different context limits. The
+// smaller route rejects oversized requests with an unparseable HTTP 400 whose
+// body echoes only the model id (31 bytes, no `error`/`message`), e.g.
+// `{"model":"deepseek-v4.1-flash"}`. Treat that opaque model-only shape as
+// overflow so compact-and-retry runs instead of hard-failing the session.
+const isOpaqueModelOnlyRejection = (message: string) => {
+  const trimmed = message.trim()
+  if (trimmed.length === 0 || trimmed.length > 500) return false
+  if (!/"model"\s*:/i.test(trimmed)) return false
+  if (/"(error|message|code)"\s*:/i.test(trimmed)) return false
+  const candidate = extractJsonObject(trimmed)
+  if (!candidate) return false
+  try {
+    const parsed = JSON.parse(candidate) as unknown
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false
+    const record = parsed as Record<string, unknown>
+    return typeof record.model === "string" && record.error == null && record.message == null
+  } catch {
+    return false
+  }
+}
+
+const extractJsonObject = (message: string) => {
+  const start = message.indexOf("{")
+  const end = message.lastIndexOf("}")
+  if (start === -1 || end <= start) return undefined
+  return message.slice(start, end + 1)
+}
 
 export const isContextOverflowFailure = (failure: unknown) =>
   failure instanceof LLMError

@@ -172,7 +172,18 @@ export type ParsedAPICallError =
 export function parseAPICallError(input: { providerID: ProviderV2.ID; error: APICallError }): ParsedAPICallError {
   const m = message(input.providerID, input.error)
   const body = json(input.error.responseBody)
-  if (isContextOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
+  const responseBodyText = typeof input.error.responseBody === "string" ? input.error.responseBody : ""
+  // message() drops the provider body for generic SDK messages such as
+  // "Provider request failed with HTTP 400", so check the raw body too.
+  // Otherwise overflow details (or the opaque opencode-go model-only 400)
+  // never reach the classifier and compact-and-retry is skipped.
+  if (
+    isContextOverflow(m) ||
+    isContextOverflow(responseBodyText) ||
+    isOpaqueModelOnlyRejection(responseBodyText) ||
+    input.error.statusCode === 413 ||
+    body?.error?.code === "context_length_exceeded"
+  ) {
     return {
       type: "context_overflow",
       message: m,
@@ -189,6 +200,31 @@ export function parseAPICallError(input: { providerID: ProviderV2.ID; error: API
     responseHeaders: input.error.responseHeaders,
     responseBody: input.error.responseBody,
     metadata,
+  }
+}
+
+// opencode-go fronts multiple upstreams with different context limits. The
+// smaller route rejects oversized requests with an unparseable HTTP 400 whose
+// body echoes only the model id (31 bytes, no `error`/`message`), e.g.
+// `{"model":"deepseek-v4.1-flash"}`. Treat that opaque model-only shape as
+// overflow so compact-and-retry runs instead of hard-failing the session.
+// Kept local (mirroring @opencode-ai/llm) so classification does not depend
+// on the llm package version resolving through the workspace.
+function isOpaqueModelOnlyRejection(message: string) {
+  const trimmed = message.trim()
+  if (trimmed.length === 0 || trimmed.length > 500) return false
+  if (!/"model"\s*:/i.test(trimmed)) return false
+  if (/"(error|message|code)"\s*:/i.test(trimmed)) return false
+  const start = trimmed.indexOf("{")
+  const end = trimmed.lastIndexOf("}")
+  if (start === -1 || end <= start) return false
+  try {
+    const parsed = JSON.parse(trimmed.slice(start, end + 1)) as unknown
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return false
+    const record = parsed as Record<string, unknown>
+    return typeof record.model === "string" && record.error == null && record.message == null
+  } catch {
+    return false
   }
 }
 
