@@ -357,6 +357,56 @@ it.instance(
   { config: { shell: "bash" } },
 )
 
+it.live("nested .opencode config overrides parent config", () =>
+  Effect.gen(function* () {
+    const root = yield* tmpdirScoped({ git: true })
+    const directory = path.join(root, "packages", "app")
+    yield* writeConfigEffect(path.join(root, ".opencode"), {
+      model: "ROOT/claude-sonnet-4-5",
+      username: "parent",
+    })
+    yield* writeConfigEffect(path.join(directory, ".opencode"), { model: "NESTED/gpt-4o" })
+    yield* FSUtil.use.writeWithDirs(path.join(root, ".opencode", "commands", "hello.md"), "Parent command")
+    yield* FSUtil.use.writeWithDirs(path.join(directory, ".opencode", "commands", "hello.md"), "Nested command")
+
+    const config = yield* withInstanceDir(directory, Config.use.get())
+    expect(config.model).toBe("NESTED/gpt-4o")
+    expect(config.username).toBe("parent")
+    expect(config.command?.hello.template).toBe("Nested command")
+  }),
+)
+
+it.live("project .opencode config overrides home config", () =>
+  Effect.gen(function* () {
+    const home = yield* tmpdirScoped()
+    const root = yield* tmpdirScoped({ git: true })
+    yield* writeConfigEffect(path.join(home, ".opencode"), { model: "HOME/model", username: "home" })
+    yield* writeConfigEffect(path.join(root, ".opencode"), { model: "PROJECT/model" })
+
+    const config = yield* withProcessEnv("OPENCODE_TEST_HOME", home, withInstanceDir(root, Config.use.get()))
+    expect(config.model).toBe("PROJECT/model")
+    expect(config.username).toBe("home")
+  }),
+)
+
+it.live("custom config directory overrides .opencode configs when home is an ancestor", () =>
+  Effect.gen(function* () {
+    const home = yield* tmpdirScoped({ git: true })
+    const directory = path.join(home, "project")
+    const custom = yield* tmpdirScoped()
+    yield* writeConfigEffect(path.join(home, ".opencode"), { model: "HOME/model", username: "home" })
+    yield* writeConfigEffect(path.join(directory, ".opencode"), { model: "PROJECT/model" })
+    yield* writeConfigEffect(custom, { model: "CUSTOM/model" }, "opencode.jsonc")
+
+    const config = yield* withProcessEnvs(
+      { OPENCODE_TEST_HOME: home, OPENCODE_CONFIG_DIR: custom },
+      withInstanceDir(directory, Config.use.get()),
+    )
+    expect(config.model).toBe("CUSTOM/model")
+    expect(config.username).toBe("home")
+  }),
+)
+
 it.instance("updates config and preserves empty shell sentinel", () =>
   Effect.gen(function* () {
     const test = yield* TestInstance
