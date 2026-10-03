@@ -2232,3 +2232,66 @@ test("parseManagedPlist handles empty config", async () => {
   )
   expect(config.$schema).toBe("https://opencode.ai/config.json")
 })
+
+test("parseManagedPlist parses managed OTLP settings", async () => {
+  const config = ConfigParse.schema(
+    ConfigV1.Info,
+    ConfigParse.jsonc(
+      await ConfigManaged.parseManagedPlist(
+        JSON.stringify({
+          telemetry: {
+            otlp: {
+              endpoint: "https://otel.example.com",
+              headers: "Authorization=Bearer test",
+              resourceAttributes: "deployment.environment.name=managed",
+            },
+          },
+        }),
+      ),
+      "test:mobileconfig",
+    ),
+    "test:mobileconfig",
+  )
+  expect(config.telemetry?.otlp?.endpoint).toBe("https://otel.example.com")
+  expect(config.telemetry?.otlp?.headers).toBe("Authorization=Bearer test")
+  expect(config.telemetry?.otlp?.resourceAttributes).toBe("deployment.environment.name=managed")
+})
+
+test("managed OTLP settings override process environment", async () => {
+  await using tmp = await tmpdir()
+  const endpoint = process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+  const headers = process.env.OTEL_EXPORTER_OTLP_HEADERS
+  const attributes = process.env.OTEL_RESOURCE_ATTRIBUTES
+  const dir = process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR
+  try {
+    process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR = tmp.path
+    process.env.OTEL_EXPORTER_OTLP_ENDPOINT = "https://user.example.com"
+    process.env.OTEL_EXPORTER_OTLP_HEADERS = "Authorization=Bearer user"
+    process.env.OTEL_RESOURCE_ATTRIBUTES = "deployment.environment.name=user"
+    await Bun.write(
+      path.join(tmp.path, "opencode.json"),
+      JSON.stringify({
+        telemetry: {
+          otlp: {
+            endpoint: "https://managed-file.example.com",
+            headers: "Authorization=Bearer managed-file",
+            resourceAttributes: "deployment.environment.name=managed-file",
+          },
+        },
+      }),
+    )
+    ConfigManaged.applyManagedTelemetry(await ConfigManaged.readManagedTelemetry())
+    expect(process.env.OTEL_EXPORTER_OTLP_ENDPOINT).toBe("https://managed-file.example.com")
+    expect(process.env.OTEL_EXPORTER_OTLP_HEADERS).toBe("Authorization=Bearer managed-file")
+    expect(process.env.OTEL_RESOURCE_ATTRIBUTES).toBe("deployment.environment.name=managed-file")
+  } finally {
+    if (endpoint === undefined) delete process.env.OTEL_EXPORTER_OTLP_ENDPOINT
+    else process.env.OTEL_EXPORTER_OTLP_ENDPOINT = endpoint
+    if (headers === undefined) delete process.env.OTEL_EXPORTER_OTLP_HEADERS
+    else process.env.OTEL_EXPORTER_OTLP_HEADERS = headers
+    if (attributes === undefined) delete process.env.OTEL_RESOURCE_ATTRIBUTES
+    else process.env.OTEL_RESOURCE_ATTRIBUTES = attributes
+    if (dir === undefined) delete process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR
+    else process.env.OPENCODE_TEST_MANAGED_CONFIG_DIR = dir
+  }
+})
