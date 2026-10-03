@@ -48,6 +48,21 @@ You can customize the base URL for any provider by setting the `baseURL` option.
 
 ---
 
+#### Custom fetch retries
+
+If a provider plugin supplies a custom `fetch` through its auth loader's provider options, it can signal a transient transport failure without pretending to be a system error:
+
+```ts
+throw Object.assign(new Error("Gateway stream interrupted"), {
+  isRetryable: true,
+  responseHeaders: { "retry-after": "2" },
+})
+```
+
+The optional `responseHeaders` can also include `retry-after-ms` (milliseconds); `retry-after` accepts seconds or an HTTP date. AI SDK `APICallError` instances with `isRetryable: true` and their response headers are already supported. A non-retryable error should not set `isRetryable: true`. Retries are bounded, discard the failed attempt's partial output, and never occur after a tool call has started. A custom `fetch` may instead return an HTTP `Response`; the provider SDK then determines its retryability from the response.
+
+---
+
 #### Hiding models
 
 You can hide specific models from the `/models` picker for a provider using the `blacklist` option. This is useful when a provider exposes models you don't want to use or select.
