@@ -154,3 +154,31 @@ describe("Host.resolve", () => {
     assert.deepEqual(Host.resolve(plugin.target), { server: undefined, tui: undefined, rpc: undefined })
   })
 })
+
+describe("Host.load", () => {
+  it("serves the host's own SDK to loose plugin files without node_modules", async () => {
+    await using plugin = await fixture({
+      "plugin.ts": [
+        'import { Plugin, Provider } from "@opencode/plugin"',
+        'import { Plugin as EffectPlugin } from "@opencode/plugin/effect"',
+        'import { define } from "@opencode/plugin/promise/plugin"',
+        "export const sdk = { Plugin, Provider, EffectPlugin, define }",
+        'export default Plugin.define({ id: "loose", setup() {} })',
+      ].join("\n"),
+    })
+    const [promise, effect, define] = await Promise.all([
+      import("../src/promise/index.js"),
+      import("../src/effect/index.js"),
+      import("../src/promise/plugin.js"),
+    ])
+    const loaded = (await Host.load(plugin.url("plugin.ts"))) as {
+      default: { id: string }
+      sdk: Record<string, unknown>
+    }
+    assert.equal(loaded.default.id, "loose")
+    assert.equal(loaded.sdk.Plugin, promise.Plugin)
+    assert.equal(loaded.sdk.Provider, promise.Provider)
+    assert.equal(loaded.sdk.EffectPlugin, effect.Plugin)
+    assert.equal(loaded.sdk.define, define.define)
+  })
+})

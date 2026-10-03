@@ -18,8 +18,11 @@ export default Plugin.define({
 })
 ```
 
-Plugins under `.opencode/plugins/` are loaded automatically, like the local example above. To load published packages
-or plugin directories from other locations, add them to `plugins` in `opencode.json(c)`:
+Plugins under `.opencode/plugins/` are loaded automatically, like the local example above. Import `@opencode/plugin`
+directly: OpenCode resolves it at runtime, so local plugins do not need a `package.json` or an install step. Add
+`@opencode/plugin` as a development dependency only when you want editor types.
+
+To load published packages or plugin directories from other locations, add them to `plugins` in `opencode.json(c)`:
 
 ```jsonc title="opencode.jsonc"
 {
