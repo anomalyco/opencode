@@ -41,6 +41,10 @@ const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
 // whole policy pass for these — emitting hints would be harmless but pointless.
 const RESPECTS_INLINE_HINTS = new Set(["anthropic-messages", "bedrock-converse"])
 
+// The part types whose schema declares a `cache` field. Anything else
+// (`reasoning`, `media`) discards the hint when the part is rebuilt.
+const CACHEABLE_PART_TYPES = new Set(["text", "tool-call", "tool-result"])
+
 const makeHint = (ttlSeconds: number | undefined): CacheHint =>
   ttlSeconds !== undefined ? new CacheHint({ type: "ephemeral", ttlSeconds }) : new CacheHint({ type: "ephemeral" })
 
@@ -61,25 +65,33 @@ const markLastSystem = (system: LLMRequest["system"], hint: CacheHint): LLMReque
 const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"]): number =>
   messages.findLastIndex((m) => m.role === role)
 
-// Mark the last text part of `messages[index]`. If no text part exists, mark
-// the last content part regardless of type — that's the breakpoint position
-// in tool-result-only messages too.
+// Mark the last part of `messages[index]` that can hold a `CacheHint`. Only
+// `TextPart`, `ToolCallPart` and `ToolResultPart` declare a `cache` field:
+// `ReasoningPart` and `MediaPart` do not, so a hint written onto one is dropped
+// when the `Message` class rebuilds the part, and the breakpoint the policy
+// asked for is silently lost (Anthropic also rejects `cache_control` on a
+// `thinking` block outright). Walk back to the last part that can carry it —
+// within the message first, then into the preceding ones, because a breakpoint
+// one boundary early still caches a prefix where no breakpoint at all caches
+// nothing. `index` is the preferred position, not a hard requirement.
 const markMessageAt = (messages: ReadonlyArray<Message>, index: number, hint: CacheHint): ReadonlyArray<Message> => {
   if (index < 0 || index >= messages.length) return messages
-  const target = messages[index]!
-  if (target.content.length === 0) return messages
-  const lastTextIndex = target.content.findLastIndex((part) => part.type === "text")
-  const markAt = lastTextIndex >= 0 ? lastTextIndex : target.content.length - 1
-  const existing = target.content[markAt]!
-  if ("cache" in existing && existing.cache) return messages
-  const nextContent = target.content.map((part, i) => (i === markAt ? ({ ...part, cache: hint } as ContentPart) : part))
-  const next = new Message({ ...target, content: nextContent })
-  // Single pass over `messages`, substituting the one updated entry. Long
-  // conversations call this on every request, so avoid `.map()` here — its
-  // closure dispatch and identity copies show up in profiling.
-  const result = messages.slice()
-  result[index] = next
-  return result
+  for (let i = index; i >= 0; i--) {
+    const target = messages[i]!
+    const markAt = target.content.findLastIndex((part) => CACHEABLE_PART_TYPES.has(part.type))
+    if (markAt < 0) continue
+    const existing = target.content[markAt]!
+    if ("cache" in existing && existing.cache) return messages
+    const nextContent = target.content.map((part, j) => (j === markAt ? ({ ...part, cache: hint } as ContentPart) : part))
+    const next = new Message({ ...target, content: nextContent })
+    // Single pass over `messages`, substituting the one updated entry. Long
+    // conversations call this on every request, so avoid `.map()` here — its
+    // closure dispatch and identity copies show up in profiling.
+    const result = messages.slice()
+    result[i] = next
+    return result
+  }
+  return messages
 }
 
 const markMessages = (

@@ -251,6 +251,68 @@ describe("applyCachePolicy", () => {
     }),
   )
 
+  // Anthropic rejects `cache_control` on `thinking`/`redacted_thinking` blocks,
+  // and `ReasoningPart` declares no `cache` field at all, so a hint placed there
+  // is never delivered. The picker has to step back to a block that can hold it
+  // instead of silently spending the breakpoint.
+  const reasoningOnly = () =>
+    Message.assistant([{ type: "reasoning" as const, text: "thinking out loud", encrypted: "sig" }])
+
+  it.effect("'latest-assistant' steps back when the assistant turn ends in reasoning", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model: anthropicModel,
+          messages: [Message.user("u1"), Message.assistant("a1"), Message.user("u2"), reasoningOnly()],
+          cache: { messages: "latest-assistant" },
+        }),
+      )
+
+      const body = prepared.body as { messages: Array<{ content: Array<{ cache_control?: unknown }> }> }
+      expect(body.messages[1]?.content[0]?.cache_control).toBeUndefined()
+      expect(body.messages[2]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
+      expect(body.messages[3]?.content[0]).not.toHaveProperty("cache_control")
+    }),
+  )
+
+  it.effect("a tail breakpoint steps back past a reasoning-only turn", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          model: anthropicModel,
+          messages: [Message.user("u1"), Message.assistant("a1"), reasoningOnly()],
+          cache: { messages: { tail: 1 } },
+        }),
+      )
+
+      const body = prepared.body as { messages: Array<{ content: Array<{ cache_control?: unknown }> }> }
+      expect(body.messages[0]?.content[0]?.cache_control).toBeUndefined()
+      expect(body.messages[1]?.content[0]?.cache_control).toEqual({ type: "ephemeral" })
+    }),
+  )
+
+  test("never places a hint on a part that cannot carry one, and still delivers it", () => {
+    const request = LLM.request({
+      model: anthropicModel,
+      messages: [Message.user("u1"), reasoningOnly()],
+      cache: { messages: "latest-assistant" },
+    })
+
+    const marked = applyCachePolicy(request)
+    // Message is a Schema.Class, so a `cache` key written onto a reasoning part
+    // is stripped on construction: the policy would report a breakpoint it never
+    // placed. It has to land on the message that can hold it instead.
+    const hints = marked.messages
+      .flatMap((message) => message.content)
+      .filter((part) => "cache" in part && part.cache !== undefined)
+    expect(hints).toHaveLength(1)
+    expect(marked.messages.at(-1)!.content[0]).toEqual({
+      type: "reasoning",
+      text: "thinking out loud",
+      encrypted: "sig",
+    })
+  })
+
   test("returns the same request reference when policy is a no-op (pure function)", () => {
     const request = LLM.request({
       model: anthropicModel,
