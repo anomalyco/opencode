@@ -38,8 +38,9 @@ if (!(root instanceof HTMLElement) && import.meta.env.DEV) {
 
 const clearAuthToken = () => {
   const params = new URLSearchParams(location.search)
-  if (!params.has("auth_token")) return
+  if (!params.has("auth_token") && !params.has("reauth")) return
   params.delete("auth_token")
+  params.delete("reauth")
   history.replaceState(null, "", location.pathname + (params.size ? `?${params}` : "") + location.hash)
 }
 
