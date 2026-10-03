@@ -118,10 +118,7 @@ export function DialogModel(props: { providerID?: string }) {
 
     if (needle) {
       return [
-        ...sortModelOptions(
-          fuzzysort.go(needle, providerOptions, { keys: ["title", "category"] }).map((x) => x.obj),
-          false,
-        ),
+        ...searchModelOptions(needle, providerOptions),
         ...fuzzysort.go(needle, popularProviders, { keys: ["title"] }).map((x) => x.obj),
       ]
     }
@@ -181,6 +178,12 @@ export function DialogModel(props: { providerID?: string }) {
       current={local.model.current()}
     />
   )
+}
+
+// Search results keep fuzzysort's relevance order: re-sorting them by release date
+// would rank a scattered-letter match above an exact one.
+export function searchModelOptions<T extends { title: string; category?: string }>(needle: string, options: T[]) {
+  return fuzzysort.go(needle, options, { keys: ["title", "category"] }).map((x) => x.obj)
 }
 
 export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(
