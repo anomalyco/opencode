@@ -12,6 +12,15 @@ import { useComposerTab } from "./context"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { sessionFamily } from "../../../util/session"
 
+const money = new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+})
+
+function totalTokens(tokens: SessionInfo["tokens"]) {
+  return tokens.input + tokens.output + tokens.reasoning + tokens.cache.read + tokens.cache.write
+}
+
 interface SubagentEntry {
   sessionID: string
   agent: string
@@ -19,6 +28,9 @@ interface SubagentEntry {
   status: string
   current: boolean
   prefix: string
+  tokens: number
+  cost: number
+  model: string
 }
 
 export function SubagentsTab(props: { sessionID: string }) {
@@ -41,6 +53,8 @@ export function SubagentsTab(props: { sessionID: string }) {
       ({ session, prefix }): SubagentEntry => {
         const title = withTimestampedFallback(session)
         const agentMatch = title.match(/@(\w+) subagent/)
+        const info = data.session.get(session.id)
+        const model = info?.model
         return {
           sessionID: session.id,
           agent: session.agent
@@ -52,6 +66,9 @@ export function SubagentsTab(props: { sessionID: string }) {
           status: data.session.status(session.id),
           current: session.id === route.sessionID,
           prefix,
+          tokens: info ? totalTokens(info.tokens) : 0,
+          cost: info?.cost ?? 0,
+          model: model ? `${model.providerID}/${model.id}${model.variant ? `#${model.variant}` : ""}` : "",
         }
       },
     )
@@ -200,8 +217,12 @@ export function SubagentsTab(props: { sessionID: string }) {
             {(entry, index) => {
               const active = createMemo(() => index() === store.selected)
               const status = createMemo(() => {
-                if (entry.status === "running") return "Running"
-                return ""
+                const parts: string[] = []
+                if (entry.model) parts.push(entry.model)
+                if (entry.tokens > 0) parts.push(`${entry.tokens.toLocaleString()} tokens`)
+                if (entry.cost > 0) parts.push(money.format(entry.cost))
+                if (entry.status === "running") parts.push("Running")
+                return parts.join(" · ")
               })
               return (
                 <box
