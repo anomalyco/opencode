@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs"
+import nodePath from "node:path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { makeGlobalNode, Node } from "@opencode-ai/core/effect/app-node"
 import { GlobalBus } from "@/bus/global"
@@ -6,6 +8,7 @@ import { WorkspaceContext } from "@/control-plane/workspace-context"
 import { InstanceRef } from "@/effect/instance-ref"
 import { disposeInstance as runDisposers } from "@/effect/instance-registry"
 import { FSUtil } from "@opencode-ai/core/fs-util"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { Context, Deferred, Duration, Effect, Exit, Layer, Scope } from "effect"
 import { type InstanceContext } from "./instance-context"
 import { InstanceBootstrap } from "./bootstrap-service"
@@ -30,6 +33,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/In
 
 export const use = serviceUse(Service)
 
+const REVALIDATE_INTERVAL_MS = 5_000
+
 interface Entry {
   readonly deferred: Deferred.Deferred<InstanceContext>
 }
@@ -41,6 +46,7 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
     const bootstrap = yield* InstanceBootstrap.Service
     const scope = yield* Scope.Scope
     const cache = new Map<string, Entry>()
+    const lastRevalidate = new Map<string, number>()
 
     const boot = (input: LoadInput & { directory: string }) =>
       Effect.gen(function* () {
@@ -110,7 +116,25 @@ const layer: Layer.Layer<Service, never, Project.Service | InstanceBootstrap.Ser
       return Effect.uninterruptibleMask((restore) =>
         Effect.gen(function* () {
           const existing = cache.get(directory)
-          if (existing) return yield* restore(Deferred.await(existing.deferred))
+          if (existing) {
+            const ctx = yield* restore(Deferred.await(existing.deferred))
+            // A directory opened while its folder was absent (e.g. mid-move
+            // or before a rename settled) resolves to the global project and
+            // stays cached that way. If a repo has since appeared at the
+            // path, transparently reload so the directory re-identifies;
+            // throttled so a path that stays unresolvable cannot trigger a
+            // reload on every request.
+            const last = lastRevalidate.get(directory) ?? 0
+            if (
+              ctx.project.id === ProjectV2.ID.global &&
+              Date.now() - last > REVALIDATE_INTERVAL_MS &&
+              existsSync(nodePath.join(directory, ".git"))
+            ) {
+              lastRevalidate.set(directory, Date.now())
+              return yield* restore(reload(input))
+            }
+            return ctx
+          }
 
           const entry: Entry = { deferred: Deferred.makeUnsafe<InstanceContext>() }
           cache.set(directory, entry)

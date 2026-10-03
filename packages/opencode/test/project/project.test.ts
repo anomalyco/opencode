@@ -30,6 +30,8 @@ function remoteProjectID(remote: string) {
   return ProjectV2.ID.make(Hash.fast(`git-remote:${remote}`))
 }
 
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
 /**
  * Creates a mock ChildProcessSpawner layer that intercepts git subcommands
  * matching `failArg` and returns exit code 128, while delegating everything
@@ -83,7 +85,7 @@ function projectV2FailureLayer() {
           directory: input,
           vcs: { type: "git" as const, store: input },
         }),
-      commit: () => Effect.void,
+      commit: () => Effect.succeed(true),
     }),
   )
 }
@@ -158,7 +160,7 @@ describe("Project.fromDirectory", () => {
     }),
   )
 
-  it.live("prefers normalized origin remote over root commit", () =>
+  it.live("mints a per-clone id instead of exposing the remote-derived id", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service
       const tmp = yield* tmpdirScoped({ git: true })
@@ -166,11 +168,12 @@ describe("Project.fromDirectory", () => {
 
       const result = yield* project.fromDirectory(tmp)
 
-      expect(result.project.id).toBe(remoteProjectID("github.com/Test-Org/Test-Repo"))
+      expect(result.project.id).toMatch(UUID_RE)
+      expect(result.project.id).not.toBe(remoteProjectID("github.com/Test-Org/Test-Repo"))
     }),
   )
 
-  it.live("normalizes equivalent origin URL forms to the same project ID", () =>
+  it.live("gives separate checkouts of the same origin distinct project IDs", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service
       const ssh = yield* tmpdirScoped({ git: true })
@@ -181,19 +184,19 @@ describe("Project.fromDirectory", () => {
       const result = yield* project.fromDirectory(ssh)
       const next = yield* project.fromDirectory(https)
 
-      expect(result.project.id).toBe(remoteProjectID("github.com/owner/repo"))
-      expect(next.project.id).toBe(result.project.id)
+      expect(result.project.id).toMatch(UUID_RE)
+      expect(next.project.id).toMatch(UUID_RE)
+      expect(next.project.id).not.toBe(result.project.id)
     }),
   )
 
-  it.live("migrates cached root project data when origin becomes available", () =>
+  it.live("keeps identity and data when origin becomes available", () =>
     Effect.gen(function* () {
       const { db } = yield* Database.Service
       const tmp = yield* tmpdirScoped({ git: true })
       const projects = yield* Project.Service
       const rootResult = yield* projects.fromDirectory(tmp)
       const rootProject = rootResult.project
-      const remoteID = remoteProjectID("github.com/acme/app")
       const sessionID = crypto.randomUUID() as SessionID
       const workspaceID = WorkspaceV2.ID.ascending()
 
@@ -220,18 +223,18 @@ describe("Project.fromDirectory", () => {
 
       const result = yield* projects.fromDirectory(tmp)
 
-      expect(result.project.id).toBe(remoteID)
+      expect(result.project.id).toBe(rootProject.id)
       expect(
         yield* db.select().from(ProjectTable).where(eq(ProjectTable.id, rootProject.id)).get().pipe(Effect.orDie),
-      ).toBeUndefined()
+      ).toBeDefined()
       expect(
         (yield* db.select().from(SessionTable).where(eq(SessionTable.id, sessionID)).get().pipe(Effect.orDie))
           ?.project_id,
-      ).toBe(remoteID)
+      ).toBe(rootProject.id)
       expect(
         (yield* db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get().pipe(Effect.orDie))
           ?.project_id,
-      ).toBe(remoteID)
+      ).toBe(rootProject.id)
     }),
   )
 })
@@ -306,9 +309,11 @@ describe("Project.fromDirectory with worktrees", () => {
 
       const result = yield* project.fromDirectory(worktreePath)
 
-      expect(result.project.worktree).toBe(worktreePath)
+      // The opened directory stays the instance sandbox, but the project is
+      // rooted at the main checkout derived from the git common dir.
+      expect(result.project.worktree).toBe(tmp)
       expect(result.sandbox).toBe(worktreePath)
-      expect(result.project.sandboxes).not.toContain(worktreePath)
+      expect(result.project.sandboxes).toContain(worktreePath)
       expect(result.project.sandboxes).not.toContain(tmp)
     }),
   )
@@ -341,7 +346,7 @@ describe("Project.fromDirectory with worktrees", () => {
     }),
   )
 
-  it.live("separate clones of the same repo should share project ID", () =>
+  it.live("separate clones of the same repo get distinct project IDs", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service
       const tmp = yield* tmpdirScoped({ git: true })
@@ -358,7 +363,8 @@ describe("Project.fromDirectory with worktrees", () => {
       const result = yield* project.fromDirectory(tmp)
       const next = yield* project.fromDirectory(clone)
 
-      expect(next.project.id).toBe(result.project.id)
+      expect(next.project.id).not.toBe(result.project.id)
+      expect(next.project.worktree).toBe(clone)
     }),
   )
 
@@ -391,7 +397,8 @@ describe("Project.fromDirectory with worktrees", () => {
       yield* project.fromDirectory(worktree1)
       const result = yield* project.fromDirectory(worktree2)
 
-      expect(result.project.worktree).toBe(worktree1)
+      expect(result.project.worktree).toBe(tmp)
+      expect(result.project.sandboxes).toContain(worktree1)
       expect(result.project.sandboxes).toContain(worktree2)
       expect(result.project.sandboxes).not.toContain(tmp)
     }),

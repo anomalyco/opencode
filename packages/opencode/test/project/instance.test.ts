@@ -1,6 +1,9 @@
 import { describe, expect } from "bun:test"
+import { $ } from "bun"
+import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import { Deferred, Effect, Fiber, Layer } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { registerDisposer } from "../../src/effect/instance-registry"
@@ -64,6 +67,33 @@ describe("InstanceStore", () => {
       yield* store.load({ directory: dir })
 
       expect(initializedDirectory).toBe(dir)
+    }),
+  )
+
+  it.live("reloads a directory cached as global once a repo appears there", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const dir = path.join(tmp, "repo")
+      const store = yield* InstanceStore.Service
+
+      // Opened while the folder is absent (e.g. mid-move): caches as global.
+      const before = yield* store.load({ directory: dir })
+      expect(before.project.id).toBe(ProjectV2.ID.global)
+
+      // The folder shows up at the path (move completed).
+      yield* Effect.promise(async () => {
+        await $`git init ${dir}`.quiet()
+        await $`git config core.fsmonitor false`.cwd(dir).quiet()
+        await $`git config commit.gpgsign false`.cwd(dir).quiet()
+        await $`git config user.email test@opencode.test`.cwd(dir).quiet()
+        await $`git config user.name Test`.cwd(dir).quiet()
+        await $`git commit --allow-empty -m root`.cwd(dir).quiet()
+      })
+
+      const after = yield* store.load({ directory: dir })
+
+      expect(after.project.id).not.toBe(ProjectV2.ID.global)
+      expect(after.worktree).toBe(dir)
     }),
   )
 
