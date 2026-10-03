@@ -1,5 +1,6 @@
 export const dict = {
   "desktop.menu.app": "OpenCode",
+  "desktop.menu.about": "Haqqında",
   "desktop.menu.file": "Fayl",
   "desktop.menu.edit": "Redaktə",
   "desktop.menu.view": "Görünüş",

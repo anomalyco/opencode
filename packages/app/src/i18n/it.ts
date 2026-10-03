@@ -1081,6 +1081,7 @@ export const dict = {
   "workspace.reset.archived.many": "Verranno archiviate {{count}} sessioni.",
   "workspace.reset.note": "L'area di lavoro verrà reimpostata in modo che corrisponda al branch predefinito.",
   "desktop.menu.app": "OpenCode",
+  "desktop.menu.about": "Informazioni",
   "desktop.menu.file": "File",
   "desktop.menu.edit": "Modifica",
   "desktop.menu.view": "Vista",

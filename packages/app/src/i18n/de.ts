@@ -1074,6 +1074,7 @@ export const dict = {
   "error.childStore.storeCreateFailed": "Speicher konnte nicht erstellt werden",
   "terminal.connectionLost.abnormalClose": "WebSocket unerwartet geschlossen: {{code}}",
   "desktop.menu.app": "OpenCode",
+  "desktop.menu.about": "Über",
   "desktop.menu.file": "Datei",
   "desktop.menu.edit": "Bearbeiten",
   "desktop.menu.view": "Ansicht",

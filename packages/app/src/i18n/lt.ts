@@ -2,6 +2,7 @@ import { DESKTOP_NATIVE_KEYS } from "./desktop-native"
 
 const desktop = [
   "OpenCode",
+  "Apie",
   "Failas",
   "Taisa",
   "Rodymas",

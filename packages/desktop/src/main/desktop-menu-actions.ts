@@ -1,4 +1,4 @@
-import { BrowserWindow } from "electron"
+import { app, BrowserWindow } from "electron"
 import type { DesktopMenuAction } from "@opencode-ai/app/desktop-menu"
 import { createMainWindow, updateTitlebar } from "./windows"
 
@@ -13,6 +13,13 @@ export function runDesktopMenuAction(
   handlers: DesktopMenuActionHandlers = {},
 ) {
   switch (action) {
+    case "app.about":
+      app.setAboutPanelOptions({
+        applicationName: app.getName(),
+        applicationVersion: app.getVersion(),
+      })
+      app.showAboutPanel()
+      return
     case "app.checkForUpdates":
       handlers.checkForUpdates?.()
       return

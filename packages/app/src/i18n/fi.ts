@@ -1057,6 +1057,7 @@ export const dict = {
   "workspace.reset.archived.many": "{{count}} istuntoa arkistoidaan.",
   "workspace.reset.note": "Tämä palauttaa työtilan vastaamaan oletushaaraa.",
   "desktop.menu.app": "OpenCode",
+  "desktop.menu.about": "Tietoja",
   "desktop.menu.file": "Tiedosto",
   "desktop.menu.edit": "Muokkaa",
   "desktop.menu.view": "Näytä",
