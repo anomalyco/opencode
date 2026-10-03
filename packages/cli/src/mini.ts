@@ -141,6 +141,9 @@ export function createMiniConnection(input: MiniCommandInput["server"]) {
     OpenCode.make({
       baseUrl: endpoint.url,
       headers: Service.headers(endpoint),
+      // Session waits can remain idle until background work finishes.
+      fetch: ((request: RequestInfo | URL, init?: RequestInit) =>
+        fetch(request, { ...init, timeout: false } as BunFetchRequestInit)) as typeof fetch,
     })
   const reconnect = input.reconnect
   return {
