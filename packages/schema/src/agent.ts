@@ -19,6 +19,7 @@ export type Color = typeof Color.Type
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
+  native: Schema.Boolean.pipe(optional),
   model: Model.Ref.pipe(optional),
   request: Provider.Request,
   system: Schema.String.pipe(optional),

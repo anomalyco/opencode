@@ -129,6 +129,7 @@ export type AgentsListOutput = {
   }
   readonly data: ReadonlyArray<{
     readonly id: string
+    readonly native?: boolean
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
     readonly request: {
       readonly headers: { readonly [x: string]: string }

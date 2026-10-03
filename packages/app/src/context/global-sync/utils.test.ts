@@ -12,6 +12,7 @@ describe("normalizeAgentList", () => {
     const result = normalizeAgentList([
       {
         id: "build",
+        native: false,
         name: "Build",
         mode: "primary",
         hidden: false,
@@ -21,11 +22,12 @@ describe("normalizeAgentList", () => {
         system: "Build software",
         permissions: [{ action: "read", resource: "*", effect: "allow" }],
       },
-    ] as AgentListOutput["data"])
+    ] as unknown as AgentListOutput["data"])
 
     expect(result).toEqual([
       {
         name: "build",
+        native: false,
         description: undefined,
         mode: "primary",
         hidden: false,

@@ -3894,6 +3894,7 @@ export type PermissionV2Ruleset = Array<PermissionV2Rule>
 
 export type AgentV2Info = {
   id: string
+  native?: boolean
   model?: ModelRef
   request: ProviderRequest
   system?: string
