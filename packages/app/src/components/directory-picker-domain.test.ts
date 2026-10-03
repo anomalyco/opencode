@@ -153,18 +153,21 @@ test("resolves directory autocomplete from the current browser root", async () =
   expect(directories).toEqual(["/repo", "/repo/src"])
 })
 
-test("keeps indexed directory results for servers that support empty search", async () => {
+test("skips indexed directory results for empty search and uses listing", async () => {
   const sdk = {
     api: {
       file: {
         find: () => Promise.resolve({ data: [{ path: "projects/", type: "directory" }] }),
-        list: () => Promise.reject(new Error("listing should not run when search returns results")),
+        list: () =>
+          Promise.resolve({
+            data: [{ path: "projects/", type: "directory" }, { path: "src/", type: "directory" }],
+          }),
       },
     },
   } as unknown as Parameters<typeof createDirectorySearch>[0]["sdk"]
   const search = createDirectorySearch({ sdk, home: () => "/home/luke", base: () => "/home/luke" })
 
-  expect(await search("")).toEqual(["/home/luke/projects"])
+  expect(await search("")).toEqual(["/home/luke/projects", "/home/luke/src"])
 })
 
 test("lists the default directory when empty search is unsupported", async () => {

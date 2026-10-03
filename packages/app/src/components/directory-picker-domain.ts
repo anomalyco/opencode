@@ -374,13 +374,15 @@ export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string
     const pathInput = raw.startsWith("~") || !!pickerRoot(raw) || raw.includes("/")
     const query = normalizePickerDrive(input.path)
     if (!pathInput) {
-      const results = await args.sdk.api.file
-        .find({ location: { directory: input.directory }, query, type: "directory", limit: 50 })
-        .then((result) => result.data.map((entry) => entry.path))
-        .catch(() => [])
-      if (!active()) return []
-      if (results.length) {
-        return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)
+      if (query) {
+        const results = await args.sdk.api.file
+          .find({ location: { directory: input.directory }, query, type: "directory", limit: 50 })
+          .then((result) => result.data.map((entry) => entry.path))
+          .catch(() => [])
+        if (!active()) return []
+        if (results.length) {
+          return results.map((path) => joinPickerPath(input.directory, path)).slice(0, 50)
+        }
       }
       const fallback = query
         ? await match(input.directory, query, 50)
