@@ -25,10 +25,15 @@ export const directory = Effect.map(context, (ctx) => ctx.directory)
 
 export const make = <A, E = never, R = never>(
   init: (ctx: InstanceContext) => Effect.Effect<A, E, R | Scope.Scope>,
+  options?: { readonly capacity?: number },
 ): Effect.Effect<InstanceState<A, E, Exclude<R, Scope.Scope>>, never, R | Scope.Scope> =>
   Effect.gen(function* () {
     const cache = yield* ScopedCache.make<string, A, E, R>({
-      capacity: Number.POSITIVE_INFINITY,
+      // Unbounded by default: most instance state is cheap to hold. A caller
+      // whose state owns real resources (child processes, sockets) passes a
+      // capacity so abandoned directories are evicted least-recently-used
+      // first, closing their scope and running their finalizer.
+      capacity: options?.capacity ?? Number.POSITIVE_INFINITY,
       lookup: () =>
         Effect.gen(function* () {
           return yield* init(yield* context)
