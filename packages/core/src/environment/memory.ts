@@ -137,6 +137,14 @@ export const makeMemoryDriver = (): MemoryDriver => {
         })
       }),
     mkdir: (value) => Effect.try({ try: () => mkdirSync(value), catch: (cause) => failed(value, cause) }),
+    realPath: (value) =>
+      Effect.suspend(() => {
+        const resolved = resolveKey(value, true)
+        if (resolved === undefined || !nodes.has(resolved)) {
+          return Effect.fail(new NotFound({ path: value }))
+        }
+        return Effect.succeed(resolved)
+      }),
   }
 
   const spawner = make((command) =>
