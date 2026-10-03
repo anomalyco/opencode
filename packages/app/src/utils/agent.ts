@@ -28,7 +28,10 @@ function tone(name: string) {
 
 export function agentColor(name: string, custom?: string) {
   if (custom) return custom
-  return defaults[name] ?? defaults[name.toLowerCase()] ?? tone(name.toLowerCase())
+  if (Object.hasOwn(defaults, name)) return defaults[name]
+  const normalized = name.toLowerCase()
+  if (Object.hasOwn(defaults, normalized)) return defaults[normalized]
+  return tone(normalized)
 }
 
 export function messageAgentColor(
