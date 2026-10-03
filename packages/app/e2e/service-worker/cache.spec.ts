@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test"
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
 import { createServer, type ServerResponse } from "node:http"
 import { once } from "node:events"
 import { createHash } from "node:crypto"
@@ -7,6 +7,7 @@ import { join, extname, relative, sep } from "node:path"
 import { tmpdir } from "node:os"
 import { fileURLToPath } from "node:url"
 import { build } from "vite"
+import solid from "vite-plugin-solid"
 import { serviceWorker } from "../../vite.pwa"
 
 type Site = {
@@ -27,10 +28,22 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
           const root = join(directory, version)
           const outDir = join(root, "dist")
           await mkdir(join(root, "public", "nested"), { recursive: true })
+          await writeFile(
+            join(root, "public", "notification.js"),
+            await readFile(new URL("../../public/notification.js", import.meta.url)),
+          )
           await Promise.all(
             Object.entries({
               "index.html": `<html><head></head><body><h1>Loading</h1><label>Draft<textarea></textarea></label><button>Load lazy</button><output></output><script type="module" src="/main.js"></script></body></html>`,
               "main.js": `document.querySelector("h1").textContent = "${version}";
+            document.addEventListener("notify", async () => {
+              const { createWebPlatform } = await import(${JSON.stringify(fileURLToPath(new URL("../../src/runtime/platform/web.ts", import.meta.url)))})
+              await createWebPlatform("test").platform.notify("Session complete", "Test session", undefined, "/server/test/session/completed").then(() => {
+                document.querySelector("output").textContent = "Notification sent"
+              }, (error) => {
+                document.querySelector("output").textContent = String(error)
+              })
+            });
             document.querySelector("button").onclick = async () => {
               document.querySelector("output").textContent = await (await import("./lazy.js")).load()
             };`,
@@ -48,8 +61,9 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
             configFile: false,
             root,
             logLevel: "silent",
+            resolve: { alias: { "@": fileURLToPath(new URL("../../src", import.meta.url)) } },
             build: { outDir, assetsDir: "_assets", sourcemap: true },
-            plugins: serviceWorker(outDir),
+            plugins: [solid(), serviceWorker(outDir)],
           })
           builds[version] = Object.fromEntries(
             await Promise.all(
@@ -184,6 +198,35 @@ async function waiting(page: Page) {
     .poll(() => page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.waiting?.state))
     .toBe("installed")
 }
+
+fixture(
+  "shows a notification when the mobile Notification constructor is unavailable",
+  async ({ page, context, site }) => {
+    await context.grantPermissions(["notifications"], { origin: site.url })
+    await install(page, site.url)
+    expect(await page.evaluate(() => Notification.permission)).toBe("granted")
+    await page.evaluate(() => {
+      // Desktop Chromium supports the constructor; Android requires the service worker API.
+      window.Notification = new Proxy(Notification, {
+        construct() {
+          throw new TypeError("Illegal constructor. Use ServiceWorkerRegistration.showNotification() instead.")
+        },
+      })
+      document.hasFocus = () => false
+      document.dispatchEvent(new Event("notify"))
+    })
+    await expect(page.getByRole("status")).toHaveText("Notification sent")
+    expect(
+      await page.evaluate(async () =>
+        (await (await navigator.serviceWorker.ready).getNotifications()).map((notification) => ({
+          title: notification.title,
+          body: notification.body,
+          url: notification.data.url,
+        })),
+      ),
+    ).toEqual([{ title: "Session complete", body: "Test session", url: `${site.url}/server/test/session/completed` }])
+  },
+)
 
 fixture(
   "opens an uncached route offline and executes never-used nested lazy chunks",
@@ -354,6 +397,12 @@ test("the production build precaches every deployable file", async ({ page, cont
     .map((entry) => "/" + relative(fileURLToPath(directory), join(entry.parentPath, entry.name)).split(sep).join("/"))
     .filter((path) => !path.endsWith(".map") && !["/_headers", "/_redirects", "/sw.js"].includes(path))
   expect(files.length).toBeGreaterThan(1)
+  // SST's KV router treats an empty file as missing and returns the HTML fallback.
+  expect(
+    (
+      await Promise.all(files.map(async (path) => ((await stat(new URL(`.${path}`, directory))).size ? [] : [path])))
+    ).flat(),
+  ).toEqual([])
   const server = createServer(async (request, response) => {
     const path = new URL(request.url ?? "/", "http://localhost").pathname
     response.setHeader("cache-control", "no-store")

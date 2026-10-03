@@ -18,7 +18,7 @@ export function createWebPlatform(version: string) {
       window.open(url.href, "_blank", "noopener,noreferrer")
     },
     restart: async () => window.location.reload(),
-    async notify(title, description, onClick) {
+    async notify(title, description, onClick, href) {
       if (!("Notification" in window)) return
 
       const permission =
@@ -28,10 +28,37 @@ export function createWebPlatform(version: string) {
       if (permission !== "granted") return
       if (document.visibilityState === "visible" && document.hasFocus()) return
 
-      const notification = new Notification(title, {
+      const options = {
         body: description ?? "",
         icon: "https://opencode.ai/favicon-96x96-v3.png",
-      })
+      }
+      const registration = "serviceWorker" in navigator ? await navigator.serviceWorker.getRegistration() : undefined
+      const worker = registration?.installing ?? registration?.waiting
+      if (registration && !registration.active && worker) {
+        await new Promise<void>((resolve) => {
+          const finish = () => {
+            clearTimeout(timeout)
+            worker.removeEventListener("statechange", done)
+            resolve()
+          }
+          const done = () => {
+            if (worker.state !== "activated" && worker.state !== "redundant") return
+            finish()
+          }
+          const timeout = setTimeout(finish, 30_000)
+          worker.addEventListener("statechange", done)
+          done()
+        })
+      }
+      if (registration?.active) {
+        await registration.showNotification(title, {
+          ...options,
+          data: { url: new URL(href ?? location.href, location.href).href },
+        })
+        return
+      }
+
+      const notification = new Notification(title, options)
       notification.onclick = () => {
         window.focus()
         onClick?.()
