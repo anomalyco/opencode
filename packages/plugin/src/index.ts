@@ -53,8 +53,20 @@ export type WorkspaceAdapter = {
   target(config: WorkspaceInfo): WorkspaceTarget | Promise<WorkspaceTarget>
 }
 
+export type StoredAuth = Auth
+
 export type PluginInput = {
   client: ReturnType<typeof createOpencodeClient>
+  auth?: {
+    /** Reads the decoded credential from disk, not the environment snapshot. */
+    get(providerID: string): Promise<StoredAuth | undefined>
+    /** Writes only when the decoded stored entry matches expected; returns the current entry on conflict. */
+    compareAndSet(
+      providerID: string,
+      expected: StoredAuth | undefined,
+      next: StoredAuth,
+    ): Promise<{ written: boolean; current: StoredAuth | undefined }>
+  }
   project: Project
   directory: string
   worktree: string
