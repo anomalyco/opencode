@@ -232,9 +232,12 @@ const layer = Layer.effect(
 
       if (flags.experimentalIconDiscovery) yield* discover(existing).pipe(Effect.ignore, Effect.forkIn(scope))
 
+      const worktreeExists = yield* fs.exists(existing.worktree).pipe(Effect.catchAll(() => Effect.succeed(false)))
+      const activeWorktree = projectID === ProjectV2.ID.global || !worktreeExists ? worktree : existing.worktree
+
       const result: Info = {
         ...existing,
-        worktree: projectID === ProjectV2.ID.global ? worktree : existing.worktree,
+        worktree: activeWorktree,
         vcs: data.vcs?.type ?? fakeVcs,
         time: { ...existing.time, updated: Date.now() },
       }
@@ -244,11 +247,12 @@ const layer = Layer.effect(
         !result.sandboxes.includes(data.directory)
       )
         result.sandboxes.push(data.directory)
+      result.sandboxes = result.sandboxes.filter((s) => s !== result.worktree)
       result.sandboxes = yield* Effect.forEach(
         result.sandboxes,
         (s) =>
           fs.exists(s).pipe(
-            Effect.orDie,
+            Effect.catchAll(() => Effect.succeed(false)),
             Effect.map((exists) => (exists ? s : undefined)),
           ),
         { concurrency: "unbounded" },
@@ -407,7 +411,7 @@ const layer = Layer.effect(
         data.sandboxes,
         (dir) =>
           fs.isDir(dir).pipe(
-            Effect.orDie,
+            Effect.catchAll(() => Effect.succeed(false)),
             Effect.map((ok) => (ok ? dir : undefined)),
           ),
         { concurrency: "unbounded" },
