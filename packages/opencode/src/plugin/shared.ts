@@ -280,7 +280,6 @@ export function readV1Plugin(
     if (mode === "detect") return
     throw new TypeError(`Plugin ${spec} must default export an object with ${kind}()`)
   }
-  if (mode === "detect" && !("id" in value) && !("server" in value) && !("tui" in value)) return
 
   const server = "server" in value ? value.server : undefined
   const tui = "tui" in value ? value.tui : undefined
@@ -293,10 +292,15 @@ export function readV1Plugin(
   if (server !== undefined && tui !== undefined) {
     throw new TypeError(`Plugin ${spec} must default export either server() or tui(), not both`)
   }
+  // A default export that does not carry the requested kind is not a plugin of this kind. Detect
+  // mode reports that back to the caller so a module that also exports legacy plugin functions can
+  // still load through them, instead of failing the whole import.
   if (kind === "server" && server === undefined) {
+    if (mode === "detect") return
     throw new TypeError(`Plugin ${spec} must default export an object with server()`)
   }
   if (kind === "tui" && tui === undefined) {
+    if (mode === "detect") return
     throw new TypeError(`Plugin ${spec} must default export an object with tui()`)
   }
 

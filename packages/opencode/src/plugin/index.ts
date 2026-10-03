@@ -96,7 +96,10 @@ function getServerPlugin(value: unknown) {
   return value.server
 }
 
-function getLegacyPlugins(mod: Record<string, unknown>) {
+// A legacy plugin module exports one or more plugin functions, and anything else in the namespace
+// is ignored: a module can carry a `default` export meant for another plugin runtime or a plain
+// constant next to its plugin functions, and neither should disable the functions it does export.
+function getLegacyPlugins(mod: Record<string, unknown>, spec: string) {
   const seen = new Set<unknown>()
   const result: PluginInstance[] = []
 
@@ -104,9 +107,11 @@ function getLegacyPlugins(mod: Record<string, unknown>) {
     if (seen.has(entry)) continue
     seen.add(entry)
     const plugin = getServerPlugin(entry)
-    if (!plugin) throw new TypeError("Plugin export is not a function")
+    if (!plugin) continue
     result.push(plugin)
   }
+
+  if (!result.length) throw new TypeError(`Plugin ${spec} does not export a plugin function`)
 
   return result
 }
@@ -119,7 +124,7 @@ async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks:
     return
   }
 
-  for (const server of getLegacyPlugins(load.mod)) {
+  for (const server of getLegacyPlugins(load.mod, load.spec)) {
     hooks.push(await server(input, load.options))
   }
 }

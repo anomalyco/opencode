@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { parsePluginSpecifier } from "../../src/plugin/shared"
+import { parsePluginSpecifier, readV1Plugin } from "../../src/plugin/shared"
 
 describe("parsePluginSpecifier", () => {
   test("parses standard npm package without version", () => {
@@ -84,5 +84,36 @@ describe("parsePluginSpecifier", () => {
       pkg: "@opencode/acme",
       version: "latest",
     })
+  })
+})
+
+describe("readV1Plugin", () => {
+  test("reads a plugin from its default export", () => {
+    const plugin = { id: "acme", server: async () => ({}) }
+    expect(readV1Plugin({ default: plugin }, "acme.ts", "server", "detect")).toBe(plugin)
+  })
+
+  test("reports a default export without the requested kind in detect mode", () => {
+    expect(readV1Plugin({ default: { id: "acme", setup: () => {} } }, "acme.ts", "server", "detect")).toBeUndefined()
+    expect(readV1Plugin({ default: async () => ({}) }, "acme.ts", "server", "detect")).toBeUndefined()
+    expect(
+      readV1Plugin({ default: { id: "acme", server: async () => ({}) } }, "acme.ts", "tui", "detect"),
+    ).toBeUndefined()
+  })
+
+  test("requires the requested kind in strict mode", () => {
+    expect(() => readV1Plugin({ default: { id: "acme", setup: () => {} } }, "acme.ts", "server")).toThrow(
+      "must default export an object with server()",
+    )
+    expect(() => readV1Plugin({ default: {} }, "acme.ts", "tui")).toThrow("must default export an object with tui()")
+  })
+
+  test("rejects a malformed plugin in both modes", () => {
+    expect(() => readV1Plugin({ default: { server: "acme" } }, "acme.ts", "server", "detect")).toThrow(
+      "has invalid server export",
+    )
+    expect(() =>
+      readV1Plugin({ default: { server: async () => ({}), tui: async () => ({}) } }, "acme.ts", "server", "detect"),
+    ).toThrow("must default export either server() or tui(), not both")
   })
 })
