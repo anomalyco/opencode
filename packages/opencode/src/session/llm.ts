@@ -273,6 +273,13 @@ const live: Layer.Layer<
         "llm.provider": input.model.providerID,
         "llm.model": input.model.id,
       })
+
+      const lastMessage = prepared.messages.at(-1)
+      const messages =
+        lastMessage?.role === "assistant"
+        ? [...prepared.messages, { role: "user" as const, content: "Continue." }]
+        : prepared.messages
+      
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {
@@ -321,7 +328,7 @@ const live: Layer.Layer<
           abortSignal: input.abort,
           headers: prepared.headers,
           maxRetries: input.retries ?? 0,
-          messages: prepared.messages,
+          messages,
           model: wrapLanguageModel({
             model: language,
             middleware: [
