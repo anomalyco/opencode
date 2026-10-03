@@ -6,10 +6,12 @@ import { Cause, Deferred, Effect, Exit, Layer, Context, Scope, Schema } from "ef
 import * as Stream from "effect/Stream"
 import { Agent } from "@/agent/agent"
 import { Config } from "@/config/config"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { Permission } from "@/permission"
 import { Plugin } from "@/plugin"
 import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
+import { parseInvokeCalls } from "./tool-xml"
 import { LLM } from "./llm"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
@@ -542,6 +544,27 @@ const layer = Layer.effect(
             }
             if (value.providerMetadata) ctx.currentText.metadata = value.providerMetadata
             yield* session.updatePart(ctx.currentText)
+            if (Flag.OPENCODE_XML_TOOL_FALLBACK && !ctx.assistantMessage.summary) {
+              const { cleanText, calls } = parseInvokeCalls(ctx.currentText.text)
+              if (calls.length > 0) {
+                ctx.currentText.text = cleanText
+                yield* session.updatePart(ctx.currentText)
+                let index = 0
+                for (const call of calls) {
+                  const id = `xml-tool-call-${index++}`
+                  yield* ensureToolCall({ id, name: call.name })
+                  yield* updateToolCall(id, (match) => ({
+                    ...match,
+                    tool: call.name,
+                    state: {
+                      status: "running",
+                      input: call.input as Record<string, unknown>,
+                      time: { start: Date.now() },
+                    },
+                  }))
+                }
+              }
+            }
             ctx.currentText = undefined
             return
 
