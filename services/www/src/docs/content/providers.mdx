@@ -362,8 +362,9 @@ az login --tenant TENANT_ID
 
 ## Bedrock
 
-Amazon Bedrock uses the AWS default credential chain. A named AWS profile is the simplest durable setup; OpenCode also
-recognizes access-key environments, web identity, and container credentials.
+Amazon Bedrock uses the AWS default credential chain and automatically discovers default profiles, `aws login`
+sessions, credential helpers, and EC2 instance roles. No OpenCode login is required; discovery rechecks every minute.
+To use a named SSO profile:
 
 ```bash
 aws configure sso --profile work
@@ -371,7 +372,7 @@ aws sso login --profile work
 ```
 
 Select the profile and region in provider settings. A configured `profile`, `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`, web
-identity token file, or container credential URI activates the provider; a region alone does not.
+identity token file, or container credential URI still activates the provider immediately; a region alone does not.
 
 ```jsonc title="opencode.jsonc"
 {

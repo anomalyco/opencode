@@ -31,7 +31,7 @@ function withEnv<A, E, R>(vars: Record<string, string | undefined>, fx: () => Ef
       })
       return previous
     }),
-    fx,
+    () => fx().pipe(Effect.scoped),
     (previous) =>
       Effect.sync(() => {
         Object.entries(previous).forEach(([key, value]) => {
@@ -50,6 +50,9 @@ const noAmbientAWS = {
   AWS_CONTAINER_CREDENTIALS_FULL_URI: undefined,
   AWS_REGION: undefined,
   AWS_DEFAULT_REGION: undefined,
+  AWS_CONFIG_FILE: "/nonexistent/opencode-bedrock-test/config",
+  AWS_SHARED_CREDENTIALS_FILE: "/nonexistent/opencode-bedrock-test/credentials",
+  AWS_EC2_METADATA_DISABLED: "true",
 }
 
 const seedBedrock = Effect.fn(function* (settings?: Provider.Settings) {
@@ -121,7 +124,13 @@ describe("AmazonBedrockPlugin", () => {
     ),
   )
 
-  for (const name of Object.keys(noAmbientAWS).filter((name) => !name.includes("REGION"))) {
+  for (const name of [
+    "AWS_PROFILE",
+    "AWS_ACCESS_KEY_ID",
+    "AWS_WEB_IDENTITY_TOKEN_FILE",
+    "AWS_CONTAINER_CREDENTIALS_RELATIVE_URI",
+    "AWS_CONTAINER_CREDENTIALS_FULL_URI",
+  ]) {
     it.effect(`enables the provider when ${name} is set`, () =>
       withEnv({ ...noAmbientAWS, [name]: "value" }, () =>
         Effect.gen(function* () {

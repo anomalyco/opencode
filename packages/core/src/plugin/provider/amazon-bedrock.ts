@@ -1,4 +1,5 @@
-import { Effect } from "effect"
+import { Effect, Schedule } from "effect"
+import { BedrockAuth } from "@opencode/ai/protocols/utils/bedrock-auth"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 
@@ -19,6 +20,8 @@ const isBedrock = (item: { readonly package: string }) =>
 export const AmazonBedrockPlugin = define({
   id: "opencode.provider.amazon.bedrock",
   effect: Effect.fn(function* (ctx) {
+    const providers = yield* Provider.Service
+    const discovered = { available: false }
     yield* ctx.integration.transform((editor) => {
       // models.dev advertises AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and
       // AWS_REGION alongside the bearer token. Only the bearer token is a key;
@@ -36,7 +39,7 @@ export const AmazonBedrockPlugin = define({
           const chain = typeof settings.profile === "string" || CHAIN_ENV.some((name) => process.env[name])
           // SigV4 authenticates through the AWS default chain rather than a key
           // credential, so ambient AWS configuration is what makes Bedrock usable.
-          if (chain && provider.activation === "auto") provider.activation = "enabled"
+          if ((chain || discovered.available) && provider.activation === "auto") provider.activation = "enabled"
           // Same default the native package uses, made explicit here so catalog
           // `${AWS_REGION}` URLs resolve without any region configured.
           const region = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "us-east-1"
@@ -53,5 +56,23 @@ export const AmazonBedrockPlugin = define({
         })
       }
     })
+    // Resolve the same AWS chain used by requests, including default profiles and
+    // EC2 roles with no AWS_* variables. Keep I/O out of the synchronous catalog fold.
+    const refresh = Effect.fn("AmazonBedrockPlugin.refresh")(function* () {
+      if (!(yield* providers.all()).some((provider) => isBedrock(provider) && provider.activation !== "disabled"))
+        return
+      const available = yield* BedrockAuth.defaultChain({
+        region: process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? "us-east-1",
+      }).pipe(
+        Effect.as(true),
+        Effect.timeout("5 seconds"),
+        Effect.orElseSucceed(() => false),
+      )
+      if (available === discovered.available) return
+      discovered.available = available
+      yield* ctx.provider.reload()
+    })
+    // Recheck so logging in after startup is picked up without restarting OpenCode.
+    yield* refresh().pipe(Effect.repeat(Schedule.spaced("1 minute")), Effect.forkScoped({ startImmediately: true }))
   }),
 })

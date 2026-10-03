@@ -37,7 +37,11 @@ export const defaultChain = (options: DefaultChainOptions): Effect.Effect<Creden
   Effect.tryPromise({
     try: async () => {
       const { fromNodeProviderChain } = await import("@aws-sdk/credential-providers")
-      const identity = await fromNodeProviderChain(options.profile === undefined ? {} : { profile: options.profile })()
+      const identity = await fromNodeProviderChain({
+        ...(options.profile === undefined ? {} : { profile: options.profile }),
+        clientConfig: { region: options.region },
+        ignoreCache: true,
+      })()
       return {
         region: options.region,
         accessKeyId: identity.accessKeyId,
