@@ -1478,6 +1478,15 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
     return props.message.finish && !["tool-calls", "unknown"].includes(props.message.finish)
   })
 
+  // A finished "stop" turn with no text, no tool calls, and no error produced
+  // nothing visible — usually a stream that terminated prematurely without
+  // reporting an error. Show it instead of silently going idle.
+  const noOutput = createMemo(() => {
+    if (!final() || props.message.error || props.message.finish !== "stop") return false
+    if (props.parts.some((x) => x.type === "tool")) return false
+    return !props.parts.some((x) => x.type === "text" && x.text.trim().length > 0)
+  })
+
   const duration = createMemo(() => {
     if (!final()) return 0
     if (!props.message.time.completed) return 0
@@ -1566,6 +1575,9 @@ function AssistantMessage(props: { message: AssistantMessage; parts: Part[]; las
               </Show>
               <Show when={props.message.error?.name === "MessageAbortedError"}>
                 <span style={{ fg: theme.textMuted }}> · interrupted</span>
+              </Show>
+              <Show when={noOutput()}>
+                <span style={{ fg: theme.warning }}> · no output</span>
               </Show>
             </text>
           </box>
