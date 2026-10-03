@@ -18,9 +18,14 @@ import { TestTuiContexts } from "../../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 const sessions = {
-  parent: session("parent", "Parent"),
-  "child-a": session("child-a", "First", "parent"),
-  "child-b": session("child-b", "Second", "parent"),
+  parent: { ...session("parent", "Parent"), model: { providerID: "anthropic", id: "sonnet" } },
+  "child-a": { ...session("child-a", "First", "parent"), model: { providerID: "anthropic", id: "sonnet" } },
+  "child-b": {
+    ...session("child-b", "Second task with an unusually long title", "parent"),
+    model: { providerID: "openai", id: "codex", variant: "high" },
+  },
+  "child-c": { ...session("child-c", "Third", "parent"), model: { providerID: "custom", id: "reviewer" } },
+  "child-d": session("child-d", "Fourth", "parent"),
 }
 
 const shells = [shell("sh-a", "bun test"), shell("sh-b", "bun dev"), shell("sh-c", "python3 - <<'PY'\nimport json")]
@@ -29,6 +34,7 @@ async function renderComposer(
   defaultTab: "subagents" | "shell",
   keybinds: Partial<TuiKeybind.Keybinds>,
   focusedTextarea = false,
+  width = 100,
 ) {
   const events = createEventStream()
   const interrupted: string[] = []
@@ -41,6 +47,14 @@ async function renderComposer(
   const calls = createFetch((url, request) => {
     if (url.pathname === "/api/session/active")
       return json({ data: { "child-a": { type: "running" }, "child-b": { type: "running" } } })
+    if (url.pathname === "/api/model")
+      return json({
+        location: { directory },
+        data: [
+          { providerID: "anthropic", id: "sonnet", name: "Claude Sonnet" },
+          { providerID: "openai", id: "codex", name: "GPT Codex" },
+        ],
+      })
     const sessionID = url.pathname.match(/^\/api\/session\/([^/]+)$/)?.[1]
     if (sessionID && sessionID in sessions) return json({ data: sessions[sessionID as keyof typeof sessions] })
     const interruptID = url.pathname.match(/^\/api\/session\/([^/]+)\/interrupt$/)?.[1]
@@ -78,6 +92,9 @@ async function renderComposer(
         data.session.sync("parent"),
         data.session.sync("child-a"),
         data.session.sync("child-b"),
+        data.session.sync("child-c"),
+        data.session.sync("child-d"),
+        data.location.model.sync(),
         data.shell.sync(),
       ])
         .then(() => wait(() => data.session.status("child-a") === "running"))
@@ -125,7 +142,7 @@ async function renderComposer(
         </ConfigProvider>
       </TestTuiContexts>
     ),
-    { width: 100, height: 20, kittyKeyboard: true },
+    { width, height: 20, kittyKeyboard: true },
   )
   await ready.promise
   await app.renderOnce()
@@ -160,6 +177,34 @@ test("disabled subagent bindings have no component fallbacks", async () => {
     composer.app.mockInput.pressArrow("down")
     composer.dispatch("composer.subagent.select")
     expect(composer.route()).toMatchObject({ type: "session", sessionID: "child-a" })
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("subagent list shows each child's model even when it matches the parent", async () => {
+  const composer = await renderComposer("subagents", {})
+  try {
+    const frame = composer.app.captureCharFrame()
+    expect(frame).toMatch(/Build: First\s+Claude Sonnet · Running/)
+    expect(frame).toMatch(/Build: Second task with an unusually long title\s+GPT Codex \(high\) · Running/)
+
+    composer.dispatch("composer.subagent.toggle-activity")
+    await composer.app.renderOnce()
+    expect(composer.app.captureCharFrame()).toMatch(/Build: Third\s+custom\/reviewer/)
+    expect(composer.app.captureCharFrame()).toMatch(/Build: Fourth\s*\n/)
+    expect(composer.app.captureCharFrame()).not.toContain("Model unavailable")
+  } finally {
+    composer.app.renderer.destroy()
+  }
+})
+
+test("narrow subagent list keeps the model and status on one row", async () => {
+  const composer = await renderComposer("subagents", {}, false, 48)
+  try {
+    const rows = composer.app.captureCharFrame().split("\n")
+    expect(rows.find((row) => row.includes("First"))).toContain("Claude Sonnet · Running")
+    expect(rows.find((row) => row.includes("Second"))).toContain("GPT Codex (high) · Running")
   } finally {
     composer.app.renderer.destroy()
   }
