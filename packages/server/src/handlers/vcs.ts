@@ -1,3 +1,4 @@
+import { Plugin } from "@opencode/core/plugin"
 import { Vcs } from "@opencode/core/vcs"
 import { Project } from "@opencode/core/project"
 import { Worktree } from "@opencode/core/worktree"
@@ -11,6 +12,9 @@ import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { response } from "../location"
+
+// A cold location registers its VCS provider during plugin activation.
+const service = Plugin.awaitActivation.pipe(Effect.andThen(Vcs.Service))
 
 export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
   Effect.gen(function* () {
@@ -57,7 +61,7 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
       .handle("vcs.get", () =>
         response(
           Effect.gen(function* () {
-            const vcs = yield* Vcs.Service
+            const vcs = yield* service
             return yield* vcs.info()
           }),
         ),
@@ -65,7 +69,7 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
       .handle("vcs.base", () =>
         response(
           Effect.gen(function* () {
-            const vcs = yield* Vcs.Service
+            const vcs = yield* service
             return yield* vcs
               .base()
               .pipe(Effect.mapError((error) => new ServiceUnavailableError({ service: "vcs", message: error.message })))
@@ -75,7 +79,7 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
       .handle("vcs.status", () =>
         response(
           Effect.gen(function* () {
-            const vcs = yield* Vcs.Service
+            const vcs = yield* service
             return yield* vcs.status()
           }),
         ),
@@ -83,7 +87,7 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
       .handle("vcs.branch.list", (ctx) =>
         response(
           Effect.gen(function* () {
-            const vcs = yield* Vcs.Service
+            const vcs = yield* service
             return yield* vcs.branches({ search: ctx.query.search, limit: Math.min(ctx.query.limit ?? 50, 100) })
           }),
         ),
@@ -91,7 +95,7 @@ export const VcsHandler = HttpApiBuilder.group(Api, "server.vcs", (handlers) =>
       .handle("vcs.diff", (ctx) =>
         response(
           Effect.gen(function* () {
-            const vcs = yield* Vcs.Service
+            const vcs = yield* service
             return yield* vcs
               .diff(ctx.query.mode, { context: ctx.query.context, base: ctx.query.base })
               .pipe(Effect.mapError((error) => new ServiceUnavailableError({ service: "vcs", message: error.message })))
