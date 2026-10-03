@@ -6,6 +6,7 @@ import path from "node:path"
 import { spawn } from "node:child_process"
 import type { Stream } from "node:stream"
 import { resolveZedDbPath, resolveZedSelection } from "./editor-zed"
+import { parseArgsStringToArgv } from "string-argv"
 
 type EditorStdio = "inherit" | "pipe" | "ignore" | number | Stream
 
@@ -32,8 +33,8 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
   input.renderer.currentRenderBuffer.clear()
   try {
     await new Promise<void>((resolve, reject) => {
-      const parts = editor.split(" ")
-      const child = spawn(parts[0]!, [...parts.slice(1), file], {
+      const parts = parseArgsStringToArgv(editor).map((arg) => `"${arg}"`)
+      const child = spawn(parts[0]!, [...parts.slice(1), `"${file}"`], {
         cwd: input.cwd && existsSync(input.cwd) ? input.cwd : process.cwd(),
         stdio: [input.stdin ?? "inherit", "inherit", "inherit"],
         shell: process.platform === "win32",
