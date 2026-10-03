@@ -645,3 +645,236 @@ index bfa2b7120a0f50c569364ea5264e6f811076f44f..abd8dfd707c155f71dae7aeeeeaf7547
                      this._cleanupTimeout(messageId);
                      reject(error);
                  });
+
+diff --git a/dist/cjs/types.d.ts b/dist/cjs/types.d.ts
+index 742adf4421a74acbf38b7dfe3a26e2a825237a01..03dc7a135e53d588f876799eeea9723598bec2ca 100644
+--- a/dist/cjs/types.d.ts
++++ b/dist/cjs/types.d.ts
+@@ -2382,12 +2382,12 @@ export declare const ToolSchema: z.ZodObject<{
+     description: z.ZodOptional<z.ZodString>;
+     inputSchema: z.ZodObject<{
+         type: z.ZodLiteral<"object">;
+-        properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++        properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+         required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+     }, z.core.$catchall<z.ZodUnknown>>;
+     outputSchema: z.ZodOptional<z.ZodObject<{
+         type: z.ZodLiteral<"object">;
+-        properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++        properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+         required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+     }, z.core.$catchall<z.ZodUnknown>>>;
+     annotations: z.ZodOptional<z.ZodObject<{
+@@ -2459,12 +2459,12 @@ export declare const ListToolsResultSchema: z.ZodObject<{
+         description: z.ZodOptional<z.ZodString>;
+         inputSchema: z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>;
+         outputSchema: z.ZodOptional<z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>>;
+         annotations: z.ZodOptional<z.ZodObject<{
+@@ -3897,12 +3897,12 @@ export declare const CreateMessageRequestParamsSchema: z.ZodObject<{
+         description: z.ZodOptional<z.ZodString>;
+         inputSchema: z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>;
+         outputSchema: z.ZodOptional<z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>>;
+         annotations: z.ZodOptional<z.ZodObject<{
+@@ -4265,12 +4265,12 @@ export declare const CreateMessageRequestSchema: z.ZodObject<{
+             description: z.ZodOptional<z.ZodString>;
+             inputSchema: z.ZodObject<{
+                 type: z.ZodLiteral<"object">;
+-                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+                 required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+             }, z.core.$catchall<z.ZodUnknown>>;
+             outputSchema: z.ZodOptional<z.ZodObject<{
+                 type: z.ZodLiteral<"object">;
+-                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+                 required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+             }, z.core.$catchall<z.ZodUnknown>>>;
+             annotations: z.ZodOptional<z.ZodObject<{
+@@ -6900,12 +6900,12 @@ export declare const ServerRequestSchema: z.ZodUnion<readonly [z.ZodObject<{
+             description: z.ZodOptional<z.ZodString>;
+             inputSchema: z.ZodObject<{
+                 type: z.ZodLiteral<"object">;
+-                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+                 required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+             }, z.core.$catchall<z.ZodUnknown>>;
+             outputSchema: z.ZodOptional<z.ZodObject<{
+                 type: z.ZodLiteral<"object">;
+-                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+                 required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+             }, z.core.$catchall<z.ZodUnknown>>>;
+             annotations: z.ZodOptional<z.ZodObject<{
+@@ -7802,12 +7802,12 @@ export declare const ServerResultSchema: z.ZodUnion<readonly [z.ZodObject<{
+         description: z.ZodOptional<z.ZodString>;
+         inputSchema: z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>;
+         outputSchema: z.ZodOptional<z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>>;
+         annotations: z.ZodOptional<z.ZodObject<{
+diff --git a/dist/cjs/types.js b/dist/cjs/types.js
+index e41c81c703d74bed1154c3f83d44d32dfbfe0867..8a73af0a6520af3b163dee090164a145ca800b75 100644
+--- a/dist/cjs/types.js
++++ b/dist/cjs/types.js
+@@ -1278,7 +1278,7 @@ exports.ToolSchema = z.object({
+     inputSchema: z
+         .object({
+         type: z.literal('object'),
+-        properties: z.record(z.string(), AssertObjectSchema).optional(),
++        properties: z.record(z.string(), z.union([AssertObjectSchema, z.boolean()])).optional(),
+         required: z.array(z.string()).optional()
+     })
+         .catchall(z.unknown()),
+@@ -1290,7 +1290,7 @@ exports.ToolSchema = z.object({
+     outputSchema: z
+         .object({
+         type: z.literal('object'),
+-        properties: z.record(z.string(), AssertObjectSchema).optional(),
++        properties: z.record(z.string(), z.union([AssertObjectSchema, z.boolean()])).optional(),
+         required: z.array(z.string()).optional()
+     })
+         .catchall(z.unknown())
+diff --git a/dist/esm/types.d.ts b/dist/esm/types.d.ts
+index 742adf4421a74acbf38b7dfe3a26e2a825237a01..03dc7a135e53d588f876799eeea9723598bec2ca 100644
+--- a/dist/esm/types.d.ts
++++ b/dist/esm/types.d.ts
+@@ -2382,12 +2382,12 @@ export declare const ToolSchema: z.ZodObject<{
+     description: z.ZodOptional<z.ZodString>;
+     inputSchema: z.ZodObject<{
+         type: z.ZodLiteral<"object">;
+-        properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++        properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+         required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+     }, z.core.$catchall<z.ZodUnknown>>;
+     outputSchema: z.ZodOptional<z.ZodObject<{
+         type: z.ZodLiteral<"object">;
+-        properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++        properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+         required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+     }, z.core.$catchall<z.ZodUnknown>>>;
+     annotations: z.ZodOptional<z.ZodObject<{
+@@ -2459,12 +2459,12 @@ export declare const ListToolsResultSchema: z.ZodObject<{
+         description: z.ZodOptional<z.ZodString>;
+         inputSchema: z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>;
+         outputSchema: z.ZodOptional<z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>>;
+         annotations: z.ZodOptional<z.ZodObject<{
+@@ -3897,12 +3897,12 @@ export declare const CreateMessageRequestParamsSchema: z.ZodObject<{
+         description: z.ZodOptional<z.ZodString>;
+         inputSchema: z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>;
+         outputSchema: z.ZodOptional<z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>>;
+         annotations: z.ZodOptional<z.ZodObject<{
+@@ -4265,12 +4265,12 @@ export declare const CreateMessageRequestSchema: z.ZodObject<{
+             description: z.ZodOptional<z.ZodString>;
+             inputSchema: z.ZodObject<{
+                 type: z.ZodLiteral<"object">;
+-                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+                 required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+             }, z.core.$catchall<z.ZodUnknown>>;
+             outputSchema: z.ZodOptional<z.ZodObject<{
+                 type: z.ZodLiteral<"object">;
+-                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+                 required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+             }, z.core.$catchall<z.ZodUnknown>>>;
+             annotations: z.ZodOptional<z.ZodObject<{
+@@ -6900,12 +6900,12 @@ export declare const ServerRequestSchema: z.ZodUnion<readonly [z.ZodObject<{
+             description: z.ZodOptional<z.ZodString>;
+             inputSchema: z.ZodObject<{
+                 type: z.ZodLiteral<"object">;
+-                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+                 required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+             }, z.core.$catchall<z.ZodUnknown>>;
+             outputSchema: z.ZodOptional<z.ZodObject<{
+                 type: z.ZodLiteral<"object">;
+-                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++                properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+                 required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+             }, z.core.$catchall<z.ZodUnknown>>>;
+             annotations: z.ZodOptional<z.ZodObject<{
+@@ -7802,12 +7802,12 @@ export declare const ServerResultSchema: z.ZodUnion<readonly [z.ZodObject<{
+         description: z.ZodOptional<z.ZodString>;
+         inputSchema: z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>;
+         outputSchema: z.ZodOptional<z.ZodObject<{
+             type: z.ZodLiteral<"object">;
+-            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodCustom<object, object>>>;
++            properties: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnion<[z.ZodCustom<object, object>, z.ZodBoolean]>>>;
+             required: z.ZodOptional<z.ZodArray<z.ZodString>>;
+         }, z.core.$catchall<z.ZodUnknown>>>;
+         annotations: z.ZodOptional<z.ZodObject<{
+diff --git a/dist/esm/types.js b/dist/esm/types.js
+index 866da3e68ca0ace1c524e8dcbd9d1370a9e39b84..3f97c3ea94bcb5888e332bbb5c30708e6531cd2f 100644
+--- a/dist/esm/types.js
++++ b/dist/esm/types.js
+@@ -1240,7 +1240,7 @@ export const ToolSchema = z.object({
+     inputSchema: z
+         .object({
+         type: z.literal('object'),
+-        properties: z.record(z.string(), AssertObjectSchema).optional(),
++        properties: z.record(z.string(), z.union([AssertObjectSchema, z.boolean()])).optional(),
+         required: z.array(z.string()).optional()
+     })
+         .catchall(z.unknown()),
+@@ -1252,7 +1252,7 @@ export const ToolSchema = z.object({
+     outputSchema: z
+         .object({
+         type: z.literal('object'),
+-        properties: z.record(z.string(), AssertObjectSchema).optional(),
++        properties: z.record(z.string(), z.union([AssertObjectSchema, z.boolean()])).optional(),
+         required: z.array(z.string()).optional()
+     })
+         .catchall(z.unknown())
