@@ -79,6 +79,17 @@ type CopilotModel = Omit<Model, "api"> & {
 const decodeModels = Schema.decodeUnknownSync(schema)
 const decodeItem = Schema.decodeUnknownOption(item)
 
+// Copilot serves these families only on /responses, so route them there when the
+// live model metadata does not advertise supported_endpoints. Older chat-only
+// families (gpt-5-mini, gpt-4*, Claude) stay on chat.
+export function fallbackEndpoint(modelID: string): "responses" | undefined {
+  const match = /^gpt-(\d+)/.exec(modelID)
+  if (match && Number(match[1]) >= 5 && !modelID.startsWith("gpt-5-mini")) return "responses"
+  if (modelID.startsWith("grok-") || modelID.startsWith("gemini-") || modelID.startsWith("mai-code-"))
+    return "responses"
+  return undefined
+}
+
 function build(key: string, remote: SelectableItem, url: string, prev?: Model): Model {
   const reasoning =
     !!remote.capabilities.supports.adaptive_thinking ||

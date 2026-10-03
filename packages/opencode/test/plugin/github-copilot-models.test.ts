@@ -490,3 +490,14 @@ test("remaps fallback oauth model urls to the enterprise host", async () => {
   expect(models.claude.api.url).toBe("https://copilot-api.ghe.example.com")
   expect(models.claude.api.npm).toBe("@ai-sdk/github-copilot")
 })
+
+test("falls back to responses for Copilot families that require it", () => {
+  expect(CopilotModels.fallbackEndpoint("gpt-5.6-sol")).toBe("responses")
+  expect(CopilotModels.fallbackEndpoint("grok-4.5")).toBe("responses")
+  expect(CopilotModels.fallbackEndpoint("grok-4.6")).toBe("responses")
+  expect(CopilotModels.fallbackEndpoint("gemini-3.5-flash")).toBe("responses")
+  expect(CopilotModels.fallbackEndpoint("mai-code-1.1-flash")).toBe("responses")
+  expect(CopilotModels.fallbackEndpoint("gpt-5-mini")).toBeUndefined()
+  expect(CopilotModels.fallbackEndpoint("gpt-4o")).toBeUndefined()
+  expect(CopilotModels.fallbackEndpoint("claude-sonnet-4.6")).toBeUndefined()
+})
