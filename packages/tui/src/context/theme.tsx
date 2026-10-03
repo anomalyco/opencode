@@ -26,6 +26,8 @@ import { useConfig } from "../config"
 import { useStorageOptional } from "./storage"
 import { DevTools } from "../devtools"
 import { configDirectories } from "../util/config-directories"
+import { createSourceWatcher } from "../plugin/watch"
+import path from "node:path"
 
 const themePerformance = DevTools.register({ id: "theme-performance", title: "Theme performance" })
 export type ThemeError = { name: string; error: Error }
@@ -64,15 +66,30 @@ export type ThemeSource = Readonly<{
   subscribeRefresh?(refresh: () => void): () => void
 }>
 
-export const createThemeSource = (config: string): ThemeSource => ({
-  async discover() {
-    return discoverThemes(configDirectories(config, process.cwd()))
-  },
-  subscribeRefresh(refresh) {
-    process.on("SIGUSR2", refresh)
-    return () => process.off("SIGUSR2", refresh)
-  },
-})
+export function createThemeSource(config: string, cwd = process.cwd()): ThemeSource {
+  const directories = configDirectories(config, cwd)
+  let watcher: ReturnType<typeof createSourceWatcher> | undefined
+  const arm = () => Promise.all(directories.map((directory) => watcher?.wait(path.join(directory, "themes"))))
+  return {
+    async discover() {
+      await arm()
+      return discoverThemes(directories)
+    },
+    subscribeRefresh(refresh) {
+      watcher = createSourceWatcher(() => {
+        void arm()
+        refresh()
+      })
+      void arm()
+      process.on("SIGUSR2", refresh)
+      return () => {
+        process.off("SIGUSR2", refresh)
+        watcher?.dispose()
+        watcher = undefined
+      }
+    },
+  }
+}
 
 export { discoverThemes } from "../theme/discovery"
 
@@ -172,14 +189,20 @@ const themeContext = createSimpleContext({
       return themes
         .discover()
         .then((themes) => {
-          setCustomThemes(themes)
+          if (disposed) return
+          const errors = setCustomThemes(themes)
+          const failure = errors.find((failure) => failure.name === store.active)
+          if (!failure) return
+          themeErrors.emit(failure.name, failure.error)
+          setStore("active", "opencode")
         })
-        .catch(() => setStore("active", "opencode"))
+        .catch(() => {})
     }
 
     onMount(() => {
       // Terminal palette queries serialize with frame output. First paint uses the cached palette or built-in fallback.
       void syncCustomThemes().finally(() => {
+        if (disposed) return
         tokens()
         setStore("ready", true)
       })

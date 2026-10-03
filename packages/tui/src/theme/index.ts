@@ -75,10 +75,22 @@ export function subscribeThemes(listener: (themes: Record<string, ThemeDocumentS
 }
 
 export function setCustomThemes(themes: Record<string, unknown>) {
+  const errors: { name: string; error: unknown }[] = []
   customThemes = Object.fromEntries(
-    Object.entries(themes).filter((entry): entry is [string, ThemeDocumentSource] => isThemeSource(entry[1])),
+    Object.entries(themes).flatMap(([name, source]): [string, ThemeDocumentSource][] => {
+      try {
+        if (!isThemeSource(source)) throw new Error(`Invalid theme: ${name}`)
+        parseTheme(source, name)
+        return [[name, source]]
+      } catch (error) {
+        if (customThemes[name]) return [[name, customThemes[name]]]
+        errors.push({ name, error })
+        return []
+      }
+    }),
   )
   syncThemes()
+  return errors
 }
 
 export function setSystemTheme(theme: ThemeDocumentSource | undefined) {
