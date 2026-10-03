@@ -136,6 +136,11 @@ export const validateName = (name: string) =>
     ? Effect.void
     : Effect.fail(new RegistrationError({ name, message: `Invalid tool name: ${name}` }))
 
+export const validate = (name: string, tool: AnyTool) =>
+  runtimes.has(tool)
+    ? Effect.void
+    : Effect.fail(new RegistrationError({ name, message: "Invalid Tool value" }))
+
 export const withPermission = <Input extends SchemaType<any>, Output extends SchemaType<any>>(
   tool: Definition<Input, Output>,
   permission: string,
