@@ -10,7 +10,19 @@ import { MessageV2 } from "./message-v2"
 import { Session } from "./session"
 import PROMPT_PLAN from "./prompt/plan.txt"
 import BUILD_SWITCH from "./prompt/build-switch.txt"
+import BUILD_MODE from "./prompt/build-mode.txt"
 import PLAN_MODE from "./prompt/plan-mode.txt"
+
+// Which standing reminder the legacy (non-experimentalPlanMode) branch must append to the last
+// user message. Plan mode gets its reminder on every turn, but build mode used to get one only
+// on the plan→build transition — a session that never entered plan carried no mode signal at
+// all, so the model could invent "plan mode" and refuse to work (#52444). Custom primary agents
+// (ask, review, user-defined) are deliberately left untouched.
+export function legacyReminder(agent: string, wasPlan: boolean): "plan" | "build-switch" | "build" | null {
+  if (agent === "plan") return "plan"
+  if (agent === "build") return wasPlan ? "build-switch" : "build"
+  return null
+}
 
 export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   messages: SessionV1.WithParts[]
@@ -24,24 +36,17 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
   if (!userMessage) return input.messages
 
   if (!flags.experimentalPlanMode) {
-    if (input.agent.name === "plan") {
-      userMessage.parts.push({
-        id: PartID.ascending(),
-        messageID: userMessage.info.id,
-        sessionID: userMessage.info.sessionID,
-        type: "text",
-        text: PROMPT_PLAN,
-        synthetic: true,
-      })
-    }
     const wasPlan = input.messages.some((msg) => msg.info.role === "assistant" && msg.info.agent === "plan")
-    if (wasPlan && input.agent.name === "build") {
+    const reminder = legacyReminder(input.agent.name, wasPlan)
+    const text =
+      reminder === "plan" ? PROMPT_PLAN : reminder === "build-switch" ? BUILD_SWITCH : reminder === "build" ? BUILD_MODE : null
+    if (text) {
       userMessage.parts.push({
         id: PartID.ascending(),
         messageID: userMessage.info.id,
         sessionID: userMessage.info.sessionID,
         type: "text",
-        text: BUILD_SWITCH,
+        text,
         synthetic: true,
       })
     }
@@ -61,6 +66,21 @@ export const apply = Effect.fn("SessionReminders.apply")(function* (input: {
       text: exists
         ? `${BUILD_SWITCH}\n\nA plan file exists at ${plan}. You should execute on the plan defined within it`
         : BUILD_SWITCH,
+      synthetic: true,
+    })
+    userMessage.parts.push(part)
+    return input.messages
+  }
+
+  // Standing build reminder for sessions that never entered plan — the same gap as the legacy
+  // branch (#52444): without it the request path carries no mode signal for build at all.
+  if (input.agent.name === "build") {
+    const part = yield* sessions.updatePart({
+      id: PartID.ascending(),
+      messageID: userMessage.info.id,
+      sessionID: userMessage.info.sessionID,
+      type: "text",
+      text: BUILD_MODE,
       synthetic: true,
     })
     userMessage.parts.push(part)
