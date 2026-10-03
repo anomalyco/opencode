@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test"
+import { lookup } from "node:dns/promises"
 import net from "node:net"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -29,12 +30,12 @@ afterEach(async () => {
   await resetDatabase()
 })
 
-async function startListener() {
+async function startListener(hostname = "127.0.0.1") {
   Flag.OPENCODE_SERVER_PASSWORD = auth.password
   Flag.OPENCODE_SERVER_USERNAME = auth.username
   process.env.OPENCODE_SERVER_PASSWORD = auth.password
   process.env.OPENCODE_SERVER_USERNAME = auth.username
-  return Server.listen({ hostname: "127.0.0.1", port: 0 })
+  return Server.listen({ hostname, port: 0 })
 }
 
 async function startNoAuthListener() {
@@ -350,6 +351,22 @@ describe("HttpApi Server.listen", () => {
       if (listener) await stop(listener, "timed out cleaning up plugin client listener").catch(() => undefined)
       if (previous === undefined) delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
       else process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = previous
+    }
+  })
+
+  test("binds every address the hostname resolves to", async () => {
+    const addresses = (await lookup("localhost", { all: true })).map((result) => result.address)
+    const listener = await startListener("localhost")
+    try {
+      for (const address of addresses) {
+        const host = address.includes(":") ? `[${address}]` : address
+        const response = await fetch(`http://${host}:${listener.port}/status`, {
+          headers: { authorization: authorization() },
+        })
+        expect({ address, status: response.status }).toEqual({ address, status: 200 })
+      }
+    } finally {
+      await stop(listener, "timed out cleaning up multi-address listener")
     }
   })
 
