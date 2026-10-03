@@ -1895,7 +1895,24 @@ export function inlineCodeKind(text: string): "path" | "url" | undefined {
   if (/^\/[a-z][a-z0-9-]*$/i.test(text)) return
   if (/\s/.test(text)) return
   if (/[()\[\]{}*+=<>|&^"';]/.test(text)) return
-  if (/[/\\]/.test(text) || /^\.\.?[/\\]/.test(text) || hasPathExtension(text) || hasPathFileName(text)) return "path"
+  if (hasPathExtension(text) || hasPathFileName(text)) return "path"
+  if (!/[/\\]/.test(text)) return
+  // Explicit relative/absolute/scope prefixes are unambiguous paths.
+  if (/^\.\.?[/\\]/.test(text)) return "path"
+  if (/^~[/\\]/.test(text)) return "path"
+  if (/^[/\\]/.test(text)) return "path"
+  if (/^[a-zA-Z]:[/\\]/.test(text)) return "path"
+  if (/^@[^/\\\s]+[/\\][^/\\\s]+/.test(text)) return "path"
+  // A trailing separator marks a directory reference (e.g. `dist/`).
+  if (/[/\\]$/.test(text)) return "path"
+  const segments = text.split(/[/\\]+/).filter(Boolean)
+  // Depth is a strong path signal (`packages/app/src`); a single bare
+  // `word/word` pair is usually prose shorthand (`write/edit`, `and/or`).
+  if (segments.length > 2) return "path"
+  if (segments.length === 2) {
+    const [first, second] = segments as [string, string]
+    if (/[.\-_]/.test(first) || /[.\-_]/.test(second)) return "path"
+  }
 }
 
 function hasPathExtension(text: string) {
