@@ -17,7 +17,8 @@ import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { testEffect } from "../lib/effect"
 import type { Agent } from "../../src/agent/agent"
 import { MessageV2 } from "../../src/session/message-v2"
-import { SessionID, MessageID } from "../../src/session/schema"
+import { SessionID, MessageID, PartID } from "../../src/session/schema"
+import { SessionProcessor } from "../../src/session/processor"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Permission } from "@/permission"
 import { LLMAISDK } from "@/session/llm/ai-sdk"
@@ -2263,4 +2264,182 @@ describe("session.llm.stream", () => {
       }),
     },
   )
+})
+
+describe("session.llm.prefill", () => {
+  const fixture = loadFixture("vivgrid", "gemini-3.1-pro-preview")
+  const providerID = ProviderV2.ID.make("prefill-test")
+  const sessionID = SessionID.make("session-prefill")
+  const agent = {
+    name: "test",
+    mode: "primary",
+    options: {},
+    permission: [{ permission: "*", pattern: "*", action: "allow" }],
+  } satisfies Agent.Info
+  const tools = {
+    read: tool({
+      description: "Read a file",
+      inputSchema: z.object({ path: z.string() }),
+      execute: async () => "unused",
+    }),
+  }
+  const user: SessionV1.WithParts = {
+    info: {
+      id: MessageID.make("msg_prefill-user"),
+      sessionID,
+      role: "user",
+      time: { created: 0 },
+      agent: agent.name,
+      model: { providerID, modelID: ModelV2.ID.make(fixture.model.id) },
+    },
+    parts: [
+      {
+        id: PartID.make("prt_prefill-user"),
+        sessionID,
+        messageID: MessageID.make("msg_prefill-user"),
+        type: "text",
+        text: "Review src/a.py, src/b.py and src/c.py",
+      },
+    ],
+  }
+  const assistantID = MessageID.make("msg_prefill-assistant")
+  // Calls finish in the order c, a, b.
+  const ends = { a: 20, b: 30, c: 10 }
+  const toolPart = (name: keyof typeof ends, done: boolean): SessionV1.ToolPart => ({
+    id: PartID.make(`prt_prefill-${name}`),
+    sessionID,
+    messageID: assistantID,
+    type: "tool",
+    tool: "read",
+    callID: `call_${name}`,
+    state: done
+      ? {
+          status: "completed",
+          input: { path: `src/${name}.py` },
+          output: `def ${name}():\n    return "${name}"`,
+          title: name,
+          metadata: {},
+          time: { start: 1, end: ends[name] },
+        }
+      : { status: "running", input: { path: `src/${name}.py` }, time: { start: 1 } },
+  })
+  const assistant = (done: Array<keyof typeof ends>, model: Provider.Model): SessionV1.WithParts => ({
+    info: {
+      id: assistantID,
+      parentID: user.info.id,
+      sessionID,
+      role: "assistant",
+      mode: agent.name,
+      agent: agent.name,
+      path: { cwd: "/", root: "/" },
+      cost: 0,
+      tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      modelID: model.id,
+      providerID: model.providerID,
+      time: { created: 0 },
+    },
+    parts: [
+      { id: PartID.make("prt_prefill-step"), sessionID, messageID: assistantID, type: "step-start" },
+      ...(["a", "b", "c"] as const).map((name) => toolPart(name, done.includes(name))),
+    ],
+  })
+  const chatResponse = () =>
+    new Response(createChatStream("ok"), { status: 200, headers: { "Content-Type": "text/event-stream" } })
+  const toolCallIDs = (body: Record<string, unknown>) =>
+    (body.messages as Array<{ role: string; tool_call_id?: string }>).flatMap((msg) =>
+      msg.role === "tool" ? [msg.tool_call_id] : [],
+    )
+
+  const cases = [
+    { mode: "ordered" as const, prefills: [["a"]], final: ["call_a", "call_b", "call_c"] },
+    { mode: "reorder" as const, prefills: [["call_c"], ["call_c", "call_a"]], final: ["call_c", "call_a", "call_b"] },
+  ]
+  cases.forEach((input) => {
+    it.instance(
+      `${input.mode}: every prefill is a byte prefix of the next real request`,
+      () =>
+        Effect.gen(function* () {
+          const model = yield* Provider.use.getModel(providerID, ModelV2.ID.make(fixture.model.id))
+          expect(model.experimentalIncrementalToolPrefill).toBe(input.mode)
+          const base = {
+            user: user.info as SessionV1.User,
+            sessionID,
+            model,
+            agent,
+            system: ["You are a helpful assistant."],
+            tools,
+          }
+          const history = yield* MessageV2.toModelMessagesEffect([user], model)
+
+          const prefills: Capture[] = []
+          for (const done of [["c"], ["c", "a"]] as Array<Array<keyof typeof ends>>) {
+            const step = assistant(done, model)
+            const plan = SessionProcessor.prefillPlan(step.parts, input.mode)
+            if (!plan) continue
+            const request = waitRequest("/chat/completions", chatResponse())
+            yield* LLM.Service.use((svc) =>
+              Effect.gen(function* () {
+                const messages = yield* MessageV2.toModelMessagesEffect([step], model)
+                yield* svc.prefill({ ...base, messages: [...history, ...messages], omitToolResults: plan.omit })
+              }),
+            )
+            prefills.push(yield* Effect.promise(() => request))
+          }
+
+          const request = waitRequest("/chat/completions", chatResponse())
+          yield* drain({
+            ...base,
+            messages: yield* MessageV2.toModelMessagesEffect([user, assistant(["a", "b", "c"], model)], model),
+          })
+          const final = (yield* Effect.promise(() => request)).body
+
+          expect(toolCallIDs(final)).toEqual(input.final)
+          expect(prefills.map((capture) => toolCallIDs(capture.body))).toEqual(
+            input.prefills.map((ids) => ids.map((id) => (id.startsWith("call_") ? id : `call_${id}`))),
+          )
+          const finalMessages = JSON.stringify(final.messages)
+          prefills.forEach((capture) => {
+            expect(capture.body.max_tokens).toBe(1)
+            expect(JSON.stringify(capture.body.tools)).toBe(JSON.stringify(final.tools))
+            const messages = JSON.stringify(capture.body.messages)
+            expect(finalMessages.startsWith(messages.slice(0, -1))).toBe(true)
+          })
+        }),
+      {
+        config: () => ({
+          enabled_providers: [providerID],
+          provider: {
+            [providerID]: {
+              name: "Prefill Test",
+              npm: "@ai-sdk/openai-compatible",
+              models: {
+                [fixture.model.id]: {
+                  ...(configModel(fixture.model) as ConfigModel),
+                  experimental_incremental_tool_prefill: input.mode,
+                },
+              },
+              options: { apiKey: "test-key", baseURL: `${state.server!.url.origin}/v1` },
+            },
+          },
+        }),
+      },
+    )
+  })
+
+  test("prefillPlan waits for a settled result and stops once every call is settled", () => {
+    const parts = (done: Array<keyof typeof ends>) =>
+      (["a", "b", "c"] as const).map((name) => toolPart(name, done.includes(name)))
+    expect(SessionProcessor.prefillPlan(parts([]), "reorder")).toBeUndefined()
+    expect(SessionProcessor.prefillPlan(parts(["b"]), "ordered")).toBeUndefined()
+    expect(SessionProcessor.prefillPlan(parts(["b"]), "reorder")).toEqual({
+      progress: 1,
+      omit: new Set(["call_a", "call_c"]),
+    })
+    expect(SessionProcessor.prefillPlan(parts(["a", "b"]), "ordered")).toEqual({
+      progress: 2,
+      omit: new Set(["call_c"]),
+    })
+    expect(SessionProcessor.prefillPlan(parts(["a", "b", "c"]), "ordered")).toBeUndefined()
+    expect(SessionProcessor.prefillPlan(parts(["a", "b", "c"]), "reorder")).toBeUndefined()
+  })
 })

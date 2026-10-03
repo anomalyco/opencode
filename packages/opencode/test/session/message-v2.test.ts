@@ -1727,3 +1727,41 @@ describe("session.message-v2.latest", () => {
     expect(state.tasks[0]).toMatchObject({ type: "subtask", prompt: "inspect" })
   })
 })
+
+describe("session.message-v2.toModelMessage incremental tool prefill", () => {
+  const reorderModel: Provider.Model = { ...model, experimentalIncrementalToolPrefill: "reorder" }
+  const tool = (callID: string, input: Record<string, unknown>, output: string, end: number): SessionV1.ToolPart => ({
+    ...basePart("a1", callID),
+    type: "tool",
+    tool: callID === "c1" ? "read" : "grep",
+    callID,
+    state: { status: "completed", input, output, title: callID, metadata: {}, time: { start: 0, end } },
+  })
+  const input: SessionV1.WithParts[] = [
+    { info: userInfo("u1"), parts: [{ ...basePart("u1", "u1-text"), type: "text", text: "go" }] },
+    {
+      info: assistantInfo("a1", "u1"),
+      parts: [
+        tool("c1", { filePath: "/src/a.ts" }, "<path>/src/a.ts</path>\nbody", 30),
+        tool("c2", { pattern: "foo\nbar" }, "match", 10),
+      ],
+    },
+  ]
+
+  test("reorder sends results in completion order with an identifying header, keeping call order", async () => {
+    const messages = await MessageV2.toModelMessages(input, reorderModel)
+    expect(messages[1].content).toMatchObject([{ toolCallId: "c1" }, { toolCallId: "c2" }])
+    expect(messages[2].content).toMatchObject([
+      { toolCallId: "c2", output: { type: "text", value: "[grep foo bar]\nmatch" } },
+      { toolCallId: "c1", output: { type: "text", value: "<path>/src/a.ts</path>\nbody" } },
+    ])
+  })
+
+  test("leaves call order and output untouched when off", async () => {
+    const messages = await MessageV2.toModelMessages(input, model)
+    expect(messages[2].content).toMatchObject([
+      { toolCallId: "c1", output: { value: "<path>/src/a.ts</path>\nbody" } },
+      { toolCallId: "c2", output: { value: "match" } },
+    ])
+  })
+})

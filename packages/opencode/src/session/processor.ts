@@ -72,6 +72,16 @@ interface ProcessorContext extends Input {
   needsCompaction: boolean
   currentText: SessionV1.TextPart | undefined
   reasoningMap: Record<string, SessionV1.ReasoningPart>
+  prefill: PrefillState | undefined
+}
+
+type PrefillState = {
+  request: LLM.StreamInput
+  mode: "ordered" | "reorder"
+  modelFinished: Deferred.Deferred<void>
+  running: boolean
+  dirty: boolean
+  progress: number
 }
 
 type StreamEvent = LLMEvent
@@ -111,6 +121,7 @@ const layer = Layer.effect(
         needsCompaction: false,
         currentText: undefined,
         reasoningMap: {},
+        prefill: undefined,
       }
       let aborted = false
 
@@ -275,6 +286,46 @@ const layer = Layer.effect(
         }
       }
 
+      // Warm the server prefix cache with settled tool results while other calls still run.
+      // One prefill at a time; each extends the last.
+      const schedulePrefill = Effect.fn("SessionProcessor.schedulePrefill")(function* () {
+        const prefill = ctx.prefill
+        if (!prefill || !Deferred.isDoneUnsafe(prefill.modelFinished)) return
+        if (prefill.running) {
+          prefill.dirty = true
+          return
+        }
+        prefill.running = true
+        yield* drainPrefill(prefill).pipe(
+          Effect.ensuring(Effect.sync(() => (prefill.running = false))),
+          Effect.ignore,
+          Effect.forkIn(scope),
+        )
+      })
+
+      const drainPrefill = Effect.fnUntraced(function* (prefill: PrefillState) {
+        while (true) {
+          prefill.dirty = false
+          const parts = yield* MessageV2.parts(ctx.assistantMessage.id).pipe(
+            Effect.provideService(Database.Service, database),
+          )
+          const plan = prefillPlan(parts, prefill.mode)
+          if (plan && plan.progress > prefill.progress) {
+            prefill.progress = plan.progress
+            const messages = yield* MessageV2.toModelMessagesEffect(
+              [{ info: ctx.assistantMessage, parts }],
+              prefill.request.model,
+            )
+            yield* llm.prefill({
+              ...prefill.request,
+              messages: [...prefill.request.messages, ...messages],
+              omitToolResults: plan.omit,
+            })
+          }
+          if (!prefill.dirty) return
+        }
+      })
+
       const handleEvent = Effect.fnUntraced(function* (value: StreamEvent) {
         switch (value.type) {
           case "reasoning-start":
@@ -385,6 +436,7 @@ const layer = Layer.effect(
             if (!toolCall && value.result.type === "error") return
             if (value.result.type === "error") {
               yield* failToolCall(value.id, value.result.value)
+              yield* schedulePrefill()
               return
             }
             const rawOutput = toolResultOutput(value)
@@ -410,11 +462,13 @@ const layer = Layer.effect(
               attachments: attachments.length ? attachments : undefined,
             }
             yield* completeToolCall(value.id, output)
+            yield* schedulePrefill()
             return
           }
 
           case "tool-error": {
             yield* failToolCall(value.id, value.error ?? new Error(value.message))
+            yield* schedulePrefill()
             return
           }
 
@@ -651,7 +705,27 @@ const layer = Layer.effect(
             ctx.currentText = undefined
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
-            const stream = llm.stream(streamInput)
+            const mode = streamInput.model.experimentalIncrementalToolPrefill
+            // A trailing max-steps prompt is not part of the next request.
+            const prefill =
+              mode && streamInput.messages.at(-1)?.role !== "assistant"
+                ? {
+                    request: streamInput,
+                    mode,
+                    modelFinished: Deferred.makeUnsafe<void>(),
+                    running: false,
+                    dirty: false,
+                    progress: 0,
+                  }
+                : undefined
+            ctx.prefill = prefill
+            if (prefill)
+              yield* Deferred.await(prefill.modelFinished).pipe(Effect.andThen(schedulePrefill), Effect.forkChild)
+            const stream = llm.stream(
+              prefill
+                ? { ...streamInput, onModelFinish: () => Deferred.doneUnsafe(prefill.modelFinished, Effect.void) }
+                : streamInput,
+            )
 
             yield* stream.pipe(
               Stream.tap((event) => handleEvent(event)),
@@ -709,6 +783,17 @@ const layer = Layer.effect(
     return Service.of({ create })
   }),
 )
+
+// Returns undefined when nothing is settled yet or everything is.
+export function prefillPlan(parts: SessionV1.Part[], mode: "ordered" | "reorder") {
+  const tools = parts.filter((part): part is SessionV1.ToolPart => part.type === "tool")
+  if (tools.some((part) => part.metadata?.providerExecuted)) return undefined
+  const settled = (part: SessionV1.ToolPart) => part.state.status === "completed" || part.state.status === "error"
+  const progress = mode === "ordered" ? tools.findIndex((part) => !settled(part)) : tools.filter(settled).length
+  if (progress <= 0 || progress === tools.length) return undefined
+  const pending = mode === "ordered" ? tools.slice(progress) : tools.filter((part) => !settled(part))
+  return { progress, omit: new Set(pending.map((part) => part.callID)) }
+}
 
 export const node = LayerNode.make({
   service: Service,

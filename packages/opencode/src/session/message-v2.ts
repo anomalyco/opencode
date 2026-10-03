@@ -135,6 +135,8 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 ) {
   const result: UIMessage[] = []
   const toolNames = new Set<string>()
+  const reorder = model.experimentalIncrementalToolPrefill === "reorder"
+  const toolEnds = new Map<string, number>()
   // Track media from tool results that need to be injected as user messages
   // for providers that don't support that media type in tool results.
   //
@@ -293,10 +295,13 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         if (part.type === "tool") {
           toolNames.add(part.tool)
+          if (part.state.status === "completed" || part.state.status === "error")
+            toolEnds.set(part.callID, part.state.time.end)
           if (part.state.status === "completed") {
-            const outputText = part.state.time.compacted
+            const text = part.state.time.compacted
               ? "[Old tool result content cleared]"
               : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
+            const outputText = reorder ? toolResultHeader(part, text) + text : text
             const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
 
             // For providers that don't support media in tool results, extract media files
@@ -407,7 +412,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
 
   const tools = Object.fromEntries(Array.from(toolNames).map((toolName) => [toolName, { toModelOutput }]))
 
-  return yield* Effect.promise(() =>
+  const messages = yield* Effect.promise(() =>
     convertToModelMessages(
       result.filter((msg) => msg.parts.some((part) => part.type !== "step-start")),
       {
@@ -416,7 +421,24 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
       },
     ),
   )
+  if (!reorder) return messages
+  // Completion order, so each result extends the prefix warmed while later calls ran.
+  const end = (part: { type: string }) =>
+    "toolCallId" in part && typeof part.toolCallId === "string" ? (toolEnds.get(part.toolCallId) ?? Infinity) : Infinity
+  return messages.map((msg) =>
+    msg.role === "tool" ? { ...msg, content: msg.content.toSorted((a, b) => end(a) - end(b)) } : msg,
+  )
 })
+
+const TOOL_RESULT_KEY_ARGS = ["filePath", "path", "pattern", "command", "url", "query", "description"]
+
+// Some chat templates drop tool_call_id, so reordered results name their call.
+function toolResultHeader(part: SessionV1.ToolPart, output: string) {
+  if (output.startsWith("<path>")) return ""
+  const arg = TOOL_RESULT_KEY_ARGS.map((key) => part.state.input[key]).find((value) => typeof value === "string")
+  if (typeof arg !== "string") return `[${part.tool}]\n`
+  return `[${part.tool} ${arg.replace(/\s+/g, " ").slice(0, 200)}]\n`
+}
 
 export function toModelMessages(
   input: WithParts[],

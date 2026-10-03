@@ -1779,6 +1779,10 @@ export type ProviderConfig = {
         | {
             field: "reasoning" | "reasoning_content" | "reasoning_text" | string
           }
+      /**
+       * Experimental: warm a server prefix cache (e.g. vLLM) with finished parallel tool results. 'reorder' sends results in completion order.
+       */
+      experimental_incremental_tool_prefill?: false | "ordered" | "reorder"
       cost?: {
         input: number
         output: number
@@ -2113,6 +2117,7 @@ export type Model = {
       [key: string]: unknown
     }
   }
+  experimentalIncrementalToolPrefill?: "ordered" | "reorder"
 }
 
 export type Provider = {

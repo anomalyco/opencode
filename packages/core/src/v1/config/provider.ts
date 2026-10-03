@@ -28,6 +28,12 @@ export const Model = Schema.Struct({
       }),
     ]),
   ),
+  experimental_incremental_tool_prefill: Schema.optional(
+    Schema.Union([Schema.Literal(false), Schema.Literals(["ordered", "reorder"])]),
+  ).annotate({
+    description:
+      "Experimental: warm a server prefix cache (e.g. vLLM) with finished parallel tool results. 'reorder' sends results in completion order.",
+  }),
   cost: Schema.optional(
     Schema.Struct({
       input: Schema.Finite,

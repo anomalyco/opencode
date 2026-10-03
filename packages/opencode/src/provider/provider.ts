@@ -1140,6 +1140,7 @@ export const Model = Schema.Struct({
   headers: Schema.Record(Schema.String, Schema.String),
   release_date: Schema.String,
   variants: optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Any))),
+  experimentalIncrementalToolPrefill: optional(Schema.Literals(["ordered", "reorder"])),
 }).annotate({ identifier: "Model" })
 export type Model = Types.DeepMutable<Schema.Schema.Type<typeof Model>>
 
@@ -1615,6 +1616,9 @@ const layer = Layer.effect(
               family: model.family ?? existingModel?.family ?? "",
               release_date: model.release_date ?? existingModel?.release_date ?? "",
               variants: {},
+              experimentalIncrementalToolPrefill:
+                (model.experimental_incremental_tool_prefill ?? existingModel?.experimentalIncrementalToolPrefill) ||
+                undefined,
             }
             const variants =
               existingModel?.api.npm === parsedModel.api.npm

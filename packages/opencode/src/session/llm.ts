@@ -45,14 +45,23 @@ export type StreamInput = {
   tools: Record<string, Tool>
   retries?: number
   toolChoice?: "auto" | "required" | "none"
+  // Fires when the provider stream ends, before the AI SDK finishes running tools.
+  onModelFinish?: () => void
+}
+
+export type PrefillInput = StreamInput & {
+  omitToolResults: ReadonlySet<string>
 }
 
 export type StreamRequest = StreamInput & {
   abort: AbortSignal
+  omitToolResults?: ReadonlySet<string>
 }
 
 export interface Interface {
   readonly stream: (input: StreamInput) => Stream.Stream<LLMEvent, unknown>
+  // Experimental: 1-token request that warms the server prefix cache for the next `stream` call.
+  readonly prefill: (input: PrefillInput) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/LLM") {}
@@ -223,7 +232,7 @@ const live: Layer.Layer<
 
       // Runtime seam: native is an opt-in adapter over @opencode-ai/llm. It
       // either returns a ready LLMEvent stream or a concrete fallback reason.
-      if (flags.experimentalNativeLlm) {
+      if (flags.experimentalNativeLlm && !input.omitToolResults) {
         const native = LLMNativeRuntime.stream({
           model: input.model,
           provider: item,
@@ -268,10 +277,12 @@ const live: Layer.Layer<
         })
       }
 
+      const omit = input.omitToolResults
       yield* Effect.logInfo("llm runtime selected", {
         "llm.runtime": "ai-sdk",
         "llm.provider": input.model.providerID,
         "llm.model": input.model.id,
+        ...(omit ? { "llm.prefill": "true" } : {}),
       })
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
@@ -315,9 +326,13 @@ const live: Layer.Layer<
           topK: prepared.params.topK,
           providerOptions: ProviderTransform.providerOptions(input.model, prepared.params.options),
           activeTools: Object.keys(prepared.tools).filter((x) => x !== "invalid"),
-          tools: prepared.tools,
+          tools: omit
+            ? Object.fromEntries(
+                Object.entries(prepared.tools).map(([name, t]) => [name, { ...t, execute: undefined }]),
+              )
+            : prepared.tools,
           toolChoice: input.toolChoice,
-          maxOutputTokens: prepared.params.maxOutputTokens,
+          maxOutputTokens: omit ? 1 : prepared.params.maxOutputTokens,
           abortSignal: input.abort,
           headers: prepared.headers,
           maxRetries: input.retries ?? 0,
@@ -336,13 +351,44 @@ const live: Layer.Layer<
                       prepared.messageTransformOptions,
                     )
                   }
+                  if (omit) {
+                    // The AI SDK rejects unanswered tool calls, so placeholders are stripped here instead.
+                    args.params.prompt = args.params.prompt
+                      .map((msg) =>
+                        msg.role === "tool"
+                          ? {
+                              ...msg,
+                              content: msg.content.filter(
+                                (part) => part.type !== "tool-result" || !omit.has(part.toolCallId),
+                              ),
+                            }
+                          : msg,
+                      )
+                      .filter((msg) => msg.role !== "tool" || msg.content.length > 0)
+                  }
                   return args.params
+                },
+                async wrapStream({ doStream }) {
+                  const result = await doStream()
+                  if (!input.onModelFinish) return result
+                  const onModelFinish = input.onModelFinish
+                  return {
+                    ...result,
+                    stream: result.stream.pipeThrough(
+                      new TransformStream({
+                        transform(chunk, controller) {
+                          if (chunk.type === "finish") onModelFinish()
+                          controller.enqueue(chunk)
+                        },
+                      }),
+                    ),
+                  }
                 },
               },
             ],
           }),
           experimental_telemetry: {
-            isEnabled: cfg.experimental?.openTelemetry,
+            isEnabled: cfg.experimental?.openTelemetry && !omit,
             functionId: "session.llm",
             tracer: telemetryTracer,
             metadata: {
@@ -380,7 +426,23 @@ const live: Layer.Layer<
         ),
       )
 
-    return Service.of({ stream })
+    const prefill: Interface["prefill"] = (input) =>
+      Effect.gen(function* () {
+        if (flags.experimentalNativeLlm) return
+        if ((yield* provider.getLanguage(input.model)) instanceof GitLabWorkflowLanguageModel) return
+        const ctrl = yield* Effect.acquireRelease(
+          Effect.sync(() => new AbortController()),
+          (ctrl) => Effect.sync(() => ctrl.abort()),
+        )
+        const result = yield* run({ ...input, abort: ctrl.signal })
+        if (result.type === "native") return
+        yield* Effect.promise(() => result.result.consumeStream())
+      }).pipe(
+        Effect.scoped,
+        Effect.catchCause(() => Effect.void),
+      )
+
+    return Service.of({ stream, prefill })
   }),
 )
 

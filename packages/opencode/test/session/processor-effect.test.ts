@@ -189,6 +189,7 @@ const it = testEffect(env)
 const providerErrorLLM = Layer.succeed(
   LLM.Service,
   LLM.Service.of({
+    prefill: () => Effect.void,
     stream: () =>
       Stream.make(
         LLMEvent.stepStart({ index: 0 }),
@@ -212,6 +213,7 @@ const itProviderError = testEffect(providerErrorEnv)
 const fragmentFailureLLM = Layer.succeed(
   LLM.Service,
   LLM.Service.of({
+    prefill: () => Effect.void,
     stream: () =>
       Stream.make(
         LLMEvent.stepStart({ index: 0 }),
@@ -225,6 +227,45 @@ const fragmentFailureLLM = Layer.succeed(
 )
 const fragmentFailureEnv = LayerNode.compile(root, [...replacements, [LLM.node, fragmentFailureLLM]])
 const itFragmentFailure = testEffect(fragmentFailureEnv)
+
+// a settles before the model finishes, then c, then b.
+const prefills: Array<{ modelFinished: boolean; omit: string[] }> = []
+const prefillState = { modelFinished: false }
+const prefillLLM = Layer.succeed(
+  LLM.Service,
+  LLM.Service.of({
+    prefill: (input) =>
+      Effect.sync(
+        () =>
+          void prefills.push({
+            modelFinished: prefillState.modelFinished,
+            omit: [...input.omitToolResults].toSorted(),
+          }),
+      ),
+    stream: (input) =>
+      Stream.fromIterable([
+        LLMEvent.stepStart({ index: 0 }),
+        ...["a", "b", "c"].map((name) => LLMEvent.toolCall({ id: `call_${name}`, name: "lookup", input: { name } })),
+        LLMEvent.toolResult({ id: "call_a", name: "lookup", result: { type: "text", value: "out-a" } }),
+        "model-finish" as const,
+        LLMEvent.toolResult({ id: "call_c", name: "lookup", result: { type: "text", value: "out-c" } }),
+        LLMEvent.toolResult({ id: "call_b", name: "lookup", result: { type: "text", value: "out-b" } }),
+        LLMEvent.stepFinish({ index: 0, reason: "tool-calls" }),
+        LLMEvent.finish({ reason: "tool-calls" }),
+      ]).pipe(
+        Stream.mapEffect((step) => Effect.sleep("20 millis").pipe(Effect.as(step))),
+        Stream.tap((step) =>
+          Effect.sync(() => {
+            if (step !== "model-finish") return
+            prefillState.modelFinished = true
+            input.onModelFinish?.()
+          }),
+        ),
+        Stream.filter((step) => step !== "model-finish"),
+      ),
+  }),
+)
+const itPrefill = testEffect(LayerNode.compile(root, [...replacements, [LLM.node, prefillLLM]]))
 
 const boot = Effect.fn("test.boot")(function* () {
   const processors = yield* SessionProcessor.Service
@@ -1167,5 +1208,50 @@ itFragmentFailure.live("session.processor effect tests retain partial legacy par
         expect(seen.filter((type) => type.startsWith("session.next."))).toEqual([])
       }),
     { config: cfg },
+  ),
+)
+;(
+  [
+    { mode: "ordered", expected: [["call_b", "call_c"]] },
+    { mode: "reorder", expected: [["call_b", "call_c"], ["call_b"]] },
+  ] as const
+).forEach((input) =>
+  itPrefill.live(`session.processor effect tests prefill settled tool results in ${input.mode} mode`, () =>
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const { processors, session, provider } = yield* boot()
+          prefills.length = 0
+          prefillState.modelFinished = false
+          const chat = yield* session.create({})
+          const parent = yield* user(chat.id, "prefill")
+          const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+          const mdl = {
+            ...(yield* provider.getModel(ref.providerID, ref.modelID)),
+            experimentalIncrementalToolPrefill: input.mode,
+          }
+          const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+
+          yield* handle.process({
+            user: {
+              id: parent.id,
+              sessionID: chat.id,
+              role: "user",
+              time: parent.time,
+              agent: parent.agent,
+              model: { providerID: ref.providerID, modelID: ref.modelID },
+            } satisfies SessionV1.User,
+            sessionID: chat.id,
+            model: mdl,
+            agent: agent(),
+            system: [],
+            messages: [{ role: "user", content: "prefill" }],
+            tools: {},
+          })
+
+          expect(prefills).toEqual(input.expected.map((omit) => ({ modelFinished: true, omit: [...omit] })))
+        }),
+      { config: cfg },
+    ),
   ),
 )
