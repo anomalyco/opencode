@@ -15,6 +15,7 @@ import { useSDK, type DirectorySDK } from "@/context/sdk"
 import { useSync, type DirectorySync } from "@/context/sync"
 import { Identifier } from "@/utils/id"
 import { Worktree as WorktreeState } from "@/utils/worktree"
+import { parsePromptInputV2Editor } from "@opencode-ai/session-ui/v2/prompt-input/editor-dom"
 import { buildRequestParts } from "./build-request-parts"
 import { setCursorPosition } from "./editor-dom"
 import { formatServerError } from "@/utils/server-errors"
@@ -167,6 +168,7 @@ export async function sendFollowupDraft(input: FollowupSendInput) {
 
     await input.api.prompt({
       sessionID: input.draft.sessionID,
+      sessionDirectory: input.draft.sessionDirectory,
       id: messageID,
       agent: input.draft.agent,
       model: input.draft.model,
@@ -324,11 +326,24 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       prompt: target.current(),
       context: target.context.items().slice(),
     })
-    const currentPrompt = submission.prompt
+    let currentPrompt = submission.prompt
     const context = submission.context
-    const text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
+    let text = currentPrompt.map((part) => ("content" in part ? part.content : "")).join("")
     const images = input.imageAttachments().slice()
     const mode = input.mode()
+
+    if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
+      const editor = input.editor()
+      if (editor) {
+        const domPrompt = parsePromptInputV2Editor(editor as HTMLDivElement)
+        const domText = domPrompt.map((p) => ("content" in p ? p.content : "")).join("")
+        if (domText.trim().length > 0) {
+          currentPrompt = domPrompt as Prompt
+          text = domText
+          target.set(domPrompt as Prompt, domText.length)
+        }
+      }
+    }
 
     if (text.trim().length === 0 && images.length === 0 && input.commentCount() === 0) {
       if (input.working()) void abort()
@@ -616,7 +631,7 @@ export function createPromptSubmit(input: PromptSubmitInput) {
       return true
     }
 
-    void sendFollowupDraft({
+    await sendFollowupDraft({
       api: sdk().api.session,
       sync: sync(),
       serverSync: serverSync(),
