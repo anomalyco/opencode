@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { createDialogSessionListQuery, loadDialogSessionList } from "../../src/component/dialog-session-list"
+import {
+  createDialogSessionListQuery,
+  loadDialogSessionList,
+  sessionScopeLabel,
+} from "../../src/component/dialog-session-list"
 
 describe("dialog session list", () => {
   test("requests root sessions for the default browse list", () => {
@@ -42,5 +46,14 @@ describe("dialog session list", () => {
         list: () => Promise.reject(new Error("offline")),
       }),
     ).toBeUndefined()
+  })
+
+  test("labels the project-wide scope", () => {
+    expect(sessionScopeLabel({ scope: "project" })).toBe("project")
+    expect(sessionScopeLabel({ path: "" })).toBe("project")
+  })
+
+  test("labels the directory scope", () => {
+    expect(sessionScopeLabel({ path: "packages/tui" })).toBe("packages/tui")
   })
 })

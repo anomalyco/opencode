@@ -89,7 +89,7 @@ import { cliErrorMessage, errorFormat } from "./util/error"
 
 registerOpencodeSpinner()
 
-const appGlobalBindingCommands = [
+export const appGlobalBindingCommands = [
   "session.list",
   "session.new",
   "session.quick_switch.1",
@@ -101,9 +101,12 @@ const appGlobalBindingCommands = [
   "session.quick_switch.7",
   "session.quick_switch.8",
   "session.quick_switch.9",
+  // Dialogs push the "modal" mode, and the session picker is a dialog, so this
+  // has to stay mode-less or the binding is dead exactly where it is used.
+  "app.toggle.session_directory_filter",
 ] as const
 
-const appBindingCommands = [
+export const appBindingCommands = [
   "command.palette.show",
   "model.list",
   "model.cycle_recent",
@@ -136,7 +139,6 @@ const appBindingCommands = [
   "app.toggle.file_context",
   "app.toggle.diffwrap",
   "app.toggle.paste_summary",
-  "app.toggle.session_directory_filter",
 ] as const
 
 export type TuiInput = {
@@ -407,6 +409,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
     }),
   )
   const [ready, setReady] = createSignal(false)
+  // Tracks whether the session picker is the open dialog, so toggling session
+  // directory filtering can re-list in place instead of closing the picker.
+  const [sessionPickerOpen, setSessionPickerOpen] = createSignal(false)
   props.pluginHost
     .start({
       api,
@@ -577,7 +582,11 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         slashName: "sessions",
         slashAliases: ["resume", "continue"],
         run: () => {
-          dialog.replace(() => <DialogSessionList />)
+          setSessionPickerOpen(true)
+          dialog.replace(
+            () => <DialogSessionList />,
+            () => setSessionPickerOpen(false),
+          )
         },
       },
       {
@@ -942,7 +951,9 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         run: async () => {
           kv.set("session_directory_filter_enabled", !kv.get("session_directory_filter_enabled", true))
           await sync.session.refresh()
-          dialog.clear()
+          // The picker re-queries on sync.session.query(), so leaving it open
+          // re-lists in place. Closing it would hide the result of the toggle.
+          if (!sessionPickerOpen()) dialog.clear()
         },
       },
       {
