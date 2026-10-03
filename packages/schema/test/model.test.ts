@@ -53,6 +53,15 @@ describe("Model.Compatibility", () => {
       requireAssistantAfterTool: true,
     })
   })
+
+  test("keeps capability overrides that gate protocol features", () => {
+    const decode = Schema.decodeUnknownSync(Model.Compatibility)
+
+    expect(decode({ supportsEffortUpdates: false, supportsThinkingBlockBinding: true })).toEqual({
+      supportsEffortUpdates: false,
+      supportsThinkingBlockBinding: true,
+    })
+  })
 })
 
 describe("Model.Info", () => {
