@@ -434,6 +434,35 @@ Show me the latest unresolved issues in my project. use sentry
 
 ---
 
+### QVeris
+
+Add the [QVeris MCP server](https://github.com/QVerisAI/qveris-agent-toolkit/tree/main/packages/mcp) to discover, inspect, and call external tools.
+
+Create a [QVeris API key](https://qveris.ai/account?page=api-keys), set it as `QVERIS_API_KEY`, and add the server to your config:
+
+```json title="opencode.json" {5-9}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "qveris": {
+      "type": "local",
+      "command": ["npx", "-y", "@qverisai/mcp"],
+      "environment": {
+        "QVERIS_API_KEY": "{env:QVERIS_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+You can then ask OpenCode to use QVeris when a task needs an external capability:
+
+```txt "use qveris"
+Discover a weather capability and get the current weather in Tokyo. use qveris
+```
+
+---
+
 ### Context7
 
 Add the [Context7 MCP server](https://github.com/upstash/context7) to search through docs.
