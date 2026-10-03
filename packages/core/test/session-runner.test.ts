@@ -439,14 +439,23 @@ const layer = Layer.unwrap(
           continuation?: SessionRunner.Continuation,
         ): Effect.Effect<void, SessionRunner.RunError> {
           return sessionRunner
-            .drain({ sessionID, force, continuation })
+            .drain({
+              sessionID,
+              force,
+              continuation,
+              interruptionReason: coordinator.interruptionReason(sessionID),
+            })
             .pipe(
               Effect.flatMap((result) =>
                 result._tag === "Complete" ? Effect.void : drain(sessionID, false, result.continuation),
               ),
             )
         }
-        const coordinator = yield* SessionRunCoordinator.make<Session.ID, SessionRunner.RunError>({
+        const coordinator = yield* SessionRunCoordinator.make<
+          Session.ID,
+          SessionRunner.RunError,
+          SessionExecution.InterruptReason
+        >({
           drain: (sessionID, force) => drain(sessionID, force),
         })
         return SessionExecution.Service.of({
@@ -454,7 +463,7 @@ const layer = Layer.unwrap(
           isActive: coordinator.isActive,
           resume: coordinator.run,
           wake: coordinator.wake,
-          interrupt: (sessionID) => coordinator.interrupt(sessionID),
+          interrupt: (sessionID, options) => coordinator.interrupt(sessionID, options?.reason ?? "user", options),
           awaitIdle: coordinator.awaitIdle,
         })
       }),
@@ -5120,6 +5129,62 @@ describe("SessionRunnerLLM", () => {
     yield* s.llm.push([])
     yield* s.resume
     expect(messageRoles(s.requests[0])).toEqual(["user", "assistant", "tool"])
+  })
+
+  scenario("reports the eviction cause on interrupted tools", function* (s) {
+    yield* s.admit("Evict blocked tool")
+    const tools = yield* s.blockTools()
+    yield* s.llm.push(
+      TestLLM.hangAfter(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-evicted", name: "echo", input: { text: "blocked" } }),
+      ),
+    )
+
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* tools.started
+    const execution = yield* SessionExecution.Service
+    expect(yield* execution.interrupt(sessionID, { reason: "inactivity" })).toBe(true)
+
+    expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+    const context = yield* s.context
+    expect(context).toMatchObject([
+      Expected.user("Evict blocked tool"),
+      Expected.assistant({}, [
+        Expected.failedTool(
+          { id: "call-evicted" },
+          { error: { type: "aborted", message: "Tool execution interrupted: location idle eviction" } },
+        ),
+      ]),
+    ])
+  })
+
+  scenario("keeps the blanket wording for user-caused interrupts", function* (s) {
+    yield* s.admit("Stop blocked tool")
+    const tools = yield* s.blockTools()
+    yield* s.llm.push(
+      TestLLM.hangAfter(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-stopped", name: "echo", input: { text: "blocked" } }),
+      ),
+    )
+
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* tools.started
+    const execution = yield* SessionExecution.Service
+    expect(yield* execution.interrupt(sessionID, { reason: "user" })).toBe(true)
+
+    expect(yield* Fiber.await(run)).toMatchObject({ _tag: "Failure" })
+    const context = yield* s.context
+    expect(context).toMatchObject([
+      Expected.user("Stop blocked tool"),
+      Expected.assistant({}, [
+        Expected.failedTool(
+          { id: "call-stopped" },
+          { error: { type: "aborted", message: "Tool execution interrupted" } },
+        ),
+      ]),
+    ])
   })
 
   scenario("interrupts a blocked step without local tool execution", function* (s) {
