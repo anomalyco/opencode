@@ -70,6 +70,7 @@ const TOP_LEVEL = [
 // gains user-visible flags that we want to lock in.
 const SUBCOMMANDS = [
   ["mcp", "list"],
+  ["mcp", "tools"],
   ["mcp", "add"],
   ["mcp", "auth"],
   ["mcp", "logout"],
