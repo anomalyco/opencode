@@ -54,7 +54,7 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
   const contenders = new Set<ServiceContender>()
-  let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let timeouts: { readonly info: Info; readonly since: number } | undefined
   let announced = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
@@ -82,16 +82,15 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     if (registration.timedOut && info !== undefined) {
       timeouts = {
         info,
-        count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
+        since: timeouts !== undefined && same(timeouts.info, info) ? timeouts.since : Date.now(),
       }
-      if (timeouts.count >= 3) {
-        yield* announce("missing")
-        yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
-        yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-        yield* terminate(info, options, timing)
-        timeouts = undefined
-        lastSpawn = Date.now() - spawnDelay
-      }
+      if (Date.now() - timeouts.since < timing.unresponsiveTimeout) return Option.none<LocalService>()
+      yield* announce("missing")
+      yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
+      yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
+      yield* terminate(info, options, timing)
+      timeouts = undefined
+      lastSpawn = Date.now() - spawnDelay
     } else timeouts = undefined
     if (service !== undefined) {
       spawnDelay = timing.spawnDelay

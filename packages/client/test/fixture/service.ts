@@ -57,7 +57,7 @@ const server = Bun.serve({
     if (pathname !== "/api/info") return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".status-request", "")
-    if (mode === "hanging") {
+    if (mode === "hanging" || (mode === "busy" && requests <= 4)) {
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})
     }
