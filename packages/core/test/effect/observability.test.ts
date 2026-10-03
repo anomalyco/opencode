@@ -80,6 +80,56 @@ test("file logger appends concurrent runs with a run on every line", async () =>
   expect(lines.every((line) => !line.startsWith("{"))).toBe(true)
 })
 
+test.each([
+  ["Asia/Shanghai", "2026-04-07T20:30:05.007Z", "2026-04-08T04:30:05.007+08:00"],
+  ["Asia/Kolkata", "2026-04-07T20:30:05.007Z", "2026-04-08T02:00:05.007+05:30"],
+  ["America/New_York", "2026-01-01T02:30:05.007Z", "2025-12-31T21:30:05.007-05:00"],
+  ["America/New_York", "2026-07-01T02:30:05.007Z", "2026-06-30T22:30:05.007-04:00"],
+  ["UTC", "2026-04-07T20:30:05.007Z", "2026-04-07T20:30:05.007+00:00"],
+])("file logger uses local time in %s at %s", async (zone, date, expected) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-log-test-"))
+  await using _ = {
+    async [Symbol.asyncDispose]() {
+      await fs.rm(dir, { recursive: true, force: true })
+    },
+  }
+  const file = path.join(dir, "opencode.log")
+
+  // Bun reads TZ at startup, so each time zone needs its own process.
+  const proc = Bun.spawn({
+    cmd: [
+      process.execPath,
+      "--eval",
+      `
+        import { Cause, Effect } from "effect"
+        import { NodeFileSystem } from "@effect/platform-node"
+        import { fileLogger } from ${JSON.stringify(new URL("../../src/observability/logging.ts", import.meta.url).href)}
+
+        await Effect.gen(function* () {
+          const logger = yield* fileLogger(${JSON.stringify(file)}, "run-local")
+          yield* Effect.withFiber((fiber) => Effect.sync(() => logger.log({
+            date: new Date(${JSON.stringify(date)}),
+            logLevel: "Info",
+            message: "local time",
+            cause: Cause.empty,
+            fiber,
+          })))
+        }).pipe(Effect.provide(NodeFileSystem.layer), Effect.scoped, Effect.runPromise)
+      `,
+    ],
+    cwd: path.join(import.meta.dir, "../.."),
+    env: { ...process.env, TZ: zone },
+    stdout: "pipe",
+    stderr: "pipe",
+  })
+  const stderr = await new Response(proc.stderr).text()
+  expect(await proc.exited, stderr).toBe(0)
+
+  expect((await Bun.file(file).text()).trim()).toBe(
+    `timestamp=${expected} level=INFO run=run-local message="local time"`,
+  )
+})
+
 test("file logger flattens nested objects", async () => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-log-test-"))
   await using _ = {
