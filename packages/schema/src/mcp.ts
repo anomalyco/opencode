@@ -5,15 +5,15 @@ import { optional, PositiveInt } from "./schema.js"
 import { IntegrationID } from "./integration-id.js"
 
 export class TimeoutConfig extends Schema.Class<TimeoutConfig>("Mcp.TimeoutConfig")({
-  startup: PositiveInt.pipe(optional).annotate({
+  startup: PositiveInt.annotate({
     description: "Maximum time in milliseconds to establish and initialize the MCP server.",
-  }),
-  catalog: PositiveInt.pipe(optional).annotate({
+  }).pipe(optional),
+  catalog: PositiveInt.annotate({
     description: "Maximum time in milliseconds to wait for MCP discovery requests such as tools/list and prompts/list.",
-  }),
-  execution: PositiveInt.pipe(optional).annotate({
+  }).pipe(optional),
+  execution: PositiveInt.annotate({
     description: "Maximum time in milliseconds to wait for MCP tool and prompt execution.",
-  }),
+  }).pipe(optional),
 }) {}
 
 export type Protocol = typeof Protocol.Type
@@ -26,14 +26,14 @@ export const Protocol = Schema.Literals(["legacy", "auto", "2026-07-28"]).annota
 export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   type: Schema.Literal("local"),
   command: Schema.String.pipe(Schema.Array),
-  cwd: Schema.String.pipe(optional).annotate({
+  cwd: Schema.String.annotate({
     description: "Working directory for the MCP server process. Relative paths resolve from the workspace directory.",
-  }),
+  }).pipe(optional),
   environment: Schema.Record(Schema.String, Schema.String).pipe(optional),
   disabled: Schema.Boolean.pipe(optional),
-  codemode: Schema.Boolean.pipe(optional).annotate({
+  codemode: Schema.Boolean.annotate({
     description: "Expose this server's tools through Code Mode. Defaults to true.",
-  }),
+  }).pipe(optional),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
 }) {}
@@ -44,10 +44,10 @@ export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
   scope: Schema.String.pipe(optional),
   callback_port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).pipe(optional),
   redirect_uri: Schema.String.pipe(optional),
-  auth_server_metadata_url: Schema.String.pipe(optional).annotate({
+  auth_server_metadata_url: Schema.String.annotate({
     description:
       "URL of the OAuth or OpenID Connect authorization server metadata document. Set when the MCP server does not publish protected resource metadata that names its authorization server.",
-  }),
+  }).pipe(optional),
 }) {}
 
 export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")({
@@ -56,9 +56,9 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
   headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
   oauth: Schema.Union([OAuthConfig, Schema.Literal(false)]).pipe(optional),
   disabled: Schema.Boolean.pipe(optional),
-  codemode: Schema.Boolean.pipe(optional).annotate({
+  codemode: Schema.Boolean.annotate({
     description: "Expose this server's tools through Code Mode. Defaults to true.",
-  }),
+  }).pipe(optional),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
 }) {}

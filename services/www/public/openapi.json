@@ -8114,7 +8114,8 @@
                     "type": "array",
                     "items": {
                       "type": "string"
-                    }
+                    },
+                    "description": "Wildcard patterns to persist as an allow rule when the request is approved."
                   },
                   "metadata": {
                     "type": "object"
@@ -11020,7 +11021,8 @@
                   },
                   "timeout": {
                     "type": "integer",
-                    "minimum": 0
+                    "minimum": 0,
+                    "description": "Timeout in milliseconds. Omitted or 0 means no timeout."
                   },
                   "metadata": {
                     "type": "object"
@@ -13229,10 +13231,12 @@
         "type": "object",
         "properties": {
           "$schema": {
-            "type": "string"
+            "type": "string",
+            "description": "JSON schema reference for configuration validation"
           },
           "shell": {
-            "type": "string"
+            "type": "string",
+            "description": "Default shell to use for terminal and shell tool execution"
           },
           "model": {
             "anyOf": [
@@ -13262,15 +13266,18 @@
             ]
           },
           "default_agent": {
-            "type": "string"
+            "type": "string",
+            "description": "Default primary agent to use when no session agent is selected"
           },
           "update": {
             "type": "string",
-            "enum": ["disable", "notify", "auto"]
+            "enum": ["disable", "notify", "auto"],
+            "description": "Disable updates, notify when one is available, or install updates automatically"
           },
           "share": {
             "type": "string",
-            "enum": ["manual", "auto", "disabled"]
+            "enum": ["manual", "auto", "disabled"],
+            "description": "Control whether sessions may be shared manually, automatically, or not at all"
           },
           "enterprise": {
             "type": "object",
@@ -13279,10 +13286,12 @@
                 "type": "string"
               }
             },
-            "additionalProperties": false
+            "additionalProperties": false,
+            "description": "Enterprise sharing service configuration"
           },
           "username": {
-            "type": "string"
+            "type": "string",
+            "description": "Username displayed in conversations and used for telemetry identity"
           },
           "permissions": {
             "$ref": "#/components/schemas/Permission.Ruleset"
@@ -13291,10 +13300,12 @@
             "type": "object",
             "additionalProperties": {
               "$ref": "#/components/schemas/Config.AgentEncoded"
-            }
+            },
+            "description": "Named built-in agent overrides and custom agent definitions"
           },
           "snapshots": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Enable snapshots used for undo and revert behavior"
           },
           "watcher": {
             "type": "object",
@@ -13398,15 +13409,18 @@
                 "properties": {
                   "startup": {
                     "type": "integer",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "description": "Maximum time in milliseconds to establish and initialize the MCP server."
                   },
                   "catalog": {
                     "type": "integer",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "description": "Maximum time in milliseconds to wait for MCP discovery requests such as tools/list and prompts/list."
                   },
                   "execution": {
                     "type": "integer",
-                    "exclusiveMinimum": 0
+                    "exclusiveMinimum": 0,
+                    "description": "Maximum time in milliseconds to wait for MCP tool and prompt execution."
                   }
                 },
                 "additionalProperties": false
@@ -13454,19 +13468,22 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Additional paths or URLs to discover skills from"
           },
           "commands": {
             "type": "object",
             "additionalProperties": {
               "$ref": "#/components/schemas/Config.CommandEncoded"
-            }
+            },
+            "description": "Named slash command definitions"
           },
           "instructions": {
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Additional paths or URLs supplying ambient instructions"
           },
           "references": {
             "type": "object",
@@ -13482,7 +13499,8 @@
                   "$ref": "#/components/schemas/Config.Reference.LocalEncoded"
                 }
               ]
-            }
+            },
+            "description": "Named local directories or Git repositories available as external context"
           },
           "websearch": {
             "anyOf": [
@@ -13506,7 +13524,8 @@
                   "$ref": "#/components/schemas/Config.Plugin.EntryEncoded"
                 }
               ]
-            }
+            },
+            "description": "Ordered plugin enablement directives and external package declarations"
           },
           "worktree": {
             "$ref": "#/components/schemas/Config.Worktree"
@@ -13531,11 +13550,13 @@
             "type": "object",
             "properties": {
               "portable_shell_scanner": {
-                "type": "boolean"
+                "type": "boolean",
+                "description": "Enable the experimental portable shell permission scanner. Defaults to false."
               },
               "subagent_depth": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 0,
+                "description": "Maximum subagent nesting depth. Defaults to 1."
               },
               "policies": {
                 "type": "array",
@@ -13556,7 +13577,8 @@
                   },
                   "required": ["action", "resource", "effect"],
                   "additionalProperties": false
-                }
+                },
+                "description": "Ordered policies controlling access to configured resources"
               }
             },
             "additionalProperties": false
@@ -13933,7 +13955,8 @@
         "type": "object",
         "properties": {
           "prompt": {
-            "type": "string"
+            "type": "string",
+            "description": "Prompt sent for keep-alive requests"
           },
           "interval": {
             "type": "string"
@@ -13952,7 +13975,8 @@
           }
         },
         "required": ["directory"],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "Directory defaults for local worktree creation"
       },
       "ConfigShell.Option": {
         "type": "object",
@@ -14294,7 +14318,8 @@
             "type": "boolean"
           },
           "hidden": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Skip the interactive authentication prompt and use the default unless an answer is supplied"
           },
           "when": {
             "type": "array",
@@ -14486,7 +14511,8 @@
             "type": "boolean"
           },
           "hidden": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Skip the interactive authentication prompt and use the default unless an answer is supplied"
           },
           "when": {
             "type": "array",
@@ -14554,7 +14580,8 @@
             "type": "boolean"
           },
           "hidden": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Skip the interactive authentication prompt and use the default unless an answer is supplied"
           },
           "when": {
             "type": "array",
@@ -14609,7 +14636,8 @@
             "type": "boolean"
           },
           "hidden": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Skip the interactive authentication prompt and use the default unless an answer is supplied"
           },
           "when": {
             "type": "array",
@@ -14743,7 +14771,8 @@
             "type": "boolean"
           },
           "hidden": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Skip the interactive authentication prompt and use the default unless an answer is supplied"
           },
           "when": {
             "type": "array",
@@ -15658,7 +15687,8 @@
             }
           },
           "cwd": {
-            "type": "string"
+            "type": "string",
+            "description": "Working directory for the MCP server process. Relative paths resolve from the workspace directory."
           },
           "environment": {
             "type": "object",
@@ -15670,22 +15700,26 @@
             "type": "boolean"
           },
           "codemode": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Expose this server's tools through Code Mode. Defaults to true."
           },
           "timeout": {
             "type": "object",
             "properties": {
               "startup": {
                 "type": "integer",
-                "exclusiveMinimum": 0
+                "exclusiveMinimum": 0,
+                "description": "Maximum time in milliseconds to establish and initialize the MCP server."
               },
               "catalog": {
                 "type": "integer",
-                "exclusiveMinimum": 0
+                "exclusiveMinimum": 0,
+                "description": "Maximum time in milliseconds to wait for MCP discovery requests such as tools/list and prompts/list."
               },
               "execution": {
                 "type": "integer",
-                "exclusiveMinimum": 0
+                "exclusiveMinimum": 0,
+                "description": "Maximum time in milliseconds to wait for MCP tool and prompt execution."
               }
             },
             "additionalProperties": false
@@ -15718,7 +15752,8 @@
             "type": "string"
           },
           "auth_server_metadata_url": {
-            "type": "string"
+            "type": "string",
+            "description": "URL of the OAuth or OpenID Connect authorization server metadata document. Set when the MCP server does not publish protected resource metadata that names its authorization server."
           }
         },
         "additionalProperties": false
@@ -15759,22 +15794,26 @@
             "type": "boolean"
           },
           "codemode": {
-            "type": "boolean"
+            "type": "boolean",
+            "description": "Expose this server's tools through Code Mode. Defaults to true."
           },
           "timeout": {
             "type": "object",
             "properties": {
               "startup": {
                 "type": "integer",
-                "exclusiveMinimum": 0
+                "exclusiveMinimum": 0,
+                "description": "Maximum time in milliseconds to establish and initialize the MCP server."
               },
               "catalog": {
                 "type": "integer",
-                "exclusiveMinimum": 0
+                "exclusiveMinimum": 0,
+                "description": "Maximum time in milliseconds to wait for MCP discovery requests such as tools/list and prompts/list."
               },
               "execution": {
                 "type": "integer",
-                "exclusiveMinimum": 0
+                "exclusiveMinimum": 0,
+                "description": "Maximum time in milliseconds to wait for MCP tool and prompt execution."
               }
             },
             "additionalProperties": false
@@ -16266,7 +16305,8 @@
       },
       "Permission.Effect": {
         "type": "string",
-        "enum": ["allow", "deny", "ask"]
+        "enum": ["allow", "deny", "ask"],
+        "description": "allow, deny, or ask. Unmatched requests default to ask."
       },
       "Permission.Reply": {
         "type": "string",
@@ -16296,7 +16336,8 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Wildcard patterns to persist as an allow rule when the request is approved."
           },
           "metadata": {
             "type": "object"
@@ -16315,10 +16356,12 @@
         "type": "object",
         "properties": {
           "action": {
-            "type": "string"
+            "type": "string",
+            "description": "Wildcard pattern for the tool or action. The last matching rule wins."
           },
           "resource": {
-            "type": "string"
+            "type": "string",
+            "description": "Wildcard pattern for the resource the action targets."
           },
           "effect": {
             "$ref": "#/components/schemas/Permission.Effect"
@@ -19274,7 +19317,8 @@
                 "description": "Start time in milliseconds since the Unix epoch"
               },
               "completed": {
-                "type": "number"
+                "type": "number",
+                "description": "Completion time in milliseconds since the Unix epoch"
               }
             },
             "required": ["started"],
@@ -19601,7 +19645,8 @@
             "type": "object",
             "properties": {
               "published": {
-                "type": "number"
+                "type": "number",
+                "description": "Publication time in milliseconds since the Unix epoch"
               }
             },
             "additionalProperties": false
@@ -19623,10 +19668,12 @@
             "type": "string"
           },
           "directory": {
-            "type": "string"
+            "type": "string",
+            "description": "Parent directory for the new worktree. Uses the project's canonical configuration, then defaults to the server's data directory under worktree/<first six project ID characters>."
           },
           "name": {
-            "type": "string"
+            "type": "string",
+            "description": "Child directory created under directory. If that path exists, the server tries -2 through -10 and then fails. A slug is used when omitted."
           }
         },
         "required": ["projectID"],
