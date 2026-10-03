@@ -1,3 +1,8 @@
+import { SessionMessage } from "@opencode/schema/session-message"
+import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Database } from "@opencode/core/database/database"
+import { Bus } from "@opencode/core/bus"
+import { SessionInbox } from "@opencode/core/session/inbox"
 import { expect } from "bun:test"
 import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
@@ -7,12 +12,12 @@ import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { OpenCodeTools } from "@opencode/core/tool/plugin/opencode"
 import { Model } from "@opencode/schema/model"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { testEffect } from "./lib/effect"
 import { executeTool, toolIdentity } from "./lib/tool"
 import { PluginTestLayer } from "./plugin/fixture"
 
-const it = testEffect(PluginTestLayer)
+const it = testEffect(Layer.merge(PluginTestLayer, AppNodeBuilder.build(Database.node)))
 
 const alpha = { id: "test/alpha", name: "Alpha", released: 300, variants: ["fast"], cost: [], status: "beta" }
 const beta = { id: "other/beta", name: "Beta", released: 200, variants: [], cost: [], status: "active" }
@@ -130,5 +135,55 @@ it.effect("groups available models by provider with paging", () =>
     })
     expect(yield* run({ query: "old" })).toMatchObject({ total: 1, providers: [{ models: [gammaOld] }] })
     expect(yield* run({ provider: "other", query: "alpha" })).toEqual({ providers: [], total: 0, next: null })
+  }),
+)
+
+it.effect("reads bounded session history through execute", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const sessions = yield* Session.Service
+    const location = yield* Location.Service
+    const database = yield* Database.Service
+    const bus = yield* Bus.Service
+    const pluginHost = yield* PluginHost.make(plugins)
+    yield* OpenCodeTools.Plugin.effect(pluginHost)
+    const session = yield* sessions.create({
+      location: Location.Ref.make({ directory: location.directory }),
+      title: "compact-history-root",
+    })
+    const child = yield* sessions.create({ parentID: session.id, title: "compact-history-child" })
+    const inbox = yield* SessionInbox.make()
+    yield* inbox.admit({
+      id: SessionMessage.ID.create(),
+      sessionID: session.id,
+      item: { type: "user", payload: { text: "😀".repeat(150) }, delivery: "steer" },
+    })
+    yield* SessionInbox.promote(database.db, bus, session.id, "steer")
+    const registry = yield* Tool.Service
+    const result = yield* executeTool(registry, {
+      sessionID: session.id,
+      ...toolIdentity,
+      call: {
+        type: "tool-call",
+        id: "call-history",
+        name: "execute",
+        input: {
+          code:
+            'const list = await tools.opencode.session_list({ search: "compact-history", limit: 20 }); const excerpt = await tools.opencode.session_excerpt({ sessionID: ' +
+            JSON.stringify(session.id) +
+            ', maxChars: 100 }); return { ids: list.sessions.map(s => s.id), updatedIsNumber: typeof list.sessions[0].updated === "number", count: excerpt.count, length: Array.from(excerpt.messages[0].text).length, truncated: excerpt.messages[0].truncated, createdIsNumber: typeof excerpt.messages[0].created === "number" }',
+        },
+      },
+    })
+    expect(result.status).toBe("completed")
+    expect(JSON.parse(result.content?.[0]?.type === "text" ? result.content[0].text : "")).toEqual({
+      ids: [session.id],
+      updatedIsNumber: true,
+      count: 1,
+      length: 100,
+      truncated: true,
+      createdIsNumber: true,
+    })
+    expect(child.parentID).toBe(session.id)
   }),
 )

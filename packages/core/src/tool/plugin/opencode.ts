@@ -5,8 +5,9 @@ import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { Model } from "@opencode/schema/model"
 import { AbsolutePath } from "@opencode/schema/schema"
-import { Session } from "@opencode/schema/session"
-import { Effect, Schema } from "effect"
+import { Session } from "../../session.js"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { DateTime, Effect, Schema } from "effect"
 
 export const RenameInput = Schema.Struct({
   sessionID: Schema.optionalKey(Session.ID).annotate({ description: "Omit to rename the current session." }),
@@ -65,9 +66,99 @@ const ModelsOutput = Schema.Struct({
   next: Schema.NullOr(Schema.Int).annotate({ description: "Offset of the next page, or null on the last page." }),
 })
 
+export const SessionListInput = Schema.Struct({
+  search: Schema.optionalKey(Schema.String).annotate({ description: "Optional title substring." }),
+  rootsOnly: Schema.optionalKey(Schema.Boolean).annotate({
+    description: "Return only top-level sessions. Defaults to true.",
+  }),
+  limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 20 }))).annotate({
+    description: "Maximum sessions to return. Defaults to 5.",
+  }),
+})
+
+const SessionSummary = Schema.Struct({
+  id: Session.ID,
+  parentID: Schema.optionalKey(Session.ID),
+  title: Schema.optionalKey(Schema.String),
+  agent: Schema.optionalKey(Schema.String),
+  directory: Schema.String,
+  updated: Schema.Number,
+  outcome: Schema.optionalKey(Schema.String),
+})
+
+const SessionListOutput = Schema.Struct({ sessions: Schema.Array(SessionSummary), count: Schema.Int })
+
+export const SessionExcerptInput = Schema.Struct({
+  sessionID: Session.ID,
+  limit: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 50 }))).annotate({
+    description: "Maximum recent messages to inspect. Defaults to 12.",
+  }),
+  maxChars: Schema.optionalKey(Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 2_000 }))).annotate({
+    description: "Maximum text characters returned per message. Defaults to 500.",
+  }),
+  includeTools: Schema.optionalKey(Schema.Boolean).annotate({
+    description: "Include tool names and terminal statuses. Tool inputs and outputs are never returned.",
+  }),
+})
+
+const SessionExcerptEntry = Schema.Struct({
+  id: SessionMessage.ID,
+  type: Schema.String,
+  created: Schema.Number,
+  text: Schema.String,
+  truncated: Schema.Boolean,
+  tools: Schema.optionalKey(Schema.Array(Schema.Struct({ name: Schema.String, status: Schema.String }))),
+})
+
+const SessionExcerptOutput = Schema.Struct({
+  sessionID: Session.ID,
+  messages: Schema.Array(SessionExcerptEntry),
+  count: Schema.Int,
+})
+
+const textExcerpt = (text: string, limit: number) => {
+  const chars = Array.from(text)
+  return chars.length <= limit ? { text, truncated: false } : { text: chars.slice(0, limit).join(""), truncated: true }
+}
+
+const messageExcerpt = (message: SessionMessage.Info, maxChars: number, includeTools: boolean) => {
+  const text = (() => {
+    switch (message.type) {
+      case "user":
+      case "synthetic":
+      case "system":
+      case "skill":
+        return message.text
+      case "assistant":
+        return message.content
+          .filter((item): item is SessionMessage.AssistantText => item.type === "text")
+          .map((item) => item.text)
+          .join("\n")
+      default:
+        return ""
+    }
+  })()
+  const excerpt = textExcerpt(text, maxChars)
+  const tools =
+    includeTools && message.type === "assistant"
+      ? message.content.flatMap((item) =>
+          item.type === "tool" ? [{ name: item.name, status: item.state.status }] : [],
+        )
+      : []
+  if (!excerpt.text && tools.length === 0) return
+  return {
+    id: message.id,
+    type: message.type,
+    created: DateTime.toEpochMillis(message.time.created),
+    ...excerpt,
+    ...(tools.length === 0 ? {} : { tools }),
+  }
+}
+
 export const Plugin = {
   id: "opencode.tools",
   effect: Effect.fn("OpenCodeTools.Plugin")(function* (ctx: Context) {
+    const sessions = yield* Session.Service
     const hook = (event: SessionHooks["context"]) =>
       Effect.sync(() => {
         event.system.push(
@@ -194,6 +285,60 @@ export const Plugin = {
                 },
               }
             }).pipe(Effect.mapError((error) => new ToolFailure({ message: "Unable to list models", error }))),
+        })
+        draft.add({
+          name: "session_list",
+          description:
+            "List recent sessions as compact structured data. Use inside execute to select sessions before reading excerpts; return only the final summary needed by the user.",
+          input: SessionListInput,
+          output: SessionListOutput,
+          options: { namespace: "opencode", codemode: true },
+          execute: (input) =>
+            sessions
+              .list({
+                limit: input.limit ?? 5,
+                order: "desc",
+                ...(input.search === undefined ? {} : { search: input.search }),
+                ...((input.rootsOnly ?? true) ? { parentID: null } : {}),
+              })
+              .pipe(
+                Effect.map(({ data }) => {
+                  const sessions = data.map((session) => ({
+                    id: session.id,
+                    ...(session.parentID === undefined ? {} : { parentID: session.parentID }),
+                    ...(session.title === undefined ? {} : { title: session.title }),
+                    ...(session.agent === undefined ? {} : { agent: session.agent }),
+                    directory: session.location.directory,
+                    updated: DateTime.toEpochMillis(session.time.updated),
+                    ...(session.outcome === undefined ? {} : { outcome: session.outcome }),
+                  }))
+                  const output = { sessions, count: sessions.length }
+                  return { output }
+                }),
+              ),
+        })
+        draft.add({
+          name: "session_excerpt",
+          description:
+            "Read compact recent text from one session. Text is capped per message; reasoning, tool inputs, and tool outputs are omitted. Use inside execute and return only relevant evidence.",
+          input: SessionExcerptInput,
+          output: SessionExcerptOutput,
+          options: { namespace: "opencode", codemode: true },
+          execute: (input) => {
+            const limit = input.limit ?? 12
+            const maxChars = input.maxChars ?? 500
+            return sessions.messages({ sessionID: input.sessionID, limit, order: "desc" }).pipe(
+              Effect.map((data) => {
+                const messages = data.toReversed().flatMap((message) => {
+                  const excerpt = messageExcerpt(message, maxChars, input.includeTools ?? false)
+                  return excerpt === undefined ? [] : [excerpt]
+                })
+                const output = { sessionID: input.sessionID, messages, count: messages.length }
+                return { output }
+              }),
+              Effect.mapError((error) => new ToolFailure({ message: "Unable to read session excerpt", error })),
+            )
+          },
         })
       })
       .pipe(Effect.orDie)
