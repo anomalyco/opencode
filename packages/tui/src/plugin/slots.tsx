@@ -51,7 +51,40 @@ export function createSlots() {
       return {
         register(plugin: HostSlotPlugin) {
           if (!isHostSlotPlugin(plugin)) return () => {}
-          return registry.register(plugin)
+          if (!plugin.slots.sidebar_content) return registry.register(plugin)
+          const sections = api.tuiConfig.sidebar_sections
+          if (!sections) return registry.register(plugin)
+          const name = plugin.id.startsWith("internal:sidebar-")
+            ? plugin.id.slice("internal:sidebar-".length)
+            : plugin.id
+          const index = sections.order?.indexOf(name) ?? -1
+          const hidden = sections.hidden?.includes(name)
+          if (!hidden && index < 0) return registry.register(plugin)
+          if (!hidden && Object.keys(plugin.slots).length === 1) {
+            return registry.register({ ...plugin, order: Number.MIN_SAFE_INTEGER + index })
+          }
+
+          const other: HostSlotPlugin<RuntimeSlotMap>["slots"] = {}
+          Object.assign(other, plugin.slots)
+          delete other.sidebar_content
+          if (hidden) return registry.register({ ...plugin, slots: other })
+
+          const sectionSlots: HostSlotPlugin<RuntimeSlotMap>["slots"] = {}
+          sectionSlots.sidebar_content = plugin.slots.sidebar_content
+          const section = {
+            id: plugin.id,
+            order: Number.MIN_SAFE_INTEGER + index,
+            slots: sectionSlots,
+          }
+          return registry.batch(() => {
+            const disposeOther = registry.register({ ...plugin, id: `${plugin.id}:sidebar-other`, slots: other })
+            const disposeSection = registry.register(section)
+            return () =>
+              registry.batch(() => {
+                disposeSection()
+                disposeOther()
+              })
+          })
         },
         dispose() {
           setView(() => empty)

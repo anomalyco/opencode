@@ -58,6 +58,11 @@ export const Prompt = Schema.Struct({
   }),
 }).annotate({ description: "Prompt size settings" })
 
+export const SidebarSections = Schema.Struct({
+  order: Schema.optional(Schema.Array(Schema.String)),
+  hidden: Schema.optional(Schema.Array(Schema.String)),
+}).annotate({ description: "Session sidebar section order and visibility" })
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -67,6 +72,7 @@ export const Info = Schema.Struct({
   leader_timeout: Schema.optional(LeaderTimeout),
   attention: Schema.optional(Attention),
   prompt: Schema.optional(Prompt),
+  sidebar_sections: Schema.optional(SidebarSections),
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),
