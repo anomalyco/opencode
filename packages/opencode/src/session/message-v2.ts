@@ -372,6 +372,7 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
               })
             continue
           }
+          if (part.text.length === 0) continue
           assistantMessage.parts.push({
             type: "reasoning",
             text: part.text,
