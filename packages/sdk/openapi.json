@@ -4988,6 +4988,22 @@
               "type": "string"
             },
             "required": false
+          },
+          {
+            "name": "connected",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": ["true", "false"]
+                }
+              ]
+            },
+            "required": false
           }
         ],
         "responses": {
