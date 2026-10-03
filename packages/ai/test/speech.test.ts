@@ -37,6 +37,16 @@ const google38Lite = Google.configure({ apiKey: "test", baseURL: "https://google
 const deepgram = Deepgram.configure({ apiKey: "test", baseURL: "https://deepgram.test" }).speech("aura-2-thalia-en")
 const voice = "JBFqnCBsd6RMkjVDRZzb"
 
+const geminiAudio = (mimeTypes: ReadonlyArray<string>) =>
+  JSON.stringify({
+    candidates: [
+      {
+        content: { parts: mimeTypes.map((mimeType) => ({ inlineData: { mimeType, data: "AQI=" } })) },
+        finishReason: "STOP",
+      },
+    ],
+  })
+
 describe("Speech", () => {
   it.effect("preserves Google's WAV output instead of describing it as raw PCM", () =>
     Effect.gen(function* () {
@@ -99,15 +109,119 @@ describe("Speech", () => {
     }),
   )
 
-  it.effect("rejects raw PCM for Gemini 3.8 unary requests before sending", () =>
+  it.effect("lowers format, style, and voice into Gemini 3.8 structured fields and keeps older models native", () =>
+    Effect.gen(function* () {
+      const bodies: Array<unknown> = []
+      const capture = (mimeType: string) =>
+        layer((input) => {
+          bodies.push(JSON.parse(input.text))
+          return Effect.succeed(
+            input.respond(geminiAudio([mimeType]), { headers: { "content-type": "application/json" } }),
+          )
+        })
+      const pcm = yield* Speech.generate({
+        model: google38,
+        text: "Have a wonderful day!",
+        format: "pcm",
+        voice: { id: "voice_abc123" },
+        instructions: "cheerful and friendly",
+      }).pipe(Effect.provide(capture("audio/l16;rate=24000")))
+      const wav = yield* Speech.generate({ model: google38Lite, text: "Hi", format: "wav", voice: "Kore" }).pipe(
+        Effect.provide(capture("audio/wav")),
+      )
+      const legacy = yield* Speech.generate({ model: google, text: "Hi", format: "pcm", voice: "Kore" }).pipe(
+        Effect.provide(capture("audio/L16;codec=pcm;rate=24000")),
+      )
+
+      expect(bodies).toEqual([
+        {
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: "Have a wonderful day!", speechMetadata: { style: "cheerful and friendly" } }],
+            },
+          ],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            responseFormat: { audio: { mimeType: "AUDIO_L16" } },
+            speechConfig: { voiceConfig: { voice: "voice_abc123" } },
+          },
+        },
+        {
+          contents: [{ role: "user", parts: [{ text: "Hi" }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            responseFormat: { audio: { mimeType: "AUDIO_WAV" } },
+            speechConfig: { voiceConfig: { voice: "Kore" } },
+          },
+        },
+        {
+          contents: [{ role: "user", parts: [{ text: "Hi" }] }],
+          generationConfig: {
+            responseModalities: ["AUDIO"],
+            speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
+          },
+        },
+      ])
+      expect(pcm.audio.info).toEqual({ format: "pcm", encoding: "pcm_s16le", sampleRate: 24000, channels: 1 })
+      expect(wav.audio.mediaType).toBe("audio/wav")
+      expect(wav.audio.info?.format).toBe("wav")
+      expect(legacy.audio.info).toEqual({ format: "pcm", encoding: "pcm_s16le", sampleRate: 24000, channels: 1 })
+    }),
+  )
+
+  it.effect("describes Gemini 3.8 mu-law and A-law output requested through providerOptions", () =>
+    Effect.gen(function* () {
+      const generate = (mimeType: string, returned: string) =>
+        Speech.generate({
+          model: google38,
+          text: "Hi",
+          providerOptions: { responseFormat: { audio: { mimeType, sampleRate: 8000 } } },
+        }).pipe(Effect.provide(respond(geminiAudio([returned]), "application/json")))
+      const mulaw = yield* generate("AUDIO_MULAW", "audio/mulaw")
+      const alaw = yield* generate("AUDIO_ALAW", "audio/alaw;rate=16000")
+      expect(mulaw.audio.mediaType).toBe("audio/mulaw")
+      expect(mulaw.audio.info).toEqual({ format: "pcm", encoding: "pcm_mulaw", sampleRate: 8000, channels: 1 })
+      expect(alaw.audio.info).toEqual({ format: "pcm", encoding: "pcm_alaw", sampleRate: 16000, channels: 1 })
+    }),
+  )
+
+  it.effect("fails Gemini audio that mixes types or does not match the requested format", () =>
+    Effect.gen(function* () {
+      const [mixed, mismatched] = yield* Effect.all(
+        [
+          Speech.generate({ model: google38, text: "Hi" }).pipe(
+            Effect.provide(respond(geminiAudio(["audio/wav", "audio/l16;rate=24000"]), "application/json")),
+          ),
+          Speech.generate({ model: google38, text: "Hi", format: "pcm" }).pipe(
+            Effect.provide(respond(geminiAudio(["audio/wav"]), "application/json")),
+          ),
+        ].map((effect) => Effect.flip(effect)),
+      )
+      expect(mixed.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
+      expect(mixed.message).toContain("mixed audio types")
+      expect(mismatched.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
+      expect(mismatched.message).toContain("returned wav instead of the requested pcm")
+    }),
+  )
+
+  it.effect("rejects Gemini formats the selected model or mode cannot produce before sending", () =>
     Effect.gen(function* () {
       const errors = yield* Effect.all(
-        [google38, google38Lite].map((model) =>
-          Speech.generate({ model, text: "Hi", format: "pcm" }).pipe(Effect.flip),
-        ),
-      ).pipe(Effect.provide(layer(() => Effect.die("An unsupported request reached the network"))))
-      expect(errors.map((error) => error.reason._tag)).toEqual(["UnsupportedOperation", "UnsupportedOperation"])
-    }),
+        [
+          Speech.generate({ model: google, text: "Hi", format: "wav" }),
+          Speech.generate({ model: google38, text: "Hi", format: "mp3" }),
+          collect(Speech.stream({ model: google38, text: "Hi", format: "wav" })),
+        ].map((effect) => Effect.flip(effect)),
+      )
+      expect(errors.map((error) => [error.reason._tag, "operation" in error.reason && error.reason.operation])).toEqual(
+        [
+          ["UnsupportedOperation", "media.format"],
+          ["UnsupportedOperation", "media.format"],
+          ["UnsupportedOperation", "media.format"],
+        ],
+      )
+    }).pipe(Effect.provide(layer(() => Effect.die("an unsupported request reached the network")))),
   )
 
   it.effect("rejects what a provider cannot produce before sending anything", () =>

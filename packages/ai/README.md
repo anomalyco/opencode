@@ -845,10 +845,14 @@ Provider notes:
 - **OpenAI** streams over SSE (`stream_format: "sse"`), which is also the only place it reports token usage; `tts-1`
   and `tts-1-hd` do not support SSE and stream the raw audio body instead. `pcm` is 24 kHz 16-bit mono. `language`
   and `timestamps` are not supported.
-- **Gemini TTS** returns the provider's default output: WAV for Gemini 3.8 TTS `generate`, raw 16-bit PCM
-  (`audio/L16;codec=pcm;rate=24000`) otherwise. `pcm` is the only explicit `format` it accepts, and it fails typed on
-  Gemini 3.8 `generate`; the route never wraps PCM as WAV. Style is directed in the text, so `instructions` and
-  `speed` fail typed. Only `gemini-3.1-flash-tts-preview` and later support streaming. Two-speaker audio goes through
+- **Gemini TTS** returns the provider's default output unless `format` asks otherwise: WAV for Gemini 3.8 TTS
+  `generate`, raw 16-bit PCM (`audio/L16;codec=pcm;rate=24000`) otherwise. On Gemini 3.8 TTS, `format: "pcm"` and
+  `format: "wav"` (`generate` only) lower to `generationConfig.responseFormat.audio.mimeType` (`AUDIO_L16` /
+  `AUDIO_WAV`); mu-law and A-law and a sample rate go through `providerOptions.responseFormat.audio`. Earlier models
+  accept only `pcm`. Gemini 3.8 TTS reads the text as a verbatim transcript, so `instructions` becomes the part's
+  `speechMetadata.style` and `voice` is sent as `voiceConfig.voice` (prebuilt names or stored `voice_…` ids); earlier
+  models take style directions in the text, reject `instructions`, and use `prebuiltVoiceConfig.voiceName`. `speed`
+  fails typed. Only `gemini-3.1-flash-tts-preview` and later support streaming. Two-speaker audio goes through
   `providerOptions.speechConfig.multiSpeakerVoiceConfig`.
 - **ElevenLabs** requires `voice` (the path voice id) and authenticates with `xi-api-key`. `format` maps to the
   `output_format` query parameter (`mp3_44100_128`, `pcm_24000`, `wav_24000`, `opus_48000_64`);
