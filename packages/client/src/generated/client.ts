@@ -710,6 +710,7 @@ export function make(options: ClientOptions) {
               resources: input["resources"],
               save: input["save"],
               metadata: input["metadata"],
+              reason: input["reason"],
               source: input["source"],
               agent: input["agent"],
             },

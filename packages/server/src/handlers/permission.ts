@@ -33,6 +33,7 @@ export const PermissionHandler = HttpApiBuilder.group(Api, "server.permission", 
                 resources: ctx.payload.resources,
                 save: ctx.payload.save,
                 metadata: ctx.payload.metadata,
+                reason: ctx.payload.reason,
                 source: ctx.payload.source,
                 agent: ctx.payload.agent,
               })

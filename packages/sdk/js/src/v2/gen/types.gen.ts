@@ -1265,6 +1265,7 @@ export type GlobalEvent = {
           metadata?: {
             [key: string]: unknown
           }
+          reason?: string
           source?: PermissionV2Source
         }
       }
@@ -1384,6 +1385,7 @@ export type GlobalEvent = {
           metadata: {
             [key: string]: unknown
           }
+          reason?: string
           always: Array<string>
           tool?: {
             messageID: string
@@ -2476,6 +2478,7 @@ export type PermissionRequest = {
   metadata: {
     [key: string]: unknown
   }
+  reason?: string
   always: Array<string>
   tool?: {
     messageID: string
@@ -4992,6 +4995,7 @@ export type PermissionV2Request = {
   metadata?: {
     [key: string]: unknown
   }
+  reason?: string
   source?: PermissionV2Source
 }
 
@@ -5457,6 +5461,7 @@ export type PermissionV2Asked = {
     metadata?: {
       [key: string]: unknown
     }
+    reason?: string
     source?: PermissionV2Source
   }
 }
@@ -5716,6 +5721,7 @@ export type PermissionAsked = {
     metadata: {
       [key: string]: unknown
     }
+    reason?: string
     always: Array<string>
     tool?: {
       messageID: string
@@ -6737,6 +6743,7 @@ export type EventPermissionV2Asked = {
     metadata?: {
       [key: string]: unknown
     }
+    reason?: string
     source?: PermissionV2Source
   }
 }
@@ -6870,6 +6877,7 @@ export type EventPermissionAsked = {
     metadata: {
       [key: string]: unknown
     }
+    reason?: string
     always: Array<string>
     tool?: {
       messageID: string
@@ -12662,6 +12670,7 @@ export type V2SessionPermissionCreateData = {
     metadata?: {
       [key: string]: unknown
     }
+    reason?: string
     source?: PermissionV2Source
     agent?: string
   }

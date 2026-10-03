@@ -401,7 +401,17 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
             <Prompt
               title="Permission required"
               header={header()}
-              body={current.body}
+              body={
+                <box flexDirection="column" gap={1}>
+                  {current.body}
+                  <Show when={props.request.reason?.trim()}>
+                    <box paddingLeft={1}>
+                      <text fg={theme.textMuted}>Reason:</text>
+                      <text fg={theme.text}>{props.request.reason}</text>
+                    </box>
+                  </Show>
+                </box>
+              }
               options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
               escapeKey="reject"
               fullscreen

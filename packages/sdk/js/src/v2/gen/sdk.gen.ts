@@ -5207,6 +5207,7 @@ export class Permission2 extends HeyApiClient {
       metadata?: {
         [key: string]: unknown
       }
+      reason?: string
       source?: PermissionV2Source
       agent?: string
     },
@@ -5223,6 +5224,7 @@ export class Permission2 extends HeyApiClient {
             { in: "body", key: "resources" },
             { in: "body", key: "save" },
             { in: "body", key: "metadata" },
+            { in: "body", key: "reason" },
             { in: "body", key: "source" },
             { in: "body", key: "agent" },
           ],

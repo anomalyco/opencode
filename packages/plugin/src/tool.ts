@@ -24,6 +24,7 @@ type AskInput = {
   patterns: string[]
   always: string[]
   metadata: { [key: string]: any }
+  reason?: string
 }
 
 export type ToolAttachment = {

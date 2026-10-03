@@ -28,6 +28,7 @@ const RequestFields = {
   resources: Schema.Array(Schema.String),
   save: Schema.Array(Schema.String).pipe(optional),
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
+  reason: Schema.String.pipe(optional),
   source: Source.pipe(optional),
 }
 

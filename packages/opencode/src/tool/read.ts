@@ -27,6 +27,10 @@ class ReadStop extends Schema.TaggedErrorClass<ReadStop>()("ReadStop", {}) {}
 // unchanged; purely CLI-facing uses must now send numbers rather than strings.
 export const Parameters = Schema.Struct({
   filePath: Schema.String.annotate({ description: "The absolute path to the file or directory to read" }),
+  reason: Schema.String.pipe(Schema.optional).annotate({
+    description:
+      "Optional brief explanation of why this read is needed for the user's task. Provide it when permission may be requested.",
+  }),
   offset: Schema.optional(NonNegativeInt).annotate({
     description: "The line number to start reading from (1-indexed)",
   }),
@@ -250,6 +254,7 @@ export const ReadTool = Tool.define<
       yield* assertExternalDirectoryEffect(ctx, filepath, {
         bypass: Boolean(ctx.extra?.["bypassCwdCheck"]),
         kind: stat?.type === "Directory" ? "directory" : "file",
+        reason: params.reason,
       })
 
       yield* ctx.ask({
@@ -257,6 +262,7 @@ export const ReadTool = Tool.define<
         patterns: [path.relative(instance.worktree, filepath)],
         always: ["*"],
         metadata: {},
+        reason: params.reason,
       })
 
       if (!stat) return yield* miss(filepath)

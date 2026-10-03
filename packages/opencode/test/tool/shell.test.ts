@@ -330,6 +330,7 @@ describe("tool.shell permissions", () => {
           yield* fail(
             {
               command: `cat ${file}`,
+              reason: "Inspect the existing configuration for this change.",
             },
             capture(requests, err),
           ),
@@ -337,6 +338,7 @@ describe("tool.shell permissions", () => {
         const extDirReq = requests.find((r) => r.permission === "external_directory")
         expect(extDirReq).toBeDefined()
         expect(extDirReq!.patterns).toContain(want)
+        expect(extDirReq!.reason).toBe("Inspect the existing configuration for this change.")
       }),
     ),
   )

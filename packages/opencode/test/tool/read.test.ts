@@ -177,10 +177,15 @@ describe("tool.read external_directory permission", () => {
 
       const { items, next } = asks()
 
-      yield* exec(dir, { filePath: path.join(outer, "secret.txt") }, next)
+      yield* exec(
+        dir,
+        { filePath: path.join(outer, "secret.txt"), reason: "Inspect the existing configuration for this change." },
+        next,
+      )
       const ext = items.find((item) => item.permission === "external_directory")
       expect(ext).toBeDefined()
       expect(ext!.patterns).toContain(glob(path.join(outer, "*")))
+      expect(ext!.reason).toBe("Inspect the existing configuration for this change.")
     }),
   )
 

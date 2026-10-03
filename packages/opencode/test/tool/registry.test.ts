@@ -462,6 +462,50 @@ describe("tool.registry", () => {
     }),
   )
 
+  it.instance("passes an optional reason from a custom tool to its permission requester", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const customTools = path.join(test.directory, ".opencode", "tools")
+      const pluginTool = pathToFileURL(path.resolve(import.meta.dir, "../../../plugin/src/tool.ts")).href
+      yield* Effect.promise(() => fs.mkdir(customTools, { recursive: true }))
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(customTools, "reason.ts"),
+          [
+            `import { tool } from ${JSON.stringify(pluginTool)}`,
+            "export default tool({",
+            "  description: 'request permission',",
+            "  args: {},",
+            "  execute: async (_, ctx) => {",
+            "    await ctx.ask({ permission: 'external_directory', patterns: ['/outside/*'], always: [], metadata: {}, reason: 'Read the configuration.' })",
+            "    return 'ok'",
+            "  },",
+            "})",
+            "",
+          ].join("\n"),
+        ),
+      )
+      const registry = yield* ToolRegistry.Service
+      const loaded = (yield* registry.all()).find((tool) => tool.id === "reason")
+      if (!loaded) throw new Error("custom permission tool was not loaded")
+      const requests: Array<Parameters<Tool.Context["ask"]>[0]> = []
+      const agents = yield* Agent.Service
+      yield* loaded.execute({}, {
+        sessionID: SessionID.make("ses_test"),
+        messageID: MessageID.make("msg_test"),
+        agent: (yield* agents.defaultInfo()).name,
+        abort: new AbortController().signal,
+        messages: [],
+        metadata: () => Effect.void,
+        ask: (request) =>
+          Effect.sync(() => {
+            requests.push(request)
+          }),
+      } satisfies Tool.Context)
+      expect(requests).toMatchObject([{ permission: "external_directory", reason: "Read the configuration." }])
+    }),
+  )
+
   it.instance("loads legacy JSON-schema-shaped custom tools with wire schema", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

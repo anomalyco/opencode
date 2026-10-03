@@ -2307,6 +2307,7 @@ export type PermissionsListRequestsOutput = {
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly reason?: string
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
   }>
 }
@@ -2336,6 +2337,7 @@ export type PermissionsCreateInput = {
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly reason?: string
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
     readonly agent?: string | null
   }["id"]
@@ -2345,6 +2347,7 @@ export type PermissionsCreateInput = {
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly reason?: string
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
     readonly agent?: string | null
   }["action"]
@@ -2354,6 +2357,7 @@ export type PermissionsCreateInput = {
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly reason?: string
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
     readonly agent?: string | null
   }["resources"]
@@ -2363,6 +2367,7 @@ export type PermissionsCreateInput = {
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly reason?: string
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
     readonly agent?: string | null
   }["save"]
@@ -2372,15 +2377,27 @@ export type PermissionsCreateInput = {
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly reason?: string
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
     readonly agent?: string | null
   }["metadata"]
+  readonly reason?: {
+    readonly id?: string | null
+    readonly action: string
+    readonly resources: ReadonlyArray<string>
+    readonly save?: ReadonlyArray<string>
+    readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly reason?: string
+    readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
+    readonly agent?: string | null
+  }["reason"]
   readonly source?: {
     readonly id?: string | null
     readonly action: string
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly reason?: string
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
     readonly agent?: string | null
   }["source"]
@@ -2390,6 +2407,7 @@ export type PermissionsCreateInput = {
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly reason?: string
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
     readonly agent?: string | null
   }["agent"]
@@ -2409,6 +2427,7 @@ export type PermissionsListOutput = {
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly reason?: string
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
   }>
 }["data"]
@@ -2426,6 +2445,7 @@ export type PermissionsGetOutput = {
     readonly resources: ReadonlyArray<string>
     readonly save?: ReadonlyArray<string>
     readonly metadata?: { readonly [x: string]: JsonValue }
+    readonly reason?: string
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly callID: string }
   }
 }["data"]

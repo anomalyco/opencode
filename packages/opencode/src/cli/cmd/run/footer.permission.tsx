@@ -395,6 +395,14 @@ export function RunPermissionBody(props: {
                       <text fg={props.theme.muted}>No diff provided</text>
                     </box>
                   </Show>
+                  <Show when={props.request.reason?.trim()}>
+                    <box paddingLeft={1}>
+                      <text fg={props.theme.muted}>Reason:</text>
+                      <text fg={props.theme.text} wrapMode="word">
+                        {props.request.reason}
+                      </text>
+                    </box>
+                  </Show>
                 </box>
               </scrollbox>
             </Match>

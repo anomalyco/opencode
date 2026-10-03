@@ -68,6 +68,7 @@ export const makePermissionGroup = <
           resources: Permission.Request.fields.resources,
           save: Permission.Request.fields.save,
           metadata: Permission.Request.fields.metadata,
+          reason: Permission.Request.fields.reason,
           source: Permission.Request.fields.source,
           agent: Agent.ID.pipe(Schema.optional),
         }),

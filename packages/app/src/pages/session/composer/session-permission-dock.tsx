@@ -69,6 +69,16 @@ export function SessionPermissionDock(props: {
           </div>
         </div>
       </Show>
+
+      <Show when={props.request.reason?.trim()}>
+        <div data-slot="permission-row">
+          <span data-slot="permission-spacer" aria-hidden="true" />
+          <div data-slot="permission-hint">
+            <strong>{language.t("ui.permission.reason")}</strong>
+            <div class="whitespace-pre-wrap break-words">{props.request.reason}</div>
+          </div>
+        </div>
+      </Show>
     </DockPrompt>
   )
 }

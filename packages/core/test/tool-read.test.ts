@@ -205,7 +205,12 @@ describe("ReadTool", () => {
         yield* executeTool(registry, {
           sessionID,
           ...toolIdentity,
-          call: { type: "tool-call", id: "call-external-read", name: "read", input: { path: external } },
+          call: {
+            type: "tool-call",
+            id: "call-external-read",
+            name: "read",
+            input: { path: external, reason: "Inspect the existing configuration for this change." },
+          },
         }),
       ).toMatchObject({ type: "json" })
       expect(assertions).toMatchObject([
@@ -213,8 +218,15 @@ describe("ReadTool", () => {
           sessionID,
           action: "external_directory",
           resources: [path.join(path.dirname(external), "*").replaceAll("\\", "/")],
+          reason: "Inspect the existing configuration for this change.",
         },
-        { sessionID, action: "read", resources: [external.replaceAll("\\", "/")], save: ["*"] },
+        {
+          sessionID,
+          action: "read",
+          resources: [external.replaceAll("\\", "/")],
+          save: ["*"],
+          reason: "Inspect the existing configuration for this change.",
+        },
       ])
       expect(readCalls).toEqual([{ input: AbsolutePath.make(external), page: { offset: undefined, limit: undefined } }])
     }),

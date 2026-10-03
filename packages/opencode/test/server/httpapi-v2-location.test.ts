@@ -78,6 +78,44 @@ afterEach(async () => {
 })
 
 describe("v2 location HttpApi", () => {
+  test("preserves a permission reason through create and pending requests", async () => {
+    await using tmp = await tmpdir({ git: true })
+    const created = await request("/api/session", tmp.path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ location: { directory: tmp.path } }),
+    })
+    expect(created.status).toBe(200)
+    const session = (await created.json()) as { data: { id: string } }
+    const route = `/api/session/${session.data.id}/permission`
+    const requested = await request(route, tmp.path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "external_directory", resources: ["/outside/*"], reason: "Check the project." }),
+    })
+    expect(requested.status).toBe(200)
+    const result = (await requested.json()) as { data: { id: string; effect: string } }
+    expect(result.data.effect).toBe("ask")
+    const pending = await request(route, tmp.path)
+    expect(pending.status).toBe(200)
+    expect(await pending.json()).toMatchObject({ data: [{ reason: "Check the project." }] })
+    const single = await request(`${route}/${result.data.id}`, tmp.path)
+    expect(single.status).toBe(200)
+    expect(await single.json()).toMatchObject({ data: { reason: "Check the project." } })
+
+    const omitted = await request(route, tmp.path, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ action: "external_directory", resources: ["/other/*"] }),
+    })
+    expect(omitted.status).toBe(200)
+    const omittedResult = (await omitted.json()) as { data: { id: string; effect: string } }
+    expect(omittedResult.data.effect).toBe("ask")
+    const withoutReason = await request(`${route}/${omittedResult.data.id}`, tmp.path)
+    expect(withoutReason.status).toBe(200)
+    expect(((await withoutReason.json()) as { data: object }).data).not.toHaveProperty("reason")
+  }, 20_000)
+
   test("decodes EventV2 location refs without resolved project metadata", () => {
     expect(
       Schema.decodeUnknownSync(Event)({

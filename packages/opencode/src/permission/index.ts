@@ -90,6 +90,7 @@ const layer = Layer.effect(
         permission: request.permission,
         patterns: request.patterns,
         metadata: request.metadata,
+        reason: request.reason,
         always: request.always,
         tool: request.tool,
       }

@@ -266,13 +266,21 @@ describe("BashTool", () => {
       ([active, outside]) => {
         reset()
         return withTool(active.path, (registry) =>
-          executeTool(registry, call({ command: "pwd", workdir: outside.path })),
+          executeTool(
+            registry,
+            call({
+              command: "pwd",
+              workdir: outside.path,
+              reason: "Run the command in the requested external working directory.",
+            }),
+          ),
         ).pipe(
           Effect.andThen(
             Effect.sync(() => {
               expect(assertions.map((item) => item.action)).toEqual(["external_directory", "bash"])
               expect(assertions[0]).toMatchObject({
                 resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
+                reason: "Run the command in the requested external working directory.",
               })
               expect(runs).toHaveLength(1)
             }),
