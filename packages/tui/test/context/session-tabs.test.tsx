@@ -5,9 +5,11 @@ import { testRender } from "@opentui/solid"
 import { mkdirSync, watch } from "fs"
 import path from "path"
 import { ConfigProvider, useConfig } from "../../src/config"
+import { ArgsProvider } from "../../src/context/args"
 import { ClientProvider, useClient } from "../../src/context/client"
 import { DataProvider, useData } from "../../src/context/data"
 import { LocationProvider } from "../../src/context/location"
+import { PermissionProvider } from "../../src/context/permission"
 import { RouteProvider, useRoute } from "../../src/context/route"
 import { TuiAppProvider } from "../../src/context/runtime"
 import { SessionTabsProvider, useSessionTabs } from "../../src/context/session-tabs"
@@ -38,9 +40,11 @@ async function renderSessionTabs(
     sessionParents?: Record<string, string>
     sessionTimes?: Record<string, { idle?: number; viewed?: number }>
     sessionOutcomes?: Record<string, "succeeded" | "failed" | "interrupted">
+    events?: ReturnType<typeof createEventStream>
     newLocation?: "launch" | "inherit"
     launchDirectory?: string
     tabsEnabled?: boolean
+    auto?: boolean
     viewFailures?: number
     experimental?: Record<string, boolean>
   },
@@ -63,7 +67,7 @@ async function renderSessionTabs(
       }),
     )
   }
-  const events = createEventStream()
+  const events = options?.events ?? createEventStream()
   const sessions: string[] = []
   const views: string[] = []
   const viewWatermarks: number[] = []
@@ -153,33 +157,37 @@ async function renderSessionTabs(
   const app = await testRender(() => (
     <TestTuiContexts paths={{ state }}>
       <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
-        <StorageProvider>
-          <ConfigProvider
-            config={createTuiResolvedConfig(configuration)}
-            service={{
-              get: async () => configuration,
-              update: async (update) => {
-                configuration = structuredClone(configuration)
-                update(configuration)
-                return configuration
-              },
-            }}
-          >
-            <RouteProvider
-              initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
+        <ArgsProvider auto={options?.auto}>
+          <StorageProvider>
+            <ConfigProvider
+              config={createTuiResolvedConfig(configuration)}
+              service={{
+                get: async () => configuration,
+                update: async (update) => {
+                  configuration = structuredClone(configuration)
+                  update(configuration)
+                  return configuration
+                },
+              }}
             >
-              <ClientProvider api={createApi(calls.fetch)}>
-                <DataProvider directory={options?.launchDirectory ?? directory}>
-                  <LocationProvider>
-                    <SessionTabsProvider>
-                      <Probe />
-                    </SessionTabsProvider>
-                  </LocationProvider>
-                </DataProvider>
-              </ClientProvider>
-            </RouteProvider>
-          </ConfigProvider>
-        </StorageProvider>
+              <RouteProvider
+                initialRoute={options?.home ? { type: "home" } : { type: "session", sessionID: initialSessionID }}
+              >
+                <ClientProvider api={createApi(calls.fetch)}>
+                  <PermissionProvider>
+                    <DataProvider directory={options?.launchDirectory ?? directory}>
+                      <LocationProvider>
+                        <SessionTabsProvider>
+                          <Probe />
+                        </SessionTabsProvider>
+                      </LocationProvider>
+                    </DataProvider>
+                  </PermissionProvider>
+                </ClientProvider>
+              </RouteProvider>
+            </ConfigProvider>
+          </StorageProvider>
+        </ArgsProvider>
       </TuiAppProvider>
     </TestTuiContexts>
   ))
@@ -653,6 +661,130 @@ test("distinguishes family questions and permissions without clearing them on se
     await wait(() => setup.tabs.status("root").attention === false)
   } finally {
     await setup.destroy()
+  }
+})
+
+test("does not show auto-approved permissions on any session tab", async () => {
+  const setup = await renderSessionTabs("root", { persisted: ["root", "background"], auto: true })
+
+  try {
+    await wait(() => setup.data.session.get("root") !== undefined && setup.data.session.get("background") !== undefined)
+    setup.emit({
+      id: "evt_auto_started",
+      created: 1,
+      type: "session.execution.started",
+      durable: { aggregateID: "root", seq: 1, version: 1 },
+      data: { sessionID: "root" },
+    })
+    await wait(() => setup.tabs.status("root").busy)
+    setup.emit({
+      id: "evt_auto_permission",
+      created: 2,
+      type: "permission.asked",
+      data: { id: "per_auto_command", sessionID: "root", action: "shell", resources: ["bun run test"] },
+    })
+    await wait(() => setup.data.session.permission.list("root")?.length === 1)
+    expect(setup.tabs.status("root")).toMatchObject({ busy: true, attention: false })
+
+    setup.emit({
+      id: "evt_background_permission",
+      created: 3,
+      type: "permission.asked",
+      data: { id: "per_background_command", sessionID: "background", action: "shell", resources: ["bun run test"] },
+    })
+    await wait(() => setup.data.session.permission.list("background")?.length === 1)
+    expect(setup.tabs.status("background").attention).toBe(false)
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("normal and auto clients project the same permission event differently", async () => {
+  const events = createEventStream()
+  let normal: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
+  let auto: Awaited<ReturnType<typeof renderSessionTabs>> | undefined
+
+  try {
+    normal = await renderSessionTabs("root", { persisted: ["root", "background"], events })
+    auto = await renderSessionTabs("root", { persisted: ["root", "background"], auto: true, events })
+    await wait(
+      () =>
+        normal!.data.session.get("root") !== undefined &&
+        normal!.data.session.get("background") !== undefined &&
+        auto!.data.session.get("root") !== undefined &&
+        auto!.data.session.get("background") !== undefined,
+    )
+
+    normal.emit({
+      id: "evt_shared_root_permission",
+      created: 1,
+      type: "permission.asked",
+      data: { id: "per_shared_root", sessionID: "root", action: "shell", resources: ["bun run test"] },
+    })
+    normal.emit({
+      id: "evt_shared_background_permission",
+      created: 2,
+      type: "permission.asked",
+      data: { id: "per_shared_background", sessionID: "background", action: "shell", resources: ["bun run test"] },
+    })
+    await wait(
+      () =>
+        normal!.data.session.permission.list("root")?.length === 1 &&
+        normal!.data.session.permission.list("background")?.length === 1 &&
+        auto!.data.session.permission.list("root")?.length === 1 &&
+        auto!.data.session.permission.list("background")?.length === 1,
+    )
+
+    expect(normal.tabs.status("root").attention).toBe("permission")
+    expect(normal.tabs.status("background").attention).toBe("permission")
+    expect(auto.tabs.status("root").attention).toBe(false)
+    expect(auto.tabs.status("background").attention).toBe(false)
+
+    normal.emit({
+      id: "evt_shared_root_permission_reply",
+      created: 3,
+      type: "permission.replied",
+      data: { sessionID: "root", requestID: "per_shared_root", reply: "once" },
+    })
+    await wait(
+      () =>
+        normal!.data.session.permission.list("root")?.length === 0 &&
+        auto!.data.session.permission.list("root")?.length === 0,
+    )
+
+    normal.emit({
+      id: "evt_shared_root_form",
+      created: 4,
+      type: "form.created",
+      data: {
+        form: {
+          id: "frm_shared_root",
+          sessionID: "root",
+          title: "Choose an approach",
+          fields: [{ key: "approach", type: "string", title: "Approach" }],
+        },
+      },
+    })
+    await wait(
+      () =>
+        normal!.data.session.form.list("root")?.length === 1 && auto!.data.session.form.list("root")?.length === 1,
+    )
+    expect(normal.tabs.status("root").attention).toBe("question")
+    expect(auto.tabs.status("root").attention).toBe("question")
+
+    normal.emit({
+      id: "evt_shared_root_form_reply",
+      created: 5,
+      type: "form.replied",
+      data: { sessionID: "root", id: "frm_shared_root", answer: {} },
+    })
+    await wait(
+      () => normal!.data.session.form.list("root")?.length === 0 && auto!.data.session.form.list("root")?.length === 0,
+    )
+    expect(normal.tabs.status("root").attention).toBe(false)
+    expect(auto.tabs.status("root").attention).toBe(false)
+  } finally {
+    await Promise.allSettled([normal?.destroy(), auto?.destroy()])
   }
 })
 
