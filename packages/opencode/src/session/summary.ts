@@ -1,5 +1,9 @@
+import { isDeepStrictEqual } from "node:util"
+import { and, eq } from "drizzle-orm"
+import { Database } from "@opencode-ai/core/database/database"
+import { MessageTable } from "@opencode-ai/core/session/sql"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Layer, Context, Schema } from "effect"
+import { Effect, Layer, Context, Schema, Semaphore } from "effect"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Snapshot } from "@/snapshot"
@@ -71,6 +75,9 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionSummary") {}
 
+// Count both active and queued calls; deleting on every completion would split a live queue.
+const pending = new Map<MessageID, { semaphore: Semaphore.Semaphore; users: number }>()
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -78,6 +85,7 @@ const layer = Layer.effect(
     const snapshot = yield* Snapshot.Service
     const events = yield* EventV2Bridge.Service
     const config = yield* Config.Service
+    const { db } = yield* Database.Service
 
     const computeDiff = Effect.fn("SessionSummary.computeDiff")(function* (input: { messages: SessionV1.WithParts[] }) {
       let from: string | undefined
@@ -103,37 +111,99 @@ const layer = Layer.effect(
       sessionID: SessionID
       messageID: MessageID
     }) {
-      yield* sessions.setSummary({
-        sessionID: input.sessionID,
-        summary: {
-          additions: 0,
-          deletions: 0,
-          files: 0,
-        },
-      })
-      yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
-      if ((yield* config.get()).snapshot === false) return
-      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
-      if (!all.length) return
+      yield* Effect.acquireUseRelease(
+        Effect.sync(() => {
+          const entry = pending.get(input.messageID) ?? { semaphore: Semaphore.makeUnsafe(1), users: 0 }
+          entry.users++
+          pending.set(input.messageID, entry)
+          return entry
+        }),
+        (entry) =>
+          entry.semaphore.withPermit(
+            Effect.gen(function* () {
+              if ((yield* config.get()).snapshot === false) return
+              const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+              if (!all.length) return
 
-      const messages = all.filter(
-        (m) => m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+              const messages = all.filter(
+                (m) =>
+                  m.info.id === input.messageID || (m.info.role === "assistant" && m.info.parentID === input.messageID),
+              )
+              const target = messages.find((m) => m.info.id === input.messageID)
+              if (!target || target.info.role !== "user") return
+              const msgDiffs = yield* computeDiff({ messages })
+              if (isDeepStrictEqual(target.info.summary?.diffs, msgDiffs)) return
+              yield* sessions.setSummary({
+                sessionID: input.sessionID,
+                summary: {
+                  additions: 0,
+                  deletions: 0,
+                  files: 0,
+                },
+              })
+              yield* events.publish(Session.Event.Diff, { sessionID: input.sessionID, diff: [] })
+              target.info.summary = { ...target.info.summary, diffs: msgDiffs }
+              yield* sessions.updateMessage(target.info)
+            }),
+          ),
+        (entry) =>
+          Effect.sync(() => {
+            if (--entry.users === 0) pending.delete(input.messageID)
+          }),
       )
-      const target = messages.find((m) => m.info.id === input.messageID)
-      if (!target || target.info.role !== "user") return
-      const msgDiffs = yield* computeDiff({ messages })
-      target.info.summary = { ...target.info.summary, diffs: msgDiffs }
-      yield* sessions.updateMessage(target.info)
     })
 
     const diff = Effect.fn("SessionSummary.diff")(function* (input: { sessionID: SessionID; messageID?: MessageID }) {
       if (!input.messageID) return []
-      const message = (yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)).find(
-        (item) => item.info.id === input.messageID,
-      )
+      const all = yield* sessions.messages({ sessionID: input.sessionID }).pipe(Effect.orDie)
+      const message = all.find((item) => item.info.id === input.messageID)
       if (!message || message.info.role !== "user") return []
       const diffs = message.info.summary?.diffs ?? []
-      return diffs.map((item) => {
+      // Local publish projects full patches. Only a patchless replay projection
+      // needs snapshot recovery; successful recovery makes subsequent reads local.
+      const resolved = yield* Effect.gen(function* () {
+        if (diffs.every((item) => item.patch !== undefined)) return diffs
+        const computed = yield* computeDiff({
+          messages: all.filter(
+            (item) =>
+              item.info.id === input.messageID ||
+              (item.info.role === "assistant" && item.info.parentID === input.messageID),
+          ),
+        }).pipe(Effect.catchCause(() => Effect.succeed([] as Snapshot.FileDiff[])))
+        const patches = new Map(
+          computed.filter((item) => item.file !== undefined).map((item) => [unquoteGitPath(item.file!), item.patch]),
+        )
+        const recovered = diffs.map((item) => {
+          if (item.patch !== undefined) return item
+          const patch = item.file === undefined ? undefined : patches.get(unquoteGitPath(item.file))
+          // truncated is runtime-only: FileDiff's schema drops it, so never persist
+          // a failed recovery (including its empty patch) as a complete projection.
+          return patch === undefined ? { ...item, patch: "", truncated: true } : { ...item, patch }
+        })
+        if (recovered.some((item) => "truncated" in item)) return recovered
+        const row = yield* db
+          .select()
+          .from(MessageTable)
+          .where(and(eq(MessageTable.id, message.info.id), eq(MessageTable.session_id, input.sessionID)))
+          .get()
+          .pipe(Effect.orDie)
+        if (
+          row?.data.role === "user" &&
+          typeof row.data.summary === "object" &&
+          isDeepStrictEqual(row.data.summary.diffs, diffs)
+        ) {
+          // Bypass publish/updateMessage. A read must neither recurse nor append an
+          // event; the compare-and-set also avoids overwriting a concurrent update.
+          yield* db
+            .update(MessageTable)
+            .set({ data: { ...row.data, summary: { ...row.data.summary, diffs: recovered } } })
+            .where(and(eq(MessageTable.id, row.id), eq(MessageTable.data, row.data)))
+            .run()
+            .pipe(Effect.orDie)
+        }
+        return recovered
+      })
+      return resolved.map((item) => {
         if (item.file === undefined) return item
         const file = unquoteGitPath(item.file)
         if (file === item.file) return item
@@ -154,7 +224,7 @@ export type DiffInput = Schema.Schema.Type<typeof DiffInput>
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node],
+  deps: [Session.node, Snapshot.node, EventV2Bridge.node, Config.node, Database.node],
 })
 
 export * as SessionSummary from "./summary"
