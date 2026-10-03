@@ -52,7 +52,7 @@ test("resolves host-neutral defaults", () => {
   const config = resolve({}, { terminalSuspend: true })
 
   expect(config.attention).toEqual({
-    enabled: false,
+    enabled: true,
     notifications: true,
     sound: true,
     volume: 0.4,

@@ -451,6 +451,9 @@ export default function LegacyLayout(props: ParentProps) {
         }
 
         if (e.details.type === "question.asked") {
+          if (settings.sounds.permissionsEnabled()) {
+            void playSoundById(settings.sounds.permissions())
+          }
           if (settings.notifications.agent()) {
             void platform.notify(title, description, () => navigate(href))
           }
