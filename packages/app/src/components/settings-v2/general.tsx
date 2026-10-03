@@ -286,6 +286,11 @@ export const SettingsGeneralV2: Component<{
   const sounds = createSoundSettingsController()
   const desktop = createMemo(() => platform.platform === "desktop")
 
+  const followupOptions = createMemo((): { value: "queue" | "steer"; label: string }[] => [
+    { value: "queue", label: language.t("settings.general.row.followup.option.queue") },
+    { value: "steer", label: language.t("settings.general.row.followup.option.steer") },
+  ])
+
   const [pinchZoom, { mutate: setPinchZoom }] = createResource(
     () => desktop() && "getPinchZoomEnabled" in platform,
     () => Promise.resolve(platform.getPinchZoomEnabled?.() ?? false).catch(() => false),
@@ -365,6 +370,24 @@ export const SettingsGeneralV2: Component<{
             <Switch
               checked={settings.general.editToolPartsExpanded()}
               onChange={(checked) => settings.general.setEditToolPartsExpanded(checked)}
+            />
+          </div>
+        </SettingsRowV2>
+
+        <SettingsRowV2
+          title={language.t("settings.general.row.followup.title")}
+          description={language.t("settings.general.row.followup.description")}
+        >
+          <div data-action="settings-followup">
+            <SelectV2
+              appearance="inline"
+              options={followupOptions()}
+              current={followupOptions().find((option) => option.value === settings.general.followup())}
+              placement="bottom-end"
+              gutter={6}
+              value={(option) => option.value}
+              label={(option) => language.t(option.label)}
+              onSelect={(option) => option && settings.general.setFollowup(option.value)}
             />
           </div>
         </SettingsRowV2>
