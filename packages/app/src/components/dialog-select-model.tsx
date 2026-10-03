@@ -64,7 +64,11 @@ const ModelList: Component<{
   return (
     <List
       class={`flex-1 px-3 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0 ${props.class ?? ""}`}
-      search={{ placeholder: language.t("dialog.model.search.placeholder"), autofocus: true, action: props.action }}
+      search={{
+        placeholder: language.t("dialog.model.search.placeholder"),
+        autofocus: true,
+        action: props.action,
+      }}
       emptyMessage={language.t("dialog.model.empty")}
       key={(x) => `${x.provider.id}:${x.id}`}
       items={models}
@@ -301,7 +305,7 @@ function ModelSelectorPopoverV2View(props: {
   onClose: () => void
 }) {
   const language = useLanguage()
-  const [store, setStore] = createStore({ open: false, search: "", active: "" })
+  const [store, setStore] = createStore({ open: false, search: "", active: "", hover: false })
   let searchRef: HTMLInputElement | undefined
   let contentRef: HTMLDivElement | undefined
   const dismiss = createMenuDismissController(() => contentRef)
@@ -317,6 +321,7 @@ function ModelSelectorPopoverV2View(props: {
   }
   const activeItem = () =>
     store.active ? contentRef?.querySelector<HTMLElement>(`[data-option-key="${CSS.escape(store.active)}"]`) : undefined
+  const activeModel = () => models().find((item) => modelKey(item) === store.active)
   const setOpen = (open: boolean) => {
     if (open) {
       dismiss.allowTriggerRestore()
@@ -329,7 +334,7 @@ function ModelSelectorPopoverV2View(props: {
       )
       return
     }
-    setStore({ open: false, search: "", active: "" })
+    setStore({ open: false, search: "", active: "", hover: false })
   }
   const selectModel = (item: ModelItem) => {
     dismiss.preventTriggerRestore()
@@ -438,46 +443,54 @@ function ModelSelectorPopoverV2View(props: {
           </div>
           <div class="h-px bg-v2-border-border-muted" />
           <ScrollView data-slot="model-selector-scroll" class="max-h-[220px] min-h-0">
-            <div class="flex flex-col p-0.5 pt-0">
-              <Show
-                when={models().length > 0}
-                fallback={
-                  <div class="flex h-12 items-center px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint">
-                    {language.t("dialog.model.empty")}
-                  </div>
-                }
-              >
-                <For each={groups()}>
-                  {(group) => (
-                    <MenuV2.Group>
-                      <MenuV2.GroupLabel class="sticky top-0 z-10 gap-2 bg-v2-background-bg-layer-01 px-3">
-                        <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
-                      </MenuV2.GroupLabel>
-                      <MenuV2.RadioGroup value={props.current()}>
-                        <For each={group.items}>
-                          {(item) => (
-                            <TooltipV2
-                              class="w-full"
-                              placement="right-start"
-                              gutter={6}
-                              openDelay={0}
-                              value={
-                                <ModelTooltip
-                                  model={item}
-                                  latest={item.latest}
-                                  free={isFree(item.provider.id, item.cost)}
-                                  v2
-                                />
-                              }
-                            >
+            <TooltipV2
+              class="flex-col"
+              placement="right-start"
+              gutter={6}
+              triggerOnFocusOnly
+              forceOpen={store.hover && !!activeModel()}
+              {...{ anchorRef: activeItem }}
+              value={
+                <Show when={activeModel()}>
+                  {(item) => (
+                    <ModelTooltip
+                      model={item()}
+                      latest={item().latest}
+                      free={isFree(item().provider.id, item().cost)}
+                      v2
+                    />
+                  )}
+                </Show>
+              }
+            >
+              <div class="flex flex-col p-0.5 pt-0" onMouseLeave={() => setStore("hover", false)}>
+                <Show
+                  when={models().length > 0}
+                  fallback={
+                    <div class="flex h-12 items-center px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint">
+                      {language.t("dialog.model.empty")}
+                    </div>
+                  }
+                >
+                  <For each={groups()}>
+                    {(group) => (
+                      <MenuV2.Group>
+                        <MenuV2.GroupLabel class="sticky top-0 z-10 gap-2 bg-v2-background-bg-layer-01 px-3">
+                          <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
+                        </MenuV2.GroupLabel>
+                        <MenuV2.RadioGroup value={props.current()}>
+                          <For each={group.items}>
+                            {(item) => (
                               <MenuV2.RadioItem
                                 value={modelKey(item)}
                                 data-option-key={modelKey(item)}
                                 data-selected-model={props.current() === modelKey(item) ? true : undefined}
                                 class="scroll-my-6 w-full"
-                                classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
+                                classList={{
+                                  "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item),
+                                }}
                                 onMouseEnter={() => {
-                                  setStore("active", modelKey(item))
+                                  setStore({ active: modelKey(item), hover: true })
                                   setTimeout(() => searchRef?.focus())
                                 }}
                                 onSelect={() => selectModel(item)}
@@ -490,15 +503,15 @@ function ModelSelectorPopoverV2View(props: {
                                   <TagV2 class="shrink-0">{language.t("model.tag.latest")}</TagV2>
                                 </Show>
                               </MenuV2.RadioItem>
-                            </TooltipV2>
-                          )}
-                        </For>
-                      </MenuV2.RadioGroup>
-                    </MenuV2.Group>
-                  )}
-                </For>
-              </Show>
-            </div>
+                            )}
+                          </For>
+                        </MenuV2.RadioGroup>
+                      </MenuV2.Group>
+                    )}
+                  </For>
+                </Show>
+              </div>
+            </TooltipV2>
           </ScrollView>
           <div class="h-px bg-v2-border-border-muted" />
           <div class="flex flex-col p-0.5">
