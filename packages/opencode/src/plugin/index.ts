@@ -38,6 +38,18 @@ type State = {
   hooks: Hooks[]
 }
 
+const pluginNames = new WeakMap<object, string>()
+
+export function nameOf(hooks: object) {
+  return pluginNames.get(hooks) ?? "unknown plugin"
+}
+
+function rememberPluginName(hooks: unknown, name: string) {
+  if ((typeof hooks === "object" && hooks !== null) || typeof hooks === "function") {
+    pluginNames.set(hooks, name)
+  }
+}
+
 // Hook names that follow the (input, output) => Promise<void> trigger pattern
 type TriggerName = {
   [K in keyof Hooks]-?: NonNullable<Hooks[K]> extends (input: any, output: any) => Promise<void> ? K : never
@@ -114,13 +126,18 @@ function getLegacyPlugins(mod: Record<string, unknown>) {
 async function applyPlugin(load: PluginLoader.Loaded, input: PluginInput, hooks: Hooks[]) {
   const plugin = readV1Plugin(load.mod, load.spec, "server", "detect")
   if (plugin) {
-    await resolvePluginId(load.source, load.spec, load.target, readPluginId(plugin.id, load.spec), load.pkg)
-    hooks.push(await (plugin as PluginModule).server(input, load.options))
+    const name = readPluginId(plugin.id, load.spec)
+    await resolvePluginId(load.source, load.spec, load.target, name, load.pkg)
+    const result = await (plugin as PluginModule).server(input, load.options)
+    rememberPluginName(result, name ?? load.spec)
+    hooks.push(result)
     return
   }
 
   for (const server of getLegacyPlugins(load.mod)) {
-    hooks.push(await server(input, load.options))
+    const result = await server(input, load.options)
+    rememberPluginName(result, load.spec)
+    hooks.push(result)
   }
 }
 
@@ -175,7 +192,10 @@ const layer = Layer.effect(
             Effect.tapError((error) => Effect.logError("failed to load internal plugin", { name: plugin.name, error })),
             Effect.option,
           )
-          if (init._tag === "Some") hooks.push(init.value)
+          if (init._tag === "Some") {
+            rememberPluginName(init.value, plugin.name)
+            hooks.push(init.value)
+          }
         }
 
         const plugins = flags.pure ? [] : (cfg.plugin_origins ?? [])

@@ -45,7 +45,7 @@ function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
     const plugins = config.plugin ?? []
     return yield* Effect.gen(function* () {
       const plugin = yield* Plugin.Service
-      yield* plugin.list()
+      return yield* plugin.list()
     }).pipe(
       Effect.provide(
         LayerNode.compile(Plugin.node, [
@@ -69,6 +69,28 @@ function load(dir: string, flags?: Parameters<typeof RuntimeFlags.layer>[0]) {
 }
 
 describe("plugin.loader.shared", () => {
+  it.live("does not crash when plugins return undefined or primitive values", () =>
+    withTmp(
+      async (dir) => {
+        const empty = path.join(dir, "empty.ts")
+        const primitive = path.join(dir, "primitive.ts")
+        await Bun.write(empty, "export default async () => undefined\n")
+        await Bun.write(primitive, "export default async () => 42\n")
+        await Bun.write(
+          path.join(dir, "opencode.json"),
+          JSON.stringify({ plugin: [pathToFileURL(empty).href, pathToFileURL(primitive).href] }, null, 2),
+        )
+      },
+      (tmp) =>
+        Effect.gen(function* () {
+          const hooks = yield* load(tmp.path)
+          expect(hooks).toHaveLength(2)
+          expect(hooks[0]).toBeUndefined()
+          expect(JSON.stringify(hooks[1])).toBe("42")
+        }),
+    ),
+  )
+
   it.live("loads a file:// plugin function export", () =>
     withTmp(
       async (dir) => {
