@@ -121,28 +121,51 @@ function executionFailed(id: string, sessionID = "session"): OpenCodeEvent {
   }
 }
 
-const formNotification: AttentionNotifyOptions = {
-  title: "Input requested",
-  message: "Input needs response",
-  notification: { when: "blurred" },
-  sound: { name: "question", when: "always" },
+function formNotification(
+  key: string,
+  options?: { title?: string; notification?: AttentionNotifyOptions["notification"] },
+): AttentionNotifyOptions {
+  return {
+    key,
+    title: options?.title ?? "Input requested",
+    message: "Input needs response",
+    notification: options?.notification ?? { when: "blurred" },
+    sound: { name: "question", when: "always" },
+  }
 }
 
-const titledFormNotification: AttentionNotifyOptions = {
-  ...formNotification,
-  title: "Confirm deployment",
+function permissionNotification(key: string): AttentionNotifyOptions {
+  return {
+    key,
+    title: "Demo session",
+    message: "Permission needs input",
+    notification: { when: "blurred" },
+    sound: { name: "permission", when: "always" },
+  }
 }
 
-const globalFormNotification: AttentionNotifyOptions = {
-  ...formNotification,
-  title: "demo-mcp is requesting input",
+function doneNotification(
+  key: string,
+  options?: { name?: "done" | "subagent_done"; title?: string },
+): AttentionNotifyOptions {
+  const name = options?.name ?? "done"
+  return {
+    key,
+    title: options?.title ?? "Demo session",
+    message: "Session done",
+    notification: name === "subagent_done" ? false : { when: "blurred" },
+    sound: { name, when: "always" },
+  }
 }
 
-const permissionNotification: AttentionNotifyOptions = {
-  title: "Demo session",
-  message: "Permission needs input",
-  notification: { when: "blurred" },
-  sound: { name: "permission", when: "always" },
+function errorNotification(key: string): AttentionNotifyOptions {
+  return {
+    key,
+    title: "Demo session",
+    message: "boom",
+    notification: { when: "blurred" },
+    sound: { name: "error", when: "always" },
+  }
 }
 
 describe("internal notifications TUI plugin", () => {
@@ -182,7 +205,10 @@ describe("internal notifications TUI plugin", () => {
     })
     harness.emit({ id: "event-3", created: 0, type: "permission.asked", data: permission("permission-1") })
 
-    expect(harness.notifications).toEqual([titledFormNotification, permissionNotification])
+    expect(harness.notifications).toEqual([
+      formNotification("event-1", { title: "Confirm deployment" }),
+      permissionNotification("event-3"),
+    ])
   })
 
   test("notifies for global forms once the TUI can render them", async () => {
@@ -195,7 +221,7 @@ describe("internal notifications TUI plugin", () => {
       data: { form: { ...form("form-1", "global"), title: "demo-mcp is requesting input" } },
     })
 
-    expect(harness.notifications).toEqual([globalFormNotification])
+    expect(harness.notifications).toEqual([formNotification("event-1", { title: "demo-mcp is requesting input" })])
   })
 
   test("dedupes pending forms and permissions until they are resolved", async () => {
@@ -222,10 +248,10 @@ describe("internal notifications TUI plugin", () => {
     harness.emit({ id: "event-12", created: 0, type: "permission.asked", data: permission("permission-1") })
 
     expect(harness.notifications).toEqual([
-      formNotification,
-      formNotification,
-      permissionNotification,
-      permissionNotification,
+      formNotification("event-1"),
+      formNotification("event-4"),
+      permissionNotification("event-9"),
+      permissionNotification("event-12"),
     ])
   })
 
@@ -238,12 +264,14 @@ describe("internal notifications TUI plugin", () => {
 
     expect(harness.notifications).toEqual([
       {
+        key: "event-1",
         title: "Demo session",
         message: "Session done",
         notification: { when: "blurred" },
         sound: { name: "done", when: "always" },
       },
       {
+        key: "event-3",
         title: "Demo session",
         message: "Session done",
         notification: { when: "blurred" },
@@ -265,18 +293,8 @@ describe("internal notifications TUI plugin", () => {
     harness.emit(executionSucceeded("event-3", "subagent"))
 
     expect(harness.notifications).toEqual([
-      {
-        title: "Questions",
-        message: "Input needs response",
-        notification: false,
-        sound: { name: "question", when: "always" },
-      },
-      {
-        title: "Subagent session",
-        message: "Session done",
-        notification: false,
-        sound: { name: "subagent_done", when: "always" },
-      },
+      formNotification("event-1", { title: "Questions", notification: false }),
+      doneNotification("event-3", { name: "subagent_done", title: "Subagent session" }),
     ])
   })
 
@@ -287,13 +305,6 @@ describe("internal notifications TUI plugin", () => {
     harness.emit(executionFailed("event-2"))
     harness.emit(executionSucceeded("event-3"))
 
-    expect(harness.notifications).toEqual([
-      {
-        title: "Demo session",
-        message: "boom",
-        notification: { when: "blurred" },
-        sound: { name: "error", when: "always" },
-      },
-    ])
+    expect(harness.notifications).toEqual([errorNotification("event-2")])
   })
 })

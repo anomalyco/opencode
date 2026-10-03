@@ -303,6 +303,12 @@ export interface AttentionNotifyOptions {
   readonly message: string
   readonly notification?: AttentionNotification
   readonly sound?: AttentionSound
+  /**
+   * Stable identity for one alert across every running TUI instance sharing a
+   * server. When set, only the first instance to claim it emits the desktop
+   * notification and plays the sound, so multiple windows do not duplicate them.
+   */
+  readonly key?: string
 }
 
 export type AttentionNotifySkipReason =
