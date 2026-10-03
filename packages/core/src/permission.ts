@@ -168,7 +168,9 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         save: input.save,
-        metadata: input.metadata,
+        metadata: input.metadata
+          ? Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined))
+          : undefined,
         source: input.source,
       }
     }
