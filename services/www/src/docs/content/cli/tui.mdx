@@ -16,6 +16,22 @@ Explain how authentication works in this project
 
 Press **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter**, or **Ctrl+J** for a new line. While OpenCode is working, **Enter** steers the active session; press **Ctrl+X**, then **Enter** to queue the prompt for later.
 
+## Projects and directories
+
+Your working directory is the folder OpenCode uses for file searches and shell commands. OpenCode groups directories from the same Git or Mercurial repository into a project; without version control, the directory is its own project.
+
+Pass a directory to start OpenCode in another project:
+
+```bash
+opencode ~/code/another-project
+```
+
+The TUI's **Workspaces** action opens the worktree picker, which lists directories and Git worktrees for the current project. You can also open it with:
+
+```text
+/worktrees
+```
+
 ## Context
 
 Type `@` to search for a file, then select it to attach that file to the prompt. Keep typing after `@` to narrow the results.
@@ -66,7 +82,17 @@ Press **Ctrl+X**, then **A** to choose an agent, or run `/agents`. Press **Shift
 
 ## Sessions
 
-Press **Ctrl+X**, then **N** to start a new session. Press **Ctrl+X**, then **L** or run `/sessions` to return to an existing session; **Ctrl+O** opens recent sessions and projects together.
+Each session is a separate conversation with its own history and working directory. Run `/new` or press **Ctrl+X**, then **N** for a separate task; existing sessions remain available. New sessions start in the TUI launch directory by default; [CLI settings](/cli/config#sessions) can change this.
+
+```text
+/new
+```
+
+Press **Ctrl+X**, then **L** or run `/sessions` to return to an existing session. Press **Ctrl+A** in the picker to switch between **current directory** and **all projects**. **Ctrl+O** opens recent sessions and projects together.
+
+```text
+/sessions
+```
 
 Tabs are enabled by default. Use **Ctrl+Tab** and **Ctrl+Shift+Tab** to move between them, **Ctrl+X** then **W** to close one, and **Ctrl+Shift+T** to reopen the last closed tab.
 
