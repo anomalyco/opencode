@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import { agent, model, renderLocal, session } from "../fixture/local"
 import { json } from "../fixture/tui-client"
+import { createModelPreferenceRepository } from "../../src/model-preference"
+import path from "node:path"
 
 test("cycles all recent models in a stable order in both directions", async () => {
   await using setup = await renderLocal({
@@ -78,6 +80,34 @@ test("agent and model drafts are isolated across sessions and survive navigation
   expect(setup.local.model.variant.current()).toBe("low")
   setup.local.agent.set("build")
   expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: "low" })
+})
+
+test("a model selected in another instance updates recents without changing this session's model", async () => {
+  await using setup = await renderLocal({
+    models: [model("first", ["high"]), model("second")],
+    preferences: { recent: [{ providerID: "provider", modelID: "first" }] },
+    sessions: [session("ses_first"), session("ses_second")],
+    fetch: selectionMessage,
+  })
+  await Promise.all([setup.data.session.sync("ses_first"), setup.data.session.sync("ses_second")])
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: undefined })
+
+  const repository = createModelPreferenceRepository(path.join(setup.state, "model.json"))
+  await repository.addRecent({ providerID: "provider", modelID: "second" })
+  await repository.setFavorite({ providerID: "provider", modelID: "second" }, true)
+  await repository.saveVariant({ providerID: "provider", modelID: "first" }, "high")
+  for (let i = 0; i < 100 && setup.local.model.recent()[0]?.modelID !== "second"; i++) await Bun.sleep(10)
+  expect(setup.local.model.recent()[0]?.modelID).toBe("second")
+  expect(setup.local.model.favorite()[0]?.modelID).toBe("second")
+  expect(setup.local.model.selection()).toEqual({ providerID: "provider", modelID: "first", variant: undefined })
+
+  setup.route.navigate({ type: "session", sessionID: "ses_second" })
+  expect(setup.local.model.current()?.modelID).toBe("second")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  expect(setup.local.model.current()?.modelID).toBe("first")
+  await publishSelection(setup, "build", "second")
+  expect(setup.local.model.current()?.modelID).toBe("second")
 })
 
 test("falls back from an unavailable session model without changing durable state", async () => {
