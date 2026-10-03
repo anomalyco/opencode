@@ -1,7 +1,7 @@
 export * as Catalog from "./catalog"
 
 import { makeLocationNode } from "./effect/app-node"
-import { Array, Context, Effect, Layer, Option, Order, pipe, Schema } from "effect"
+import { Array, Context, Effect, Latch, Layer, Option, Order, pipe, Schema } from "effect"
 import { Catalog } from "@opencode-ai/schema/catalog"
 import { ModelV2 } from "./model"
 import { ProviderV2 } from "./provider"
@@ -45,6 +45,14 @@ export type Draft = {
 }
 
 export interface Interface extends State.Transformable<Draft> {
+  /**
+   * Public catalog reads wait here so a cold Location cannot return an empty or
+   * partial snapshot while plugin boot is still applying catalog transforms.
+   * Later hot reloads stay asynchronous; this fence is one-shot after initial readiness.
+   */
+  readonly ready: Effect.Effect<void>
+  /** Close readiness until the returned release Effect runs. Nested holds stay pending. */
+  readonly hold: () => Effect.Effect<Effect.Effect<void>>
   readonly provider: {
     readonly get: (providerID: ProviderV2.ID) => Effect.Effect<ProviderV2.Info | undefined>
     readonly all: () => Effect.Effect<ProviderV2.Info[]>
@@ -67,6 +75,17 @@ const layer = Layer.effect(
     const events = yield* EventV2.Service
     const policy = yield* Policy.Service
     const integrations = yield* Integration.Service
+    const ready = yield* Latch.make(true)
+    const pending = new Set<object>()
+    const hold = () =>
+      Effect.sync(() => {
+        const token = {}
+        pending.add(token)
+        ready.closeUnsafe()
+        return Effect.sync(() => {
+          if (pending.delete(token) && pending.size === 0) ready.openUnsafe()
+        })
+      })
 
     const available = (provider: ProviderV2.Info, integration: Integration.Info | undefined) => {
       if (provider.disabled) return false
@@ -171,17 +190,22 @@ const layer = Layer.effect(
     const result: Interface = {
       transform: state.transform,
       reload: state.reload,
+      ready: ready.await,
+      hold,
 
       provider: {
         get: Effect.fn("CatalogV2.provider.get")(function* (providerID) {
+          yield* ready.await
           return state.get().providers.get(providerID)?.provider
         }),
 
         all: Effect.fn("CatalogV2.provider.all")(function* () {
+          yield* ready.await
           return Array.fromIterable(state.get().providers.values()).map((record) => record.provider)
         }),
 
         available: Effect.fn("CatalogV2.provider.available")(function* () {
+          yield* ready.await
           const active = new Map((yield* integrations.list()).map((integration) => [integration.id, integration]))
           return (yield* result.provider.all()).filter((provider) =>
             available(provider, active.get(provider.integrationID ?? Integration.ID.make(provider.id))),
@@ -191,6 +215,7 @@ const layer = Layer.effect(
 
       model: {
         get: Effect.fn("CatalogV2.model.get")(function* (providerID, modelID) {
+          yield* ready.await
           const record = state.get().providers.get(providerID)
           if (!record) return
           const model = record.models.get(modelID)
@@ -198,6 +223,7 @@ const layer = Layer.effect(
         }),
 
         all: Effect.fn("CatalogV2.model.all")(function* () {
+          yield* ready.await
           return pipe(
             Array.fromIterable(state.get().providers.values()),
             Array.flatMap((record) => {
@@ -208,11 +234,13 @@ const layer = Layer.effect(
         }),
 
         available: Effect.fn("CatalogV2.model.available")(function* () {
+          yield* ready.await
           const providers = new Set((yield* result.provider.available()).map((provider) => provider.id))
           return (yield* result.model.all()).filter((model) => providers.has(model.providerID) && model.enabled)
         }),
 
         default: Effect.fn("CatalogV2.model.default")(function* () {
+          yield* ready.await
           const defaultModel = state.get().defaultModel
           if (defaultModel) {
             const provider = yield* result.provider.get(defaultModel.providerID)
@@ -232,6 +260,7 @@ const layer = Layer.effect(
         }),
 
         small: Effect.fn("CatalogV2.model.small")(function* (providerID) {
+          yield* ready.await
           const record = state.get().providers.get(providerID)
           if (!record) return
           const provider = record.provider

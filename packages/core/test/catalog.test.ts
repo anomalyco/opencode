@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
-import { Effect, Fiber, Layer, Stream } from "effect"
+import { Duration, Effect, Exit, Fiber, Layer, Stream } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import { Catalog } from "@opencode-ai/core/catalog"
 import { Integration } from "@opencode-ai/core/integration"
 import { Credential } from "@opencode-ai/core/credential"
@@ -348,6 +349,64 @@ describe("CatalogV2", () => {
       expect(yield* catalog.provider.all()).toEqual([])
       expect(yield* catalog.model.all()).toEqual([])
       expect(yield* catalog.provider.get(providerID)).toBeUndefined()
+    }),
+  )
+
+  it.effect("catalog reads wait for readiness and include transforms applied while held", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("delayed")
+      const release = yield* catalog.hold()
+      const reading = yield* Effect.all(
+        [catalog.provider.available(), catalog.model.available(), catalog.provider.get(providerID)],
+        { concurrency: "unbounded" },
+      ).pipe(Effect.forkChild)
+
+      yield* catalog.transform((editor) => {
+        editor.provider.update(providerID, (provider) => {
+          provider.name = "Delayed"
+          provider.request.body.apiKey = "test"
+        })
+        editor.model.update(providerID, ModelV2.ID.make("chat"), (model) => {
+          model.name = "Delayed"
+        })
+      })
+      yield* release
+
+      const [providers, models, provider] = yield* Fiber.join(reading)
+      expect(providers.map((item) => item.id)).toContain(providerID)
+      expect(models.map((item) => item.id)).toContain(ModelV2.ID.make("chat"))
+      expect(provider?.name).toBe("Delayed")
+    }),
+  )
+
+  it.effect("nested catalog holds stay closed until every hold is released", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("nested")
+      const first = yield* catalog.hold()
+      const second = yield* catalog.hold()
+      const reading = yield* catalog.provider.available().pipe(Effect.forkChild)
+
+      yield* first
+      yield* catalog.transform((editor) => {
+        editor.provider.update(providerID, (provider) => {
+          provider.request.body.apiKey = "test"
+        })
+      })
+      yield* second
+
+      expect((yield* Fiber.join(reading)).map((item) => item.id)).toContain(providerID)
+    }),
+  )
+
+  it.effect("catalog readiness times out while the fence is held", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      yield* catalog.hold()
+      const waiting = yield* catalog.ready.pipe(Effect.timeout("1 second"), Effect.exit, Effect.forkChild)
+      yield* TestClock.adjust(Duration.seconds(1))
+      expect(Exit.isFailure(yield* Fiber.join(waiting))).toBe(true)
     }),
   )
 })

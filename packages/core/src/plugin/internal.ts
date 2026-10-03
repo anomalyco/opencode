@@ -78,6 +78,7 @@ const layer = Layer.effectDiscard(
     const http = yield* HttpClient.HttpClient
     const skill = yield* SkillV2.Service
     const reference = yield* Reference.Service
+    const release = yield* catalog.hold()
     const add = <R>(input: Plugin<R>) => {
       const loaded = {
         id: input.id,
@@ -120,7 +121,11 @@ const layer = Layer.effectDiscard(
         yield* add(ConfigProviderPlugin.Plugin)
         yield* add(VariantPlugin.Plugin)
       }),
-    ).pipe(Effect.withSpan("PluginInternal.boot"), Effect.forkScoped({ startImmediately: true }))
+    ).pipe(
+      Effect.ensuring(release),
+      Effect.withSpan("PluginInternal.boot"),
+      Effect.forkScoped({ startImmediately: true }),
+    )
   }),
 )
 
