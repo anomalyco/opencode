@@ -1,4 +1,5 @@
 import * as Tool from "./tool"
+import { ToolInputRepair } from "./input-repair"
 import { CallToolResultSchema, type CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import { Cause, Effect, Schema } from "effect"
 import { CodeMode, Tool as SandboxTool, toolError } from "@opencode-ai/codemode"
@@ -148,7 +149,10 @@ const invokeChildTool = Effect.fn("CodeMode.invokeChildTool")(function* (input: 
     // Deliberately mirrors McpCatalog.convertTool's transport call so the MCP service stays free of tool-loop concerns.
     return yield* Effect.promise(async () => {
       const raw = await input.entry.tool.client.callTool(
-        { name: input.entry.tool.def.name, arguments: input.args },
+        {
+          name: input.entry.tool.def.name,
+          arguments: ToolInputRepair.repair(input.args, input.entry.tool.def.inputSchema) as Record<string, unknown>,
+        },
         CallToolResultSchema,
         {
           resetTimeoutOnProgress: true,

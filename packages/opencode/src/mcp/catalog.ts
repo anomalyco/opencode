@@ -7,6 +7,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js"
 import { dynamicTool, jsonSchema, type JSONSchema7, type Tool } from "ai"
 import { Effect } from "effect"
+import { ToolInputRepair } from "@/tool/input-repair"
 
 const DEFAULT_TIMEOUT = 30_000
 const MAX_LIST_PAGES = 1_000
@@ -54,7 +55,8 @@ export function convertTool(mcpTool: MCPToolDef, client: Client, timeout?: numbe
       const result = await client.callTool(
         {
           name: mcpTool.name,
-          arguments: (args || {}) as Record<string, unknown>,
+          // Repair against the server's own schema: the local copy forces `additionalProperties: false`.
+          arguments: ToolInputRepair.repair(args || {}, mcpTool.inputSchema) as Record<string, unknown>,
         },
         CallToolResultSchema,
         {

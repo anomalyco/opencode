@@ -117,15 +117,18 @@ function handleCall(name: string, args: Record<string, unknown>) {
   }
 }
 
+const received: Array<{ name: string; arguments: unknown }> = []
+
 let tool: Awaited<ReturnType<typeof buildTool>>["tool"]
 let description: string
 
 async function buildTool() {
   const server = new Server({ name: SERVER, version: "1.0.0" }, { capabilities: { tools: {} } })
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: TOOL_DEFS }))
-  server.setRequestHandler(CallToolRequestSchema, async (req) =>
-    handleCall(req.params.name, (req.params.arguments ?? {}) as Record<string, unknown>),
-  )
+  server.setRequestHandler(CallToolRequestSchema, async (req) => {
+    received.push({ name: req.params.name, arguments: req.params.arguments })
+    return handleCall(req.params.name, (req.params.arguments ?? {}) as Record<string, unknown>)
+  })
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
   await server.connect(serverTransport)
@@ -201,6 +204,13 @@ describe("code mode integration (real MCP server)", () => {
   test("exposes structured data natively from a tool with an outputSchema", async () => {
     const out = await run("const r = await tools.fixtures.add({ a: 2, b: 3 }); return r.sum")
     expect(out.output).toBe("5")
+  })
+
+  test("repairs malformed child call arguments against the server schema before sending them", async () => {
+    received.length = 0
+    const out = await run("const r = await tools.fixtures.add({ a: '2', b: '3' }); return r.sum")
+    expect(out.output).toBe("5")
+    expect(received).toEqual([{ name: "add", arguments: { a: 2, b: 3 } }])
   })
 
   test("composes multiple structured calls and returns a plain object", async () => {
