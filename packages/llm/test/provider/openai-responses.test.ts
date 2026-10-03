@@ -1091,6 +1091,7 @@ describe("OpenAI Responses route", () => {
       expect(prepared.body.input).toEqual([
         {
           type: "reasoning",
+          id: "rs_1",
           encrypted_content: "encrypted-state",
           summary: [
             { type: "summary_text", text: "First" },
@@ -1467,6 +1468,46 @@ describe("OpenAI Responses route", () => {
       expect(error).toBeInstanceOf(LLMError)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect(error.message).toContain("HTTP 400")
+    }),
+  )
+  it.effect("includes id in stateless reasoning replay item", () =>
+    Effect.gen(function* () {
+      // Regression for the bug introduced by PR #34027: the replay object
+      // built in lowerMessages explicitly omitted id via the Omit type alias,
+      // causing HTTP 400 from the Responses API when encrypted_content was
+      // present (the API requires id and encrypted_content as a matched pair).
+      const prepared = yield* LLMClient.prepare<OpenAIResponses.OpenAIResponsesBody>(
+        LLM.request({
+          id: "req_reasoning_replay_id",
+          model,
+          messages: [
+            Message.assistant([
+              {
+                type: "reasoning",
+                text: "I considered the question carefully.",
+                providerMetadata: {
+                  openai: {
+                    itemId: "rs_abc123",
+                    reasoningEncryptedContent: "encrypted-abc123",
+                  },
+                },
+              },
+            ]),
+          ],
+          providerOptions: { openai: { store: false } },
+        }),
+      )
+
+      const reasoningItem = prepared.body.input.find(
+        (item) => "type" in item && item.type === "reasoning",
+      )
+      expect(reasoningItem).toBeDefined()
+      expect(reasoningItem).toEqual({
+        type: "reasoning",
+        id: "rs_abc123",
+        encrypted_content: "encrypted-abc123",
+        summary: [{ type: "summary_text", text: "I considered the question carefully." }],
+      })
     }),
   )
 })
