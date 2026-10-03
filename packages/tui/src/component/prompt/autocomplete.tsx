@@ -849,9 +849,9 @@ export function Autocomplete(props: {
     agent: "agent",
     reference: "reference",
   }
-  const labelWidth = (option: AutocompleteOption) => (option.kind ? stringWidth(labels[option.kind]) + 2 : 0)
   // Border and padding take two cells on each side.
-  const displayWidth = (option: AutocompleteOption) => Math.max(1, position().width - 4 - labelWidth(option))
+  const displayWidth = (option: AutocompleteOption) =>
+    Math.max(1, position().width - 4 - (option.kind ? stringWidth(labels[option.kind]) + 2 : 0))
   const descriptionText = (option: AutocompleteOption) => option.description?.replace(/\s+/g, " ").trim() ?? ""
   // The description follows the display text and a single space.
   const descriptionWidth = (option: AutocompleteOption) =>
@@ -863,7 +863,7 @@ export function Autocomplete(props: {
     const option = store.visible ? options()[store.selected] : undefined
     const text = option && !confirming() ? descriptionText(option) : ""
     untrack(() => {
-      if (!option || !text) return marquee.reset()
+      if (!option || !text || descriptionWidth(option) <= 0) return marquee.reset()
       marquee.enter(option.display, text, descriptionWidth(option))
     })
   })
