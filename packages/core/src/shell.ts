@@ -13,6 +13,7 @@ import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
 import { FileRetention } from "./file-retention.js"
 import { Location } from "./location.js"
+import { LocationRetention } from "./location-retention.js"
 import { Global } from "@opencode/util/global"
 import { ShellSelect } from "./shell/select.js"
 import type { ShellCreateBefore } from "@opencode/plugin/effect/shell"
@@ -43,6 +44,8 @@ type Active = {
   info: Info
   file: string
   size: number
+  // Whether this command currently pins its location against idle eviction.
+  retained: boolean
   newlines: number
   // Resolves with the terminal Info once the command exits, times out, or is killed. A wait
   // started after termination resolves immediately from the already-completed deferred.
@@ -122,6 +125,7 @@ const layer = () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
       const location = yield* Location.Service
+      const retention = yield* LocationRetention.Service
       const global = yield* Global.Service
       const shell = yield* ShellSelect.Service
       const environment = yield* Environment.Service
@@ -130,6 +134,7 @@ const layer = () =>
       const config = yield* Config.Service
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
+      const ref = Location.Ref.make({ directory: location.directory, workspaceID: location.workspaceID })
       const commands = new Map<Shell.ID, Active>()
       const exitOrder: Shell.ID[] = []
 
@@ -140,6 +145,11 @@ const layer = () =>
 
       yield* Effect.addFinalizer(() =>
         Effect.gen(function* () {
+          const retained = Array.from(commands.values()).filter((command) => command.retained)
+          for (const command of retained) command.retained = false
+          const killed = Array.from(commands.values())
+            .filter((command) => command.info.status === "running")
+            .map((command) => ({ id: command.info.id, pid: command.info.pid }))
           for (const command of commands.values()) {
             if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
             // Teardown interrupts pending commands; it is not a terminal command failure.
@@ -147,6 +157,12 @@ const layer = () =>
           }
           commands.clear()
           exitOrder.length = 0
+          if (killed.length > 0)
+            yield* Effect.logInfo("shell commands killed by location teardown", {
+              directory: location.directory,
+              commands: killed,
+            })
+          for (const command of retained) yield* retention.release(ref)
         }),
       )
 
@@ -162,6 +178,10 @@ const layer = () =>
         if (index !== -1) exitOrder.splice(index, 1)
         if (!command) return
         commands.delete(id)
+        if (command.retained) {
+          command.retained = false
+          yield* retention.release(ref)
+        }
         if (command.timeoutFiber) yield* Fiber.interrupt(command.timeoutFiber)
         // Unblock any wait still pending when the command is removed before it terminated.
         yield* Deferred.fail(command.done, new NotFoundError({ id }))
@@ -316,9 +336,11 @@ const layer = () =>
                 file,
                 size: 0,
                 newlines: 0,
+                retained: true,
                 done: Deferred.makeUnsafe<Info, NotFoundError>(),
               }
               commands.set(id, command)
+              yield* retention.retain(ref)
 
               const stream = createWriteStream(file)
               const outputDone = Latch.makeUnsafe()
@@ -356,6 +378,10 @@ const layer = () =>
               const finish = (status: Info["status"], exit?: number, beforeWait = Effect.void, signal?: string) =>
                 Effect.gen(function* () {
                   if (command.info.status !== "running") return
+                  if (command.retained) {
+                    command.retained = false
+                    yield* retention.release(ref)
+                  }
                   command.info = produce(command.info, (draft) => {
                     draft.status = status
                     if (exit !== undefined) draft.exit = exit
@@ -451,5 +477,6 @@ export const node = makeLocationNode({
     SessionEnvironment.node,
     Config.node,
     cleanupNode,
+    LocationRetention.node,
   ],
 })
