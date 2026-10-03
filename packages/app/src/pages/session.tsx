@@ -2112,6 +2112,7 @@ export default function Page() {
                     restoreHistoryAnchor = handlers.restore
                   }}
                   anchor={anchor}
+                  onPauseScroll={autoScroll.pause}
                   setRevealMessage={(fn) => {
                     revealMessage = fn
                   }}
