@@ -699,7 +699,7 @@ interface MCPDomain extends Pick<McpApi<unknown>, "list"> {
 
 ### Plugins
 
-List active, failed, and resolved plugins at the current location.
+List active and failed plugins at the current location.
 
 ```ts
 effect: (ctx) =>
@@ -718,7 +718,7 @@ effect: (ctx) =>
     const plugin = ctx.plugin
     const active = yield* plugin.list().pipe(
       Effect.orDie,
-      Effect.map((result) => result.data.filter((item) => item.status === "active")),
+      Effect.map((result) => result.data.filter((item) => item.state.status === "active")),
     )
     yield* Effect.logInfo("active plugin count", { count: active.length })
   }),
