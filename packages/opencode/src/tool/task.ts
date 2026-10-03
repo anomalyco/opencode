@@ -9,6 +9,7 @@ import { MessageV2 } from "../session/message-v2"
 import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
+import { SessionRunState } from "../session/run-state"
 import { Config } from "@/config/config"
 import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
@@ -18,7 +19,7 @@ import { Database } from "@opencode-ai/core/database/database"
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
-  prompt(input: SessionPrompt.PromptInput): Effect.Effect<SessionV1.WithParts>
+  prompt(input: SessionPrompt.PromptInput): Effect.Effect<SessionV1.WithParts, SessionRunState.LeaseLostError>
 }
 
 const id = "task"
