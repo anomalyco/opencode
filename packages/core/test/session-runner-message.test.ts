@@ -112,6 +112,7 @@ describe("toLLMMessages", () => {
         role: "user",
         content: [
           { type: "text", text: "Inspect this image" },
+          { type: "text", text: "[Attached image/png: hello.png]" },
           { type: "media", mediaType: "image/png", data: "data:image/png;base64,aGVsbG8=", filename: "hello.png" },
         ],
         metadata: { agents: [{ name: "build" }] },
@@ -136,6 +137,58 @@ Recent work
 </conversation-checkpoint>`,
         },
       ],
+    ])
+  })
+
+  test("includes attachment path in user media context", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-path"),
+          type: "user",
+          text: "[Image 1] inspect this",
+          files: [
+            FileAttachment.make({
+              uri: "data:image/jpeg;base64,aGVsbG8=",
+              mime: "image/jpeg",
+              name: "/Users/vogel/Pictures/IMG_3480.JPG",
+            }),
+          ],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "[Image 1] inspect this" },
+      { type: "text", text: "[Attached image/jpeg: /Users/vogel/Pictures/IMG_3480.JPG]" },
+      {
+        type: "media",
+        mediaType: "image/jpeg",
+        data: "data:image/jpeg;base64,aGVsbG8=",
+        filename: "/Users/vogel/Pictures/IMG_3480.JPG",
+      },
+    ])
+  })
+
+  test("does not dump data URIs when an attachment has no name", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-unnamed"),
+          type: "user",
+          text: "Inspect this image",
+          files: [FileAttachment.make({ uri: "data:image/png;base64,aGVsbG8=", mime: "image/png" })],
+          time: { created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages[0]?.content).toEqual([
+      { type: "text", text: "Inspect this image" },
+      { type: "media", mediaType: "image/png", data: "data:image/png;base64,aGVsbG8=" },
     ])
   })
 

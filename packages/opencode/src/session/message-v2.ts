@@ -128,6 +128,11 @@ function providerMeta(metadata: Record<string, any> | undefined) {
   return Object.keys(rest).length > 0 ? rest : undefined
 }
 
+function attachedFileLabel(part: SessionV1.FilePart) {
+  const path = part.source?.type === "file" || part.source?.type === "symbol" ? part.source.path.trim() : ""
+  return `[Attached ${part.mime}: ${path || part.filename || "file"}]`
+}
+
 export const toModelMessagesEffect = Effect.fnUntraced(function* (
   input: WithParts[],
   model: Provider.Model,
@@ -214,12 +219,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         // text/plain and directory files are converted into text parts, ignore them
         if (part.type === "file" && part.mime !== "text/plain" && part.mime !== "application/x-directory") {
-          if (options?.stripMedia && isMedia(part.mime)) {
-            userMessage.parts.push({
-              type: "text",
-              text: `[Attached ${part.mime}: ${part.filename ?? "file"}]`,
-            })
-          } else {
+          userMessage.parts.push({
+            type: "text",
+            text: attachedFileLabel(part),
+          })
+          if (!(options?.stripMedia && isMedia(part.mime))) {
             userMessage.parts.push({
               type: "file",
               url: part.url,
