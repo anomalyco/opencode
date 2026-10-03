@@ -5,11 +5,24 @@ import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { McpClient } from "@opencode/core/mcp/client"
 import { McpOAuth } from "@opencode/core/mcp/oauth"
+import { EffectFlock } from "@opencode/util/effect-flock"
+import { LayerNode } from "@opencode/util/effect/layer-node"
+import { Global } from "@opencode/util/global"
 import { Cause, Effect, Exit } from "effect"
 import { hostEnvironmentLayer } from "./fixture/environment"
+import { tmpdir } from "./fixture/tmpdir"
 
 const authServer = Bun.serve({ port: 0, fetch: () => new Response(null, { status: 404 }) })
-afterAll(() => authServer.stop(true))
+const state = await tmpdir()
+afterAll(async () => {
+  authServer.stop(true)
+  await state[Symbol.asyncDispose]()
+})
+
+// Every provider locks in one directory, as separate processes on the same machine do.
+const flock = LayerNode.compile(EffectFlock.node, {
+  replacements: [Global.node.replace(Global.layerWith({ state: state.path }))],
+})
 
 const integrationID = Integration.ID.make("mcp_test")
 const methodID = Integration.MethodID.make("oauth")
@@ -54,7 +67,10 @@ const memoryCredentials = (initial: Credential.Info[]) => {
 
 const connectProvider = (config: typeof ConfigMCP.Remote.Type, store: ReturnType<typeof memoryCredentials>) =>
   Effect.runPromise(
-    McpOAuth.connectProvider({ config, integrationID }).pipe(Effect.provideService(Credential.Service, store.service)),
+    McpOAuth.connectProvider({ config, integrationID }).pipe(
+      Effect.provideService(Credential.Service, store.service),
+      Effect.provide(flock),
+    ),
   )
 
 // Serves authorization server metadata with the given capabilities and records DCR + token requests.
@@ -273,6 +289,35 @@ describe("MCP OAuth", () => {
       { access_token: "access", token_type: "Bearer", refresh_token: "next" },
       { access_token: "access", token_type: "Bearer", refresh_token: "next" },
     ])
+  })
+
+  test("serializes refreshes of a credential shared across processes", async () => {
+    const presented: string[] = []
+    const server = Bun.serve({
+      port: 0,
+      async fetch(request) {
+        const url = new URL(request.url)
+        if (request.method !== "POST" || url.pathname !== "/token") return new Response(null, { status: 404 })
+        const token = new URLSearchParams(await request.text()).get("refresh_token") ?? ""
+        presented.push(token)
+        // Hold the response so a refresher that did not wait would present the same token.
+        await Bun.sleep(50)
+        return Response.json({ access_token: "next", token_type: "Bearer", refresh_token: `${token}+` })
+      },
+    })
+    const url = server.url.href
+    const store = memoryCredentials([credential({ access: "expired", refresh: "r", url })])
+    const providers = await Promise.all([connectProvider(remote(url), store), connectProvider(remote(url), store)])
+
+    // Plain fetch: processes share no in-memory request, so only the lock can order the refreshes.
+    const results = await Promise.all(
+      providers.map((provider) => auth(provider, { serverUrl: url, fetchFn: (input, init) => fetch(input, init) })),
+    ).finally(() => server.stop(true))
+
+    expect(results).toEqual(["AUTHORIZED", "AUTHORIZED"])
+    expect(presented).toEqual(["r", "r+"])
+    const stored = store.rows.get(Credential.ID.make("cred_test"))?.value
+    expect(stored?.type === "oauth" && stored.refresh).toBe("r++")
   })
 
   test("generates a loopback redirect URL when none is configured", async () => {
