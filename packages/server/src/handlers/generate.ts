@@ -1,6 +1,7 @@
 import { Generate } from "@opencode/core/generate"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
+import { Plugin } from "@opencode/core/plugin"
 import { AbsolutePath } from "@opencode/core/schema"
 import { InvalidRequestError, ServiceUnavailableError } from "@opencode/protocol/errors"
 import { Global } from "@opencode/util/global"
@@ -16,6 +17,7 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
     return handlers.handle(
       "generate.text",
       Effect.fn("server.generate.text")(function* (request) {
+        yield* Plugin.awaitActivation
         const generate = yield* Generate.Service
         const text = yield* generate
           .text(request.payload)
