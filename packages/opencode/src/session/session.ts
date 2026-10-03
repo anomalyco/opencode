@@ -412,6 +412,7 @@ export type NotFound = NotFoundError
 
 export interface Interface {
   readonly list: (input?: ListInput) => Effect.Effect<Info[]>
+  readonly listAll: (input?: Omit<ListInput, "limit">) => Effect.Effect<Info[]>
   readonly listGlobal: (input?: GlobalListInput) => Effect.Effect<GlobalInfo[]>
   readonly create: (input?: {
     parentID?: SessionID
@@ -549,6 +550,17 @@ const layer: Layer.Layer<
         projectID: ctx.project.id,
         experimentalWorkspaces: flags.experimentalWorkspaces,
         ...input,
+        limit: input?.limit ?? 100,
+      })
+    })
+
+    const listAll = Effect.fn("Session.listAll")(function* (input?: Omit<ListInput, "limit">) {
+      const ctx = yield* InstanceState.context
+      return yield* listByProject(db, {
+        projectID: ctx.project.id,
+        experimentalWorkspaces: flags.experimentalWorkspaces,
+        ...input,
+        limit: undefined,
       })
     })
 
@@ -905,6 +917,7 @@ const layer: Layer.Layer<
 
     return Service.of({
       list,
+      listAll,
       listGlobal,
       create,
       fork,
@@ -992,14 +1005,13 @@ function listByProject(
     conditions.push(like(SessionTable.title, `%${input.search}%`))
   }
 
-  const limit = input.limit ?? 100
-
-  return db
+  const query = db
     .select()
     .from(SessionTable)
     .where(and(...conditions))
     .orderBy(desc(SessionTable.time_updated))
-    .limit(limit)
+
+  return (input.limit === undefined ? query : query.limit(input.limit))
     .all()
     .pipe(
       Effect.orDie,
