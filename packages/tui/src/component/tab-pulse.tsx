@@ -29,7 +29,7 @@ type TabPulseOptions = RenderableOptions<TabPulseRenderable> & {
   onLevel?: (level: number) => void
 }
 
-const clamp = (value: number) => Math.max(0, Math.min(1, value))
+export const clamp = (value: number) => Math.max(0, Math.min(1, value))
 export const smootherstep = (value: number) => value * value * value * (value * (value * 6 - 15) + 10)
 const RUN_DURATION = 2_800
 const RUN_ATTACK = 450
