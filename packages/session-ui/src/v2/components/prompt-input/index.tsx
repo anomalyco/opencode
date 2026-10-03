@@ -289,6 +289,8 @@ function renderPromptInputV2Editor(editor: HTMLDivElement, prompt: PromptInputV2
       return [mention]
     }),
   )
+  const last = editor.lastChild
+  if (last?.nodeType === Node.TEXT_NODE && last.textContent?.endsWith("\n")) last.textContent += "\u200B"
   if (!active) return
   const selection = window.getSelection()
   const range = document.createRange()
@@ -336,7 +338,7 @@ function parsePromptInputV2Editor(editor: HTMLDivElement) {
   }
   const visit = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
-      buffer += node.textContent ?? ""
+      buffer += (node.textContent ?? "").replace(/\u200B/g, "")
       return
     }
     if (!(node instanceof HTMLElement)) return
@@ -368,11 +370,13 @@ function parsePromptInputV2Editor(editor: HTMLDivElement) {
 
 function promptInputV2Cursor(editor: HTMLDivElement) {
   const selection = window.getSelection()
-  if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return editor.textContent?.length ?? 0
+  if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) {
+    return (editor.textContent ?? "").replace(/\u200B/g, "").length
+  }
   const range = selection.getRangeAt(0).cloneRange()
   range.selectNodeContents(editor)
   range.setEnd(selection.anchorNode!, selection.anchorOffset)
-  return range.toString().length
+  return range.toString().replace(/\u200B/g, "").length
 }
 
 export function PromptInputV2Attachments(props: {

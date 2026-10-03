@@ -382,18 +382,32 @@ export function createPromptInputV2Controller(input: {
       }
       input.view.onPaste?.(event)
       if (event.defaultPrevented) return
-      const text = clipboard?.getData("text/plain")
-      if (!text) return
+      const plainText = clipboard?.getData("text/plain")
+      if (!plainText) return
+      const text = plainText.replace(/\r\n?/g, "\n")
       event.preventDefault()
-      if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return
+      // Escaped HTML keeps literal newlines and one native undo transaction;
+      // multiline insertText builds blocks and Range insertion bypasses undo.
+      const multiline = text.includes("\n")
+      const value = multiline
+        ? text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;") +
+          (text.endsWith("\n") ? "\u200B" : "")
+        : text
+      if (
+        typeof document.execCommand === "function" &&
+        document.execCommand(multiline ? "insertHTML" : "insertText", false, value)
+      ) {
+        return
+      }
       const target = event.currentTarget
       const selection = window.getSelection()
       if (!(target instanceof HTMLElement) || !selection?.rangeCount || !target.contains(selection.anchorNode)) return
       const range = selection.getRangeAt(0)
       range.deleteContents()
-      const node = document.createTextNode(text)
+      // A trailing newline needs a caret anchor or Chromium types on the preceding line.
+      const node = document.createTextNode(text.endsWith("\n") ? `${text}\u200B` : text)
       range.insertNode(node)
-      range.setStartAfter(node)
+      range.setStart(node, text.length)
       range.collapse(true)
       selection.removeAllRanges()
       selection.addRange(range)
