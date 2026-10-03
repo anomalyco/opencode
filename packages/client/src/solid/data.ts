@@ -608,6 +608,11 @@ export function createData(config: CreateDataInput) {
               })
               activeUpdates = undefined
               setStore("session", "active", reconcile(Object.fromEntries(snapshot)))
+              // Sessions created while disconnected missed `session.created`; without their info they never
+              // join a family, so a running child would not mark its root as running.
+              snapshot.forEach((status, id) => {
+                if (status === "running" && !store.session.info[id]) refresh(() => result.session.sync(id))
+              })
             })
             .catch(() => {
               if (activeUpdates === updates) activeUpdates = undefined

@@ -1016,6 +1016,21 @@ test.each([
   }
 })
 
+test("adds running sessions created while disconnected to their family", async () => {
+  const root = { ...session(0), id: "ses_root" }
+  const child = { ...session(0), id: "ses_child", parentID: "ses_root" }
+  const setup = activityFixture(() => Response.json({ data: { ses_child: { type: "running" } } }), [child])
+
+  try {
+    setup.data.session.remember(root)
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => setup.data.session.family("ses_root").includes("ses_child"))
+    expect(setup.data.session.status("ses_child")).toBe("running")
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("ignores activity snapshots from an older connection", async () => {
   const reads: ReturnType<typeof Promise.withResolvers<Response>>[] = []
   const setup = activityFixture(() => {
@@ -1087,7 +1102,7 @@ function modelInfo(name: string): ModelInfo {
   }
 }
 
-function activityFixture(read: () => Response | Promise<Response>) {
+function activityFixture(read: () => Response | Promise<Response>, sessions: SessionInfo[] = []) {
   const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
   const api = OpenCode.make({
     baseUrl: "http://opencode.local",
@@ -1095,6 +1110,8 @@ function activityFixture(read: () => Response | Promise<Response>) {
       const request = input instanceof Request ? input : new Request(input, init)
       const path = new URL(request.url).pathname
       if (path === "/api/session/active") return read()
+      const known = sessions.find((item) => path === `/api/session/${item.id}`)
+      if (known) return Response.json({ data: known })
       if (path === "/api/project") return Response.json([])
       if (path === "/api/location") return Response.json({ directory: "/project" })
       return Response.json({ location: { directory: "/project" }, data: { branch: "main" } })
