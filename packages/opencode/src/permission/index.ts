@@ -1,5 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigPermissionV1 } from "@opencode-ai/core/v1/config/permission"
+import { SoulGuard } from "@/soul/guard"
 import { InstanceState } from "@/effect/instance-state"
 import { Wildcard } from "@opencode-ai/core/util/wildcard"
 import { Deferred, Effect, Layer, Context } from "effect"
@@ -67,6 +68,32 @@ const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: PermissionV1.AskInput) {
       const { approved, pending } = yield* InstanceState.get(state)
       const { ruleset, ...request } = input
+
+      // Soul formation guard. Agents may never edit SOUL.md or its paired
+      // eval suite (SOUL.suite.yaml, SOUL.baseline.json): axioms change only
+      // by human edit plus a full eval re-run. This runs before the
+      // configurable permission rules so no rule or "always" grant can
+      // override it. Human edits in their own editor never pass through
+      // this path and are unaffected.
+      if (request.permission === "edit") {
+        const metadata = request.metadata as { filepath?: unknown } | undefined
+        const target = request.patterns.find((pattern) =>
+          SoulGuard.isProtectedEditTarget(pattern, metadata?.filepath),
+        )
+        if (target) {
+          return yield* new PermissionV1.DeniedError({
+            ruleset: [
+              {
+                permission: "edit",
+                pattern: target,
+                action: "deny",
+                reason: SoulGuard.denialMessage(target),
+              },
+            ],
+          })
+        }
+      }
+
       let needsAsk = false
 
       for (const pattern of request.patterns) {

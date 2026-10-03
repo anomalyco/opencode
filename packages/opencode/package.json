@@ -148,6 +148,7 @@
     "web-tree-sitter": "0.25.10",
     "ws": "8.21.0",
     "xdg-basedir": "5.1.0",
+    "yaml": "2.9.1",
     "yargs": "18.0.0",
     "zod": "catalog:"
   },
