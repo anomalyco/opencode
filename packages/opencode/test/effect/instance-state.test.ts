@@ -102,6 +102,37 @@ it.live("InstanceState invalidates on disposeAll", () =>
   }),
 )
 
+it.live("InstanceState releases least-recently-used directories past capacity", () =>
+  Effect.gen(function* () {
+    const one = yield* tmpdirScoped()
+    const two = yield* tmpdirScoped()
+    const three = yield* tmpdirScoped()
+    const seen: string[] = []
+    const state = yield* InstanceState.make(
+      (ctx) =>
+        Effect.acquireRelease(
+          Effect.sync(() => ctx.directory),
+          (value) =>
+            Effect.sync(() => {
+              seen.push(value)
+            }),
+        ),
+      { capacity: 2 },
+    )
+
+    yield* access(state, one)
+    yield* access(state, two)
+    expect(seen).toEqual([])
+
+    yield* access(state, three)
+
+    // `one` is the least recently used, so it is the one that gives up its
+    // scope. A caller bounding its cache does so precisely to stop holding
+    // resources for directories nobody is using any more.
+    expect(seen).toEqual([one])
+  }),
+)
+
 it.live("InstanceState.get reads the current directory lazily", () =>
   Effect.gen(function* () {
     const one = yield* tmpdirScoped()

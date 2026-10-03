@@ -106,6 +106,16 @@ export const Status = Schema.Union([
 ]).annotate({ identifier: "MCPStatus", discriminator: "status" })
 export type Status = Schema.Schema.Type<typeof Status>
 
+// MCP servers are real child processes, and this state is per directory, so
+// every directory OpenCode has served costs a full set of server processes.
+// The rest of the per-directory state lives in `locationServices`, which is
+// released after 60 minutes idle; MCP state is not part of that layer and
+// `InstanceState.invalidate` has no caller, so with an unbounded cache those
+// processes stay alive for the lifetime of the process. Cap the cache so
+// least-recently-used directories release theirs, which closes their scope
+// and runs the disposal that terminates the servers.
+const MCP_STATE_CAPACITY = 8
+
 // Store transports for OAuth servers to allow finishing auth
 type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
 const pendingOAuthTransports = new Map<string, { transport: TransportWithAuth; provider?: McpOAuthPendingProvider }>()
@@ -557,6 +567,7 @@ const layer = Layer.effect(
 
         return s
       }),
+      { capacity: MCP_STATE_CAPACITY },
     )
 
     function closeClient(s: State, name: string) {
