@@ -389,9 +389,6 @@ const layer = Layer.effect(
 
         return yield* Effect.gen(function* () {
           const listed = mcpClient.getServerCapabilities()?.tools ? yield* McpCatalog.defs(mcpClient, mcp.timeout) : []
-          if (!listed) {
-            return yield* Effect.fail(new Error("Failed to get tools"))
-          }
           return {
             mcpClient,
             status,
@@ -462,7 +459,9 @@ const layer = Layer.effect(
       client.setNotificationHandler(ToolListChangedNotificationSchema, async () => {
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
-        const listed = await bridge.promise(McpCatalog.defs(client, timeout))
+        const listed = await bridge.promise(
+          McpCatalog.defs(client, timeout).pipe(Effect.orElseSucceed(() => undefined)),
+        )
         if (!listed) return
         if (s.clients[name] !== client || s.status[name]?.status !== "connected") return
 
@@ -873,6 +872,8 @@ const layer = Layer.effect(
       mcpName: string,
       onAuthorization?: (authorizationUrl: string) => void,
     ) {
+      const s = yield* InstanceState.get(state)
+      const previous = s.status[mcpName]
       const result = yield* startAuth(mcpName)
       if (!result.authorizationUrl) {
         const client = "client" in result ? result.client : undefined
@@ -880,19 +881,27 @@ const layer = Layer.effect(
           Effect.tapError(() => Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)),
         )
 
-        const listed = client
-          ? client.getServerCapabilities()?.tools
-            ? yield* McpCatalog.defs(client, mcpConfig.timeout)
-            : []
-          : undefined
-        if (!client || !listed) {
-          yield* Effect.tryPromise(() => client?.close() ?? Promise.resolve()).pipe(Effect.ignore)
+        if (!client) {
           return { status: "failed", error: "Failed to get tools" } satisfies Status
         }
 
-        const s = yield* InstanceState.get(state)
+        const listed = yield* (
+          client.getServerCapabilities()?.tools ? McpCatalog.defs(client, mcpConfig.timeout) : Effect.succeed([])
+        ).pipe(
+          Effect.match({
+            onFailure: (error) => ({ error }),
+            onSuccess: (defs) => ({ defs }),
+          }),
+        )
+        if ("error" in listed) {
+          yield* Effect.tryPromise(() => client.close()).pipe(Effect.ignore)
+          const status = { status: "failed", error: listed.error.message } satisfies Status
+          // A newer add/connect may have already published a healthy connection.
+          if (s.status[mcpName] === previous) s.status[mcpName] = status
+          return status
+        }
         yield* auth.clearOAuthState(mcpName)
-        return yield* storeClient(s, mcpName, client, listed, client.getInstructions()?.trim(), mcpConfig.timeout)
+        return yield* storeClient(s, mcpName, client, listed.defs, client.getInstructions()?.trim(), mcpConfig.timeout)
       }
 
       const callbackPromise = McpOAuthCallback.waitForCallback(result.oauthState, mcpName)

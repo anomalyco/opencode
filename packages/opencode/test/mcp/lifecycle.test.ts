@@ -14,7 +14,7 @@ import {
   type Tool,
 } from "@modelcontextprotocol/sdk/types.js"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Effect, Exit } from "effect"
+import { Cause, Effect, Exit, Logger } from "effect"
 import type { MCP as MCPNS } from "../../src/mcp/index"
 import { MCP } from "../../src/mcp/index"
 import { McpOAuthCallback } from "../../src/mcp/oauth-callback"
@@ -236,6 +236,35 @@ it.instance("tools() reuses cached definitions until a protocol notification", (
   }),
 )
 
+it.instance("failed tool refresh logs its cause and preserves the last usable catalog", () => {
+  const logs: unknown[] = []
+  return Effect.gen(function* () {
+    const server = yield* lifecycleServer({ capabilities: { tools: { listChanged: true } } })
+    const mcp = yield* MCP.Service
+    yield* mcp.add("refresh-server", remote(server.url))
+    server.state.listToolsError = "catalog refresh unavailable"
+    yield* Effect.promise(server.sendToolListChanged)
+    yield* pollWithTimeout(
+      Effect.sync(() => (JSON.stringify(logs).includes("catalog refresh unavailable") ? true : undefined)),
+      "tool refresh failure was not logged",
+    )
+
+    expect((yield* mcp.status())["refresh-server"]?.status).toBe("connected")
+    expect(Object.keys(yield* mcp.tools())).toEqual(["refresh-server_test_tool"])
+
+    server.state.listToolsError = undefined
+    server.state.tools = [{ name: "recovered", inputSchema: { type: "object" } }]
+    yield* Effect.promise(server.sendToolListChanged)
+    yield* pollWithTimeout(
+      Effect.gen(function* () {
+        return (yield* mcp.tools())["refresh-server_recovered"]
+      }),
+      "tool refresh did not recover",
+    )
+    expect(Object.keys(yield* mcp.tools())).toEqual(["refresh-server_recovered"])
+  }).pipe(Effect.provide(Logger.layer([Logger.make((entry) => logs.push(entry.message))])))
+})
+
 it.instance("instructions() returns non-empty connected server instructions with tool names", () =>
   Effect.gen(function* () {
     const guide = yield* lifecycleServer({ instructions: "Use lookup before mutate." })
@@ -356,6 +385,10 @@ it.instance("one failed server does not affect another connected server", () =>
 
     expect((yield* mcp.status())["good-server"]?.status).toBe("connected")
     expect((yield* mcp.status())["bad-server"]?.status).toBe("failed")
+    expect((yield* mcp.status())["bad-server"]).toEqual({
+      status: "failed",
+      error: expect.stringContaining("listTools failed"),
+    })
     expect(Object.keys(yield* mcp.tools())).toEqual(["good-server_good_tool"])
   }),
 )
@@ -386,6 +419,10 @@ it.instance("does not fall back for protocol tool discovery errors", () =>
     const result = yield* mcp.add("broken-server", remote(server.url))
 
     expect(statusName(result.status, "broken-server")).toBe("failed")
+    expect((yield* mcp.status())["broken-server"]).toEqual({
+      status: "failed",
+      error: expect.stringContaining("transport closed"),
+    })
   }),
 )
 
