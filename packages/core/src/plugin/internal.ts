@@ -96,6 +96,7 @@ import { ProviderPlugins } from "./provider.js"
 import { OpencodePlugin } from "./provider/opencode.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { SkillPlugin } from "./skill.js"
+import { McpSkillPlugin } from "./mcp-skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
 import { ToolInputRepairPlugin } from "./tool-input-repair.js"
 import { OptimizePlugin } from "./optimize.js"
@@ -221,6 +222,7 @@ const pre = [
   PlanPlugin.Plugin,
   CommandPlugin.Plugin,
   SkillPlugin.Plugin,
+  McpSkillPlugin.Plugin,
   VcsHgPlugin.Plugin,
   ModelsDevPlugin,
   ...ProviderPlugins,

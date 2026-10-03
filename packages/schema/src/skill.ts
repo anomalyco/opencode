@@ -23,6 +23,20 @@ export const UrlSource = Schema.Struct({
   url: Schema.String,
 }).annotate({ identifier: "Skill.UrlSource" })
 
+/**
+ * Where a skill served by an MCP server keeps its files. SEP-2640 addresses every file as its
+ * own resource URI, so a served skill has no base directory to resolve relative paths against the
+ * way a filesystem skill does. `files` are the verified supporting-file URIs, excluding the
+ * skill's own `uri`.
+ */
+export interface McpOrigin extends Schema.Schema.Type<typeof McpOrigin> {}
+export const McpOrigin = Schema.Struct({
+  type: Schema.tag("mcp"),
+  server: Schema.String,
+  uri: Schema.String,
+  files: Schema.Array(Schema.String),
+}).annotate({ identifier: "Skill.McpOrigin" })
+
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
@@ -31,6 +45,7 @@ export const Info = Schema.Struct({
   autoinvoke: Schema.Boolean.pipe(optional),
   path: AbsolutePath,
   content: Schema.String,
+  origin: McpOrigin.pipe(optional),
 }).annotate({ identifier: "Skill.Info" })
 
 const Updated = ephemeral({ type: "skill.updated", schema: {} })

@@ -15,7 +15,8 @@ export const Input = Schema.Struct({
 
 export const Output = Schema.Struct({
   name: Skill.Name,
-  directory: Schema.String,
+  // Absent for a skill served over MCP: it has no directory on disk to report.
+  directory: Schema.optional(Schema.String),
   output: Schema.String,
 })
 export const description = [
