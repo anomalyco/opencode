@@ -1,14 +1,18 @@
 import path from "path"
 import { describe, expect } from "bun:test"
 import { Money } from "@opencode/schema/money"
+import { LLM } from "@opencode/ai"
+import { compileRequest } from "@opencode/ai/route/client"
 import { Context, Effect, Exit, Layer, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { Integration } from "@opencode/core/integration"
+import { Credential } from "@opencode/core/credential"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
+import { ModelResolver } from "@opencode/core/model-resolver"
 import { ModelsDev } from "@opencode/core/models-dev"
 import { ModelsDevPlugin } from "@opencode/core/plugin/models-dev"
 import { Plugin } from "@opencode/core/plugin"
@@ -124,6 +128,64 @@ const richSnapshot = (name = "Acme") => {
 }
 
 describe("ModelsDevPlugin", () => {
+  it.effect("routes DigitalOcean catalog variants through their native APIs", () =>
+    Effect.gen(function* () {
+      const providers = yield* Provider.Service
+      const modelState = yield* Model.Service
+      const integrations = yield* Integration.Service
+      yield* ModelsDevPlugin.effect(
+        host({ provider: providerHost(providers), integration: integrationHost(integrations) }),
+      )
+      yield* providers.transform((draft) => {
+        draft.update(Provider.ID.make("digitalocean"), (provider) => {
+          provider.activation = "enabled"
+        })
+      })
+      for (const item of [
+        { id: "anthropic-claude-sonnet-5.5", api: "messages" },
+        { id: "openai-gpt-5-nano", api: "responses" },
+      ]) {
+        const info = required(yield* modelState.get(Provider.ID.make("digitalocean"), Model.ID.make(item.id)))
+        expect(info.package).toBe(`@opencode/ai/providers/digitalocean/${item.api}`)
+        const selected = yield* ModelResolver.fromCatalogModel(
+          yield* ModelResolver.withVariant(info, Model.VariantID.make("high")),
+          Credential.Key.make({ type: "key", key: "fixture" }),
+        )
+        expect(selected.route.id).toBe(`digitalocean-${item.api}`)
+        const compiled = yield* compileRequest(LLM.request({ model: selected, prompt: "Hello" }))
+        expect(compiled.body).toMatchObject(
+          item.api === "messages"
+            ? {
+                model: item.id,
+                output_config: { effort: "high" },
+                thinking: { type: "adaptive", display: "summarized" },
+              }
+            : {
+                model: item.id,
+                reasoning: { effort: "high", summary: "auto" },
+                include: ["reasoning.encrypted_content"],
+              },
+        )
+      }
+      yield* modelState.transform((draft) => {
+        draft.update(Provider.ID.make("digitalocean"), Model.ID.make("anthropic-claude-sonnet-5.5"), (model) => {
+          model.package = "@opencode/ai/providers/digitalocean/chat"
+        })
+      })
+      const overridden = required(
+        yield* modelState.get(Provider.ID.make("digitalocean"), Model.ID.make("anthropic-claude-sonnet-5.5")),
+      )
+      const chat = yield* ModelResolver.fromCatalogModel(
+        yield* ModelResolver.withVariant(overridden, Model.VariantID.make("high")),
+        Credential.Key.make({ type: "key", key: "fixture" }),
+      )
+      expect(chat.route.id).toBe("digitalocean")
+      expect((yield* compileRequest(LLM.request({ model: chat, prompt: "Hello" }))).body).toMatchObject({
+        reasoning_effort: "high",
+      })
+    }).pipe(Effect.provide(models(path.join(import.meta.dir, "../../src/models-dev/snapshot.txt")))),
+  )
+
   isolated.effect("shares definitions between Locations while provider and model edits own their copies", () =>
     Effect.gen(function* () {
       const { providerID, modelID, snapshot } = richSnapshot()

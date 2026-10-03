@@ -11,6 +11,7 @@ import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
+import { ModelNames } from "@opencode/ai/model-names"
 
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
 const issuer = "https://auth.openai.com"
@@ -281,12 +282,12 @@ export const OpenAIPlugin = define({
             return
           }
           const apiID = draft.modelID ?? draft.id
-          const match = apiID.match(/^gpt-(\d+)(?:\.(\d+))?/)
-          const major = Number(match?.[1])
-          const minor = Number(match?.[2] ?? 0)
+          const version = ModelNames.gptVersion(apiID)
           if (
             !codexAllowed.has(apiID) &&
-            (codexDisallowed.has(apiID) || !match || !(major > 5 || (major === 5 && minor > 4)))
+            (codexDisallowed.has(apiID) ||
+              !version ||
+              !(version.major > 5 || (version.major === 5 && version.minor > 4)))
           ) {
             draft.enabled = false
             return

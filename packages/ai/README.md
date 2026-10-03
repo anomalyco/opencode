@@ -333,6 +333,27 @@ The provider targets the Moonshot Open Platform; Kimi Code is a separate product
 Package entrypoints are `@opencode/ai/providers/moonshot`, `moonshot/chat`, `moonshot/messages`,
 and `moonshot/responses`; each exports `model(modelID, settings)`.
 
+## DigitalOcean
+
+DigitalOcean defaults Claude models to Anthropic Messages and other text models to OpenAI Responses.
+Both reuse the shared native protocols. Select an API explicitly when needed:
+
+```ts
+import { DigitalOcean } from "@opencode/ai/providers"
+
+const digitalocean = DigitalOcean.configure({ apiKey: process.env.DIGITALOCEAN_ACCESS_TOKEN })
+const claude = digitalocean.model("anthropic-claude-sonnet-5.5") // Messages
+const gpt = digitalocean.model("openai-gpt-6-1-sol") // Responses
+const chat = digitalocean.chat("openai-gpt-5-nano")
+```
+
+Explicit package entrypoints are `@opencode/ai/providers/digitalocean/chat`,
+`digitalocean/messages`, and `digitalocean/responses`. Each exposes `model(modelID, settings)`.
+Responses defaults to stateless encrypted-reasoning replay and preserves native tool namespaces.
+Messages uses automatic cache breakpoints, signed thinking replay, and the shared protocol's
+model-specific system-update support. Native chronological effort markers remain disabled because
+the gateway rejected that wire format in live probes.
+
 ## MiniMax
 
 MiniMax defaults to its Messages API and reads `MINIMAX_API_KEY` when `apiKey` is omitted:

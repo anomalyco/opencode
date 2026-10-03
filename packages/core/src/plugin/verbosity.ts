@@ -6,6 +6,7 @@ import { Effect } from "effect"
 import { Model } from "../model.js"
 import { Provider } from "../provider.js"
 import type { PluginInternal } from "./internal.js"
+import { ModelNames } from "@opencode/ai/model-names"
 
 const direct = new Set([
   "@opencode/ai/providers/openai",
@@ -39,10 +40,16 @@ export const Plugin = define({
 } satisfies PluginInternal.InternalPlugin)
 
 function supportsVerbosity(id: string) {
-  if (id.includes("gpt-6")) return true
+  const version = ModelNames.gptVersion(id)
+  if (!version) return false
+  if (version.major >= 6) return true
   if (id.includes("-chat") || id.includes("-image")) return false
   // New GPT-5 minor versions remain unset until their support is known.
-  return /(?:^|[/.])gpt-5\.[1-6](?:[.:-]|$)/.test(id) || /(?:^|[/.])gpt-5(?:-(?:mini|nano)(?:[.:-]|$)|$)/.test(id)
+  return (
+    version.major === 5 &&
+    ((version.minor >= 1 && version.minor <= 6) ||
+      (version.minor === 0 && /(?:^|[/.])gpt-5(?:-(?:mini|nano)(?:[.:-]|$)|$)/.test(id)))
+  )
 }
 
 function openAIModelID(model: Model.Info) {

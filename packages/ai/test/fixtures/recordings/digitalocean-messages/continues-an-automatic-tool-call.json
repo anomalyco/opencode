@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "anthropic-claude-haiku-4.5",
+    "tags": [
+      "prefix:digitalocean-messages",
+      "provider:digitalocean",
+      "protocol:messages",
+      "tool",
+      "tool-loop"
+    ],
+    "name": "digitalocean-messages/continues-an-automatic-tool-call",
+    "recordedAt": "2026-10-01T18:30:10.338Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://inference.do-ai.run/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"anthropic-claude-haiku-4.5\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\",\"cache_control\":{\"type\":\"ephemeral\"}}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"cache_control\":{\"type\":\"ephemeral\"}}],\"stream\":true,\"max_tokens\":128}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"message\":{\"container\":null,\"content\":[],\"diagnostics\":null,\"id\":\"msg_011CfbzYAu4i3vSHbbsbo5Nv\",\"model\":\"claude-haiku-4-5-20251001\",\"role\":\"assistant\",\"stop_details\":null,\"stop_reason\":null,\"stop_sequence\":null,\"type\":\"message\",\"usage\":{\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"inference_geo\":\"not_available\",\"input_tokens\":593,\"output_tokens\":26,\"service_tier\":\"standard\"}},\"type\":\"message_start\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"caller\":{\"type\":\"direct\"},\"id\":\"toolu_01V3F9KT6SZ7pF5d1JHpWePf\",\"input\":{},\"name\":\"get_weather\",\"type\":\"tool_use\"},\"index\":0,\"type\":\"content_block_start\"}\n\nevent: ping\ndata: {\"type\":\"ping\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"partial_json\":\"\",\"type\":\"input_json_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"partial_json\":\"{\\\"city\\\"\",\"type\":\"input_json_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"partial_json\":\": \\\"Pari\",\"type\":\"input_json_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"partial_json\":\"s\\\"}\",\"type\":\"input_json_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":0,\"type\":\"content_block_stop\"}\n\nevent: message_delta\ndata: {\"delta\":{\"container\":null,\"stop_details\":null,\"stop_reason\":\"tool_use\",\"stop_sequence\":null},\"type\":\"message_delta\",\"usage\":{\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"input_tokens\":593,\"output_tokens\":54}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://inference.do-ai.run/v1/messages",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"anthropic-claude-haiku-4.5\",\"system\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\",\"cache_control\":{\"type\":\"ephemeral\"}}],\"messages\":[{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\"}]},{\"role\":\"assistant\",\"content\":[{\"type\":\"tool_use\",\"id\":\"toolu_01V3F9KT6SZ7pF5d1JHpWePf\",\"name\":\"get_weather\",\"input\":{\"city\":\"Paris\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"tool_result\",\"tool_use_id\":\"toolu_01V3F9KT6SZ7pF5d1JHpWePf\",\"content\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"tools\":[{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"input_schema\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"cache_control\":{\"type\":\"ephemeral\"}}],\"stream\":true,\"max_tokens\":128}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "event: message_start\ndata: {\"message\":{\"container\":null,\"content\":[],\"diagnostics\":null,\"id\":\"msg_011CfbzYEsvpWAknf8prvt3Q\",\"model\":\"claude-haiku-4-5-20251001\",\"role\":\"assistant\",\"stop_details\":null,\"stop_reason\":null,\"stop_sequence\":null,\"type\":\"message\",\"usage\":{\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"inference_geo\":\"not_available\",\"input_tokens\":668,\"output_tokens\":1,\"service_tier\":\"standard\"}},\"type\":\"message_start\"}\n\nevent: content_block_start\ndata: {\"content_block\":{\"text\":\"\",\"type\":\"text\"},\"index\":0,\"type\":\"content_block_start\"}\n\nevent: ping\ndata: {\"type\":\"ping\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\"Paris\",\"type\":\"text_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\" is sunny\",\"type\":\"text_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_delta\ndata: {\"delta\":{\"text\":\".\",\"type\":\"text_delta\"},\"index\":0,\"type\":\"content_block_delta\"}\n\nevent: content_block_stop\ndata: {\"index\":0,\"type\":\"content_block_stop\"}\n\nevent: message_delta\ndata: {\"delta\":{\"container\":null,\"stop_details\":null,\"stop_reason\":\"end_turn\",\"stop_sequence\":null},\"type\":\"message_delta\",\"usage\":{\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"input_tokens\":668,\"output_tokens\":7}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+      }
+    }
+  ]
+}

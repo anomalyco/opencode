@@ -2,6 +2,7 @@ export * as Variant from "./variant.js"
 
 import { Model } from "./model.js"
 import { Provider } from "./provider.js"
+import { ModelNames } from "@opencode/ai/model-names"
 
 export type Support =
   | { readonly type: "effort"; readonly values?: readonly string[] }
@@ -54,11 +55,10 @@ const modelID = (model: Model.Info) => model.modelID ?? model.id
 
 function claudeInfo(model: Model.Info) {
   const id = modelID(model)
-  const familyFirst = /(?:claude-)?(opus|sonnet|haiku|fable|mythos)-(\d+)(?:[.-](\d+))?/i.exec(id)
-  const versionFirst = /claude-(\d+)(?:[.-](\d+))?-(opus|sonnet|haiku|fable|mythos)/i.exec(id)
-  const family = (familyFirst?.[1] ?? versionFirst?.[3])?.toLowerCase()
-  const major = Number(familyFirst?.[2] ?? versionFirst?.[1])
-  const minor = Number(familyFirst?.[3] ?? versionFirst?.[2] ?? 0)
+  const version = ModelNames.claudeVersion(id)
+  const family = version?.family
+  const major = version?.major ?? 0
+  const minor = version?.minor ?? 0
   return {
     family,
     major,
@@ -575,7 +575,13 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/cohere/chat": openaiChat,
   "@opencode/ai/providers/deepinfra": deepinfraChat,
   "@opencode/ai/providers/deepseek": deepseekChat,
-  "@opencode/ai/providers/digitalocean": openaiChat,
+  "@opencode/ai/providers/digitalocean": (model, support) =>
+    ModelNames.isAnthropic(modelID(model))
+      ? anthropicMessages(model, support)
+      : openaiResponses(model, support),
+  "@opencode/ai/providers/digitalocean/chat": openaiChat,
+  "@opencode/ai/providers/digitalocean/messages": anthropicMessages,
+  "@opencode/ai/providers/digitalocean/responses": openaiResponses,
   "@opencode/ai/providers/fireworks": openaiChat,
   "@opencode/ai/providers/groq": openaiChat,
   "@opencode/ai/providers/meta/chat": openaiChat,

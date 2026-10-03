@@ -804,12 +804,9 @@ const requireThinkingSignature = (request: LLMRequest) => {
   return true
 }
 
-// Mid-conversation system messages became available with Opus 4.8 and version
-// 5 of the other supported Claude families. Treat later family versions as
-// compatible without assuming that every Anthropic Messages model is Claude.
 // Opus 4.8 and every Claude 5 model accept mid-conversation system messages; later versions inherit support.
 const supportsNativeSystemUpdates = (request: LLMRequest) => {
-  const version = claudeVersion(String(request.model.id))
+  const version = claudeVersion(request.model.id)
   if (version === undefined) return false
   if (version.family === "opus" && version.major === 4) return version.minor >= 8
   return version.major >= 5

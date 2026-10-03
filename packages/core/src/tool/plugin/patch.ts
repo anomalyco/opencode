@@ -3,6 +3,7 @@ export * as PatchTool from "./patch.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
 import { ToolFailure } from "@opencode/ai"
+import { ModelNames } from "@opencode/ai/model-names"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
 import { Bom } from "@opencode/util/bom"
@@ -295,8 +296,8 @@ export const Plugin = {
 
     const hook = (event: SessionHooks["context"]) =>
       Effect.sync(() => {
-        const usePatch =
-          event.model.id.includes("gpt-") && !event.model.id.includes("oss") && !event.model.id.includes("gpt-4")
+        const version = ModelNames.gptVersion(event.model.id)
+        const usePatch = version !== undefined && version.major !== 4
         if (usePatch) {
           delete event.tools.edit
           delete event.tools.write

@@ -127,7 +127,6 @@ it.effect("sets known OpenAI Responses defaults without overriding configured or
 
     for (const model of [
       ref("openai", "gpt-4o"),
-      ref("openai", "gpt-7"),
       ref("openai", "gpt-5.7"),
       ref("openai", "gpt-5.5-chat"),
       ref("openai", "gpt-5.4-image-2"),
@@ -149,6 +148,10 @@ it.effect("sets known OpenAI Responses defaults without overriding configured or
     const alias = request(ref("opencode", "astra-alias"))
     yield* hooks.trigger("session", "context", alias)
     expect(alias.options.textVerbosity).toBe("low")
+
+    const future = request(ref("openai", "gpt-7"))
+    yield* hooks.trigger("session", "context", future)
+    expect(future.options.textVerbosity).toBe("low")
 
     for (const providerID of ["azure", "bedrock-mantle", "cloudflare", "vercel"]) {
       const event = request(ref(providerID, "selected"))

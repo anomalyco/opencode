@@ -21,6 +21,33 @@ function map(
 }
 
 describe("AISDKNative", () => {
+  test("selects DigitalOcean APIs by model while preserving explicit packages", () => {
+    expect(map("@ai-sdk/openai-compatible", {}, "anthropic-claude-sonnet-5.5", "digitalocean")?.package).toBe(
+      "@opencode/ai/providers/digitalocean/messages",
+    )
+    for (const id of ["openai-gpt-6-1-sol", "kimi-k3", "qwen3.8-max", "router:default"]) {
+      expect(map("@ai-sdk/openai-compatible", {}, id, "digitalocean")?.package).toBe(
+        "@opencode/ai/providers/digitalocean/responses",
+      )
+    }
+    for (const api of ["chat", "messages", "responses"]) {
+      const target = { package: `@opencode/ai/providers/digitalocean/${api}` }
+      AISDKNative.rewrite(target, {
+        specifier: target.package,
+        providerID: "digitalocean",
+        modelID: "anthropic-claude-sonnet-5.5",
+      })
+      expect(target.package).toBe(`@opencode/ai/providers/digitalocean/${api}`)
+    }
+    const target = { package: "@opencode/ai/providers/digitalocean" }
+    AISDKNative.rewrite(target, {
+      specifier: target.package,
+      providerID: "digitalocean",
+      modelID: "anthropic-claude-sonnet-5.5",
+    })
+    expect(target.package).toBe("@opencode/ai/providers/digitalocean/messages")
+  })
+
   test("keeps Cloudflare AI Gateway models on its native gateway package", () => {
     for (const packageName of [
       "ai-gateway-provider",

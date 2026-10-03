@@ -2,6 +2,7 @@ import { mergeProviderOptions, type ProviderOptions } from "../schema/index.js"
 import type { OpenAIServiceTier } from "../protocols/utils/openai-options.js"
 import type { Options } from "../protocols/utils/open-responses-options.js"
 import type { ContextManagement } from "../protocols/openai-responses.js"
+import { ModelNames } from "../model-names.js"
 
 export type { OpenAIResponseIncludable, OpenAIServiceTier } from "../protocols/utils/openai-options.js"
 
@@ -34,7 +35,7 @@ const openAIProviderOptions = (options: OpenAIOptionsInput | undefined): Provide
 
 export const gpt5DefaultOptions = (modelID: string): ProviderOptions | undefined => {
   const id = modelID.toLowerCase()
-  if (!id.includes("gpt-5") || id.includes("gpt-5-chat") || id.includes("gpt-5-pro")) return undefined
+  if (ModelNames.gptVersion(id)?.major !== 5 || id.includes("gpt-5-chat") || id.includes("gpt-5-pro")) return undefined
   return openAIProviderOptions({
     reasoningEffort: "medium",
     reasoningSummary: "auto",
