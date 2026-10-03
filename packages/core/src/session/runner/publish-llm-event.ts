@@ -32,6 +32,8 @@ const asRecord = (value: unknown): Record<string, unknown> =>
 export interface StepRecord {
   /** The model produced visible output this attempt, which bars transparent retries and overflow recovery. */
   readonly outputStarted: boolean
+  /** Nonblank assistant text or a tool call, excluding reasoning and fragment lifecycle events. */
+  readonly usableOutput: boolean
   readonly providerFailed: boolean
   /** The step's recorded assistant failure, if any. */
   readonly failure?: SessionError.Error
@@ -94,6 +96,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
   let stepStarted = false
   let providerFailed = false
   let outputStarted = false
+  let usableOutput = false
   let stepFailure: SessionError.Error | undefined
   let stepSettlement: StepRecord["finish"]
 
@@ -208,6 +211,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     "text",
     (_textID, value, ordinal, state) =>
       Effect.gen(function* () {
+        if (value.trim()) usableOutput = true
         yield* bus.publish(SessionEvent.Text.Ended, {
           sessionID: input.sessionID,
           assistantMessageID: yield* currentAssistantMessageID(),
@@ -458,6 +462,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
         return
       case "tool-call": {
         outputStarted = true
+        usableOutput = true
         const tool = tools.get(event.id) ?? (yield* startToolInput(event))
         if (toolInput.has(event.id)) yield* endToolInput(event)
         if (tool.name !== event.name)
@@ -609,6 +614,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     /** Immutable snapshot of everything recorded for this step so far. */
     record: (): StepRecord => ({
       outputStarted,
+      usableOutput,
       providerFailed,
       failure: stepFailure,
       finish: stepSettlement,
