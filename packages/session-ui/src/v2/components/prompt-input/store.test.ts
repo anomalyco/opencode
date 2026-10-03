@@ -105,6 +105,66 @@ describe("prompt input v2 store", () => {
     expect(prompt.state.model).toBeUndefined()
   })
 
+  test("adds another mention when the prompt already contains one", () => {
+    const [state, setState] = createStore<PromptInputV2PersistedState>({
+      prompt: [{ type: "text", content: "", start: 0, end: 0 }],
+      cursor: 0,
+      context: { items: [] },
+    })
+    const prompt = createPromptInputV2Store([state, setState])
+
+    prompt.addMention({ type: "file", path: "opencode.json", content: "@opencode.json", start: 0, end: 0 })
+    prompt.addMention({ type: "file", path: "src/app.ts", content: "@src/app.ts", start: 0, end: 0 })
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "file", path: "opencode.json", content: "@opencode.json", start: 0, end: 14 },
+      { type: "text", content: " ", start: 14, end: 15 },
+      { type: "file", path: "src/app.ts", content: "@src/app.ts", start: 15, end: 26 },
+      { type: "text", content: " ", start: 26, end: 27 },
+    ])
+    expect(prompt.state.cursor).toBe(27)
+  })
+
+  test("replaces an active mention query next to the cursor", () => {
+    const [state, setState] = createStore<PromptInputV2PersistedState>({
+      prompt: [{ type: "text", content: "hi @tw", start: 0, end: 6 }],
+      cursor: 6,
+      context: { items: [] },
+    })
+    const prompt = createPromptInputV2Store([state, setState])
+
+    prompt.addMention({ type: "file", path: "two.ts", content: "@two.ts", start: 0, end: 0 })
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "text", content: "hi ", start: 0, end: 3 },
+      { type: "file", path: "two.ts", content: "@two.ts", start: 3, end: 10 },
+      { type: "text", content: " ", start: 10, end: 11 },
+    ])
+    expect(prompt.state.cursor).toBe(11)
+  })
+
+  test("appends a mention when the cursor follows a trailing mention", () => {
+    const [state, setState] = createStore<PromptInputV2PersistedState>({
+      prompt: [
+        { type: "text", content: "hey ", start: 0, end: 4 },
+        { type: "file", path: "one", content: "@one", start: 4, end: 8 },
+      ],
+      cursor: 8,
+      context: { items: [] },
+    })
+    const prompt = createPromptInputV2Store([state, setState])
+
+    prompt.addMention({ type: "file", path: "two", content: "@two", start: 0, end: 0 })
+
+    expect(prompt.state.prompt).toEqual([
+      { type: "text", content: "hey ", start: 0, end: 4 },
+      { type: "file", path: "one", content: "@one", start: 4, end: 8 },
+      { type: "file", path: "two", content: "@two", start: 8, end: 12 },
+      { type: "text", content: " ", start: 12, end: 13 },
+    ])
+    expect(prompt.state.cursor).toBe(13)
+  })
+
   test("resets the prompt and cursor", () => {
     const prompt = createPromptStore()
 
