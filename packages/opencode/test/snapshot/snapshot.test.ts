@@ -1120,6 +1120,28 @@ it.instance(
 )
 
 it.instance(
+  "diffFull with large text changes omits patch",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    const lines1 = Array.from({ length: 15_000 }, (_, i) => `line ${i}`).join("\n")
+    yield* write(`${tmp.path}/large.txt`, lines1)
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    const lines2 = Array.from({ length: 15_000 }, (_, i) => `line modified ${i}`).join("\n")
+    yield* write(`${tmp.path}/large.txt`, lines2)
+    const after = yield* snapshot.track()
+    expect(after).toBeTruthy()
+    const diffs = yield* snapshot.diffFull(before!, after!)
+    expect(diffs.length).toBe(1)
+    expect(diffs[0].file).toBe("large.txt")
+    expect(diffs[0].patch).toBe("")
+    expect(diffs[0].additions).toBeGreaterThan(10_000)
+  }),
+  { git: true },
+)
+
+it.instance(
   "diffFull with whitespace changes",
   Effect.gen(function* () {
     const tmp = yield* bootstrap()
