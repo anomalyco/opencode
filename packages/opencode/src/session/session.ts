@@ -328,10 +328,12 @@ export const Event = {
   Error: SessionV1.Event.Error,
 }
 
-export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext) {
-  const base = instance.project.vcs
-    ? path.join(instance.worktree, ".opencode", "plans")
-    : path.join(Global.Path.data, "plans")
+export function plan(input: { slug: string; time: { created: number } }, instance: InstanceContext, plansDirectory?: string) {
+  const base = plansDirectory
+    ? path.resolve(Global.expandTilde(plansDirectory))
+    : instance.project.vcs
+      ? path.join(instance.worktree, ".opencode", "plans")
+      : path.join(Global.Path.data, "plans")
   return path.join(base, [input.time.created, input.slug].join("-") + ".md")
 }
 
