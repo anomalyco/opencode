@@ -544,6 +544,7 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
     if (eventType === "integration.connection.updated") void refreshProviders()
 
     if (directory === "global") {
+      if (eventType === "server.connected") void session.resync().catch(() => {})
       if (eventType === "server.connected" && activeSessionsQuery.data === undefined && !activeSessionsQuery.isFetching)
         void activeSessionsQuery.refetch()
       applyGlobalEvent({

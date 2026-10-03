@@ -1419,6 +1419,9 @@ export function createServerSession(
       if (!count || count === 1) pinned.delete(sessionID)
       if (count && count > 1) pinned.set(sessionID, count - 1)
     },
+    resync() {
+      return Promise.all([...pinned.keys()].map((sessionID) => sync(sessionID, { force: true })))
+    },
     apply,
     applyV2,
   }
