@@ -876,6 +876,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "შეტყობინებების გასუფთავება",
   "sidebar.empty.title": "პროექტები არ არის გახსნილი",
   "sidebar.empty.description": "გახსენით პროექტი დასაწყებად",
+  "sidebar.projects.empty": "No projects",
   "debugBar.ariaLabel": "განვითარების შესრულების დიაგნოსტიკა",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

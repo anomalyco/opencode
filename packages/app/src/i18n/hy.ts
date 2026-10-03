@@ -883,6 +883,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Մաքրել ծանուցումները",
   "sidebar.empty.title": "Ոչ մի նախագիծ բաց",
   "sidebar.empty.description": "Բացեք նախագիծ՝ սկսելու համար",
+  "sidebar.projects.empty": "No projects",
   "debugBar.ariaLabel": "Զարգացման կատարողականի ախտորոշում",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

@@ -882,6 +882,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Vymazat oznámení",
   "sidebar.empty.title": "Nejsou otevřeny žádné projekty",
   "sidebar.empty.description": "Chcete-li začít, otevřete projekt",
+  "sidebar.projects.empty": "No projects",
   "debugBar.ariaLabel": "Diagnostika vývoje výkonnosti",
   "debugBar.na": "n/a",
   "debugBar.nav.label": "NAV",

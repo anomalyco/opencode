@@ -876,6 +876,7 @@ export const dict = {
   "sidebar.project.clearNotifications": "Kosongkan notifikasi",
   "sidebar.empty.title": "Tiada projek dibuka",
   "sidebar.empty.description": "Buka projek untuk bermula",
+  "sidebar.projects.empty": "No projects",
   "debugBar.ariaLabel": "Diagnostik prestasi pembangunan",
   "debugBar.na": "tiada",
   "debugBar.nav.label": "NAV",
