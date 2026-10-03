@@ -28,6 +28,7 @@
   ],
   "dependencies": {
     "@ai-sdk/provider": "3.0.8",
+    "@ai-sdk/provider-v4": "npm:@ai-sdk/provider@4.0.18",
     "@opencode/ai": "workspace:*",
     "@opencode/client": "workspace:*",
     "@opencode/protocol": "workspace:*",

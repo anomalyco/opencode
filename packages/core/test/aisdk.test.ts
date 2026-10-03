@@ -545,86 +545,140 @@ it.effect("projects replay metadata onto AI SDK prompt parts", () =>
   }),
 )
 
-it.effect("normalizes file data across AI SDK prompt parts", () =>
+for (const version of ["v3", "v4"] as const) {
+  it.effect(`normalizes ${version} file data across AI SDK prompt parts`, () =>
+    Effect.gen(function* () {
+      const aisdk = yield* AISDK.Service
+      yield* aisdk.hook.sdk((event) => {
+        event.sdk = { languageModel: () => ({ provider: event.model.providerID, specificationVersion: version }) }
+      })
+
+      const resolved = yield* aisdk.model(model("opaque-provider"))
+      const bytes = new Uint8Array([0, 1, 2, 3])
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: resolved,
+          messages: [
+            Message.user([
+              { type: "media", media: Media.bytes(bytes, "image/png"), filename: "bytes.png" },
+              { type: "media", media: Media.base64("AAAA", "image/png"), filename: "base64.png" },
+              {
+                type: "media",
+                media: Media.fromDataUrl("data:image/png;charset=utf-8;base64,AQID"),
+                filename: "inline.png",
+              },
+              { type: "media", media: Media.url("https://example.com/image.png", { mediaType: "image/png" }) },
+              { type: "media", media: Media.base64("s3://bucket/image.png", "image/png") },
+            ]),
+            Message.assistant({
+              type: "media",
+              media: Media.url("http://example.com/document.pdf", { mediaType: "application/pdf" }),
+              filename: "document.pdf",
+            }),
+            Message.tool({
+              id: "call_1",
+              name: "screenshot",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: "data:image/png;base64,BAUG", mime: "image/png", name: "tool.png" }],
+              },
+            }),
+          ],
+        }),
+      )
+
+      const data = (value: string | Uint8Array | URL) =>
+        version === "v3" ? value : value instanceof URL ? { type: "url", url: value } : { type: "data", data: value }
+      expect(prepared.body.prompt).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "file", mediaType: "image/png", data: data(bytes), filename: "bytes.png" },
+            { type: "file", mediaType: "image/png", data: data("AAAA"), filename: "base64.png" },
+            { type: "file", mediaType: "image/png", data: data("AQID"), filename: "inline.png" },
+            {
+              type: "file",
+              mediaType: "image/png",
+              data: data(new URL("https://example.com/image.png")),
+              filename: undefined,
+            },
+            { type: "file", mediaType: "image/png", data: data("s3://bucket/image.png"), filename: undefined },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "file",
+              mediaType: "application/pdf",
+              data: data(new URL("http://example.com/document.pdf")),
+              filename: "document.pdf",
+            },
+          ],
+        },
+        {
+          role: "tool",
+          content: [
+            {
+              type: "tool-result",
+              toolCallId: "call_1",
+              toolName: "screenshot",
+              output: { type: "text", value: "Media attached in the following user message." },
+              providerOptions: undefined,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Attached media from tool result:" },
+            { type: "file", mediaType: "image/png", data: data("BAUG"), filename: "tool.png" },
+          ],
+        },
+      ])
+    }),
+  )
+}
+
+it.effect("lowers v4 file content in assistant and tool results", () =>
   Effect.gen(function* () {
     const aisdk = yield* AISDK.Service
     yield* aisdk.hook.sdk((event) => {
-      event.sdk = { languageModel: () => ({ provider: event.model.providerID }) }
+      event.sdk = { languageModel: () => ({ specificationVersion: "v4" }) }
     })
-
     const resolved = yield* aisdk.model(model("opaque-provider"))
-    const bytes = new Uint8Array([0, 1, 2, 3])
+    const result = {
+      type: "content" as const,
+      value: [
+        { type: "text" as const, text: "Audio attached" },
+        { type: "file" as const, uri: "data:audio/wav;base64,AQID", mime: "audio/wav", name: "audio.wav" },
+        { type: "file" as const, uri: "https://example.test/audio.wav", mime: "audio/wav" },
+      ],
+    }
     const prepared = yield* compileRequest(
       LLM.request({
         model: resolved,
         messages: [
-          Message.user([
-            { type: "media", media: Media.bytes(bytes, "image/png"), filename: "bytes.png" },
-            { type: "media", media: Media.base64("AAAA", "image/png"), filename: "base64.png" },
-            { type: "media", media: Media.fromDataUrl("data:image/png;charset=utf-8;base64,AQID"), filename: "inline.png" },
-            { type: "media", media: Media.url("https://example.com/image.png", { mediaType: "image/png" }) },
-            { type: "media", media: Media.base64("s3://bucket/image.png", "image/png") },
-          ]),
-          Message.assistant({ type: "media", media: Media.url("http://example.com/document.pdf", { mediaType: "application/pdf" }), filename: "document.pdf" }),
-          Message.tool({
-            id: "call_1",
-            name: "screenshot",
-            result: {
-              type: "content",
-              value: [{ type: "file", uri: "data:image/png;base64,BAUG", mime: "image/png", name: "tool.png" }],
-            },
-          }),
+          Message.assistant({ type: "tool-result", id: "hosted", name: "audio", result }),
+          Message.tool({ id: "local", name: "audio", result }),
         ],
       }),
     )
-
-    expect(prepared.body.prompt).toEqual([
-      {
-        role: "user",
-        content: [
-          { type: "file", mediaType: "image/png", data: bytes, filename: "bytes.png" },
-          { type: "file", mediaType: "image/png", data: "AAAA", filename: "base64.png" },
-          { type: "file", mediaType: "image/png", data: "AQID", filename: "inline.png" },
+    for (const message of prepared.body.prompt) {
+      expect(message.content[0].output).toEqual({
+        type: "content",
+        value: [
+          { type: "text", text: "Audio attached" },
+          { type: "file", mediaType: "audio/wav", filename: "audio.wav", data: { type: "data", data: "AQID" } },
           {
             type: "file",
-            mediaType: "image/png",
-            data: new URL("https://example.com/image.png"),
+            mediaType: "audio/wav",
             filename: undefined,
-          },
-          { type: "file", mediaType: "image/png", data: "s3://bucket/image.png", filename: undefined },
-        ],
-      },
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "file",
-            mediaType: "application/pdf",
-            data: new URL("http://example.com/document.pdf"),
-            filename: "document.pdf",
+            data: { type: "url", url: new URL("https://example.test/audio.wav") },
           },
         ],
-      },
-      {
-        role: "tool",
-        content: [
-          {
-            type: "tool-result",
-            toolCallId: "call_1",
-            toolName: "screenshot",
-            output: { type: "text", value: "Media attached in the following user message." },
-            providerOptions: undefined,
-          },
-        ],
-      },
-      {
-        role: "user",
-        content: [
-          { type: "text", text: "Attached media from tool result:" },
-          { type: "file", mediaType: "image/png", data: "BAUG", filename: "tool.png" },
-        ],
-      },
-    ])
+      })
+    }
   }),
 )
 
@@ -694,6 +748,112 @@ const chatChunk = (text: string) =>
     choices: [{ index: 0, delta: { content: text }, finish_reason: "stop" }],
   })}\n\ndata: [DONE]\n\n`
 
+for (const version of ["v3", "v4"] as const) {
+  it.effect(`serializes media through a real ${version} provider after a tool call`, () =>
+    Effect.gen(function* () {
+      const { createOpenAICompatible } = yield* Effect.promise(async () =>
+        version === "v3" ? import("@ai-sdk/openai-compatible") : import("@ai-sdk/openai-compatible-v4"),
+      )
+      const aisdk = yield* AISDK.Service
+      const bodies: string[] = []
+      yield* aisdk.hook.sdk((event) => {
+        event.sdk = createOpenAICompatible({
+          name: "test-provider",
+          baseURL: "https://example.test/v1",
+          fetch: Object.assign(
+            async (_input: Parameters<typeof fetch>[0], init?: RequestInit) => {
+              bodies.push(String(init?.body))
+              const chunk =
+                bodies.length === 1
+                  ? `data: ${JSON.stringify({
+                      id: "response-1",
+                      object: "chat.completion.chunk",
+                      created: 0,
+                      model: "api-model",
+                      choices: [
+                        {
+                          index: 0,
+                          delta: {
+                            tool_calls: [
+                              { index: 0, id: "call_1", type: "function", function: { name: "read", arguments: "{}" } },
+                            ],
+                          },
+                          finish_reason: "tool_calls",
+                        },
+                      ],
+                    })}\n\ndata: [DONE]\n\n`
+                  : chatChunk("I can see the image.")
+              return new Response(chunk, { headers: { "content-type": "text/event-stream" } })
+            },
+            { preconnect: fetch.preconnect },
+          ),
+        })
+      })
+      const resolved = yield* aisdk.model(model(`@ai-sdk/openai-compatible@${version === "v3" ? "2" : "3"}`))
+      const first = yield* LLMClient.generate(LLM.request({ model: resolved, prompt: "Read the image" })).pipe(
+        Effect.provide(client),
+      )
+      const call = first.events.find(LLMEvent.is.toolCall)!
+      expect(call).toMatchObject({ id: "call_1", name: "read", input: {} })
+      expect(first.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_calls" })
+
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: resolved,
+          messages: [
+            Message.user([
+              { type: "text", text: "Read the image" },
+              { type: "media", media: Media.bytes(new Uint8Array([0, 1, 2]), "image/png") },
+              { type: "media", media: Media.base64("AQID", "image/png") },
+              { type: "media", media: Media.url("https://example.test/image.png", { mediaType: "image/png" }) },
+              { type: "media", media: Media.base64("JVBERi0=", "application/pdf"), filename: "input.pdf" },
+            ]),
+            Message.assistant({ type: "tool-call", id: call.id, name: call.name, input: call.input }),
+            Message.tool({
+              id: call.id,
+              name: call.name,
+              result: {
+                type: "content",
+                value: [
+                  { type: "text", text: "Read succeeded" },
+                  { type: "file", uri: "data:image/png;base64,BAUG", mime: "image/png", name: "tool.png" },
+                  { type: "file", uri: "https://example.test/tool.png", mime: "image/png" },
+                  {
+                    type: "file",
+                    uri: "data:application/pdf;base64,JVBERi0=",
+                    mime: "application/pdf",
+                    name: "tool.pdf",
+                  },
+                ],
+              },
+            }),
+          ],
+        }),
+      ).pipe(Effect.provide(client))
+
+      const body = JSON.parse(bodies[1])
+      expect(body.messages[3].content).toEqual([
+        { type: "text", text: "Attached media from tool result:" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,BAUG" } },
+        { type: "image_url", image_url: { url: "https://example.test/tool.png" } },
+        { type: "file", file: { filename: "tool.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+      ])
+      expect(body.messages[0].content).toEqual([
+        { type: "text", text: "Read the image" },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AAEC" } },
+        { type: "image_url", image_url: { url: "data:image/png;base64,AQID" } },
+        { type: "image_url", image_url: { url: "https://example.test/image.png" } },
+        { type: "file", file: { filename: "input.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } },
+      ])
+      expect(body.messages[2]).toMatchObject({ role: "tool", tool_call_id: "call_1" })
+      expect(JSON.parse(body.messages[2].content)).toEqual([{ type: "text", text: "Read succeeded" }])
+
+      expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["I can see the image."])
+      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+    }),
+  )
+}
+
 const compatibleModel = Effect.fn(function* (customFetch: typeof fetch) {
   const aisdk = yield* AISDK.Service
   yield* aisdk.hook.sdk((event) => {
@@ -748,12 +908,7 @@ it.effect("routes AI SDK requests and responses through HTTP hook middleware", (
     expect(sent[0]?.headers.get("x-hook")).toBe("applied")
     expect(sent[0]?.headers.get("authorization")).toBe("Bearer test")
     expect(JSON.parse(sent[0]?.body ?? "")).toMatchObject({ model: "api-model" })
-    expect(seen).toEqual([
-      "POST https://example.test/v1/chat/completions",
-      sent[0]?.body,
-      sent[0]?.body,
-      "status 200",
-    ])
+    expect(seen).toEqual(["POST https://example.test/v1/chat/completions", sent[0]?.body, sent[0]?.body, "status 200"])
     expect(response.events.filter(LLMEvent.is.textDelta).map((event) => event.text)).toEqual(["rewritten"])
   }),
 )
