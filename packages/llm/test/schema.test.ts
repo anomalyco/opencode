@@ -2,7 +2,19 @@ import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import * as OpenAIChat from "../src/protocols/openai-chat"
 import * as OpenAIResponses from "../src/protocols/openai-responses"
-import { ContentPart, LLMEvent, LLMRequest, Model, ModelID, ProviderID, Usage } from "../src/schema"
+import {
+  ContentPart,
+  InvalidRequestReason,
+  LLMError,
+  LLMEvent,
+  LLMRequest,
+  Model,
+  ModelID,
+  ProviderFailureClassification,
+  ProviderID,
+  ProviderMetadata,
+  Usage,
+} from "../src/schema"
 import { ProviderShared } from "../src/protocols/shared"
 
 const model = new Model({
@@ -82,5 +94,104 @@ describe("LLM.Usage", () => {
     expect(new Usage({ outputTokens: 10 }).visibleOutputTokens).toBe(10)
     expect(new Usage({ outputTokens: 4, reasoningTokens: 10 }).visibleOutputTokens).toBe(0)
     expect(new Usage({}).visibleOutputTokens).toBe(0)
+  })
+})
+
+describe("LLM.ProviderFailureClassification (M1-T01)", () => {
+  const decodeClassification = Schema.decodeUnknownSync(ProviderFailureClassification)
+  const encodeClassification = Schema.encodeSync(ProviderFailureClassification)
+  const decodeEvent = Schema.decodeUnknownSync(LLMEvent)
+  const encodeEvent = Schema.encodeSync(LLMEvent)
+  const classifications = ["context-overflow", "incomplete-stream"] as const
+  const metadata = { openai: { nested: { deep: true } } } satisfies ProviderMetadata
+  const decodeProviderError = (input: unknown) => {
+    const decoded = decodeEvent(input)
+    if (decoded.type !== "provider-error") throw new Error(`expected provider-error, got ${decoded.type}`)
+    return decoded
+  }
+
+  test("accepts both literals on the scalar schema with a lossless round-trip", () => {
+    for (const classification of classifications) {
+      expect(decodeClassification(classification)).toBe(classification)
+      expect(encodeClassification(classification)).toBe(classification)
+    }
+  })
+
+  test("rejects unsupported classification values", () => {
+    expect(() => decodeClassification("network-error")).toThrow()
+    expect(() => decodeClassification("")).toThrow()
+    expect(() => decodeClassification(null)).toThrow()
+    expect(() => decodeClassification(1)).toThrow()
+    expect(() => decodeClassification(undefined)).toThrow()
+  })
+
+  test("round-trips both literals through ProviderErrorEvent with nested metadata intact", () => {
+    for (const classification of classifications) {
+      const event = LLMEvent.providerError({
+        message: "m1 classification probe",
+        retryable: false,
+        classification,
+        providerMetadata: metadata,
+      })
+      expect(LLMEvent.is.providerError(event)).toBe(true)
+      const decoded = decodeProviderError(encodeEvent(event))
+      expect(decoded).toMatchObject({
+        type: "provider-error",
+        message: "m1 classification probe",
+        retryable: false,
+        classification,
+      })
+      expect(decoded.providerMetadata).toEqual(metadata)
+      expect(encodeEvent(decoded)).toEqual(encodeEvent(event))
+    }
+  })
+
+  test("round-trips both literals through real InvalidRequestReason and LLMError instances", () => {
+    const decodeReason = Schema.decodeUnknownSync(InvalidRequestReason)
+    const decodeError = Schema.decodeUnknownSync(LLMError)
+    for (const classification of classifications) {
+      const reason = new InvalidRequestReason({ message: "m1 real class probe", classification })
+      expect(decodeReason(reason).classification).toBe(classification)
+      const error = new LLMError({ module: "m1.module", method: "probe", reason })
+      const decodedError = decodeError(error)
+      expect(decodedError.reason._tag).toBe("InvalidRequest")
+      if (decodedError.reason._tag !== "InvalidRequest") throw new Error("expected InvalidRequest reason")
+      expect(decodedError.reason.classification).toBe(classification)
+      expect(decodedError.retryable).toBe(false)
+    }
+  })
+
+  test("keeps absent and explicit-undefined classification interchangeable", () => {
+    const absent = decodeProviderError({ type: "provider-error", message: "unclassified" })
+    const explicit = decodeProviderError({
+      type: "provider-error",
+      message: "unclassified",
+      classification: undefined,
+    })
+    expect(absent.classification).toBeUndefined()
+    expect(explicit.classification).toBeUndefined()
+    const encodedAbsent = JSON.parse(JSON.stringify(encodeEvent(absent)))
+    const encodedExplicit = JSON.parse(JSON.stringify(encodeEvent(explicit)))
+    expect(encodedAbsent).toEqual({ type: "provider-error", message: "unclassified" })
+    expect(encodedExplicit).toEqual(encodedAbsent)
+  })
+
+  test("leaves the pre-existing context-overflow payload untouched", () => {
+    const event = LLMEvent.providerError({
+      message: "Prompt has 5,958,968 tokens, but the configured context size is 256,000 tokens",
+      retryable: false,
+      classification: "context-overflow",
+      providerMetadata: metadata,
+    })
+    const decoded = decodeProviderError(encodeEvent(event))
+    expect(decoded).toMatchObject({
+      type: "provider-error",
+      message: "Prompt has 5,958,968 tokens, but the configured context size is 256,000 tokens",
+      retryable: false,
+      classification: "context-overflow",
+    })
+    expect(decoded.providerMetadata).toEqual(metadata)
+    // The dedicated overflow reader must still match only context-overflow.
+    expect(decoded.classification === "incomplete-stream").toBe(false)
   })
 })

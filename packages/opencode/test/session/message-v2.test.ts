@@ -1554,6 +1554,118 @@ describe("session.message-v2.fromError", () => {
   })
 })
 
+describe("G7 overflow classification", () => {
+  const url = "https://example.invalid/g7"
+  const message = "prompt is too long"
+  const envelope = {
+    type: "error",
+    error: { code: "context_length_exceeded", message: "opaque detail" },
+  }
+  const body = JSON.stringify(envelope)
+  const serialize = (input: unknown) => JSON.parse(JSON.stringify(MessageV2.fromError(input, { providerID })))
+
+  for (const fixture of [
+    { name: "typed message", message, statusCode: 400, responseBody: '{"detail":"fixture"}' },
+    { name: "typed status", message: "opaque detail", statusCode: 413, responseBody: '{"detail":"fixture"}' },
+    {
+      name: "typed body code",
+      message: "opaque detail",
+      statusCode: 400,
+      responseBody: '{"error":{"code":"context_length_exceeded"}}',
+    },
+  ]) {
+    test(fixture.name, () => {
+      expect(serialize(new APICallError({ ...fixture, url, requestBodyValues: {}, isRetryable: false }))).toStrictEqual(
+        {
+          name: "ContextOverflowError",
+          data: { message: fixture.message, responseBody: fixture.responseBody },
+        },
+      )
+    })
+  }
+
+  for (const fixture of [
+    { name: "envelope object", input: envelope },
+    { name: "envelope string", input: body },
+    { name: "envelope message wrapper", input: { message: body } },
+  ]) {
+    test(fixture.name, () => {
+      expect(serialize(fixture.input)).toStrictEqual({
+        name: "ContextOverflowError",
+        data: { message: "Input exceeds context window of this model", responseBody: body },
+      })
+    })
+  }
+
+  for (const fixture of [
+    { name: "generic Error", input: new Error(message), message },
+    { name: "generic string", input: message, message },
+    { name: "generic message wrapper", input: { message }, message },
+    { name: "Error containing envelope text uses fallback", input: new Error(body), message: body },
+  ]) {
+    test(fixture.name, () => {
+      expect(serialize(fixture.input)).toStrictEqual({
+        name: "ContextOverflowError",
+        data: { message: fixture.message },
+      })
+    })
+  }
+
+  for (const message of [
+    "429 Too Many Requests",
+    "Unauthorized",
+    "unrelated failure",
+    "rate limit exceeded: too many tokens",
+  ]) {
+    for (const fixture of [
+      { name: "Error", input: new Error(message), serialized: message },
+      { name: "string", input: message, serialized: JSON.stringify(message) },
+      { name: "wrapper", input: { message }, serialized: JSON.stringify({ message }) },
+    ]) {
+      test(`negative ${fixture.name}: ${message}`, () => {
+        expect(serialize(fixture.input)).toStrictEqual({
+          name: "UnknownError",
+          data: { message: fixture.serialized },
+        })
+      })
+    }
+  }
+
+  for (const fixture of [
+    { statusCode: 429, message: "Too Many Requests", isRetryable: true },
+    { statusCode: 401, message: "Unauthorized", isRetryable: false },
+  ]) {
+    test(`typed negative ${fixture.statusCode} preserves API payload`, () => {
+      const responseBody = JSON.stringify({ error: fixture.message })
+      const responseHeaders = { "content-type": "application/json", "x-g7": "preserved" }
+      expect(
+        serialize(new APICallError({ ...fixture, url, requestBodyValues: {}, responseBody, responseHeaders })),
+      ).toStrictEqual({
+        name: "APIError",
+        data: {
+          ...fixture,
+          message: `${fixture.message}: ${fixture.message}`,
+          responseBody,
+          responseHeaders,
+          metadata: { url },
+        },
+      })
+    })
+  }
+
+  test("quota envelope remains nonretryable APIError", () => {
+    const input = { type: "error", error: { code: "insufficient_quota" } }
+    expect(serialize(input)).toStrictEqual({
+      name: "APIError",
+      data: {
+        message: "Quota exceeded. Check your plan and billing details.",
+        isRetryable: false,
+        responseBody: JSON.stringify(input),
+      },
+    })
+  })
+})
+
 describe("session.message-v2.latest", () => {
   const TAIL_USER = MessageID.make("msg_001")
   const OVERFLOW_ASSISTANT = MessageID.make("msg_002")

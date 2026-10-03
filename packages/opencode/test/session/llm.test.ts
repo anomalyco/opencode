@@ -3,7 +3,10 @@ import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import path from "path"
-import { tool, type ModelMessage } from "ai"
+import { streamText, tool, type ModelMessage } from "ai"
+import { createOpenAICompatible } from "@ai-sdk/openai-compatible"
+import type { LanguageModelV3StreamPart } from "@ai-sdk/provider"
+import { LLMEvent } from "@opencode-ai/llm"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import { InstanceRef } from "../../src/effect/instance-ref"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -554,6 +557,169 @@ describe("session.llm.ai-sdk adapter", () => {
     if (events[1].type !== "step-finish") throw new Error("expected step-finish")
     expect(events[1].providerMetadata?.copilot).toBeUndefined()
   })
+
+  // M1-T02: the SDK reports wire EOF as a finish-step with unified "other" and no raw
+  // provider reason. The adapter must surface that as a classified provider error and
+  // it must precede the settlement, so a consumer that stops once the settlement lands
+  // (compaction cutoff) still observes the marker.
+  const canonicalFinishStep = {
+    type: "finish-step",
+    response: { id: "response-m1", timestamp: new Date(0), modelId: "gpt-test" },
+    finishReason: "other",
+    rawFinishReason: undefined,
+    usage: {
+      inputTokens: 3,
+      outputTokens: 2,
+      totalTokens: 5,
+      inputTokenDetails: { noCacheTokens: 3, cacheReadTokens: 1, cacheWriteTokens: 0 },
+      outputTokenDetails: { textTokens: 2, reasoningTokens: undefined },
+    },
+    providerMetadata: { openai: { step: true } },
+  } as AISDKAdapterEvent
+
+  test("M1-T02 canonical finish-step returns exactly [provider-error marker, step-finish settlement]", async () => {
+    const state = LLMAISDK.adapterState()
+    const events = await Effect.runPromise(LLMAISDK.toLLMEvents(state, canonicalFinishStep))
+
+    expect(events).toHaveLength(2)
+    expect(events[0]).toEqual({
+      type: "provider-error",
+      message: "Provider stream ended without a terminal finish event",
+      retryable: false,
+      classification: "incomplete-stream",
+    })
+    expect(events[1]).toMatchObject({
+      type: "step-finish",
+      index: 0,
+      reason: "unknown",
+      usage: {
+        inputTokens: 3,
+        outputTokens: 2,
+        totalTokens: 5,
+        cacheReadInputTokens: 1,
+        cacheWriteInputTokens: 0,
+      },
+      providerMetadata: { openai: { step: true } },
+    })
+    if (events[1].type !== "step-finish") throw new Error("expected step-finish")
+    expect(Object.keys(events[1]).sort()).toEqual(["index", "providerMetadata", "reason", "type", "usage"])
+    expect(Object.keys(events[1].usage!).sort()).toEqual([
+      "cacheReadInputTokens",
+      "cacheWriteInputTokens",
+      "inputTokens",
+      "outputTokens",
+      "totalTokens",
+    ])
+  })
+
+  test("M1-T02 canonical finish-step after nonempty text stays canonical", async () => {
+    const events = await adapt([
+      uncheckedAdapterEvent({ type: "text-delta", text: "partial output" }),
+      canonicalFinishStep,
+    ])
+
+    expect(events.map((event) => event.type)).toEqual(["text-delta", "provider-error", "step-finish"])
+    expect(events[1]).toMatchObject({
+      type: "provider-error",
+      message: "Provider stream ended without a terminal finish event",
+      retryable: false,
+      classification: "incomplete-stream",
+    })
+    expect(events[2]).toMatchObject({ type: "step-finish", index: 0, reason: "unknown" })
+  })
+
+  // M1-T03: every non-canonical finish-step shape must keep its pre-M1 result exactly —
+  // no marker, same settlement/failure. "network_error" is its own Effect.fail branch.
+  test("M1-T03 raw terminal reasons settle without a marker", async () => {
+    for (const rawFinishReason of ["other", "stop", "end_turn", ""]) {
+      const state = LLMAISDK.adapterState()
+      const events = await Effect.runPromise(
+        LLMAISDK.toLLMEvents(state, {
+          ...canonicalFinishStep,
+          rawFinishReason,
+        } as AISDKAdapterEvent),
+      )
+      expect(events).toHaveLength(1)
+      expect(events[0]).toMatchObject({
+        type: "step-finish",
+        index: 0,
+        reason: "unknown",
+        usage: {
+          inputTokens: 3,
+          outputTokens: 2,
+          totalTokens: 5,
+          cacheReadInputTokens: 1,
+          cacheWriteInputTokens: 0,
+        },
+        providerMetadata: { openai: { step: true } },
+      })
+      if (events[0].type !== "step-finish") throw new Error("expected step-finish")
+      expect(Object.keys(events[0]).sort()).toEqual(["index", "providerMetadata", "reason", "type", "usage"])
+    }
+  })
+
+  test("M1-T03 known normalized reason with undefined raw settles without a marker", async () => {
+    const state = LLMAISDK.adapterState()
+    const events = await Effect.runPromise(
+      LLMAISDK.toLLMEvents(state, {
+        ...canonicalFinishStep,
+        finishReason: "stop",
+      } as AISDKAdapterEvent),
+    )
+
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ type: "step-finish", index: 0, reason: "stop" })
+  })
+
+  test("M1-T03 network_error raw reason still fails before any settlement or marker", async () => {
+    const state = LLMAISDK.adapterState()
+    const failure = await Effect.runPromise(
+      LLMAISDK.toLLMEvents(state, {
+        ...canonicalFinishStep,
+        rawFinishReason: "network_error",
+      } as AISDKAdapterEvent),
+    ).then(
+      () => null,
+      (error: unknown) => error,
+    )
+
+    expect(failure).toBeInstanceOf(ProviderError.ResponseStreamError)
+    expect((failure as Error).message).toBe("Provider finish_reason: network_error")
+  })
+
+  test("M1-T03 SDK error chunk fails with the original error value", async () => {
+    const state = LLMAISDK.adapterState()
+    const original = new Error("sdk exploded")
+    const failure = await Effect.runPromise(
+      LLMAISDK.toLLMEvents(state, { type: "error", error: original } as AISDKAdapterEvent),
+    ).then(
+      () => null,
+      (error: unknown) => error,
+    )
+
+    expect(failure).toBe(original)
+  })
+
+  test("M1-T03 ordinary final finish still emits exactly one finish event", async () => {
+    const state = LLMAISDK.adapterState()
+    const events = await Effect.runPromise(
+      LLMAISDK.toLLMEvents(state, {
+        type: "finish",
+        finishReason: "other",
+        rawFinishReason: undefined,
+        totalUsage: {
+          inputTokens: 3,
+          outputTokens: 2,
+          totalTokens: 5,
+          inputTokenDetails: { noCacheTokens: 3, cacheReadTokens: 1, cacheWriteTokens: 0 },
+          outputTokenDetails: { textTokens: 2, reasoningTokens: undefined },
+        },
+      } as AISDKAdapterEvent),
+    )
+
+    expect(events).toHaveLength(1)
+    expect(events[0]).toMatchObject({ type: "finish", reason: "unknown" })
+  })
 })
 
 type Capture = {
@@ -563,6 +729,7 @@ type Capture = {
 }
 
 const state = {
+  requests: 0,
   server: null as ReturnType<typeof Bun.serve> | null,
   queue: [] as Array<{
     path: string
@@ -641,6 +808,7 @@ beforeAll(() => {
   state.server = Bun.serve({
     port: 0,
     async fetch(req) {
+      state.requests++
       const next = state.queue.shift()
       if (!next) {
         return new Response("unexpected request", { status: 500 })
@@ -662,6 +830,7 @@ beforeAll(() => {
 })
 
 beforeEach(() => {
+  state.requests = 0
   state.queue.length = 0
 })
 
@@ -751,6 +920,138 @@ function createEventResponse(chunks: unknown[], includeDone = false) {
     headers: { "Content-Type": "text/event-stream" },
   })
 }
+
+describe("session.llm G2 wire settlement", () => {
+  const chunk = (delta: Record<string, unknown>, reason?: string) => ({
+    id: "chatcmpl-g2",
+    object: "chat.completion.chunk",
+    choices: [{ delta, ...(reason === undefined ? {} : { finish_reason: reason }) }],
+  })
+  const role = chunk({ role: "assistant" })
+  const cases = [
+    { name: "absent reason", chunks: [role], done: true, raw: undefined, text: "", incomplete: true },
+    { name: "missing raw terminal", chunks: [role], done: false, raw: undefined, text: "", incomplete: true },
+    { name: "empty wire", chunks: [], done: false, raw: undefined, text: "", incomplete: true },
+    {
+      name: "literal other",
+      chunks: [role, chunk({}, "other")],
+      done: true,
+      raw: "other",
+      text: "",
+      incomplete: false,
+    },
+    {
+      name: "empty stop without DONE",
+      chunks: [role, chunk({}, "stop")],
+      done: false,
+      raw: "stop",
+      text: "",
+      incomplete: false,
+    },
+    {
+      name: "usable unknown",
+      chunks: [role, chunk({ content: "usable" }), chunk({}, "other")],
+      done: true,
+      raw: "other",
+      text: "usable",
+      incomplete: false,
+    },
+    {
+      name: "text without raw terminal",
+      chunks: [role, chunk({ content: "usable" })],
+      done: false,
+      raw: undefined,
+      text: "usable",
+      incomplete: true,
+    },
+  ]
+
+  for (const fixture of cases) {
+    test(`G2 provider ${fixture.name}`, async () => {
+      const request = waitRequest("/chat/completions", createEventResponse(fixture.chunks, fixture.done))
+      const model = createOpenAICompatible({
+        name: "g2",
+        baseURL: `${state.server!.url.origin}/v1`,
+        apiKey: "test-key",
+      })("g2-model")
+      const result = await model.doStream({
+        prompt: [{ role: "user", content: [{ type: "text", text: "settle" }] }],
+      })
+      const parts: LanguageModelV3StreamPart[] = []
+      await result.stream.pipeTo(
+        new WritableStream<LanguageModelV3StreamPart>({
+          write(part) {
+            parts.push(part)
+          },
+        }),
+      )
+      await request
+      const finishes = parts.filter((part) => part.type === "finish").map((part) => part.finishReason)
+      console.log("G2 provider observation", JSON.stringify({ name: fixture.name, requests: state.requests, finishes }))
+      expect(finishes).toEqual([{ unified: fixture.raw === "stop" ? "stop" : "other", raw: fixture.raw }])
+      expect(parts.filter((part) => part.type === "error")).toEqual([])
+      expect(
+        parts
+          .filter((part) => part.type === "text-delta")
+          .map((part) => part.delta)
+          .join(""),
+      ).toBe(fixture.text)
+      expect(state.requests).toBe(1)
+      expect(state.queue).toHaveLength(0)
+    })
+
+    test(`G2 adapter ${fixture.name}`, async () => {
+      const request = waitRequest("/chat/completions", createEventResponse(fixture.chunks, fixture.done))
+      const model = createOpenAICompatible({
+        name: "g2",
+        baseURL: `${state.server!.url.origin}/v1`,
+        apiKey: "test-key",
+      })("g2-model")
+      const result = streamText({ model, messages: [{ role: "user", content: "settle" }], maxRetries: 0 })
+      const adapter = LLMAISDK.adapterState()
+      const sdk: Parameters<typeof LLMAISDK.toLLMEvents>[1][] = []
+      const normalized: LLMEvent[] = []
+      for await (const event of result.fullStream) {
+        sdk.push(event)
+        normalized.push(...(await Effect.runPromise(LLMAISDK.toLLMEvents(adapter, event))))
+      }
+      await request
+      const finishes = sdk
+        .filter((event) => event.type === "finish-step")
+        .map((event) => ({
+          reason: event.finishReason,
+          raw: event.rawFinishReason,
+        }))
+      const errors: (string | undefined)[] = normalized
+        .filter((event) => event.type === "provider-error")
+        .map((event) => event.classification)
+      console.log(
+        "G2 adapter observation",
+        JSON.stringify({
+          name: fixture.name,
+          requests: state.requests,
+          finishes,
+          types: normalized.map((event) => event.type),
+          errors,
+        }),
+      )
+      expect(finishes).toEqual([{ reason: fixture.raw === "stop" ? "stop" : "other", raw: fixture.raw }])
+      expect(sdk.filter((event) => event.type === "error")).toEqual([])
+      expect(sdk.filter((event) => event.type === "finish")).toHaveLength(1)
+      expect(normalized.filter((event) => event.type === "step-finish").map((event) => event.reason)).toEqual([
+        fixture.raw === "stop" ? "stop" : "unknown",
+      ])
+      expect(
+        normalized
+          .filter((event) => event.type === "text-delta")
+          .map((event) => event.text)
+          .join(""),
+      ).toBe(fixture.text)
+      expect(state.requests).toBe(1)
+      expect(errors).toEqual(fixture.incomplete ? ["incomplete-stream"] : [])
+    })
+  }
+})
 
 describe("session.llm.stream", () => {
   const vivgridFixture = { providerID: "vivgrid", modelID: "gemini-3.1-pro-preview" }

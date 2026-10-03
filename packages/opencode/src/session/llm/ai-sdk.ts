@@ -101,7 +101,7 @@ export function toLLMEvents(
                 },
               }
         state.copilotTotalNanoAiu = undefined
-        return [
+        const settlement = [
           LLMEvent.stepFinish({
             index: state.step++,
             reason: finishReason(event.finishReason),
@@ -109,6 +109,20 @@ export function toLLMEvents(
             providerMetadata: metadata,
           }),
         ]
+        // A step that ends with the SDK's unified "other" and no raw provider reason
+        // means the wire never delivered a terminal finish event. Report it as a
+        // classified provider error placed BEFORE the settlement so consumers that
+        // stop after the settlement (compaction cutoff) still see the marker.
+        if (event.finishReason === "other" && event.rawFinishReason === undefined)
+          return [
+            LLMEvent.providerError({
+              message: "Provider stream ended without a terminal finish event",
+              retryable: false,
+              classification: "incomplete-stream",
+            }),
+            ...settlement,
+          ]
+        return settlement
       })
 
     case "finish":
