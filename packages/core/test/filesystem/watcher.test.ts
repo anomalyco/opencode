@@ -197,19 +197,34 @@ describeWatcher("Watcher", () => {
     }).pipe(Effect.provide(AppNodeBuilder.build(LayerNode.group([FSUtil.node, EventV2.node])))),
   )
 
-  it.live("ignores .git/index changes", () =>
+  it.live("publishes .git/index events", () =>
     withTmp(
       (directory) =>
         Effect.gen(function* () {
           const fs = yield* FSUtil.Service
           const index = path.join(directory, ".git", "index")
           yield* ready(directory)
-          yield* noUpdate(
-            (event) => event.file === index,
-            fs
-              .writeFileString(path.join(directory, "tracked.txt"), "a")
-              .pipe(Effect.andThen(Effect.promise(() => $`git add .`.cwd(directory).quiet())), Effect.asVoid),
-          )
+          expect(
+            yield* nextUpdate(
+              (event) => event.file === index,
+              fs
+                .writeFileString(path.join(directory, "tracked.txt"), "a")
+                .pipe(Effect.andThen(Effect.promise(() => $`git add .`.cwd(directory).quiet())), Effect.asVoid),
+            ),
+          ).toMatchObject({ file: index })
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live("ignores other .git changes", () =>
+    withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const fs = yield* FSUtil.Service
+          const msg = path.join(directory, ".git", "COMMIT_EDITMSG")
+          yield* ready(directory)
+          yield* noUpdate((event) => event.file === msg, fs.writeFileString(msg, "test"))
         }),
       { git: true },
     ),

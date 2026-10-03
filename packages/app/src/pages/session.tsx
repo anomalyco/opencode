@@ -957,7 +957,15 @@ export default function Page() {
         ? (details.properties as Record<string, unknown>)
         : undefined
     const file = typeof props?.file === "string" ? props.file : undefined
-    if (!file || file.startsWith(".git/")) return
+    if (!file) return
+    // .git is watched separately; rewrites of index (stage/commit) and HEAD
+    // (branch switch) change the VCS state the review panel renders, so refresh
+    // for those and skip the rest of .git
+    const segments = file.split(/[\\/]/)
+    if (segments.includes(".git")) {
+      const name = segments[segments.length - 1]
+      if (name !== "index" && name !== "HEAD") return
+    }
     refreshVcs()
   })
   onCleanup(stopVcs)
