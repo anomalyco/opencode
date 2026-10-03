@@ -51,13 +51,17 @@ export function createPromptAttachmentsCore(input: PromptAttachmentsCoreInput) {
       return false
     }
 
+    const blob = await (input.draftStore ? input.draftStore.putBlob(file) : createBlobReference(file)).catch(() =>
+      createBlobReference(file),
+    )
+
     const attachment: ImageAttachmentPart = {
       type: "image",
       id: uuid(),
       filename: file.name,
       sourcePath: input.getPathForFile?.(file) || undefined,
       mime,
-      blob: input.draftStore ? await input.draftStore.putBlob(file) : await createBlobReference(file),
+      blob,
     }
     target.prompt.set([...target.prompt.current(), attachment], target.cursor)
     return true

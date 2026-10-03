@@ -221,11 +221,28 @@ export function createPromptInputV2Attachments(
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
 
-async function blobReference(file: File) {
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer())))
+const hexID = (bytes: Uint8Array) =>
+  Array.from(bytes)
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("")
-  return { id, url: URL.createObjectURL(file) }
+
+function randomID() {
+  const bytes = new Uint8Array(32)
+  crypto.getRandomValues(bytes)
+  return hexID(bytes)
+}
+
+async function blobReference(file: File) {
+  // crypto.subtle is undefined on insecure (http) origins; getRandomValues works everywhere.
+  if (crypto.subtle?.digest) {
+    try {
+      const id = hexID(new Uint8Array(await crypto.subtle.digest("SHA-256", await file.arrayBuffer())))
+      return { id, url: URL.createObjectURL(file) }
+    } catch {
+      // fall through to the random fallback below
+    }
+  }
+  return { id: randomID(), url: URL.createObjectURL(file) }
 }
 const imageExtensions = new Map([
   ["gif", "image/gif"],
