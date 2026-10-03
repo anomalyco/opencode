@@ -67,7 +67,12 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       if (!updater || !current || current.type !== "available") return
       setState({ type: "installing", version: current.version })
       await updater.apply(current.version).then(
-        () => setState({ type: "installed", version: current.version }),
+        () => {
+          setState({ type: "installed", version: current.version })
+          setNotification((notice) =>
+            notice?.source === "client" ? { ...notice, type: "installed", version: current.version } : notice,
+          )
+        },
         (error) => setState({ type: "failed", message: errorMessage(error) }),
       )
     }
@@ -85,6 +90,10 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       if (signal.aborted) return
       if (result?.type === "unavailable") return result.message
       setState(result)
+      setNotification((notice) => {
+        if (notice?.source !== "client") return notice
+        return result ? { ...notice, ...result } : undefined
+      })
     }
 
     const restart = () => {
@@ -98,14 +107,14 @@ export const { use: useUpdateNotification, provider: UpdateNotificationProvider 
       const current = notification()
       const known = current && (current.source === "client" || !current.remote) ? current : undefined
       if (origin === "notification" && !known) return
-      const active = state()
-      // The notification can predate an installation through /update.
-      if (known && active?.type !== "installing" && !(active?.type === "installed" && active.version === known.version))
-        setState({ type: known.type, version: known.version })
       const status = state()?.type
+      // An available notification may be stale; an installed one still requires a restart.
+      if (status !== "installing" && status !== "installed")
+        setState(known?.type === "installed" ? { type: "installed", version: known.version } : undefined)
+      const next = state()?.type
       dialog.replace(() => (
         <DialogUpdate
-          check={status === undefined || status === "failed" ? check : undefined}
+          check={next === "installing" || next === "installed" ? undefined : check}
           state={state}
           skip={dismiss}
           install={install}
