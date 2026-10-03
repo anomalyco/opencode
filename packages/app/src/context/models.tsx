@@ -1,10 +1,11 @@
 import { type Accessor, createMemo, createResource } from "solid-js"
 import { createStore } from "solid-js/store"
 import { DateTime } from "luxon"
-import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
+import { uniqueBy } from "remeda"
 import { createSimpleContext } from "@opencode-ai/ui/context"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
+import { selectLatest } from "./model-latest"
 
 export type ModelKey = { providerID: string; modelID: string }
 
@@ -56,34 +57,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
         ),
     )
 
-    const latest = createMemo(() =>
-      pipe(
-        available(),
-        filter(
-          (x) =>
-            Math.abs(
-              (release().get(modelKey({ providerID: x.provider.id, modelID: x.id })) ?? DateTime.invalid("invalid"))
-                .diffNow()
-                .as("months"),
-            ) < 6,
-        ),
-        groupBy((x) => x.provider.id),
-        mapValues((models) =>
-          pipe(
-            models,
-            groupBy((x) => x.family),
-            values(),
-            (groups) =>
-              groups.flatMap((g) => {
-                const first = firstBy(g, [(x) => x.release_date, "desc"])
-                return first ? [{ modelID: first.id, providerID: first.provider.id }] : []
-              }),
-          ),
-        ),
-        values(),
-        flat(),
-      ),
-    )
+    const latest = createMemo(() => selectLatest(available(), release()))
 
     const latestSet = createMemo(() => new Set(latest().map((x) => modelKey(x))))
 
