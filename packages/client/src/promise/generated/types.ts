@@ -2154,6 +2154,7 @@ export type ConfigEntry =
             name?: string
             env?: Array<string>
             package?: string
+            compatibility?: ModelCompatibility
             settings?: ConfigProviderSettings
             headers?: { [x: string]: string }
             body?: { [x: string]: JsonValue }

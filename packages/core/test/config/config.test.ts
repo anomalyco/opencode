@@ -829,6 +829,22 @@ describe("Config", () => {
     expect(migrated.providers?.custom?.models?.boolean?.compatibility).toBeUndefined()
   })
 
+  test("migrates v1 setCacheKey to provider compatibility", () => {
+    const migrated = ConfigMigrateV1.migrate({
+      provider: {
+        enabled: { options: { setCacheKey: true, baseURL: "https://enabled.example/v1" } },
+        disabled: { options: { setCacheKey: false } },
+        unset: { options: { baseURL: "https://unset.example/v1" } },
+      },
+    })
+
+    expect(migrated.providers?.enabled?.compatibility).toEqual({ supportsPromptCacheKey: true })
+    expect(migrated.providers?.enabled?.settings).toEqual({ baseURL: "https://enabled.example/v1" })
+    expect(migrated.providers?.disabled?.compatibility).toEqual({ supportsPromptCacheKey: false })
+    expect(migrated.providers?.disabled?.settings).toEqual({})
+    expect(migrated.providers?.unset?.compatibility).toBeUndefined()
+  })
+
   for (const subtask of [true, false]) {
     test(`migrates v1 command configuration with subtask: ${subtask}`, () => {
       expect(
