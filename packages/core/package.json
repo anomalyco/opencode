@@ -127,6 +127,9 @@
     "xdg-basedir": "5.1.0",
     "zod": "catalog:"
   },
+  "optionalDependencies": {
+    "@opencode-ai/proxy-auth-native": "workspace:*"
+  },
   "overrides": {
     "drizzle-orm": "catalog:"
   }

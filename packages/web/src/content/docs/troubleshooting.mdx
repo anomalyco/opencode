@@ -225,6 +225,60 @@ Here are some common issues and how to resolve them.
 
 ---
 
+### Authentication issues
+
+If authentication is failing, try the following steps in order:
+
+1. Run `opencode auth login` to re-authenticate with your provider
+2. Check that your API key or credentials are still valid
+3. Clear your credentials and set them again
+4. Ensure your credentials file is readable and not corrupted
+
+---
+
+### Proxy authentication (407)
+
+If requests fail with `407` or "Proxy requires authentication", your network
+routes traffic through an authenticating proxy (common on corporate networks).
+
+1. Set the proxy URL if it is not already in your environment:
+
+   ```bash
+   export HTTPS_PROXY=http://proxy.example.com:8080
+   export HTTP_PROXY=http://proxy.example.com:8080
+   export NO_PROXY=localhost,127.0.0.1
+   ```
+
+2. For **Kerberos/Negotiate**, ensure you have a valid ticket (`kinit`, or sign
+   in on Windows). OpenCode uses your OS credentials automatically when the
+   optional native addon is installed.
+
+3. For **NTLM** or **Basic**, set credentials explicitly:
+
+   ```jsonc
+   {
+     "proxy": {
+       "url": "http://proxy.example.com:8080",
+       "auth": "ntlm",
+       "username": "DOMAIN\\user",
+       "password": "{env:PROXY_PASSWORD}"
+     }
+   }
+   ```
+
+:::caution
+Some gateways "fix" proxy authentication by allow-listing requests whose
+`User-Agent` starts with `curl/`. That is a spoofable workaround and is not a
+substitute for real proxy authentication. Prefer configuring the mechanisms
+above, or ask your proxy team to allow-list the destinations you need.
+:::
+
+If the native addon is unavailable, OpenCode falls back to Basic credentials and
+logs a one-time warning. Run with `--print-logs` to see the exact mechanism and
+error.
+
+---
+
 ### Model not available
 
 1. Check that you've authenticated with the provider

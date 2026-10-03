@@ -423,6 +423,32 @@ Use the `experimental.policies` option to allow or deny OpenCode actions on conf
 
 ---
 
+### Proxy
+
+Configure the HTTP proxy and its authentication. This complements the standard
+proxy environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`), which are
+used when `proxy.url` is not set.
+
+```jsonc
+{
+  "proxy": {
+    "url": "http://proxy.example.com:8080",  // optional; else HTTP(S)_PROXY/env
+    "auth": "auto",                           // auto | negotiate | ntlm | basic | none
+    "username": "DOMAIN\\user",               // optional; overrides URL userinfo
+    "password": "{env:PROXY_PASSWORD}",       // optional; {env:...} substitution
+    "no_proxy": "localhost,127.0.0.1,.internal" // optional; merged with NO_PROXY
+  }
+}
+```
+
+`auth: "auto"` selects the mechanism from the proxy's `Proxy-Authenticate`
+challenges, trying Negotiate (Kerberos/SPNEGO), then NTLM, then Basic. Negotiate
+and NTLM use the optional native addon and your OS credentials; without it,
+OpenCode falls back to Basic. Loopback and `no_proxy` targets always connect
+directly. See [Network](/docs/network) for details.
+
+---
+
 ### Image attachments
 
 OpenCode normalizes image attachments before sending them to the model. By default, images are resized when they exceed `2000x2000` pixels or `5242880` base64 bytes.

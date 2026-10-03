@@ -1,0 +1,37 @@
+{
+  "name": "@opencode-ai/proxy-auth-native",
+  "version": "0.0.1",
+  "description": "Optional native proxy authentication (SSPI / GSSAPI) for OpenCode",
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "native",
+    "*.node",
+    "npm"
+  ],
+  "optionalDependencies": {
+    "@opencode-ai/proxy-auth-native-win32-x64": "0.0.1",
+    "@opencode-ai/proxy-auth-native-darwin-arm64": "0.0.1",
+    "@opencode-ai/proxy-auth-native-darwin-x64": "0.0.1",
+    "@opencode-ai/proxy-auth-native-linux-x64-gnu": "0.0.1",
+    "@opencode-ai/proxy-auth-native-linux-x64-musl": "0.0.1"
+  },
+  "napi": {
+    "binaryName": "proxy-auth-native",
+    "targets": [
+      "x86_64-pc-windows-msvc",
+      "aarch64-apple-darwin",
+      "x86_64-apple-darwin",
+      "x86_64-unknown-linux-gnu",
+      "x86_64-unknown-linux-musl"
+    ]
+  },
+  "scripts": {
+    "build": "napi build --platform --release",
+    "artifacts": "napi artifacts"
+  }
+}
