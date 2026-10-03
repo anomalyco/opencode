@@ -5,10 +5,13 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
 import { tool } from "ai"
 import { Cause, Effect, Exit, Fiber, Layer, Stream } from "effect"
+import * as TestClock from "effect/testing/TestClock"
 import path from "path"
 import z from "zod"
 import type { Agent } from "../../src/agent/agent"
 import { Provider } from "@/provider/provider"
+import { ProviderError } from "@/provider/error"
+import { Snapshot } from "@/snapshot"
 
 import { Session } from "@/session/session"
 import { LLM } from "../../src/session/llm"
@@ -232,6 +235,386 @@ const boot = Effect.fn("test.boot")(function* () {
   const provider = yield* Provider.Service
   return { processors, session, provider }
 })
+
+function retryStreams(streams: Stream.Stream<LLMEvent, unknown>[], snapshots?: Layer.Layer<Snapshot.Service>) {
+  let calls = 0
+  const llm = Layer.succeed(LLM.Service, LLM.Service.of({ stream: () => streams[calls++] ?? Stream.empty }))
+  return {
+    it: testEffect(
+      snapshots
+        ? LayerNode.compile(root, [...replacements, [LLM.node, llm], [Snapshot.node, snapshots]])
+        : LayerNode.compile(root, [...replacements, [LLM.node, llm]]),
+    ),
+    calls: () => calls,
+  }
+}
+
+const failedStream = (...events: LLMEvent[]) =>
+  Stream.make(...events).pipe(Stream.concat(Stream.fail(new ProviderError.ResponseStreamError("Service unavailable"))))
+
+const runRetryCase = Effect.fn("test.retryCase")(function* (dir: string, tools: LLM.StreamInput["tools"] = {}) {
+  const { processors, session, provider } = yield* boot()
+  const chat = yield* session.create({})
+  const parent = yield* user(chat.id, "retry")
+  const msg = yield* assistant(chat.id, parent.id, path.resolve(dir))
+  const mdl = yield* provider.getModel(ref.providerID, ref.modelID)
+  const handle = yield* processors.create({ assistantMessage: msg, sessionID: chat.id, model: mdl })
+  const input = {
+    user: parent,
+    sessionID: chat.id,
+    model: mdl,
+    agent: agent(),
+    system: [],
+    messages: [{ role: "user", content: "retry" }],
+    tools,
+  } satisfies LLM.StreamInput
+  return { handle, input, msg, chat }
+})
+
+const retryText = retryStreams([
+  failedStream(
+    LLMEvent.stepStart({ index: 0 }),
+    LLMEvent.textStart({ id: "first" }),
+    LLMEvent.textDelta({ id: "first", text: "discard" }),
+  ),
+  Stream.make(
+    LLMEvent.stepStart({ index: 0 }),
+    LLMEvent.textStart({ id: "second" }),
+    LLMEvent.textDelta({ id: "second", text: "keep" }),
+    LLMEvent.textEnd({ id: "second" }),
+    LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+    LLMEvent.finish({ reason: "stop" }),
+  ),
+])
+
+retryText.it.effect("session.processor discards failed text and step parts with removal events", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg, chat } = yield* runRetryCase(dir)
+        const events = yield* EventV2Bridge.Service
+        const removed: string[] = []
+        const off = yield* events.listen((event) => {
+          if (event.type === SessionV1.Event.PartRemoved.type) {
+            const data = event.data as typeof SessionV1.Event.PartRemoved.data.Type
+            if (data.messageID === msg.id) removed.push(data.partID)
+          }
+          return Effect.void
+        })
+        const fiber = yield* handle.process(input).pipe(Effect.forkChild)
+        yield* TestClock.adjust("10 seconds")
+        expect(yield* Fiber.join(fiber)).toBe("continue")
+        yield* off
+        const parts = yield* MessageV2.parts(msg.id)
+        expect(retryText.calls()).toBe(2)
+        expect(parts.filter((part) => part.type === "text").map((part) => part.text)).toEqual(["keep"])
+        expect(parts.filter((part) => part.type === "step-start")).toHaveLength(1)
+        expect(removed).toHaveLength(2)
+      }),
+    { config: cfg },
+  ),
+)
+
+const retryReasoning = retryStreams([
+  failedStream(LLMEvent.reasoningStart({ id: "first" }), LLMEvent.reasoningDelta({ id: "first", text: "discard" })),
+  Stream.make(
+    LLMEvent.reasoningStart({ id: "second" }),
+    LLMEvent.reasoningDelta({ id: "second", text: "keep" }),
+    LLMEvent.reasoningEnd({ id: "second" }),
+    LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+  ),
+])
+
+retryReasoning.it.effect("session.processor discards failed reasoning", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg } = yield* runRetryCase(dir)
+        const fiber = yield* handle.process(input).pipe(Effect.forkChild)
+        yield* TestClock.adjust("10 seconds")
+        expect(yield* Fiber.join(fiber)).toBe("continue")
+        expect(retryReasoning.calls()).toBe(2)
+        expect(
+          (yield* MessageV2.parts(msg.id)).filter((part) => part.type === "reasoning").map((part) => part.text),
+        ).toEqual(["keep"])
+      }),
+    { config: cfg },
+  ),
+)
+
+let toolExecutions = 0
+const executeTool = Stream.make(LLMEvent.toolCall({ id: "execute", name: "lookup", input: { query: "once" } })).pipe(
+  Stream.concat(
+    Stream.fromEffect(
+      Effect.sync(() => {
+        toolExecutions++
+        return LLMEvent.toolResult({ id: "execute", name: "lookup", result: { type: "text", value: "done" } })
+      }),
+    ),
+  ),
+)
+const retryExecuted = retryStreams([
+  executeTool.pipe(Stream.concat(Stream.fail(new ProviderError.ResponseStreamError("Service unavailable")))),
+  executeTool.pipe(Stream.concat(Stream.make(LLMEvent.stepFinish({ index: 0, reason: "stop" })))),
+])
+
+retryExecuted.it.live("session.processor does not retry a stream after executing a tool", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg } = yield* runRetryCase(dir)
+        const result = yield* handle.process(input)
+        expect(toolExecutions).toBe(1)
+        expect(result).toBe("stop")
+        expect(retryExecuted.calls()).toBe(1)
+        expect(handle.message.error?.name).toBe("APIError")
+        const tools = (yield* MessageV2.parts(msg.id)).filter((part) => part.type === "tool")
+        expect(tools).toHaveLength(1)
+        expect(tools[0]?.state.status).toBe("completed")
+      }),
+    { config: cfg },
+  ),
+)
+
+const retryPending = retryStreams([
+  failedStream(LLMEvent.toolInputStart({ id: "pending", name: "lookup" })),
+  Stream.make(
+    LLMEvent.textStart({ id: "next" }),
+    LLMEvent.textDelta({ id: "next", text: "recovered" }),
+    LLMEvent.textEnd({ id: "next" }),
+    LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+  ),
+])
+
+retryPending.it.effect("session.processor retries a pending tool input without retaining it", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg } = yield* runRetryCase(dir)
+        const fiber = yield* handle.process(input).pipe(Effect.forkChild)
+        yield* TestClock.adjust("10 seconds")
+        expect(yield* Fiber.join(fiber)).toBe("continue")
+        expect(retryPending.calls()).toBe(2)
+        expect((yield* MessageV2.parts(msg.id)).filter((part) => part.type === "tool")).toHaveLength(0)
+      }),
+    { config: cfg },
+  ),
+)
+
+const nonRetryable = retryStreams([
+  Stream.make(LLMEvent.textStart({ id: "partial" }), LLMEvent.textDelta({ id: "partial", text: "partial" })).pipe(
+    Stream.concat(Stream.fail(new Error("invalid request"))),
+  ),
+])
+
+nonRetryable.it.live("session.processor retains partial text on non-retryable errors", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg } = yield* runRetryCase(dir)
+        expect(yield* handle.process(input)).toBe("stop")
+        expect(nonRetryable.calls()).toBe(1)
+        expect(
+          (yield* MessageV2.parts(msg.id)).filter((part) => part.type === "text").map((part) => part.text),
+        ).toEqual(["partial"])
+      }),
+    { config: cfg },
+  ),
+)
+
+const retryOldSteps = retryStreams([
+  failedStream(
+    LLMEvent.stepStart({ index: 0 }),
+    LLMEvent.textStart({ id: "discard" }),
+    LLMEvent.textDelta({ id: "discard", text: "discard" }),
+  ),
+  Stream.make(
+    LLMEvent.textStart({ id: "new" }),
+    LLMEvent.textDelta({ id: "new", text: "new" }),
+    LLMEvent.textEnd({ id: "new" }),
+    LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+  ),
+])
+
+retryOldSteps.it.effect("session.processor keeps parts of previously completed steps", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg, chat } = yield* runRetryCase(dir)
+        const session = yield* Session.Service
+        const previous = yield* session.updatePart({
+          id: PartID.ascending(),
+          messageID: msg.id,
+          sessionID: chat.id,
+          type: "text",
+          text: "previous",
+        })
+        const completed = yield* session.updatePart({
+          id: PartID.ascending(),
+          messageID: msg.id,
+          sessionID: chat.id,
+          type: "step-finish",
+          reason: "stop",
+          tokens: msg.tokens,
+          cost: 0,
+        })
+        const fiber = yield* handle.process(input).pipe(Effect.forkChild)
+        yield* TestClock.adjust("10 seconds")
+        expect(yield* Fiber.join(fiber)).toBe("continue")
+        expect(retryOldSteps.calls()).toBe(2)
+        expect(
+          (yield* MessageV2.parts(msg.id)).filter((part) => part.type === "text").map((part) => part.text),
+        ).toEqual(["previous", "new"])
+        expect((yield* MessageV2.parts(msg.id)).some((part) => part.id === previous.id)).toBe(true)
+        expect((yield* MessageV2.parts(msg.id)).some((part) => part.id === completed.id)).toBe(true)
+      }),
+    { config: cfg },
+  ),
+)
+
+const snapshotCalls = { track: 0 }
+const snapshots = Layer.succeed(
+  Snapshot.Service,
+  Snapshot.Service.of({
+    init: () => Effect.void,
+    cleanup: () => Effect.void,
+    track: () => Effect.sync(() => (snapshotCalls.track++ === 0 ? "before" : "after")),
+    patch: (hash) => Effect.succeed({ hash, files: hash === "before" ? ["tracked.txt"] : [] }),
+    restore: () => Effect.void,
+    revert: () => Effect.void,
+    diff: () => Effect.succeed(""),
+    diffFull: () => Effect.succeed([]),
+  }),
+)
+const retrySnapshot = retryStreams(
+  [
+    failedStream(LLMEvent.stepStart({ index: 0 }), LLMEvent.stepFinish({ index: 0, reason: "stop" })),
+    Stream.make(LLMEvent.stepStart({ index: 0 }), LLMEvent.stepFinish({ index: 0, reason: "stop" })),
+  ],
+  snapshots,
+)
+
+retrySnapshot.it.effect("session.processor retains the original snapshot after discarding a finished failed step", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg } = yield* runRetryCase(dir)
+        const fiber = yield* handle.process(input).pipe(Effect.forkChild)
+        yield* TestClock.adjust("10 seconds")
+        expect(yield* Fiber.join(fiber)).toBe("continue")
+        expect(retrySnapshot.calls()).toBe(2)
+        const parts = yield* MessageV2.parts(msg.id)
+        const starts = parts.filter((part) => part.type === "step-start")
+        const patches = parts.filter((part) => part.type === "patch")
+        expect(starts).toHaveLength(1)
+        expect(patches).toHaveLength(1)
+        expect(patches[0]?.files).toContain("tracked.txt")
+        expect(patches[0]?.hash).toBe("before")
+        expect(starts[0]?.snapshot).toBe("before")
+      }),
+    { config: cfg },
+  ),
+)
+
+const retryEmpty = retryStreams([
+  Stream.make(
+    LLMEvent.stepStart({ index: 0 }),
+    LLMEvent.reasoningStart({ id: "abandoned" }),
+    LLMEvent.reasoningDelta({ id: "abandoned", text: "partial reasoning" }),
+    LLMEvent.stepFinish({ index: 0, reason: "unknown" }),
+    LLMEvent.finish({ reason: "unknown" }),
+  ),
+  Stream.make(
+    LLMEvent.textStart({ id: "recovered" }),
+    LLMEvent.textDelta({ id: "recovered", text: "recovered" }),
+    LLMEvent.textEnd({ id: "recovered" }),
+    LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+  ),
+])
+
+retryEmpty.it.effect("session.processor retries an empty unknown-finish stream and discards reasoning", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg } = yield* runRetryCase(dir)
+        const fiber = yield* handle.process(input).pipe(Effect.forkChild)
+        yield* TestClock.adjust("10 seconds")
+        expect(yield* Fiber.join(fiber)).toBe("continue")
+        expect(retryEmpty.calls()).toBe(2)
+        const parts = yield* MessageV2.parts(msg.id)
+        expect(parts.filter((part) => part.type === "reasoning")).toHaveLength(0)
+        expect(parts.filter((part) => part.type === "text").map((part) => part.text)).toEqual(["recovered"])
+      }),
+    { config: cfg },
+  ),
+)
+
+const retryExhausted = retryStreams(Array.from({ length: 7 }, () => Stream.empty))
+
+retryExhausted.it.effect("session.processor surfaces an error when an empty stream exhausts retries", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg } = yield* runRetryCase(dir)
+        const fiber = yield* handle.process(input).pipe(Effect.forkChild)
+        yield* TestClock.adjust("2 minutes")
+        expect(yield* Fiber.join(fiber)).toBe("stop")
+        expect(retryExhausted.calls()).toBe(6)
+        expect(handle.message.error?.name).toBe("APIError")
+        const stored = yield* MessageV2.get({ sessionID: msg.sessionID, messageID: msg.id })
+        if (stored.info.role !== "assistant") throw new Error("expected assistant")
+        expect(stored.info.error?.name).toBe("APIError")
+      }),
+    { config: cfg },
+  ),
+)
+
+const missingFinishWithText = retryStreams([
+  Stream.make(
+    LLMEvent.textStart({ id: "without-reason" }),
+    LLMEvent.textDelta({ id: "without-reason", text: "valid content" }),
+    LLMEvent.textEnd({ id: "without-reason" }),
+    LLMEvent.stepFinish({ index: 0, reason: "unknown" }),
+  ),
+])
+
+missingFinishWithText.it.live("session.processor accepts text even without a finish reason", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg } = yield* runRetryCase(dir)
+        expect(yield* handle.process(input)).toBe("continue")
+        expect(missingFinishWithText.calls()).toBe(1)
+        expect(
+          (yield* MessageV2.parts(msg.id)).filter((part) => part.type === "text").map((part) => part.text),
+        ).toEqual(["valid content"])
+      }),
+    { config: cfg },
+  ),
+)
+
+const missingFinishWithTool = retryStreams([
+  Stream.make(
+    LLMEvent.toolCall({ id: "completed", name: "lookup", input: {} }),
+    LLMEvent.toolResult({ id: "completed", name: "lookup", result: { type: "text", value: "done" } }),
+    LLMEvent.stepFinish({ index: 0, reason: "unknown" }),
+  ),
+])
+
+missingFinishWithTool.it.live("session.processor accepts tool output even without a finish reason", () =>
+  provideTmpdirInstance(
+    (dir) =>
+      Effect.gen(function* () {
+        const { handle, input, msg } = yield* runRetryCase(dir)
+        expect(yield* handle.process(input)).toBe("continue")
+        expect(missingFinishWithTool.calls()).toBe(1)
+        const tools = (yield* MessageV2.parts(msg.id)).filter((part) => part.type === "tool")
+        expect(tools).toHaveLength(1)
+        expect(tools[0]?.state.status).toBe("completed")
+      }),
+    { config: cfg },
+  ),
+)
 
 // ---------------------------------------------------------------------------
 // Tests
