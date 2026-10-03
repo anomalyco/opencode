@@ -85,6 +85,7 @@ export function make<
 >(
   input: MakeInput<Implementation, Items, T>,
 ): Node<Layer.Success<Implementation>, Layer.Error<Implementation> | Error<Items[number]>, T> {
+  validateNodes(input.service !== undefined ? input.service.key : input.name, input.deps)
   return {
     kind: "layer",
     name: input.service !== undefined ? input.service.key : input.name,
@@ -92,6 +93,13 @@ export function make<
     implementation: input.layer,
     dependencies: input.deps,
     tag: input.tag,
+  }
+}
+
+function validateNodes(owner: string, nodes: readonly unknown[]) {
+  for (const [index, node] of nodes.entries()) {
+    if (node !== undefined && node !== null && typeof node === "object" && "name" in node) continue
+    throw new Error(`LayerNode ${owner}: invalid dependency at index ${index} (${String(node)})`)
   }
 }
 
@@ -108,6 +116,7 @@ export function unbound<R, Shape, const T extends Tag>(service: Context.Key<R, S
 export function group<const Items extends readonly AnyNode[]>(
   dependencies: Items,
 ): Node<Output<Items[number]>, Error<Items[number]>, NodeTag<Items[number]>> {
+  validateNodes("group", dependencies)
   return { kind: "group", name: "group", dependencies }
 }
 
