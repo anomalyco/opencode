@@ -1,0 +1,14 @@
+diff --git a/dist/index.js b/dist/index.js
+index 78c570c916437f1b11de6dcd44e2375b98f940de..038fa7821203e30778dcdc6c549584c76e6c5b98 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -789,6 +789,9 @@ function convertToGoogleMessages(prompt, options) {
+             }
+           }).filter((part) => part !== void 0)
+         });
++        if (contents[contents.length - 1].parts.length === 0) {
++          contents.pop();
++        }
+         break;
+       }
+       case "tool": {

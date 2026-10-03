@@ -14,7 +14,7 @@ import type { Provider } from "@/provider/provider"
 import { isRecord } from "@/util/record"
 
 type ToolInput = {
-  readonly description?: string
+  readonly description?: string | ((options: any) => string)
   readonly inputSchema?: unknown
 }
 
@@ -127,7 +127,8 @@ const tools = (input: Record<string, ToolInput> | undefined): ToolDefinition[] =
   Object.entries(input ?? {}).map(([name, item]) =>
     ToolDefinition.make({
       name,
-      description: item.description ?? "",
+      description:
+        typeof item.description === "function" ? item.description({ context: undefined }) : (item.description ?? ""),
       inputSchema: schema(item.inputSchema),
     }),
   )

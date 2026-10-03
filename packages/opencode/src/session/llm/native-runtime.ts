@@ -173,7 +173,8 @@ export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput
       // Tool execution remains opencode-owned. The native runtime only adapts
       // the @opencode-ai/llm tool call back into the AI SDK Tool.execute shape.
       NativeTool.make({
-        description: item.description ?? "",
+        description:
+          typeof item.description === "function" ? item.description({ context: undefined }) : (item.description ?? ""),
         jsonSchema: nativeSchema(item.inputSchema),
         execute: (args: unknown, ctx) =>
           Effect.tryPromise({
@@ -183,6 +184,7 @@ export function nativeTools(tools: Record<string, Tool>, input: Pick<StreamInput
                 toolCallId: ctx?.id ?? name,
                 messages: input.messages,
                 abortSignal: input.abort,
+                context: undefined,
               })
             },
             catch: (error) => new ToolFailure({ message: errorMessage(error), error }),

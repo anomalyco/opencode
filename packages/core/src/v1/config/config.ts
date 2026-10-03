@@ -182,6 +182,10 @@ export const Info = Schema.Struct({
       mcp_timeout: Schema.optional(PositiveInt).annotate({
         description: "Timeout in milliseconds for model context protocol (MCP) requests",
       }),
+      stream_idle_timeout: Schema.optional(NonNegativeInt).annotate({
+        description:
+          "Timeout in milliseconds after which a stalled provider stream (no chunks) is aborted and retried. 0 disables the timeout",
+      }),
       policies: Schema.optional(Schema.mutable(Schema.Array(ConfigExperimental.Policy))).annotate({
         description: "Policy statements applied to supported resources, such as provider access",
       }),

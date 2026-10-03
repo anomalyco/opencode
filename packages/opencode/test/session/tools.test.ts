@@ -154,6 +154,7 @@ it.effect("preserves running tool start time across metadata updates", () =>
           toolCallId: callID,
           abortSignal: new AbortController().signal,
           messages: [],
+          context: undefined,
         },
       ),
     )

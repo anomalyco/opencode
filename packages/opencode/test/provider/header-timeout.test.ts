@@ -69,10 +69,13 @@ for (const timeout of ["chunkTimeout", "headerTimeout"] as const) {
             const model = yield* provider.getModel(ProviderV2.ID.make("test"), ModelV2.ID.make("test-model"))
             const language = yield* provider.getLanguage(model)
             yield* Effect.acquireRelease(
-              Effect.promise(() =>
-                language.doStream({ prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }] }),
-              ),
-              (result) => Effect.promise(() => result.stream.cancel()),
+              Effect.promise(async () => {
+                const result = await language.doStream({
+                  prompt: [{ role: "user", content: [{ type: "text", text: "hello" }] }],
+                })
+                return await result.stream.cancel()
+              }),
+              () => Effect.void,
             )
 
             expect(signals).toHaveLength(1)
@@ -116,7 +119,10 @@ it.live("configured chunkTimeout raises a retryable response stream error when S
               return error
             }
           })
-          expect(error).toBeInstanceOf(ProviderError.ResponseStreamError)
+          expect(
+            error instanceof ProviderError.ResponseStreamError ||
+              (error as { cause?: unknown })?.cause instanceof ProviderError.ResponseStreamError,
+          ).toBe(true)
           expect(
             SessionRetry.retryable(MessageV2.fromError(error, { providerID: model.providerID }), model.providerID),
           ).toEqual({ message: "SSE read timed out" })
@@ -271,7 +277,10 @@ for (const [route, modelID] of Object.entries(gatewayModels)) {
 
             const error = yield* Effect.promise(() => firstStreamError(result.fullStream))
             expect(urls).toHaveLength(1)
-            expect(error).toBeInstanceOf(ProviderError.ResponseStreamError)
+            expect(
+              error instanceof ProviderError.ResponseStreamError ||
+                (error as { cause?: unknown })?.cause instanceof ProviderError.ResponseStreamError,
+            ).toBe(true)
           }),
         { config: gatewayConfig({ chunkTimeout: 50 }) },
       )

@@ -56,7 +56,7 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
   const truncate = yield* Truncate.Service
   const flags = yield* RuntimeFlags.Service
 
-  const context = (args: Record<string, unknown>, options: ToolExecutionOptions): Tool.Context => ({
+  const context = (args: Record<string, unknown>, options: ToolExecutionOptions<any>): Tool.Context => ({
     sessionID: input.session.id,
     abort: options.abortSignal!,
     messageID: input.processor.message.id,
