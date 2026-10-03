@@ -3,7 +3,7 @@ import { resolveThemeColors } from "./resolve"
 import { DEFAULT_THEMES, type Theme, type ThemeV1Json } from "./v1"
 import opencode from "./assets/v2/opencode.json" with { type: "json" }
 
-export { DEFAULT_THEMES, generateSyntax, selectedForeground, type Theme, type ThemeV1Json } from "./v1"
+export { DEFAULT_THEMES, type Theme, type ThemeV1Json } from "./v1"
 
 export type ThemeDocumentSource = Record<string, unknown>
 
