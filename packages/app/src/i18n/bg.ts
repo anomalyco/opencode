@@ -747,6 +747,7 @@ export const dict = {
   "session.question.progress": "{{current}} от {{total}} въпроса",
   "session.question.minimize": "Минимизиране на въпроса",
   "session.question.restore": "Възстановете въпроса",
+  "session.question.build": "Отговорете и продължете с агента Build",
   "session.question.pending.one": "{{count}} чакащ въпрос",
   "session.question.pending.other": "{{count}} висящи въпроси",
   "session.followupDock.summary.one": "{{count}} съобщение в опашка",

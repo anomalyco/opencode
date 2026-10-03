@@ -748,6 +748,7 @@ export const dict = {
   "session.question.progress": "{{current}} iš {{total}} klausimų",
   "session.question.minimize": "Sumažinti klausimą",
   "session.question.restore": "Atkurti klausimą",
+  "session.question.build": "Atsakyti ir tęsti su Build agentu",
   "session.question.pending.one": "Laukiamas klausimas {{count}}",
   "session.question.pending.other": "{{count}} laukiantys klausimai",
   "session.question.pending.few": "{{count}} laukiantys klausimai",

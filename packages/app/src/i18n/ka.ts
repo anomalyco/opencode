@@ -741,6 +741,7 @@ export const dict = {
   "session.question.progress": "{{current}} / {{total}} შეკითხვადან",
   "session.question.minimize": "შეკითხვის მინიმიზაცია",
   "session.question.restore": "კითხვის აღდგენა",
+  "session.question.build": "უპასუხე და გააგრძელე Build აგენტით",
   "session.question.pending.one": "{{count}} მომლოდინე შეკითხვა",
   "session.question.pending.other": "{{count}} მომლოდინე შეკითხვა",
   "session.followupDock.summary.one": "{{count}} რიგში დადებული შეტყობინება",

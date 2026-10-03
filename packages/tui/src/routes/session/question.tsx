@@ -5,6 +5,8 @@ import type { TextareaRenderable } from "@opentui/core"
 import { selectedForeground, tint, useTheme } from "../../context/theme"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useSDK } from "../../context/sdk"
+import { useSync } from "../../context/sync"
+import { useLocal } from "../../context/local"
 import { SplitBorder } from "../../ui/border"
 import { useTuiConfig } from "../../config"
 import { useBindings, useOpencodeModeStack } from "../../keymap"
@@ -13,6 +15,8 @@ const QUESTION_MODE = "question"
 
 export function QuestionPrompt(props: { request: QuestionRequest; directory?: string }) {
   const sdk = useSDK()
+  const sync = useSync()
+  const local = useLocal()
   const { theme } = useTheme()
   const renderer = useRenderer()
   const tuiConfig = useTuiConfig()
@@ -45,13 +49,35 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
     return store.answers[store.tab]?.includes(value) ?? false
   })
 
-  function submit() {
-    const answers = questions().map((_, i) => store.answers[i] ?? [])
-    void sdk.client.question.reply({
-      requestID: props.request.id,
-      directory: props.directory,
-      answers,
-    })
+  // Only offer the build hand-off when the plan agent asked the question.
+  const canBuild = createMemo(() => {
+    const messageID = props.request.tool?.messageID
+    if (!messageID) return false
+    const message = (sync.data.message[props.request.sessionID] ?? []).find((item) => item.id === messageID)
+    return message?.role === "assistant" && message.agent === "plan"
+  })
+
+  function submit(agent?: string, provided?: QuestionAnswer[]) {
+    const answers = provided ?? questions().map((_, i) => store.answers[i] ?? [])
+    void sdk.client.question
+      .reply({
+        requestID: props.request.id,
+        directory: props.directory,
+        answers,
+        agent,
+      })
+      .then(() => {
+        if (agent) local.agent.set(agent)
+      })
+  }
+
+  function submitBuild() {
+    if (other()) {
+      setStore("editing", true)
+      return
+    }
+    const opt = single() ? options()[store.selected] : undefined
+    submit("build", opt ? [[opt.label]] : undefined)
   }
 
   function reject() {
@@ -223,8 +249,21 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
             reject()
           },
         },
+        ...(canBuild()
+          ? [
+              {
+                name: "question.build",
+                title: "Answer and continue in the build agent",
+                category: "Question",
+                run() {
+                  submitBuild()
+                },
+              },
+            ]
+          : []),
       ],
       bindings: [
+        ...(canBuild() ? tuiConfig.keybinds.get("question.build") : []),
         {
           key: "left",
           desc: "Previous question",
@@ -504,6 +543,12 @@ export function QuestionPrompt(props: { request: QuestionRequest; directory?: st
               {confirm() ? "submit" : multi() ? "toggle" : single() ? "submit" : "confirm"}
             </span>
           </text>
+
+          <Show when={canBuild()}>
+            <text fg={theme.text}>
+              {"ctrl+b"} <span style={{ fg: theme.textMuted }}>build</span>
+            </text>
+          </Show>
 
           <text fg={theme.text}>
             esc <span style={{ fg: theme.textMuted }}>dismiss</span>

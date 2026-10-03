@@ -736,6 +736,7 @@ export const dict = {
   "session.question.progress": "{{current}} ຂອງ {{total}} ຄໍາຖາມ",
   "session.question.minimize": "ຫຍໍ້ຄໍາຖາມ",
   "session.question.restore": "ຟື້ນຟູຄໍາຖາມ",
+  "session.question.build": "ຕອບ ແລະສືບຕໍ່ກັບຕົວແທນ Build",
   "session.question.pending.one": "{{count}} ຄຳຖາມທີ່ຍັງຄ້າງຢູ່",
   "session.question.pending.other": "{{count}} ຄຳຖາມທີ່ຍັງຄ້າງຢູ່",
   "session.followupDock.summary.one": "{{count}} ຄິວຂໍ້ຄວາມ",

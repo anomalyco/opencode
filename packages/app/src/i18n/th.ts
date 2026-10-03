@@ -776,6 +776,7 @@ export const dict = {
   "session.todo.expand": "ขยาย",
   "session.question.minimize": "ย่อคำถาม",
   "session.question.restore": "คืนค่าคำถาม",
+  "session.question.build": "ตอบและดำเนินการต่อด้วยเอเจนต์ Build",
   "session.question.pending.one": "คำถามที่รอดำเนินการ {{count}} ข้อ",
   "session.question.pending.other": "คำถามที่รอดำเนินการ {{count}} ข้อ",
   "session.followupDock.summary.one": "{{count}} ข้อความในคิว",

@@ -770,6 +770,7 @@ export const dict = {
   "session.todo.expand": "展開",
   "session.question.minimize": "最小化問題",
   "session.question.restore": "還原問題",
+  "session.question.build": "回答並繼續使用 Build 代理程式",
   "session.question.pending.one": "{{count}} 個待處理問題",
   "session.question.pending.other": "{{count}} 個待處理問題",
   "session.followupDock.summary.one": "{{count}} 則佇列訊息",

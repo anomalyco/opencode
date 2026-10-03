@@ -750,6 +750,7 @@ export const dict = {
   "session.question.progress": "{{total}} سوالاں وچوں {{current}}",
   "session.question.minimize": "سوال نوں چھوٹا کرو",
   "session.question.restore": "سوال بحال کرو",
+  "session.question.build": "جواب دیو تے Build ایجنٹ نال جاری رکھو",
   "session.question.pending.one": "{{count}} زیر التوا سوال",
   "session.question.pending.other": "{{count}} زیر التوا سوال",
   "session.followupDock.summary.one": "{{count}} قطار چ لگیا ہویا پیغام",

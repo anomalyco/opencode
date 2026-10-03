@@ -4712,6 +4712,9 @@
                       "$ref": "#/components/schemas/QuestionAnswer"
                     },
                     "description": "User answers in order of questions (each answer is an array of selected labels)"
+                  },
+                  "agent": {
+                    "type": "string"
                   }
                 },
                 "required": ["answers"],
@@ -33744,6 +33747,9 @@
               "$ref": "#/components/schemas/QuestionV2Answer"
             },
             "description": "User answers in order of questions (each answer is an array of selected labels)"
+          },
+          "agent": {
+            "type": "string"
           }
         },
         "required": ["answers"],

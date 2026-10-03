@@ -35,9 +35,15 @@ type CompatiblePermissionApi = Omit<ServerApi["permission"], "reply"> & {
     input: Parameters<ServerApi["permission"]["reply"]>[0] & { location?: { directory?: string } },
   ) => ReturnType<ServerApi["permission"]["reply"]>
 }
-export type CompatibleApi = Omit<ServerApi, "session" | "permission"> & {
+type CompatibleQuestionApi = Omit<ServerApi["question"], "reply"> & {
+  reply: (
+    input: Parameters<ServerApi["question"]["reply"]>[0] & { agent?: string },
+  ) => ReturnType<ServerApi["question"]["reply"]>
+}
+export type CompatibleApi = Omit<ServerApi, "session" | "permission" | "question"> & {
   readonly session: CompatibleSessionApi
   readonly permission: CompatiblePermissionApi
+  readonly question: CompatibleQuestionApi
 }
 type LegacyPrompt = {
   agent?: string
@@ -504,10 +510,11 @@ function createV1Api(input: CompatibleInput): CompatibleApi {
     },
     question: {
       ...input.current.question,
-      async reply(value: Parameters<ServerApi["question"]["reply"]>[0]) {
+      async reply(value: Parameters<ServerApi["question"]["reply"]>[0] & { agent?: string }) {
         await legacy().question.reply({
           requestID: value.requestID,
           answers: value.answers.map((answer) => [...answer]),
+          agent: value.agent,
         })
       },
       async reject(value: Parameters<ServerApi["question"]["reject"]>[0]) {

@@ -1003,6 +1003,7 @@ export const dict = {
   "session.review.noBranchChanges": "아직 브랜치 변경 사항이 없습니다",
   "session.question.minimize": "질문 최소화",
   "session.question.restore": "질문 복원",
+  "session.question.build": "답변하고 Build 에이전트로 계속",
   "session.question.pending.one": "{{count}}개의 대기 중인 질문",
   "session.question.pending.other": "{{count}}개의 대기 중인 질문",
   "session.new.project.new": "새 프로젝트",

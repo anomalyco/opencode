@@ -639,6 +639,7 @@ export const dict = {
   "session.question.progress": "{{current}}/{{total}} kysymystä",
   "session.question.minimize": "Pienennä kysymys",
   "session.question.restore": "Palauta kysymys",
+  "session.question.build": "Vastaa ja jatka Build-agentilla",
   "session.question.pending.one": "{{count}} odottava kysymys",
   "session.question.pending.other": "{{count}} odottavaa kysymystä",
   "session.followupDock.summary.one": "{{count}} jonossa oleva viesti",

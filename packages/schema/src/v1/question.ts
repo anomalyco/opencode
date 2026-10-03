@@ -43,6 +43,9 @@ export const Reply = Schema.Struct({
   answers: Schema.Array(Answer).annotate({
     description: "User answers in order of questions (each answer is an array of selected labels)",
   }),
+  agent: Schema.optional(Schema.String).annotate({
+    description: "Agent to continue the session with after the answers are submitted",
+  }),
 }).annotate({ identifier: "QuestionReply" })
 export const Replied = Schema.Struct({
   sessionID: SessionID,

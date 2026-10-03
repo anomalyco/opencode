@@ -741,6 +741,7 @@ export const dict = {
   "session.question.progress": "{{total}} soraglarynyň {{current}}",
   "session.question.minimize": "Soragy azaldyň",
   "session.question.restore": "Soragy dikelt",
+  "session.question.build": "Jogap beriň we Build agenty bilen dowam ediň",
   "session.question.pending.one": "Garaşylýan sorag {{count}}",
   "session.question.pending.other": "Garaşylýan soraglar {{count}}",
   "session.followupDock.summary.one": "{{count}} nobatdaky habar",

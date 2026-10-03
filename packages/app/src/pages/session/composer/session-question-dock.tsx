@@ -9,6 +9,7 @@ import { showToast } from "@/utils/toast"
 import type { QuestionAnswer, QuestionRequest } from "@opencode-ai/sdk/v2"
 import { useLanguage } from "@/context/language"
 import { useSDK } from "@/context/sdk"
+import { useSync } from "@/context/sync"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useServerSDK } from "@/context/server-sdk"
@@ -64,6 +65,7 @@ function Option(props: {
 export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit: () => void }> = (props) => {
   const sdk = useSDK()
   const serverSDK = useServerSDK()
+  const sync = useSync()
   const language = useLanguage()
   const cacheKey = ScopedKey.from(serverSDK().scope, props.request.id)
 
@@ -95,6 +97,15 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   const on = createMemo(() => store.customOn[store.tab] === true)
   const multi = createMemo(() => question()?.multiple === true)
   const count = createMemo(() => options().length + 1)
+
+  // Only offer the build hand-off when the plan agent asked the question.
+  const canBuild = createMemo(() => {
+    if (serverSDK().protocolKind() !== "v1") return false
+    const messageID = props.request.tool?.messageID
+    if (!messageID) return false
+    const message = (sync().data.message[props.request.sessionID] ?? []).find((item) => item.id === messageID)
+    return message?.role === "assistant" && message.agent === "plan"
+  })
 
   const summary = createMemo(() => {
     const n = Math.min(store.tab + 1, total())
@@ -223,8 +234,13 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const replyMutation = useMutation(() => ({
-    mutationFn: (answers: QuestionAnswer[]) =>
-      sdk().api.question.reply({ sessionID: props.request.sessionID, requestID: props.request.id, answers }),
+    mutationFn: (input: { answers: QuestionAnswer[]; agent?: string }) =>
+      sdk().api.question.reply({
+        sessionID: props.request.sessionID,
+        requestID: props.request.id,
+        answers: input.answers,
+        agent: input.agent,
+      }),
     onMutate: () => {
       props.onSubmit()
     },
@@ -249,9 +265,9 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
 
   const sending = createMemo(() => replyMutation.isPending || rejectMutation.isPending)
 
-  const reply = async (answers: QuestionAnswer[]) => {
+  const reply = async (answers: QuestionAnswer[], agent?: string) => {
     if (sending()) return
-    await replyMutation.mutateAsync(answers)
+    await replyMutation.mutateAsync({ answers, agent })
   }
 
   const reject = async () => {
@@ -260,6 +276,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
   }
 
   const submit = () => void reply(questions().map((_, i) => store.answers[i] ?? []))
+  const submitBuild = () =>
+    void reply(
+      questions().map((_, i) => store.answers[i] ?? []),
+      "build",
+    )
 
   const answered = (i: number) => {
     if ((store.answers[i]?.length ?? 0) > 0) return true
@@ -503,6 +524,11 @@ export const SessionQuestionDock: Component<{ request: QuestionRequest; onSubmit
               <Show when={store.tab > 0}>
                 <Button variant="secondary" size="large" disabled={sending()} onClick={back}>
                   {language.t("ui.common.back")}
+                </Button>
+              </Show>
+              <Show when={canBuild()}>
+                <Button variant="secondary" size="large" disabled={sending()} onClick={submitBuild}>
+                  {language.t("session.question.build")}
                 </Button>
               </Show>
               <Button

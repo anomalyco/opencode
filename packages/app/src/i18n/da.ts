@@ -663,6 +663,7 @@ export const dict = {
   "session.todo.expand": "Udvid",
   "session.question.minimize": "Minimer spørgsmål",
   "session.question.restore": "Gendan spørgsmål",
+  "session.question.build": "Svar og fortsæt med Build-agenten",
   "session.question.pending.one": "{{count}} afventende spørgsmål",
   "session.question.pending.other": "{{count}} afventende spørgsmål",
   "session.followupDock.summary.one": "{{count}} besked i kø",

@@ -747,6 +747,7 @@ export const dict = {
   "session.question.progress": "{{current}} de {{total}} preguntes",
   "session.question.minimize": "Minimitzar la pregunta",
   "session.question.restore": "Pregunta de restauració",
+  "session.question.build": "Respon i continua amb l'agent Build",
   "session.question.pending.one": "{{count}} pregunta pendent",
   "session.question.pending.other": "{{count}} preguntes pendents",
   "session.question.pending.many": "{{count}} preguntes pendents",

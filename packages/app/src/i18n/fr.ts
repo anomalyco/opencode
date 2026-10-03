@@ -739,6 +739,7 @@ export const dict = {
   "session.todo.expand": "Développer",
   "session.question.minimize": "Réduire la question",
   "session.question.restore": "Restaurer la question",
+  "session.question.build": "Répondre et continuer avec l'agent Build",
   "session.question.pending.one": "{{count}} question en attente",
   "session.question.pending.many": "{{count}} de questions en attente",
   "session.question.pending.other": "{{count}} questions en attente",

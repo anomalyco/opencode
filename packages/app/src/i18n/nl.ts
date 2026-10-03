@@ -749,6 +749,7 @@ export const dict = {
   "session.question.progress": "{{current}} van {{total}} vragen",
   "session.question.minimize": "Minimaliseer de vraag",
   "session.question.restore": "Vraag herstellen",
+  "session.question.build": "Antwoorden en doorgaan in de Build-agent",
   "session.question.pending.one": "{{count}} openstaande vraag",
   "session.question.pending.other": "{{count}} openstaande vragen",
   "session.followupDock.summary.one": "{{count}} bericht in de wachtrij",

@@ -737,6 +737,7 @@ export const dict = {
   "session.question.progress": "{{current}} küsimust {{total}}-st",
   "session.question.minimize": "Minimeerige küsimus",
   "session.question.restore": "Taasta küsimus",
+  "session.question.build": "Vasta ja jätka Build-agendiga",
   "session.question.pending.one": "{{count}} ootel küsimus",
   "session.question.pending.other": "{{count}} ootel küsimust",
   "session.followupDock.summary.one": "{{count}} järjekorda pandud sõnum",
