@@ -220,6 +220,21 @@ describe("tool.apply_patch freeform", () => {
     }),
   )
 
+  it.instance("rejects multiple operations on the same file before writing", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const { ctx } = makeCtx()
+      const target = path.join(test.directory, "repeat.txt")
+      yield* writeText(target, "line1\nline2\n")
+
+      const patchText =
+        "*** Begin Patch\n*** Update File: repeat.txt\n@@\n-line1\n+changed1\n*** Update File: ./repeat.txt\n@@\n-line2\n+changed2\n*** End Patch"
+
+      yield* expectFailure(execute({ patchText }, ctx), `multiple operations target ${target}`)
+      expect(yield* readText(target)).toBe("line1\nline2\n")
+    }),
+  )
+
   it.instance("does not invent a first-line diff for BOM files", () =>
     Effect.gen(function* () {
       const test = yield* TestInstance

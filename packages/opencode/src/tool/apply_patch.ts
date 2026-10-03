@@ -69,8 +69,15 @@ export const ApplyPatchTool = Tool.define(
 
       let totalDiff = ""
 
+      const targets = new Set<string>()
       for (const hunk of hunks) {
         const filePath = path.resolve(instance.directory, hunk.path)
+        if (targets.has(filePath)) {
+          return yield* Effect.fail(
+            new Error(`apply_patch verification failed: invalid patch: multiple operations target ${filePath}`),
+          )
+        }
+        targets.add(filePath)
         yield* assertExternalDirectoryEffect(ctx, filePath)
 
         switch (hunk.type) {
