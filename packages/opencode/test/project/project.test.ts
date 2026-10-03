@@ -95,7 +95,9 @@ const iconDiscoveryIt = testEffect(
   AppNodeBuilder.build(projectTestNode, [[RuntimeFlags.node, RuntimeFlags.layer({ experimentalIconDiscovery: true })]]),
 )
 
-function waitForProjectIcon(id: ProjectV2.ID, attempts = 50): Effect.Effect<Project.Info, never, Project.Service> {
+// Discovery shells out to ripgrep, so the readiness budget has to cover a
+// subprocess spawn plus one-time binary resolution, not just an in-process walk.
+function waitForProjectIcon(id: ProjectV2.ID, attempts = 300): Effect.Effect<Project.Info, never, Project.Service> {
   return Effect.gen(function* () {
     const project = yield* Project.Service
     const info = yield* project.get(id)
@@ -447,6 +449,26 @@ describe("Project.discover", () => {
       const updated = yield* project.get(result.project.id)
       expect(updated).toBeDefined()
       expect(updated!.icon).toBeUndefined()
+    }),
+  )
+
+  it.live("should not discover favicon in a gitignored directory", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const tmp = yield* tmpdirScoped({ git: true })
+      const result = yield* project.fromDirectory(tmp)
+
+      const pngData = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+      yield* Effect.promise(() => Bun.write(path.join(tmp, ".gitignore"), "dep/\n"))
+      // Shorter path than the tracked icon, so it would win the shortest-path
+      // tie-break if the scan did not honour .gitignore.
+      yield* Effect.promise(() => Bun.write(path.join(tmp, "dep", "favicon.png"), pngData))
+      yield* Effect.promise(() => Bun.write(path.join(tmp, "assets", "favicon.svg"), "<svg/>"))
+
+      yield* project.discover(result.project)
+
+      const updated = yield* project.get(result.project.id)
+      expect(updated!.icon?.url).toStartWith("data:image/svg+xml")
     }),
   )
 
