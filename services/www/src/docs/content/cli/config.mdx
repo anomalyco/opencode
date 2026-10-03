@@ -12,6 +12,9 @@ Press `Ctrl+P`, then select **Open settings** to change common settings from the
 
 ## Configuration file
 
+This page covers OpenCode V2. OpenCode V1 uses [`tui.json(c)`](https://opencode.ai/docs/config/#tui) for TUI settings.
+See [Migrating from V1](/migrate-v1#terminal-client-configuration) for how V2 imports supported global settings.
+
 OpenCode stores CLI settings in one global file:
 
 ```text
@@ -213,7 +216,7 @@ the TUI exits and do not change `cli.json`.
 
 ## Alerts
 
-Enable system notifications and attention sounds independently:
+In OpenCode V2, enable system notifications and attention sounds independently:
 
 ```json title="cli.json"
 {
@@ -241,7 +244,9 @@ Enable system notifications and attention sounds independently:
 
 </div>
 
-An invalid or unreadable override falls back to the built-in sound for that event.
+Sound overrides support local WAV, FLAC, and MP3 files. Use an absolute path, as in the example above, so the file can
+be found regardless of the directory where you start OpenCode. An invalid or unreadable override falls back to the
+built-in sound for that event.
 
 ## Terminal
 
