@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { createClientConnection } from "../src/solid"
+import { createClientConnection, defaultIdleTimeout } from "../src/solid"
 import { OpenCode, type OpenCodeEvent } from "../src/promise"
 
 const connected = { id: "evt_connected", created: 1, type: "server.connected", data: {} }
@@ -178,4 +178,10 @@ test("a reconnect does not ask the volatile event stream to replay", async () =>
   } finally {
     ctx.dispose()
   }
+})
+
+test("the default idle timeout spans several server keepalives", () => {
+  // The server writes a keepalive comment every 15 seconds. The default must cover several missed
+  // keepalives so a transient Windows stall triggers a reconnect, never a service replacement.
+  expect(defaultIdleTimeout).toBeGreaterThanOrEqual(6 * 15_000)
 })

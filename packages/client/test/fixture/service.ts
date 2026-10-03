@@ -59,6 +59,10 @@ const server = Bun.serve({
       await appendFile(registration + ".requests", process.pid + "\n")
       return new Promise<Response>(() => {})
     }
+    if (mode === "flaky") {
+      await appendFile(registration + ".requests", process.pid + "\n")
+      if (requests <= Number(delay ?? "3")) return new Promise<Response>(() => {})
+    }
     if (mode === "modern" && requests === 1) {
       await writeFile(registration + ".first-request", "")
       while (!(await Bun.file(registration + ".release").exists())) await Bun.sleep(5)

@@ -20,7 +20,8 @@ export type ClientConnectionOptions = {
   readonly pageLifecycle?: boolean
   /**
    * Abort and reconnect a stream that receives no bytes for this long. The server writes a keepalive
-   * comment every 15 seconds, so a quiet but healthy stream never trips this.
+   * comment every 15 seconds, so a quiet but healthy stream never trips this. The default allows six
+   * missed keepalives so transient Windows stalls never look like a dead stream.
    */
   readonly idleTimeout?: number
   readonly log?: {
@@ -32,7 +33,7 @@ export type ClientConnectionOptions = {
 const connectTimeout = 2_000
 const reconnectDelay = 1_000
 const connectionHistoryLimit = 50
-export const defaultIdleTimeout = 45_000
+export const defaultIdleTimeout = 90_000
 // Longer than one server keepalive interval: a stream that is silent this long when the page
 // returns to the foreground is probably half-open after the device slept.
 export const foregroundIdleThreshold = 20_000
