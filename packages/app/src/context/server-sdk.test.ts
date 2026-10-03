@@ -1,17 +1,44 @@
 import { describe, expect, test } from "bun:test"
-import { adaptServerEvent, coalesceServerEvents, enqueueServerEvent, resumeStreamAfterPageShow } from "./server-sdk"
+import {
+  RECONNECT_DELAY_MAX_MS,
+  STREAM_STALL_TIMEOUT_MS,
+  adaptServerEvent,
+  coalesceServerEvents,
+  enqueueServerEvent,
+  reconnectDelay,
+} from "./server-sdk"
 import type { OpenCodeEvent } from "@opencode-ai/client/promise"
 import type { Event } from "@opencode-ai/sdk/v2/client"
 
-describe("resumeStreamAfterPageShow", () => {
-  test("restarts a stream only after a back-forward cache restore", () => {
-    let starts = 0
-    const start = () => starts++
+describe("reconnectDelay", () => {
+  test("starts at the base delay for the first fast drop", () => {
+    expect(reconnectDelay(0, 0)).toBe(250)
+  })
 
-    resumeStreamAfterPageShow({ persisted: false } as PageTransitionEvent, start)
-    resumeStreamAfterPageShow({ persisted: true } as PageTransitionEvent, start)
+  test("grows exponentially while reconnects keep dropping fast", () => {
+    expect(reconnectDelay(1, 0)).toBe(500)
+    expect(reconnectDelay(2, 0)).toBe(1000)
+    expect(reconnectDelay(3, 0)).toBe(2000)
+  })
 
-    expect(starts).toBe(1)
+  test("caps at the maximum delay", () => {
+    expect(reconnectDelay(20, 0)).toBe(RECONNECT_DELAY_MAX_MS)
+  })
+
+  test("adds bounded jitter without exceeding backoff + base delay", () => {
+    for (const drops of [0, 1, 2, 10, 20]) {
+      const delay = reconnectDelay(drops, 1)
+      const backoff = Math.min(250 * 2 ** drops, RECONNECT_DELAY_MAX_MS)
+      expect(delay).toBeLessThanOrEqual(backoff + 250)
+    }
+  })
+})
+
+describe("STREAM_STALL_TIMEOUT_MS", () => {
+  test("exceeds three server heartbeat intervals", () => {
+    // The server emits server.heartbeat every 10s; a live stream should never
+    // go this long without any event.
+    expect(STREAM_STALL_TIMEOUT_MS).toBeGreaterThan(30_000)
   })
 })
 
