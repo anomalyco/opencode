@@ -3,6 +3,7 @@ import net from "node:net"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { Flag } from "@opencode-ai/core/flag/flag"
+import { InstanceRuntime } from "../../src/project/instance-runtime"
 import { Server } from "../../src/server/server"
 import { PtyPaths } from "../../src/server/routes/instance/httpapi/groups/pty"
 import { withTimeout } from "../../src/util/timeout"
@@ -166,7 +167,148 @@ async function openPtySocket(listener: Awaited<ReturnType<typeof startListener>>
   }
 }
 
+async function markerInstance() {
+  return tmpdir({
+    init: async (directory) => {
+      const plugin = path.join(directory, "plugin.ts")
+      const initialized = path.join(directory, "initialized.txt")
+      await Bun.write(
+        plugin,
+        [
+          'import { appendFileSync } from "node:fs"',
+          "export default async function plugin() {",
+          `  appendFileSync(${JSON.stringify(initialized)}, "initialized\\n")`,
+          "  return {}",
+          "}",
+        ].join("\n"),
+      )
+      await Bun.write(
+        path.join(directory, "opencode.json"),
+        JSON.stringify({ formatter: false, lsp: false, plugin: [pathToFileURL(plugin).href] }),
+      )
+      return initialized
+    },
+  })
+}
+
+async function requestConfig(listener: Awaited<ReturnType<typeof startListener>>, directory: string) {
+  const response = await fetch(new URL("/config", listener.url), {
+    headers: { authorization: authorization(), "x-opencode-directory": directory },
+  })
+  expect(response.status).toBe(200)
+}
+
 describe("HttpApi Server.listen", () => {
+  for (const order of ["runtime-first", "listener-first", "concurrent"] as const) {
+    test(`shares one bootstrapped instance with AppRuntime (${order})`, async () => {
+      await using tmp = await markerInstance()
+      const previous = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+      process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
+      let listener: Awaited<ReturnType<typeof startListener>> | undefined
+      try {
+        const active = await startListener()
+        listener = active
+        const load = () => InstanceRuntime.load({ directory: tmp.path })
+        const request = () => requestConfig(active, tmp.path)
+        if (order === "runtime-first") {
+          await load()
+          await request()
+        } else if (order === "listener-first") {
+          await request()
+          await load()
+        } else {
+          await Promise.all([load(), request()])
+        }
+        expect(await Bun.file(tmp.extra).text()).toBe("initialized\n")
+      } finally {
+        if (listener) await stop(listener, "timed out cleaning up shared-graph listener")
+        if (previous === undefined) delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+        else process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = previous
+      }
+    })
+  }
+
+  test("keeps the AppRuntime instance alive across listener restarts", async () => {
+    await using tmp = await markerInstance()
+    const previous = process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+    process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = "1"
+    let listener: Awaited<ReturnType<typeof startListener>> | undefined
+    try {
+      const first = await InstanceRuntime.load({ directory: tmp.path })
+      listener = await startListener()
+      await requestConfig(listener, tmp.path)
+      await stop(listener, "timed out stopping first shared-graph listener")
+      listener = await startListener()
+      await requestConfig(listener, tmp.path)
+      expect(await InstanceRuntime.load({ directory: tmp.path })).toBe(first)
+      expect(await Bun.file(tmp.extra).text()).toBe("initialized\n")
+    } finally {
+      if (listener) await stop(listener, "timed out cleaning up restarted shared-graph listener")
+      if (previous === undefined) delete process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS
+      else process.env.OPENCODE_DISABLE_DEFAULT_PLUGINS = previous
+    }
+  })
+
+  test("keeps Vary: Origin on preflight after Default and across listeners", async () => {
+    const headers = {
+      origin: "http://localhost:3000",
+      "access-control-request-method": "POST",
+      "access-control-request-headers": "content-type, x-opencode-directory",
+    }
+    const preflight = (response: Response) => {
+      expect([200, 204]).toContain(response.status)
+      expect(response.headers.get("access-control-allow-origin")).toBe(headers.origin)
+      expect((response.headers.get("vary") ?? "").toLowerCase()).toContain("origin")
+    }
+    preflight(await Server.Default().app.request("/global/config", { method: "OPTIONS", headers }))
+    const first = await startNoAuthListener()
+    let second: Awaited<ReturnType<typeof startNoAuthListener>> | undefined
+    try {
+      second = await startNoAuthListener()
+      for (const listener of [first, second]) {
+        preflight(await fetch(new URL("/global/config", listener.url), { method: "OPTIONS", headers }))
+      }
+    } finally {
+      if (second) await stop(second, "timed out cleaning up second CORS listener")
+      await stop(first, "timed out cleaning up first CORS listener")
+    }
+  })
+
+  test("uses fresh password auth after Default() builds the shared graph", async () => {
+    const initial = await Server.Default().app.request("/status")
+    expect(initial.status).toBe(200)
+    const listener = await startListener()
+    try {
+      expect((await fetch(new URL("/status", listener.url))).status).toBe(401)
+      expect(
+        (await fetch(new URL("/status", listener.url), { headers: { authorization: authorization() } })).status,
+      ).toBe(200)
+    } finally {
+      await stop(listener, "timed out cleaning up fresh-auth listener")
+    }
+  })
+
+  testPty("stop(true) closes only its own listener's websockets", async () => {
+    await using tmp = await tmpdir({ git: true, config: { formatter: false, lsp: false } })
+    const first = await startListener()
+    let second: Awaited<ReturnType<typeof startListener>> | undefined
+    try {
+      second = await startListener()
+      const one = await openPtySocket(first, tmp.path)
+      const two = await openPtySocket(second, tmp.path)
+      await stop(first, "timed out stopping first listener with two websockets")
+      await withTimeout(one.closed, 5_000, "first listener websocket stayed open")
+      expect(two.ws.readyState).toBe(WebSocket.OPEN)
+      const message = waitForMessage(two.ws, (data) => data.includes("still-open"))
+      two.ws.send("still-open\n")
+      expect(await message).toContain("still-open")
+      two.ws.close(1000)
+    } finally {
+      if (second) await stop(second, "timed out cleaning up second websocket listener")
+      await stop(first, "timed out cleaning up first websocket listener")
+    }
+  })
+
   testPty("serves HTTP routes and upgrades PTY websocket through Server.listen", async () => {
     await using tmp = await tmpdir({ config: { formatter: false, lsp: false } })
     const listener = await startListener()
