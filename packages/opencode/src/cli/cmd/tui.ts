@@ -14,6 +14,7 @@ import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
+import { installConsoleGuard } from "@/util/console-guard"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -142,6 +143,8 @@ export const TuiThreadCommand = cmd({
         hidden: true,
       }),
   handler: async (args) => {
+    // The TUI renders on the alternate screen; console output must go to the log file.
+    installConsoleGuard()
     if (args.replay === true) {
       UI.error("--replay is not supported; replay is enabled by default")
       process.exitCode = 1

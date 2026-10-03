@@ -10,8 +10,12 @@ import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
 import { Effect } from "effect"
 import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
+import { installConsoleGuard } from "@/util/console-guard"
 
 Heap.start()
+
+// The worker shares the TUI terminal; library console output must never reach it.
+installConsoleGuard()
 
 const onUnhandledRejection = (_error: unknown) => {}
 
