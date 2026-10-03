@@ -2,7 +2,7 @@ import { afterEach, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Cause, Effect, Exit, Layer } from "effect"
 import path from "path"
-import { disposeAllInstances, TestInstance } from "../fixture/fixture"
+import { disposeAllInstances, withTmpdirInstance, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { Agent } from "../../src/agent/agent"
 import { Auth } from "../../src/auth"
@@ -15,6 +15,8 @@ import { Plugin } from "../../src/plugin"
 import { Provider } from "../../src/provider/provider"
 import { Skill } from "../../src/skill"
 import { Truncate } from "../../src/tool/truncate"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
 const agentLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
   LayerNode.compile(
@@ -43,6 +45,74 @@ const expectDefaultAgentError = Effect.fn("AgentTest.expectDefaultAgentError")(f
 afterEach(async () => {
   await disposeAllInstances()
 })
+
+it.live(
+  "agent generation identifies its OpenCode Go request",
+  () =>
+    Effect.gen(function* () {
+      const headers: string[] = []
+      const server = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          Bun.serve({
+            port: 0,
+            fetch(request) {
+              const session = request.headers.get("x-opencode-session")
+              headers.push(session ?? "")
+              if (!session) return new Response("missing x-opencode-session", { status: 400 })
+              return Response.json({
+                id: "chatcmpl-agent-test",
+                object: "chat.completion",
+                created: 1,
+                model: "test-model",
+                choices: [
+                  {
+                    index: 0,
+                    message: {
+                      role: "assistant",
+                      content: JSON.stringify({
+                        identifier: "test-agent",
+                        whenToUse: "Use for test work",
+                        systemPrompt: "You are a test agent",
+                      }),
+                    },
+                    finish_reason: "stop",
+                  },
+                ],
+                usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+              })
+            },
+          }),
+        ),
+        (server) => Effect.sync(() => server.stop()),
+      )
+
+      const result = yield* Agent.Service.use((svc) =>
+        svc.generate({
+          description: "Create a test agent",
+          model: { providerID: ProviderV2.ID.make("opencode-go"), modelID: ModelV2.ID.make("test-model") },
+        }),
+      ).pipe(
+        withTmpdirInstance({
+          config: {
+            provider: {
+              "opencode-go": {
+                name: "Test OpenCode Go",
+                npm: "@ai-sdk/openai-compatible",
+                api: `http://127.0.0.1:${server.port}/v1`,
+                models: { "test-model": { name: "Test Model" } },
+                options: { apiKey: "test-key" },
+              },
+            },
+          },
+        }),
+      )
+
+      expect(result.identifier).toBe("test-agent")
+      expect(headers).toHaveLength(1)
+      expect(headers[0]).toMatch(/^ses_/)
+    }),
+  30000,
+)
 
 it.instance("returns default native agents when no config", () =>
   Effect.gen(function* () {

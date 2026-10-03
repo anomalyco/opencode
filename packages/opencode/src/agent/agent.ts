@@ -31,6 +31,7 @@ import { LocationServiceMap, locationServiceMapLayer } from "@opencode-ai/core/l
 import { Reference } from "@opencode-ai/core/reference"
 import { Location } from "@opencode-ai/core/location"
 import { PluginV2 } from "@opencode-ai/core/plugin"
+import { SessionID } from "@/session/schema"
 
 export const Info = Schema.Struct({
   name: Schema.String,
@@ -386,6 +387,9 @@ const layer = Layer.effect(
         const isOpenaiOauth = model.providerID === "openai" && authInfo?.type === "oauth"
 
         const params = {
+          headers: model.providerID.startsWith("opencode")
+            ? { "x-opencode-session": SessionID.descending() }
+            : undefined,
           experimental_telemetry: {
             isEnabled: cfg.experimental?.openTelemetry,
             tracer,
