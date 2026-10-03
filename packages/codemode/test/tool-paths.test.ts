@@ -368,3 +368,16 @@ describe("tool references under ==", () => {
     ).toEqual([false, false, false, 0])
   })
 })
+
+describe("tool reference identity", () => {
+  test("repeated member reads yield the same reference", async () => {
+    const runtime = CodeMode.make({ tools: { probe: echo("Probe", "ok"), "ns.inner": echo("Inner", "in") } })
+    expect(
+      await value(
+        runtime,
+        `return [tools.probe === tools.probe, tools.ns.inner === tools.ns.inner, tools.ns === tools.ns, tools["probe"] === tools.probe,
+                 tools.probe === tools.ns.inner, new Set([tools.probe, tools.probe]).size, await tools.ns.inner({})]`,
+      ),
+    ).toEqual([true, true, true, true, false, 1, "in"])
+  })
+})
