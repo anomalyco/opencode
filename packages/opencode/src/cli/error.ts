@@ -75,6 +75,17 @@ export function FormatError(input: unknown): string | undefined {
     return `Failed to initialize provider "${stringField(providerInit, "providerID")}". Check credentials and configuration.`
   }
 
+  const notFound = configData(input, "NotFoundError")
+  if (notFound) {
+    const message = stringField(notFound, "message") ?? "Resource not found"
+    if (!message.startsWith("Model not found:")) return message
+    return [
+      message,
+      `Try: \`opencode models\` to list available models`,
+      `Or check your config (opencode.json) provider/model names`,
+    ].join("\n")
+  }
+
   // ConfigJsonError: { path: string, message?: string }
   const configJson = configData(input, "ConfigJsonError")
   if (configJson) {

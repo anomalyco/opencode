@@ -89,6 +89,18 @@ describe("cli.error", () => {
     expect(FormatError({ _tag: "ProviderInitError", ...data })).toBe(expected)
   })
 
+  test("formats model not found API errors with recovery guidance", () => {
+    const data = { message: "Model not found: opencode/x-preview-f-free." }
+    const expected = [
+      data.message,
+      "Try: `opencode models` to list available models",
+      "Or check your config (opencode.json) provider/model names",
+    ].join("\n")
+
+    expect(FormatError({ name: "NotFoundError", data })).toBe(expected)
+    expect(FormatError({ _tag: "NotFoundError", ...data })).toBe(expected)
+  })
+
   test("formats cancelled UI errors as empty output", () => {
     expect(FormatError(new UI.CancelledError())).toBe("")
   })

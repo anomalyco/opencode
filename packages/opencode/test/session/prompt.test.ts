@@ -2383,6 +2383,25 @@ noLLMServer.instance(
 
 // Agent / command resolution errors
 
+noLLMServer.instance("unavailable models fail before the user message is persisted", () =>
+  Effect.gen(function* () {
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({})
+    const error = yield* prompt
+      .prompt({
+        sessionID: session.id,
+        agent: "build",
+        model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("missing-model") },
+        parts: [{ type: "text", text: "hello" }],
+      })
+      .pipe(Effect.flip)
+
+    expect(ProviderSvc.ModelNotFoundError.isInstance(error)).toBe(true)
+    expect(yield* sessions.messages({ sessionID: session.id })).toEqual([])
+  }),
+)
+
 noLLMServer.instance(
   "unknown agent throws typed error",
   () =>
