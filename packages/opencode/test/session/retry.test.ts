@@ -425,6 +425,56 @@ describe("session.retry.retryable", () => {
       "Usage limit reached. It will reset in 15 minutes. To continue using this model now, enable usage from your available balance",
     )
   })
+
+  test("does not retry server-side context overflow despite embedded status-code substrings", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "The input (523659 tokens) is longer than the model's context length (500000 tokens)",
+        isRetryable: false,
+        statusCode: 400,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
+  test("does not retry OpenAI-style maximum context length errors", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "This model's maximum context length is 1048576 tokens.",
+        isRetryable: false,
+        statusCode: 400,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
+  test("does not match status codes embedded inside larger numbers", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "rejected request of 500000 tokens",
+        isRetryable: false,
+        statusCode: 400,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toBeUndefined()
+  })
+
+  test("still retries messages containing standalone status codes", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "upstream returned 502 while proxying the request",
+        isRetryable: false,
+        statusCode: 400,
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "upstream returned 502 while proxying the request",
+    })
+  })
 })
 
 describe("session.message-v2.fromError", () => {

@@ -31,13 +31,26 @@ export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for se
 export const RETRY_MAX_RETRIES = 5
 
 const RETRYABLE_MESSAGE_PATTERNS = [
-  /429|500|502|503|504|524/i,
+  /\b(?:429|500|502|503|504|524)\b/i,
   /rate increased too quickly|rate limit|rate-limit|rate_limit|too many requests/i,
   /overloaded|service unavailable|service_unavailable|service-unavailable|internal error|internal_error|internal server error|server error|server_error|server-error|provider returned error|provider_returned_error|provider-returned-error/i,
   /terminated|fetch failed|failed to fetch|network[-_\s]error|upstream connect|connection error|connection refused|connection lost|socket connection was closed|socket hang up|reset before headers|getaddrinfo|enotfound|eai_again|econnrefused|econnreset|etimedout/i,
   /^timeout$|\b(?:request|response|connection|network|stream|read) (?:timeout|timed out|time out)\b/i,
   /try your request again|retry your request|resource exhausted|resource_exhausted/i,
   /\btry again (?:later|in\b)|\b(?:currently|temporarily) at capacity\b/i,
+]
+
+// Deterministic client errors — retrying can never succeed. Checked before the
+// retryable patterns because a context-overflow message embeds large numbers
+// (e.g. "...context length (500000 tokens)") that contain retryable-looking
+// status codes as substrings.
+const NON_RETRYABLE_MESSAGE_PATTERNS = [
+  /longer than the model'?s (?:maximum )?context length/i,
+  /maximum context length is \d+ tokens/i,
+  /prompt is too long/i,
+  /context_length_exceeded/i,
+  /input token count exceeds/i,
+  /exceeds the maximum number of tokens/i,
 ]
 
 function cap(ms: number) {
@@ -86,6 +99,11 @@ export function retryable(error: Err, provider: string) {
   // context overflow errors should not be retried
   if (SessionV1.ContextOverflowError.isInstance(error)) return undefined
   if (SessionV1.APIError.isInstance(error)) {
+    // A server-side context overflow arrives as a deterministic 4xx — never
+    // retry it, even when the message text contains status-code substrings.
+    if (matchesNonRetryableMessage(error.data.message) || matchesNonRetryableMessage(error.data.responseBody)) {
+      return undefined
+    }
     const status = error.data.statusCode
     // 5xx errors are transient server failures and should always be retried,
     // even when the provider SDK doesn't explicitly mark them as retryable.
@@ -156,6 +174,10 @@ export function retryable(error: Err, provider: string) {
 
 function matchesRetryableMessage(value: unknown) {
   return typeof value === "string" && RETRYABLE_MESSAGE_PATTERNS.some((pattern) => pattern.test(value))
+}
+
+function matchesNonRetryableMessage(value: unknown) {
+  return typeof value === "string" && NON_RETRYABLE_MESSAGE_PATTERNS.some((pattern) => pattern.test(value))
 }
 
 function str(value: unknown) {
