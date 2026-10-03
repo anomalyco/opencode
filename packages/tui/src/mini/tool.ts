@@ -15,10 +15,10 @@ import os from "os"
 import path from "path"
 import stripAnsi from "strip-ansi"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { Tool } from "@opencode/schema/tool"
 import { LANGUAGE_EXTENSIONS } from "../util/filetype"
 import { Locale } from "../util/locale"
 import {
-  canonicalToolName,
   finiteNumber,
   primitiveInputSummary,
   toolDisplayContent,
@@ -28,8 +28,6 @@ import {
 import { formatPath } from "../util/path-format"
 import { isRecord } from "../util/record"
 import type { RunEntryBody, StreamCommit, ToolSnapshot } from "./types"
-
-export { canonicalToolName } from "../util/tool-display"
 
 type ToolView = {
   output: boolean
@@ -157,9 +155,9 @@ function text(v: unknown): string {
 export function toolOutputText(name: string, content: ReadonlyArray<{ type: string; text?: string }> | undefined) {
   if (!content) return ""
   // V2 shell content appends model-only status after the user-visible command output.
-  if (canonicalToolName(name) === "shell") return content.find((item) => item.type === "text")?.text ?? ""
+  if (Tool.canonicalName(name) === "shell") return content.find((item) => item.type === "text")?.text ?? ""
   const joined = content.flatMap((item) => (item.type === "text" && item.text ? [item.text] : [])).join("\n")
-  if (canonicalToolName(name) === "read") return readDisplayText(joined) ?? joined
+  if (Tool.canonicalName(name) === "read") return readDisplayText(joined) ?? joined
   return joined
 }
 
@@ -240,7 +238,7 @@ function normalizeMetadata(name: string, value: unknown) {
 }
 
 export function normalizeTool(tool: SessionMessageAssistantTool): SessionMessageAssistantTool {
-  const name = canonicalToolName(tool.name)
+  const name = Tool.canonicalName(tool.name)
   if (tool.state.status === "streaming") return { ...tool, name }
   return {
     ...tool,
@@ -1116,7 +1114,7 @@ function toolFrame(commit: StreamCommit, raw: string): ToolFrame {
   return {
     directory: commit.directory,
     raw,
-    name: canonicalToolName(commit.tool || current?.name || "tool"),
+    name: Tool.canonicalName(commit.tool || current?.name || "tool"),
     input: current?.input ?? {},
     meta: current?.meta ?? {},
     state: current?.state ?? {},
@@ -1138,7 +1136,7 @@ function runShell(p: ToolProps): ToolInline {
 
 export function toolView(name?: string): ToolView {
   return (
-    rule(name ? canonicalToolName(name) : undefined)?.view ?? {
+    rule(name ? Tool.canonicalName(name) : undefined)?.view ?? {
       output: true,
       final: true,
     }

@@ -11,6 +11,13 @@ export type Metadata = Readonly<Record<string, any>>
 export const CallID = Schema.String.pipe(Schema.brand("Tool.CallID"))
 export type CallID = typeof CallID.Type
 
+export function canonicalName(name: string) {
+  if (name === "bash") return "shell"
+  if (name === "task") return "subagent"
+  if (name === "apply_patch") return "patch"
+  return name
+}
+
 export interface Context {
   readonly sessionID: Session.ID
   readonly agent: Agent.ID

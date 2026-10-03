@@ -13,6 +13,7 @@ import {
   type Accessor,
 } from "solid-js"
 import path from "node:path"
+import { Tool } from "@opencode/schema/tool"
 import { EOL, tmpdir } from "node:os"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
@@ -39,7 +40,6 @@ import { useLocal } from "../../context/local"
 import { Locale } from "../../util/locale"
 import { FilePath } from "../../ui/file-path"
 import {
-  canonicalToolName,
   executeCalls,
   executeCallSummary,
   finiteNumber,
@@ -1762,7 +1762,7 @@ function BackgroundToolHint(props: { messages: SessionMessageInfo[] }) {
     )
     const part = current?.content.find((part): part is SessionMessageAssistantTool => {
       if (part.type !== "tool" || part.state.status !== "running") return false
-      const name = canonicalToolName(part.name)
+      const name = Tool.canonicalName(part.name)
       return name === "shell" || name === "subagent"
     })
     if (!current || !part) return
