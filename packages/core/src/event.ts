@@ -5,6 +5,7 @@ import { Event } from "@opencode-ai/schema/event"
 import type { Data, Definition, Payload } from "@opencode-ai/schema/event"
 import { and, asc, eq, gt, inArray } from "drizzle-orm"
 import { Database } from "./database/database"
+import { DatabaseStorage } from "./database/storage"
 import { EventSequenceTable, EventTable } from "./event/sql"
 import { Location } from "./location"
 import { makeGlobalNode } from "./effect/app-node"
@@ -519,7 +520,10 @@ export const layerWith = (options?: LayerOptions) =>
               yield* db.delete(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).run()
             }),
           )
-          .pipe(Effect.orDie)
+          .pipe(
+            Effect.orDie,
+            Effect.tap(() => DatabaseStorage.reclaim(db)),
+          )
       }
 
       function claim(aggregateID: string, ownerID: string) {
