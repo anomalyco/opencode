@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
 import { AgentV2 } from "@opencode-ai/core/agent"
 import { Database } from "@opencode-ai/core/database/database"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
@@ -23,19 +23,18 @@ const current = Layer.succeed(
   Location.Service,
   Location.Service.of(location({ directory: AbsolutePath.make("/project") })),
 )
-const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([
-      Database.node,
-      EventV2.node,
-      SessionStore.node,
-      PermissionSaved.node,
-      AgentV2.node,
-      PermissionV2.node,
-    ]),
-    [[Location.node, current]],
-  ),
+const nodeLayer = AppNodeBuilder.build(
+  LayerNode.group([
+    Database.node,
+    EventV2.node,
+    SessionStore.node,
+    PermissionSaved.node,
+    AgentV2.node,
+    PermissionV2.node,
+  ]),
+  [[Location.node, current]],
 )
+const it = testEffect(nodeLayer)
 
 function setup(rules: PermissionV2.Ruleset = []) {
   return Effect.gen(function* () {
@@ -310,6 +309,31 @@ describe("PermissionV2", () => {
       yield* service.assert(assertion({ id: PermissionV2.ID.create("per_next"), resources: ["src/next.ts"] }))
       yield* saved.remove(id)
       expect(yield* saved.list()).toEqual([])
+    }),
+  )
+
+  it.effect("declines pending requests when its scope closes", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make()
+      const context = yield* Layer.buildWithScope(Layer.fresh(nodeLayer), scope)
+      const { service, fiber, request } = yield* Effect.gen(function* () {
+        yield* setup()
+        return yield* waitForRequest()
+      }).pipe(Effect.provide(context))
+
+      expect(yield* service.list()).toEqual([request])
+
+      yield* Scope.close(scope, Exit.void)
+
+      const exit = yield* Fiber.await(fiber)
+      expect(exit._tag).toBe("Failure")
+      if (exit._tag === "Failure")
+        expect(
+          exit.cause.reasons.some(
+            (reason) => Cause.isDieReason(reason) && reason.defect instanceof PermissionV2.DeclinedError,
+          ),
+        ).toBe(true)
+      expect(yield* service.list()).toEqual([])
     }),
   )
 })
