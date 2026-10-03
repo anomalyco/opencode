@@ -56,6 +56,14 @@ describe("prompt input v2 store", () => {
     expect(prompt.state.cursor).toBe(7)
   })
 
+  test("setText anchors the cursor at an explicit position when provided", () => {
+    const prompt = createPromptStore()
+
+    prompt.setText("keep me /review b", 16)
+
+    expect(prompt.state.cursor).toBe(16)
+  })
+
   test("inserts text without flattening structured mentions", () => {
     const [state, setState] = createStore<PromptInputV2PersistedState>({
       prompt: [

@@ -14,6 +14,7 @@ import type {
 } from "./types"
 import {
   createPromptInputV2InteractionState,
+  isWholePromptTrigger,
   transitionPromptInputV2,
   type PromptInputV2InteractionCommand,
   type PromptInputV2InteractionEvent,
@@ -131,7 +132,12 @@ export function createPromptInputV2Controller(input: {
     },
   })
   const commandList = useFilteredList<PromptInputV2Suggestion>({
-    items: () => input.commands(),
+    // Mid-prompt slash completion offers only custom commands (which expand to
+    // text). Built-ins stay reachable at prompt-start and in the command menu.
+    items: () =>
+      state.popover.type === "command-inline" && !isWholePromptTrigger(draft.state)
+        ? input.commands().filter((command) => !command.builtin)
+        : input.commands(),
     key: (item) => item.id,
     filterKeys: ["trigger", "title"],
   })
@@ -140,7 +146,7 @@ export function createPromptInputV2Controller(input: {
 
   const execute = (command: PromptInputV2InteractionCommand) => {
     if (command.type === "draft.setText") {
-      draft.setText(command.value)
+      draft.setText(command.value, command.cursor)
       return
     }
     if (command.type === "mention.add") {
