@@ -22,6 +22,10 @@ export type FileDiff = typeof FileDiff.Type
 
 const prune = "7.days"
 const limit = 2 * 1024 * 1024
+// Patch text is display-only; restore uses snapshot hashes. Keep message rows and
+// their repeated event snapshots bounded when a tracked or generated file is huge.
+const patchFileLimit = 1024 * 1024
+const patchTotalLimit = 1024 * 1024
 const core = ["-c", "core.longpaths=true", "-c", "core.symlinks=true"]
 const cfg = ["-c", "core.autocrlf=false", ...core]
 const quote = [...cfg, "-c", "core.quotepath=false"]
@@ -733,8 +737,23 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               }
 
               const step = 100
-              const patch = (file: string, before: string, after: string) =>
-                formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
+              let patchBytes = 0
+              const patch = (file: string, before: string, after: string) => {
+                if (patchBytes >= patchTotalLimit) return { text: "", truncated: true }
+                if (Buffer.byteLength(before) + Buffer.byteLength(after) > patchFileLimit) {
+                  return { text: "", truncated: true }
+                }
+
+                const text = formatPatch(
+                  structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }),
+                )
+                const bytes = Buffer.byteLength(text)
+                if (bytes > patchFileLimit || patchBytes + bytes > patchTotalLimit) {
+                  return { text: "", truncated: true }
+                }
+                patchBytes += bytes
+                return { text, truncated: false }
+              }
 
               for (let i = 0; i < rows.length; i += step) {
                 const run = rows.slice(i, i + step)
@@ -743,12 +762,14 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
                 for (const row of run) {
                   const hit = text?.get(row.file) ?? { before: "", after: "" }
                   const [before, after] = row.binary ? ["", ""] : text ? [hit.before, hit.after] : yield* show(row)
+                  const output = row.binary ? { text: "", truncated: false } : patch(row.file, before, after)
                   result.push({
                     file: row.file,
-                    patch: row.binary ? "" : patch(row.file, before, after),
+                    patch: output.text,
                     additions: row.additions,
                     deletions: row.deletions,
                     status: row.status,
+                    ...(output.truncated ? { truncated: true as const } : {}),
                   })
                 }
               }
