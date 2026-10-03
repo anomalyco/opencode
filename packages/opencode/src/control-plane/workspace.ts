@@ -1,6 +1,6 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
-import { Context, Effect, FiberMap, Iterable, Layer, Schema, Stream } from "effect"
+import { Context, Effect, FiberMap, Iterable, Layer, Option, Schema, Stream } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { FetchHttpClient, HttpBody, HttpClient, HttpClientError, HttpClientRequest } from "effect/unstable/http"
 import { Database } from "@opencode-ai/core/database/database"
@@ -13,6 +13,7 @@ import { Auth } from "@/auth"
 import { EventV2 } from "@opencode-ai/core/event"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
+import { NonNegativeInt } from "@opencode-ai/core/schema"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { ProjectV2 } from "@opencode-ai/core/project"
@@ -344,21 +345,44 @@ const layer = Layer.effect(
 
       const history = (yield* response.json) as HistoryEvent[]
 
+      // Replay per-aggregate batches: the history endpoint returns compacted
+      // rows, so sequence gaps are normal. replayAll verifies ascending order
+      // within a batch and tolerates those gaps; single-event replay would
+      // die on every post-gap row and wedge the resync permanently.
+      const groups = new Map<string, HistoryEvent[]>()
+      for (const event of history) {
+        const group = groups.get(event.aggregate_id)
+        if (group) group.push(event)
+        else groups.set(event.aggregate_id, [event])
+      }
+
       yield* Effect.forEach(
-        history,
-        (event) =>
+        groups,
+        ([aggregateID, group]) =>
           events
-            .replay(
-              {
+            .replayAll(
+              group.map((event) => ({
                 id: EventV2.ID.make(event.id),
                 aggregateID: event.aggregate_id,
                 seq: event.seq,
                 type: event.type,
                 data: event.data,
-              },
+              })),
               { publish: true, ownerID: space.id },
             )
-            .pipe(Effect.provideService(WorkspaceRef, space.id)),
+            .pipe(
+              Effect.catchCause((error) =>
+                // One un-replayable batch must not abort the whole history
+                // pass: it would wedge every future resync at the same events.
+                Effect.logWarning("failed to replay history batch", {
+                  workspaceID: space.id,
+                  sessionID: aggregateID,
+                  seqs: group.map((event) => event.seq),
+                  error: errorData(error),
+                }),
+              ),
+              Effect.provideService(WorkspaceRef, space.id),
+            ),
         { discard: true },
       )
     })
@@ -369,9 +393,16 @@ const layer = Layer.effect(
       if (target.type === "local") return
 
       let attempt = 0
+      // A failed replay triggers a history resync because the source cursor
+      // advanced past the event. Without a latch, a poison event that fails
+      // identically in every resync turns every subsequent SSE event into a
+      // full-history fetch — unbounded amplification. Coalesce to one resync
+      // per live event burst; the next reconnect does another.
+      let resyncInFlight = false
 
       while (true) {
         setStatus(space.id, "connecting")
+        resyncInFlight = false
 
         const stream = yield* connectSSE(target.url, target.headers).pipe(
           Effect.tap(() => syncHistory(space, target.url, target.headers)),
@@ -392,14 +423,29 @@ const layer = Layer.effect(
 
           setStatus(space.id, "connected")
 
+          const decodeSyncEvent = Schema.decodeUnknownOption(
+            Schema.Struct({
+              type: Schema.Literal("sync"),
+              syncEvent: Schema.Struct({
+                id: EventV2.ID,
+                type: Schema.String,
+                seq: NonNegativeInt,
+                aggregateID: Schema.String,
+                data: Schema.Record(Schema.String, Schema.Unknown),
+              }),
+            }),
+          )
+
           yield* parseSSE(stream, (evt) =>
             Effect.gen(function* () {
               if (!evt || typeof evt !== "object" || !("payload" in evt)) return
               const payload = evt.payload as { type?: string; syncEvent?: EventV2.SerializedEvent }
               if (payload.type === "server.heartbeat") return
 
-              if (payload.type === "sync" && payload.syncEvent) {
-                const failed = yield* events.replay(payload.syncEvent, { publish: true, ownerID: space.id }).pipe(
+              const decoded = Option.getOrUndefined(decodeSyncEvent(payload))
+              if (decoded) {
+                const syncEvent = decoded.syncEvent
+                const failed = yield* events.replay(syncEvent, { publish: true, ownerID: space.id }).pipe(
                   Effect.as(false),
                   Effect.catchCause((error) =>
                     Effect.logWarning("failed to replay global event", error).pipe(
@@ -408,7 +454,35 @@ const layer = Layer.effect(
                     ),
                   ),
                 )
+                if (failed && !resyncInFlight) {
+                  resyncInFlight = true
+                  // A failed replay leaves a permanent gap: the source's
+                  // sequence cursor advances past this event, so history
+                  // requests will never resend it. Resync the whole session
+                  // history instead of continuing with a hole. Replay
+                  // failures are defects (Effect.die), so catch the cause,
+                  // not just typed errors. The latch resets when the resync
+                  // settles so a later, different poison event still resyncs.
+                  yield* syncHistory(space, target.url, target.headers).pipe(
+                    Effect.catchCause((error) =>
+                      Effect.logWarning("history resync after failed replay failed", {
+                        workspaceID: space.id,
+                        sessionID: syncEvent.aggregateID,
+                        error: errorData(error),
+                      }),
+                    ),
+                  )
+                  resyncInFlight = false
+                  return
+                }
                 if (failed) return
+              } else if (payload.type === "sync") {
+                // A sync payload that fails schema validation is invisible
+                // data loss if dropped silently — log it.
+                yield* Effect.logWarning("malformed sync event from global sync", {
+                  workspaceID: space.id,
+                  payload,
+                })
               }
 
               try {

@@ -17,9 +17,14 @@ export const EventTable = sqliteTable(
     seq: integer().notNull(),
     type: text().notNull(),
     data: text({ mode: "json" }).$type<Record<string, unknown>>().notNull(),
+    // Materialized compaction entity key (see EventV2 compact). Null for
+    // events without a compact path or an unresolvable key; indexed so
+    // snapshot compaction never scans JSON.
+    compact_key: text(),
   },
   (table) => [
     uniqueIndex("event_aggregate_seq_idx").on(table.aggregate_id, table.seq),
     index("event_aggregate_type_seq_idx").on(table.aggregate_id, table.type, table.seq),
+    index("event_aggregate_type_compact_key_idx").on(table.aggregate_id, table.type, table.compact_key),
   ],
 )
