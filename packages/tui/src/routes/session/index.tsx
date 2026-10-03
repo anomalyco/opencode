@@ -1400,6 +1400,11 @@ function UserMessage(props: {
           border={["left"]}
           borderColor={color()}
           customBorderChars={SplitBorder.customBorderChars}
+          // An entry taller than the scroll viewport is only partly visible, so it is not
+          // culled and draws its full height. opentui skips the viewport's scissor rect for
+          // a fully transparent background, which let the left border paint over the
+          // composer and status rows. An opaque background keeps it clipped.
+          backgroundColor={theme.background}
           marginTop={props.index === 0 ? 0 : 1}
         >
           <box
