@@ -31,6 +31,9 @@ const TOOL_OUTPUT_MAX_CHARS = 2_000
 const PRUNE_PROTECTED_TOOLS = ["skill"]
 const MIN_PRESERVE_RECENT_TOKENS = 2_000
 const MAX_PRESERVE_RECENT_TOKENS = 15_000
+// Prompt template, previous summary, and plugin context that accompany the
+// serialized head in the summarizer request.
+const SUMMARIZER_PROMPT_RESERVE = 8_000
 type Turn = {
   start: number
   end: number
@@ -159,6 +162,40 @@ function splitTurn(input: {
       } satisfies Tail
     }
     return undefined
+  })
+}
+
+// The summarizer request only carries the serialized head. When it no longer
+// fits the model's usable context, drop the oldest complete turns instead of
+// giving up with "session too large to compact".
+function shrinkHeadToBudget(input: {
+  messages: SessionV1.WithParts[]
+  model: Provider.Model
+  budget: number
+  estimate: (input: { messages: SessionV1.WithParts[]; model: Provider.Model }) => Effect.Effect<number>
+}) {
+  return Effect.gen(function* () {
+    let total = yield* input.estimate({ messages: input.messages, model: input.model })
+    if (total <= input.budget) return input.messages
+    const all = turns(input.messages)
+    let start = 0
+    let i = 0
+    while (total > input.budget && i < all.length - 1) {
+      const next = all[i + 1]
+      total -= yield* input.estimate({
+        messages: input.messages.slice(start, next.start),
+        model: input.model,
+      })
+      start = next.start
+      i++
+    }
+    if (start === 0) return input.messages
+    yield* Effect.logInfo("head exceeds budget; dropping oldest turns", {
+      dropped: start,
+      kept: input.messages.length - start,
+      budget: input.budget,
+    })
+    return input.messages.slice(start)
   })
 }
 
@@ -375,7 +412,13 @@ const layer = Layer.effect(
         { sessionID: input.sessionID },
         { context: [], prompt: undefined },
       )
-      const msgs = structuredClone(selected.head)
+      const head = yield* shrinkHeadToBudget({
+        messages: selected.head,
+        model,
+        budget: Math.max(0, usable({ cfg, model, outputTokenMax: flags.outputTokenMax }) - SUMMARIZER_PROMPT_RESERVE),
+        estimate,
+      })
+      const msgs = structuredClone(head)
       yield* plugin.trigger("experimental.chat.messages.transform", {}, { messages: msgs })
       const conversation = msgs.map(serialize).filter(Boolean).join("\n\n")
       const nextPrompt =

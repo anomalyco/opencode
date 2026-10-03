@@ -1052,6 +1052,43 @@ describe("session.compaction.process", () => {
   )
 
   itCompaction.instance(
+    "drops oldest turns when the head exceeds the model context budget",
+    () => {
+      const stub = llm()
+      let captured = ""
+      stub.push(reply("summary", (input) => (captured = JSON.stringify(input.messages))))
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        yield* createUserMessage(session.id, "x".repeat(24_000))
+        yield* createUserMessage(session.id, "y".repeat(8_000))
+        yield* createSummaryCompaction(session.id)
+
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const parent = msgs.at(-1)?.info.id
+        expect(parent).toBeTruthy()
+        const result = yield* SessionCompaction.use.process({
+          parentID: parent!,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+        })
+
+        expect(result).toBe("continue")
+        expect(captured).toContain("yyyy")
+        expect(captured).not.toContain("xxxx")
+      }).pipe(
+        withCompaction({
+          llm: stub.llmLayer,
+          provider: ProviderTest.fake({ model: createModel({ context: 20_000, output: 8_000 }) }),
+          config: cfg({ preserve_recent_tokens: 100 }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
     "retains a split turn suffix when a later message fits the preserve token budget",
     () => {
       const stub = llm()
