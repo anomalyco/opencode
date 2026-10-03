@@ -309,6 +309,26 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Service unavailable" })
   })
 
+  test("retries 408 request timeout errors", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "stream error: stream disconnected before completion",
+        isRetryable: false,
+        statusCode: 408,
+        responseBody: JSON.stringify({
+          type: "error",
+          sequence_number: 0,
+          code: "request_timeout",
+          message: "stream error: stream disconnected before completion",
+        }),
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, retryProvider)).toEqual({
+      message: "stream error: stream disconnected before completion",
+    })
+  })
+
   test("does not retry 4xx errors when isRetryable is false", () => {
     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
       new SessionV1.APIError({
