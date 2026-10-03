@@ -510,6 +510,15 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
         }),
       ],
     }),
+    Spec.make("browser", {
+      description: "Connect the OpenCode Browser extension",
+      commands: [
+        Spec.make("install", { description: "Set up OpenCode Browser: register the helper, add Browser Control, and open the extension page" }),
+        Spec.make("status", { description: "Show where the helper is registered and when the extension connected" }),
+        Spec.make("uninstall", { description: "Remove the OpenCode Browser helper" }),
+        Spec.make("host", { description: "Native messaging host started by the OpenCode Browser extension" }),
+      ],
+    }),
     Spec.make("reload", {
       description: "Reload configuration",
       params: {

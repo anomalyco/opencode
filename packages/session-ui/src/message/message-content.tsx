@@ -27,7 +27,7 @@ import type {
   SessionMessageUser,
 } from "@opencode/client/promise"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
-import { attached, typeLabel } from "../components/message-file"
+import { attached, attachedImage, typeLabel } from "../components/message-file"
 
 export async function writeClipboard(text: string): Promise<boolean> {
   const body = typeof document === "undefined" ? undefined : document.body
@@ -217,7 +217,10 @@ export function CurrentUserMessageDisplay(props: {
   const dialog = useDialog()
   const i18n = useI18n()
   const [state, setState] = createStore({ copied: false, reverting: false })
-  const attachments = createMemo(() => (props.message.files ?? []).filter(attached))
+  // Pasted images that clients name inline ("[Image 1]") keep their highlighted mention and also show here.
+  const attachments = createMemo(() =>
+    (props.message.files ?? []).filter((file) => attached(file) || (!!file.mention && attachedImage(file))),
+  )
   const references = createMemo(() => props.references ?? [])
   const inlineFiles = createMemo(() => (props.message.files ?? []).filter((file) => !!file.mention))
   const agents = createMemo(() => props.message.agents ?? [])

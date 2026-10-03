@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@tsconfig/node22/tsconfig.json",
+  "compilerOptions": {
+    "jsx": "preserve",
+    "jsxImportSource": "solid-js",
+    "target": "ESNext",
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "isolatedModules": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "lib": ["es2024", "dom", "dom.iterable"],
+    "strict": true,
+    "skipLibCheck": true,
+    "types": ["vite/client", "bun", "chrome"]
+  },
+  "include": ["src", "plugin", "vite.config.ts", "vite.content.config.ts", "scripts"]
+}

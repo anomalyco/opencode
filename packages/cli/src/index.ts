@@ -75,6 +75,12 @@ const Handlers = Runtime.handlers(Commands, {
     set: () => import("./commands/handlers/service/set"),
     unset: () => import("./commands/handlers/service/unset"),
   },
+  browser: {
+    install: () => import("./commands/handlers/browser/install"),
+    status: () => import("./commands/handlers/browser/status"),
+    uninstall: () => import("./commands/handlers/browser/uninstall"),
+    host: () => import("./commands/handlers/browser/host"),
+  },
   serve: () => import("./commands/handlers/serve"),
 })
 
