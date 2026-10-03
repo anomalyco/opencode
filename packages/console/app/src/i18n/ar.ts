@@ -4,6 +4,8 @@ import { dict as en } from "./en"
 export const dict = {
   ...en,
   "go.promo.spaceBunny": "يتوفر Space Bunny Free، وهو نموذج مجهول جديد، لفترة محدودة",
+  "go.referral.ended.label": "تحذير",
+  "go.referral.ended": "انتهى برنامج الإحالة. لم تعد روابط الإحالة تمنح رصيدًا لك أو للشخص الذي شاركها.",
   "go.graph.bonus": "استخدام مضاعف {{count}} مرات",
   "nav.github": "GitHub",
   "nav.docs": "الوثائق",
@@ -260,6 +262,7 @@ export const dict = {
   "go.title": "OpenCode Go | نماذج برمجة منخفضة التكلفة للجميع",
   "go.meta.description": "يبلغ سعر Go ‏$10/شهر، مع حدود استخدام سخية ووصول موثوق إلى نماذج البرمجة الرائدة.",
   "go.hero.title": "نماذج برمجة منخفضة التكلفة للجميع",
+  "go.hero.tagline": "استخدمه مع أي وكيل. قم بزيادة الرصيد إذا لزم الأمر. الإلغاء في أي وقت.",
   "go.hero.body":
     "يجلب Go البرمجة الوكيلة للمبرمجين حول العالم. يوفر حدودًا سخية ووصولًا موثوقًا إلى أقوى النماذج مفتوحة المصدر، حتى تتمكن من البناء باستخدام وكلاء أقوياء دون القلق بشأن التكلفة أو التوفر.",
 
@@ -267,7 +270,7 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "اشترك في Go",
   "go.cta.price": "$10/شهر",
-  "go.plans.month": "/شهر",
+  "go.plans.month": "شهريًا",
   "go.plans.plus.cta": "الاشتراك في Go Plus",
   "go.plans.plus.description": "تبلغ تكلفة Go Plus ‏$40/شهر مع حدود استخدام أعلى.",
   "go.plans.go.feature1": "نماذج مختارة بأسعار معقولة",
@@ -653,7 +656,6 @@ export const dict = {
   "workspace.payments.type.subscription": "اشتراك",
   "workspace.payments.view": "عرض",
 
-  "workspace.black.loading": "جارٍ التحميل...",
   "workspace.black.time.day": "يوم",
   "workspace.black.time.days": "أيام",
   "workspace.black.time.hour": "ساعة",
@@ -663,7 +665,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "بضع ثوان",
   "workspace.black.subscription.title": "الاشتراك",
   "workspace.black.subscription.message": "أنت مشترك في OpenCode Black مقابل ${{plan}} شهريًا.",
-  "workspace.black.subscription.manage": "إدارة الاشتراك",
+  "workspace.black.subscription.ending":
+    "ينتهي OpenCode Black بنهاية فترة الفوترة الحالية ولن يتم تجديده. سننقلك إلى وحدة التحكم الجديدة.",
   "workspace.black.subscription.rollingUsage": "استخدام لمدة 5 ساعات",
   "workspace.black.subscription.weeklyUsage": "الاستخدام الأسبوعي",
   "workspace.black.subscription.resetsIn": "إعادة تعيين في",

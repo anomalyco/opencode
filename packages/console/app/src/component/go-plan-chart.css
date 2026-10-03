@@ -1,13 +1,5 @@
 @import "@opencode-ai/ui/v2/styles/colors.css";
 
-@font-face {
-  font-family: "Inter";
-  src: url("@opencode-ai/ui/fonts/Inter.ttf") format("truetype");
-  font-style: normal;
-  font-weight: 100 900;
-  font-display: swap;
-}
-
 [data-page="go"] {
   --go-console-bg: var(--v2-grey-50);
   --go-console-surface: var(--v2-grey-100);
@@ -35,7 +27,7 @@
   padding: 2rem var(--padding) 3rem;
   background: var(--go-console-bg);
   color: var(--go-console-text);
-  font-family: "Inter", sans-serif;
+  font-family: var(--font-mono);
   font-size: 0.8125rem;
   font-weight: 440;
   line-height: 1.25rem;
