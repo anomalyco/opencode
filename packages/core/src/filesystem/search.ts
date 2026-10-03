@@ -113,18 +113,30 @@ export const ripgrepLayer = Layer.effect(
   }),
 )
 
+// Every engine owns a file index and an inotify watcher. A reload boots the replacement graph while running
+// sessions still borrow the old one, so share one engine per directory until its last user closes.
+const engines = new Map<string, { picker: Fff.Picker; users: number }>()
+
 export const fffLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const location = yield* Location.Service
     const result = yield* Effect.try({
-      try: () =>
-        Fff.create({
+      try: () => {
+        const shared = engines.get(location.directory)
+        if (shared) {
+          shared.users++
+          return { ok: true as const, value: shared.picker }
+        }
+        const created = Fff.create({
           basePath: location.directory,
           aiMode: true,
           disableMmapCache: true,
           disableContentIndexing: true,
-        }),
+        })
+        if (created.ok) engines.set(location.directory, { picker: created.value, users: 1 })
+        return created
+      },
       catch: (cause) => cause,
     }).pipe(
       Effect.catch((error) => Effect.logWarning("failed to initialize fff", { error }).pipe(Effect.as(undefined))),
@@ -135,7 +147,14 @@ export const fffLayer = Layer.effect(
         find: () => Effect.succeed([]),
       })
     }
-    yield* Effect.addFinalizer(() => Effect.sync(() => result.value.destroy()))
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        const shared = engines.get(location.directory)
+        if (!shared || --shared.users > 0) return
+        engines.delete(location.directory)
+        shared.picker.destroy()
+      }),
+    )
     return Service.of({
       find: (input) =>
         Effect.sync(() => {
