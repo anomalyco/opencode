@@ -11,6 +11,7 @@ const sessionCreateInputs: Array<{
   agent?: string
   model?: { id: string; providerID: string; variant?: string }
   location?: { directory: string }
+  infinite?: boolean
 }> = []
 const enabledAutoAccept: Array<{ server: string; sessionID: string; directory: string }> = []
 const optimistic: Array<{
@@ -38,6 +39,7 @@ let params: { id?: string } = {}
 let search: { draftId?: string } = {}
 let selected = "/repo/worktree-a"
 let variant: string | undefined
+let sessionMode: string | undefined
 let permissionServer = "server-a"
 let createSessionGate: Promise<void> | undefined
 
@@ -135,6 +137,7 @@ beforeAll(async () => {
   mock.module("@opencode-ai/ui/toast", () => ({
     Toast: { Region: () => null },
     showToast: () => 0,
+    toaster: { dismiss: () => {} },
   }))
 
   mock.module("@opencode-ai/core/util/encode", () => ({
@@ -149,6 +152,10 @@ beforeAll(async () => {
       },
       agent: {
         current: () => ({ name: "agent" }),
+      },
+      mode: {
+        current: () => (sessionMode === "infinite" ? "infinite" : "complete"),
+        selected: () => (sessionMode === "infinite" ? "infinite" : undefined),
       },
       session: {
         promote(directory: string, sessionID: string) {
@@ -298,6 +305,7 @@ beforeEach(() => {
   syncedDirectories.length = 0
   selected = "/repo/worktree-a"
   variant = undefined
+  sessionMode = undefined
   permissionServer = "server-a"
   createSessionGate = undefined
   serverSessionSyncs = 0
@@ -339,11 +347,13 @@ describe("prompt submit worktree selection", () => {
         agent: "agent",
         model: { id: "model", providerID: "provider", variant: undefined },
         location: { directory: "/repo/worktree-a" },
+        infinite: false,
       },
       {
         agent: "agent",
         model: { id: "model", providerID: "provider", variant: undefined },
         location: { directory: "/repo/worktree-b" },
+        infinite: false,
       },
     ])
     expect(sentShell).toEqual([
@@ -594,5 +604,87 @@ describe("prompt submit worktree selection", () => {
     expect(storedSessions["/repo/worktree-a"]).toHaveLength(1)
     expect(storedSessions["/repo/worktree-a"]?.[0]).toMatchObject({ id: "session-1", title: "New session 1" })
     expect(optimisticSeeded).toEqual([true])
+  })
+
+  test("sends infinite false for complete mode followups", async () => {
+    params = { id: "session-1" }
+    sessionMode = "complete"
+
+    const submit = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await submit.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+
+    expect(promptInputs[0]).toMatchObject({ sessionID: "session-1", infinite: false })
+  })
+
+  test("sends infinite true for infinite mode followups and creates", async () => {
+    params = { id: "session-1" }
+    sessionMode = "infinite"
+
+    const followup = createPromptSubmit({
+      prompt,
+      info: () => ({ id: "session-1" }),
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await followup.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+    await Bun.sleep(0)
+
+    expect(promptInputs[0]).toMatchObject({ sessionID: "session-1", infinite: true })
+
+    params = {}
+    const created = createPromptSubmit({
+      prompt,
+      info: () => undefined,
+      imageAttachments: () => [],
+      commentCount: () => 0,
+      autoAccept: () => false,
+      mode: () => "normal",
+      working: () => false,
+      editor: () => undefined,
+      queueScroll: () => undefined,
+      promptLength: (value) => value.reduce((sum, part) => sum + ("content" in part ? part.content.length : 0), 0),
+      addToHistory: () => undefined,
+      resetHistoryNavigation: () => undefined,
+      setMode: () => undefined,
+      setPopover: () => undefined,
+      newSessionWorktree: () => selected,
+      onNewSessionWorktreeReset: () => undefined,
+      onSubmit: () => undefined,
+    })
+
+    await created.handleSubmit({ preventDefault: () => undefined } as unknown as Event)
+
+    const lastCreate = sessionCreateInputs[sessionCreateInputs.length - 1]
+    expect(lastCreate).toMatchObject({ infinite: true })
   })
 })
