@@ -1094,7 +1094,6 @@ body {
 [data-page="stats"] [data-component="top-models-chart"] {
   --top-models-bar-gap: 12px;
   --top-models-dot-size: 6px;
-  --top-models-dot-offset: 2px;
   position: relative;
   display: grid;
   grid-template-rows: 34px minmax(0, 1fr);
@@ -1224,38 +1223,31 @@ body {
   padding-inline: calc(var(--top-models-bar-gap) / 2);
   outline: none;
   cursor: pointer;
+  /* Resolved by absolutely positioned children against this slot's width. Three 2px dot columns span the bar, so this inset makes the gap between bars equal the gap between dot columns. */
+  --top-models-bar-inset: calc((100% - 6px) / 6);
 }
 
+/* Three dot columns aligned to the bar's left edge, center, and right edge, so they read as rising out of the bar. The SVG has no viewBox, so the 2px dot keeps its size while the cell stretches. */
 [data-page="stats"] [data-slot="top-models-bar"]::before {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: calc(100% - var(--top-models-bar-gap));
-  transform: translateX(-50%);
+  inset: 0 var(--top-models-bar-inset);
   content: "";
   background: var(--stats-dot);
-  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  mask-position: var(--top-models-dot-offset) top;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  mask-position: left top;
   mask-repeat: repeat;
-  mask-size: var(--top-models-dot-size) var(--top-models-dot-size);
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  -webkit-mask-position: var(--top-models-dot-offset) top;
+  mask-size: calc((100% - 2px) / 2) var(--top-models-dot-size);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  -webkit-mask-position: left top;
   -webkit-mask-repeat: repeat;
-  -webkit-mask-size: var(--top-models-dot-size) var(--top-models-dot-size);
-}
-
-@supports (width: round(down, 100%, 1px)) {
-  [data-page="stats"] [data-slot="top-models-bar"]::before {
-    width: round(down, calc(100% - var(--top-models-bar-gap)), var(--top-models-dot-size));
-  }
+  -webkit-mask-size: calc((100% - 2px) / 2) var(--top-models-dot-size);
 }
 
 [data-page="stats"] [data-slot="top-models-stack"] {
   position: absolute;
-  right: calc(var(--top-models-bar-gap) / 2);
+  right: var(--top-models-bar-inset);
   bottom: 0;
-  left: calc(var(--top-models-bar-gap) / 2);
+  left: var(--top-models-bar-inset);
   z-index: 1;
   display: grid;
   height: var(--top-models-bar-height);
@@ -4545,7 +4537,6 @@ body {
 [data-page="stats"] [data-component="model-usage-chart"] {
   --model-usage-bar-gap: 6px;
   --model-usage-dot-size: 6px;
-  --model-usage-dot-offset: 2px;
   position: relative;
   display: grid;
   grid-template-rows: 40px minmax(0, 1fr);
@@ -4603,38 +4594,31 @@ body {
   padding-inline: calc(var(--model-usage-bar-gap) / 2);
   outline: none;
   cursor: pointer;
+  /* Resolved by absolutely positioned children against this slot's width. Three 2px dot columns span the bar, so this inset makes the gap between bars equal the gap between dot columns. */
+  --model-usage-bar-inset: calc((100% - 6px) / 6);
 }
 
+/* Three dot columns aligned to the bar's left edge, center, and right edge, so they read as rising out of the bar. The SVG has no viewBox, so the 2px dot keeps its size while the cell stretches. */
 [data-page="stats"] [data-slot="model-usage-column"]::before {
   position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: calc(100% - var(--model-usage-bar-gap));
-  transform: translateX(-50%);
+  inset: 0 var(--model-usage-bar-inset);
   content: "";
   background: var(--stats-dot);
-  mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  mask-position: var(--model-usage-dot-offset) top;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  mask-position: left top;
   mask-repeat: repeat;
-  mask-size: var(--model-usage-dot-size) var(--model-usage-dot-size);
-  -webkit-mask-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 6 6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0H2V2H0V0Z' fill='black'/%3E%3C/svg%3E");
-  -webkit-mask-position: var(--model-usage-dot-offset) top;
+  mask-size: calc((100% - 2px) / 2) var(--model-usage-dot-size);
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  -webkit-mask-position: left top;
   -webkit-mask-repeat: repeat;
-  -webkit-mask-size: var(--model-usage-dot-size) var(--model-usage-dot-size);
-}
-
-@supports (width: round(down, 100%, 1px)) {
-  [data-page="stats"] [data-slot="model-usage-column"]::before {
-    width: round(down, calc(100% - var(--model-usage-bar-gap)), var(--model-usage-dot-size));
-  }
+  -webkit-mask-size: calc((100% - 2px) / 2) var(--model-usage-dot-size);
 }
 
 [data-page="stats"] [data-slot="model-usage-bar"] {
   position: absolute;
-  right: calc(var(--model-usage-bar-gap) / 2);
+  right: var(--model-usage-bar-inset);
   bottom: 0;
-  left: calc(var(--model-usage-bar-gap) / 2);
+  left: var(--model-usage-bar-inset);
   z-index: 1;
   height: var(--model-usage-fill);
   min-height: 0;
@@ -8196,7 +8180,8 @@ body {
   }
 
   [data-page="stats"] [data-component="model-usage-chart"] {
-    --model-usage-mobile-bar-width: 16px;
+    /* 18px puts three 2px dot columns 6px apart, matching the 6px bar gap. */
+    --model-usage-mobile-bar-width: 18px;
     --model-usage-mobile-edge-space: 48px;
     --model-usage-mobile-track-width: calc(
       var(--model-usage-count) * (var(--model-usage-mobile-bar-width) + var(--model-usage-bar-gap)) +
@@ -8237,7 +8222,7 @@ body {
   }
 
   [data-page="stats"] [data-slot="model-usage-column"]::before {
-    width: 100%;
+    inset: 0;
   }
 
   [data-page="stats"] [data-slot="model-usage-bar"] {
