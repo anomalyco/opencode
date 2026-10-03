@@ -4,20 +4,30 @@ import fs from "fs/promises"
 import path from "path"
 import yargs from "yargs"
 import { tmpdir } from "../../fixture/fixture"
-import { TuiThreadCommand, resolveThreadDirectory } from "../../../src/cli/cmd/tui"
+import { TuiThreadCommand } from "../../../src/cli/cmd/tui"
+import { resolveThreadDirectory } from "../../../src/cli/cmd/tui.handler"
 import { cliIt } from "../../lib/cli-process"
 
 describe("tui thread", () => {
   test("loads the TUI integration lazily", async () => {
-    const source = await Bun.file(new URL("../../../src/cli/cmd/tui.ts", import.meta.url)).text()
+    const source = await Bun.file(new URL("../../../src/cli/cmd/tui.handler.ts", import.meta.url)).text()
 
     expect(source).toContain('await import("../tui/layer")')
     expect(source).toMatch(/await import\(["']@\/plugin\/tui\/runtime["']\)/)
     expect(source).not.toContain('import("./app")')
   })
 
-  test("forwards the CLI environment to the TUI worker", async () => {
+  test("keeps the command definition free of heavy imports", async () => {
     const source = await Bun.file(new URL("../../../src/cli/cmd/tui.ts", import.meta.url)).text()
+
+    expect(source).not.toContain("from \"effect\"")
+    expect(source).not.toContain("from \"@/cli/ui\"")
+    expect(source).not.toContain("from \"@/server/auth\"")
+    expect(source).not.toContain("from \"@/util/filesystem\"")
+  })
+
+  test("forwards the CLI environment to the TUI worker", async () => {
+    const source = await Bun.file(new URL("../../../src/cli/cmd/tui.handler.ts", import.meta.url)).text()
 
     expect(source).toMatch(/new Worker\(file, \{\s*env: Object\.fromEntries\(\s*Object\.entries\(process\.env\)/)
   })
