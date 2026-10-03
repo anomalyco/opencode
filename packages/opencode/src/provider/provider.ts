@@ -1263,6 +1263,17 @@ interface State {
   sdk: Map<string, BundledSDK>
   modelLoaders: Record<string, CustomModelLoader>
   varsLoaders: Record<string, CustomVarsLoader>
+  authFingerprint: string
+}
+
+// auth.json is re-read live by Auth but Provider state is cached per
+// directory. Fingerprint the auth snapshot so cached instances can detect
+// external changes (TUI/CLI login, manual edit) and rebuild lazily.
+function fingerprintAuth(auths: Record<string, Auth.Info>): string {
+  return Object.keys(auths)
+    .sort()
+    .map((key) => `${key}:${JSON.stringify(auths[key])}`)
+    .join("|")
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Provider") {}
@@ -1776,11 +1787,25 @@ const layer = Layer.effect(
           sdk,
           modelLoaders,
           varsLoaders,
+          authFingerprint: fingerprintAuth(auths),
         }
       }),
     )
 
-    const list = Effect.fn("Provider.list")(() => InstanceState.use(state, (s) => s.providers))
+    // Re-check auth on every access. Auth.all() re-reads auth.json live, so a
+    // fingerprint mismatch means another process changed credentials after this
+    // directory's state was built. Invalidate lazily so the next get rebuilds.
+    const getFreshState = Effect.fn("Provider.getFreshState")(function* () {
+      const cached = yield* InstanceState.get(state)
+      const auths = yield* auth.all().pipe(Effect.orDie)
+      if (fingerprintAuth(auths) === cached.authFingerprint) return cached
+      yield* InstanceState.invalidate(state)
+      return yield* InstanceState.get(state)
+    })
+
+    const list = Effect.fn("Provider.list")(function* () {
+      return (yield* getFreshState()).providers
+    })
 
     async function resolveSDK(model: Model, s: State, envs: Record<string, string | undefined>) {
       try {
@@ -1887,12 +1912,12 @@ const layer = Layer.effect(
       }
     }
 
-    const getProvider = Effect.fn("Provider.getProvider")((providerID: ProviderV2.ID) =>
-      InstanceState.use(state, (s) => s.providers[providerID]),
-    )
+    const getProvider = Effect.fn("Provider.getProvider")(function* (providerID: ProviderV2.ID) {
+      return (yield* getFreshState()).providers[providerID]
+    })
 
     const getModel = Effect.fn("Provider.getModel")(function* (providerID: ProviderV2.ID, modelID: ModelV2.ID) {
-      const s = yield* InstanceState.get(state)
+      const s = yield* getFreshState()
       const provider = s.providers[providerID]
       if (!provider) {
         const catalogProvider = s.catalog[providerID]
@@ -1916,7 +1941,7 @@ const layer = Layer.effect(
     })
 
     const getLanguage = Effect.fn("Provider.getLanguage")(function* (model: Model) {
-      const s = yield* InstanceState.get(state)
+      const s = yield* getFreshState()
       const envs = yield* env.all()
       const key = `${model.providerID}/${model.id}`
       if (s.models.has(key)) return s.models.get(key)!
@@ -1947,7 +1972,7 @@ const layer = Layer.effect(
     })
 
     const closest = Effect.fn("Provider.closest")(function* (providerID: ProviderV2.ID, query: string[]) {
-      const s = yield* InstanceState.get(state)
+      const s = yield* getFreshState()
       const provider = s.providers[providerID]
       if (!provider) return undefined
       for (const item of query) {
@@ -1968,7 +1993,7 @@ const layer = Layer.effect(
         )
       }
 
-      const s = yield* InstanceState.get(state)
+      const s = yield* getFreshState()
       const provider = s.providers[providerID]
       if (!provider) return undefined
 
@@ -2031,7 +2056,7 @@ const layer = Layer.effect(
       const cfg = yield* config.get()
       if (cfg.model) return parseModel(cfg.model)
 
-      const s = yield* InstanceState.get(state)
+      const s = yield* getFreshState()
       const recent = yield* fs.readJson(path.join(Global.Path.state, "model.json")).pipe(
         Effect.map((x): { providerID: ProviderV2.ID; modelID: ModelV2.ID }[] => {
           if (!isRecord(x) || !Array.isArray(x.recent)) return []
