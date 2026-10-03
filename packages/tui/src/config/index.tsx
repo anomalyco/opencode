@@ -58,6 +58,10 @@ export const Prompt = Schema.Struct({
   }),
 }).annotate({ description: "Prompt size settings" })
 
+const SidebarWidth = Schema.Int.check(Schema.isGreaterThan(10)).annotate({
+  description: "Session sidebar width in columns (default: 42)",
+})
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -66,6 +70,7 @@ export const Info = Schema.Struct({
   plugin_enabled: Schema.optional(Schema.Record(Schema.String, Schema.Boolean)),
   leader_timeout: Schema.optional(LeaderTimeout),
   attention: Schema.optional(Attention),
+  sidebar_width: Schema.optional(SidebarWidth),
   prompt: Schema.optional(Prompt),
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
@@ -75,7 +80,7 @@ export const Info = Schema.Struct({
 })
 export type Info = Schema.Schema.Type<typeof Info>
 
-export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "cursor"> & {
+export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | "mouse" | "cursor" | "sidebar_width"> & {
   attention: {
     enabled: boolean
     notifications: boolean
@@ -86,6 +91,7 @@ export type Resolved = Omit<Info, "attention" | "keybinds" | "leader_timeout" | 
   }
   keybinds: TuiKeybind.BindingLookupView
   leader_timeout: number
+  sidebar_width: number
   mouse: boolean
   cursor?: {
     style: "block" | "underline" | "line" | "default"
@@ -125,6 +131,7 @@ export function resolve(input: Info, options: ResolveOptions): Resolved {
       bindingDefaults: TuiKeybind.bindingDefaults(),
     }),
     leader_timeout: input.leader_timeout ?? LeaderTimeoutDefault,
+    sidebar_width: input.sidebar_width ?? 42,
     mouse: input.mouse ?? true,
     cursor: input.cursor
       ? {

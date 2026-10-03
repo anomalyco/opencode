@@ -33,14 +33,17 @@ test("validates config constraints", () => {
       diff_style: "stacked",
       cursor: { blinking: false },
       plugin: ["example-plugin"],
+      sidebar_width: 50,
     }),
   ).toMatchObject({
     leader_timeout: 250,
     attention: { volume: 1 },
     diff_style: "stacked",
     cursor: { blinking: false },
+    sidebar_width: 50,
   })
   expect(() => decodeInfo({ leader_timeout: 0 })).toThrow()
+  expect(() => decodeInfo({ sidebar_width: 5 })).toThrow()
   expect(() => decodeInfo({ attention: { volume: 1.1 } })).toThrow()
   expect(() => decodeInfo({ prompt: { max_width: 0 } })).toThrow()
   expect(() => decodeInfo({ scroll_speed: 0 })).toThrow()
@@ -60,6 +63,7 @@ test("resolves host-neutral defaults", () => {
     sounds: {},
   })
   expect(config.leader_timeout).toBe(LeaderTimeoutDefault)
+  expect(config.sidebar_width).toBe(42)
   expect(config.mouse).toBe(true)
   expect(config.keybinds.has("terminal.suspend")).toBe(true)
   expect(config.keybinds.has("session.list")).toBe(true)
