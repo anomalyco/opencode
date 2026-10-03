@@ -1,14 +1,15 @@
 import { describe, expect, beforeAll, beforeEach, afterAll } from "bun:test"
-import { Effect, Layer, Ref } from "effect"
+import { Deferred, Effect, Fiber, Layer, Ref } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/unstable/http"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Flag } from "@opencode-ai/core/flag/flag"
 import { Global } from "@opencode-ai/core/global"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { it } from "./lib/effect"
-import { readFile, rm, writeFile, utimes, mkdir } from "fs/promises"
+import { readdir, readFile, rm, writeFile, utimes, mkdir } from "fs/promises"
 import path from "path"
 
 // test/preload.ts pins OPENCODE_MODELS_PATH to a fixture so other tests can
@@ -87,13 +88,14 @@ const makeMockClient = (state: Ref.Ref<MockState>) =>
     }),
   )
 
-const buildLayer = (state: Ref.Ref<MockState>) =>
+const buildLayer = (state: Ref.Ref<MockState>, replacements: LayerNode.Replacements = []) =>
   // Layer.fresh is required because the ModelsDev implementation is a module-level Layer constant,
   // and Effect.provide uses a process-global MemoMap by default — without fresh,
   // every test would reuse the cachedInvalidateWithTTL state from the first run.
   Layer.fresh(
     AppNodeBuilder.build(ModelsDev.node, [
       [LayerNodePlatform.httpClient, Layer.succeed(HttpClient.HttpClient, makeMockClient(state))],
+      ...replacements,
     ]),
   )
 
@@ -109,8 +111,14 @@ const writeCacheText = (text: string, mtimeMs?: number) =>
 
 const writeCache = (data: object, mtimeMs?: number) => writeCacheText(JSON.stringify(data), mtimeMs)
 
-const provided = <A, E>(state: Ref.Ref<MockState>, eff: Effect.Effect<A, E, ModelsDev.Service>) =>
-  eff.pipe(Effect.provide(buildLayer(state)))
+const provided = <A, E>(
+  state: Ref.Ref<MockState>,
+  eff: Effect.Effect<A, E, ModelsDev.Service>,
+  replacements?: LayerNode.Replacements,
+) => eff.pipe(Effect.provide(buildLayer(state, replacements)))
+
+const tempFiles = () =>
+  Effect.promise(async () => (await readdir(Global.Path.cache)).filter((name) => name.endsWith(".tmp")))
 
 beforeEach(async () => {
   await rm(cacheFile, { force: true })
@@ -266,6 +274,35 @@ describe("ModelsDev Service", () => {
       const final = yield* Ref.get(state)
       expect(final.calls.length).toBe(1)
       expect(after).toEqual(fixture2)
+    }),
+  )
+
+  it.live("refresh removes its temp file when interrupted before the rename", () =>
+    Effect.gen(function* () {
+      yield* writeCache(fixture)
+      const state = yield* Ref.make({ ...initialState, body: JSON.stringify(fixture2) })
+      const before = yield* tempFiles()
+      const renaming = yield* Deferred.make<void>()
+      const stuck = Layer.effect(
+        FSUtil.Service,
+        FSUtil.Service.use((fs) =>
+          Effect.succeed(
+            FSUtil.Service.of({
+              ...fs,
+              rename: () => Deferred.succeed(renaming, undefined).pipe(Effect.andThen(Effect.never)),
+            }),
+          ),
+        ),
+      ).pipe(Layer.provide(AppNodeBuilder.build(FSUtil.node)))
+      const fiber = yield* provided(
+        state,
+        ModelsDev.Service.use((s) => s.refresh(true)),
+        [[FSUtil.node, stuck]],
+      ).pipe(Effect.forkChild)
+      yield* Deferred.await(renaming)
+      expect(yield* tempFiles()).toHaveLength(before.length + 1)
+      yield* Fiber.interrupt(fiber)
+      expect(yield* tempFiles()).toEqual(before)
     }),
   )
 
