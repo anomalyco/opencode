@@ -27,6 +27,12 @@ describe("tab migration", () => {
     expect(migrateTabs(null, server)).toEqual([])
     expect(migrateTabs({}, server)).toEqual([])
   })
+
+  test("drops drafts whose directory decoded to replacement characters", () => {
+    const damaged: Tab = { type: "draft", server, draftID: "a", directory: "j\uFFFD" }
+    const valid: Tab = { type: "draft", server, draftID: "b", directory: "/home/dev/repo" }
+    expect(migrateTabs([damaged, valid], server)).toEqual([valid])
+  })
 })
 
 describe("tab memory", () => {
