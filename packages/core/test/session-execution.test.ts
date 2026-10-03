@@ -17,12 +17,13 @@ import { Session } from "@opencode/core/session"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { SessionEvent } from "@opencode/core/session/event"
+import { SessionStatusEvent } from "@opencode/schema/session-status-event"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope, Stream } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -371,6 +372,47 @@ describe("SessionExecution lifecycle", () => {
       expect(continued).toEqual([])
       expect(yield* attempts(database, sessionID)).toBe(0)
       expect((yield* claims(database))[sessionID]).toBe(true)
+    }),
+  )
+
+  it.effect("reports waiting while a settled Session has outstanding background work", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const jobs = yield* Job.Service
+      const sessionID = Session.ID.make("ses_waiting_background")
+      yield* seedSessions(database, [sessionID])
+
+      const gate = yield* Deferred.make<void>()
+      const shell = yield* jobs.start({
+        id: "sh_waiting",
+        type: "shell",
+        title: "sleep",
+        recovery: { kind: "shell", sessionID, shellID: "sh_waiting", command: "sleep" },
+        run: Deferred.await(gate).pipe(Effect.as("")),
+      })
+      const marker = yield* jobs.background(shell.id)
+      if (!marker?.notificationID) return yield* Effect.die("expected background marker")
+
+      const statuses = yield* bus.subscribe(SessionStatusEvent.Status).pipe(
+        Stream.filter((event) => event.data.sessionID === sessionID),
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.forkScoped,
+      )
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.void)
+      const execution = Context.get(context, SessionExecution.Service)
+      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+
+      const events = Array.from(yield* Fiber.join(statuses))
+      expect(events[0]?.data.status).toEqual({ type: "waiting" })
+
+      // Once the background notification is acknowledged, the Session is no longer waiting.
+      yield* jobs.completeBackground(marker.notificationID)
+      expect(yield* jobs.awaiting(sessionID)).toBe(false)
     }),
   )
 })

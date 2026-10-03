@@ -26,16 +26,12 @@ export function text(message: SessionMessage.Info | undefined) {
  */
 export const finalText = Effect.fnUntraced(function* (input: {
   sessions: Pick<Session.Interface, "resume" | "messages">
-  jobs: Pick<Job.Interface, "pendingBackground" | "awaitBackground">
+  jobs: Pick<Job.Interface, "pendingFor" | "awaitBackground">
   sessionID: SessionSchema.ID
 }) {
   while (true) {
     yield* input.sessions.resume(input.sessionID)
-    const pending = (yield* input.jobs.pendingBackground).filter((job) =>
-      job.recovery.kind === "shell"
-        ? job.recovery.sessionID === input.sessionID
-        : job.recovery.parentSessionID === input.sessionID,
-    )
+    const pending = yield* input.jobs.pendingFor(input.sessionID)
     if (pending.length === 0) break
     yield* Effect.forEach(pending, (job) => input.jobs.awaitBackground(job.notificationID), {
       concurrency: "unbounded",

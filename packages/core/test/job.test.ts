@@ -294,6 +294,7 @@ describe("Job", () => {
     Effect.gen(function* () {
       const jobs = yield* Job.Service
       const job = yield* jobs.start({
+        id: "shell_background_await",
         type: "shell",
         recovery: {
           kind: "shell",

@@ -5,6 +5,7 @@ import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Job } from "../job.js"
 import { Instance } from "../instance/service.js"
+import { SessionStatusEvent } from "@opencode/schema/session-status-event"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { SessionEvent } from "./event.js"
 import { SessionRunCoordinator } from "./run-coordinator.js"
@@ -123,6 +124,9 @@ export const layer = Layer.effect(
             const outcome = terminal(exit, reason)
             if (outcome.type === "succeeded") {
               yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID))
+              if (yield* jobs.awaiting(sessionID)) {
+                yield* bus.publish(SessionStatusEvent.Status, { sessionID, status: { type: "waiting" } })
+              }
               return
             }
             if (outcome.type === "interrupted") {

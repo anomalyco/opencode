@@ -136,6 +136,8 @@ export interface Interface {
   readonly pendingBackground: Effect.Effect<readonly Background[]>
   readonly completeBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
   readonly awaitBackground: (notificationID: SessionMessage.ID) => Effect.Effect<void>
+  readonly pendingFor: (sessionID: SessionSchema.ID) => Effect.Effect<readonly Background[]>
+  readonly awaiting: (sessionID: SessionSchema.ID) => Effect.Effect<boolean>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Job") {}
@@ -452,6 +454,22 @@ export const make = Effect.gen(function* () {
     return recovered
   }).pipe(Effect.withSpan("Job.pendingBackground"))
 
+  /**
+   * Outstanding durable background work owned by a Session: shell work belongs to the
+   * Session that started it, subagent work belongs to the parent awaiting its child.
+   */
+  const pendingFor: Interface["pendingFor"] = Effect.fn("Job.pendingFor")(function* (sessionID) {
+    return (yield* pendingBackground).filter((background) =>
+      background.recovery.kind === "shell"
+        ? background.recovery.sessionID === sessionID
+        : background.recovery.parentSessionID === sessionID,
+    )
+  })
+
+  const awaiting: Interface["awaiting"] = Effect.fn("Job.awaiting")(function* (sessionID) {
+    return (yield* pendingFor(sessionID)).length > 0
+  })
+
   const completeBackground: Interface["completeBackground"] = Effect.fn("Job.completeBackground")((notificationID) =>
     SynchronizedRef.updateEffect(state.jobs, (jobs) =>
       Effect.gen(function* () {
@@ -505,6 +523,8 @@ export const make = Effect.gen(function* () {
     pendingBackground,
     completeBackground,
     awaitBackground,
+    pendingFor,
+    awaiting,
   })
 })
 
