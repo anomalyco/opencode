@@ -46,6 +46,7 @@ type HttpError = {
   type: "http-error"
   status: number
   body: unknown
+  headers?: Record<string, string>
 }
 
 export type Item = Sse | HttpError
@@ -446,6 +447,7 @@ function fail(item: HttpError) {
   return HttpServerResponse.text(JSON.stringify(item.body), {
     status: item.status,
     contentType: "application/json",
+    headers: item.headers,
   })
 }
 
