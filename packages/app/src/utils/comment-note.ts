@@ -10,11 +10,22 @@ export type PromptComment = {
 
 function selection(selection: unknown) {
   if (!selection || typeof selection !== "object") return undefined
-  const startLine = Number((selection as FileSelection).startLine)
-  const startChar = Number((selection as FileSelection).startChar)
-  const endLine = Number((selection as FileSelection).endLine)
-  const endChar = Number((selection as FileSelection).endChar)
-  if (![startLine, startChar, endLine, endChar].every(Number.isFinite)) return undefined
+  const value = selection as Record<string, unknown>
+  const startLine = value.startLine
+  const startChar = value.startChar
+  const endLine = value.endLine
+  const endChar = value.endChar
+  if (
+    typeof startLine !== "number" ||
+    !Number.isFinite(startLine) ||
+    typeof startChar !== "number" ||
+    !Number.isFinite(startChar) ||
+    typeof endLine !== "number" ||
+    !Number.isFinite(endLine) ||
+    typeof endChar !== "number" ||
+    !Number.isFinite(endChar)
+  )
+    return undefined
   return {
     startLine,
     startChar,
