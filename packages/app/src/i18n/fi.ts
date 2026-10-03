@@ -622,6 +622,7 @@ export const dict = {
   "session.review.noChanges": "Ei muutoksia",
   "session.review.noUncommittedChanges": "Ei vielä sitomattomia muutoksia",
   "session.review.noBranchChanges": "Ei vielä haaran muutoksia",
+  "session.files.refresh": "Päivitä",
   "session.files.selectToOpen": "Valitse avattava tiedosto",
   "session.files.all": "Kaikki tiedostot",
   "session.files.empty": "Ei tiedostoja",

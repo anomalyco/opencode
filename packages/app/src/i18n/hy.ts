@@ -729,6 +729,7 @@ export const dict = {
   "session.review.noChanges": "Ոչ փոփոխություններ",
   "session.review.noUncommittedChanges": "Դեռեւս չկատարված փոփոխություններ",
   "session.review.noBranchChanges": "Ճյուղի փոփոխություններ դեռ չկան",
+  "session.files.refresh": "Թարմացնել",
   "session.files.selectToOpen": "Ընտրեք ֆայլ բացելու համար",
   "session.files.all": "Բոլոր ֆայլերը",
   "session.files.empty": "Ֆայլեր չկան",

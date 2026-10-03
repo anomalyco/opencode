@@ -721,6 +721,7 @@ export const dict = {
   "session.review.noChanges": "គ្មានការផ្លាស់ប្តូរទេ។",
   "session.review.noUncommittedChanges": "មិនទាន់មានការផ្លាស់ប្តូរដែលមិនទាន់បានកំណត់នៅឡើយ",
   "session.review.noBranchChanges": "មិនទាន់មានការផ្លាស់ប្តូរសាខានៅឡើយទេ",
+  "session.files.refresh": "ធ្វើឱ្យស្រស់",
   "session.files.selectToOpen": "ជ្រើសរើសឯកសារដើម្បីបើក",
   "session.files.all": "ឯកសារទាំងអស់។",
   "session.files.empty": "គ្មានឯកសារទេ។",

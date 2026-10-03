@@ -726,6 +726,7 @@ export const dict = {
   "session.review.noChanges": "Nav izmaiņu",
   "session.review.noUncommittedChanges": "Vēl nav neapstiprinātu izmaiņu",
   "session.review.noBranchChanges": "Vēl nav zara izmaiņu",
+  "session.files.refresh": "Atsvaidzināt",
   "session.files.selectToOpen": "Izvēlies failu atvēršanai",
   "session.files.all": "Visi faili",
   "session.files.empty": "Nav failu",

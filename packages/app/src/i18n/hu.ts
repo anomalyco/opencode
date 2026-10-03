@@ -731,6 +731,7 @@ export const dict = {
   "session.review.noChanges": "Nincs változás",
   "session.review.noUncommittedChanges": "Még nincsenek végrehajtatlan változtatások",
   "session.review.noBranchChanges": "A fióktelep még nem változott",
+  "session.files.refresh": "Frissítés",
   "session.files.selectToOpen": "Válassza ki a megnyitandó fájlt",
   "session.files.all": "Minden fájl",
   "session.files.empty": "Nincsenek fájlok",

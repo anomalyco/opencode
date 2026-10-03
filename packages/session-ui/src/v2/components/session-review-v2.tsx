@@ -43,6 +43,7 @@ export type SessionReviewV2SidebarProps = {
   transition: boolean
   title?: JSX.Element
   stats?: JSX.Element
+  actions?: JSX.Element
   filter: string
   onFilterChange: (value: string) => void
   onFilterKeyDown?: JSX.EventHandlerUnion<HTMLInputElement, KeyboardEvent>
@@ -85,6 +86,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
           <div data-slot="session-review-v2-sidebar-header">
             <div data-slot="session-review-v2-sidebar-title">{props.title}</div>
             {props.stats}
+            {props.actions}
           </div>
           <div data-slot="session-review-v2-sidebar-filter">
             <TextInputV2

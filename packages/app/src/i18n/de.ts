@@ -607,6 +607,7 @@ export const dict = {
   "session.review.noChanges": "Keine Änderungen",
   "session.review.noUncommittedChanges": "Noch keine nicht committeten Änderungen",
   "session.review.noBranchChanges": "Noch keine Branch-Änderungen",
+  "session.files.refresh": "Aktualisieren",
   "session.files.selectToOpen": "Datei zum Öffnen auswählen",
   "session.files.all": "Alle Dateien",
   "session.files.empty": "Keine Dateien",

@@ -727,6 +727,7 @@ export const dict = {
   "session.review.noChanges": "Nuk ka ndryshime",
   "session.review.noUncommittedChanges": "Ende nuk ka ndryshime të pazgjedhura",
   "session.review.noBranchChanges": "Ende nuk ka ndryshime në degë",
+  "session.files.refresh": "Rifresko",
   "session.files.selectToOpen": "Zgjidhni një skedar për të hapur",
   "session.files.all": "Të gjithë skedarët",
   "session.files.empty": "Nuk ka skedarë",

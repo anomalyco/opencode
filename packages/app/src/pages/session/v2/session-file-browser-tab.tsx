@@ -13,6 +13,9 @@ import { useSessionLayout } from "@/pages/session/session-layout"
 import { SessionFileView } from "@/pages/session/file-tabs"
 import { applyFileListKeyDown, SessionFileListV2 } from "@/pages/session/v2/session-file-list-v2"
 import { pathKey } from "@/utils/path-key"
+import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
+import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 
 const emptyFiles: string[] = []
 
@@ -42,6 +45,7 @@ export function SessionFileBrowserTab(props: {
   const resultsID = `session-file-browser-results-${createUniqueId()}`
   const [filter, setFilter] = createSignal("")
   const [explicitHighlight, setExplicitHighlight] = createSignal<string>()
+  const [refreshing, setRefreshing] = createSignal(false)
   const sidebarOpened = () => props.placeholder || props.state.sidebarOpened()
   const query = createMemo(() => filter().trim())
   const search = createQuery(() => {
@@ -90,6 +94,17 @@ export function SessionFileBrowserTab(props: {
     })
   }
 
+  const refreshLabel = () => language.t("session.files.refresh")
+  const onRefresh = async () => {
+    if (refreshing()) return
+    setRefreshing(true)
+    try {
+      await file.tree.refreshAll()
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
   // Keep the sidebar outside Kobalte Tabs.Content: a morphing content value
   // unmounts the whole panel on every file-tab switch and resets sidebar scroll.
   return (
@@ -110,6 +125,19 @@ export function SessionFileBrowserTab(props: {
           filterExpanded={query().length > 0 && files().length > 0}
           width={props.state.sidebarWidth()}
           onWidthChange={props.state.resizeSidebar}
+          actions={
+            <TooltipV2 placement="bottom" value={refreshLabel()}>
+              <IconButtonV2
+                type="button"
+                variant="ghost-muted"
+                size="small"
+                aria-label={refreshLabel()}
+                disabled={refreshing()}
+                onClick={() => void onRefresh()}
+                icon={<IconV2 name="outline-reset" class="size-4" />}
+              />
+            </TooltipV2>
+          }
         >
           <Show
             when={query()}

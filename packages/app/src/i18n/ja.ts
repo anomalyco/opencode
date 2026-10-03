@@ -709,6 +709,7 @@ export const dict = {
   "session.review.noChanges": "変更なし",
   "session.review.noUncommittedChanges": "コミットされていない変更はまだありません",
   "session.review.noBranchChanges": "ブランチの変更はまだありません",
+  "session.files.refresh": "更新",
   "session.files.selectToOpen": "開くファイルを選択",
   "session.files.all": "すべてのファイル",
   "session.files.empty": "ファイルなし",

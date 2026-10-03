@@ -736,6 +736,7 @@ export const dict = {
   "session.review.noChanges": "کوئی تبدیلی نہیں۔",
   "session.review.noUncommittedChanges": "ابھی تک کوئی غیر ارتکاب تبدیلیاں نہیں ہیں۔",
   "session.review.noBranchChanges": "ابھی تک برانچ میں کوئی تبدیلی نہیں ہے۔",
+  "session.files.refresh": "ریفریش کریں۔",
   "session.files.selectToOpen": "کھولنے کے لیے ایک فائل منتخب کریں۔",
   "session.files.all": "تمام فائلیں۔",
   "session.files.empty": "کوئی فائل نہیں ہے۔",

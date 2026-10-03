@@ -727,6 +727,7 @@ export const dict = {
   "session.review.noChanges": "Engar breytingar",
   "session.review.noUncommittedChanges": "Engar óbundnar breytingar ennþá",
   "session.review.noBranchChanges": "Engar greinarbreytingar ennþá",
+  "session.files.refresh": "Endurnýja",
   "session.files.selectToOpen": "Veldu skrá til að opna",
   "session.files.all": "Allar skrár",
   "session.files.empty": "Engar skrár",

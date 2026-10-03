@@ -732,6 +732,7 @@ export const dict = {
   "session.review.noChanges": "အပြောင်းအလဲမရှိပါ။",
   "session.review.noUncommittedChanges": "ကတိကဝတ်မပြုထားသော အပြောင်းအလဲများ မရှိသေးပါ။",
   "session.review.noBranchChanges": "ဌာနခွဲပြောင်းလဲမှုမရှိသေးပါ။",
+  "session.files.refresh": "ပြန်လည်စတင်ပါ။",
   "session.files.selectToOpen": "ဖွင့်ရန် ဖိုင်တစ်ခုကို ရွေးပါ။",
   "session.files.all": "ဖိုင်အားလုံး",
   "session.files.empty": "ဖိုင်မရှိပါ။",

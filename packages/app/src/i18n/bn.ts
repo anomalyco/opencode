@@ -724,6 +724,7 @@ export const dict: Record<string, string> = {
   "session.review.noChanges": "কোনো পরিবর্তন নেই",
   "session.review.noUncommittedChanges": "এখনও কোন অপ্রতিরোধ্য পরিবর্তন",
   "session.review.noBranchChanges": "এখনো কোনো শাখা পরিবর্তন হয়নি",
+  "session.files.refresh": "রিফ্রেশ",
   "session.files.selectToOpen": "খুলতে একটি ফাইল নির্বাচন করুন",
   "session.files.all": "সমস্ত ফাইল",
   "session.files.empty": "কোনো ফাইল নেই",

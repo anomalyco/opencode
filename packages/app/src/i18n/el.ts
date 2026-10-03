@@ -732,6 +732,7 @@ export const dict = {
   "session.review.noChanges": "Χωρίς αλλαγές",
   "session.review.noUncommittedChanges": "Δεν υπάρχουν ακόμη μη δεσμευμένες αλλαγές",
   "session.review.noBranchChanges": "Δεν υπάρχουν ακόμη αλλαγές κλάδου",
+  "session.files.refresh": "Ανανέωση",
   "session.files.selectToOpen": "Επιλέξτε ένα αρχείο για άνοιγμα",
   "session.files.all": "Όλα τα αρχεία",
   "session.files.empty": "Δεν υπάρχουν αρχεία",
