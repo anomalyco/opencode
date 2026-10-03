@@ -1771,7 +1771,10 @@ function reasoningToggle(model: Provider.Model): NonNullable<Provider.Model["var
       none: { enableThinking: false },
       high: { enableThinking: true },
     }
-  if (model.api.npm === "@ai-sdk/cohere")
+  if (
+    model.api.npm === "@ai-sdk/cohere" ||
+    (model.providerID === "longcat" && model.api.npm === "@ai-sdk/openai-compatible")
+  )
     return {
       none: { thinking: { type: "disabled" } },
       high: { thinking: { type: "enabled" } },
