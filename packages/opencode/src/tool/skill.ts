@@ -24,6 +24,11 @@ export const SkillTool = Tool.define(
             .require(params.name)
             .pipe(Effect.catchTag("Skill.NotFoundError", (error) => Effect.die(new Error(error.message))))
 
+          if (info.disableModelInvocation)
+            return yield* Effect.die(
+              new Error(`Skill "${info.name}" can only be invoked by the user and cannot be loaded with this tool.`),
+            )
+
           yield* ctx.ask({
             permission: "skill",
             patterns: [params.name],

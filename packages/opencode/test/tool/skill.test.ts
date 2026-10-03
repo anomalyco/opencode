@@ -93,6 +93,59 @@ Use this skill.
     }),
   )
 
+  it.instance("execute rejects skills with disable-model-invocation", () =>
+    Effect.gen(function* () {
+      const dir = (yield* TestInstance).directory
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(dir, ".opencode", "skill", "manual-skill", "SKILL.md"),
+          `---
+name: manual-skill
+description: Only run this when invoked manually.
+disable-model-invocation: true
+---
+
+# Manual Skill
+`,
+        ),
+      )
+
+      const home = process.env.OPENCODE_TEST_HOME
+      process.env.OPENCODE_TEST_HOME = dir
+      yield* Effect.addFinalizer(() =>
+        Effect.sync(() => {
+          process.env.OPENCODE_TEST_HOME = home
+        }),
+      )
+
+      const registry = yield* ToolRegistry.Service
+      const agent = { name: "build", mode: "primary" as const, permission: [], options: {} }
+      const tool = (yield* registry.tools({
+        providerID: "opencode" as any,
+        modelID: "gpt-5" as any,
+        agent,
+      })).find((tool) => tool.id === SkillTool.id)
+      if (!tool) throw new Error("Skill tool not found")
+
+      const exit = yield* tool
+        .execute(
+          { name: "manual-skill" },
+          {
+            ...baseCtx,
+            ask: () => Effect.void,
+          },
+        )
+        .pipe(Effect.exit)
+
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const error = Cause.squash(exit.cause)
+        expect(error).toBeInstanceOf(Error)
+        if (error instanceof Error) expect(error.message).toContain('Skill "manual-skill" can only be invoked')
+      }
+    }),
+  )
+
   it.instance("execute preserves not found message", () =>
     Effect.gen(function* () {
       const dir = (yield* TestInstance).directory

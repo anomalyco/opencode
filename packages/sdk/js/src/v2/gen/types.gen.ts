@@ -5020,6 +5020,7 @@ export type SkillV2Info = {
   name: string
   description?: string
   slash?: boolean
+  disableModelInvocation?: boolean
   location: string
   content: string
 }
@@ -8368,6 +8369,7 @@ export type AppSkillsResponses = {
   200: Array<{
     name: string
     description?: string
+    disableModelInvocation?: boolean
     location: string
     content: string
   }>

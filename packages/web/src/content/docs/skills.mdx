@@ -38,6 +38,7 @@ Only these fields are recognized:
 
 - `name` (required)
 - `description` (required)
+- `disable-model-invocation` (optional, boolean)
 - `license` (optional)
 - `compatibility` (optional)
 - `metadata` (optional, string-to-string map)
@@ -119,6 +120,23 @@ The agent loads a skill by calling the tool:
 ```
 skill({ name: "git-release" })
 ```
+
+---
+
+## Keep a skill manual-only
+
+Set `disable-model-invocation: true` to keep a skill installed without paying its context cost:
+
+```markdown
+---
+name: internal-debug-helper
+description: Heavy internal workflow that should only run when manually invoked.
+disable-model-invocation: true
+---
+```
+
+The skill is left out of `<available_skills>` and the agent cannot load it with the `skill` tool.
+It stays available as a `/internal-debug-helper` command, which injects the skill content into your next message.
 
 ---
 
