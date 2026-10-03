@@ -3,7 +3,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Database } from "@opencode-ai/core/database/database"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import { Agent } from "../../src/agent/agent"
 import { BackgroundJob } from "@/background/job"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -543,6 +543,70 @@ describe("tool.task", () => {
       expect(asked).toBe(false)
       expect(yield* sessions.children(child.id)).toHaveLength(0)
     }),
+  )
+
+  it.instance(
+    "limits concurrent subagent execution when configured",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const firstStarted = yield* Deferred.make<void>()
+        const release = yield* Deferred.make<void>()
+        let calls = 0
+        let active = 0
+        let peak = 0
+        const promptOps: TaskPromptOps = {
+          cancel: () => Effect.void,
+          resolvePromptParts: (template) => Effect.succeed([{ type: "text" as const, text: template }]),
+          prompt: (input) =>
+            Effect.gen(function* () {
+              calls++
+              active++
+              peak = Math.max(peak, active)
+              if (calls === 1) yield* Deferred.succeed(firstStarted, undefined)
+              yield* Deferred.await(release)
+              active--
+              return reply(input, "done")
+            }),
+        }
+        const execute = () =>
+          def.execute(
+            {
+              description: "inspect bug",
+              prompt: "look into the cache key path",
+              subagent_type: "general",
+            },
+            {
+              sessionID: chat.id,
+              messageID: assistant.id,
+              agent: "build",
+              abort: new AbortController().signal,
+              extra: { promptOps },
+              messages: [],
+              metadata: () => Effect.void,
+              ask: () => Effect.void,
+            },
+          )
+
+        const first = yield* execute().pipe(Effect.forkChild)
+        yield* Deferred.await(firstStarted)
+        const second = yield* execute().pipe(Effect.forkChild)
+        yield* Effect.yieldNow
+        yield* Effect.yieldNow
+
+        expect(calls).toBe(1)
+        expect(peak).toBe(1)
+
+        yield* Deferred.succeed(release, undefined)
+        yield* Fiber.join(first)
+        yield* Fiber.join(second)
+
+        expect(calls).toBe(2)
+        expect(peak).toBe(1)
+      }),
+    { config: { subagent_concurrency: 1 } },
   )
 
   it.instance(

@@ -10,7 +10,7 @@ import { Agent } from "../agent/agent"
 import { deriveSubagentSessionPermission } from "../agent/subagent-permissions"
 import type { SessionPrompt } from "../session/prompt"
 import { Config } from "@/config/config"
-import { Effect, Exit, Schema, Scope } from "effect"
+import { Effect, Exit, Schema, Scope, Semaphore } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
@@ -19,6 +19,19 @@ export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
   resolvePromptParts(template: string): Effect.Effect<SessionPrompt.PromptInput["parts"]>
   prompt(input: SessionPrompt.PromptInput): Effect.Effect<SessionV1.WithParts>
+}
+
+function isTaskPromptOps(value: unknown): value is TaskPromptOps {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "cancel" in value &&
+    typeof value.cancel === "function" &&
+    "resolvePromptParts" in value &&
+    typeof value.resolvePromptParts === "function" &&
+    "prompt" in value &&
+    typeof value.prompt === "function"
+  )
 }
 
 const id = "task"
@@ -88,6 +101,16 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    const limits = new Map<number, Semaphore.Semaphore>()
+
+    function limit(concurrency: number | undefined) {
+      if (concurrency === undefined) return undefined
+      const current = limits.get(concurrency)
+      if (current) return current
+      const created = Semaphore.makeUnsafe(concurrency)
+      limits.set(concurrency, created)
+      return created
+    }
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -194,12 +217,14 @@ export const TaskTool = Tool.define(
         metadata,
       })
 
-      const ops = ctx.extra?.promptOps as TaskPromptOps
-      if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
+      const promptOps = ctx.extra?.promptOps
+      if (!isTaskPromptOps(promptOps)) {
+        return yield* Effect.fail(new Error("TaskTool requires valid promptOps in ctx.extra"))
+      }
 
-      const runTask = Effect.fn("TaskTool.runTask")(function* () {
-        const parts = yield* ops.resolvePromptParts(params.prompt)
-        const result = yield* ops.prompt({
+      const executeTask = Effect.fn("TaskTool.runTask")(function* () {
+        const parts = yield* promptOps.resolvePromptParts(params.prompt)
+        const result = yield* promptOps.prompt({
           messageID: MessageID.ascending(),
           sessionID: nextSession.id,
           model: {
@@ -223,13 +248,15 @@ export const TaskTool = Tool.define(
         }
         return result.parts.findLast((item) => item.type === "text")?.text ?? ""
       })
+      const semaphore = limit(cfg.subagent_concurrency)
+      const runTask = () => (semaphore ? semaphore.withPermit(executeTask()) : executeTask())
 
       const inject = Effect.fn("TaskTool.injectBackgroundResult")(function* (
         state: "completed" | "error",
         text: string,
       ) {
         const currentParent = yield* sessions.get(ctx.sessionID)
-        yield* ops
+        yield* promptOps
           .prompt({
             sessionID: ctx.sessionID,
             agent: currentParent.agent ?? ctx.agent,
@@ -286,14 +313,14 @@ export const TaskTool = Tool.define(
         type: id,
         title: params.description,
         metadata,
-        onPromote: Effect.all([
-          ctx.metadata({
+        onPromote: Effect.gen(function* () {
+          yield* ctx.metadata({
             title: params.description,
             metadata: { ...metadata, background: true, jobId: nextSession.id },
-          }),
-          notify(nextSession.id),
-        ]),
-        run: runTask().pipe(Effect.onInterrupt(() => ops.cancel(nextSession.id))),
+          })
+          yield* notify(nextSession.id)
+        }),
+        run: runTask().pipe(Effect.onInterrupt(() => promptOps.cancel(nextSession.id))),
       })
 
       function backgroundResult() {
@@ -319,7 +346,7 @@ export const TaskTool = Tool.define(
       }
 
       const runCancel = yield* EffectBridge.make()
-      const cancel = ops.cancel(nextSession.id)
+      const cancel = promptOps.cancel(nextSession.id)
 
       function onAbort() {
         runCancel.fork(cancel)

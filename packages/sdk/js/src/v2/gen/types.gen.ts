@@ -1936,6 +1936,7 @@ export type Config = {
   small_model?: string
   default_agent?: string
   subagent_depth?: number
+  subagent_concurrency?: number
   username?: string
   mode?: {
     build?: AgentConfig
