@@ -366,11 +366,12 @@ export function Markdown(
     text: string
     cacheKey?: string
     streaming?: boolean
+    livePlain?: boolean
     class?: string
     classList?: Record<string, boolean>
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
+  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList", "livePlain"])
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
@@ -382,14 +383,18 @@ export function Markdown(
       if (isServer) return
       const live = local.streaming ?? false
       if (live) streamed = true
-      if (!live && !streamed) return
+      if (!live || !streamed) return
       return { key: owner, text: local.text, live }
     },
     (src) => projectMarkdown(src.key, src.text, src.live),
     { initialValue: pendingProjection("") },
   )
   const currentProjection = () => {
-    if (!(local.streaming ?? false) && !streamed) return completedProjection(local.text)
+    if (!(local.streaming ?? false) || !streamed) return completedProjection(local.text)
+    // Reasoning blocks are rendered as plain text while streaming to avoid
+    // flickering/raw-markdown artifacts from incomplete syntax; once the message
+    // completes, the full markdown projection is used instead.
+    if (local.livePlain) return pendingProjection(local.text)
     const value = projection.latest
     if (value?.text === local.text) return value
     if (value?.text) return value
@@ -403,7 +408,11 @@ export function Markdown(
           key: local.cacheKey,
           projection: pendingProjection(local.text),
         }
-      const value = !(local.streaming ?? false) && !streamed ? completedProjection(local.text) : projection.latest
+      const value = !(local.streaming ?? false) || !streamed
+        ? completedProjection(local.text)
+        : local.livePlain
+          ? pendingProjection(local.text)
+          : projection.latest
       if (!value || value.text !== local.text) return
       return {
         text: local.text,
@@ -458,7 +467,9 @@ export function Markdown(
           }
 
           const hash = checksum(block.raw)
-          const safe = sanitizeMarkdown(await parseMarkdown(block.src))
+          const safe = block.mode === "live" && local.livePlain
+            ? fallback(block.src)
+            : sanitizeMarkdown(await parseMarkdown(block.src))
           if (key && hash) touchCachedMarkdown(key, { raw: block.raw, hash, html: safe })
           return { key: blockKey, mode: block.mode, raw: block.raw, hash: hash ?? "", html: safe }
         }),
