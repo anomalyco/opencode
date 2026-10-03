@@ -182,6 +182,22 @@ function statusName(status: Record<string, MCPNS.Status> | MCPNS.Status, server:
 
 const remote = (url: string, timeout?: number) => ({ type: "remote" as const, url, oauth: false as const, timeout })
 
+const readPidFile = (file: string) =>
+  Effect.promise(async () => {
+    const handle = Bun.file(file)
+    return (await handle.exists()) ? Number(await handle.text()) : undefined
+  })
+
+const goneIfNotRunning = (pid: number) =>
+  Effect.sync(() => {
+    try {
+      process.kill(pid, 0)
+      return undefined
+    } catch {
+      return true
+    }
+  })
+
 it.instance("advertises and lists the instance directory as its root", () =>
   Effect.gen(function* () {
     const server = yield* lifecycleServer({ requestRoots: true })
@@ -507,23 +523,57 @@ it.instance("local stdio timeout terminates the real server process", () =>
     })
 
     expect(statusName(result.status, "hanging-stdio")).toBe("failed")
-    const pid = yield* pollWithTimeout(
-      Effect.promise(async () => {
-        const file = Bun.file(pidFile)
-        return (await file.exists()) ? Number(await file.text()) : undefined
-      }),
-      "stdio fixture did not publish its pid",
+    const pid = yield* pollWithTimeout(readPidFile(pidFile), "stdio fixture did not publish its pid")
+    yield* pollWithTimeout(goneIfNotRunning(pid), "stdio fixture process was not terminated")
+  }),
+)
+
+// `descendants()` walks the tree with `pgrep`, which is POSIX only.
+const nonWindowsIt = process.platform === "win32" ? it.instance.skip : it.instance
+
+nonWindowsIt("local stdio disconnect terminates the whole process tree", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const pidFile = path.join(test.directory, "mcp-tree.pid")
+    const mcp = yield* MCP.Service
+    const added = yield* mcp.add("tree-stdio", {
+      type: "local",
+      command: [process.execPath, stdioFixture, "--child"],
+      environment: { MCP_LIFECYCLE_PID_FILE: pidFile },
+    })
+    expect(statusName(added.status, "tree-stdio")).toBe("connected")
+
+    const childPid = yield* pollWithTimeout(
+      readPidFile(`${pidFile}.child`),
+      "stdio fixture did not publish its child pid",
     )
+
+    yield* mcp.disconnect("tree-stdio")
+    yield* pollWithTimeout(goneIfNotRunning(childPid), "the server the stdio launcher spawned outlived the disconnect")
+  }),
+)
+
+nonWindowsIt("local stdio timeout terminates the whole process tree", () =>
+  Effect.gen(function* () {
+    const test = yield* TestInstance
+    const pidFile = path.join(test.directory, "mcp-tree-timeout.pid")
+    const mcp = yield* MCP.Service
+    const result = yield* mcp.add("hanging-tree-stdio", {
+      type: "local",
+      command: [process.execPath, stdioFixture, "--hang", "--child"],
+      environment: { MCP_LIFECYCLE_PID_FILE: pidFile },
+      timeout: 100,
+    })
+    expect(statusName(result.status, "hanging-tree-stdio")).toBe("failed")
+
+    const childPid = yield* pollWithTimeout(
+      readPidFile(`${pidFile}.child`),
+      "stdio fixture did not publish its child pid",
+    )
+
     yield* pollWithTimeout(
-      Effect.sync(() => {
-        try {
-          process.kill(pid, 0)
-          return undefined
-        } catch {
-          return true
-        }
-      }),
-      "stdio fixture process was not terminated",
+      goneIfNotRunning(childPid),
+      "the server the timed out stdio launcher spawned outlived the connection",
     )
   }),
 )

@@ -1,6 +1,18 @@
+import path from "node:path"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { ListToolsRequestSchema } from "@modelcontextprotocol/sdk/types.js"
+
+if (process.argv.includes("--child")) {
+  const pidFile = process.env.MCP_LIFECYCLE_PID_FILE
+  if (!pidFile) throw new Error("MCP_LIFECYCLE_PID_FILE is required")
+  const child = Bun.spawn([process.execPath, path.join(import.meta.dir, "mcp-lifecycle-child.ts")], {
+    stdin: "ignore",
+    stdout: "ignore",
+    stderr: "ignore",
+  })
+  await Bun.write(`${pidFile}.child`, String(child.pid))
+}
 
 if (process.argv.includes("--hang")) {
   const pidFile = process.env.MCP_LIFECYCLE_PID_FILE
