@@ -55,6 +55,45 @@ const installNames: Record<Method, string> = {
   brew: "Homebrew",
 }
 
+// A package manager can be slow to answer on a cold Windows install (npm under
+// nvm4w in particular), and a timed-out probe is indistinguishable from a
+// package that is not installed.
+const probeTimeout: Duration.Input = process.platform === "win32" ? "30 seconds" : "10 seconds"
+
+export type ProbeOutcome =
+  | { readonly type: "result"; readonly code: number; readonly stdout: string; readonly stderr: string }
+  | { readonly type: "error"; readonly detail: string }
+
+function matchesInstalledPackage(method: Method, stdout: string, installedPackage: string) {
+  if (method !== "vp") return stdout.includes(installedPackage)
+  // Vite+ repeats the filter in its successful no-match message, so substring detection would be a false positive.
+  return Option.exists(decodeVpPackages(stdout), (packages) => packages.some((item) => item.name === installedPackage))
+}
+
+/**
+ * Picks the package manager whose probe named the installed package and describes
+ * every probe, so a failed detection can be diagnosed from the log.
+ */
+export function evaluateProbes(
+  probes: ReadonlyArray<{ readonly method: Method; readonly outcome: ProbeOutcome }>,
+  installedPackage: string,
+) {
+  const evaluated = probes.map((probe) => ({
+    method: probe.method,
+    outcome: probe.outcome,
+    matched:
+      probe.outcome.type === "result" && matchesInstalledPackage(probe.method, probe.outcome.stdout, installedPackage),
+  }))
+  return {
+    method: evaluated.find((probe) => probe.matched)?.method,
+    report: evaluated.map((probe) =>
+      probe.outcome.type === "error"
+        ? `${probe.method}: ${probe.outcome.detail}`
+        : `${probe.method}: ${probe.matched ? "matched" : `exit ${probe.outcome.code}`}`,
+    ),
+  }
+}
+
 function conciseDetail(input: string) {
   const lines = stripVTControlCharacters(input)
     .trim()
@@ -192,22 +231,20 @@ const make = Effect.gen(function* () {
       { method: "yarn", command: ["yarn", "global", "list"] },
       { method: "vp", command: ["vp", "list", "-g", "--json", installedPackage] },
     ]
-    const results = yield* Effect.forEach(
+    const probes = yield* Effect.forEach(
       checks,
       (check) =>
-        exec(check.command).pipe(
-          Effect.orElseSucceed(() => ({ code: 1, stdout: "", stderr: "" })),
-          Effect.map((result) => ({ check, result })),
+        exec(check.command, probeTimeout).pipe(
+          Effect.map((result) => ({ method: check.method, outcome: { type: "result" as const, ...result } })),
+          Effect.catch((error) =>
+            Effect.succeed({ method: check.method, outcome: { type: "error" as const, detail: errorDetail(error) } }),
+          ),
         ),
       { concurrency: "unbounded" },
     )
-    return results.find((result) => {
-      if (result.check.method !== "vp") return result.result.stdout.includes(installedPackage)
-      // Vite+ repeats the filter in its successful no-match message, so substring detection would be a false positive.
-      return Option.exists(decodeVpPackages(result.result.stdout), (packages) =>
-        packages.some((item) => item.name === installedPackage),
-      )
-    })?.check.method
+    const detected = evaluateProbes(probes, installedPackage)
+    if (!detected.method) yield* Effect.logWarning("installation method detection failed", { probes: detected.report })
+    return detected.method
   })
 
   const removal = (method: Method) => {
