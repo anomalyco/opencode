@@ -204,6 +204,10 @@ The set of patterns that `always` would approve is provided by the tool (for exa
 
 You can override permissions per agent. Agent permissions are merged with the global config, and agent rules take precedence. [Learn more](/docs/agents#permissions) about agent permissions.
 
+:::caution
+For custom agents, declaring an agent-level `permission` block makes unspecified actions deny by default. List every action the agent needs explicitly; built-in agents and custom agents without a permission block retain the normal defaults.
+:::
+
 :::note
 Refer to the [Granular Rules (Object Syntax)](#granular-rules-object-syntax) section above for more detailed pattern matching examples.
 :::

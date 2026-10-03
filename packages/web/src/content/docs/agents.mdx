@@ -199,6 +199,10 @@ mode: subagent
 model: anthropic/claude-sonnet-4-20250514
 temperature: 0.1
 permission:
+  read: allow
+  glob: allow
+  grep: allow
+  list: allow
   edit: deny
   bash: deny
 ---
@@ -487,6 +491,10 @@ You can also set permissions in Markdown agents.
 description: Code review without edits
 mode: subagent
 permission:
+  read: allow
+  glob: allow
+  grep: allow
+  list: allow
   edit: deny
   bash:
     "*": ask
@@ -498,6 +506,10 @@ permission:
 
 Only analyze code and suggest changes.
 ```
+
+:::caution
+For custom agents, declaring a `permission` block makes unspecified actions deny by default. List every action the agent needs explicitly; built-in agents and custom agents without a permission block retain the normal defaults.
+:::
 
 You can set permissions for specific bash commands.
 
