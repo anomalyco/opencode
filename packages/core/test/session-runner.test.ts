@@ -1106,11 +1106,13 @@ describe("SessionRunnerLLM", () => {
           "x-opencode-session-id": sessionID,
           "x-session-affinity": sessionID,
           "X-Session-Id": sessionID,
+          "x-opencode-session": sessionID,
         },
         {
           "x-opencode-session-id": sessionID,
           "x-session-affinity": sessionID,
           "X-Session-Id": sessionID,
+          "x-opencode-session": sessionID,
         },
       ])
       expect(userTexts(requests[0])[0]).toContain("## Objective")
@@ -2533,6 +2535,7 @@ describe("SessionRunnerLLM", () => {
         "x-opencode-session-id": sessionID,
         "x-session-affinity": sessionID,
         "X-Session-Id": sessionID,
+        "x-opencode-session": sessionID,
       })
     }),
   )

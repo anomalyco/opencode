@@ -210,6 +210,7 @@ const layer = Layer.effect(
             ...(session.parentID ? { "x-opencode-parent-session-id": session.parentID } : {}),
             "x-session-affinity": session.id,
             "X-Session-Id": session.id,
+            "x-opencode-session": session.id,
             ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
           },
         },
