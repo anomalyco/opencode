@@ -565,6 +565,11 @@ export const make = Effect.fn("PluginHost.make")(function* (
           .interrupt(input.sessionID, { resume: input.resume })
           .pipe(Effect.map((interrupted) => ({ interrupted }))),
       wait: (input) => sessions.wait(input.sessionID),
+      revert: {
+        stage: sessions.revert.stage,
+        clear: (input) => sessions.revert.clear(input.sessionID),
+        commit: (input) => sessions.revert.commit(input.sessionID),
+      },
       context: (input) => sessions.context(input.sessionID),
     },
   }

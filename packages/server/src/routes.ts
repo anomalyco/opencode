@@ -112,11 +112,24 @@ function makeRoutes<AuthError, AuthServices>(
   overrides: LayerNode.Replacements,
   instances?: InstanceNode,
 ) {
+  const password = options.password
+  const serverURL = password ? serviceURLs()[0] : undefined
   const standard: LayerNode.Replacements = [
     Database.node.replace(Database.configured(options.database)),
     PersistentPty.node.replace(PersistentPty.configured(options.pty)),
     Bus.node.replace(Bus.configured({ persist: options.events?.persist })),
-    App.node.replace(App.configured(options.app)),
+    App.node.replace(
+      App.configured({
+        ...options.app,
+        server:
+          password === undefined || serverURL === undefined
+            ? undefined
+            : {
+                url: serverURL,
+                password,
+              },
+      }),
+    ),
     ModelsDev.node.replace(ModelsDev.configured(options.models)),
     Watcher.node.replace(Watcher.configured({ enabled: options.fs?.filewatcher })),
     FileSystemSearch.node.replace(FileSystemSearch.configured({ fff: options.fs?.fff })),

@@ -7,6 +7,10 @@ export interface Info {
   readonly name: string
   readonly version: string
   readonly channel: string
+  readonly server?: {
+    readonly url: string
+    readonly password: string
+  }
 }
 
 export const Metadata = Context.Reference<Info>("@opencode/App", {
@@ -18,6 +22,7 @@ export function make(input: Partial<Info> = {}): Info {
     name: input.name ?? "opencode",
     version: input.version ?? "unknown",
     channel: input.channel ?? "unknown",
+    server: input.server,
   }
 }
 
