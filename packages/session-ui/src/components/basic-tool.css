@@ -200,6 +200,107 @@
   }
 }
 
+[data-component="execute-tool-calls"] {
+  margin-inline-start: 12px;
+  padding-inline-start: 12px;
+  border-inline-start: 1px solid var(--v2-border-border-weak);
+}
+
+[data-component="execute-tool-call"] {
+  min-width: 0;
+
+  &[data-open="true"] [data-slot="execute-tool-call-status"] [data-slot="icon-svg"] {
+    transform: rotate(90deg);
+  }
+
+  &[data-status="error"] [data-slot="execute-tool-call-status"] {
+    color: var(--text-error);
+  }
+
+  [data-slot="execute-tool-call-trigger"] {
+    width: 100%;
+    height: 28px;
+    min-width: 0;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    border: 0;
+    background: transparent;
+    color: var(--v2-text-text-muted);
+    text-align: start;
+    cursor: pointer;
+
+    &:disabled {
+      cursor: default;
+    }
+
+    &:hover:not(:disabled),
+    &:focus-visible {
+      color: var(--v2-text-text-base);
+    }
+  }
+
+  [data-slot="execute-tool-call-status"] {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    [data-slot="icon-svg"] {
+      transition: transform 0.15s ease;
+    }
+
+    [data-component="session-progress-indicator-v2"] {
+      width: 16px;
+      height: 16px;
+    }
+  }
+
+  [data-slot="execute-tool-call-title"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: var(--font-family-mono);
+    font-size: 13px;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-compact);
+    color: inherit;
+  }
+
+  [data-slot="execute-tool-call-details"] {
+    margin: 0;
+    padding: 2px 0 8px 22px;
+    min-width: 0;
+  }
+
+  [data-slot="execute-tool-call-detail"] {
+    min-width: 0;
+    display: grid;
+    grid-template-columns: max-content minmax(0, 1fr);
+    column-gap: 8px;
+    font-family: var(--font-family-mono);
+    font-size: 13px;
+    font-weight: var(--font-weight-regular);
+    line-height: var(--line-height-base);
+
+    dt {
+      color: var(--v2-text-text-muted);
+    }
+
+    dd {
+      min-width: 0;
+      margin: 0;
+      color: var(--v2-text-text-base);
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+  }
+}
+
 [data-component="task-tool-card"] {
   width: 100%;
   min-width: 0;
