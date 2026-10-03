@@ -118,6 +118,14 @@ describe("PermissionV2", () => {
     }),
   )
 
+  it.effect("asks instead of allowing when resources is empty", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "deny" }])
+      const service = yield* PermissionV2.Service
+      expect(yield* service.ask(assertion({ resources: [] }))).toMatchObject({ effect: "ask" })
+    }),
+  )
+
   it.effect("evaluates against an explicit provider-turn agent", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
