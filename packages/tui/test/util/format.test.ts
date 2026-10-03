@@ -1,7 +1,21 @@
 import { describe, expect, test } from "bun:test"
-import { formatDuration } from "../../src/util/format"
+import { formatDuration, formatElapsed } from "../../src/util/format"
 
 describe("util.format", () => {
+  describe("formatElapsed", () => {
+    test("formats whole seconds between start and now", () => {
+      expect(formatElapsed(1000, 1000)).toBe("")
+      expect(formatElapsed(1000, 1001)).toBe("")
+      expect(formatElapsed(1000, 2000)).toBe("1s")
+      expect(formatElapsed(1000, 12_400)).toBe("11s")
+      expect(formatElapsed(1000, 61_000)).toBe("1m")
+    })
+
+    test("clamps negative elapsed to empty", () => {
+      expect(formatElapsed(5000, 1000)).toBe("")
+    })
+  })
+
   describe("formatDuration", () => {
     test("returns empty string for zero or negative values", () => {
       expect(formatDuration(0)).toBe("")
