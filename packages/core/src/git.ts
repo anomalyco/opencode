@@ -1,7 +1,7 @@
 export * as Git from "./git.js"
 
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Cause, Context, Effect, Exit, Layer, Option, Schedule, Schema } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { AbsolutePath, RelativePath } from "./schema.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -30,6 +30,8 @@ const snapshotConfig = `[core]
 	symlinks = true
 	fsmonitor = false
 	untrackedCache = true
+	# A split index cannot name its shared file once manyFiles skips index checksums.
+	splitIndex = false
 [feature]
 	manyFiles = true
 [index]
@@ -39,6 +41,22 @@ const snapshotConfig = `[core]
 
 export const TreeID = Schema.String.pipe(Schema.brand("Git.TreeID"))
 export type TreeID = typeof TreeID.Type
+
+const privateIndexPrefix = "index.opencode-"
+const excludeMarker = "# opencode: mirrored from the source repository; edits below are replaced\n"
+// Like `git gc --auto`, pack once loose objects accumulate, and merge packs before lookups slow down.
+const compactLooseLimit = 2048
+const compactPackLimit = 16
+
+export interface CaptureInput {
+  readonly repository: Repository
+  readonly scopes: readonly RelativePath[]
+  /** Source repository whose ignore rules decide which paths are recorded. */
+  readonly ignores?: Repository
+  /** Repository whose index rebuilds a corrupt snapshot index without rehashing tracked files. */
+  readonly seed?: Repository
+  readonly maximumUntrackedFileBytes?: number
+}
 
 export class OperationError extends Schema.TaggedError<OperationError>()("Git.OperationError", {
   operation: Schema.Literals([
@@ -52,6 +70,7 @@ export class OperationError extends Schema.TaggedError<OperationError>()("Git.Op
     "list_files",
     "diff",
     "restore",
+    "compact",
   ]),
   message: Schema.String,
   directory: Schema.optional(AbsolutePath),
@@ -134,12 +153,7 @@ export interface Interface {
     }) => Effect.Effect<ReadonlySet<RelativePath>, OperationError>
   }
   readonly tree: {
-    readonly capture: (input: {
-      repository: Repository
-      scopes: readonly RelativePath[]
-      ignores?: Repository
-      maximumUntrackedFileBytes?: number
-    }) => Effect.Effect<TreeID, OperationError>
+    readonly capture: (input: CaptureInput) => Effect.Effect<TreeID, OperationError>
     readonly write: (repository: Repository) => Effect.Effect<TreeID, OperationError>
     readonly files: (input: {
       repository: Repository
@@ -157,6 +171,14 @@ export interface Interface {
       repository: Repository
       files: ReadonlyMap<RelativePath, TreeID>
     }) => Effect.Effect<void, OperationError>
+  }
+  readonly objects: {
+    /**
+     * Pack loose objects and merge small packs without dropping any object,
+     * reachable or not. Returns without work below the thresholds; safe to run
+     * concurrently with captures and with other processes.
+     */
+    readonly compact: (repository: Repository) => Effect.Effect<void, OperationError>
   }
 }
 
@@ -310,13 +332,13 @@ const layer = Layer.effect(
       operationName: OperationError["operation"],
       repository: Repository,
       args: string[],
-      options?: { stdin?: string; env?: Record<string, string>; maxOutputBytes?: number },
+      options?: { stdin?: string | Uint8Array; env?: Record<string, string>; maxOutputBytes?: number; index?: string },
     ) {
       const result = yield* proc
         .run(
           ChildProcess.make(gitExecutable, repositoryArgs(repository, args), {
             cwd: repository.worktree,
-            env: options?.env,
+            env: options?.index ? { ...options.env, GIT_INDEX_FILE: options.index } : options?.env,
             extendEnv: true,
           }),
           { stdin: options?.stdin, maxOutputBytes: options?.maxOutputBytes },
@@ -342,43 +364,148 @@ const layer = Layer.effect(
       })
     })
 
+    /**
+     * A new store is initialized in a private staging directory and renamed into
+     * place, so processes racing to create the same store never observe or write a
+     * half-initialized one; the loser discards its copy and adopts the winner's.
+     */
     const create = Effect.fn("Git.repo.create")(function* (input: {
       worktree: AbsolutePath
       gitDirectory: AbsolutePath
       seed?: Repository
     }) {
-      const operationError = (message: string) => (cause: unknown) =>
-        new OperationError({ operation: "create", directory: input.gitDirectory, message, cause })
-      yield* fs.ensureDir(input.gitDirectory).pipe(Effect.mapError(operationError("Failed to create Git storage")))
       const repository = new Repository({
         worktree: input.worktree,
         gitDirectory: input.gitDirectory,
         commonDirectory: input.gitDirectory,
       })
-      yield* repositoryOperation("create", repository, ["init"])
+      if (yield* fs.existsSafe(path.join(input.gitDirectory, "HEAD"))) {
+        yield* initialize({ ...input, directory: input.gitDirectory })
+        return repository
+      }
+      const staging = AbsolutePath.make(
+        `${input.gitDirectory}.init-${process.pid}-${Math.random().toString(36).slice(2)}`,
+      )
+      yield* Effect.acquireUseRelease(
+        Effect.succeed(staging),
+        (directory) =>
+          Effect.gen(function* () {
+            yield* initialize({ ...input, directory })
+            const renamed = yield* fs.rename(directory, input.gitDirectory).pipe(Effect.exit)
+            if (Exit.isSuccess(renamed) || (yield* fs.existsSafe(path.join(input.gitDirectory, "HEAD")))) return
+            return yield* new OperationError({
+              operation: "create",
+              directory: input.gitDirectory,
+              message: "Failed to move Git storage into place",
+              cause: Cause.squash(renamed.cause),
+            })
+          }),
+        (directory) => fs.remove(directory, { recursive: true, force: true }).pipe(Effect.ignore),
+      )
+      return repository
+    })
+
+    const initialize = Effect.fnUntraced(function* (input: {
+      worktree: AbsolutePath
+      gitDirectory: AbsolutePath
+      directory: AbsolutePath
+      seed?: Repository
+    }) {
+      const operationError = (message: string) => (cause: unknown) =>
+        new OperationError({ operation: "create", directory: input.gitDirectory, message, cause })
+      yield* fs.ensureDir(input.directory).pipe(Effect.mapError(operationError("Failed to create Git storage")))
+      yield* repositoryOperation(
+        "create",
+        new Repository({ worktree: input.worktree, gitDirectory: input.directory, commonDirectory: input.directory }),
+        ["init"],
+      )
       yield* Effect.gen(function* () {
-        yield* fs.writeFileString(path.join(input.gitDirectory, snapshotConfigFile), snapshotConfig)
-        const config = path.join(input.gitDirectory, "config")
+        yield* fs.writeFileString(path.join(input.directory, snapshotConfigFile), snapshotConfig)
+        const config = path.join(input.directory, "config")
         const current = yield* fs.readFileString(config)
         if (current.includes(snapshotConfigInclude)) return
         yield* fs.writeFileString(config, `${current.endsWith("\n") ? "\n" : "\n\n"}${snapshotConfigInclude}`, {
           flag: "a",
         })
       }).pipe(Effect.mapError(operationError("Failed to configure Git storage")))
-      if (!input.seed) return repository
+      if (!input.seed) return
       yield* fs
-        .ensureDir(path.join(input.gitDirectory, "objects", "info"))
+        .ensureDir(path.join(input.directory, "objects", "info"))
         .pipe(Effect.mapError(operationError("Failed to configure shared Git objects")))
       yield* fs
         .writeFileString(
-          path.join(input.gitDirectory, "objects", "info", "alternates"),
+          path.join(input.directory, "objects", "info", "alternates"),
           path.join(input.seed.commonDirectory, "objects") + "\n",
         )
         .pipe(Effect.mapError(operationError("Failed to configure shared Git objects")))
       yield* fs
-        .copyFile(path.join(input.seed.gitDirectory, "index"), path.join(input.gitDirectory, "index"))
+        .copyFile(path.join(input.seed.gitDirectory, "index"), path.join(input.directory, "index"))
         .pipe(Effect.ignore)
-      return repository
+    })
+
+    /**
+     * Report modified, deleted, and non-ignored untracked paths against the index.
+     * Both commands only read the index, so they run against the shared index
+     * without taking `index.lock`. Two parallel processes beat one combined
+     * `ls-files -m -o`, whose lstat pass is not threaded like diff-files'.
+     */
+    const scan = Effect.fnUntraced(function* (repository: Repository, scope: RelativePath) {
+      const list = (args: string[]) =>
+        repositoryOperation("refresh", repository, args).pipe(
+          // Embedded repositories are listed as `dir/`; update-index records them as gitlinks.
+          Effect.map((result) => nuls(result.text).map((file) => RelativePath.make(file.replace(/\/$/, "")))),
+        )
+      const [tracked, untracked] = yield* Effect.all(
+        [
+          list(["diff-files", "--name-only", "-z", "--", literal(scope)]),
+          list(["ls-files", "--others", "--exclude-standard", "-z", "--", literal(scope)]),
+        ],
+        { concurrency: 2 },
+      )
+      return { tracked, untracked }
+    })
+
+    const stage = Effect.fnUntraced(function* (input: {
+      repository: Repository
+      changes: { tracked: readonly RelativePath[]; untracked: readonly RelativePath[] }
+      ignores?: Repository
+      maximumUntrackedFileBytes?: number
+      index?: string
+    }) {
+      const candidates = [...input.changes.tracked, ...input.changes.untracked]
+      if (!candidates.length) return { skipped: [] }
+      const excluded = input.ignores
+        ? yield* ignored({ repository: input.ignores, paths: candidates })
+        : new Set<RelativePath>()
+      const maximum = input.maximumUntrackedFileBytes
+      const skipped = maximum
+        ? (yield* Effect.forEach(
+            input.changes.untracked.filter((item) => !excluded.has(item)),
+            (item) =>
+              fs.stat(path.join(input.repository.worktree, item)).pipe(
+                Effect.map((info) => (info.type === "File" && Number(info.size) > maximum ? item : undefined)),
+                Effect.orElseSucceed(() => undefined),
+              ),
+            { concurrency: 8 },
+          )).filter((item): item is RelativePath => item !== undefined)
+        : []
+      const skip = new Set(skipped)
+      const staged = candidates.filter((item) => !excluded.has(item) && !skip.has(item))
+      const removed = [...excluded, ...skipped]
+      // update-index takes literal paths, so large lists avoid add's quadratic pathspec matching.
+      if (removed.length)
+        yield* repositoryOperation("refresh", input.repository, ["update-index", "--force-remove", "-z", "--stdin"], {
+          stdin: removed.join("\0") + "\0",
+          index: input.index,
+        })
+      if (staged.length)
+        yield* repositoryOperation(
+          "refresh",
+          input.repository,
+          ["update-index", "--add", "--remove", "--replace", "-z", "--stdin"],
+          { stdin: staged.join("\0") + "\0", index: input.index },
+        )
+      return { skipped }
     })
 
     const refresh = Effect.fn("Git.index.refresh")(function* (input: {
@@ -387,52 +514,7 @@ const layer = Layer.effect(
       ignores?: Repository
       maximumUntrackedFileBytes?: number
     }) {
-      const list = (args: string[]) =>
-        repositoryOperation("refresh", input.repository, args).pipe(Effect.map((result) => nuls(result.text)))
-      const [tracked, untracked] = yield* Effect.all(
-        [
-          list(["diff-files", "--name-only", "-z", "--", input.scope]),
-          list(["ls-files", "--others", "--exclude-standard", "-z", "--", input.scope]),
-        ],
-        { concurrency: 2 },
-      )
-      const candidates = Array.from(new Set([...tracked, ...untracked])).map((file) => RelativePath.make(file))
-      if (!candidates.length) return { skipped: [] }
-      const excluded = input.ignores
-        ? yield* ignored({ repository: input.ignores, paths: candidates })
-        : new Set<RelativePath>()
-      const allowed = candidates.filter((item) => !excluded.has(item))
-      const maximum = input.maximumUntrackedFileBytes
-      const skipped = maximum
-        ? (yield* Effect.forEach(
-            untracked.filter((item) => allowed.includes(RelativePath.make(item))),
-            (item) =>
-              fs.stat(path.join(input.repository.worktree, item)).pipe(
-                Effect.map((info) =>
-                  info.type === "File" && Number(info.size) > maximum ? RelativePath.make(item) : undefined,
-                ),
-                Effect.orElseSucceed(() => undefined),
-              ),
-            { concurrency: 8 },
-          )).filter((item): item is RelativePath => item !== undefined)
-        : []
-      const stage = allowed.filter((item) => !skipped.includes(item))
-      const remove = [...excluded, ...skipped]
-      if (remove.length)
-        yield* repositoryOperation(
-          "refresh",
-          input.repository,
-          ["rm", "--cached", "-f", "--ignore-unmatch", "--pathspec-from-file=-", "--pathspec-file-nul"],
-          { stdin: remove.join("\0") + "\0" },
-        )
-      if (stage.length)
-        yield* repositoryOperation(
-          "refresh",
-          input.repository,
-          ["add", "--all", "--sparse", "--pathspec-from-file=-", "--pathspec-file-nul"],
-          { stdin: stage.join("\0") + "\0" },
-        )
-      return { skipped }
+      return yield* stage({ ...input, changes: yield* scan(input.repository, input.scope) })
     })
 
     const ignored = Effect.fn("Git.index.ignored")(function* (input: {
@@ -472,25 +554,239 @@ const layer = Layer.effect(
       return new Set(nuls(result.stdout.toString("utf8")).map((file) => RelativePath.make(file)))
     })
 
-    const writeTree = Effect.fn("Git.tree.write")(function* (repository: Repository) {
-      return TreeID.make((yield* repositoryOperation("write_tree", repository, ["write-tree"])).text.trim())
+    const writeTree = Effect.fn("Git.tree.write")(function* (repository: Repository, index?: string) {
+      const tree = (yield* repositoryOperation("write_tree", repository, ["write-tree"], { index })).text.trim()
+      if (/^[0-9a-f]{40,64}$/.test(tree)) return TreeID.make(tree)
+      return yield* new OperationError({
+        operation: "write_tree",
+        directory: repository.worktree,
+        message: `Invalid tree ID: ${tree}`,
+      })
     })
 
-    const captureTree = Effect.fn("Git.tree.capture")(
-      (input: {
-        repository: Repository
-        scopes: readonly RelativePath[]
-        ignores?: Repository
-        maximumUntrackedFileBytes?: number
-      }) =>
-        locked(
-          input.repository,
-          Effect.gen(function* () {
-            yield* Effect.forEach(input.scopes, (scope) => refresh({ ...input, scope }), { discard: true })
-            return yield* writeTree(input.repository)
-          }),
+    const sharedIndex = (repository: Repository) => path.join(repository.gitDirectory, "index")
+    /** Identity of an index file; Git only replaces an index by renaming a new file into place. */
+    const stamp = (file: string) =>
+      fs.stat(file).pipe(
+        Effect.map((info) =>
+          [Option.getOrUndefined(info.ino), info.size, Option.getOrUndefined(info.mtime)?.getTime()].join(":"),
         ),
+        Effect.orElseSucceed(() => undefined),
+      )
+
+    /**
+     * Run index writes against a private index, then publish it with an atomic
+     * rename. Processes never contend on `index.lock`, an interrupted or killed
+     * writer cannot leave a partial shared index, and a stale lock is irrelevant.
+     * The private index starts as a hard link: Git never writes an index in place,
+     * it writes a lock file and renames it over the private name, so the shared
+     * file is never modified and no bytes are copied. The shared index is only a
+     * stat cache over the object store; when writers race, the last publish wins
+     * and the next capture reconciles against the worktree.
+     */
+    const privateIndex = <A, E, R>(repository: Repository, use: (index: string) => Effect.Effect<A, E, R>) =>
+      Effect.acquireUseRelease(
+        Effect.gen(function* () {
+          const shared = sharedIndex(repository)
+          const index = path.join(
+            repository.gitDirectory,
+            `${privateIndexPrefix}${process.pid}-${Math.random().toString(36).slice(2)}`,
+          )
+          if (!(yield* fs.existsSafe(shared))) return index
+          const linked = yield* fs.link(shared, index).pipe(
+            Effect.as(true),
+            Effect.orElseSucceed(() => false),
+          )
+          if (linked) return index
+          const info = yield* fs.stat(shared).pipe(Effect.option)
+          yield* fs.copyFile(shared, index).pipe(
+            Effect.mapError(
+              (cause) =>
+                new OperationError({
+                  operation: "refresh",
+                  directory: repository.gitDirectory,
+                  message: "Failed to prepare a private index",
+                  cause,
+                }),
+            ),
+          )
+          // A copy must keep the timestamp Git uses to detect racily clean entries.
+          const mtime = Option.isSome(info) ? Option.getOrUndefined(info.value.mtime) : undefined
+          if (mtime && Option.isSome(info))
+            yield* fs
+              .utimes(
+                index,
+                Option.getOrElse(info.value.atime, () => mtime),
+                mtime,
+              )
+              .pipe(Effect.ignore)
+          return index
+        }),
+        (index) =>
+          Effect.gen(function* () {
+            const value = yield* use(index)
+            const published = yield* Effect.uninterruptible(
+              Effect.gen(function* () {
+                // Stamp the private file before it takes the shared name, so a concurrent publish can never
+                // pair another writer's index with this tree.
+                const identity = yield* stamp(index)
+                const renamed = yield* fs.rename(index, sharedIndex(repository)).pipe(
+                  // Windows reports a transient sharing violation while another process reads the index.
+                  Effect.retry({ times: 3, schedule: Schedule.spaced("20 millis") }),
+                  Effect.as(true),
+                  Effect.orElseSucceed(() => false),
+                )
+                return renamed ? identity : undefined
+              }),
+            )
+            return { value, published }
+          }),
+        (index) => fs.remove(index, { force: true }).pipe(Effect.ignore),
+      )
+
+    // Clean captures return the tree last written from the exact shared index they scanned.
+    const trees = new Map<string, { readonly stamp: string; readonly tree: TreeID }>()
+    const swept = new Set<string>()
+
+    const captureOnce = Effect.fnUntraced(function* (input: CaptureInput) {
+      yield* syncExcludes(input.repository, input.ignores)
+      const changes = yield* Effect.forEach(input.scopes, (scope) => scan(input.repository, scope), {
+        concurrency: "unbounded",
+      })
+      const current = yield* stamp(sharedIndex(input.repository))
+      const cached = trees.get(input.repository.gitDirectory)
+      if (
+        current &&
+        cached?.stamp === current &&
+        changes.every((change) => !change.tracked.length && !change.untracked.length)
+      )
+        return cached.tree
+      const result = yield* privateIndex(input.repository, (index) =>
+        Effect.gen(function* () {
+          yield* Effect.forEach(changes, (change) => stage({ ...input, changes: change, index }), { discard: true })
+          return yield* writeTree(input.repository, index)
+        }),
+      )
+      if (result.published) trees.set(input.repository.gitDirectory, { stamp: result.published, tree: result.value })
+      if (!result.published) trees.delete(input.repository.gitDirectory)
+      return result.value
+    })
+
+    const captureTree = Effect.fn("Git.tree.capture")((input: CaptureInput) =>
+      locked(
+        input.repository,
+        Effect.gen(function* () {
+          if (!swept.has(input.repository.gitDirectory)) {
+            swept.add(input.repository.gitDirectory)
+            yield* sweepPrivateIndexes(input.repository)
+            yield* upgradeConfig(input.repository)
+          }
+          return yield* captureOnce(input).pipe(
+            Effect.catch((error) =>
+              Effect.gen(function* () {
+                if (!(yield* indexCorrupt(input.repository))) return yield* error
+                yield* Effect.logWarning("rebuilding corrupt snapshot index", {
+                  directory: input.repository.gitDirectory,
+                  message: error.message,
+                })
+                yield* reseedIndex(input.repository, input.seed)
+                return yield* captureOnce(input)
+              }),
+            ),
+          )
+        }),
+      ),
     )
+
+    /**
+     * Mirror the source repository's info/exclude into a marked block of the
+     * store's own file, so one ls-files pass applies both, exactly like listing
+     * with the store's rules and then filtering with the source's. Content above
+     * the marker, such as patterns from an init template, is kept.
+     */
+    const syncExcludes = Effect.fnUntraced(function* (repository: Repository, source?: Repository) {
+      if (!source || source.gitDirectory === repository.gitDirectory) return
+      const target = path.join(repository.commonDirectory, "info", "exclude")
+      const [wanted, current] = yield* Effect.all(
+        [fs.readFileStringSafe(path.join(source.commonDirectory, "info", "exclude")), fs.readFileStringSafe(target)],
+        { concurrency: 2 },
+      ).pipe(Effect.orElseSucceed(() => [undefined, undefined] as const))
+      const own = (current ?? "").split(excludeMarker)[0]!
+      const next = wanted ? `${own}${own && !own.endsWith("\n") ? "\n" : ""}${excludeMarker}${wanted}` : own
+      if (next === (current ?? "")) return
+      // Concurrent Git processes must never read a partially written file.
+      const staged = `${target}.${process.pid}-${Math.random().toString(36).slice(2)}`
+      yield* fs
+        .writeWithDirs(staged, next)
+        .pipe(
+          Effect.andThen(fs.rename(staged, target)),
+          Effect.ignore,
+          Effect.ensuring(fs.remove(staged, { force: true }).pipe(Effect.ignore)),
+        )
+    })
+
+    /**
+     * Only an index Git itself cannot read is rebuilt, decided by exit status rather
+     * than by localized messages. Other failures, such as an unreadable worktree
+     * file, surface unchanged.
+     */
+    const indexCorrupt = Effect.fnUntraced(function* (repository: Repository) {
+      if (!(yield* fs.existsSafe(sharedIndex(repository)))) return false
+      return yield* repositoryOperation("refresh", repository, [
+        "ls-files",
+        "-z",
+        "--",
+        literal(".opencode-probe"),
+      ]).pipe(
+        Effect.as(false),
+        Effect.orElseSucceed(() => true),
+      )
+    })
+
+    const reseedIndex = Effect.fnUntraced(function* (repository: Repository, seed?: Repository) {
+      yield* fs.remove(sharedIndex(repository), { force: true }).pipe(Effect.ignore)
+      trees.delete(repository.gitDirectory)
+      if (!seed) return
+      // Seeding keeps the source's stat cache and cache-tree, so recovery does not rehash every tracked file.
+      yield* privateIndex(repository, (index) =>
+        fs.copyFile(path.join(seed.gitDirectory, "index"), index).pipe(Effect.ignore),
+      )
+    })
+
+    // Stores created by earlier releases keep the settings they were created with; only OpenCode's own file is rewritten.
+    const upgradeConfig = Effect.fnUntraced(function* (repository: Repository) {
+      const file = path.join(repository.gitDirectory, snapshotConfigFile)
+      const current = yield* fs.readFileStringSafe(file).pipe(Effect.orElseSucceed(() => undefined))
+      if (current === undefined || current === snapshotConfig) return
+      // Concurrent Git processes must never read a partially written file.
+      const staged = `${file}.${process.pid}-${Math.random().toString(36).slice(2)}`
+      yield* fs
+        .writeFileString(staged, snapshotConfig)
+        .pipe(
+          Effect.andThen(fs.rename(staged, file)),
+          Effect.ignore,
+          Effect.ensuring(fs.remove(staged, { force: true }).pipe(Effect.ignore)),
+        )
+    })
+
+    // Private indexes left by killed processes; live captures finish long before the cutoff.
+    const sweepPrivateIndexes = Effect.fnUntraced(function* (repository: Repository) {
+      const cutoff = Date.now() - 60 * 60 * 1000
+      const entries = yield* fs.readDirectory(repository.gitDirectory).pipe(Effect.orElseSucceed(() => []))
+      yield* Effect.forEach(
+        entries.filter((entry) => entry.startsWith(privateIndexPrefix)),
+        (entry) =>
+          fs.stat(path.join(repository.gitDirectory, entry)).pipe(
+            Effect.flatMap((info) =>
+              (Option.getOrUndefined(info.mtime)?.getTime() ?? 0) < cutoff
+                ? fs.remove(path.join(repository.gitDirectory, entry), { force: true })
+                : Effect.void,
+            ),
+            Effect.ignore,
+          ),
+        { discard: true },
+      )
+    })
 
     const treeFiles = Effect.fn("Git.tree.files")(function* (input: {
       repository: Repository
@@ -523,7 +819,7 @@ const layer = Layer.effect(
       paths?: readonly RelativePath[]
     }) {
       if (input.paths?.length === 0) return []
-      const args = ["--no-renames", input.from, input.to, "--", ...(input.paths ?? [])]
+      const args = ["--no-renames", input.from, input.to, "--", ...(input.paths ?? []).map(literal)]
       // Patch headers have no -z form: unquoted paths keep chunksByFile matching non-ASCII names.
       const [names, numbers, patch] = yield* Effect.all(
         [
@@ -581,7 +877,7 @@ const layer = Layer.effect(
         "-z",
         tree,
         "--",
-        file,
+        literal(file),
       ])).text.replace(/\0$/, "")
       if (!text) return false
       if (!/^\d+\s+\w+\s+[0-9a-f]+\t/.test(text))
@@ -593,34 +889,287 @@ const layer = Layer.effect(
       return true
     })
 
+    const removePath = (repository: Repository, file: RelativePath) =>
+      fs.remove(path.join(repository.worktree, file), { recursive: true, force: true }).pipe(
+        Effect.mapError(
+          (cause) =>
+            new OperationError({
+              operation: "restore",
+              directory: repository.worktree,
+              message: `Failed to remove ${file}`,
+              cause,
+            }),
+        ),
+      )
+
+    /** Paths that have an entry in `tree`, listed in chunks to stay below argument limits. */
+    const entries = Effect.fnUntraced(function* (repository: Repository, tree: TreeID, files: readonly RelativePath[]) {
+      const chunks = Array.from({ length: Math.ceil(files.length / 512) }, (_, index) =>
+        files.slice(index * 512, (index + 1) * 512),
+      )
+      const listed = yield* Effect.forEach(chunks, (chunk) =>
+        repositoryOperation("restore", repository, ["ls-tree", "-z", tree, "--", ...chunk.map(literal)]).pipe(
+          Effect.flatMap((result) =>
+            Effect.forEach(nuls(result.text), (record) => {
+              const match = /^\d+ \w+ [0-9a-f]+\t(.*)$/s.exec(record)
+              if (match) return Effect.succeed(match[1])
+              return Effect.fail(
+                new OperationError({
+                  operation: "restore",
+                  directory: repository.worktree,
+                  message: `Invalid tree entry: ${record}`,
+                }),
+              )
+            }),
+          ),
+        ),
+      )
+      return new Set(listed.flat())
+    })
+
+    /**
+     * Restores path by path in map order, like the original implementation, unless
+     * every path is independent. Operations on independent paths commute, so they
+     * are batched into one ls-tree and one checkout per source tree instead of two
+     * processes per file.
+     */
     const restore = Effect.fn("Git.tree.restore")(
       (input: { repository: Repository; files: ReadonlyMap<RelativePath, TreeID> }) =>
         locked(
           input.repository,
-          Effect.forEach(
-            input.files,
-            ([file, tree]) =>
-              Effect.gen(function* () {
-                if (yield* hasEntry(input.repository, tree, file)) {
-                  yield* repositoryOperation("restore", input.repository, ["checkout", tree, "--", file])
-                  return
-                }
-                yield* fs.remove(path.join(input.repository.worktree, file), { recursive: true, force: true }).pipe(
-                  Effect.mapError(
-                    (cause) =>
-                      new OperationError({
-                        operation: "restore",
-                        directory: input.repository.worktree,
-                        message: `Failed to remove ${file}`,
-                        cause,
+          Effect.gen(function* () {
+            if (!input.files.size) return
+            if (!independent([...input.files.keys()]))
+              return yield* Effect.forEach(
+                input.files,
+                ([file, tree]) =>
+                  Effect.gen(function* () {
+                    if (!(yield* hasEntry(input.repository, tree, file)))
+                      return yield* removePath(input.repository, file)
+                    yield* privateIndex(input.repository, (index) =>
+                      repositoryOperation("restore", input.repository, ["checkout", tree, "--", literal(file)], {
+                        index,
                       }),
+                    )
+                  }),
+                { discard: true },
+              )
+            const groups = new Map<TreeID, RelativePath[]>()
+            input.files.forEach((tree, file) => groups.set(tree, [...(groups.get(tree) ?? []), file]))
+            const plan = yield* Effect.forEach(groups, ([tree, files]) =>
+              entries(input.repository, tree, files).pipe(
+                Effect.map((present) => ({
+                  tree,
+                  present: files.filter((file) => present.has(file)),
+                  absent: files.filter((file) => !present.has(file)),
+                })),
+              ),
+            )
+            yield* Effect.forEach(
+              plan.flatMap((item) => item.absent),
+              (file) => removePath(input.repository, file),
+              { concurrency: 16, discard: true },
+            )
+            const checkouts = plan.filter((item) => item.present.length)
+            if (!checkouts.length) return
+            yield* privateIndex(input.repository, (index) =>
+              Effect.forEach(
+                checkouts,
+                (item) =>
+                  repositoryOperation(
+                    "restore",
+                    input.repository,
+                    ["checkout", item.tree, "--pathspec-from-file=-", "--pathspec-file-nul"],
+                    { stdin: item.present.map(literal).join("\0") + "\0", index },
                   ),
-                )
-              }),
-            { discard: true },
-          ),
+                { discard: true },
+              ),
+            )
+          }),
         ),
     )
+
+    /**
+     * Snapshot trees have no refs, so Git's own repack and prune would treat every
+     * snapshot as garbage. Compaction instead hands pack-objects an explicit list of
+     * every loose object (and, when merging, every object in the old packs), checks
+     * the new index lists all of them, and only then deletes the loose copies and
+     * the merged packs. Nothing is pruned, and objects are never delegated to the
+     * source repository through alternates.
+     */
+    const compact = Effect.fn("Git.objects.compact")(function* (repository: Repository) {
+      const objects = path.join(repository.gitDirectory, "objects")
+      const packDirectory = path.join(objects, "pack")
+      const loose = yield* looseObjects(objects)
+      const packs = yield* localPacks(packDirectory)
+      const merge = packs.length >= compactPackLimit
+      if (loose.length < compactLooseLimit && !merge) return
+      yield* compactionLock(
+        repository,
+        Effect.gen(function* () {
+          yield* sweepTemporaryPacks(packDirectory)
+          const merged = merge
+            ? yield* Effect.forEach(packs, (pack) =>
+                packIndex(repository, path.join(packDirectory, `${pack}.idx`)).pipe(
+                  Effect.map((oids) => ({ pack, oids })),
+                ),
+              )
+            : []
+          const wanted = [...new Set([...loose.map((item) => item.oid), ...merged.flatMap((item) => item.oids)])]
+          if (!wanted.length) return
+          const written = (yield* repositoryOperation(
+            "compact",
+            repository,
+            [
+              "-c",
+              "pack.threads=2",
+              "-c",
+              "pack.windowMemory=64m",
+              "pack-objects",
+              "-q",
+              "--non-empty",
+              path.join(packDirectory, "pack"),
+            ],
+            { stdin: wanted.join("\n") + "\n" },
+          )).text
+            .split("\n")
+            .map((line) => line.trim())
+            .filter(Boolean)
+          const packed = new Set(
+            (yield* Effect.forEach(written, (name) =>
+              packIndex(repository, path.join(packDirectory, `pack-${name}.idx`)),
+            )).flat(),
+          )
+          const missing = wanted.filter((oid) => !packed.has(oid))
+          if (missing.length)
+            return yield* new OperationError({
+              operation: "compact",
+              directory: repository.gitDirectory,
+              message: `Packed ${packed.size} objects but ${missing.length} are missing; nothing was removed`,
+            })
+          // Deletion is quick and must not stop halfway, which could strand a pack without its index.
+          yield* Effect.uninterruptible(
+            Effect.gen(function* () {
+              yield* Effect.forEach(loose, (item) => fs.remove(item.file, { force: true }).pipe(Effect.ignore), {
+                concurrency: 16,
+                discard: true,
+              })
+              const kept = new Set(written.map((name) => `pack-${name}`))
+              yield* Effect.forEach(
+                merged.filter((item) => !kept.has(item.pack)),
+                (item) =>
+                  // The index goes first so readers never see an index without its pack.
+                  Effect.forEach(
+                    [".idx", ".pack", ".rev", ".bitmap", ".mtimes"],
+                    (extension) =>
+                      fs
+                        .remove(path.join(packDirectory, `${item.pack}${extension}`), { force: true })
+                        .pipe(Effect.ignore),
+                    { discard: true },
+                  ),
+                { discard: true },
+              )
+            }),
+          )
+        }),
+      )
+    })
+
+    const looseObjects = Effect.fnUntraced(function* (objects: string) {
+      const fanout = (yield* fs.readDirectory(objects).pipe(Effect.orElseSucceed(() => []))).filter((entry) =>
+        /^[0-9a-f]{2}$/.test(entry),
+      )
+      const listed = yield* Effect.forEach(
+        fanout,
+        (prefix) =>
+          fs.readDirectory(path.join(objects, prefix)).pipe(
+            Effect.orElseSucceed(() => []),
+            Effect.map((entries) =>
+              entries
+                .filter((entry) => /^[0-9a-f]{38}$|^[0-9a-f]{62}$/.test(entry))
+                .map((entry) => ({ oid: prefix + entry, file: path.join(objects, prefix, entry) })),
+            ),
+          ),
+        { concurrency: 16 },
+      )
+      return listed.flat()
+    })
+
+    // Packs with a .keep marker or a promisor file belong to someone else's policy and are left alone.
+    const localPacks = Effect.fnUntraced(function* (directory: string) {
+      const entries = new Set(yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => [])))
+      return [...entries]
+        .filter((entry) => entry.startsWith("pack-") && entry.endsWith(".pack"))
+        .map((entry) => entry.slice(0, -".pack".length))
+        .filter(
+          (pack) => entries.has(`${pack}.idx`) && !entries.has(`${pack}.keep`) && !entries.has(`${pack}.promisor`),
+        )
+    })
+
+    const packIndex = Effect.fnUntraced(function* (repository: Repository, file: string) {
+      const bytes = yield* fs.readFile(file).pipe(
+        Effect.mapError(
+          (cause) =>
+            new OperationError({
+              operation: "compact",
+              directory: repository.gitDirectory,
+              message: `Failed to read ${file}`,
+              cause,
+            }),
+        ),
+      )
+      const result = yield* repositoryOperation("compact", repository, ["show-index"], { stdin: bytes })
+      return result.text.split("\n").flatMap((line) => {
+        const oid = line.split(" ")[1]
+        return oid ? [oid] : []
+      })
+    })
+
+    /**
+     * pack-objects writes tmp_* files and renames them; leftovers mean a killed
+     * process. A pack without its index is unreadable to Git, so removing one is
+     * lossless; the age cutoff skips a pack whose index is still being renamed.
+     */
+    const sweepTemporaryPacks = Effect.fnUntraced(function* (directory: string) {
+      const cutoff = Date.now() - 60 * 60 * 1000
+      const entries = yield* fs.readDirectory(directory).pipe(Effect.orElseSucceed(() => []))
+      const indexed = new Set(entries.filter((entry) => entry.endsWith(".idx")).map((entry) => entry.slice(0, -4)))
+      yield* Effect.forEach(
+        entries.filter(
+          (entry) =>
+            entry.startsWith("tmp_") ||
+            (entry.startsWith("pack-") && entry.endsWith(".pack") && !indexed.has(entry.slice(0, -5))),
+        ),
+        (entry) =>
+          fs.stat(path.join(directory, entry)).pipe(
+            Effect.flatMap((info) =>
+              (Option.getOrUndefined(info.mtime)?.getTime() ?? 0) < cutoff
+                ? fs.remove(path.join(directory, entry), { force: true })
+                : Effect.void,
+            ),
+            Effect.ignore,
+          ),
+        { discard: true },
+      )
+    })
+
+    // Cross-process exclusion: concurrent compactions would stay lossless but duplicate work and objects.
+    const compactionLock = <A, E, R>(repository: Repository, effect: Effect.Effect<A, E, R>) => {
+      const file = path.join(repository.gitDirectory, "opencode-compact.lock")
+      return Effect.gen(function* () {
+        const stale = yield* fs.stat(file).pipe(
+          Effect.map((info) => (Option.getOrUndefined(info.mtime)?.getTime() ?? 0) < Date.now() - 60 * 60 * 1000),
+          Effect.orElseSucceed(() => false),
+        )
+        if (stale) yield* fs.remove(file, { force: true }).pipe(Effect.ignore)
+        const acquired = yield* fs.writeFileString(file, String(process.pid), { flag: "wx" }).pipe(
+          Effect.as(true),
+          Effect.orElseSucceed(() => false),
+        )
+        if (!acquired) return
+        yield* effect.pipe(Effect.ensuring(fs.remove(file, { force: true }).pipe(Effect.ignore)))
+      })
+    }
 
     const worktreeRun = Effect.fnUntraced(function* (
       operation: "create" | "remove" | "list",
@@ -702,11 +1251,12 @@ const layer = Layer.effect(
       index: { refresh, ignored },
       tree: {
         capture: captureTree,
-        write: writeTree,
+        write: (repository) => writeTree(repository),
         files: treeFiles,
         diff: treeDiff,
         restore,
       },
+      objects: { compact },
     })
   }),
 )
@@ -747,6 +1297,30 @@ function execute(cwd: string, proc: AppProcess.Interface, args: string[]) {
 /** Split NUL-terminated git output into its records. */
 function nuls(text: string) {
   return text.split("\0").filter(Boolean)
+}
+
+/** Pathspec magic that matches exactly one path, so names with `*`, `?`, `[`, or a leading `:` are not patterns. */
+function literal(file: string) {
+  return `:(literal)${file}`
+}
+
+/**
+ * Paths whose restore operations commute: none inside another, and every segment
+ * printable ASCII that no platform rewrites. Git precomposes Unicode, filesystems
+ * may fold case, and Windows drops trailing dots and spaces and treats `\` and
+ * `:` specially, so anything else takes the ordered path.
+ */
+function independent(files: readonly string[]) {
+  const canonical = files.every((file) =>
+    file.split("/").every((part) => /^[\x20-\x7e]+$/.test(part) && !/[\\:]/.test(part) && !/[. ]$/.test(part)),
+  )
+  if (!canonical) return false
+  const folded = new Set(files.map((file) => file.toLowerCase()))
+  if (folded.size !== files.length) return false
+  return files.every((file) => {
+    const parts = file.toLowerCase().split("/")
+    return parts.slice(1).every((_, index) => !folded.has(parts.slice(0, index + 1).join("/")))
+  })
 }
 
 function resolvePath(cwd: string, value: string) {

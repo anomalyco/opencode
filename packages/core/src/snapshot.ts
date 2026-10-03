@@ -2,7 +2,7 @@ export * as Snapshot from "./snapshot.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
+import { Clock, Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "./git.js"
@@ -106,26 +106,44 @@ const layer = Layer.effect(
     const repository = repositoryFiber.pipe(Effect.uninterruptible, Effect.flatMap(Fiber.join))
 
     const scope = Effect.fnUntraced(function* (worktree: AbsolutePath) {
-      const relative = path.relative(worktree, location.directory)
-      if (relative.startsWith("..") || path.isAbsolute(relative))
+      // A directory named like `..scope` is inside the project; only a `..` segment escapes it.
+      if (!FSUtil.contains(worktree, location.directory))
         return yield* new Error({ operation: "capture", message: "Location is outside the project" })
-      return RelativePath.make(relative.replaceAll("\\", "/") || ".")
+      return RelativePath.make(path.relative(worktree, location.directory).replaceAll("\\", "/") || ".")
     })
 
     const enabled = () => location.vcs?.type === "git" && state.get().enabled
+
+    // Background and rate-limited: a capture never waits for compaction, and the check itself is a few directory reads.
+    let maintenance = { checked: Number.NEGATIVE_INFINITY, running: false }
+    const maintain = Effect.fnUntraced(function* (repository: Git.Repository) {
+      const now = yield* Clock.currentTimeMillis
+      if (maintenance.running || now - maintenance.checked < 10 * 60 * 1000) return
+      maintenance = { checked: now, running: true }
+      yield* git.objects.compact(repository).pipe(
+        Effect.catch((cause) => Effect.logWarning("failed to compact snapshot objects", { cause })),
+        Effect.ensuring(
+          Effect.sync(() => {
+            maintenance = { ...maintenance, running: false }
+          }),
+        ),
+        Effect.forkIn(lifetime),
+      )
+    })
 
     const capture = Effect.fn("Snapshot.capture")(function* () {
       if (!enabled()) return undefined
       return yield* Effect.gen(function* () {
         const repo = yield* repository
-        return ID.make(
-          yield* git.tree.capture({
-            repository: repo.snapshotRepository,
-            scopes: [yield* scope(repo.worktree)],
-            ignores: repo.source,
-            maximumUntrackedFileBytes: 2 * 1024 * 1024,
-          }),
-        )
+        const tree = yield* git.tree.capture({
+          repository: repo.snapshotRepository,
+          scopes: [yield* scope(repo.worktree)],
+          ignores: repo.source,
+          seed: repo.source,
+          maximumUntrackedFileBytes: 2 * 1024 * 1024,
+        })
+        yield* maintain(repo.snapshotRepository)
+        return ID.make(tree)
       }).pipe(
         Effect.catch((cause) => Effect.logWarning("failed to capture snapshot", { cause }).pipe(Effect.as(undefined))),
       )

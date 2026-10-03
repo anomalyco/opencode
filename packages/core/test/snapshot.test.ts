@@ -127,6 +127,145 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("recovers from a corrupt index and ignores a stale index lock", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+            await initGit(project, true)
+          })
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            const before = yield* snapshot.capture()
+            const storage = yield* snapshotDirectory(tmp.path)
+            yield* Effect.promise(async () => {
+              // A process killed mid-write in older releases left a zeroed index and a lock behind.
+              await fs.writeFile(path.join(storage, "index"), new Uint8Array(512))
+              await fs.writeFile(path.join(storage, "index.lock"), "")
+              await fs.writeFile(path.join(project, "tracked.txt"), "two\n")
+            })
+            const after = yield* snapshot.capture()
+            expect(after).toBeDefined()
+            if (!before || !after) return
+            expect(yield* snapshot.files({ from: before, to: after })).toEqual([RelativePath.make("tracked.txt")])
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  testEffect(Layer.empty).live("captures concurrently from independent processes", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await Promise.all(
+              Array.from({ length: 200 }, (_, index) =>
+                fs.writeFile(path.join(project, `f${index}.txt`), `${index}\n`),
+              ),
+            )
+            await initGit(project, true)
+          })
+          // Each layer owns its own Git service, so their in-process locks do not coordinate.
+          const writer = (id: number) =>
+            Effect.gen(function* () {
+              const snapshot = yield* Snapshot.Service
+              return yield* Effect.forEach(
+                Array.from({ length: 8 }, (_, index) => index),
+                (index) =>
+                  Effect.promise(() => fs.writeFile(path.join(project, `writer-${id}.txt`), `${index}\n`)).pipe(
+                    Effect.andThen(snapshot.capture()),
+                  ),
+              )
+            }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+          const results = yield* Effect.all([writer(0), writer(1), writer(2)], { concurrency: "unbounded" })
+          expect(results.flat().every((tree) => tree !== undefined)).toBe(true)
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  testEffect(Layer.empty).live("captures a Location in a directory whose name starts with two dots", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          const location = path.join(project, "..scope")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(location, { recursive: true })
+            await fs.writeFile(path.join(location, "tracked.txt"), "one\n")
+            await initGit(project)
+          })
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            const before = yield* snapshot.capture()
+            yield* Effect.promise(() => fs.writeFile(path.join(location, "tracked.txt"), "two\n"))
+            const after = yield* snapshot.capture()
+            expect(before).toBeDefined()
+            expect(after).toBeDefined()
+            if (!before || !after) return
+            expect(yield* snapshot.files({ from: before, to: after })).toEqual([
+              RelativePath.make("..scope/tracked.txt"),
+            ])
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, location)))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  testEffect(Layer.empty).live("restores many files from several trees and removes paths absent from them", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(project)
+            await fs.writeFile(path.join(project, "a.txt"), "a1\n")
+            await fs.writeFile(path.join(project, "b[1].txt"), "b1\n")
+            await initGit(project, true)
+          })
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            const first = yield* snapshot.capture()
+            yield* Effect.promise(async () => {
+              await fs.writeFile(path.join(project, "a.txt"), "a2\n")
+              await fs.writeFile(path.join(project, "c.txt"), "c2\n")
+            })
+            const second = yield* snapshot.capture()
+            yield* Effect.promise(async () => {
+              await fs.writeFile(path.join(project, "a.txt"), "a3\n")
+              await fs.writeFile(path.join(project, "b[1].txt"), "b3\n")
+              await fs.writeFile(path.join(project, "c.txt"), "c3\n")
+              await fs.writeFile(path.join(project, "d.txt"), "d3\n")
+            })
+            if (!first || !second) throw new globalThis.Error("capture failed")
+            yield* snapshot.restore({
+              files: new Map([
+                [RelativePath.make("a.txt"), second],
+                [RelativePath.make("b[1].txt"), first],
+                [RelativePath.make("c.txt"), first],
+                [RelativePath.make("d.txt"), second],
+              ]),
+            })
+            expect(yield* read(path.join(project, "a.txt"))).toBe("a2\n")
+            expect(yield* read(path.join(project, "b[1].txt"))).toBe("b1\n")
+            expect(yield* exists(path.join(project, "c.txt"))).toBe(false)
+            expect(yield* exists(path.join(project, "d.txt"))).toBe(false)
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+        }),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   testEffect(Layer.empty).live("applies availability transforms", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
@@ -217,6 +356,23 @@ function snapshotLayer(data: string, directory: string) {
     Location.node.replace(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
     Global.node.replace(Global.layerWith({ data, config: path.join(data, "config") })),
   ])
+}
+
+function snapshotDirectory(data: string) {
+  return Effect.promise(async () => {
+    const projects = await fs.readdir(path.join(data, "snapshot"))
+    const project = path.join(data, "snapshot", projects[0]!)
+    return path.join(project, (await fs.readdir(project))[0]!)
+  })
+}
+
+function exists(file: string) {
+  return Effect.promise(() =>
+    fs.stat(file).then(
+      () => true,
+      () => false,
+    ),
+  )
 }
 
 function read(file: string) {

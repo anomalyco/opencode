@@ -70,14 +70,16 @@ export const make = Effect.gen(function* () {
   const toolOutput = yield* ToolOutput.Service
 
   const attempt = Effect.fn("SessionStep.attempt")(function* (input: Input) {
-    const startSnapshot = yield* snapshots.capture()
+    // The preimage only has to precede local tool execution, which cannot begin before Step.Started,
+    // so the capture overlaps the provider's time to first event instead of delaying the request.
+    const startCapture = yield* snapshots.capture().pipe(Effect.forkScoped)
     const publisher = createLLMEventPublisher(bus, {
       sessionID: input.sessionID,
       assistantMessageID: input.assistantMessageID,
       agent: input.agent,
       model: input.model.ref,
       providerMetadataKey: input.model.model.route.providerMetadataKey ?? input.model.model.provider,
-      snapshot: startSnapshot,
+      snapshot: Fiber.join(startCapture),
       started: yield* Clock.currentTimeMillis,
     })
     const toolRuns: Array<{
@@ -224,6 +226,7 @@ export const make = Effect.gen(function* () {
 
         const record = publisher.record()
         if (record.finish || record.failure) {
+          const startSnapshot = yield* Fiber.join(startCapture)
           const snapshot = yield* snapshots.capture()
           const files =
             startSnapshot && snapshot
