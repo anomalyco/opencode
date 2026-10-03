@@ -5,6 +5,7 @@ import { Effect, Layer, Schema } from "effect"
 import { makeLocationNode } from "../effect/app-node"
 import { PermissionV2 } from "../permission"
 import { QuestionV2 } from "../question"
+import { QuestionOutput } from "../question-output"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -31,18 +32,8 @@ export const Output = Schema.Struct({
 })
 export type Output = typeof Output.Type
 
-export const toModelOutput = (
-  questions: ReadonlyArray<QuestionV2.Prompt>,
-  answers: ReadonlyArray<QuestionV2.Answer>,
-) => {
-  const formatted = questions
-    .map(
-      (question, index) =>
-        `"${question.question}"="${answers[index]?.length ? answers[index].join(", ") : "Unanswered"}"`,
-    )
-    .join(", ")
-  return `User has answered your questions: ${formatted}. You can now continue with the user's answers in mind.`
-}
+export const toModelOutput = (questions: ReadonlyArray<QuestionV2.Prompt>, answers: ReadonlyArray<QuestionV2.Answer>) =>
+  QuestionOutput.toModelOutput(questions, answers)
 
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {

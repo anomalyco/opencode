@@ -137,6 +137,20 @@ const layer = Layer.effect(
         }
       }
     })
+    const hasRecoveredQuestionContinuation = Effect.fn("SessionRunner.hasRecoveredQuestionContinuation")(function* (
+      sessionID: SessionSchema.ID,
+    ) {
+      const assistant = (yield* getContext(sessionID)).findLast((message) => message.type === "assistant")
+      if (assistant?.type !== "assistant" || (assistant.time.completed && assistant.finish !== "tool-calls"))
+        return false
+      return assistant.content.some(
+        (item) =>
+          item.type === "tool" &&
+          item.name === "question" &&
+          item.provider?.executed !== true &&
+          item.state.status === "completed",
+      )
+    })
 
     const awaitToolFibers = (fibers: FiberSet.FiberSet<void, ToolOutputStore.Error>) =>
       Effect.raceFirst(FiberSet.join(fibers), FiberSet.awaitEmpty(fibers))
@@ -395,10 +409,12 @@ const layer = Layer.effect(
     }) {
       const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
-      if (!input.force && !hasSteer && !hasQueue) return
+      const hasRecovered =
+        input.force || hasSteer || hasQueue ? false : yield* hasRecoveredQuestionContinuation(input.sessionID)
+      if (!input.force && !hasSteer && !hasQueue && !hasRecovered) return
       yield* failInterruptedTools(input.sessionID)
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
-      let shouldRun = input.force || hasSteer || hasQueue
+      let shouldRun = input.force || hasSteer || hasQueue || hasRecovered
       while (shouldRun) {
         let needsContinuation = true
         let step = 1

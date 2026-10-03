@@ -3,6 +3,7 @@ export * from "./session/schema"
 
 import { DateTime, Effect, Layer, Schema, Context, Stream } from "effect"
 import { ListAnchor } from "@opencode-ai/schema/session"
+import { Question } from "@opencode-ai/schema/question"
 import { and, asc, desc, eq, gt, like, lt, or, type SQL } from "drizzle-orm"
 import { ProjectV2 } from "./project"
 import { WorkspaceV2 } from "./workspace"
@@ -193,6 +194,11 @@ const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
     const decodeMessage = Schema.decodeUnknownEffect(SessionMessage.Message)
     const isDurableSessionEvent = Schema.is(SessionEvent.Durable)
+    const isQuestionReplied = Schema.is(Question.Event.Replied)
+    const unsubscribeQuestionWake = yield* events.listen((event) =>
+      isQuestionReplied(event) ? execution.wake(event.data.sessionID) : Effect.void,
+    )
+    yield* Effect.addFinalizer(() => unsubscribeQuestionWake)
     const decode = (row: typeof SessionMessageTable.$inferSelect) =>
       decodeMessage({ ...row.data, id: row.id, type: row.type }).pipe(
         Effect.mapError(

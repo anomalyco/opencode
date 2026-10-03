@@ -297,7 +297,18 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
       "session.next.tool.success": (event) => {
         return updateOwnedAssistant(event.data.assistantMessageID, (draft) => {
           const match = latestTool(draft, event.data.callID)
-          if (match && match.state.status === "running") {
+          if (!match) return
+          const completedInput =
+            match.state.status === "running"
+              ? match.state.input
+              : match.state.status === "error" &&
+                  match.name === "question" &&
+                  match.provider?.executed !== true &&
+                  match.state.error.message === "Tool execution interrupted" &&
+                  event.data.recovery?.type === "question"
+                ? match.state.input
+                : undefined
+          if (completedInput) {
             match.provider = {
               executed: event.data.provider.executed || match.provider?.executed === true,
               metadata: match.provider?.metadata,
@@ -307,7 +318,7 @@ export function update(adapter: Adapter, event: SessionEvent.Event) {
             match.state = castDraft(
               SessionMessage.ToolStateCompleted.make({
                 status: "completed",
-                input: match.state.input,
+                input: completedInput,
                 structured: event.data.structured,
                 content: [...event.data.content],
                 outputPaths: event.data.outputPaths ? [...event.data.outputPaths] : [],

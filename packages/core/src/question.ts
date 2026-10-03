@@ -1,10 +1,18 @@
 export * as QuestionV2 from "./question"
 
 import { makeLocationNode } from "./effect/app-node"
-import { Context, Deferred, Effect, Layer, Schema } from "effect"
+import { Context, DateTime, Deferred, Effect, Layer, Schema } from "effect"
+import { and, asc, eq, isNull } from "drizzle-orm"
 import { Question } from "@opencode-ai/schema/question"
+import { Database } from "./database/database"
 import { EventV2 } from "./event"
+import { Location } from "./location"
+import { QuestionOutput } from "./question-output"
+import { QuestionPendingTable } from "./question.sql"
+import { SessionEvent } from "./session/event"
+import { SessionMessage } from "./session/message"
 import { SessionSchema } from "./session/schema"
+import { SessionTable } from "./session/sql"
 
 export const ID = Question.ID
 export type ID = typeof ID.Type
@@ -75,8 +83,40 @@ interface Pending {
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const { db } = yield* Database.Service
     const events = yield* EventV2.Service
+    const location = yield* Location.Service
     const pending = new Map<ID, Pending>()
+    const decodeRequest = Schema.decodeUnknownSync(Request)
+    const answers = (input: ReplyInput) => input.answers.map((answer) => [...answer])
+    const locationFilter = and(
+      eq(SessionTable.directory, location.directory),
+      location.workspaceID === undefined
+        ? isNull(SessionTable.workspace_id)
+        : eq(SessionTable.workspace_id, location.workspaceID),
+    )
+    const pendingRequest = Effect.fn("QuestionV2.pendingRequest")(function* (requestID: ID) {
+      const row = yield* db
+        .select({ request: QuestionPendingTable.request })
+        .from(QuestionPendingTable)
+        .innerJoin(SessionTable, eq(QuestionPendingTable.session_id, SessionTable.id))
+        .where(and(eq(QuestionPendingTable.id, requestID), locationFilter))
+        .get()
+        .pipe(Effect.orDie)
+      return row ? decodeRequest(row.request) : undefined
+    })
+    const deletePending = (requestID: ID) =>
+      db
+        .delete(QuestionPendingTable)
+        .where(eq(QuestionPendingTable.id, requestID))
+        .run()
+        .pipe(Effect.orDie, Effect.asVoid)
+    const publishReplied = (request: Request, input: ReplyInput) =>
+      events.publish(Event.Replied, {
+        sessionID: request.sessionID,
+        requestID: request.id,
+        answers: answers(input),
+      })
 
     yield* Effect.addFinalizer(() =>
       Effect.forEach(pending.values(), (item) => Deferred.fail(item.deferred, new RejectedError()), {
@@ -97,14 +137,37 @@ const layer = Layer.effect(
           const deferred = yield* Deferred.make<ReadonlyArray<Answer>, RejectedError>()
           const request: Request = { id, ...input }
           pending.set(id, { request, deferred })
-          return yield* events.publish(Event.Asked, request).pipe(
-            Effect.andThen(restore(Deferred.await(deferred))),
-            Effect.ensuring(
-              Effect.sync(() => {
-                pending.delete(id)
-              }),
-            ),
-          )
+          return yield* events
+            .publish(Event.Asked, request, {
+              commit: (seq) =>
+                Effect.gen(function* () {
+                  const session = yield* db
+                    .select({ id: SessionTable.id })
+                    .from(SessionTable)
+                    .where(eq(SessionTable.id, request.sessionID))
+                    .get()
+                    .pipe(Effect.orDie)
+                  if (!session) return
+                  yield* db
+                    .insert(QuestionPendingTable)
+                    .values({
+                      id,
+                      session_id: request.sessionID,
+                      request,
+                      asked_seq: seq,
+                    })
+                    .run()
+                    .pipe(Effect.orDie)
+                }),
+            })
+            .pipe(
+              Effect.andThen(restore(Deferred.await(deferred))),
+              Effect.ensuring(
+                Effect.sync(() => {
+                  pending.delete(id)
+                }),
+              ),
+            )
         }),
       ),
     )
@@ -113,14 +176,36 @@ const layer = Layer.effect(
       Effect.uninterruptible(
         Effect.gen(function* () {
           const existing = pending.get(input.requestID)
-          if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
-          yield* events.publish(Event.Replied, {
-            sessionID: existing.request.sessionID,
-            requestID: existing.request.id,
-            answers: input.answers.map((answer) => [...answer]),
-          })
-          yield* Deferred.succeed(existing.deferred, input.answers)
-          pending.delete(input.requestID)
+          if (existing) {
+            yield* publishReplied(existing.request, input)
+            yield* Deferred.succeed(existing.deferred, input.answers)
+            pending.delete(input.requestID)
+            yield* deletePending(input.requestID)
+            return
+          }
+
+          const request = yield* pendingRequest(input.requestID)
+          if (!request) return yield* new NotFoundError({ requestID: input.requestID })
+          if (request.tool) {
+            const settled = answers(input)
+            yield* events.publish(
+              SessionEvent.Tool.Success,
+              {
+                sessionID: request.sessionID,
+                timestamp: yield* DateTime.now,
+                assistantMessageID: SessionMessage.ID.make(request.tool.messageID),
+                callID: request.tool.callID,
+                structured: { answers: settled },
+                content: [{ type: "text", text: QuestionOutput.toModelOutput(request.questions, settled) }],
+                recovery: { type: "question", requestID: request.id },
+                provider: { executed: false },
+              },
+              { commit: () => deletePending(input.requestID) },
+            )
+          } else {
+            yield* deletePending(input.requestID)
+          }
+          yield* publishReplied(request, input)
         }),
       ),
     )
@@ -136,12 +221,26 @@ const layer = Layer.effect(
           })
           yield* Deferred.fail(existing.deferred, new RejectedError())
           pending.delete(requestID)
+          yield* db.delete(QuestionPendingTable).where(eq(QuestionPendingTable.id, requestID)).run().pipe(Effect.orDie)
         }),
       ),
     )
 
     const list = Effect.fn("QuestionV2.list")(function* () {
-      return Array.from(pending.values(), (item) => item.request)
+      const rows = yield* db
+        .select({ request: QuestionPendingTable.request })
+        .from(QuestionPendingTable)
+        .innerJoin(SessionTable, eq(QuestionPendingTable.session_id, SessionTable.id))
+        .where(locationFilter)
+        .orderBy(asc(QuestionPendingTable.asked_seq))
+        .all()
+        .pipe(Effect.orDie)
+
+      const durable = rows.map((row) => decodeRequest(row.request))
+      const durableIDs = new Set(durable.map((request) => request.id))
+      return durable.concat(
+        Array.from(pending.values(), (item) => item.request).filter((request) => !durableIDs.has(request.id)),
+      )
     })
 
     return Service.of({ ask, reply, reject, list })
@@ -150,4 +249,8 @@ const layer = Layer.effect(
 
 export const locationLayer = layer
 
-export const node = makeLocationNode({ service: Service, layer, deps: [EventV2.node] })
+export const node = makeLocationNode({
+  service: Service,
+  layer,
+  deps: [Database.node, EventV2.node, Location.node],
+})
