@@ -4,6 +4,7 @@ import type { JSONSchema7 } from "@ai-sdk/provider"
 import type * as Provider from "./provider"
 import type * as ModelsDev from "@opencode-ai/core/models-dev"
 import { iife } from "@/util/iife"
+import { inlineSchemaReferences } from "./inline-schema-references"
 
 type Modality = NonNullable<ModelsDev.Model["modalities"]>["input"][number]
 
@@ -1573,6 +1574,9 @@ function sanitizeOpenAISchema(value: unknown): unknown {
 }
 
 export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {
+  // These model families can stringify objects described only through a reference.
+  if (/nemotron|qwen/i.test(model.api.id))
+    schema = inlineSchemaReferences(schema as Record<string, unknown>) as JSONSchema7
   /*
   if (["openai", "azure"].includes(providerID)) {
     if (schema.type === "object" && schema.properties) {
