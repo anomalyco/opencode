@@ -5,7 +5,8 @@
     "jsx": "preserve",
     "jsxImportSource": "@opentui/solid",
     "lib": ["ESNext", "DOM", "DOM.Iterable", "DOM.AsyncIterable"],
-    "noUncheckedIndexedAccess": false
+    "noUncheckedIndexedAccess": false,
+    "noUnusedLocals": true
   },
   "exclude": ["dist", "dist-node"],
   "references": [{ "path": "../core" }]

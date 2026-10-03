@@ -11,6 +11,7 @@ import {
 } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient } from "@opencode/client/effect"
 import { Cause, Deferred, Effect, Ref, type Scope } from "effect"
+import { ACPCapabilities } from "./capabilities"
 import { ACPCatalog } from "./catalog"
 import { ACPClient } from "./client"
 import { ACPConnection } from "./connection"
@@ -27,7 +28,7 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
   const ready = yield* Deferred.make<ACPService.Interface>()
   const handle =
     <Params, A>(
-      call: (service: ACPService.Interface, ctx: AgentHandlerContext<Params>) => Effect.Effect<A, ACPService.Failure>,
+      call: (service: ACPService.Interface, ctx: AgentHandlerContext<Params>) => Effect.Effect<A, ACPError.Failure>,
     ) =>
     (name: string) => {
       const handler = Effect.fn(name)(
@@ -35,7 +36,8 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
           Deferred.await(ready).pipe(Effect.flatMap((service) => call(service, ctx))),
         Effect.catchTags({
           ACPCatalogLoadError: (error) => ACPClient.classify(error.cause),
-          ACPCatalogNotReadyError: (error) => Effect.die(error),
+          ACPCatalogNotReadyError: (error) =>
+            Effect.fail(new ACPError.ServiceFailureError({ safeMessage: error.message, errorName: "CatalogNotReady" })),
         }),
         Effect.mapError((error) => (error instanceof RequestError ? error : ACPError.toRequestError(error))),
         Effect.tapCauseIf(Cause.hasDies, (cause) => Effect.logError("ACP request failed", cause)),
@@ -113,7 +115,7 @@ export const connect = Effect.fnUntraced(function* (client: OpenCodeClient, stre
   const acp = ACPConnection.make(app, stream)
   const connection = acp.connection
   const sessions = yield* ACPSessions.make({ client, connection, catalog })
-  const capabilities = yield* Ref.make({ childSessionUpdates: false, formElicitation: false, compaction: false })
+  const capabilities = yield* Ref.make(ACPCapabilities.parse(undefined))
   const turn = yield* ACPTurn.make({ client, connection, sessions, catalog, capabilities })
   yield* Deferred.succeed(ready, ACPService.make({ client, connection, catalog, sessions, capabilities, turn }))
   return acp.agent

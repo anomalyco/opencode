@@ -92,7 +92,7 @@ export function disposeMarkdownProjection(key: string) {
 }
 
 export function highlightStreamingCode(key: string, text: string, language: string, complete = false) {
-  const instance = getWorker()
+  getWorker()
   const id = ++nextID
   latest.set(key, id)
   keys.delete(key)

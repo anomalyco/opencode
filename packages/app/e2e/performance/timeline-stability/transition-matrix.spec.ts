@@ -15,7 +15,6 @@ import {
   partUpdated,
   renderedPartID,
   setupTimeline,
-  shell,
   status,
   textPart,
   toolPart,

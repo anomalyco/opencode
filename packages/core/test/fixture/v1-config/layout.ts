@@ -1,4 +1,4 @@
-export * as ConfigLayoutV1 from "./layout.js"
+export * as ConfigLayoutV1 from "./layout"
 
 import { Schema } from "effect"
 

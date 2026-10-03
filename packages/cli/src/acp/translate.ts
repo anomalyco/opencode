@@ -4,14 +4,11 @@ import type { Session } from "@opencode/schema/session"
 import type { SessionError } from "@opencode/schema/session-error"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
+import { ACPChild } from "./child"
 import { ACPCompaction } from "./compaction"
-import { partsToContentChunks, type ReplayPart } from "./content"
 import { ACPError } from "./error"
-import type { ACPService } from "./service"
 import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate, type ToolInput } from "./tool"
 
-export const ChildSessionUpdatesCapability = "opencode/child-session-updates"
-export const ChildSessionUpdateMethod = "opencode/session/child_update"
 const RetryMeta = "opencode/retry"
 
 export type TurnStart = { readonly type: "input" | "compaction"; readonly id: SessionMessage.ID }
@@ -42,37 +39,14 @@ type RetryStatus = {
   readonly error: SessionError.Error
 }
 
-export type ChildSession = {
-  readonly id: string
-  readonly parentID: string
-  readonly depth: number
-  readonly title?: string
-}
-
-type ChildSessionEvent =
-  | { readonly type: "update"; readonly update: SessionUpdate }
-  | {
-      readonly type: "status"
-      readonly status: "created" | "running" | "completed" | "failed" | "interrupted"
-      readonly error?: { readonly type: string; readonly message: string }
-    }
-
-export type ChildSessionUpdate = {
-  readonly rootSessionId: string
-  readonly childSessionId: string
-  readonly parentSessionId: string
-  readonly depth: number
-  readonly title?: string
-} & ChildSessionEvent
-
 export type TurnState = {
   readonly started: boolean
   readonly tools: ReadonlyMap<string, Tool>
   readonly retries: ReadonlyMap<string, RetryStatus>
   readonly compactions: ACPCompaction.Tracked
-  readonly children: ReadonlyMap<string, ChildSession>
+  readonly children: ReadonlyMap<string, ACPChild.Session>
   readonly openChildren: ReadonlySet<string>
-  readonly forms: ReadonlySet<string>
+  readonly asks: ReadonlySet<string>
   readonly finish?: SessionMessage.Assistant["finish"]
   readonly usage?: { readonly turn: TokenUsage.Info; readonly last: TokenUsage.Info }
   readonly stepError?: SessionError.Error
@@ -84,22 +58,22 @@ type FormEvent = Extract<OpenCodeEvent, { type: "form.created" }>
 
 export type Output =
   | { readonly _tag: "SessionUpdate"; readonly update: SessionUpdate }
-  | { readonly _tag: "ChildUpdate"; readonly update: ChildSessionUpdate }
+  | { readonly _tag: "ChildUpdate"; readonly update: ACPChild.Update }
   | {
       readonly _tag: "PermissionAsk"
       readonly event: PermissionEvent
       readonly tool?: Tool
-      readonly child?: ChildSession
+      readonly child?: ACPChild.Session
     }
   | {
       readonly _tag: "FormAsk"
       readonly form: FormEvent["data"]["form"]
-      readonly child?: ChildSession
+      readonly child?: ACPChild.Session
       readonly toolCallSent: boolean
     }
-  | { readonly _tag: "FormSettled"; readonly formID: string }
+  | { readonly _tag: "AskSettled"; readonly id: string }
 
-export type Step = {
+type Step = {
   readonly state: TurnState
   readonly outputs: ReadonlyArray<Output>
   readonly terminal?: Terminal
@@ -112,7 +86,7 @@ export const initial: TurnState = {
   compactions: new Map(),
   children: new Map(),
   openChildren: new Set(),
-  forms: new Set(),
+  asks: new Set(),
 }
 
 export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step {
@@ -141,11 +115,14 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
     const tool = event.data.source?.id
       ? state.tools.get(toolKey(event.data.sessionID, event.data.source.id))
       : undefined
-    return { state, outputs: [{ _tag: "PermissionAsk", event, tool, child }] }
+    return {
+      state: { ...state, asks: new Set(state.asks).add(event.data.id) },
+      outputs: [{ _tag: "PermissionAsk", event, tool, child }],
+    }
   }
   if (event.type === "form.created" && (event.data.form.sessionID === ctx.sessionID || child)) {
     return {
-      state: { ...state, forms: new Set(state.forms).add(event.data.form.id) },
+      state: { ...state, asks: new Set(state.asks).add(event.data.form.id) },
       outputs: [
         {
           _tag: "FormAsk",
@@ -156,13 +133,20 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
       ],
     }
   }
-  if ((event.type === "form.replied" || event.type === "form.cancelled") && state.forms.has(event.data.id)) {
-    const forms = new Set(state.forms)
-    forms.delete(event.data.id)
-    return { state: { ...state, forms }, outputs: [{ _tag: "FormSettled", formID: event.data.id }] }
+  const settledID =
+    event.type === "permission.replied"
+      ? event.data.requestID
+      : event.type === "form.replied" || event.type === "form.cancelled"
+        ? event.data.id
+        : undefined
+  if (settledID && state.asks.has(settledID)) {
+    const asks = new Set(state.asks)
+    asks.delete(settledID)
+    return { state: { ...state, asks }, outputs: [{ _tag: "AskSettled", id: settledID }] }
   }
   if (!eventSessionID || (eventSessionID !== ctx.sessionID && !child)) return { state, outputs: [] }
-  if (matchesStart(event, ctx.start)) return { state: { ...state, started: true }, outputs: [] }
+  if (event.type === "session.inbox.delivered" && event.data.inboxID === ctx.start.id)
+    return { state: { ...state, started: true }, outputs: [] }
   if (!state.started) return { state, outputs: [] }
 
   switch (event.type) {
@@ -219,7 +203,7 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
         state,
         outputs: send({
           sessionUpdate: "agent_thought_chunk",
-          messageId: `${event.data.assistantMessageID}:reasoning:${event.data.ordinal}`,
+          messageId: reasoningMessageID(event.data.assistantMessageID, event.data.ordinal),
           content: { type: "text", text: event.data.delta },
         }),
       }
@@ -396,126 +380,31 @@ export function abandon(state: TurnState, ctx: Context): Step {
   }
 }
 
-export function* replayMessage(
-  message: SessionMessage.Info,
-  cwd: string,
-  capabilities: ACPService.Capabilities,
-): Generator<SessionUpdate> {
-  if (message.type === "user") {
-    yield { sessionUpdate: "user_message_chunk", messageId: message.id, content: { type: "text", text: message.text } }
-    const files: ReplayPart[] = (message.files ?? []).map((file) => ({
-      type: "file",
-      url: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
-      filename: file.name,
-      mime: file.mime,
-    }))
-    for (const chunk of partsToContentChunks(files))
-      yield { sessionUpdate: "user_message_chunk", messageId: message.id, ...chunk }
-    return
-  }
-  if (message.type === "compaction") {
-    const update = ACPCompaction.replay(message, capabilities.compaction)
-    if (update) yield update
-    return
-  }
-  if (message.type !== "assistant") return
-  // Live reasoning ordinals count only reasoning parts, not the mixed content array.
-  let reasoningOrdinal = 0
-  for (const part of message.content) {
-    if (part.type === "text") {
-      yield { sessionUpdate: "agent_message_chunk", messageId: message.id, content: { type: "text", text: part.text } }
-      continue
-    }
-    if (part.type === "reasoning") {
-      yield {
-        sessionUpdate: "agent_thought_chunk",
-        messageId: `${message.id}:reasoning:${reasoningOrdinal++}`,
-        content: { type: "text", text: part.text },
-      }
-      continue
-    }
-    yield {
-      sessionUpdate: "tool_call",
-      ...pendingToolCall({
-        toolCallId: part.id,
-        toolName: part.name,
-        state: { input: part.state.status === "streaming" ? {} : part.state.input },
-        cwd,
-      }),
-    }
-    switch (part.state.status) {
-      case "completed":
-        yield {
-          sessionUpdate: "tool_call_update",
-          ...completedToolUpdate({
-            toolCallId: part.id,
-            toolName: part.name,
-            input: part.state.input,
-            metadata: part.state.metadata,
-            content: part.state.content,
-            cwd,
-          }),
-        }
-        break
-      case "running":
-        yield {
-          sessionUpdate: "tool_call_update",
-          ...runningToolUpdate({ toolCallId: part.id, toolName: part.name, state: { input: part.state.input }, cwd }),
-        }
-        break
-      case "error":
-        yield {
-          sessionUpdate: "tool_call_update",
-          ...errorToolUpdate({
-            toolCallId: part.id,
-            toolName: part.name,
-            input: part.state.input,
-            metadata: part.state.metadata,
-            content: part.state.content,
-            error: part.state.error.message,
-            cwd,
-          }),
-        }
-        break
-      case "streaming":
-        break
-    }
-  }
+export function reasoningMessageID(messageID: string, ordinal: number) {
+  return `${messageID}:reasoning:${ordinal}`
 }
 
 function newTool(sessionID: string, id: string, name = "tool"): Tool {
   return { sessionID, id, name, input: {}, metadata: {} }
 }
 
-function route(ctx: Context, child: ChildSession | undefined, update: SessionUpdate): Output[] {
+function route(ctx: Context, child: ACPChild.Session | undefined, update: SessionUpdate): Output[] {
   if (!child) return ctx.mode === "turn" ? [{ _tag: "SessionUpdate", update }] : []
-  const projected = projectChildUpdate(update, child)
+  const projected = ACPChild.project(update, child)
   if (ctx.childUpdates) return childStatus(ctx, child, { type: "update", update: projected })
   return ctx.mode === "turn" ? [{ _tag: "SessionUpdate", update: projected }] : []
 }
 
-function childStatus(ctx: Context, child: ChildSession, value: ChildSessionEvent): Output[] {
+function childStatus(ctx: Context, child: ACPChild.Session, event: ACPChild.Event): Output[] {
   if (!ctx.childUpdates) return []
-  return [
-    {
-      _tag: "ChildUpdate",
-      update: {
-        rootSessionId: ctx.sessionID,
-        childSessionId: child.id,
-        parentSessionId: child.parentID,
-        depth: child.depth,
-        ...(child.title ? { title: child.title } : {}),
-        ...value,
-      },
-    },
-  ]
+  return [{ _tag: "ChildUpdate", update: ACPChild.update(ctx.sessionID, child, event) }]
 }
 
 function childEnded(
   state: TurnState,
   ctx: Context,
-  child: ChildSession,
-  status: ChildSessionEvent,
+  child: ACPChild.Session,
+  status: ACPChild.Event,
   terminal: Terminal,
 ): Step {
   const openChildren = new Set(state.openChildren)
@@ -559,31 +448,6 @@ function sessionIDFromEvent(event: OpenCodeEvent) {
 
 function toolKey(sessionID: string, id: string) {
   return `${sessionID}:${id}`
-}
-
-function projectChildUpdate(update: SessionUpdate, child: ChildSession) {
-  const projected = { ...update }
-  projected._meta = { ...projected._meta, ...childSessionMeta(child) }
-  if (projected.sessionUpdate === "tool_call" || projected.sessionUpdate === "tool_call_update") {
-    projected.toolCallId = `${child.id}:${projected.toolCallId}`
-    if (projected.title && child.title) projected.title = `${child.title}: ${projected.title}`
-  }
-  return projected
-}
-
-export function childSessionMeta(child: ChildSession) {
-  return {
-    "opencode/child-session": {
-      id: child.id,
-      parentID: child.parentID,
-      depth: child.depth,
-      ...(child.title ? { title: child.title } : {}),
-    },
-  }
-}
-
-function matchesStart(event: OpenCodeEvent, start: TurnStart) {
-  return event.type === "session.inbox.delivered" && event.data.inboxID === start.id
 }
 
 function resolveStopReason(input: {

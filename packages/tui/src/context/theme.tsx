@@ -8,17 +8,12 @@ import {
   type SurfaceName,
 } from "@opencode/theme/tui"
 import {
-  DEFAULT_THEMES,
-  addTheme,
   allThemes,
   hasTheme,
   parseTheme,
-  selectedForeground,
   setCustomThemes,
   setSystemTheme,
   subscribeThemes,
-  upsertTheme,
-  type Theme,
   type ThemeDocumentSource,
 } from "../theme"
 import { generateSystem, terminalMode } from "../theme/system"

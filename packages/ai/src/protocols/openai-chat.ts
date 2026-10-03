@@ -14,7 +14,6 @@ import {
   ProviderInternalError,
   UnknownProviderError,
   Usage,
-  type FinishReason,
   type FinishReasonDetails,
   type CacheHint,
   type LLMRequest,
@@ -45,12 +44,6 @@ const OpenAIChatCacheControl = Schema.Struct({
   ttl: Schema.optional(Schema.String),
 })
 type OpenAIChatCacheControl = Schema.Schema.Type<typeof OpenAIChatCacheControl>
-
-const OpenAIChatFunction = Schema.Struct({
-  name: Schema.String,
-  description: Schema.String,
-  parameters: JsonObject,
-})
 
 const OpenAIChatTool = Schema.Struct({
   type: Schema.tag("function"),

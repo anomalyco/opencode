@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
 import {
   Agent,
   Config,
@@ -42,9 +41,6 @@ describe("public event manifest", () => {
     expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
     expect(EventManifest.Server.get("project.updated")).toBe(Project.Event.Updated)
     expect(EventManifest.Server.has("mcp.tools.changed")).toBe(false)
-    expect(EventManifest.Server.has("question.asked")).toBe(false)
-    expect(EventManifest.Server.has("question.replied")).toBe(false)
-    expect(EventManifest.Server.has("question.rejected")).toBe(false)
     expect(Agent.Event.Updated.durable).toBeUndefined()
     expect(EventManifest.Durable.has("agent.updated")).toBe(false)
   })

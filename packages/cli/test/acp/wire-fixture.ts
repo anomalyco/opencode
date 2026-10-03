@@ -28,7 +28,7 @@ import type { Session } from "@opencode/schema/session"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { BunRequest } from "bun"
-import { Duration, Effect, Exit, Option, Schema, Scope } from "effect"
+import { Duration, Effect, Exit, Logger, Option, Schema, Scope } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { ACP } from "../../src/acp/agent"
 import { ACPTurn } from "../../src/acp/turn"
@@ -412,6 +412,7 @@ export async function startWire(options: WireOptions = {}) {
 
   const clientToAgent = new TransformStream<Uint8Array, Uint8Array>()
   const agentToClient = new TransformStream<Uint8Array, Uint8Array>()
+  const logs: Array<Pick<Logger.Options<unknown>, "message" | "cause">> = []
   const agentScope = Scope.makeUnsafe()
   const agentConnection = await Effect.runPromise(
     OpenCode.make({ baseUrl: server.url }).pipe(
@@ -422,6 +423,7 @@ export async function startWire(options: WireOptions = {}) {
         options.cancelDrainTimeout === undefined
           ? effect
           : Effect.provideService(effect, ACPTurn.CancelDrainTimeout, options.cancelDrainTimeout),
+      Effect.provide(Logger.layer([Logger.make((log) => logs.push({ message: log.message, cause: log.cause }))])),
     ),
   )
   const clientStream = ndJsonStream(clientToAgent.writable, agentToClient.readable)
@@ -505,6 +507,7 @@ export async function startWire(options: WireOptions = {}) {
     permissions,
     childUpdates,
     elicitations,
+    logs,
     request,
     until,
     initialize,

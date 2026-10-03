@@ -137,17 +137,26 @@ describe("acp session lifecycle over the wire", () => {
     const first = await acp.newSession("/workspace", [local, local, remote])
     await acp.request("session/resume", { cwd: "/workspace", sessionId: first.sessionId, mcpServers: [local, remote] })
     await acp.request("session/resume", { cwd: "/workspace", sessionId: first.sessionId, mcpServers: [changed] })
-    await acp.newSession("/workspace", [local])
+    await acp.request("session/resume", { cwd: "/workspace", sessionId: first.sessionId, mcpServers: [local] })
 
     const localConfig = (args: string[]) => ({
       name: "tools",
       directory: "/workspace",
       config: { type: "local", command: ["bun", ...args], environment: { TOKEN: "x" } },
     })
-    expect(acp.server.mcp).toHaveLength(4)
     expect(acp.server.mcp.filter((item) => item.name === "tools")).toEqual([
       localConfig(["server.ts"]),
       localConfig(["changed.ts"]),
+      localConfig(["server.ts"]),
+    ])
+
+    await acp.newSession("/workspace", [local])
+
+    expect(acp.server.mcp).toHaveLength(5)
+    expect(acp.server.mcp.filter((item) => item.name === "tools")).toEqual([
+      localConfig(["server.ts"]),
+      localConfig(["changed.ts"]),
+      localConfig(["server.ts"]),
       localConfig(["server.ts"]),
     ])
     expect(acp.server.mcp.find((item) => item.name === "docs")).toEqual({
@@ -155,6 +164,28 @@ describe("acp session lifecycle over the wire", () => {
       directory: "/workspace",
       config: { type: "remote", url: "https://example.com/mcp", headers: { Authorization: "Bearer x" }, oauth: false },
     })
+  })
+  test("rejects MCP-over-ACP and SSE servers before creating or loading a session", async () => {
+    await using acp = await startWire()
+    acp.server.sessions.set("ses_saved", makeSession("ses_saved"))
+    await acp.initialize()
+    const existing = new Set(acp.server.sessions.keys())
+    const mcpServers: McpServer[] = [{ type: "acp", name: "client", serverId: "mcp_client" }]
+    const sse: McpServer[] = [{ type: "sse", name: "events", url: "https://example.com/sse", headers: [] }]
+    const invalid = {
+      code: -32602,
+      message: "Invalid params: Only stdio and HTTP MCP servers are supported",
+      data: { field: "mcpServers" },
+    }
+
+    expect(await rpcError(acp.newSession("/workspace", mcpServers))).toEqual(invalid)
+    expect(await rpcError(acp.newSession("/workspace", sse))).toEqual(invalid)
+    expect(
+      await rpcError(acp.request("session/load", { cwd: "/workspace", sessionId: "ses_saved", mcpServers })),
+    ).toEqual(invalid)
+    expect(new Set(acp.server.sessions.keys())).toEqual(existing)
+    expect(acp.server.requests.filter((request) => request.path.includes("ses_saved"))).toEqual([])
+    expect(acp.logs).toEqual([])
   })
 })
 

@@ -6,7 +6,7 @@ import { Persist, persisted, removePersisted, draftPersistedKeys } from "@/runti
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useExtensionServers } from "@/runtime/extension/servers"
 import { createEffect, getOwner, onCleanup, startTransition } from "solid-js"
-import { useLocation, useNavigate, useParams } from "@solidjs/router"
+import { useLocation, useNavigate } from "@solidjs/router"
 import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@/runtime/persistence/uuid"
 import { SessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
@@ -80,7 +80,6 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
     const [closed, setClosed, , closedReady] = persisted(Persist.window("tabs.closed"), TabStorage.Closed, [])
     const [pending, setPending] = createStore<Record<string, PendingSession | undefined>>({})
 
-    const params = useParams()
     const navigate = useNavigate()
     const location = useLocation()
     const memory = createTabMemory(getOwner())

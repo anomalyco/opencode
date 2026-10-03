@@ -5,7 +5,7 @@ import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
 import { Global } from "@opencode/util/global"
 import { ClipboardProvider, useClipboard } from "./context/clipboard"
-import { LogProvider, useLog, type LogSink } from "./context/log"
+import { LogProvider, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
 import { Selection } from "./util/selection"
@@ -457,7 +457,6 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
 })
 
 function App() {
-  const log = useLog({ component: "app" })
   const app = useTuiApp()
   const startup = useTuiStartup()
   const config = useConfig()

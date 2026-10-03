@@ -30,14 +30,7 @@ import type { Upload } from "../attachments/uploads"
 import { CommentCard } from "@opencode/session-ui/comment-card"
 import { typeLabel } from "@opencode/session-ui/message-file"
 import { Skill } from "@opencode/schema/skill"
-import type {
-  ComposerAttachment,
-  ComposerComment,
-  ComposerOption,
-  ComposerPersistedState,
-  ComposerPrompt,
-  ComposerSuggestion,
-} from "../types"
+import type { ComposerAttachment, ComposerComment, ComposerOption, ComposerPrompt, ComposerSuggestion } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment } from "../prompt-parts"
 import "../attachments/attachments.css"

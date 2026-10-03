@@ -15,7 +15,6 @@ import { displayName } from "@opencode/ui/project-avatar"
 import { resolveProjectForSession } from "@/shell/layout/helpers"
 import { useExtensionHost } from "@/runtime/extension/host"
 import { useExtensionAttachment } from "@/runtime/extension/services"
-import { useServer } from "@/runtime/server/current"
 import { looksLikeSessionID } from "@/session/search"
 
 export type CommandPaletteEntry = {

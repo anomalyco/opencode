@@ -1,27 +1,20 @@
-export * as ConfigV1 from "./config.js"
+export * as ConfigV1 from "./config"
 
 import { Schema } from "effect"
 import { ConfigReference } from "@opencode/schema/config/reference"
-import { NonNegativeInt, PositiveInt, type DeepMutable } from "../../schema.js"
-import { ConfigAgentV1 } from "./agent.js"
-import { ConfigAttachmentV1 } from "./attachment.js"
-import { ConfigCommandV1 } from "./command.js"
-import { ConfigFormatterV1 } from "./formatter.js"
-import { ConfigLayoutV1 } from "./layout.js"
-import { ConfigLSPV1 } from "./lsp.js"
-import { ConfigMCPV1 } from "./mcp.js"
-import { ConfigPermissionV1 } from "./permission.js"
-import { ConfigPluginV1 } from "./plugin.js"
-import { ConfigProviderV1 } from "./provider.js"
-import { ConfigServerV1 } from "./server.js"
-import { ConfigSkillsV1 } from "./skills.js"
-
-export type Layout = ConfigLayoutV1.Layout
-
-export const WellKnown = Schema.Struct({
-  config: Schema.optional(Schema.Json),
-  remote_config: Schema.optional(Schema.Json),
-})
+import { NonNegativeInt, PositiveInt } from "@opencode/core/schema"
+import { ConfigAgentV1 } from "@opencode/core/v1/config/agent"
+import { ConfigAttachmentV1 } from "./attachment"
+import { ConfigCommandV1 } from "@opencode/core/v1/config/command"
+import { ConfigFormatterV1 } from "./formatter"
+import { ConfigLayoutV1 } from "./layout"
+import { ConfigLSPV1 } from "./lsp"
+import { ConfigMCPV1 } from "@opencode/core/v1/config/mcp"
+import { ConfigPermissionV1 } from "@opencode/core/v1/config/permission"
+import { ConfigPluginV1 } from "@opencode/core/v1/config/plugin"
+import { ConfigProviderV1 } from "@opencode/core/v1/config/provider"
+import { ConfigServerV1 } from "./server"
+import { ConfigSkillsV1 } from "./skills"
 
 const LogLevelRef = Schema.Literals(["DEBUG", "INFO", "WARN", "ERROR"]).annotate({
   identifier: "LogLevel",
@@ -187,5 +180,3 @@ export const Info = Schema.Struct({
     }),
   ),
 }).annotate({ identifier: "Config" })
-
-export type Info = DeepMutable<Schema.Schema.Type<typeof Info>>

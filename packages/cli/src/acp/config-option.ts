@@ -5,7 +5,7 @@ import { builtinCommands, type Catalog } from "./catalog"
 
 export const DEFAULT_VARIANT_VALUE = "default"
 
-export type ConfigOptionModel = {
+type ConfigOptionModel = {
   id: string
   name: string
   variants?: ReadonlyArray<string>
@@ -17,7 +17,7 @@ export type ConfigOptionProvider = {
   models: ReadonlyArray<ConfigOptionModel>
 }
 
-export type ConfigOptionMode = {
+type ConfigOptionMode = {
   id: string
   name: string
   description?: string
@@ -163,5 +163,3 @@ function selectVariant(variant: string | undefined, variants: readonly string[])
   if (variants.includes(DEFAULT_VARIANT_VALUE)) return DEFAULT_VARIANT_VALUE
   return variants[0] ?? DEFAULT_VARIANT_VALUE
 }
-
-export * as ACPConfigOption from "./config-option"
