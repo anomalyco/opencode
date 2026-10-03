@@ -1445,7 +1445,7 @@ export function Prompt(props: PromptProps) {
               <box flexDirection="row" gap={1}>
                 <Show when={local.agent.current()} fallback={<box height={1} />}>
                   {(agent) => (
-                    <>
+                    <box flexDirection="row" gap={1}>
                       <text fg={fadeColor(highlight(), agentMetaAlpha())}>
                         {store.mode === "shell" ? "Shell" : Locale.titlecase(agent().name)}
                       </text>
@@ -1472,7 +1472,7 @@ export function Prompt(props: PromptProps) {
                           </Show>
                         </box>
                       </Show>
-                    </>
+                    </box>
                   )}
                 </Show>
               </box>
