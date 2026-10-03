@@ -203,7 +203,7 @@ export const ToolInputDelta = Schema.Struct({
   name: Schema.String,
   namespace: Schema.optional(Schema.String),
   text: Schema.String,
-  /** Best-effort parse of all input fragments received through this delta. */
+  /** Optional best-effort parse supplied by adapters; native routes emit raw text until the final tool call. */
   input: Schema.optional(Schema.Unknown),
 }).annotate({ identifier: "LLM.Event.ToolInputDelta" })
 export type ToolInputDelta = Schema.Schema.Type<typeof ToolInputDelta>

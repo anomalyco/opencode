@@ -66,7 +66,6 @@ const inputDelta = (tool: PendingTool, text: string) =>
     name: tool.name,
     namespace: tool.namespace,
     text,
-    input: Option.getOrElse(parsePartialInput(tool.input), () => ({})),
   })
 
 const toolCall = (route: string, tool: PendingTool, inputOverride?: string) => {
