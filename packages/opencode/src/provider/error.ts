@@ -3,6 +3,7 @@ import { STATUS_CODES } from "http"
 import { iife } from "@/util/iife"
 import type { ProviderV2 } from "@opencode-ai/core/provider"
 import { isContextOverflow } from "@opencode-ai/llm"
+import { SessionRetry } from "@/session/retry"
 
 export class HeaderTimeoutError extends Error {
   public override readonly name = "ProviderHeaderTimeoutError"
@@ -181,13 +182,19 @@ export function parseAPICallError(input: { providerID: ProviderV2.ID; error: API
   }
 
   const metadata = input.error.url ? { url: input.error.url } : undefined
+  const responseBody = input.error.responseBody
+  // FreeUsageLimitError is daily quota exhaustion — show Go upsell, not a generic rate-limit string.
+  const freeLimit =
+    typeof responseBody === "string" && responseBody.includes("FreeUsageLimitError")
+      ? SessionRetry.GO_UPSELL_MESSAGE
+      : undefined
   return {
     type: "api_error",
-    message: m,
+    message: freeLimit ?? m,
     statusCode: input.error.statusCode,
     isRetryable: input.providerID.startsWith("openai") ? isOpenAiErrorRetryable(input.error) : input.error.isRetryable,
     responseHeaders: input.error.responseHeaders,
-    responseBody: input.error.responseBody,
+    responseBody,
     metadata,
   }
 }
