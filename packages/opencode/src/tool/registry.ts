@@ -11,10 +11,12 @@ import { GrepTool } from "./grep"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { Database } from "@opencode-ai/core/database/database"
+import { MoveSession } from "@opencode-ai/core/control-plane/move-session"
 import { TodoWriteTool } from "./todo"
 import { WebFetchTool } from "./webfetch"
 import { WriteTool } from "./write"
 import { InvalidTool } from "./invalid"
+import { ChangeDirectoryTool } from "./change-directory"
 import { SkillTool } from "./skill"
 import * as Tool from "./tool"
 import { Config } from "@/config/config"
@@ -114,6 +116,7 @@ const layer = Layer.effect(
     const greptool = yield* GrepTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
+    const changeDir = yield* ChangeDirectoryTool
     const agent = yield* Agent.Service
     const codeMode = flags.experimentalCodeMode ? yield* Effect.promise(() => import("./code-mode")) : undefined
     const codeModeTool = codeMode ? yield* codeMode.CodeModeTool : undefined
@@ -219,6 +222,7 @@ const layer = Layer.effect(
           todo: Tool.init(todo),
           search: Tool.init(websearch),
           skill: Tool.init(skilltool),
+          changeDirectory: Tool.init(changeDir),
           patch: Tool.init(patchtool),
           question: Tool.init(question),
           lsp: Tool.init(lsptool),
@@ -242,6 +246,7 @@ const layer = Layer.effect(
             tool.todo,
             tool.search,
             tool.skill,
+            tool.changeDirectory,
             tool.patch,
             ...(tool.execute ? [tool.execute] : []),
             ...(flags.experimentalLspTool ? [tool.lsp] : []),
@@ -435,6 +440,7 @@ export const node = LayerNode.make({
     Agent.node,
     Skill.node,
     Session.node,
+    MoveSession.node,
     BackgroundJob.node,
     Provider.node,
     LSP.node,
