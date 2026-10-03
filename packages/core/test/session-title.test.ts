@@ -39,6 +39,7 @@ import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
 let selectedSmall: Model.Info | undefined
+let selectedPrimary: Model.Info | undefined
 let selections: Array<Session.Info["model"]> = []
 const model = LanguageModel.make({
   id: "title-model",
@@ -102,6 +103,7 @@ const models = Layer.mock(SessionRunnerModel.Service)({
 })
 const smallModels = Layer.mock(Model.Service, {
   small: () => Effect.succeed(selectedSmall),
+  get: (_providerID, modelID) => Effect.succeed(modelID === selectedPrimary?.id ? selectedPrimary : undefined),
 })
 const it = testEffect(
   AppNodeBuilder.build(
@@ -183,6 +185,7 @@ const lowSmall = Model.Info.make({
 beforeEach(() => {
   requests = []
   selectedSmall = undefined
+  selectedPrimary = undefined
   selections = []
   titleStream = successfulTitle
 })
@@ -340,6 +343,64 @@ it.effect("falls back to the primary model when the small model fails", () =>
     expect(attempted.map((model) => String(model.variant))).toEqual(["low", "high"])
     const store = yield* SessionStore.Service
     expect((yield* store.get(sessionID))?.title).toBe("Generated Title")
+  }),
+)
+
+const primaryRef = Model.Ref.make({
+  providerID: Provider.ID.make("test"),
+  id: Model.ID.make("title-model"),
+  variant: Model.VariantID.make("high"),
+})
+const primaryInfo = (variants: string[]) =>
+  Model.Info.make({
+    ...Model.Info.default(Provider.ID.make("test"), Model.ID.make("title-model")),
+    variants: variants.map((id) => ({ id: Model.VariantID.make(id) })),
+  })
+
+const titleAttempts = (sessionID: Session.ID, text: string) =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    yield* insertSession(sessionID, undefined, undefined, primaryRef)
+    yield* prompt(sessionID, text)
+    const attempted: Model.Ref[] = []
+    const hooks = yield* PluginHooks.Service
+    yield* hooks.register("session", "model.request", (event) =>
+      Effect.sync(() => {
+        attempted.push(event.model)
+      }),
+    )
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+    const store = yield* SessionStore.Service
+    return { attempted: attempted.map((model) => String(model.variant)), title: (yield* store.get(sessionID))?.title }
+  })
+
+it.effect("uses the primary model at its lowest variant without a small model", () =>
+  Effect.gen(function* () {
+    selectedPrimary = primaryInfo(["high", "low", "none"])
+    const result = yield* titleAttempts(Session.ID.make("ses_title_primary_lowest"), "Title with the lowest variant")
+    expect(result.attempted).toEqual(["none"])
+    expect(result.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("falls back to the selected primary variant when the lowest variant fails", () =>
+  Effect.gen(function* () {
+    titleStream = () =>
+      requests.length === 1 ? Stream.make(LLMEvent.providerError({ message: "Variant rejected" })) : successfulTitle()
+    selectedPrimary = primaryInfo(["high", "low"])
+    const result = yield* titleAttempts(Session.ID.make("ses_title_primary_fallback"), "Fall back to the selection")
+    expect(result.attempted).toEqual(["low", "high"])
+    expect(result.title).toBe("Generated Title")
+  }),
+)
+
+it.effect("uses the selected primary variant when no lower variant exists", () =>
+  Effect.gen(function* () {
+    selectedPrimary = primaryInfo(["high", "max"])
+    const result = yield* titleAttempts(Session.ID.make("ses_title_primary_selected"), "No lower variant here")
+    expect(result.attempted).toEqual(["high"])
+    expect(result.title).toBe("Generated Title")
   }),
 )
 
