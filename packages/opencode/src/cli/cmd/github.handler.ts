@@ -1272,6 +1272,23 @@ export const githubRun = Effect.fn("Cli.github.run")(function* (args: { event?: 
 
     async function createComment(body: string) {
       // Only called for non-schedule events, so issueId is defined
+      if (commentType === "pr_review") {
+        const comment = (payload as PullRequestReviewCommentEvent).comment
+        console.log("Creating review thread reply...")
+        try {
+          return await octoRest.rest.pulls.createReplyForReviewComment({
+            owner,
+            repo,
+            pull_number: issueId!,
+            // Replies must target the thread's root comment; a reply's own id is rejected
+            comment_id: comment.in_reply_to_id ?? comment.id,
+            body,
+          })
+        } catch (error) {
+          // Fall through to a top-level comment so the response is never lost
+          console.error(`Failed to reply in the review thread: ${error}`)
+        }
+      }
       console.log("Creating comment...")
       return await octoRest.rest.issues.createComment({
         owner,
