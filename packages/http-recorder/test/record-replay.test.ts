@@ -748,6 +748,44 @@ describe("http-recorder", () => {
     }
   })
 
+  test("records and matches binary request bodies without changing bytes", async () => {
+    const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-binary-request-"))
+    const received: number[][] = []
+    using server = Bun.serve({
+      port: 0,
+      fetch: async (request) => {
+        received.push(Array.from(new Uint8Array(await request.arrayBuffer())))
+        return new Response("recorded")
+      },
+    })
+    const url = `http://127.0.0.1:${server.port}/upload`
+    const request = (byte: number) =>
+      Effect.gen(function* () {
+        const http = yield* HttpClient.HttpClient
+        const response = yield* http.execute(
+          HttpClientRequest.post(url, {
+            body: HttpBody.uint8Array(new Uint8Array([byte]), "application/octet-stream"),
+          }),
+        )
+        return yield* response.text
+      })
+    const run = (byte: number, mode: "record" | "replay") =>
+      Effect.runPromise(
+        request(byte).pipe(Effect.provide(HttpRecorderInternal.cassetteLayer("binary-request", { directory, mode }))),
+      )
+
+    expect(await run(0x80, "record")).toBe("recorded")
+    await server.stop()
+    expect(await run(0x80, "replay")).toBe("recorded")
+    const mismatch = await Effect.runPromise(Effect.exit(Effect.promise(() => run(0x81, "replay"))))
+    const cassette = JSON.parse(fs.readFileSync(path.join(directory, "binary-request.json"), "utf8"))
+
+    expect(Exit.isFailure(mismatch)).toBe(true)
+    expect(received).toEqual([[0x80]])
+    expect(cassette.interactions[0].request.body).toBe("gA==")
+    expect(cassette.interactions[0].request.bodyEncoding).toBe("base64")
+  })
+
   test("records and replays arbitrary binary responses without changing bytes", async () => {
     const directory = fs.mkdtempSync(path.join(os.tmpdir(), "http-recorder-binary-"))
     const expected = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0xff, 0x00, 0x80])

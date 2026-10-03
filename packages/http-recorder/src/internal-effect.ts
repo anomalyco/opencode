@@ -52,14 +52,13 @@ const isTextContentType = (contentType: string | undefined) => {
   )
 }
 
+const captureBody = (bytes: ArrayBuffer, contentType: string | undefined) =>
+  isTextContentType(contentType)
+    ? { body: new TextDecoder().decode(bytes) }
+    : { body: Buffer.from(bytes).toString("base64"), bodyEncoding: "base64" as const }
+
 const captureResponseBody = (response: HttpClientResponse.HttpClientResponse, contentType: string | undefined) =>
-  response.arrayBuffer.pipe(
-    Effect.map((bytes) =>
-      isTextContentType(contentType)
-        ? { body: new TextDecoder().decode(bytes) }
-        : { body: Buffer.from(bytes).toString("base64"), bodyEncoding: "base64" as const },
-    ),
-  )
+  response.arrayBuffer.pipe(Effect.map((bytes) => captureBody(bytes, contentType)))
 
 const decodeResponseBody = (snapshot: ResponseSnapshot) =>
   snapshot.bodyEncoding === "base64" ? Buffer.from(snapshot.body, "base64") : snapshot.body
@@ -107,11 +106,14 @@ export const recordingLayer = (
       const snapshotRequest = (request: HttpClientRequest.HttpClientRequest) =>
         Effect.gen(function* () {
           const web = yield* HttpClientRequest.toWeb(request).pipe(Effect.orDie)
+          const bytes = yield* Effect.promise(() => web.arrayBuffer())
           return redactor.request({
             method: web.method,
             url: web.url,
             headers: Object.fromEntries(web.headers.entries()),
-            body: yield* Effect.promise(() => web.text()),
+            ...(bytes.byteLength === 0
+              ? { body: "" }
+              : captureBody(bytes, web.headers.get("content-type") ?? undefined)),
           })
         })
 
