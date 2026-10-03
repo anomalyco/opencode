@@ -2,6 +2,7 @@ import { ProviderAuth } from "@/provider/auth"
 import { Config } from "@/config/config"
 import { ModelsDev } from "@opencode-ai/core/models-dev"
 import { Provider } from "@/provider/provider"
+import { catalog as commandcodeGoplanCatalog } from "@/provider/commandcode-goplan"
 import { Auth } from "@/auth"
 
 import { mapValues } from "remeda"
@@ -50,8 +51,12 @@ export const providerHandlers = HttpApiBuilder.group(InstanceHttpApi, "provider"
       }
       const connected = yield* provider.list()
       const credentials = yield* authStore.all().pipe(Effect.orDie)
+      // Built-in seed: the gateway exposes no list-models endpoint, so the
+      // catalog entry ships here too (visible pre-login, connected post-login).
+      const seed = Provider.fromModelsDevProvider(commandcodeGoplanCatalog())
       const providers = Object.assign(
         mapValues(filtered, (item) => Provider.fromModelsDevProvider(item)),
+        { [seed.id]: seed },
         connected,
       )
       return {
