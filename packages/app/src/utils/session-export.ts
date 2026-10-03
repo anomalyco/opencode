@@ -16,6 +16,8 @@ export type SessionExportClient = {
   }
 }
 
+const WINDOWS_RESERVED_NAME = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i
+
 export async function fetchSessionExport(input: {
   sessionID: string
   client: SessionExportClient
@@ -44,7 +46,8 @@ export function sessionExportFilename(session: { id: string; title?: string; slu
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/gi, "-")
     .replace(/^-+|-+$/g, "")
-  return `${clean || session.id}.json`
+  const basename = clean || session.id
+  return `${WINDOWS_RESERVED_NAME.test(basename) ? `${basename}-session` : basename}.json`
 }
 
 export function downloadSessionExport(filename: string, data: unknown) {

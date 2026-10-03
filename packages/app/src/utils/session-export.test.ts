@@ -16,6 +16,23 @@ describe("sessionExportFilename", () => {
   test("falls back to id when title and slug are empty", () => {
     expect(sessionExportFilename({ id: "ses_123" })).toBe("ses_123.json")
   })
+
+  test("avoids Windows reserved device names", () => {
+    const reserved = [
+      "CON",
+      "PRN",
+      "AUX",
+      "NUL",
+      ...Array.from({ length: 9 }, (_, index) => `COM${index + 1}`),
+      ...Array.from({ length: 9 }, (_, index) => `LPT${index + 1}`),
+    ]
+
+    reserved.forEach((title) =>
+      expect(sessionExportFilename({ id: "ses_123", title })).toBe(`${title.toLowerCase()}-session.json`),
+    )
+    expect(sessionExportFilename({ id: "ses_123", title: "COM0" })).toBe("com0.json")
+    expect(sessionExportFilename({ id: "ses_123", title: "COM10" })).toBe("com10.json")
+  })
 })
 
 describe("fetchSessionExport", () => {
