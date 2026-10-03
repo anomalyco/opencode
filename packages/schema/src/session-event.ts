@@ -516,6 +516,17 @@ export namespace Tool {
   })
   export type Called = typeof Called.Type
 
+  /** Internal recovery fact: a tool owns this child, independently of live progress. */
+  export const SessionLinked = Event.durable({
+    type: "session.tool.session.linked",
+    ...options,
+    schema: {
+      ...ToolBase,
+      childSessionID: SessionID,
+    },
+  })
+  export type SessionLinked = typeof SessionLinked.Type
+
   /** Live replacement metadata for a running tool. */
   export const Progress = Event.ephemeral({
     type: "session.tool.progress",
@@ -706,6 +717,7 @@ export const DurableDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "durable"),
   UsageRecorded,
   MessageContentUpdated,
+  Tool.SessionLinked,
 )
 export const EphemeralDefinitions = Event.inventory(
   ...Definitions.filter((definition) => definition.durability === "ephemeral"),

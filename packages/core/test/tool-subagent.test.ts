@@ -119,7 +119,17 @@ const subagentPluginSupervisor = makeLocationNode({
       yield* registerToolPlugin(SubagentTool.Plugin, {}, (name, callback) => hooks.register("tool", name, callback))
     }),
   ),
-  deps: [Agent.node, Config.node, Model.node, Permission.node, Session.node, Job.node, Tool.node, PluginHooks.node],
+  deps: [
+    Agent.node,
+    Config.node,
+    Model.node,
+    Permission.node,
+    Session.node,
+    Job.node,
+    Tool.node,
+    PluginHooks.node,
+    Bus.node,
+  ],
 })
 
 const nodes = LayerNode.group([
@@ -450,6 +460,85 @@ describe("SubagentTool", () => {
           expect(fallbackChild).toMatchObject({ parentID: parent.id, model: parentModel })
         }),
       ),
+    ),
+  )
+  ;[false, true].forEach((continued) =>
+    it.live(
+      `persists the ${continued ? "continued" : "new"} child link before admitting a foreground subagent prompt`,
+      () =>
+        Effect.gen(function* () {
+          const dir = yield* Effect.acquireRelease(
+            Effect.promise(() => tmpdir()),
+            (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+          )
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({
+            location: Location.Ref.make({ directory: AbsolutePath.make(dir.path) }),
+            model: parentModel,
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const bus = yield* Bus.Service
+          const assistantMessageID = SessionMessage.ID.create()
+          const child = continued
+            ? yield* sessions.create({ parentID: parent.id, title: "existing review" })
+            : undefined
+          const call = {
+            type: "tool-call" as const,
+            id: "call-durable-child-link",
+            name: SubagentTool.name,
+            input: {
+              agent: "reviewer",
+              description: "linked review",
+              prompt: "review",
+              ...(child ? { sessionID: child.id } : {}),
+            },
+          }
+          yield* bus.publish(SessionEvent.Step.Started, {
+            sessionID: parent.id,
+            assistantMessageID,
+            agent: toolIdentity.agent,
+            model: parentModel,
+            started: 0,
+          })
+          yield* bus.publish(SessionEvent.Tool.Input.Started, {
+            sessionID: parent.id,
+            assistantMessageID,
+            id: call.id,
+            name: call.name,
+          })
+          yield* bus.publish(SessionEvent.Tool.Called, {
+            sessionID: parent.id,
+            assistantMessageID,
+            id: call.id,
+            input: call.input,
+            executed: false,
+          })
+          const admitted = yield* Deferred.make<Session.ID>()
+          yield* bus.project(SessionEvent.InboxEnqueued, (event) =>
+            Effect.gen(function* () {
+              if (event.data.item.type !== "user" || event.data.sessionID === parent.id) return
+              const assistant = (yield* sessions.context(parent.id).pipe(Effect.orDie)).find(
+                (message) => message.type === "assistant",
+              )
+              expect(assistant?.content.find((part) => part.type === "tool")?.state).toEqual({
+                status: "running",
+                input: call.input,
+                metadata: { sessionID: event.data.sessionID, status: "running" },
+              })
+              yield* Deferred.succeed(admitted, event.data.sessionID)
+            }),
+          )
+          const result = yield* executeTool(registry, {
+            sessionID: parent.id,
+            agent: toolIdentity.agent,
+            messageID: assistantMessageID,
+            call,
+          })
+          expect(result.metadata).toEqual({ sessionID: yield* Deferred.await(admitted), status: "completed" })
+          if (child) expect(outputSessionID(result.metadata)).toBe(child.id)
+        }),
     ),
   )
 

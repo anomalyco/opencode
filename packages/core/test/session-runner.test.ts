@@ -4543,18 +4543,18 @@ describe("SessionRunnerLLM", () => {
       input: { agent: "general" },
       executed: false,
     })
-    yield* s.db
-      .update(SessionMessageTable)
-      .set({
-        data: sql`json_set(
-          ${SessionMessageTable.data},
-          '$.content[0].state.metadata',
-          json('{"sessionID":"ses_existing_child","status":"running","internal":"private"}')
-        )`,
-      })
-      .where(eq(SessionMessageTable.id, assistantMessageID))
-      .run()
-      .pipe(Effect.orDie)
+    yield* s.bus.publish(SessionEvent.Tool.SessionLinked, {
+      sessionID,
+      assistantMessageID,
+      id: "call-interrupted-subagent",
+      childSessionID: Session.ID.make("ses_existing_child"),
+    })
+    yield* s.bus.publish(SessionEvent.Tool.Progress, {
+      sessionID,
+      assistantMessageID,
+      id: "call-interrupted-subagent",
+      metadata: { sessionID: "ses_existing_child", status: "running", internal: "private" },
+    })
     s.requests.length = 0
     yield* s.llm.push([])
     yield* s.resume
@@ -4569,7 +4569,7 @@ describe("SessionRunnerLLM", () => {
               type: "aborted",
               message: "Tool execution interrupted: subagent (sessionID: ses_existing_child)",
             },
-            metadata: { sessionID: "ses_existing_child", status: "running", internal: "private" },
+            metadata: { sessionID: "ses_existing_child", status: "running" },
           },
         ),
       ]),

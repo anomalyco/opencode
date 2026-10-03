@@ -85,6 +85,61 @@ const seedSession = (overrides?: Partial<typeof SessionTable.$inferInsert>) =>
   })
 
 describe("SessionProjector", () => {
+  it.effect("replays child session links without persisting ephemeral progress", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession()
+      const bus = yield* Bus.Service
+      const store = yield* SessionStore.Service
+      const assistantMessageID = SessionMessage.ID.make("msg_linked_subagent")
+      const childSessionID = Session.ID.make("ses_linked_child")
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID,
+        agent: build,
+        model,
+        started: 0,
+      })
+      yield* bus.publish(SessionEvent.Tool.Input.Started, {
+        sessionID,
+        assistantMessageID,
+        id: "call-linked",
+        name: "subagent",
+      })
+      yield* bus.publish(SessionEvent.Tool.Called, {
+        sessionID,
+        assistantMessageID,
+        id: "call-linked",
+        input: { agent: "general" },
+        executed: false,
+      })
+      yield* bus.replay({
+        id: Event.ID.create(),
+        created: 0,
+        aggregateID: sessionID,
+        seq: 3,
+        type: Bus.versionedType(SessionEvent.Tool.SessionLinked.type, 1),
+        data: { sessionID, assistantMessageID, id: "call-linked", childSessionID },
+      })
+      yield* bus.publish(SessionEvent.Tool.Progress, {
+        sessionID,
+        assistantMessageID,
+        id: "call-linked",
+        metadata: { internal: "live-only" },
+      })
+      const assistant = (yield* store.context(sessionID)).find((message) => message.type === "assistant")
+      expect(assistant?.content.find((part) => part.type === "tool")?.state).toEqual({
+        status: "running",
+        input: { agent: "general" },
+        metadata: { sessionID: childSessionID, status: "running" },
+      })
+      expect(
+        (yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, sessionID)).all()).map(
+          (event) => event.type,
+        ),
+      ).toContain("session.tool.session.linked.1")
+    }),
+  )
+
   it.effect("does not settle a pending manual compaction on an auto failure", () =>
     Effect.gen(function* () {
       const db = yield* seedSession()

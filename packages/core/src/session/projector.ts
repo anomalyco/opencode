@@ -701,6 +701,7 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Tool.Input.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Tool.Input.Ended, (event) => run(db, event))
     yield* bus.project(SessionEvent.Tool.Called, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Tool.SessionLinked, (event) => run(db, event))
     yield* bus.project(SessionEvent.Tool.Success, (event) => run(db, event))
     yield* bus.project(SessionEvent.Tool.Failed, (event) => run(db, event))
     yield* bus.project(SessionEvent.Reasoning.Started, (event) => run(db, event))

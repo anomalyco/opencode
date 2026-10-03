@@ -136,6 +136,7 @@ describe("public event manifest", () => {
         "session.tool.input.started.1",
         "session.tool.input.ended.1",
         "session.tool.called.1",
+        "session.tool.session.linked.1",
         "session.tool.success.2",
         "session.tool.failed.2",
         "session.reasoning.started.1",
@@ -154,6 +155,7 @@ describe("public event manifest", () => {
       ...SessionEvent.Definitions.filter((definition) => definition.durability === "durable"),
       SessionEvent.UsageRecorded,
       SessionEvent.MessageContentUpdated,
+      SessionEvent.Tool.SessionLinked,
     ])
     expect(SessionEvent.UsageRecorded.durability).toBe("durable")
     expect(EventManifest.Durable.get("session.usage.recorded.1")).toBe(SessionEvent.UsageRecorded)
@@ -164,6 +166,8 @@ describe("public event manifest", () => {
     expect(SessionEvent.UsageUpdated.durability).toBe("ephemeral")
     expect(SessionEvent.Compaction.Delta.durability).toBe("ephemeral")
     expect(SessionEvent.Tool.Progress.durability).toBe("ephemeral")
+    expect(EventManifest.Durable.get("session.tool.session.linked.1")).toBe(SessionEvent.Tool.SessionLinked)
+    expect(EventManifest.ServerDefinitions).not.toContain(SessionEvent.Tool.SessionLinked)
     expect(EventManifest.Server.get("session.tool.progress")).toBe(SessionEvent.Tool.Progress)
     expect(EventManifest.Durable.has("session.compaction.delta.1")).toBe(false)
     expect(EventManifest.ServerDefinitions).toContain(SessionEvent.UsageUpdated)
