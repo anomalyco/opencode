@@ -285,6 +285,35 @@ describe("cross-spawn spawner", () => {
         expect(running).toBe(false)
       }),
     )
+
+    if (process.platform !== "win32") {
+      fx.live(
+        "resolves exitCode when a grandchild keeps stdio open",
+        Effect.gen(function* () {
+          const tmp = yield* Effect.acquireRelease(
+            Effect.promise(() => tmpdir()),
+            (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+          )
+          const pidFile = path.join(tmp.path, "child.pid")
+          const handle = yield* js(
+            [
+              'const {spawn}=require("node:child_process")',
+              'const fs=require("node:fs")',
+              `const child=spawn(process.execPath,["-e","setInterval(()=>{},86400000)"],{stdio:["ignore","inherit","inherit"],detached:true})`,
+              `fs.writeFileSync(${JSON.stringify(pidFile)}, String(child.pid))`,
+              "child.unref()",
+              'process.stdout.write("parent-done")',
+            ].join(";"),
+          )
+          const code = yield* handle.exitCode.pipe(Effect.timeout("5 seconds"))
+          expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+          const pid = Number(yield* Effect.promise(() => fs.readFile(pidFile, "utf8")))
+          try {
+            process.kill(pid, "SIGKILL")
+          } catch {}
+        }),
+      )
+    }
   })
 
   describe("error handling", () => {
