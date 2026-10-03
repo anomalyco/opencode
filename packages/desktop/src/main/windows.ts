@@ -228,6 +228,11 @@ export function createMainWindow(id: string = randomUUID()) {
 
   win.once("ready-to-show", () => {
     win.show()
+    // Frameless Win32 windows can end up stuck in the topmost Z-order level
+    // after the first show, making the app behave as always-on-top even though
+    // it was never set. Reset the always-on-top flag so the OS treats it as a
+    // normal window and lets other windows cover it again.
+    if (process.platform === "win32") win.setAlwaysOnTop(false)
   })
 
   return win
