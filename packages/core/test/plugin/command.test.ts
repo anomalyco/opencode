@@ -10,9 +10,10 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/schema/session"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
+import { Workspace } from "@opencode/schema/workspace"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { DateTime } from "effect"
-import { emptyMcpLayer } from "../fixture/mcp"
+import { emptyMcp, emptyMcpLayer } from "../fixture/mcp"
 import { location } from "../fixture/location"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
@@ -33,6 +34,66 @@ const it = testEffect(
 )
 
 describe("CommandPlugin.Plugin", () => {
+  it.effect("discovers MCP prompt commands on first lookup without starting them at plugin boot", () =>
+    Effect.gen(function* () {
+      const counts = { starts: 0, reloads: 0 }
+      const bus = yield* Bus.Service
+      const mcp = Layer.effect(
+        Mcp.Service,
+        Effect.gen(function* () {
+          return Mcp.Service.of({
+            ...emptyMcp,
+            start: () =>
+              Effect.gen(function* () {
+                if (counts.starts) return
+                counts.starts++
+                yield* bus.publish(Mcp.PromptsChanged, { server: "demo" })
+              }),
+            prompts: () =>
+              Effect.succeed(counts.starts ? [{ server: Mcp.ServerName.make("demo"), name: "first" }] : []),
+          })
+        }),
+      )
+      yield* Effect.gen(function* () {
+        const command = yield* Command.Service
+        yield* CommandPlugin.Plugin.effect(
+          host({
+            command: {
+              list: () => Effect.die("unused command.list"),
+              transform: command.transform,
+              reload: () => Effect.sync(() => counts.reloads++).pipe(Effect.andThen(command.reload())),
+            },
+          }),
+        )
+        expect(counts.starts).toBe(0)
+        yield* bus.publish(
+          Mcp.PromptsChanged,
+          { server: "demo" },
+          {
+            location: Location.Ref.make({ directory: AbsolutePath.make("/other") }),
+          },
+        )
+        yield* bus.publish(
+          Mcp.PromptsChanged,
+          { server: "demo" },
+          {
+            location: Location.Ref.make({ directory, workspaceID: Workspace.ID.make("wrk_other") }),
+          },
+        )
+        expect(counts.reloads).toBe(0)
+        expect(yield* command.get("demo:first")).toMatchObject({ name: "demo:first" })
+        expect((yield* command.list()).map((item) => item.name)).toContain("demo:first")
+        expect(counts.starts).toBe(1)
+        expect(counts.reloads).toBe(1)
+      }).pipe(
+        Effect.provide(
+          Layer.fresh(Command.layer.pipe(Layer.provideMerge(mcp), Layer.provideMerge(Layer.succeed(Bus.Service, bus)))),
+        ),
+        Effect.provide(locationLayer),
+      )
+    }),
+  )
+
   it.effect("registers built-in init and review commands", () =>
     Effect.gen(function* () {
       const command = yield* Command.Service

@@ -380,6 +380,7 @@ const settled = (service: Mcp.Interface, name = "resources") =>
   }).pipe(Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }))
 
 const mcp = Layer.mock(Mcp.Service, {
+  start: () => Effect.void,
   tools: () =>
     Effect.succeed([
       {
@@ -498,6 +499,158 @@ const mcp = Layer.mock(Mcp.Service, {
       } satisfies Mcp.ToolResult
     }),
 })
+
+testEffect(Layer.empty).effect("does not spawn MCP for an unused location or its config updates", () =>
+  Effect.gen(function* () {
+    const spawns: string[] = []
+    const environment = Layer.succeed(
+      Environment.Service,
+      Environment.Service.of({
+        files: Environment.makeFiles(Environment.makeMemoryDriver()),
+        spawner: ChildProcessSpawner.make((command) => {
+          spawns.push(ChildProcess.isStandardCommand(command) ? command.command : "pipeline")
+          return EnvironmentUnavailable.spawner.spawn(command)
+        }),
+      }),
+    )
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      yield* drain
+      yield* TestClock.adjust("1 hour")
+      expect(spawns).toEqual([])
+      yield* service.transform((editor) =>
+        editor.update("resources", (config) => {
+          if (config.type === "local") config.command = ["replacement"]
+        }),
+      )
+      yield* drain
+      expect(spawns).toEqual([])
+      expect(yield* service.tools()).toEqual([])
+      expect(yield* service.prompts()).toEqual([])
+      yield* service.disconnect("resources")
+      yield* service.start()
+      expect(spawns).toEqual([])
+    }).pipe(
+      Effect.provide(
+        resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unused"] }), undefined, undefined, {
+          environment,
+        }),
+      ),
+    )
+    expect(spawns).toEqual([])
+  }),
+)
+
+testEffect(Layer.empty).effect("shares lazy MCP startup, retains active connections, and closes recreated scopes", () =>
+  Effect.gen(function* () {
+    const counts = { spawned: 0, closed: 0 }
+    const environment = Layer.effect(
+      Environment.Service,
+      Effect.gen(function* () {
+        const host = yield* Environment.Service
+        return Environment.Service.of({
+          ...host,
+          spawner: ChildProcessSpawner.make((command) =>
+            Effect.acquireRelease(
+              host.spawner.spawn(command).pipe(Effect.tap(() => Effect.sync(() => counts.spawned++))),
+              () => Effect.sync(() => counts.closed++),
+            ),
+          ),
+        })
+      }),
+    ).pipe(Layer.provide(hostEnvironmentLayer))
+    for (const iteration of [1, 2]) {
+      const root = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(root, Exit.void))
+      const context = yield* Layer.buildWithScope(
+        resourceMcpLayer(
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-prompts.ts")],
+          }),
+          undefined,
+          undefined,
+          { environment },
+        ),
+        root,
+      )
+      const service = Context.get(context, Mcp.Service)
+      expect(counts.spawned).toBe(iteration - 1)
+      yield* Effect.all(
+        Array.from({ length: 12 }, () => service.start()),
+        { concurrency: "unbounded" },
+      )
+      expect(counts.spawned).toBe(iteration)
+      yield* TestClock.adjust("24 hours")
+      expect(counts.closed).toBe(iteration - 1)
+      expect(
+        yield* service.prompt({ server: "resources", name: "first", args: { topic: "still alive" } }),
+      ).toMatchObject({
+        messages: [{ content: { type: "text", text: "still alive" } }],
+      })
+      yield* service.start()
+      expect(counts.spawned).toBe(iteration)
+      yield* Scope.close(root, Exit.void)
+      expect(counts.closed).toBe(iteration)
+    }
+  }),
+)
+
+testEffect(Layer.empty).effect("lazy MCP tool discovery survives a cancelled subagent waiter", () =>
+  Effect.gen(function* () {
+    const entered = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    const counts = { starts: 0, reads: 0 }
+    yield* Effect.gen(function* () {
+      const registration = yield* McpTool.Service
+      yield* drain
+      expect(counts.starts).toBe(0)
+      const first = yield* registration.flush.pipe(Effect.forkChild)
+      yield* Deferred.await(entered)
+      yield* Fiber.interrupt(first)
+      const second = yield* registration.flush.pipe(Effect.forkChild)
+      yield* Deferred.succeed(release, undefined)
+      yield* Fiber.join(second)
+      yield* registration.flush
+      expect(counts).toEqual({ starts: 1, reads: 1 })
+    }).pipe(
+      Effect.provide(
+        AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+          Mcp.node.replace(
+            Layer.mock(Mcp.Service, {
+              start: () =>
+                Effect.gen(function* () {
+                  counts.starts++
+                  yield* Deferred.succeed(entered, undefined)
+                  yield* Deferred.await(release)
+                }),
+              tools: () =>
+                Effect.sync(() => {
+                  counts.reads++
+                  return []
+                }),
+            }),
+          ),
+          Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
+          Image.node.replace(imagePassthrough),
+        ]),
+      ),
+    )
+  }),
+)
+
+testEffect(Layer.empty).live("discovers resources on the first dormant MCP catalog request", () =>
+  Effect.gen(function* () {
+    const server = yield* resourceServer()
+    server.state.resources = [{ name: "Readme", uri: "docs://readme" }]
+    yield* Effect.gen(function* () {
+      const service = yield* Mcp.Service
+      expect(server.state.initializations).toBe(0)
+      expect((yield* service.resourceCatalog()).resources).toMatchObject([{ name: "Readme", uri: "docs://readme" }])
+      expect(server.state.initializations).toBe(1)
+    }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+  }),
+)
 const permissions = Layer.mock(Permission.Service, {
   assert: (input) =>
     Effect.gen(function* () {
@@ -1728,9 +1881,7 @@ testEffect(resourceMcpLayer(new ConfigMCP.Local({ type: "local", command: ["unus
               command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
             })
           })
-          expect((yield* service.servers()).find((server) => server.name === "dynamic")?.status.status).toBe(
-            "connected",
-          )
+          expect((yield* settled(service, "dynamic"))?.status).toBe("connected")
           expect(yield* service.tools()).toHaveLength(2)
 
           yield* service.transform((editor) => editor.update("dynamic", (server) => (server.codemode = false)))
@@ -1972,6 +2123,7 @@ testEffect(Layer.empty).live("keeps MCP config snapshots stable during an in-fli
 
     yield* Effect.gen(function* () {
       const service = yield* Mcp.Service
+      yield* service.start()
       const replacing = yield* service
         .transform((editor) => editor.update("resources", (config) => (config.disabled = false)))
         .pipe(Effect.forkScoped({ startImmediately: true }))
@@ -2257,6 +2409,7 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
             Mcp.node.replace(
               Layer.mock(Mcp.Service, {
+                start: () => Effect.void,
                 tools: () => Ref.get(catalog),
                 callTool: (input) =>
                   Effect.succeed({
@@ -2299,6 +2452,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
         Mcp.node.replace(
           Layer.mock(Mcp.Service, {
+            start: () => Effect.void,
             tools: () =>
               Effect.sync(() => [
                 {
