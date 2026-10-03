@@ -233,7 +233,14 @@ export const TaskTool = Tool.define(
           .prompt({
             sessionID: ctx.sessionID,
             agent: currentParent.agent ?? ctx.agent,
-            variant,
+            // Follow the parent's current selection; the user may have switched model or variant meanwhile.
+            // The variant only applies to the model it was picked for, so pass both.
+            ...(currentParent.model
+              ? {
+                  model: { providerID: currentParent.model.providerID, modelID: currentParent.model.id },
+                  variant: currentParent.model.variant,
+                }
+              : { variant }),
             parts: [
               {
                 type: "text",

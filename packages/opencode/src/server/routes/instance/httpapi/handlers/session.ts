@@ -36,8 +36,12 @@ import {
   SummarizePayload,
   UpdatePayload,
 } from "../groups/session"
-import { PermissionNotFoundError } from "../errors"
+import { badRequest, PermissionNotFoundError } from "../errors"
 import * as SessionError from "./session-errors"
+
+// Callers need the valid values to fix a bad variant; other prompt failures keep their existing empty body.
+const toPromptError = (error: unknown) =>
+  error instanceof SessionPrompt.VariantNotFoundError ? badRequest(error.message) : new HttpApiError.BadRequest({})
 
 const tryParseJson = (text: string) =>
   Effect.try({
@@ -302,7 +306,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
           ...ctx.payload,
           sessionID: ctx.params.sessionID,
         })
-        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+        .pipe(Effect.mapError(toPromptError))
       return HttpServerResponse.stream(Stream.make(JSON.stringify(message)).pipe(Stream.encodeText), {
         contentType: "application/json",
       })
@@ -335,7 +339,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       yield* requireSession(ctx.params.sessionID)
       return yield* promptSvc
         .command({ ...ctx.payload, sessionID: ctx.params.sessionID })
-        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+        .pipe(Effect.mapError(toPromptError))
     })
 
     const shell = Effect.fn("SessionHttpApi.shell")(function* (ctx: {

@@ -99,12 +99,31 @@ function isOrphanedInterruptedTool(part: SessionV1.ToolPart) {
   return part.state.status === "error" && part.state.metadata?.interrupted === true
 }
 
+export class VariantNotFoundError extends Schema.TaggedErrorClass<VariantNotFoundError>()(
+  "SessionVariantNotFoundError",
+  {
+    providerID: Schema.String,
+    modelID: Schema.String,
+    variant: Schema.String,
+    available: Schema.Array(Schema.String),
+  },
+) {
+  override get message() {
+    const hint = this.available.length
+      ? ` Available variants: ${this.available.join(", ")}`
+      : " This model has no variants."
+    return `Variant not found: "${this.variant}" for ${this.providerID}/${this.modelID}.${hint}`
+  }
+}
+
+export type PromptError = Image.Error | VariantNotFoundError
+
 export interface Interface {
   readonly cancel: (sessionID: SessionID) => Effect.Effect<void>
-  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  readonly prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, PromptError>
   readonly loop: (input: LoopInput) => Effect.Effect<SessionV1.WithParts>
   readonly shell: (input: ShellInput) => Effect.Effect<SessionV1.WithParts, Session.BusyError>
-  readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, Image.Error>
+  readonly command: (input: CommandInput) => Effect.Effect<SessionV1.WithParts, PromptError>
   readonly resolvePromptParts: (template: string) => Effect.Effect<PromptInput["parts"]>
 }
 
@@ -613,7 +632,7 @@ const layer = Layer.effect(
 
     const currentModel = Effect.fnUntraced(function* (sessionID: SessionID) {
       const current = yield* db
-        .select({ model: SessionTable.model })
+        .select({ model: SessionTable.model, revert: SessionTable.revert })
         .from(SessionTable)
         .where(eq(SessionTable.id, sessionID))
         .get()
@@ -625,14 +644,27 @@ const layer = Layer.effect(
           ...(current.model.variant && current.model.variant !== "default" ? { variant: current.model.variant } : {}),
         }
       }
-      const match = yield* sessions
-        .findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model)
-        .pipe(Effect.orDie)
+      // Undone messages are dropped by the next prompt, so they must not decide the model it runs on.
+      const pending = current?.revert
+      const match = pending
+        ? yield* sessions.messages({ sessionID }).pipe(
+            Effect.orDie,
+            Effect.map((msgs) =>
+              Option.fromNullishOr(
+                msgs
+                  .slice(0, SessionRevert.cutoff(msgs, pending))
+                  .findLast((m) => m.info.role === "user" && !!m.info.model),
+              ),
+            ),
+          )
+        : yield* sessions.findMessage(sessionID, (m) => m.info.role === "user" && !!m.info.model).pipe(Effect.orDie)
       if (Option.isSome(match) && match.value.info.role === "user") return match.value.info.model
       return yield* provider.defaultModel().pipe(Effect.orDie)
     })
 
-    const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (input: PromptInput) {
+    // Resolves the agent, model and variant a prompt is recorded with. It does not write to the session, so a
+    // prompt can be checked before anything destructive happens.
+    const resolveSelection = Effect.fn("SessionPrompt.resolveSelection")(function* (input: PromptInput) {
       const agentName = input.agent
       const ag = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!ag) {
@@ -645,13 +677,38 @@ const layer = Layer.effect(
 
       const model = input.model ?? ag.model ?? (yield* currentModel(input.sessionID))
       const same = ag.model && model.providerID === ag.model.providerID && model.modelID === ag.model.modelID
+      const explicit = input.variant !== undefined && input.variant !== "default" ? input.variant : undefined
       const full =
-        !input.variant && ag.variant && same
+        explicit !== undefined || (!input.variant && ag.variant && same)
           ? yield* provider
               .getModel(model.providerID, model.modelID)
               .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
           : undefined
-      const variant = input.variant ?? (ag.variant && full?.variants?.[ag.variant] ? ag.variant : undefined)
+      // An unknown variant would be dropped when the request is built while still being recorded on the
+      // session, so reject it before anything is persisted.
+      if (explicit !== undefined && full && !Object.hasOwn(full.variants ?? {}, explicit)) {
+        const error = new VariantNotFoundError({
+          providerID: model.providerID,
+          modelID: model.modelID,
+          variant: explicit,
+          available: Object.keys(full.variants ?? {}),
+        })
+        yield* events.publish(Session.Event.Error, {
+          sessionID: input.sessionID,
+          error: new NamedError.Unknown({ message: error.message }).toObject(),
+        })
+        return yield* error
+      }
+      const variant =
+        input.variant ?? (ag.variant && Object.hasOwn(full?.variants ?? {}, ag.variant) ? ag.variant : undefined)
+      return { ag, model, variant }
+    })
+
+    const createUserMessage = Effect.fn("SessionPrompt.createUserMessage")(function* (
+      input: PromptInput,
+      selection: Effect.Success<ReturnType<typeof resolveSelection>>,
+    ) {
+      const { ag, model, variant } = selection
 
       const info: SessionV1.User = {
         id: input.messageID ?? MessageID.ascending(),
@@ -1049,12 +1106,15 @@ const layer = Layer.effect(
       return { info, parts }
     }, Effect.scoped)
 
-    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, Image.Error> = Effect.fn(
+    const prompt: (input: PromptInput) => Effect.Effect<SessionV1.WithParts, PromptError> = Effect.fn(
       "SessionPrompt.prompt",
     )(function* (input: PromptInput) {
       const session = yield* sessions.get(input.sessionID).pipe(Effect.orDie)
+      // Cleanup permanently drops the undone messages, so a prompt that is rejected must fail before it. The
+      // selection is resolved once and recorded as is, so what was checked is what the message is created with.
+      const selection = yield* resolveSelection(input)
       yield* revert.cleanup(session)
-      const message = yield* createUserMessage(input)
+      const message = yield* createUserMessage(input, selection)
       yield* sessions.touch(input.sessionID)
 
       const permissions: PermissionV1.Rule[] = []
@@ -1408,17 +1468,21 @@ const layer = Layer.effect(
       }
       template = template.trim()
 
-      const taskModel = yield* Effect.gen(function* () {
+      const callerModel = Effect.fnUntraced(function* () {
+        if (input.model) return Provider.parseModel(input.model)
+        return yield* currentModel(input.sessionID)
+      })
+      const pinnedModel = yield* Effect.gen(function* () {
         if (cmd.model) return Provider.parseModel(cmd.model)
         if (cmd.agent) {
           const cmdAgent = yield* agents.get(cmd.agent)
           if (cmdAgent?.model) return cmdAgent.model
         }
-        if (input.model) return Provider.parseModel(input.model)
-        return yield* currentModel(input.sessionID)
+        return undefined
       })
+      const taskModel = pinnedModel ?? (yield* callerModel())
 
-      yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
+      const resolvedTaskModel = yield* getModel(taskModel.providerID, taskModel.modelID, input.sessionID)
 
       const agent = agentName ? yield* agents.get(agentName) : yield* agents.defaultInfo()
       if (!agent) {
@@ -1451,11 +1515,21 @@ const layer = Layer.effect(
         : [...uniqueTemplateParts, ...(input.parts ?? [])]
 
       const userAgent = isSubtask ? (input.agent ?? (yield* agents.defaultInfo()).name) : agent.name
-      const userModel = isSubtask
-        ? input.model
-          ? Provider.parseModel(input.model)
-          : yield* currentModel(input.sessionID)
-        : taskModel
+      const userModel = isSubtask ? yield* callerModel() : taskModel
+      // The caller picked its variant for its own model. When the command pins a different model that does
+      // not offer that variant, run it on that model's default instead of failing the command. A value the
+      // caller's model does not declare either is left in place so it is rejected like any other prompt.
+      const inherited = yield* Effect.gen(function* () {
+        if (isSubtask || !pinnedModel || input.variant === undefined || input.variant === "default") return false
+        if (Object.hasOwn(resolvedTaskModel.variants ?? {}, input.variant)) return false
+        const caller = yield* callerModel()
+        if (caller.providerID === pinnedModel.providerID && caller.modelID === pinnedModel.modelID) return false
+        const callerInfo = yield* provider
+          .getModel(caller.providerID, caller.modelID)
+          .pipe(Effect.catchIf(Provider.ModelNotFoundError.isInstance, () => Effect.succeed(undefined)))
+        return Object.hasOwn(callerInfo?.variants ?? {}, input.variant)
+      })
+      const variant = inherited ? undefined : input.variant
 
       yield* plugin.trigger(
         "command.execute.before",
@@ -1469,7 +1543,7 @@ const layer = Layer.effect(
         model: userModel,
         agent: userAgent,
         parts,
-        variant: input.variant,
+        variant,
       })
       yield* events.publish(Command.Event.Executed, {
         name: input.command,

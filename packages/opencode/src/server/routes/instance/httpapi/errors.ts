@@ -185,6 +185,23 @@ export class ApiNotFoundError extends Schema.ErrorClass<ApiNotFoundError>("NotFo
   { httpApiStatus: 404 },
 ) {}
 
+export class ApiBadRequestError extends Schema.ErrorClass<ApiBadRequestError>("BadRequestError")(
+  {
+    name: Schema.Literal("BadRequest"),
+    data: Schema.Struct({
+      message: Schema.String,
+    }),
+  },
+  { httpApiStatus: 400 },
+) {}
+
+export function badRequest(message: string) {
+  return new ApiBadRequestError({
+    name: "BadRequest",
+    data: { message },
+  })
+}
+
 export function notFound(message: string) {
   return new ApiNotFoundError({
     name: "NotFoundError",
