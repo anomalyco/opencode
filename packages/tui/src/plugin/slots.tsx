@@ -1,6 +1,8 @@
+/** @jsxImportSource @opentui/solid */
 import type { TuiPluginApi, TuiSlotContext, TuiSlotMap, TuiSlotProps } from "@opencode-ai/plugin/tui"
 import { createSlot, createSolidSlotRegistry, type JSX, type SolidPlugin } from "@opentui/solid"
-import { createSignal } from "solid-js"
+import { ErrorBoundary, createSignal } from "solid-js"
+import { errorMessage } from "../util/error"
 import { isRecord } from "../util/record"
 
 type RuntimeSlotMap = TuiSlotMap<Record<string, object>>
@@ -25,7 +27,21 @@ function isHostSlotPlugin(value: unknown): value is HostSlotPlugin<Record<string
 export function createSlots() {
   const empty: SlotView = () => null
   const [view, setView] = createSignal<SlotView>(empty)
-  const Slot: SlotView = (props) => view()(props)
+  // Plugin slot views can throw during render (e.g. optional snapshot fields
+  // like tailHygiene.evaluable). Isolate those so they do not take down the TUI.
+  const Slot: SlotView = (props) => (
+    <ErrorBoundary
+      fallback={(error) => {
+        console.error("[tui.slot] plugin error", {
+          slot: props.name,
+          message: errorMessage(error),
+        })
+        return null
+      }}
+    >
+      {view()(props)}
+    </ErrorBoundary>
+  )
 
   return {
     Slot,
