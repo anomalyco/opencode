@@ -582,9 +582,47 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("rejects content after a terminal chunk", () =>
+  it.effect("absorbs content after a terminal chunk", () =>
     Effect.gen(function* () {
-      const error = yield* LLMClient.generate(request).pipe(
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(deltaChunk({ content: "Hello" }), deltaChunk({}, "stop"), deltaChunk({ content: " late" })),
+          ),
+        ),
+      )
+
+      expect(response.text).toBe("Hello late")
+    }),
+  )
+
+  it.effect("absorbs reasoning after a terminal chunk", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "stop"), deltaChunk({ reasoning_content: "late" })))),
+      )
+
+      expect(response.reasoning).toBe("late")
+    }),
+  )
+
+  it.effect("drops malformed tool deltas after a terminal chunk", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(deltaChunk({}, "stop"), deltaChunk({ tool_calls: [{ index: 1, function: { arguments: "{}" } }] })),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toEqual([])
+    }),
+  )
+
+  it.effect("finishes a tool call absorbed after a terminal chunk", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
         Effect.provide(
           fixedResponse(
             sseEvents(
@@ -594,15 +632,49 @@ describe("OpenAI-compatible Chat route", () => {
             ),
           ),
         ),
-        Effect.flip,
       )
 
-      expect(error.message).toContain("OpenAI Chat received content after the finish reason")
-      expect(error.reason._tag).toBe("InvalidProviderOutput")
-      if (error.reason._tag !== "InvalidProviderOutput") return
-      expect(decodeJson(error.reason.body ?? "")).toMatchObject({
-        choices: [{ delta: { tool_calls: [{ id: "call_1" }] } }],
-      })
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: {} }])
+    }),
+  )
+
+  it.effect("accumulates split argument deltas of a late tool call before finishing", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ content: "Hello" }),
+              deltaChunk({}, "stop"),
+              deltaChunk({
+                tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"city":' } }],
+              }),
+              deltaChunk({ tool_calls: [{ index: 0, function: { arguments: '"Paris"}' } }] }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { city: "Paris" } }])
+    }),
+  )
+
+  it.effect("still drops unconfirmed tool calls after a content-filter finish", () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(
+              deltaChunk({ tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: "{}" } }] }),
+              deltaChunk({}, "content_filter"),
+              deltaChunk({ tool_calls: [{ index: 1, id: "call_2", function: { name: "lookup", arguments: "{}" } }] }),
+            ),
+          ),
+        ),
+      )
+
+      expect(response.toolCalls).toEqual([])
+      expect(response.finishReason).toEqual({ normalized: "content-filter", raw: "content_filter" })
     }),
   )
 })
