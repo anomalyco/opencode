@@ -200,6 +200,9 @@ const main = Effect.gen(function* () {
     return
   }
 
+  // CLI launches must deliver links on first launch as well as second-instance.
+  emitDeepLinks(process.argv.filter((arg) => arg.startsWith("opencode://")))
+
   const shellEnv = preferAppEnv(app.getPath("userData"))
 
   app.on("second-instance", (_event: Event, argv: string[]) => {
