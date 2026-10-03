@@ -499,6 +499,7 @@ export function PromptInputV2AddMenu(props: {
           icon={<IconV2 name="plus" />}
           variant="ghost-muted"
           size="large"
+          class="pointer-coarse:size-11!"
           disabled={props.disabled}
           aria-label={props.title}
         />
@@ -560,6 +561,7 @@ export function PromptInputV2Select(props: {
 }) {
   return (
     <TooltipV2
+      class="min-w-0"
       placement="top"
       value={
         <>
@@ -573,7 +575,7 @@ export function PromptInputV2Select(props: {
           as={ButtonV2}
           variant="ghost-muted"
           size="normal"
-          class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+          class={`min-w-0 max-w-[140px] sm:max-w-[220px] justify-start ![font-weight:440] pointer-coarse:h-11! ${props.class ?? ""}`}
           aria-label={props.title}
         >
           {props.currentIcon}
@@ -691,7 +693,7 @@ export function PromptInputV2SubmitButton(props: {
         tabIndex={props.mode === "normal" ? undefined : -1}
         icon={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
         variant="primary"
-        class="size-7 rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
+        class="size-7 pointer-coarse:size-11! rounded-md p-[6px] text-v2-icon-icon-muted shadow-[var(--v2-elevation-button-contrast)] disabled:opacity-50"
         style={{
           "background-image":
             "linear-gradient(180deg,var(--v2-alpha-light-20) 0%,var(--v2-alpha-light-0) 100%),linear-gradient(90deg,var(--v2-background-bg-contrast) 0%,var(--v2-background-bg-contrast) 100%)",

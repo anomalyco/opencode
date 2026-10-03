@@ -1583,7 +1583,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   tabIndex={store.mode === "normal" ? undefined : -1}
                   icon={stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
                   variant="primary"
-                  class="size-8"
+                  class="size-8 pointer-coarse:size-11!"
                   aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
                 />
               </Tooltip>
@@ -1607,7 +1607,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   data-action="prompt-attach"
                   type="button"
                   variant="ghost"
-                  class="size-8 p-0"
+                  class="size-8 p-0 pointer-coarse:size-11!"
                   style={buttons()}
                   onClick={pick}
                   disabled={store.mode !== "normal"}
@@ -1649,6 +1649,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 <Show when={!agentsLoading()}>
                   <div
                     data-component="prompt-agent-control"
+                    class="min-w-0"
                     classList={{ "animate-in fade-in duration-300": agentsShouldFadeIn() }}
                   >
                     <TooltipKeybind
@@ -1665,10 +1666,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                           props.controls.agents.select(value)
                           restoreFocus()
                         }}
-                        class="capitalize max-w-[160px] text-text-base"
+                        class="capitalize max-w-[110px] sm:max-w-[160px] text-text-base"
                         valueClass="truncate text-13-regular text-text-base"
                         triggerStyle={control()}
-                        triggerProps={{ "data-action": "prompt-agent" }}
+                        triggerProps={{ "data-action": "prompt-agent", class: "pointer-coarse:h-11!" }}
                         variant="ghost"
                       />
                     </TooltipKeybind>
@@ -1678,6 +1679,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   <Show when={store.mode !== "shell"}>
                     <div
                       data-component="prompt-model-control"
+                      class="min-w-0"
                       classList={{ "animate-in fade-in duration-300": providersShouldFadeIn() }}
                     >
                       <Show
@@ -1694,7 +1696,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               as="div"
                               variant="ghost"
                               size="normal"
-                              class="min-w-0 max-w-[320px] text-13-regular text-text-base group"
+                              class="min-w-0 max-w-[150px] sm:max-w-[320px] text-13-regular text-text-base group pointer-coarse:h-11!"
                               style={control()}
                               onClick={() => {
                                 dialog.show(() => <DialogSelectModelUnpaid model={props.controls.model.selection} />)
@@ -1730,7 +1732,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                                 variant="ghost"
                                 size="normal"
                                 style={control()}
-                                class="min-w-0 max-w-[320px] text-13-regular text-text-base group"
+                                class="min-w-0 max-w-[150px] sm:max-w-[320px] text-13-regular text-text-base group pointer-coarse:h-11!"
                                 data-action="prompt-model"
                               >
                                 <Show when={props.controls.model.selection.current()?.provider?.id}>
@@ -1755,6 +1757,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                     <Show when={showVariantControl()}>
                       <div
                         data-component="prompt-variant-control"
+                        class="min-w-0"
                         classList={{ "animate-in fade-in duration-300": providersShouldFadeIn() }}
                       >
                         <TooltipKeybind
@@ -1772,10 +1775,10 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                               props.controls.model.selection.variant.set(value === "default" ? undefined : value)
                               restoreFocus()
                             }}
-                            class="capitalize max-w-[160px] text-text-base"
+                            class="capitalize max-w-[110px] sm:max-w-[160px] text-text-base"
                             valueClass="truncate text-13-regular text-text-base"
                             triggerStyle={control()}
-                            triggerProps={{ "data-action": "prompt-model-variant" }}
+                            triggerProps={{ "data-action": "prompt-model-variant", class: "pointer-coarse:h-11!" }}
                             variant="ghost"
                           />
                         </TooltipKeybind>
