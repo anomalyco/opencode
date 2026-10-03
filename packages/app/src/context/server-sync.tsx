@@ -608,6 +608,12 @@ export function createServerSyncContextInner(serverSDK: ServerSDK) {
       retainedLimit: sessionMeta.get(key)?.limit,
       sessionContent: false,
       permission: session.data.permission,
+      notifyError: (message) =>
+        showToast({
+          variant: "error",
+          title: language.t("notification.session.error.title"),
+          description: message ?? language.t("notification.session.error.fallbackDescription"),
+        }),
       vcsCache: children.vcsCache.get(key),
       loadLsp: () => {
         if (!children.active(key)) return
