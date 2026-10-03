@@ -70,7 +70,13 @@ import {
   createSessionComposerRegionController,
   SessionComposerRegion,
 } from "@/pages/session/composer"
-import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
+import {
+  createOpenReviewFile,
+  createSessionTabs,
+  createSizing,
+  shouldRefocusComposerOnSwitch,
+  shouldShowFileTree,
+} from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
@@ -1992,8 +1998,18 @@ export default function Page() {
   createEffect(
     on(
       () => params.id,
-      (id) => {
-        if (!id) requestAnimationFrame(() => inputRef?.focus())
+      () => {
+        // Refocus the composer whenever the active session changes (tab switch
+        // via mouse or mod+number, link navigation, new draft).
+        // isChildSession is handled by focusInput. ponytail: focuses on any
+        // params.id change, not only user tab switches; guard by a switch-source
+        // flag if programmatic navs prove disruptive.
+        const allowed = shouldRefocusComposerOnSwitch({
+          dialogActive: dialog.active,
+          composerBlocked: composer.blocked(),
+          protectedFocus: !!deepActiveElement()?.closest("[data-prevent-autofocus]"),
+        })
+        if (allowed) requestAnimationFrame(() => focusInput())
       },
     ),
   )
