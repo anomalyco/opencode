@@ -1,5 +1,5 @@
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
-import type { PartGroup } from "@opencode-ai/session-ui/message-part"
+import { sameGroup, type PartGroup } from "@opencode-ai/session-ui/message-part-groups"
 import { Data, Equal } from "effect"
 
 export type SummaryDiff = SnapshotFileDiff & { file: string }
@@ -75,6 +75,42 @@ export namespace TimelineRow {
   }
 
   export function equals(a: TimelineRow, b: TimelineRow) {
-    return Equal.equals(a, b)
+    if (a === b) return true
+    if (a._tag !== b._tag) return false
+    switch (a._tag) {
+      case "TurnGap":
+      case "CommentStrip":
+        return a.userMessageID === (b as TurnGap | CommentStrip).userMessageID
+      case "UserMessage": {
+        const other = b as UserMessage
+        return a.userMessageID === other.userMessageID && a.anchor === other.anchor
+      }
+      case "TurnDivider": {
+        const other = b as TurnDivider
+        return a.userMessageID === other.userMessageID && a.label === other.label
+      }
+      case "AssistantPart": {
+        const other = b as AssistantPart
+        return (
+          a.userMessageID === other.userMessageID &&
+          a.previousAssistantPart === other.previousAssistantPart &&
+          sameGroup(a.group, other.group)
+        )
+      }
+      case "Thinking": {
+        const other = b as Thinking
+        return a.userMessageID === other.userMessageID && a.reasoningHeading === other.reasoningHeading
+      }
+      case "DiffSummary": {
+        const other = b as DiffSummary
+        return a.userMessageID === other.userMessageID && Equal.equals(a.diffs, other.diffs)
+      }
+      case "Error": {
+        const other = b as Error
+        return a.userMessageID === other.userMessageID && a.text === other.text
+      }
+      case "Retry":
+        return a.userMessageID === (b as Retry).userMessageID
+    }
   }
 }
