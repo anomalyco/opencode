@@ -626,6 +626,7 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         hidden: true,
         run: () => {
           local.session.quickSwitch(i + 1)
+          setTimeout(() => promptRef.current?.focus(), 0)
         },
       })),
       {
