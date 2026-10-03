@@ -51,7 +51,14 @@ import { createFadeIn } from "../../util/signal"
 import { DialogSkill } from "../dialog-skill"
 import { DialogWorkspaceUnavailable } from "../dialog-workspace-unavailable"
 import { useArgs } from "../../context/args"
-import { OPENCODE_BASE_MODE, useBindings, useCommandShortcut, useLeaderActive, useOpencodeKeymap } from "../../keymap"
+import {
+  OPENCODE_BASE_MODE,
+  useBindings,
+  useCommandShortcut,
+  useCommandSlashes,
+  useLeaderActive,
+  useOpencodeKeymap,
+} from "../../keymap"
 import { useTuiConfig } from "../../config"
 import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
@@ -164,6 +171,15 @@ export function Prompt(props: PromptProps) {
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = useOpencodeKeymap()
+  const clientSlashes = useCommandSlashes()
+  const clientSlashActions = createMemo(() => {
+    const actions = new Map<string, () => void>()
+    for (const entry of clientSlashes()) {
+      actions.set(entry.display, entry.onSelect)
+      for (const alias of entry.aliases ?? []) actions.set(alias, entry.onSelect)
+    }
+    return actions
+  })
   const agentShortcut = useCommandShortcut("agent.cycle")
   const paletteShortcut = useCommandShortcut("command.palette.show")
   const renderer = useRenderer()
@@ -1089,6 +1105,12 @@ export function Prompt(props: PromptProps) {
         variant,
         parts: nonTextParts.filter((x) => x.type === "file"),
       })
+    } else if (
+      inputText.trim().startsWith("/") &&
+      !inputText.trim().slice(1).match(/\s/) &&
+      clientSlashActions().has(inputText.trim())
+    ) {
+      clientSlashActions().get(inputText.trim())?.()
     } else {
       move.startSubmit()
       sdk.client.session
