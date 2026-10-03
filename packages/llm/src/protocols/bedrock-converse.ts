@@ -348,6 +348,8 @@ const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
           continue
         }
         if (part.type === "reasoning") {
+          // Never attach cachePoint after reasoning — Bedrock returns
+          // ValidationException: "Cache point cannot be inserted after reasoning block."
           content.push({
             reasoningContent: {
               reasoningText: { text: part.text, signature: reasoningSignature(part) },

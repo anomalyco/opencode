@@ -62,14 +62,17 @@ const lastIndexOfRole = (messages: ReadonlyArray<Message>, role: Message["role"]
   messages.findLastIndex((m) => m.role === role)
 
 // Mark the last text part of `messages[index]`. If no text part exists, mark
-// the last content part regardless of type — that's the breakpoint position
-// in tool-result-only messages too.
+// the last non-reasoning content part — Bedrock rejects cache markers that
+// sit immediately after a reasoning block, and tool-result-only messages still
+// need a breakpoint on their last result part.
 const markMessageAt = (messages: ReadonlyArray<Message>, index: number, hint: CacheHint): ReadonlyArray<Message> => {
   if (index < 0 || index >= messages.length) return messages
   const target = messages[index]!
   if (target.content.length === 0) return messages
   const lastTextIndex = target.content.findLastIndex((part) => part.type === "text")
-  const markAt = lastTextIndex >= 0 ? lastTextIndex : target.content.length - 1
+  const lastSafeIndex = target.content.findLastIndex((part) => part.type !== "reasoning")
+  const markAt = lastTextIndex >= 0 ? lastTextIndex : lastSafeIndex
+  if (markAt < 0) return messages
   const existing = target.content[markAt]!
   if ("cache" in existing && existing.cache) return messages
   const nextContent = target.content.map((part, i) => (i === markAt ? ({ ...part, cache: hint } as ContentPart) : part))

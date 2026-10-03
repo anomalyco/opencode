@@ -452,6 +452,42 @@ describe("Bedrock Converse route", () => {
     }),
   )
 
+  it.effect("does not place cachePoint after a trailing reasoning block (#36517)", () =>
+    Effect.gen(function* () {
+      const cache = new CacheHint({ type: "ephemeral" })
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_cache_reasoning",
+          model,
+          cache: "none",
+          messages: [
+            Message.user("hi"),
+            Message.assistant([
+              { type: "text", text: "reply", cache },
+              { type: "reasoning", text: "thoughts", encrypted: "sig" },
+            ]),
+          ],
+          generation: { maxTokens: 16, temperature: 0 },
+        }),
+      )
+
+      const assistant = (prepared.body as { messages: Array<{ role: string; content: unknown[] }> }).messages.find(
+        (message) => message.role === "assistant",
+      )
+      expect(assistant?.content).toEqual([
+        { text: "reply" },
+        { cachePoint: { type: "default" } },
+        {
+          reasoningContent: {
+            reasoningText: { text: "thoughts", signature: "sig" },
+          },
+        },
+      ])
+      // Final block must not be a cachePoint (Bedrock ValidationException).
+      expect(assistant?.content.at(-1)).not.toHaveProperty("cachePoint")
+    }),
+  )
+
   it.effect("does not emit cachePoint when no cache hint is set", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(baseRequest)
