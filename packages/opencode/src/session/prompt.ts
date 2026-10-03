@@ -1097,6 +1097,13 @@ const layer = Layer.effect(
 
           if (!lastUser) throw new Error("No user message found in stream. This should never happen.")
 
+          // A terminal assistant normally parents the latest user turn, but
+          // transcripts written across the ID rollover can hold an assistant
+          // that settles the latest turn while keeping an older parent.
+          const lastAssistantBelongsToLatestTurn =
+            lastAssistant !== undefined &&
+            (lastAssistant.parentID === lastUser.id || MessageV2.compareChronology(lastUser, lastAssistant) < 0)
+
           const lastAssistantMsg = msgs.findLast(
             (msg) => msg.info.role === "assistant" && msg.info.id === lastAssistant?.id,
           )
@@ -1112,7 +1119,7 @@ const layer = Layer.effect(
             lastAssistant?.finish &&
             !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
             !hasToolCalls &&
-            lastAssistant.parentID === lastUser.id
+            lastAssistantBelongsToLatestTurn
           ) {
             const orphan = lastAssistantMsg?.parts.find(
               (part): part is SessionV1.ToolPart => part.type === "tool" && isOrphanedInterruptedTool(part),

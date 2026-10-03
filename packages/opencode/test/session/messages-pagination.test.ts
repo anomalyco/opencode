@@ -5,7 +5,11 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Effect, Option } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
+import { Identifier } from "../../src/id/id"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
+import { Database } from "@opencode-ai/core/database/database"
+import { PartTable } from "@opencode-ai/core/session/sql"
+import { eq } from "drizzle-orm"
 
 import { NotFoundError } from "@/storage/storage"
 import { testEffect } from "../lib/effect"
@@ -428,6 +432,58 @@ describe("MessageV2.parts", () => {
         expect((result[0] as SessionV1.TextPart).text).toBe("m0")
         expect((result[1] as SessionV1.TextPart).text).toBe("second")
         expect((result[2] as SessionV1.TextPart).text).toBe("third")
+      }),
+    ),
+  )
+
+  it.instance("orders parts by persisted creation time across the ID rollover", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const messageID = yield* addUser(sessionID)
+        // Parts of one message persisted on both sides of the rollover:
+        // ascending part IDs restart from zero, so raw ID order inverts the
+        // order the parts were actually written in.
+        const rollover = 2 ** 36
+        const earlyID = PartID.make(Identifier.create("prt", "ascending", rollover - 1))
+        const lateID = PartID.make(Identifier.create("prt", "ascending", rollover + 1))
+        yield* session.updatePart({
+          id: earlyID,
+          sessionID,
+          messageID,
+          type: "text",
+          text: "early",
+        })
+        yield* session.updatePart({
+          id: lateID,
+          sessionID,
+          messageID,
+          type: "text",
+          text: "late",
+        })
+        const { db } = yield* Database.Service
+        yield* db
+          .update(PartTable)
+          .set({ time_created: rollover - 1 })
+          .where(eq(PartTable.id, earlyID))
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .update(PartTable)
+          .set({ time_created: rollover + 1 })
+          .where(eq(PartTable.id, lateID))
+          .run()
+          .pipe(Effect.orDie)
+
+        expect(earlyID > lateID).toBe(true)
+
+        const parts = yield* MessageV2.parts(messageID)
+        expect(parts.map((part) => part.id)).toEqual([earlyID, lateID])
+        expect((parts[0] as SessionV1.TextPart).text).toBe("early")
+        expect((parts[1] as SessionV1.TextPart).text).toBe("late")
+
+        const hydrated = yield* MessageV2.page({ sessionID, limit: 1 })
+        expect(hydrated.items[0]?.info.id).toBe(messageID)
+        expect(hydrated.items[0]?.parts.map((part) => part.id)).toEqual([earlyID, lateID])
       }),
     ),
   )

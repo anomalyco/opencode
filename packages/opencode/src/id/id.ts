@@ -15,7 +15,9 @@ const prefixes = {
 
 const LENGTH = 26
 
-// State for monotonic ID generation
+// State for ordering IDs generated in the same millisecond. The six-byte
+// encoding retains only the low 36 bits of the millisecond timestamp, so IDs
+// are not globally monotonic across the 2^36 ms rollover.
 let lastTimestamp = 0
 let counter = 0
 
@@ -69,7 +71,7 @@ export function create(prefix: string, direction: "descending" | "ascending", ti
   return prefix + "_" + timeBytes.toString("hex") + randomBase62(LENGTH - 12)
 }
 
-/** Extract timestamp from an ascending ID. Does not work with descending IDs. */
+/** Extract the low 36 timestamp bits from an ascending ID, not a full epoch timestamp. */
 export function timestamp(id: string): number {
   const prefix = id.split("_")[0]
   const hex = id.slice(prefix.length + 1, prefix.length + 13)
