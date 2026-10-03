@@ -163,6 +163,22 @@ function info(file: string): Item {
   }
 }
 
+// Windows PowerShell 7 and Python initialize stdio from the OEM/ANSI code pages
+// (for example cp720 and cp1256 on Arabic Windows), while shell output is read
+// as UTF-8. Switch both to UTF-8 before running the command.
+const POWERSHELL_UTF8 = "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {};"
+
+export function utf8Command(file: string, command: string) {
+  if (process.platform !== "win32" || !ps(file)) return command
+  return `${POWERSHELL_UTF8} ${command}`
+}
+
+export function utf8Env(source: NodeJS.ProcessEnv = process.env) {
+  if (process.platform !== "win32") return {}
+  if (source.PYTHONIOENCODING !== undefined) return {}
+  return { PYTHONIOENCODING: "utf-8" }
+}
+
 export function args(file: string, command: string, cwd: string) {
   const n = name(file)
   if (n === "nu" || n === "fish") return ["-c", command]
@@ -195,7 +211,7 @@ export function args(file: string, command: string, cwd: string) {
     ]
   }
   if (n === "cmd") return ["/c", command]
-  if (ps(file)) return ["-NoProfile", "-Command", command]
+  if (ps(file)) return ["-NoProfile", "-Command", utf8Command(file, command)]
   return ["-c", command]
 }
 

@@ -559,7 +559,7 @@ const layer = Layer.effect(
               const cmd = ChildProcess.make(sh, args, {
                 cwd,
                 extendEnv: true,
-                env: { ...shellEnv.env, TERM: "dumb" },
+                env: { ...Shell.utf8Env(), ...shellEnv.env, TERM: "dumb" },
                 stdin: "ignore",
                 forceKillAfter: "3 seconds",
               })

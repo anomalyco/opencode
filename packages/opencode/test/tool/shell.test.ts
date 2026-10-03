@@ -1197,3 +1197,36 @@ describe("tool.shell truncation", () => {
     ),
   )
 })
+
+describe("tool.shell encoding", () => {
+  if (process.platform !== "win32") return
+
+  for (const item of ps) {
+    it.live(`preserves non-ASCII output [${item.label}]`, () =>
+      withShell(
+        item,
+        runIn(
+          projectRoot,
+          Effect.gen(function* () {
+            const result = yield* run({ command: "echo 'مرحبا'" })
+            expect(result.metadata.exit).toBe(0)
+            expect(result.output).toContain("مرحبا")
+          }),
+        ),
+      ),
+    )
+  }
+
+  if (Bun.which("python")) {
+    it.live("preserves non-ASCII output from Python", () =>
+      runIn(
+        projectRoot,
+        Effect.gen(function* () {
+          const result = yield* run({ command: `python -c "print('مرحبا')"` })
+          expect(result.metadata.exit).toBe(0)
+          expect(result.output).toContain("مرحبا")
+        }),
+      ),
+    )
+  }
+})
