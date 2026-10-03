@@ -31,6 +31,7 @@ describe("desktop native translations", () => {
       "العربية",
       "Norsk",
       "Português (Brasil)",
+      "Português (Portugal)",
       "ไทย",
       "Türkçe",
       "हिन्दी",
@@ -126,6 +127,13 @@ describe("desktop native locale detection", () => {
     expect(detectDesktopNativeLocale(["sr-Cyrl"])).toBe("sr")
     expect(detectDesktopNativeLocale(["sr-Latn", "en"])).toBe("en")
     expect(detectDesktopNativeLocale(["uz-Latn"])).toBe("uz")
+  })
+
+  test("separates European and Brazilian Portuguese by region", () => {
+    expect(detectDesktopNativeLocale(["pt-PT"])).toBe("pt")
+    expect(detectDesktopNativeLocale(["pt-AO"])).toBe("pt")
+    expect(detectDesktopNativeLocale(["pt-BR"])).toBe("br")
+    expect(detectDesktopNativeLocale(["pt"])).toBe("br")
   })
 
   test("recognizes Norwegian language tags", () => {

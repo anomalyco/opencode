@@ -15,6 +15,7 @@ export const DESKTOP_NATIVE_LOCALES = [
   "ar",
   "no",
   "br",
+  "pt",
   "th",
   "tr",
   "hi",
@@ -82,6 +83,7 @@ export const DESKTOP_NATIVE_LABELS: Record<DesktopNativeLocale, string> = {
   ar: "العربية",
   no: "Norsk",
   br: "Português (Brasil)",
+  pt: "Português (Portugal)",
   th: "ไทย",
   tr: "Türkçe",
   hi: "हिन्दी",
@@ -147,6 +149,7 @@ export const DESKTOP_NATIVE_LOCALE_TAGS: Record<DesktopNativeLocale, string> = {
   ar: "ar",
   no: "nb-NO",
   br: "pt-BR",
+  pt: "pt-PT",
   th: "th",
   tr: "tr",
   hi: "hi-IN",
@@ -200,6 +203,8 @@ export function detectDesktopNativeLocale(languages: readonly string[]): Desktop
     const source = locale(language)
     if (!source) continue
     if (["no", "nb", "nn"].includes(source.language)) return "no"
+    // "pt" alone maximizes to pt-BR; every other Portuguese region uses the European norm
+    if (source.language === "pt") return source.region === "BR" ? "br" : "pt"
     const match = DESKTOP_NATIVE_LOCALES.find((candidate) => {
       const target = locale(DESKTOP_NATIVE_LOCALE_TAGS[candidate])
       return target?.language === source.language && target.script === source.script
