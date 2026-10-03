@@ -462,6 +462,33 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("normalizes uppercase data URL schemes without double prefixing", () =>
+    Effect.gen(function* () {
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          id: "req_media_upper",
+          model,
+          messages: [
+            Message.user([
+              { type: "media", mediaType: "image/png", data: "DATA:image/png;base64,AAECAw==" },
+              { type: "media", mediaType: "image/png", data: "Data:image/png;base64,AAECAw==" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAECAw==" } },
+            { type: "image_url", image_url: { url: "data:image/png;base64,AAECAw==" } },
+          ],
+        },
+      ])
+    }),
+  )
+
   it.effect("lowers reasoning-only assistant history", () =>
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
