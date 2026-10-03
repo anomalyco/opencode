@@ -2,4 +2,6 @@ Load a specialized skill when the task at hand matches one of the skills listed 
 
 Use this tool to inject the skill's instructions and resources into current conversation. The output may contain detailed workflow guidance as well as references to scripts, files, etc in the same directory as the skill.
 
+When a skill contains `!`command`` directives, they are expanded at load time by executing each command in the skill directory and replacing the directive with stdout.
+
 The skill name must match one of the skills listed in your system prompt.
