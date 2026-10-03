@@ -80,15 +80,22 @@ const AnthropicServerToolUseBlock = Schema.Struct({
 })
 type AnthropicServerToolUseBlock = Schema.Schema.Type<typeof AnthropicServerToolUseBlock>
 
-// Server tool result blocks: web_search_tool_result, code_execution_tool_result,
-// and web_fetch_tool_result. The provider executes the tool and inlines the
+// Server tool result blocks. The provider executes the tool and inlines the
 // structured result into the assistant turn — there is no client tool_result
 // round-trip. We round-trip the structured `content` payload as opaque JSON so
 // the next request can echo it back when continuing the conversation.
+//
+// Echoing them back is mandatory, not an optimisation: when the assistant turn
+// also contains a signed `thinking` block, Anthropic rejects the next request if
+// any sibling block was dropped, reordered or edited. `tool_search_tool_result`
+// is emitted by the tool-search server tools that back `defer_loading`, which
+// put thinking + server_tool_use + tool_search_tool_result + tool_use in one
+// turn — so dropping it breaks every following request in the session.
 const AnthropicServerToolResultType = Schema.Literals([
   "web_search_tool_result",
   "code_execution_tool_result",
   "web_fetch_tool_result",
+  "tool_search_tool_result",
 ])
 type AnthropicServerToolResultType = Schema.Schema.Type<typeof AnthropicServerToolResultType>
 
@@ -224,6 +231,12 @@ interface ParserState {
   readonly tools: ToolStream.State<number>
   readonly usage?: Usage
   readonly lifecycle: Lifecycle.State
+  // `server_tool_use` id -> tool name. The matching `*_tool_result` block
+  // carries only `tool_use_id`, and the pending-tool entry is already gone by
+  // then (`content_block_stop` finishes it), so the name is recorded here.
+  // Needed because one block type can answer several tool names — both
+  // tool-search variants report through `tool_search_tool_result`.
+  readonly serverTools: Readonly<Record<string, string>>
 }
 
 const invalid = ProviderShared.invalidRequest
@@ -287,13 +300,15 @@ const lowerServerToolCall = (part: ToolCallPart): AnthropicServerToolUseBlock =>
   input: part.input,
 })
 
-// Server tool result blocks are typed by name. Anthropic ships three today;
-// extend this list when new server tools land. The block content is the
-// structured payload returned by the provider, which we round-trip as-is.
+// Server tool result blocks are typed by name; extend this list when new server
+// tools land. The block content is the structured payload returned by the
+// provider, which we round-trip as-is. Both tool-search variants (BM25 and
+// regex) report their results in a single `tool_search_tool_result` block type.
 const serverToolResultType = (name: string): AnthropicServerToolResultType | undefined => {
   if (name === "web_search") return "web_search_tool_result"
   if (name === "code_execution") return "code_execution_tool_result"
   if (name === "web_fetch") return "web_fetch_tool_result"
+  if (name === "tool_search_tool_bm25" || name === "tool_search_tool_regex") return "tool_search_tool_result"
   return undefined
 }
 
@@ -621,15 +636,22 @@ const mergeUsage = (left: Usage | undefined, right: Usage | undefined) => {
 // `providerExecuted: true`. The runtime appends it to the assistant message
 // for round-trip; downstream consumers can inspect `result.value` for the
 // structured payload.
+//
+// These are fallback names, used only when the originating `server_tool_use` was not seen
+// on this stream. `serverTools` in the parser state is the accurate source.
 const SERVER_TOOL_RESULT_NAMES: Record<AnthropicServerToolResultType, string> = {
   web_search_tool_result: "web_search",
   code_execution_tool_result: "code_execution",
   web_fetch_tool_result: "web_fetch",
+  tool_search_tool_result: "tool_search_tool_bm25",
 }
 
 const isServerToolResultType = (type: string): type is AnthropicServerToolResultType => type in SERVER_TOOL_RESULT_NAMES
 
-const serverToolResultEvent = (block: NonNullable<AnthropicEvent["content_block"]>): LLMEvent | undefined => {
+const serverToolResultEvent = (
+  block: NonNullable<AnthropicEvent["content_block"]>,
+  serverTools: ParserState["serverTools"],
+): LLMEvent | undefined => {
   if (!block.type || !isServerToolResultType(block.type)) return undefined
   const errorPayload =
     typeof block.content === "object" && block.content !== null && "type" in block.content
@@ -638,7 +660,7 @@ const serverToolResultEvent = (block: NonNullable<AnthropicEvent["content_block"
   const isError = errorPayload.endsWith("_tool_result_error")
   return LLMEvent.toolResult({
     id: block.tool_use_id ?? "",
-    name: SERVER_TOOL_RESULT_NAMES[block.type],
+    name: (block.tool_use_id ? serverTools[block.tool_use_id] : undefined) ?? SERVER_TOOL_RESULT_NAMES[block.type],
     result: isError ? { type: "error", value: block.content } : { type: "json", value: block.content },
     providerExecuted: true,
     providerMetadata: anthropicMetadata({ blockType: block.type }),
@@ -661,12 +683,15 @@ const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepRes
   if ((block.type === "tool_use" || block.type === "server_tool_use") && event.index !== undefined) {
     const events: LLMEvent[] = []
     const lifecycle = Lifecycle.stepStart(state.lifecycle, events)
+    const id = block.id ?? String(event.index)
     return [
       {
         ...state,
         lifecycle,
+        serverTools:
+          block.type === "server_tool_use" ? { ...state.serverTools, [id]: block.name ?? "" } : state.serverTools,
         tools: ToolStream.start(state.tools, event.index, {
-          id: block.id ?? String(event.index),
+          id,
           name: block.name ?? "",
           providerExecuted: block.type === "server_tool_use",
         }),
@@ -694,7 +719,7 @@ const onContentBlockStart = (state: ParserState, event: AnthropicEvent): StepRes
     ]
   }
 
-  const result = serverToolResultEvent(block)
+  const result = serverToolResultEvent(block, state.serverTools)
   if (!result) return [state, NO_EVENTS]
   const events: LLMEvent[] = []
   return [{ ...state, lifecycle: Lifecycle.stepStart(state.lifecycle, events) }, [...events, result]]
@@ -837,7 +862,7 @@ export const protocol = Protocol.make({
   },
   stream: {
     event: Protocol.jsonEvent(AnthropicEvent),
-    initial: () => ({ tools: ToolStream.empty<number>(), lifecycle: Lifecycle.initial() }),
+    initial: () => ({ tools: ToolStream.empty<number>(), lifecycle: Lifecycle.initial(), serverTools: {} }),
     step,
   },
 })
