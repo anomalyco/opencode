@@ -4521,6 +4521,10 @@ export type SessionCompactInput = {
 
 export type SessionCompactOutput = { data: SessionInboxCompaction }["data"]
 
+export type SessionResumeInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionResumeOutput = void
+
 export type SessionWaitInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
 
 export type SessionWaitOutput = void

@@ -27,6 +27,10 @@ test("Promise host uses the embedded router", async () => {
     const missingSessionID = Session.ID.create()
     const missing = await opencode.sessions.get({ sessionID: missingSessionID }).catch((error: unknown) => error)
     expect(missing).toMatchObject({ _tag: "SessionNotFoundError", sessionID: missingSessionID })
+    const missingResume = await opencode.sessions
+      .resume({ sessionID: missingSessionID })
+      .catch((error: unknown) => error)
+    expect(missingResume).toMatchObject({ _tag: "SessionNotFoundError", sessionID: missingSessionID })
   } finally {
     await opencode.close()
     await opencode.close()

@@ -53,6 +53,8 @@ import type {
   SessionShellOutput,
   SessionCompactInput,
   SessionCompactOutput,
+  SessionResumeInput,
+  SessionResumeOutput,
   SessionWaitInput,
   SessionWaitOutput,
   SessionRevertStageInput,
@@ -805,6 +807,17 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ).then((value) => value.data),
+      resume: (input: SessionResumeInput, requestOptions?: RequestOptions) =>
+        request<SessionResumeOutput>(
+          {
+            method: "POST",
+            path: `/api/session/${encodeURIComponent(input.sessionID)}/resume`,
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404, 503],
+            empty: true,
+          },
+          requestOptions,
+        ),
       wait: (input: SessionWaitInput, requestOptions?: RequestOptions) =>
         request<SessionWaitOutput>(
           {
