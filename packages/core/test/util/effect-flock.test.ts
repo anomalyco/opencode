@@ -196,6 +196,33 @@ describe("util.effect-flock", () => {
   )
 
   it.live(
+    "refreshes the heartbeat while the lock is held",
+    Effect.gen(function* () {
+      const flock = yield* EffectFlock.Service
+      const tmp = yield* Effect.promise(() => fs.mkdtemp(path.join(os.tmpdir(), "eflock-test-")))
+      const dir = path.join(tmp, "locks")
+      const key = "eflock:heartbeat"
+      const heartbeat = path.join(lock(dir, key), "heartbeat")
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* flock.acquire(key, dir)
+          yield* Effect.promise(async () => {
+            const old = new Date(Date.now() - 120_000)
+            await fs.utimes(heartbeat, old, old)
+          })
+          yield* Effect.promise(() => new Promise((resolve) => setTimeout(resolve, 22_000)))
+
+          const updated = yield* Effect.promise(() => fs.stat(heartbeat))
+          expect(Date.now() - updated.mtimeMs).toBeLessThan(5_000)
+        }),
+      )
+      yield* Effect.promise(() => fs.rm(tmp, { recursive: true, force: true }))
+    }),
+    30_000,
+  )
+
+  it.live(
     "breaks stale lock dirs",
     Effect.gen(function* () {
       const flock = yield* EffectFlock.Service
