@@ -343,6 +343,8 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         <div
           class="directory-picker-browser"
           ref={container}
+          // The modal's scroll lock sees only the shadow host, not the tree's inner scroller.
+          on:touchmove={(event) => event.stopPropagation()}
           onWheel={(event) => {
             const scroller = tree
               ?.getFileTreeContainer()
