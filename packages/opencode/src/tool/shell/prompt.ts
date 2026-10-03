@@ -79,8 +79,10 @@ function bashCommandSection(chain: string, limits: Limits, defaultTimeoutMs: num
   return `Before executing the command, please follow these steps:
 
 1. Directory Verification:
-   - If the command will create new directories or files, first use \`ls\` to verify the parent directory exists and is the correct location
-   - For example, before running "mkdir foo/bar", first use \`ls foo\` to check that "foo" exists and is the intended parent directory
+   - If the command will create new directories or files, first verify the parent directory exists and is the correct location
+   - When only existence and type matter, use a bounded check such as \`test -d "foo"\` or \`stat "foo"\` instead of listing its contents
+   - Use \`ls "foo"\` only when child names are materially needed
+   - For example, before running \`mkdir "foo/bar"\`, first use \`test -d "foo"\` to check that \`foo\` exists and is a directory
 
 2. Command Execution:
    - Always quote file paths that contain spaces with double quotes (e.g., rm "path with spaces/file.txt")
