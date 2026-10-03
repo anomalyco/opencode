@@ -498,4 +498,29 @@ Recent work
       },
     ])
   })
+
+  test("bounds oversized session shell output in the model-facing message", () => {
+    const output = "x".repeat(1024 * 1024)
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Shell.make({
+          id: id("shell-big"),
+          type: "shell",
+          callID: "shell-2",
+          command: "bun typecheck",
+          output,
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+    expect(messages.map((message) => message.id)).toEqual([id("shell-big")])
+    expect(messages[0]?.content).toEqual([
+      {
+        type: "text",
+        text: `Shell command: bun typecheck\n\n${"x".repeat(50 * 1024)}\n[truncated: shell output exceeds 50 KiB; full output retained in session history]`,
+      },
+    ])
+    expect(Buffer.byteLength(JSON.stringify(messages[0]?.content), "utf-8")).toBeLessThan(60 * 1024)
+  })
 })
