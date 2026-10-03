@@ -1,5 +1,5 @@
-import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { describe, expect, test } from "bun:test"
+import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { LanguageModel } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
@@ -29,6 +29,7 @@ import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionStore } from "@opencode/core/session/store"
+import { SubagentCompletion } from "@opencode/core/session/subagent-completion"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
@@ -41,7 +42,8 @@ import { offlineModels } from "./fixture/models"
 import { testEffect } from "./lib/effect"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
-const childText = "child final response"
+const childBlocks = ["The files are unchanged.", "## Result\nchild final response"]
+const childText = childBlocks.join("\n\n")
 const completedOutput = (sessionID: Session.ID) =>
   `<subagent sessionID="${sessionID}" state="completed">\n${childText}\n</subagent>`
 const childModel = Model.Ref.make({ id: Model.ID.make("child"), providerID: Provider.ID.make("test") })
@@ -79,17 +81,19 @@ const executionNode = makeGlobalNode({
           model: childModel,
           started: 0,
         })
-        yield* bus.publish(SessionEvent.Text.Started, {
-          sessionID,
-          assistantMessageID,
-          ordinal: 0,
-        })
-        yield* bus.publish(SessionEvent.Text.Ended, {
-          sessionID,
-          assistantMessageID,
-          ordinal: 0,
-          text: childText,
-        })
+        for (const [ordinal, text] of childBlocks.entries()) {
+          yield* bus.publish(SessionEvent.Text.Started, {
+            sessionID,
+            assistantMessageID,
+            ordinal,
+          })
+          yield* bus.publish(SessionEvent.Text.Ended, {
+            sessionID,
+            assistantMessageID,
+            ordinal,
+            text,
+          })
+        }
         yield* bus.publish(SessionEvent.Step.Ended, {
           sessionID,
           assistantMessageID,
@@ -195,6 +199,76 @@ const withSubagent = (location: Location.Ref) =>
       }),
     ).pipe(Effect.provide(locations.get(location)))
   })
+
+describe("SubagentCompletion.text", () => {
+  const assistant = (content: SessionMessage.AssistantContent[]) =>
+    SessionMessage.Assistant.make({
+      id: SessionMessage.ID.create(),
+      type: "assistant",
+      agent: Agent.ID.make("reviewer"),
+      model: childModel,
+      content,
+      time: { created: DateTime.makeUnsafe(0) },
+    })
+
+  test("preserves paragraph boundaries and excludes reasoning", () => {
+    expect(
+      SubagentCompletion.text(
+        assistant([
+          { type: "text", text: childBlocks[0]! },
+          { type: "reasoning", text: "private reasoning" },
+          { type: "text", text: childBlocks[1]! },
+        ]),
+      ),
+    ).toBe(childText)
+  })
+
+  test("preserves a single block verbatim", () => {
+    const text = "  ## Result\n\n```ts\nconst value = 1\n```\n"
+    expect(SubagentCompletion.text(assistant([{ type: "text", text }]))).toBe(text)
+  })
+
+  test("ignores empty blocks without losing the no-text fallback", () => {
+    expect(SubagentCompletion.text(assistant([{ type: "text", text: "" }]))).toBe(SubagentCompletion.NO_TEXT)
+    expect(
+      SubagentCompletion.text(
+        assistant([
+          { type: "text", text: "" },
+          { type: "text", text: "" },
+        ]),
+      ),
+    ).toBe(SubagentCompletion.NO_TEXT)
+    expect(
+      SubagentCompletion.text(
+        assistant([
+          { type: "text", text: "" },
+          { type: "text", text: childBlocks[0]! },
+          { type: "text", text: "" },
+          { type: "text", text: childBlocks[1]! },
+          { type: "text", text: "" },
+        ]),
+      ),
+    ).toBe(childText)
+  })
+
+  test("uses the no-text fallback for missing or non-assistant messages", () => {
+    expect(SubagentCompletion.text(undefined)).toBe(SubagentCompletion.NO_TEXT)
+    expect(SubagentCompletion.text(assistant([]))).toBe(SubagentCompletion.NO_TEXT)
+    expect(SubagentCompletion.text(assistant([{ type: "reasoning", text: "private reasoning" }]))).toBe(
+      SubagentCompletion.NO_TEXT,
+    )
+    expect(
+      SubagentCompletion.text(
+        SessionMessage.Synthetic.make({
+          id: SessionMessage.ID.create(),
+          type: "synthetic",
+          text: "not an assistant response",
+          time: { created: DateTime.makeUnsafe(0) },
+        }),
+      ),
+    ).toBe(SubagentCompletion.NO_TEXT)
+  })
+})
 
 describe("SubagentTool", () => {
   completionIt.live("admits one durable completion across live delivery and restart replay", () =>
