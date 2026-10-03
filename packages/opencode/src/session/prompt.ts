@@ -1125,6 +1125,39 @@ const layer = Layer.effect(
                 callID: orphan.callID,
               })
             }
+            // Give plugins a chance to keep the turn alive (for example to run a
+            // check and hand its findings back to the model). Errored turns and
+            // runs that reached the agent's step limit always stop, so a plugin
+            // cannot extend a run past that limit.
+            const agent = yield* agents.get(lastUser.agent)
+            const stopping: { continue: boolean; message?: string } = { continue: false }
+            if (!lastAssistant.error && step < (agent?.steps ?? Infinity))
+              yield* plugin.trigger(
+                "experimental.session.stopping",
+                { sessionID, messageID: lastAssistant.id },
+                stopping,
+              )
+            if (stopping.continue && stopping.message) {
+              const continueMsg = yield* sessions.updateMessage({
+                id: MessageID.ascending(),
+                role: "user",
+                sessionID,
+                time: { created: Date.now() },
+                agent: lastUser.agent,
+                model: lastUser.model,
+              })
+              yield* sessions.updatePart({
+                id: PartID.ascending(),
+                messageID: continueMsg.id,
+                sessionID,
+                type: "text",
+                synthetic: true,
+                text: stopping.message,
+                time: { start: Date.now(), end: Date.now() },
+              })
+              yield* Effect.logInfo("loop continued by plugin", { "session.id": sessionID, step })
+              continue
+            }
             yield* Effect.logInfo("exiting loop", { "session.id": sessionID })
             break
           }

@@ -387,3 +387,30 @@ Format as a structured prompt that a new agent can use to resume work.
 ```
 
 When `output.prompt` is set, it completely replaces the default compaction prompt. The `output.context` array is ignored in this case.
+
+---
+
+### Keep the agent working
+
+Run a check when the agent is about to end its turn and hand the result back to it:
+
+```ts title=".opencode/plugins/stopping.ts"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const StoppingPlugin: Plugin = async (ctx) => {
+  const checked = new Set<string>()
+  return {
+    "experimental.session.stopping": async (input, output) => {
+      // Only run the check once per session so the loop cannot run forever
+      if (checked.has(input.sessionID)) return
+      checked.add(input.sessionID)
+      const result = await ctx.$`npm run typecheck`.nothrow().quiet()
+      if (result.exitCode === 0) return
+      output.continue = true
+      output.message = `Type check failed, fix these errors:\n${result.stderr.toString()}`
+    },
+  }
+}
+```
+
+The `experimental.session.stopping` hook fires when the assistant's last message finished without tool calls and the loop is about to end. Setting `output.continue` to `true` together with `output.message` appends the message as a synthetic user message and runs another step. The hook is not called for turns that ended with an error or once the agent's `steps` limit is reached. A plugin that always continues keeps the loop running until that limit, so keep your own stopping condition.

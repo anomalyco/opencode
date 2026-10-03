@@ -329,6 +329,20 @@ export interface Hooks {
     output: { text: string },
   ) => Promise<void>
   /**
+   * Called when the agent loop is about to end because the assistant's last
+   * message finished without tool calls. Set `continue` to `true` and provide
+   * a `message` to append it as a synthetic user message and run another
+   * step instead of ending the turn.
+   *
+   * Not called for turns that ended with an error or once the agent's `steps`
+   * limit is reached. A plugin that always continues keeps the loop running
+   * until that limit, so plugins must keep their own stopping condition.
+   */
+  "experimental.session.stopping"?: (
+    input: { sessionID: string; messageID: string },
+    output: { continue: boolean; message?: string },
+  ) => Promise<void>
+  /**
    * Modify tool definitions (description and parameters) sent to LLM
    */
   "tool.definition"?: (input: { toolID: string }, output: { description: string; parameters: any }) => Promise<void>
