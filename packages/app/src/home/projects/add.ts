@@ -5,7 +5,9 @@ export function addProjects(context: ServerCtx, directories: string[]) {
   if (!directory) return
 
   directories.forEach((item) => {
-    if (context.projects.list().some((project) => project.worktree === item)) return
+    // Compare against opened projects only: list() also contains server-known entries,
+    // and an explicit add must still persist the directory so it is no longer appended-only.
+    if (context.projects.opened().some((project) => project.worktree === item)) return
     const location = { directory: item }
     void context.sdk.api.file
       .list({ path: ".", location })
