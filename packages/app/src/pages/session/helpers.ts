@@ -20,6 +20,7 @@ type TabsInput = {
   review?: Accessor<boolean>
   hasReview?: Accessor<boolean>
   fileBrowser?: Accessor<boolean>
+  customTab?: (tab: string) => boolean
 }
 
 export const getSessionKey = (dir: string | undefined, id: string | undefined) => `${dir ?? ""}${id ? `/${id}` : ""}`
@@ -32,6 +33,7 @@ export const createSessionTabs = (input: TabsInput) => {
   const review = input.review ?? (() => false)
   const hasReview = input.hasReview ?? (() => false)
   const fileBrowser = input.fileBrowser ?? (() => false)
+  const customTab = input.customTab ?? (() => false)
   const contextOpen = createMemo(() => input.tabs().active() === "context" || input.tabs().all().includes("context"))
   const openFileOpen = createMemo(
     () =>
@@ -56,17 +58,23 @@ export const createSessionTabs = (input: TabsInput) => {
     emptyTabs,
     { equals: same },
   )
-  const openedTabs = createMemo(() => panelTabs().filter((tab) => tab !== SESSION_OPEN_FILE_TAB), emptyTabs, {
-    equals: same,
-  })
+  const openedTabs = createMemo(
+    () => panelTabs().filter((tab) => tab !== SESSION_OPEN_FILE_TAB && !customTab(tab)),
+    emptyTabs,
+    {
+      equals: same,
+    },
+  )
+  const customTabs = createMemo(() => panelTabs().filter(customTab), emptyTabs, { equals: same })
   const activeTab = createMemo(() => {
     const active = input.tabs().active()
     if (active === "context") return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
     if (active === "review" && review()) return active
     if (active && input.pathFromTab(active)) return input.normalizeTab(active)
+    if (active && customTab(active)) return active
 
-    const first = openedTabs()[0]
+    const first = panelTabs().find((tab) => tab !== SESSION_OPEN_FILE_TAB)
     if (first) return first
     if (contextOpen()) return "context"
     if (review() && hasReview()) return "review"
@@ -81,6 +89,7 @@ export const createSessionTabs = (input: TabsInput) => {
     const active = activeTab()
     if (active === "context") return active
     if (active === SESSION_OPEN_FILE_TAB && openFileOpen()) return active
+    if (customTab(active)) return active
     if (!openedTabs().includes(active)) return
     return active
   })
@@ -90,6 +99,7 @@ export const createSessionTabs = (input: TabsInput) => {
     openFileOpen,
     panelTabs,
     openedTabs,
+    customTabs,
     activeTab,
     activeFileTab,
     closableTab,
