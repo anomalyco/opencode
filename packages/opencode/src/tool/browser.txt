@@ -1,0 +1,27 @@
+Drive a real browser (Playwright/Chromium) to verify web applications end to end. A web task is NEVER complete because the code compiled or unit tests passed — verification happens in the browser, and screenshots/console/network evidence accompany every claim.
+
+Actions:
+- open: launch a browser session (idempotent; with url, navigates immediately). headless defaults to true.
+- close: shut the browser down and clear buffered logs. Idempotent.
+- goto: navigate to url (required); reports final URL and title.
+- back / forward: history navigation.
+- click: click the element matching selector (CSS). Auto-waits for actionability.
+- fill: type value into the input/textarea matched by selector. Empty value clears the field.
+- select: choose the <option> matching value (value or label) in the <select> matched by selector.
+- upload: attach the local file at value (absolute path) to input[type=file] matched by selector.
+- screenshot: PNG of the viewport as a file attachment; fullPage=true captures the whole scrollable page; path=<file> saves to disk instead of attaching.
+- snapshot: page URL, title, and full HTML for DOM analysis.
+- eval: evaluate the JavaScript expression in code inside the PAGE context only (returns its JSON value).
+- console: read and clear buffered console messages and uncaught page errors since the last read.
+- network: read and clear buffered network responses and failures since the last read.
+- downloads: read and clear completed downloads (saved under the system temp dir).
+- viewport: set responsive size with width and height; without them, report the current size.
+- wait: wait for selector; if selector is omitted, wait timeoutMs milliseconds (default 1000, max 30000).
+
+Permission: open, goto, and eval request permission under the "browser" permission (pattern = URL when given). All other actions run inside the already-approved session.
+
+Notes:
+- One browser session per workspace. Actions other than open/close fail with a clear error when no session is open.
+- console/network/downloads drain on read, so evidence is never repeated across reads.
+- If Playwright is not installed, the tool fails with installation instructions — report that honestly; never simulate browser results.
+- timeoutMs bounds navigation and interaction actions (default 30000).
