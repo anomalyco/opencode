@@ -599,3 +599,81 @@ it.effect("forked session compaction reuses the fork root prompt cache key", () 
     expect(requests[0]?.promptCacheKey).toBe(rootID)
   }),
 )
+
+it.effect("summary compaction uses the compaction model and fits its window", () =>
+  Effect.gen(function* () {
+    requests = []
+    const store = yield* SessionStore.Service
+    const sessionID = Session.ID.make("ses_compaction_model")
+    const session = yield* insertSession(sessionID)
+    const summaryModel = SessionRunnerModel.resolved(
+      LanguageModel.make({ id: "compaction-model", provider: "other", route: OpenAIChat.route }),
+      {
+        capabilities: { tools: true, input: ["text"], output: ["text"] },
+        cost: [],
+        limit: { context: 50_000, output: 32_000 },
+      },
+    )
+    const messages = [
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "Summarize with the compaction model.",
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+    ]
+    const compaction = yield* SessionCompaction.Service
+    const inputID = SessionMessage.ID.make("msg_compaction_model")
+    const bus = yield* Bus.Service
+    yield* bus.publish(SessionEvent.Compaction.Started, { sessionID, reason: "manual", recent: "", inputID })
+    expect(
+      yield* compaction.compact({ reason: "manual", context: loaded(session, messages), inputID, summaryModel }),
+    ).toEqual({ status: "completed" })
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]?.model).toBe(summaryModel.model)
+    // The 16k reserve of the smaller window sets the output limit, not the session model's 20k.
+    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 16_000 }))
+    expect(yield* store.context(sessionID)).toMatchObject([
+      {
+        type: "compaction",
+        model: { providerID: "other", id: "compaction-model" },
+        summary: "## Objective\n- manual summary",
+        // The compaction model is free, unlike the session model.
+        cost: 0,
+      },
+    ])
+  }),
+)
+
+it.effect("native compaction stays on the session model when a compaction model is set", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    const session = yield* insertSession(Session.ID.make("ses_native_compaction_model"))
+    const messages = [
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text: "Compact this natively.",
+        time: { created: DateTime.makeUnsafe(0) },
+      }),
+    ]
+    const summaryModel = SessionRunnerModel.resolved(
+      LanguageModel.make({ id: "compaction-model", provider: "other", route: OpenAIChat.route }),
+      { capabilities: resolved.capabilities, cost: [], limit: resolved.limit },
+    )
+    expect(
+      yield* compaction.compact({
+        reason: "manual",
+        context: { ...loaded(session, messages), model: { ...resolved, compaction: { type: "native" } } },
+        inputID: SessionMessage.ID.create(),
+        summaryModel,
+      }),
+    ).toMatchObject({
+      status: "failed",
+      error: { message: "Native compaction is not supported for test/openai-chat" },
+    })
+    expect(requests).toHaveLength(0)
+  }),
+)
