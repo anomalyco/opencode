@@ -8,6 +8,7 @@ import { useToast } from "./toast"
 import { useClipboard } from "../context/clipboard"
 import { useConfig } from "../config"
 import { copy, copyOnSelectRelease } from "../util/selection"
+import type { SurfaceName } from "@opencode/theme/tui"
 
 export type DialogSize = "medium" | "large" | "xlarge"
 
@@ -20,17 +21,18 @@ export function dialogWidth(size: DialogSize) {
 export function Dialog(
   props: ParentProps<{
     size?: DialogSize
+    surface?: SurfaceName
     centered?: boolean
     onClose: () => void
   }>,
 ) {
   const dimensions = useTerminalDimensions()
-  const theme = useTheme().surface("dialog")
+  const theme = useTheme().surface(props.surface ?? "dialog")
   const renderer = useRenderer()
 
   let dismiss = false
   return (
-    <ThemeContextProvider context="dialog">
+    <ThemeContextProvider context={props.surface ?? "dialog"}>
       <box
       onMouseDown={() => {
         dismiss = !!renderer.getSelection()
@@ -81,6 +83,7 @@ function init() {
       key?: unknown
     }[],
     size: "medium" as DialogSize,
+    surface: "dialog" as SurfaceName,
     centered: false,
   })
 
@@ -167,7 +170,7 @@ function init() {
       })
       refocus()
     },
-    replace(input: any, onClose?: () => void, options?: { key?: unknown; size?: DialogSize }) {
+    replace(input: any, onClose?: () => void, options?: { key?: unknown; size?: DialogSize; surface?: SurfaceName }) {
       if (store.stack.length === 0) {
         focus = renderer.currentFocusedRenderable
         focus?.blur()
@@ -177,6 +180,7 @@ function init() {
       }
       batch(() => {
         setStore("size", options?.size ?? "medium")
+        setStore("surface", options?.surface ?? "dialog")
         setStore("centered", false)
         setStore("stack", [
           {
@@ -192,6 +196,9 @@ function init() {
     },
     get size() {
       return store.size
+    },
+    get surface() {
+      return store.surface
     },
     get centered() {
       return store.centered
@@ -240,7 +247,7 @@ export function DialogProvider(props: ParentProps) {
         }
       >
         <Show when={value.stack.length}>
-          <Dialog onClose={() => value.clear()} size={value.size} centered={value.centered}>
+            <Dialog onClose={() => value.clear()} size={value.size} surface={value.surface} centered={value.centered}>
             {value.stack.at(-1)!.element}
           </Dialog>
         </Show>

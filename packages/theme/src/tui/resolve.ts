@@ -77,6 +77,7 @@ function resolveExpandedTheme(definition: ThemeDefinition): ResolvedTheme {
     surface: (name) => views[name],
   })
   views.dialog = definition["@dialog"] ? view(contextualize(base, definition["@dialog"])) : view(base)
+  views.palette = definition["@palette"] ? view(contextualize(base, definition["@palette"])) : views.dialog
   return view(base)
 }
 

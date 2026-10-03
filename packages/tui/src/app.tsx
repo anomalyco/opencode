@@ -699,7 +699,7 @@ function App() {
         category: "System",
         palette: undefined,
         run: () => {
-          dialog.replace(() => <CommandPaletteDialog />)
+          dialog.replace(() => <CommandPaletteDialog />, undefined, { surface: "palette" })
         },
       },
       {
