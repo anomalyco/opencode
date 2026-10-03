@@ -966,14 +966,6 @@ export function Session(props: {
       },
     },
     {
-      title: "Unshare session",
-      id: "session.unshare",
-      group: "Session",
-      enabled: false,
-      slash: { name: "unshare" },
-      run: () => unavailable("Unsharing"),
-    },
-    {
       title: "Undo previous message",
       id: "session.undo",
       group: "Session",
