@@ -1,4 +1,5 @@
 import { createMiddleware } from "@solidjs/start/middleware"
+import { isSourceModel } from "@opencode-ai/stats-core/domain/public-model"
 import {
   compareMarkdown,
   homeJson,
@@ -44,6 +45,14 @@ export default createMiddleware({
     const path = strip(url.pathname)
     const parsed = parsePath(path)
     if (!parsed) return
+    if (
+      (parsed.target.kind === "model" && isSourceModel(parsed.target.lab, parsed.target.model)) ||
+      (parsed.target.kind === "compare" &&
+        parsed.target.params.length === 4 &&
+        (isSourceModel(parsed.target.params[0], parsed.target.params[1]) ||
+          isSourceModel(parsed.target.params[2], parsed.target.params[3])))
+    )
+      return new Response(null, { status: 404, headers: { "Cache-Control": "no-store" } })
     const negotiated = !parsed.format && prefersMarkdown(request.headers.get("accept"))
     const format = parsed.format ?? (negotiated ? "markdown" : undefined)
 

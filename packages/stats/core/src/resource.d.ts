@@ -2,6 +2,10 @@ import "sst/resource"
 
 declare module "sst/resource" {
   export interface Resource {
+    StatsPublicModelAliases: {
+      type: "sst.sst.Secret"
+      value: string
+    }
     R2Sql: {
       accountId: string
       bucket: string

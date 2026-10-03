@@ -3,6 +3,7 @@ import { Effect } from "effect"
 import { Resource } from "sst/resource"
 import type { ModelStatMetric } from "./model"
 import { RETIRED_STAT_PROVIDERS, statProvider } from "./model-normalization"
+import { publicModelName, sourceModelName } from "./public-model"
 import { isMissingRetentionTable } from "./retention"
 import { DATA_SITE_TIERS, normalizeTier } from "./stat"
 
@@ -218,13 +219,16 @@ export function getStatsModelData(
       const window = modelRowsWindow(modelRows, "2M")
       const resolvedProvider = resolveModelProvider(resolvedModel, normalized, provider)
       const countryRows = window
-        ? await listCountryTotals(window, { model: resolvedModel, provider: resolvedProvider })
+        ? await listCountryTotals(window, {
+            model: sourceModelName(resolvedProvider ?? "unknown", resolvedModel),
+            provider: resolvedProvider,
+          })
         : []
       return buildStatsModelData(
         resolvedModel,
         modelRows,
         countryRows.length === 0 && window && resolvedProvider && resolvedProvider !== "unknown"
-          ? await listCountryTotals(window, { model: resolvedModel, provider: "unknown" })
+          ? await listCountryTotals(window, { model: sourceModelName("unknown", resolvedModel), provider: "unknown" })
           : countryRows,
         provider,
         retentionRows,
@@ -442,7 +446,7 @@ export function buildStatsHomeData(
   }
 }
 
-function buildStatsModelData(
+export function buildStatsModelData(
   modelParam: string,
   modelRows: ModelStatMetric[],
   countryRows: CountryTotalRow[],
@@ -603,9 +607,10 @@ export function buildRetentionEntries(rows: RetentionMetricRow[]): RetentionEntr
   const aggregate = rows
     .filter((row) => cohortDates.includes(row.cohortDate))
     .reduce<Map<string, Omit<RetentionEntry, "author" | "rate" | "rank">>>((result, row) => {
-      const current = result.get(row.model)
-      result.set(row.model, {
-        model: row.model,
+      const model = publicModelName(row.provider, row.model)
+      const current = result.get(model)
+      result.set(model, {
+        model,
         provider: current?.provider ?? row.provider,
         eligibleUserWeeks: (current?.eligibleUserWeeks ?? 0) + row.eligibleUsers,
         retainedUserWeeks: (current?.retainedUserWeeks ?? 0) + row.retainedUsers,
@@ -1024,7 +1029,7 @@ function normalizeStatRow(row: ModelStatMetric): StatMetricRow[] {
         row.provider === "unknown" || RETIRED_STAT_PROVIDERS.includes(row.provider.toLowerCase())
           ? statProvider(row.model, undefined, row.provider) || "unknown"
           : row.provider,
-      model: row.model || "unknown",
+      model: publicModelName(row.provider, row.model || "unknown"),
     },
   ]
 }

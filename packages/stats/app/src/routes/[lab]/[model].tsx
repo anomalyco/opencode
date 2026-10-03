@@ -79,7 +79,11 @@ export default function StatsModel() {
   const [themePreference, setThemePreference] = createSignal<ThemePreference>("system")
   const canonicalModel = createMemo(() => statModel(stats()?.model ?? modelParam(), undefined))
   const modelName = createMemo(
-    () => catalogEntry()?.name ?? publicModelName(canonicalModel()) ?? i18n.t("model.fallback"),
+    () =>
+      catalogEntry()?.name ??
+      (canonicalModel() === glmFlashModel ? publicModelName(canonicalModel()) : stats()?.model) ??
+      publicModelName(canonicalModel()) ??
+      i18n.t("model.fallback"),
   )
   const lab = createMemo(() => catalogEntry()?.lab ?? stats()?.provider ?? labParam())
   const catalogLabs = createMemo(() => page()?.catalog.labs.map((item) => item.id) ?? [])

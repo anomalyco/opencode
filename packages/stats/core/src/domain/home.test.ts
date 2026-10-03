@@ -4,8 +4,9 @@ import type { RetentionMetricRow } from "./home"
 
 process.env.SST_RESOURCE_App = JSON.stringify({ name: "opencode", stage: "test" })
 process.env.SST_RESOURCE_StatsDatabase = JSON.stringify({ url: "mysql://localhost/stats" })
+process.env.SST_RESOURCE_StatsPublicModelAliases = JSON.stringify({ value: '{"unknown/internal-code":"Public Model"}' })
 
-const { buildRetentionEntries, buildStatsHomeData, normalizeStatRows } = await import("./home")
+const { buildRetentionEntries, buildStatsHomeData, buildStatsModelData, normalizeStatRows } = await import("./home")
 
 test("daily rankings use the latest day while weekly rankings retain seven days and their previous-period change", () => {
   const rows = Array.from({ length: 14 }, (_, index) =>
@@ -78,6 +79,49 @@ describe("model usage attribution", () => {
   test("keeps unknown usage when a different lab has the same model name", () => {
     expect(normalizeStatRows([row, { ...row, provider: "another-lab" }])).toHaveLength(2)
   })
+})
+
+test("public model aliases cover historical rows, rankings, model data, peers, and retention", () => {
+  const row: ModelStatMetric = {
+    periodKey: "2026-09-27",
+    updatedAt: new Date("2026-09-28T00:00:00.000Z"),
+    tier: "Go",
+    provider: "unknown",
+    model: "internal-code",
+    sessions: 2,
+    uniqueUsers: 1,
+    inputTokens: 40,
+    outputTokens: 60,
+    reasoningTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 100,
+    inputCostMicrocents: 0,
+    outputCostMicrocents: 0,
+    totalCostMicrocents: 0,
+  }
+  const retention: RetentionMetricRow = {
+    cohortDate: "2026-09-20",
+    updatedAt: Date.UTC(2026, 8, 27),
+    provider: "unknown",
+    model: "internal-code",
+    eligibleUsers: 200,
+    retainedUsers: 100,
+  }
+  const home = buildStatsHomeData([row], [], [retention])
+  const model = buildStatsModelData("public-model", [row], [], "unknown", [retention])
+
+  expect(normalizeStatRows([row])).toMatchObject([{ model: "Public Model", provider: "unknown" }])
+  expect(home.leaderboard.Go["1W"][0]?.model).toBe("Public Model")
+  expect(home.usage.Go["2M"].flatMap((day) => day.segments).map((item) => item.model)).toContain("Public Model")
+  expect(home.retention[0]?.model).toBe("Public Model")
+  expect(model).toMatchObject({
+    model: "Public Model",
+    slug: "public-model",
+    weeklyRetention: { model: "Public Model" },
+  })
+  expect(model?.peers[0]?.model).toBe("Public Model")
+  expect(buildStatsModelData("internal-code", [row], [], "unknown", [retention])).toBeNull()
+  expect(JSON.stringify({ home, model })).not.toContain("internal-code")
 })
 
 describe("retention aggregates", () => {

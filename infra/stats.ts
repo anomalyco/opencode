@@ -71,7 +71,7 @@ export const app = new sst.cloudflare.x.SolidStart("Stats", {
   path: "packages/stats/app",
   buildCommand: "bun run build",
   domain: `stats.${domain}`,
-  link: [database, EMAILOCTOPUS_API_KEY],
+  link: [database, EMAILOCTOPUS_API_KEY, new sst.Secret("StatsPublicModelAliases", "{}")],
   environment: {
     PUBLIC_URL: `https://${domain}/data`,
   },
