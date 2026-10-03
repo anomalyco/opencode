@@ -1216,3 +1216,72 @@ it.instance(
   }),
   { git: true },
 )
+
+it.instance(
+  "patch restricts the file list to tool-reported paths",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      yield* write(`${tmp.path}/touched.txt`, "session edit")
+      yield* write(`${tmp.path}/foreign.txt`, "unrelated edit")
+      const patch = yield* snapshot.patch(before, [fwd(tmp.path, "touched.txt")])
+      expect(patch.files).toContain(fwd(tmp.path, "touched.txt"))
+      expect(patch.files).not.toContain(fwd(tmp.path, "foreign.txt"))
+      yield* snapshot.revert([patch])
+      expect(yield* readText(`${tmp.path}/foreign.txt`)).toBe("unrelated edit")
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
+  "patch with an empty tool list produces no files",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      yield* write(`${tmp.path}/touched.txt`, "session edit")
+      expect((yield* snapshot.patch(before, [])).files).toEqual([])
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
+  "revert refuses when another run tracked since the target snapshot",
+  withTrackedSnapshot(({ tmp, snapshot, before }) =>
+    Effect.gen(function* () {
+      const target = before!
+      yield* write(`${tmp.path}/inbetween.txt`, "created later")
+      // A second run captures the store in between; then "my-run" tries to revert
+      // its earlier snapshot including the late file as a deletion candidate. The
+      // ownership guard must refuse, keeping the file on disk.
+      const after = yield* snapshot.track("other-run")
+      expect(after).toBeTruthy()
+      yield* snapshot.revert([{ hash: target, files: [fwd(tmp.path, "inbetween.txt")] }], "my-run")
+      expect(yield* readText(`${tmp.path}/inbetween.txt`)).toBe("created later")
+    }),
+  ),
+  { git: true },
+)
+
+it.instance(
+  "revert refuses to delete files when the delete budget is exceeded",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    yield* write(`${tmp.path}/a.txt`, "recover-me")
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    // 105 deletion candidates, all absent from the target snapshot; the revert
+    // must cap deletions and keep the 5 files created beyond the cap intact.
+    const many = Array.from({ length: 105 }, (_, i) => fwd(tmp.path, `gone-${i}.txt`))
+    yield* snapshot.revert([{ hash: before!, files: many }])
+    expect(yield* exists(`${tmp.path}/a.txt`)).toBe(true)
+    const survivors = Array.from({ length: 5 }, (_, i) => fwd(tmp.path, `survivor-${i}.txt`))
+    yield* Effect.all(
+      survivors.map((file, i) => write(file, `keep-${i}`)),
+      { concurrency: "unbounded" },
+    )
+    yield* snapshot.revert([{ hash: before!, files: [...many, ...survivors] }])
+    for (const file of survivors) expect(yield* exists(file)).toBe(true)
+  }),
+  { git: true },
+)
