@@ -4,7 +4,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Effect, Schedule, Schema } from "effect"
+import { Duration, Effect, Exit, Schedule, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -144,6 +144,51 @@ describe("session.retry.delay", () => {
       )
 
       expect(attempts).toStrictEqual([1, 2, 3, 4, 5])
+    }),
+  )
+
+  it.instance("policy stops when the provider asks for a wait past the ceiling", () =>
+    Effect.gen(function* () {
+      const seen: { message: string; reason?: string }[] = []
+      // opencode zen answers an exhausted free tier with 429 and a retry-after pointing
+      // at the next daily reset, so the wait can be most of a day
+      const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+        new SessionV1.APIError({
+          message: "Rate limit exceeded. Please try again later.",
+          statusCode: 429,
+          isRetryable: true,
+          responseHeaders: { "retry-after": "43200" },
+          responseBody: JSON.stringify({ type: "error", error: { type: "FreeUsageLimitError" } }),
+        }).toObject(),
+      )
+      const step = yield* Schedule.toStep(
+        SessionRetry.policy({
+          provider: "opencode",
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+          set: (info) =>
+            Effect.sync(() => {
+              seen.push({ message: info.message, reason: info.action?.reason })
+            }),
+        }),
+      )
+
+      expect(Exit.isFailure(yield* Effect.exit(step(Date.now(), error)))).toBe(true)
+      expect(seen).toStrictEqual([{ message: SessionRetry.GO_UPSELL_MESSAGE, reason: "free_tier_limit" }])
+    }),
+  )
+
+  it.instance("policy keeps retrying a wait within the ceiling", () =>
+    Effect.gen(function* () {
+      const error = apiError({ "retry-after-ms": String(SessionRetry.RETRY_MAX_WAIT) })
+      const step = yield* Schedule.toStep(
+        SessionRetry.policy({
+          provider: "test",
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+          set: () => Effect.void,
+        }),
+      )
+
+      expect(Duration.toMillis((yield* step(Date.now(), error))[1])).toBe(SessionRetry.RETRY_MAX_WAIT)
     }),
   )
 })
