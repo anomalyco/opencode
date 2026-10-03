@@ -50,17 +50,17 @@ export class Handler {
 
   private async process(event: PermissionEvent) {
     const permission = event.properties
-    const session = await Effect.runPromise(this.input.session.tryGet(permission.sessionID))
-    if (!session) return
+    const route = await this.resolveRoute(permission.sessionID)
+    if (!route) return
 
     if (!this.input.connection.requestPermission) {
-      await this.reply(permission.id, "reject", session.cwd)
+      await this.reply(permission.id, "reject", route.directory)
       return
     }
 
     const result = await this.input.connection
       .requestPermission({
-        sessionId: permission.sessionID,
+        sessionId: route.session.id,
         toolCall: await permissionToolCall({
           toolCallId: permission.tool?.callID ?? permission.id,
           toolName: permission.permission,
@@ -69,7 +69,7 @@ export class Handler {
         options: permissionOptions,
       })
       .catch(async () => {
-        await this.reply(permission.id, "reject", session.cwd)
+        await this.reply(permission.id, "reject", route.directory)
         return undefined
       })
 
@@ -77,15 +77,50 @@ export class Handler {
 
     const reply = selectedReply(result)
     if (reply !== "once" && reply !== "always") {
-      await this.reply(permission.id, "reject", session.cwd)
+      await this.reply(permission.id, "reject", route.directory)
       return
     }
 
     if (permission.permission === "edit") {
-      await this.writeProposedEdit(session.id, permission.metadata).catch(() => {})
+      await this.writeProposedEdit(route.session.id, permission.metadata).catch(() => {})
     }
 
-    await this.reply(permission.id, reply, session.cwd)
+    await this.reply(permission.id, reply, route.directory)
+  }
+
+  private async resolveRoute(sessionId: string): Promise<{ session: ACPSession.Info; directory: string } | undefined> {
+    const session = await Effect.runPromise(this.input.session.tryGet(sessionId))
+    if (session) return { session, directory: session.cwd }
+
+    const child = await this.sessionInfo(sessionId)
+    if (!child?.parentID) return
+    return this.resolveParentRoute(child.parentID, child.directory, child.directory)
+  }
+
+  private async resolveParentRoute(
+    sessionId: string,
+    directory: string,
+    childDirectory: string,
+  ): Promise<{ session: ACPSession.Info; directory: string } | undefined> {
+    const session = await Effect.runPromise(this.input.session.tryGet(sessionId))
+    if (session) return { session, directory: childDirectory }
+
+    const parent = await this.sessionInfo(sessionId, directory)
+    if (!parent?.parentID) return
+    return this.resolveParentRoute(parent.parentID, parent.directory, childDirectory)
+  }
+
+  private async sessionInfo(sessionId: string, directory?: string) {
+    return this.input.sdk.session
+      .get(
+        {
+          sessionID: sessionId,
+          ...(directory ? { directory } : {}),
+        },
+        { throwOnError: true },
+      )
+      .then((response) => response.data)
+      .catch(() => undefined)
   }
 
   private async reply(requestID: string, reply: Reply, directory: string) {
