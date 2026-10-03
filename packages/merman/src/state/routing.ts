@@ -327,6 +327,7 @@ function sideParallelTargetApproach(
     spatialPathClaim(`side-target:${transition.from}:${transition.to}`, "side-target", "route", points)
 
   if (
+    from.centerY !== to.centerY &&
     space.isFree(
       claim([
         { x: railX, y: to.centerY },
@@ -486,6 +487,17 @@ export function createStateTransitionRoutePlans(
       const fromParent = statesById.get(transition.from)?.parentId
       const toParent = statesById.get(transition.to)?.parentId
       if (fromParent && toParent && fromParent !== toParent) {
+        if (from.centerY === to.centerY) {
+          const railY = allocateBottomRail()
+          return [
+            {
+              ...base,
+              kind: "bottom-parallel",
+              railY,
+              approachX: bottomApproachX(diagram, transition, from, to, bounds, railY),
+            },
+          ]
+        }
         return [sideParallel()]
       }
       if (verticalCorridorCrossesUnrelatedState(diagram, transition, from, to, bounds)) {
@@ -783,12 +795,14 @@ function addSideParallelTransition(builder: StateTransitionRenderBuilder): void 
   const startX = from.left + from.width
   const startY = from.centerY
   const endY = targetApproach === "top" ? to.top - 2 : targetApproach === "bottom" ? to.top + to.height + 1 : to.centerY
-  const verticalStep: 1 | -1 = startY <= endY ? 1 : -1
   addRightDeparture(builder, from)
   addHorizontalLine(builder, startX, railX - 1, startY, 1)
-  addCell(builder, { x: railX, y: startY, char: verticalStep === 1 ? "╮" : "╯" })
-  for (let y = startY + verticalStep; y !== endY; y += verticalStep) addCell(builder, { x: railX, y, char: "│" })
-  addCell(builder, { x: railX, y: endY, char: verticalStep === 1 ? "╯" : "╮" })
+  if (startY !== endY) {
+    const verticalStep: 1 | -1 = startY <= endY ? 1 : -1
+    addCell(builder, { x: railX, y: startY, char: verticalStep === 1 ? "╮" : "╯" })
+    for (let y = startY + verticalStep; y !== endY; y += verticalStep) addCell(builder, { x: railX, y, char: "│" })
+    addCell(builder, { x: railX, y: endY, char: verticalStep === 1 ? "╯" : "╮" })
+  }
   if (targetApproach) {
     const targetX = innerConnectorX(to, from.centerX)
     for (let x = railX - 1; x > targetX; x--) addCell(builder, { x, y: endY, char: "─" })

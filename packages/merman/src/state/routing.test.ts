@@ -690,4 +690,30 @@ describe("reconverging vertical elbows", () => {
     expect(entering.label!.y).toBeLessThan(enteringHorizontalY)
     expect(leaving.label!.y).toBeLessThan(leavingHorizontalY)
   })
+
+  test("routes side-parallel transitions between states sharing the same vertical row without infinite allocation", () => {
+    const diagram: StateVisibleDiagram = {
+      direction: "TB",
+      states: [
+        { id: "A", label: "A", kind: "state", parentId: "P1" },
+        { id: "B", label: "B", kind: "state", parentId: "P2" },
+      ],
+      transitions: [{ from: "A", to: "B", label: "" }],
+      composites: [
+        { id: "P1", label: "P1" },
+        { id: "P2", label: "P2" },
+      ],
+      notes: [],
+    }
+    const placements = new Map([
+      ["A", bounds("A", 4, 8)],
+      ["B", bounds("B", 22, 8)],
+    ])
+
+    const plans = createStateTransitionRenderPlans(diagram, placements, 29)
+    expect(plans).toHaveLength(1)
+    expect(plans[0]!.cells.length).toBeGreaterThan(0)
+    expect(plans[0]!.cells.length).toBeLessThan(100)
+  })
 })
+

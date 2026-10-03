@@ -1383,4 +1383,26 @@ stateDiagram-v2
       }
     }
   })
+
+  test("renders transitions between nested composite states sharing horizontal rows without looping", () => {
+    const source = `stateDiagram-v2
+direction TB
+A --> B
+A --> C
+state D {
+  state E {
+    B --> F
+  }
+  B --> C
+}`
+
+    const output = renderStateDiagram(source)
+    expect(output).toContain("A")
+    expect(output).toContain("B")
+    expect(output).toContain("C")
+    expect(output).toContain("D")
+    expect(output).toContain("E")
+    expect(output).toContain("F")
+  })
 })
+
