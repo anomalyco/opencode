@@ -804,9 +804,6 @@ const requireThinkingSignature = (request: LLMRequest) => {
   return true
 }
 
-// Mid-conversation system messages became available with Opus 4.8 and version
-// 5 of the other supported Claude families. Treat later family versions as
-// compatible without assuming that every Anthropic Messages model is Claude.
 // Opus 4.8 and every Claude 5 model accept mid-conversation system messages; later versions inherit support.
 const supportsNativeSystemUpdates = (request: LLMRequest) => {
   const version = claudeVersion(String(request.model.id))
@@ -820,20 +817,10 @@ const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
   return message.role === "assistant" && last?.type === "tool-call" && last.providerExecuted === true
 }
 
-const canUseNativeSystemUpdate = (request: LLMRequest, index: number) => {
-  const previous = request.messages[index - 1]
-  const next = request.messages[index + 1]
-  // Vertex currently rejects/404s for a system message after local tool results,
-  // so fold it into the user tool-result turn across continuations and history.
-  if (request.model.route.id === "google-vertex-messages" && previous?.role === "tool") return false
-  return (
-    previous !== undefined &&
-    previous.role !== "system" &&
-    (previous.role === "user" || previous.role === "tool" || endsInServerToolUse(previous)) &&
-    next?.role !== "system" &&
-    (next === undefined || next.role === "assistant")
-  )
-}
+// Released updates always sit directly before an assistant turn or at the end, so only the preceding
+// turn decides whether they can be native system messages.
+const canUseNativeSystemUpdates = (previous: LLMRequest["messages"][number] | undefined) =>
+  previous !== undefined && (previous.role === "user" || previous.role === "tool" || endsInServerToolUse(previous))
 
 const splitsLocalToolResults = (messages: LLMRequest["messages"], index: number) => {
   const pending = new Set<string>()
@@ -868,6 +855,27 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
 ) {
   const messages: AnthropicMessage[] = []
   const providerMetadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
+  const native = supportsNativeSystemUpdates(request)
+  // Native system messages must follow a user turn and precede an assistant turn or end the request, so
+  // text updates wait for the next assistant turn and are released together as one system section.
+  const held: Array<LLMRequest["messages"][number]> = []
+  let lastTurn: LLMRequest["messages"][number] | undefined
+  const wrapSystemUpdate = Effect.fnUntraced(function* (message: LLMRequest["messages"][number]) {
+    const part = yield* ProviderShared.wrappedSystemUpdate("Anthropic Messages", message)
+    const block = { type: "text" as const, text: part.text, cache_control: cacheControl(breakpoints, part.cache) }
+    const last = messages.at(-1)
+    if (last?.role === "user") messages[messages.length - 1] = { role: "user", content: [...last.content, block] }
+    else messages.push({ role: "user", content: [block] })
+  })
+  const releaseSystemUpdates = Effect.fnUntraced(function* () {
+    const updates = held.splice(0)
+    if (updates.length === 0) return
+    if (canUseNativeSystemUpdates(lastTurn)) {
+      for (const update of updates) messages.push(yield* lowerNativeSystemUpdate(update, breakpoints))
+      return
+    }
+    for (const update of updates) yield* wrapSystemUpdate(update)
+  })
 
   for (const [index, message] of request.messages.entries()) {
     if (message.role === "system") {
@@ -879,16 +887,8 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
       }
       if (splitsLocalToolResults(request.messages, index))
         return yield* invalid("Anthropic Messages system updates cannot split a local tool call from its tool result")
-      if (supportsNativeSystemUpdates(request) && canUseNativeSystemUpdate(request, index)) {
-        messages.push(yield* lowerNativeSystemUpdate(message, breakpoints))
-        continue
-      }
-      const part = yield* ProviderShared.wrappedSystemUpdate("Anthropic Messages", message)
-      const block = { type: "text" as const, text: part.text, cache_control: cacheControl(breakpoints, part.cache) }
-      const previous = messages.at(-1)
-      if (previous?.role === "user")
-        messages[messages.length - 1] = { role: "user", content: [...previous.content, block] }
-      else messages.push({ role: "user", content: [block] })
+      if (native) held.push(message)
+      else yield* wrapSystemUpdate(message)
       continue
     }
 
@@ -906,7 +906,9 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         }
         return yield* ProviderShared.unsupportedContent("Anthropic Messages", "user", ["text", "media"])
       }
-      if (content.length > 0) messages.push({ role: "user", content })
+      if (content.length === 0) continue
+      messages.push({ role: "user", content })
+      lastTurn = message
       continue
     }
 
@@ -964,7 +966,10 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
           `Anthropic Messages assistant messages only support text, reasoning, and tool-call content for now`,
         )
       }
-      if (content.length > 0) messages.push({ role: "assistant", content })
+      if (content.length === 0) continue
+      yield* releaseSystemUpdates()
+      messages.push({ role: "assistant", content })
+      lastTurn = message
       continue
     }
 
@@ -980,11 +985,13 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
         cache_control: cacheControl(breakpoints, part.cache),
       })
     }
-    const previous = messages.at(-1)
-    if (previous?.role === "user" && previous.content.every((block) => block.type === "tool_result"))
-      messages[messages.length - 1] = { role: "user", content: [...previous.content, ...content] }
+    const last = messages.at(-1)
+    if (last?.role === "user" && last.content.every((block) => block.type === "tool_result"))
+      messages[messages.length - 1] = { role: "user", content: [...last.content, ...content] }
     else messages.push({ role: "user", content })
+    lastTurn = message
   }
+  yield* releaseSystemUpdates()
 
   return messages
 })

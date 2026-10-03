@@ -172,6 +172,33 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
+  it.effect("releases a held system update next to an effort marker as one valid section", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: opus5,
+          messages: [
+            Message.user("Fix it."),
+            Message.assistant("Done."),
+            lowFromHigh,
+            Message.system("Update."),
+            Message.user("Next."),
+          ],
+          providerOptions: { effort: "low" },
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "Fix it." }] },
+        { role: "assistant", content: [{ type: "text", text: "Done." }] },
+        { role: "system", content: [], output_config: { effort: "low" } },
+        { role: "user", content: [{ type: "text", text: "Next." }] },
+        { role: "system", content: [{ type: "text", text: "Update.", cache_control: undefined }] },
+      ])
+    }),
+  )
+
   it.effect("falls back to a plain top-level effort when history drifted from the current effort", () =>
     Effect.gen(function* () {
       const drifted = yield* compileRequest(
