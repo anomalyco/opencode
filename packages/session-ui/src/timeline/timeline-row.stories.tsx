@@ -3,6 +3,7 @@ import { createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionDocument } from "../document"
 import { SessionTimeline } from "./session-timeline"
+import { timelinePresets } from "./detail"
 import type { ReasoningMode } from "./projection"
 import { CurrentSessionProviders, CurrentSessionTimelineStory } from "../storybook/current-session-story"
 import {
@@ -621,4 +622,58 @@ export const InstructionsUpdatedMultiple = {
       width="600px"
     />
   ),
+}
+
+export const ErrorAndUpdates = {
+  render: () => {
+    const document = {
+      ...thinkingDocument,
+      status: { type: "idle" },
+      messages: [
+        {
+          id: "msg_user_shell_error",
+          type: "user",
+          text: "Check the shell command and its result.",
+          metadata: { agent: "build", model: STORY_MODEL },
+          time: { created: STORY_TIME },
+        },
+        {
+          id: "msg_shell_error",
+          type: "assistant",
+          agent: "build",
+          model: STORY_MODEL,
+          content: [
+            {
+              type: "tool",
+              id: "tool_shell_error",
+              name: "shell",
+              state: {
+                status: "completed",
+                input: { command: "cd ~/Documents/Local/opencode && ls packages/tui" },
+                content: [{ type: "text", text: "AGENTS.md\nbunfig.toml\nnode_modules\npackage.json\nsrc" }],
+                metadata: {},
+              },
+              time: { created: STORY_TIME + 100, ran: STORY_TIME + 150, completed: STORY_TIME + 300 },
+            },
+          ],
+          error: { type: "ProviderError", message: "getaddrinfo ENOTFOUND opencode.ai" },
+          time: { created: STORY_TIME + 50, completed: STORY_TIME + 400 },
+        },
+        {
+          id: "msg_after_error_updates",
+          type: "system",
+          description: "Instructions updated: core/codemode, core/mcp-guidance",
+          text: "Instructions updated: core/codemode, core/mcp-guidance",
+          time: { created: STORY_TIME + 500 },
+        },
+      ],
+    } satisfies SessionDocument
+    return (
+      <section class="mx-auto min-h-screen w-full max-w-[720px] bg-v2-background-bg-base p-6">
+        <CurrentSessionProviders document={document}>
+          <SessionTimeline document={document} timelineDetail={timelinePresets[1].value} />
+        </CurrentSessionProviders>
+      </section>
+    )
+  },
 }

@@ -676,6 +676,10 @@
   }
 }
 
+[data-component="collapsed-tool-group"][data-notices-only] > [data-component="collapsible"].tool-collapsible {
+  --tool-content-gap: 0px;
+}
+
 [data-component="context-tool-group-list"] {
   padding: 0;
   display: flex;
