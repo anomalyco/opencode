@@ -209,6 +209,7 @@ describe("ACP service sessions", () => {
         }
       }>
       prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
+      message?: (input: { sessionID: string; messageID: string }) => Promise<{ data: unknown }>
       sessionUpdate?: (update: SessionNotification) => Promise<void>
     },
   ) => {
@@ -258,6 +259,7 @@ describe("ACP service sessions", () => {
       session: {
         create: () => Promise.resolve({ data: { id: "ses_new" } }),
         get: options?.get ?? (() => Promise.resolve({ data: { id: "ses_loaded" } })),
+        message: options?.message ?? (() => Promise.resolve({ data: undefined })),
         list: (input: { directory?: string }) =>
           Promise.resolve({
             data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
@@ -1361,6 +1363,22 @@ describe("ACP service sessions", () => {
         called.resolve(undefined)
         return response.promise
       },
+      message: (input) =>
+        Promise.resolve({
+          data: {
+            info: { id: input.messageID, sessionID: input.sessionID, role: "assistant" },
+            parts: [
+              {
+                id: "part_reasoning",
+                sessionID: input.sessionID,
+                messageID: input.messageID,
+                type: "reasoning",
+                text: "",
+                time: { start: 1 },
+              },
+            ],
+          },
+        }),
       sessionUpdate: (notification) => {
         if (notification.update.sessionUpdate !== "agent_thought_chunk") return Promise.resolve()
         update.resolve(undefined)

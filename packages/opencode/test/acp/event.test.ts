@@ -167,7 +167,13 @@ function toolUpdated(part: ToolPart): Event {
   }
 }
 
-function assistantMessage(sessionID: string, messageID: string, partID: string, type: DeltaPartType) {
+function assistantMessage(
+  sessionID: string,
+  messageID: string,
+  partID: string,
+  type: DeltaPartType,
+  options: { summary?: boolean; text?: string } = {},
+) {
   return {
     info: {
       id: messageID,
@@ -180,6 +186,7 @@ function assistantMessage(sessionID: string, messageID: string, partID: string, 
       mode: "build",
       agent: "build",
       path: { cwd: "/workspace", root: "/workspace" },
+      ...(options.summary ? { summary: true } : {}),
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     },
@@ -190,14 +197,14 @@ function assistantMessage(sessionID: string, messageID: string, partID: string, 
             sessionID,
             messageID,
             type: "text",
-            text: "",
+            text: options.text ?? "",
           }
         : {
             id: partID,
             sessionID,
             messageID,
             type: "reasoning",
-            text: "",
+            text: options.text ?? "",
             time: { start: Date.now() },
           },
     ],
@@ -314,6 +321,7 @@ async function createKnownSession(
       partId: part.partId,
       partType: part.partType,
       role: part.role ?? "assistant",
+      summary: false,
     }),
   )
 }
@@ -366,6 +374,7 @@ describe("acp event routing", () => {
         partId: "part_second",
         partType: "reasoning",
         role: "assistant",
+        summary: false,
       }),
     )
 
@@ -781,5 +790,155 @@ describe("acp event routing", () => {
         { type: "content", content: { type: "image", mimeType: "image/png", data: image } },
       ],
     ])
+  })
+
+  it("filters live compaction summary text deltas", async () => {
+    const harness = createHarness({
+      msg_summary_text: assistantMessage("ses_summary_text", "msg_summary_text", "part_summary_text", "text", {
+        summary: true,
+      }),
+    })
+    await Effect.runPromise(harness.session.create({ id: "ses_summary_text", cwd: "/workspace" }))
+
+    await harness.subscription.handle(partUpdated("ses_summary_text", "msg_summary_text", "part_summary_text", "text"))
+    await harness.subscription.handle(
+      textDelta("ses_summary_text", "msg_summary_text", "part_summary_text", "internal compaction dump"),
+    )
+
+    expect(harness.updates).toHaveLength(0)
+  })
+
+  it("filters live compaction summary reasoning deltas", async () => {
+    const harness = createHarness({
+      msg_summary_reasoning: assistantMessage(
+        "ses_summary_reasoning",
+        "msg_summary_reasoning",
+        "part_summary_reasoning",
+        "reasoning",
+        { summary: true },
+      ),
+    })
+    await Effect.runPromise(harness.session.create({ id: "ses_summary_reasoning", cwd: "/workspace" }))
+
+    // reasoning part.updated caches an assistant role before the owning message is inspected
+    await harness.subscription.handle(
+      partUpdated("ses_summary_reasoning", "msg_summary_reasoning", "part_summary_reasoning", "reasoning"),
+    )
+    await harness.subscription.handle(
+      textDelta("ses_summary_reasoning", "msg_summary_reasoning", "part_summary_reasoning", "internal reasoning"),
+    )
+
+    expect(harness.updates).toHaveLength(0)
+  })
+
+  it("keeps filtering summary deltas across cache reuse and later part.updated events", async () => {
+    const harness = createHarness({
+      msg_summary_cache: assistantMessage("ses_summary_cache", "msg_summary_cache", "part_summary_cache", "reasoning", {
+        summary: true,
+      }),
+    })
+    await Effect.runPromise(harness.session.create({ id: "ses_summary_cache", cwd: "/workspace" }))
+
+    await harness.subscription.handle(textDelta("ses_summary_cache", "msg_summary_cache", "part_summary_cache", "a"))
+    await harness.subscription.handle(textDelta("ses_summary_cache", "msg_summary_cache", "part_summary_cache", "b"))
+    await harness.subscription.handle(
+      partUpdated("ses_summary_cache", "msg_summary_cache", "part_summary_cache", "reasoning"),
+    )
+    await harness.subscription.handle(textDelta("ses_summary_cache", "msg_summary_cache", "part_summary_cache", "c"))
+
+    expect(harness.updates).toHaveLength(0)
+  })
+
+  it("suppresses compaction summary text and reasoning during history replay", async () => {
+    const harness = createHarness()
+    await Effect.runPromise(harness.session.create({ id: "ses_summary_replay", cwd: "/workspace" }))
+
+    await harness.subscription.replayMessage(
+      assistantMessage("ses_summary_replay", "msg_summary_replay_text", "part_summary_replay_text", "text", {
+        summary: true,
+        text: "internal summary text",
+      }),
+    )
+    await harness.subscription.replayMessage(
+      assistantMessage(
+        "ses_summary_replay",
+        "msg_summary_replay_reasoning",
+        "part_summary_replay_reasoning",
+        "reasoning",
+        { summary: true, text: "internal summary reasoning" },
+      ),
+    )
+
+    expect(harness.updates).toHaveLength(0)
+  })
+
+  it("still forwards normal assistant replies after compaction", async () => {
+    const harness = createHarness({
+      msg_after_live: assistantMessage("ses_after_compaction", "msg_after_live", "part_after_live", "text"),
+    })
+    await Effect.runPromise(harness.session.create({ id: "ses_after_compaction", cwd: "/workspace" }))
+
+    await harness.subscription.replayMessage(
+      assistantMessage("ses_after_compaction", "msg_after_text", "part_after_text", "text", { text: "visible reply" }),
+    )
+    await harness.subscription.replayMessage(
+      assistantMessage("ses_after_compaction", "msg_after_reasoning", "part_after_reasoning", "reasoning", {
+        text: "visible thought",
+      }),
+    )
+    await harness.subscription.handle(
+      textDelta("ses_after_compaction", "msg_after_live", "part_after_live", "live reply"),
+    )
+
+    expect(harness.updates.map((update) => update.update)).toEqual([
+      {
+        sessionUpdate: "agent_message_chunk",
+        messageId: "msg_after_text",
+        content: { type: "text", text: "visible reply" },
+      },
+      {
+        sessionUpdate: "agent_thought_chunk",
+        messageId: "part_after_reasoning",
+        content: { type: "text", text: "visible thought" },
+      },
+      {
+        sessionUpdate: "agent_message_chunk",
+        messageId: "msg_after_live",
+        content: { type: "text", text: "live reply" },
+      },
+    ])
+  })
+
+  it("does not filter normal replies whose text contains summary", async () => {
+    const harness = createHarness({
+      msg_word: assistantMessage("ses_word", "msg_word", "part_word", "text"),
+    })
+    await Effect.runPromise(harness.session.create({ id: "ses_word", cwd: "/workspace" }))
+
+    await harness.subscription.handle(textDelta("ses_word", "msg_word", "part_word", "summary of the changes"))
+    await harness.subscription.replayMessage(
+      assistantMessage("ses_word", "msg_word_replay", "part_word_replay", "text", { text: "summary details" }),
+    )
+
+    expect(harness.updates.map((update) => update.update.sessionUpdate)).toEqual([
+      "agent_message_chunk",
+      "agent_message_chunk",
+    ])
+  })
+
+  it("isolates compaction summary filtering per session", async () => {
+    const harness = createHarness({
+      msg_iso_summary: assistantMessage("ses_iso_summary", "msg_iso_summary", "part_iso_summary", "text", {
+        summary: true,
+      }),
+      msg_iso_normal: assistantMessage("ses_iso_normal", "msg_iso_normal", "part_iso_normal", "text"),
+    })
+    await Effect.runPromise(harness.session.create({ id: "ses_iso_summary", cwd: "/workspace" }))
+    await Effect.runPromise(harness.session.create({ id: "ses_iso_normal", cwd: "/workspace" }))
+
+    await harness.subscription.handle(textDelta("ses_iso_normal", "msg_iso_normal", "part_iso_normal", "hello"))
+    await harness.subscription.handle(textDelta("ses_iso_summary", "msg_iso_summary", "part_iso_summary", "internal"))
+
+    expect(harness.updates.map((update) => update.sessionId)).toEqual(["ses_iso_normal"])
   })
 })
