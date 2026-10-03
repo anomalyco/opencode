@@ -544,4 +544,64 @@ describe("run subagent data", () => {
       }),
     ])
   })
+
+  test("registers a grandchild tab when a known child session spawns a nested task", () => {
+    const data = createSubagentData()
+
+    bootstrapSubagentData({
+      data,
+      messages: [taskMessage("child-1", "running")],
+      children: [{ id: "child-1" }],
+      permissions: [],
+      questions: [],
+    })
+
+    const changed = reduce(data, {
+      type: "message.part.updated",
+      properties: {
+        part: {
+          id: "part-grandchild-1",
+          sessionID: "child-1",
+          messageID: "msg-child-1",
+          type: "tool",
+          callID: "call-grandchild-1",
+          tool: "task",
+          state: {
+            status: "running",
+            input: {
+              description: "Grep for callers",
+              subagent_type: "explore",
+            },
+            metadata: {
+              sessionId: "grandchild-1",
+            },
+            time: { start: 1 },
+          },
+        },
+      },
+    })
+
+    expect(changed).toBe(true)
+
+    const tabs = snapshotSubagentData(data).tabs
+    expect(tabs.map((tab) => tab.sessionID).sort()).toEqual(["child-1", "grandchild-1"])
+
+    reduce(data, {
+      type: "permission.asked",
+      properties: {
+        id: "perm-grandchild-1",
+        sessionID: "grandchild-1",
+        permission: "grep",
+        patterns: ["callers"],
+        metadata: {},
+        always: [],
+        tool: {
+          messageID: "msg-grandchild-1",
+          callID: "call-grep-1",
+        },
+      },
+    })
+
+    expect(snapshotSubagentData(data).permissions.map((item) => item.id)).toEqual(["perm-grandchild-1"])
+  })
 })

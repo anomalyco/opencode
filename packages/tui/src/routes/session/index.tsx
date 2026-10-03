@@ -30,6 +30,7 @@ import type {
   AssistantMessage,
   Part,
   Provider,
+  Session,
   ToolPart,
   UserMessage,
   TextPart,
@@ -229,14 +230,14 @@ export function Session() {
         )
       : [],
   )
-  const permissions = createMemo(() => {
-    if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.permission[x.id] ?? [])
+  const subtree = createMemo(() => {
+    // NOTE: 仅根会话收集整棵子树的权限/问题；子会话自身不重复收集（避免与父视图双重展示）
+    const s = session()
+    if (!s || s.parentID) return []
+    return collectSubtree(sync.data.session, s.id)
   })
-  const questions = createMemo(() => {
-    if (session()?.parentID) return []
-    return children().flatMap((x) => sync.data.question[x.id] ?? [])
-  })
+  const permissions = createMemo(() => subtree().flatMap((x) => sync.data.permission[x.id] ?? []))
+  const questions = createMemo(() => subtree().flatMap((x) => sync.data.question[x.id] ?? []))
   const visible = createMemo(() => !session()?.parentID && permissions().length === 0 && questions().length === 0)
   const disabled = createMemo(() => permissions().length > 0 || questions().length > 0)
 
@@ -2647,6 +2648,31 @@ export function toolDisplay(tool: string) {
 function recordValue(value: unknown): Record<string, unknown> | undefined {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return
   return value as Record<string, unknown>
+}
+
+export function collectSubtree(sessions: Session[], rootID: string): Session[] {
+  const root = sessions.find((item) => item.id === rootID)
+  if (!root) return []
+  const childrenByParent = new Map<string, Session[]>()
+  for (const item of sessions) {
+    if (!item.parentID) continue
+    const siblings = childrenByParent.get(item.parentID) ?? []
+    siblings.push(item)
+    childrenByParent.set(item.parentID, siblings)
+  }
+  const result = [root]
+  const visited = new Set([root.id])
+  const queue = [root]
+  while (queue.length > 0) {
+    const current = queue.shift()!
+    for (const child of childrenByParent.get(current.id) ?? []) {
+      if (visited.has(child.id)) continue
+      visited.add(child.id)
+      result.push(child)
+      queue.push(child)
+    }
+  }
+  return result
 }
 
 export function parseApplyPatchFiles(value: unknown) {
