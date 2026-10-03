@@ -2032,6 +2032,71 @@ You can also install [Poolside Agent CLI](https://github.com/poolsideai/pool) to
 
 ---
 
+### QVAC
+
+You can run opencode against local models through [QVAC](https://qvac.tether.io), an open-source runtime for local-first, peer-to-peer AI.
+
+:::tip
+Use the [`@qvac/opencode-plugin`](https://www.npmjs.com/package/@qvac/opencode-plugin) package for OpenCode. It starts a managed local QVAC server, registers the `qvac` provider, and selects a local model for the project.
+:::
+
+Add the plugin to your project config:
+
+```json title="opencode.json" {3}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": ["@qvac/opencode-plugin"]
+}
+```
+
+Then start opencode as usual:
+
+```bash
+opencode
+```
+
+OpenCode automatically installs npm plugins on startup. The QVAC plugin brings up a managed `qvac serve` process in the background and points opencode at it. The default model is `qvac/qwen3.5-9b`.
+
+To choose a different model or tune the context window, pass plugin options:
+
+```json title="opencode.json" {3-12}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugin": [
+    [
+      "@qvac/opencode-plugin",
+      {
+        "model": "GPT_OSS_20B_INST_Q4_K_M",
+        "ctxSize": 32768,
+        "reasoningBudget": -1,
+        "tools": true
+      }
+    ]
+  ]
+}
+```
+
+In this example:
+
+- `model` accepts friendly ids such as `qwen3.5-9b` and raw QVAC model constants such as `GPT_OSS_20B_INST_Q4_K_M`.
+- `ctxSize` sets the server context window. Agent prompts and tool schemas need a large context window; 32768 is a good starting point.
+- `reasoningBudget: -1` leaves reasoning enabled. Set it to `0` if you want to suppress reasoning for models that support it.
+- `tools: true` enables the tool-calling chat template.
+
+:::note
+The plugin sets both the main model and `small_model` to `qvac/<model>` by default, so title, summary, and compaction calls use the same local QVAC model. QVAC queues same-model completion requests, so a second local model is optional.
+:::
+
+:::tip
+Local tool-calling quality is bounded by the model. `qwen3.5-9b` is the default friendly id; for more demanding agent workflows, use a larger model such as `GPT_OSS_20B_INST_Q4_K_M` if your machine can keep it warm.
+:::
+
+:::note[Advanced]
+If you already run `qvac serve openai` yourself, you can also configure QVAC as a custom OpenAI-compatible provider with `@qvac/ai-sdk-provider`. The plugin is recommended for normal OpenCode usage because it manages the server lifecycle and provider setup for you.
+:::
+
+---
+
 ### SAP AI Core
 
 SAP AI Core provides access to 40+ models from OpenAI, Anthropic, Google, Amazon, Meta, Mistral, and AI21 through a unified platform.
