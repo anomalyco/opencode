@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import { Skill } from "../../src/skill"
@@ -582,4 +582,125 @@ description: A skill in the .opencode/skills directory.
       { git: true },
     ),
   )
+
+  test("formats project skills inline and summarizes large global skill libraries", () => {
+    const projectSkill: Skill.Info = {
+      name: "project-deploy",
+      description: "Deploys project artifacts.",
+      location: "/project/.opencode/skill/project-deploy/SKILL.md",
+      content: "# Deploy",
+      scope: "project",
+    }
+    const globalSkills: Skill.Info[] = Array.from({ length: 25 }, (_, i) => ({
+      name: `global-skill-${i}`,
+      description: `Global skill number ${i}`,
+      location: `/home/.agents/skills/global-skill-${i}/SKILL.md`,
+      content: `# Global ${i}`,
+      scope: "global",
+    }))
+
+    const formatted = Skill.fmt([projectSkill, ...globalSkills], { verbose: true })
+    expect(formatted).toContain("<name>project-deploy</name>")
+    expect(formatted).toContain('<global_skills count="25">')
+    expect(formatted).toContain("global-skill-24")
+  })
+
+  test("formats small numbers of global skills inline alongside project skills", () => {
+    const projectSkill: Skill.Info = {
+      name: "local-skill",
+      description: "Local workspace skill.",
+      location: "/project/.opencode/skill/local-skill/SKILL.md",
+      content: "# Local",
+      scope: "project",
+    }
+    const globalSkill: Skill.Info = {
+      name: "global-helper",
+      description: "Helper global skill.",
+      location: "/home/.agents/skills/global-helper/SKILL.md",
+      content: "# Helper",
+      scope: "global",
+    }
+
+    const formatted = Skill.fmt([projectSkill, globalSkill], { verbose: true })
+    expect(formatted).toContain("<name>local-skill</name>")
+    expect(formatted).toContain("<name>global-helper</name>")
+    expect(formatted).not.toContain("<global_skills")
+  })
+
+  test("keeps skill prompt output within the character budget", () => {
+    const skills: Skill.Info[] = Array.from({ length: 16 }, (_, i) => ({
+      name: `large-skill-${i}`,
+      description: "x".repeat(40_000),
+      location: `/skills/large-skill-${i}/SKILL.md`,
+      content: "",
+      scope: "global",
+    }))
+
+    const formatted = Skill.fmt(skills, { verbose: true })
+    expect(formatted.length).toBeLessThanOrEqual(300_000)
+    expect(formatted).toContain("large-skill-0")
+    expect(formatted).toContain("large-skill-15")
+  })
+
+  test("falls back to compact skill metadata when locations consume the budget", () => {
+    const skills: Skill.Info[] = Array.from({ length: 16 }, (_, i) => ({
+      name: `pathological-skill-${i}`,
+      description: "description",
+      location: `/skills/${"nested/".repeat(25_000)}${i}/SKILL.md`,
+      content: "",
+      scope: "global",
+    }))
+
+    const formatted = Skill.fmt(skills, { verbose: true })
+    expect(formatted.length).toBeLessThanOrEqual(300_000)
+    expect(formatted).toContain("pathological-skill-0")
+  })
+
+  test("keeps pathological compact fallback structurally closed", () => {
+    const skills: Skill.Info[] = Array.from({ length: 16 }, (_, i) => ({
+      name: `${"very-long-skill-name-".repeat(20_000)}${i}`,
+      description: "description",
+      location: "/skills/SKILL.md",
+      content: "",
+      scope: "global",
+    }))
+
+    const formatted = Skill.fmt(skills, { verbose: true })
+    expect(formatted.length).toBeLessThanOrEqual(300_000)
+    expect(formatted.endsWith("</global_skills>")).toBe(true)
+  })
+
+  test("escapes skill metadata in XML prompt output", () => {
+    const formatted = Skill.fmt(
+      [
+        {
+          name: "unsafe <skill> & name",
+          description: "Use <script> & tools",
+          location: "/skills/SKILL.md",
+          content: "",
+        },
+      ],
+      { verbose: true },
+    )
+
+    expect(formatted).toContain("unsafe &lt;skill&gt; &amp; name")
+    expect(formatted).toContain("Use &lt;script&gt; &amp; tools")
+    expect(formatted).not.toContain("<script>")
+  })
+
+  test("enforces prompt budget ceiling when inline project skills exceed budget", () => {
+    const hugeProjectSkills: Skill.Info[] = Array.from({ length: 10 }, (_, i) => ({
+      name: `huge-project-skill-${i}`,
+      description: "D".repeat(40_000),
+      location: `/project/.opencode/skill/huge-project-skill-${i}/SKILL.md`,
+      content: "# Huge",
+      scope: "project",
+    }))
+
+    const formatted = Skill.fmt(hugeProjectSkills, { verbose: true })
+    expect(formatted.length).toBeLessThanOrEqual(300_000)
+    expect(formatted).toContain("huge-project-skill-0")
+  })
 })
+
+

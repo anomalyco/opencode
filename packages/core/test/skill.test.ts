@@ -122,4 +122,34 @@ describe("SkillV2", () => {
       ),
     ),
   )
+
+  it.live("ignores nested markdown documentation files inside skill reference directories", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const root = path.join(tmp.path, "my-skill")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(root, "references"), { recursive: true })
+            await fs.writeFile(
+              path.join(root, "SKILL.md"),
+              `---\nname: my-skill\ndescription: Main skill\n---\n# Main`,
+            )
+            await fs.writeFile(
+              path.join(root, "references", "llms-full.md"),
+              `---\nname: ignore-me\ndescription: Huge doc\n---\n# Large documentation dump`,
+            )
+          })
+
+          const skill = yield* SkillV2.Service
+          yield* skill.transform((editor) => editor.source({ type: "directory", path: AbsolutePath.make(root) }))
+
+          const list = yield* skill.list()
+          expect(list.map((item) => item.name)).toEqual(["my-skill"])
+        }),
+      ),
+    ),
+  )
 })
