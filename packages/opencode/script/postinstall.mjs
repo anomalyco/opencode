@@ -14,6 +14,7 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(__dirname, "package.jso
 const platformMap = {
   darwin: "darwin",
   linux: "linux",
+  android: "linux", // Termux/Android uses linux binary via grun
   win32: "windows",
 }
 const archMap = {
