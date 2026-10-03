@@ -76,3 +76,21 @@ export function formatContextUsage(tokens: number, percent?: number) {
   const value = Locale.number(tokens)
   return percent === undefined ? value : `${value} (${percent}%)`
 }
+
+type SessionActivity = {
+  session: { status(sessionID: string): string | undefined; family(sessionID: string): readonly string[] }
+  shell: { listBySession(sessionID: string): readonly unknown[] }
+}
+
+/**
+ * Whether a session, or any session in its family, is doing work: a running turn, a running subagent, or a
+ * background shell command. The session footer already counts background shells; lists must too, or a
+ * session running a long command in the background looks idle.
+ */
+export function sessionActive(data: SessionActivity, sessionID: string) {
+  const ids = new Set([sessionID, ...data.session.family(sessionID)])
+  for (const id of ids) {
+    if (data.session.status(id) === "running" || data.shell.listBySession(id).length > 0) return true
+  }
+  return false
+}

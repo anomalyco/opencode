@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode/client"
-import { lastAssistantWithUsage, sessionFamily } from "../../src/util/session"
+import { lastAssistantWithUsage, sessionActive, sessionFamily } from "../../src/util/session"
 
 const assistant = (id: string, input: number): SessionMessageInfo => ({
   id,
@@ -59,5 +59,27 @@ describe("util.session", () => {
 
     messages.push(assistant("msg_after", 5))
     expect(lastAssistantWithUsage(messages)?.tokens.input).toBe(5)
+  })
+})
+
+describe("sessionActive", () => {
+  const data = (running: string[], shells: string[], family: Record<string, string[]> = {}) => ({
+    session: {
+      status: (id: string) => (running.includes(id) ? "running" : "idle"),
+      family: (id: string) => family[id] ?? [id],
+    },
+    shell: { listBySession: (id: string) => (shells.includes(id) ? [{ id: "sh_1" }] : []) },
+  })
+
+  test("counts a running turn, a running subagent and a background shell", () => {
+    expect(sessionActive(data([], []), "ses_a")).toBe(false)
+    expect(sessionActive(data(["ses_a"], []), "ses_a")).toBe(true)
+    expect(sessionActive(data(["ses_child"], [], { ses_a: ["ses_a", "ses_child"] }), "ses_a")).toBe(true)
+    expect(sessionActive(data([], ["ses_a"]), "ses_a")).toBe(true)
+  })
+
+  test("counts a background shell started by a subagent", () => {
+    expect(sessionActive(data([], ["ses_child"], { ses_a: ["ses_a", "ses_child"] }), "ses_a")).toBe(true)
+    expect(sessionActive(data([], ["ses_other"], { ses_a: ["ses_a", "ses_child"] }), "ses_a")).toBe(false)
   })
 })
