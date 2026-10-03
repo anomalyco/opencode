@@ -72,6 +72,15 @@ function applyUsage(db: DatabaseService, sessionID: SessionSchema.ID, value: Usa
     .pipe(Effect.orDie)
 }
 
+function touch(db: DatabaseService, event: MessageEvent) {
+  return db
+    .update(SessionTable)
+    .set({ time_updated: event.created })
+    .where(eq(SessionTable.id, event.data.sessionID))
+    .run()
+    .pipe(Effect.orDie)
+}
+
 const publishSessionUsage = Effect.fn("SessionProjector.publishUsage")(function* (
   db: DatabaseService,
   bus: Bus.Interface,
@@ -681,12 +690,18 @@ const layer = Layer.effectDiscard(
     yield* bus.project(SessionEvent.Skill.Activated, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Ended, (event) => run(db, event))
-    yield* bus.project(SessionEvent.Step.Started, (event) => run(db, event))
+    yield* bus.project(SessionEvent.Step.Started, (event) =>
+      Effect.gen(function* () {
+        yield* run(db, event)
+        yield* touch(db, event)
+      }),
+    )
     yield* bus.project(SessionEvent.Step.Streamed, (event) => run(db, event))
     yield* bus.project(SessionEvent.Step.Ended, (event) =>
       Effect.gen(function* () {
         yield* run(db, event)
         yield* applyUsage(db, event.data.sessionID, event.data)
+        yield* touch(db, event)
       }),
     )
     yield* bus.project(SessionEvent.Step.Failed, (event) =>
@@ -694,6 +709,7 @@ const layer = Layer.effectDiscard(
         yield* run(db, event)
         if (event.data.cost !== undefined && event.data.tokens !== undefined)
           yield* applyUsage(db, event.data.sessionID, { cost: event.data.cost, tokens: event.data.tokens })
+        yield* touch(db, event)
       }),
     )
     yield* bus.project(SessionEvent.Text.Started, (event) => run(db, event))
