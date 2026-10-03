@@ -2,6 +2,7 @@ import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { expect } from "bun:test"
 import { Server } from "@modelcontextprotocol/sdk/server/index.js"
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js"
 import {
   GetPromptRequestSchema,
@@ -360,6 +361,35 @@ it.instance("one failed server does not affect another connected server", () =>
   }),
 )
 
+it.instance("reconnects after the local server process exits", () =>
+  Effect.gen(function* () {
+    const mcp = yield* MCP.Service
+    yield* mcp.add("cycle-server", {
+      type: "local",
+      command: [process.execPath, stdioFixture],
+    })
+    expect((yield* mcp.status())["cycle-server"]?.status).toBe("connected")
+    const transport = (yield* mcp.clients())["cycle-server"].transport
+    expect(transport).toBeInstanceOf(StdioClientTransport)
+    const pid = (transport as StdioClientTransport).pid
+    expect(pid).toBeTypeOf("number")
+    process.kill(pid!)
+
+    yield* pollWithTimeout(
+      Effect.gen(function* () {
+        if ((yield* mcp.status())["cycle-server"]?.status !== "connected") return
+        const next = (yield* mcp.clients())["cycle-server"]
+        return next.transport instanceof StdioClientTransport && next.transport.pid !== pid
+          ? (true as const)
+          : undefined
+      }),
+      "server did not reconnect after process exit",
+      "30 seconds",
+    )
+    expect(Object.keys(yield* mcp.tools())).toEqual(["cycle-server_current_directory"])
+  }),
+)
+
 it.instance("falls back when output schema refs fail SDK tool discovery", () =>
   Effect.gen(function* () {
     const server = yield* lifecycleServer({ capabilities: { tools: {} } })
@@ -539,7 +569,7 @@ it.instance("remote timeout aborts both real HTTP transport attempts", () =>
       Effect.sync(() => (server.aborted() >= 2 ? server.aborted() : undefined)),
       "remote transport requests were not aborted",
     )
-    expect(server.requests).toEqual(["POST", "GET"])
+    expect(server.requests.slice(0, 2)).toEqual(["POST", "GET"])
   }),
 )
 

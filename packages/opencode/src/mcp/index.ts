@@ -26,7 +26,7 @@ import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { TuiEvent } from "@/server/tui-event"
-import { Cause, Effect, Exit, Layer, Context, Schema, Stream } from "effect"
+import { Cause, Effect, Exit, Fiber, Layer, Context, Schedule, Schema, Stream } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { InstanceState } from "@/effect/instance-state"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
@@ -36,6 +36,7 @@ import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
 
 const DEFAULT_TIMEOUT = 30_000
+const RECONNECT_MAX_ATTEMPTS = 10
 const CLIENT_OPTIONS = {
   capabilities: {
     // https://github.com/anomalyco/opencode/issues/11948
@@ -145,6 +146,7 @@ interface State {
   clients: Record<string, MCPClient>
   defs: Record<string, MCPToolDef[]>
   instructions: Record<string, string>
+  reconnects: Map<string, { fiber?: Fiber.Fiber<unknown, unknown> }>
 }
 
 export interface ServerInstructions {
@@ -439,6 +441,34 @@ const layer = Layer.effect(
       Effect.catch(() => Effect.succeed([] as number[])),
     )
 
+    function scheduleReconnect(s: State, name: string, bridge: EffectBridge.Shape) {
+      if (s.reconnects.has(name)) return
+      const ref: { fiber?: Fiber.Fiber<unknown, unknown> } = {}
+      s.reconnects.set(name, ref)
+      ref.fiber = bridge.fork(
+        Effect.gen(function* () {
+          const mcp = yield* getMcpConfig(name)
+          if (!mcp || mcp.enabled === false) return
+          if (s.status[name]?.status !== "failed") return
+          const next = yield* createAndStore(name, mcp)
+          if (next.status === "failed") return yield* Effect.fail(next.error)
+        }).pipe(
+          Effect.retry(
+            Schedule.exponential("1 second").pipe(
+              Schedule.jittered,
+              Schedule.both(Schedule.recurs(RECONNECT_MAX_ATTEMPTS)),
+            ),
+          ),
+          Effect.ignore,
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (s.reconnects.get(name) === ref) s.reconnects.delete(name)
+            }),
+          ),
+        ),
+      )
+    }
+
     function watch(s: State, name: string, client: MCPClient, bridge: EffectBridge.Shape, timeout?: number) {
       client.onclose = () => {
         if (s.clients[name] !== client) return
@@ -446,6 +476,7 @@ const layer = Layer.effect(
         delete s.defs[name]
         delete s.instructions[name]
         s.status[name] = { status: "failed", error: "Connection closed" }
+        scheduleReconnect(s, name, bridge)
         bridge.fork(
           Effect.logWarning("MCP connection closed", { server: name }).pipe(
             Effect.andThen(events.publish(ToolsChanged, { server: name })),
@@ -500,6 +531,7 @@ const layer = Layer.effect(
           clients: {},
           defs: {},
           instructions: {},
+          reconnects: new Map(),
         }
 
         yield* Effect.forEach(
@@ -518,6 +550,7 @@ const layer = Layer.effect(
 
               const result = yield* create(key, mcp)
               s.status[key] = result.status
+              if (result.status.status === "failed") scheduleReconnect(s, key, bridge)
               if (result.mcpClient) {
                 s.clients[key] = result.mcpClient
                 s.defs[key] = result.defs!
@@ -530,6 +563,9 @@ const layer = Layer.effect(
 
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
+            const pending = [...s.reconnects.values()]
+            s.reconnects.clear()
+            yield* Effect.forEach(pending, (ref) => (ref.fiber ? Fiber.interrupt(ref.fiber) : Effect.void))
             const clients = Object.values(s.clients)
             s.clients = {}
             s.defs = {}
@@ -632,6 +668,7 @@ const layer = Layer.effect(
       if (!result.mcpClient) {
         yield* closeClient(s, name)
         delete s.clients[name]
+        if (result.status.status === "failed") scheduleReconnect(s, name, yield* EffectBridge.make())
         return result.status
       }
 
@@ -653,6 +690,9 @@ const layer = Layer.effect(
     const disconnect = Effect.fn("MCP.disconnect")(function* (name: string) {
       yield* requireMcpConfig(name)
       const s = yield* InstanceState.get(state)
+      const ref = s.reconnects.get(name)
+      s.reconnects.delete(name)
+      if (ref?.fiber) yield* Fiber.interrupt(ref.fiber)
       yield* closeClient(s, name)
       delete s.clients[name]
       s.status[name] = { status: "disabled" }
