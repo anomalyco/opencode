@@ -116,6 +116,8 @@ describe("Project.fromDirectory", () => {
       const result = yield* project.fromDirectory(tmp)
 
       expect(result.project).toBeDefined()
+      // No commits yet: git.history.rootCommits() finds nothing, so this still
+      // falls back to ID.global, same as before. VCS metadata is still git.
       expect(result.project.id).toBe(ProjectV2.ID.global)
       expect(result.project.vcs).toBe("git")
       expect(result.project.worktree).toBe(tmp)
@@ -139,12 +141,28 @@ describe("Project.fromDirectory", () => {
     }),
   )
 
-  it.live("returns global for non-git directory", () =>
+  it.live("derives a stable directory-based project id for non-git directory", () =>
     Effect.gen(function* () {
       const project = yield* Project.Service
       const tmp = yield* tmpdirScoped()
       const result = yield* project.fromDirectory(tmp)
-      expect(result.project.id).toBe(ProjectV2.ID.global)
+      expect(result.project.id).not.toBe(ProjectV2.ID.global)
+      expect(result.project.worktree).toBe(tmp)
+    }),
+  )
+
+  it.live("keeps unrelated non-git directories on separate projects/sessions", () =>
+    Effect.gen(function* () {
+      const project = yield* Project.Service
+      const a = yield* tmpdirScoped()
+      const b = yield* tmpdirScoped()
+
+      const resultA = yield* project.fromDirectory(a)
+      const resultB = yield* project.fromDirectory(b)
+
+      expect(resultA.project.id).not.toBe(resultB.project.id)
+      expect(resultA.project.worktree).toBe(a)
+      expect(resultB.project.worktree).toBe(b)
     }),
   )
 

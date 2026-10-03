@@ -17,8 +17,9 @@ export const context = LocalContext.create<InstanceContext>("instance")
  */
 export function containsPath(filepath: string, ctx: InstanceContext): boolean {
   if (FSUtil.contains(ctx.directory, filepath)) return true
-  // Non-git projects set worktree to "/" which would match ANY absolute path.
-  // Skip worktree check in this case to preserve external_directory permissions.
+  // Legacy persisted rows (from before non-git projects got their own directory
+  // as worktree) may still have worktree "/", which would match ANY absolute path.
+  // Keep this guard so old data can't make the filesystem root count as in-project.
   if (ctx.worktree === "/") return false
   return FSUtil.contains(ctx.worktree, filepath)
 }
