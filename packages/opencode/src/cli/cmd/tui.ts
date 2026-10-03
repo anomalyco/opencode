@@ -14,6 +14,7 @@ import { writeHeapSnapshot } from "v8"
 import { ServerAuth } from "@/server/auth"
 import { validateSession } from "../tui/validate-session"
 import { win32InstallCtrlCGuard } from "@opencode-ai/tui/terminal-win32"
+import { INTERACTIVE_INPUT_ERROR, resolveInteractiveStdin } from "./run/runtime.stdin"
 
 declare global {
   const OPENCODE_WORKER_PATH: string
@@ -61,6 +62,17 @@ async function input(value?: string) {
   if (!value) return piped
   if (!piped) return value
   return piped + "\n" + value
+}
+
+// The renderer needs a real terminal for keyboard input even when stdin is piped as the prompt.
+function openTuiStdin() {
+  try {
+    return resolveInteractiveStdin()
+  } catch (error) {
+    if (!(error instanceof Error) || error.message !== INTERACTIVE_INPUT_ERROR) throw error
+    UI.error(`TUI ${error.message}`)
+    process.exitCode = 1
+  }
 }
 
 export function resolveThreadDirectory(project?: string, envPWD = process.env.PWD, cwd = process.cwd()) {
@@ -186,7 +198,9 @@ export const TuiThreadCommand = cmd({
       return
     }
 
-    const unguard = win32InstallCtrlCGuard()
+    const interactiveStdin = openTuiStdin()
+    if (!interactiveStdin) return
+    const unguard = win32InstallCtrlCGuard(interactiveStdin.stdin)
     try {
       const { TuiConfig } = await import("@/config/tui")
       if (args.fork && !args.continue && !args.session) {
@@ -280,6 +294,7 @@ export const TuiThreadCommand = cmd({
             },
             config,
             pluginHost: createLegacyTuiPluginHost(),
+            stdin: interactiveStdin.stdin,
             directory: cwd,
             fetch: transport.fetch,
             headers: transport.headers,
@@ -302,8 +317,8 @@ export const TuiThreadCommand = cmd({
       try {
         unguard?.()
       } catch {}
+      interactiveStdin.cleanup?.()
     }
     process.exit()
   },
 })
-// scratch
