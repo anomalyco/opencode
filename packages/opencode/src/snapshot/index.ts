@@ -735,17 +735,33 @@ const layer: Layer.Layer<Service, never, FSUtil.Service | AppProcess.Service | C
               const step = 100
               const patch = (file: string, before: string, after: string) =>
                 formatPatch(structuredPatch(file, file, before, after, "", "", { context: Number.MAX_SAFE_INTEGER }))
+              // Each patch carries the whole file because the diff context is unbounded,
+              // so one turn over a large working tree can store hundreds of megabytes.
+              // Bound the patch text a turn keeps with the same limit that decides what
+              // is tracked at all; files past it keep their numstat entry without patch
+              // text, the shape binary entries already use.
+              let stored = 0
+              const patchFor = Effect.fnUntraced(function* (
+                row: Row,
+                text: Map<string, { before: string; after: string }> | undefined,
+              ) {
+                if (row.binary || stored >= limit) return ""
+                const hit = text?.get(row.file) ?? { before: "", after: "" }
+                const [before, after] = text ? [hit.before, hit.after] : yield* show(row)
+                const body = patch(row.file, before, after)
+                if (body.length > limit) return ""
+                stored += body.length
+                return body
+              })
 
               for (let i = 0; i < rows.length; i += step) {
                 const run = rows.slice(i, i + step)
-                const text = yield* load(run)
+                const text = stored >= limit ? undefined : yield* load(run)
 
                 for (const row of run) {
-                  const hit = text?.get(row.file) ?? { before: "", after: "" }
-                  const [before, after] = row.binary ? ["", ""] : text ? [hit.before, hit.after] : yield* show(row)
                   result.push({
                     file: row.file,
-                    patch: row.binary ? "" : patch(row.file, before, after),
+                    patch: yield* patchFor(row, text),
                     additions: row.additions,
                     deletions: row.deletions,
                     status: row.status,

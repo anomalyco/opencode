@@ -49,6 +49,12 @@ const mkdirp = (dir: string) => FSUtil.Service.use((fs) => fs.ensureDir(dir))
 const rm = (file: string) =>
   FSUtil.Service.use((fs) => fs.remove(file, { recursive: true, force: true }).pipe(Effect.ignore))
 
+// Large, cheap-to-diff contents: every line is distinct so line numbers stay
+// stable, and only the `flip` line differs between two calls.
+const PATCH_LINE_PAD = "abcdefghijklmnop"
+const patchLines = (count: number, tag: string, flip?: number) =>
+  Array.from({ length: count }, (_, i) => `${i === flip ? "flip" : tag}-${i}-${PATCH_LINE_PAD}`).join("\n") + "\n"
+
 const initialize = Effect.fn("SnapshotTest.initialize")(function* (dir: string) {
   const unique = Math.random().toString(36).slice(2)
   const aContent = `A${unique}`
@@ -1213,6 +1219,62 @@ it.instance(
     yield* snapshot.revert([patch])
     for (let i = 0; i < base.length; i++) expect(yield* readText(base[i])).toBe(`base-${i}`)
     for (const file of fresh) expect(yield* exists(file)).toBe(false)
+  }),
+  { git: true },
+)
+
+it.instance(
+  "diffFull drops the patch of a file larger than the tracked file limit",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    yield* write(`${tmp.path}/a-large.txt`, patchLines(70_000, "same"))
+    yield* write(`${tmp.path}/b-small.txt`, "small before")
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    yield* write(`${tmp.path}/a-large.txt`, patchLines(95_000, "same"))
+    yield* write(`${tmp.path}/b-small.txt`, "small after")
+    const after = yield* snapshot.track()
+    expect(after).toBeTruthy()
+    const diffs = yield* snapshot.diffFull(before!, after!)
+    const large = diffs.find((item) => item.file === "a-large.txt")!
+    const small = diffs.find((item) => item.file === "b-small.txt")!
+    // The oversized file keeps its numstat entry without patch text, like a binary file.
+    expect(large.patch).toBe("")
+    expect(large.status).toBe("modified")
+    expect(large.additions).toBeGreaterThan(0)
+    expect(small.patch).toContain("+small after")
+  }),
+  { git: true },
+)
+
+it.instance(
+  "diffFull bounds the patch text stored for one turn",
+  Effect.gen(function* () {
+    const tmp = yield* bootstrap()
+    const snapshot = yield* Snapshot.Service
+    const files = Array.from({ length: 8 }, (_, i) => `bulk/${i}.txt`)
+    yield* mkdirp(`${tmp.path}/bulk`)
+    yield* Effect.all(
+      files.map((file) => write(fwd(tmp.path, file), patchLines(12_000, "same"))),
+      { concurrency: "unbounded" },
+    )
+    const before = yield* snapshot.track()
+    expect(before).toBeTruthy()
+    yield* Effect.all(
+      files.map((file) => write(fwd(tmp.path, file), patchLines(12_000, "same", 6_000))),
+      { concurrency: "unbounded" },
+    )
+    const after = yield* snapshot.track()
+    expect(after).toBeTruthy()
+    const diffs = yield* snapshot.diffFull(before!, after!)
+    expect(diffs.map((item) => item.file)).toEqual(files)
+    expect(diffs.every((item) => item.status === "modified" && item.additions > 0)).toBe(true)
+    const kept = diffs.filter((item) => item.patch !== "")
+    expect(kept.length).toBeGreaterThan(0)
+    expect(kept.length).toBeLessThan(diffs.length)
+    // Patches are kept in diff order, so the entries without patch text are the tail.
+    expect(kept.map((item) => item.file)).toEqual(diffs.slice(0, kept.length).map((item) => item.file))
   }),
   { git: true },
 )
