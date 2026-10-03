@@ -42,12 +42,25 @@ export default {
   argTypes: {
     id: {
       control: "select",
-      options: iconNames,
+      options: [...iconNames, "kimi-code-plan-cn", "kimi-code-plan-global"],
     },
   },
 }
 
 export const Basic = story.Basic
+
+export const KimiProviders = {
+  render: () => (
+    <div style={{ display: "flex", gap: "24px", "align-items": "start" }}>
+      {["kimi-code-plan-cn", "kimi-code-plan-global", "kimi-for-coding", "unknown-provider"].map((id) => (
+        <div style={{ display: "grid", gap: "12px", "justify-items": "center" }}>
+          <mod.ProviderIcon id={id} width="32" height="32" aria-label={id} />
+          <code>{id}</code>
+        </div>
+      ))}
+    </div>
+  ),
+}
 
 export const AllIcons = {
   render: () => (

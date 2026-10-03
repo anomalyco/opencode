@@ -9,7 +9,7 @@ export type ProviderIconProps = JSX.SVGElementTags["svg"] & {
 
 export const ProviderIcon: Component<ProviderIconProps> = (props) => {
   const [local, rest] = splitProps(props, ["id", "class", "classList"])
-  const resolved = createMemo(() => (iconNames.includes(local.id as IconName) ? local.id : "synthetic"))
+  const resolved = createMemo(() => resolveProviderIcon(local.id))
   return (
     <svg
       data-component="provider-icon"
@@ -22,4 +22,9 @@ export const ProviderIcon: Component<ProviderIconProps> = (props) => {
       <use href={`${sprite}#${resolved()}`} />
     </svg>
   )
+}
+
+export function resolveProviderIcon(id: string) {
+  if (id === "kimi-code-plan-cn" || id === "kimi-code-plan-global") return "kimi-for-coding"
+  return iconNames.includes(id as IconName) ? id : "synthetic"
 }
