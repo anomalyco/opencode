@@ -37,7 +37,7 @@ export const Input = Schema.Struct({
     description:
       'NEVER set this unless the user explicitly asks for a particular model or variant. The value is written as "providerID/modelID", or "providerID/modelID#variant" to include a variant. Do not guess the ID: look the model up with the models tool, filtering to your own provider first.',
   }),
-  sessionID: Schema.optionalKey(SessionSchema.ID).annotate({
+  sessionID: Schema.optionalKey(Schema.NullOr(SessionSchema.ID)).annotate({
     description:
       "Continue a specific previous subagent conversation by passing its sessionID. Calls without a sessionID start a new conversation.",
   }),
@@ -151,7 +151,7 @@ export const Plugin = {
                 .pipe(Effect.mapError((error) => new ToolFailure({ message: `Subagent denied: ${agent.id}`, error })))
 
               const existing =
-                input.sessionID === undefined
+                input.sessionID == null
                   ? undefined
                   : yield* sessions
                       .get(input.sessionID)
