@@ -19,6 +19,12 @@ describe("isLocalWorkspaceRoute", () => {
     expect(isLocalWorkspaceRoute("POST", "/session")).toBe(false)
   })
 
+  test("remote admin pairing stays on the control plane", () => {
+    expect(isLocalWorkspaceRoute("POST", "/session/ses_abc/remote")).toBe(true)
+    expect(isLocalWorkspaceRoute("DELETE", "/session/ses_abc/remote")).toBe(true)
+    expect(isLocalWorkspaceRoute("POST", "/session/ses_abc/remote/extra")).toBe(false)
+  })
+
   test("/session/status is forwarded regardless of method", () => {
     expect(isLocalWorkspaceRoute("GET", "/session/status")).toBe(false)
     expect(isLocalWorkspaceRoute("POST", "/session/status")).toBe(false)

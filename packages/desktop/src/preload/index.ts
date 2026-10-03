@@ -14,6 +14,8 @@ const api: ElectronAPI = {
   killSidecar: () => ipcRenderer.invoke("kill-sidecar"),
   installCli: () => ipcRenderer.invoke("install-cli"),
   awaitInitialization: () => ipcRenderer.invoke("await-initialization"),
+  createRemotePairing: (sessionID, directory) => ipcRenderer.invoke("remote-pairing-create", sessionID, directory),
+  revokeRemotePairing: (sessionID, directory) => ipcRenderer.invoke("remote-pairing-revoke", sessionID, directory),
   wslServers: {
     getState: () => ipcRenderer.invoke("wsl-servers-get-state"),
     subscribe: (cb) => {
