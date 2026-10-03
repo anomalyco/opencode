@@ -26,7 +26,7 @@ Automatic compaction is on by default:
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "compaction": {
     "auto": true,
     "keep": { "tokens": 15000 },
@@ -69,7 +69,7 @@ Add `compaction` to any [OpenCode configuration file](/config):
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "compaction": {
     "auto": false,
     "keep": { "tokens": 24000 },
@@ -94,7 +94,7 @@ provider or model with `settings.compaction`:
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "openai": {
       "settings": { "compaction": { "type": "native" } },

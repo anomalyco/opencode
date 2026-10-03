@@ -6,7 +6,7 @@ Create `opencode.jsonc` in your project to configure OpenCode. Add the schema fo
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "model": "anthropic/claude-sonnet-4-5",
 }
 ```
@@ -19,7 +19,7 @@ OpenCode supports JSON and JSONC. Use JSONC when you want comments or trailing c
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   // Use this model by default.
   "model": "anthropic/claude-sonnet-4-5",
 }
@@ -71,14 +71,14 @@ which overrides the global config. Settings that do not conflict are preserved.
 ## Schema
 
 The complete OpenCode configuration schema is available at
-[opencode.ai/config.json](https://opencode.ai/config.json).
+[opencode.ai/v2/config.json](https://opencode.ai/v2/config.json).
 
 Add the `$schema` field to your configuration file to enable validation and
 autocomplete in editors that support JSON Schema:
 
 ```json title="opencode.json"
 {
-  "$schema": "https://opencode.ai/config.json"
+  "$schema": "https://opencode.ai/v2/config.json"
 }
 ```
 

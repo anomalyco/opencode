@@ -43,7 +43,7 @@ Set `model` in `opencode.json` or `opencode.jsonc` to choose the default for new
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "model": "anthropic/claude-sonnet-4-5",
 }
 ```
@@ -73,7 +73,7 @@ Define new variants, or replace catalog variants with the same ID, in the model'
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "providers": {
     "openai": {
       "models": {
@@ -153,7 +153,7 @@ Use `modelID` to give an API model a friendlier catalog ID:
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "model": "openai/coding-default",
   "providers": {
     "openai": {
@@ -243,7 +243,7 @@ With Ollama listening at `http://127.0.0.1:11434`, select a discovered model wit
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "model": "ollama/gemma3:4b",
 }
 ```
@@ -277,7 +277,7 @@ provider ID:
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "model": "lmstudio/google/gemma-4-26b-a4b",
 }
 ```
@@ -309,7 +309,7 @@ With vLLM listening at `http://127.0.0.1:8000`, select a discovered model with t
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "model": "vllm/Qwen/Qwen3-Coder-30B-A3B-Instruct",
 }
 ```
@@ -346,7 +346,7 @@ For another OpenAI-compatible server, define its provider package, endpoint, and
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "model": "local/coder",
   "providers": {
     "local": {

@@ -11,7 +11,7 @@ inspection, and always block pushes. Add these ordered rules to `opencode.jsonc`
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "permissions": [
     { "action": "shell", "resource": "*", "effect": "ask" },
     { "action": "shell", "resource": "git status *", "effect": "allow" },
@@ -142,7 +142,7 @@ A path outside both the active Location and its non-root project worktree needs
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "permissions": [
     { "action": "external_directory", "resource": "~/projects/reference/*", "effect": "allow" },
     { "action": "read", "resource": "~/projects/reference/*", "effect": "allow" },
@@ -179,7 +179,7 @@ Enable the experimental portable shell scanner with:
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "experimental": {
     "portable_shell_scanner": true,
   },
@@ -232,7 +232,7 @@ Put shared rules at the top level and narrower rules under
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "permissions": [
     { "action": "shell", "resource": "*", "effect": "ask" },
     { "action": "shell", "resource": "git status *", "effect": "allow" },

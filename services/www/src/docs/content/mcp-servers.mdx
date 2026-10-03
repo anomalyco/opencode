@@ -31,7 +31,7 @@ To configure a server by hand, give it a unique name under `mcp.servers`. V2 doe
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "mcp": {
     "servers": {
       "my-server": {
@@ -86,7 +86,7 @@ Use configuration for process options such as a working directory or environment
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "mcp": {
     "servers": {
       "everything": {
@@ -136,7 +136,7 @@ Use configuration when the server needs headers or other options. Store secrets 
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "mcp": {
     "servers": {
       "context7": {
@@ -182,7 +182,7 @@ For dynamic registration, configure only the server URL:
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "mcp": {
     "servers": {
       "sentry": {
@@ -204,7 +204,7 @@ When a provider gives you client credentials, use V2's snake_case OAuth fields:
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "mcp": {
     "servers": {
       "company-tools": {
@@ -244,7 +244,7 @@ Timeouts are positive integer milliseconds. Set defaults under `mcp.timeout`; a 
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "mcp": {
     "timeout": {
       "startup": 45000,
@@ -276,7 +276,7 @@ OpenCode opens every server with the classic MCP `initialize` handshake by defau
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "mcp": {
     "servers": {
       "modern": {

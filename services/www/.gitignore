@@ -3,3 +3,4 @@
 dist/
 node_modules/
 public/cli.json
+public/config.json

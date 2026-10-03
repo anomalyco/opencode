@@ -22,11 +22,10 @@ legacy OpenCode, or migrating from V1.
 Use only <https://opencode.ai/v2/docs/> documentation as the source of truth for V2.
 Do not use <https://opencode.ai/docs/>, which documents V1, and do not use
 general web search to resolve a V2 documentation question when the V2 docs or
-linked pages cover it. The schema served from
-<https://opencode.ai/config.json> may describe V1 even though V2 configuration
-files include that URL for editor integration. Never use it to infer V2 field
-names or shapes. If V2 documentation is missing or contradictory, state the
-uncertainty or ask for clarification instead of falling back to V1.
+linked pages cover it. The V1 schema at <https://opencode.ai/config.json> is
+not the native V2 schema at <https://opencode.ai/v2/config.json>. If V2
+documentation is missing or contradictory, state the uncertainty or ask for
+clarification instead of falling back to V1.
 
 V1 documentation and syntax may be consulted only when the user explicitly
 asks about V1 or when needed as migration input. Outputs and recommendations
@@ -74,7 +73,7 @@ autocomplete:
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
 }
 ```
 
@@ -101,8 +100,8 @@ preferences, especially themes and keybindings.
 
 Do not guess field names or shapes. Fetch the V2 configuration guide and its
 linked topic guide as the source of truth, and preserve unrelated settings when
-editing an existing file. Keep the published `$schema` URL in configuration
-examples, but do not fetch it to determine the V2 configuration shape.
+editing an existing file. Use the V2 `$schema` URL for native V2 examples;
+leave the V1 URL in existing files that still use V1 syntax.
 
 See the [full configuration guide](https://opencode.ai/v2/docs/config) for
 every field, examples, config locations, and links to dedicated feature guides.
@@ -145,7 +144,9 @@ V1 config files and `.opencode/` definitions are intended to remain compatible.
 The only intentional breaking changes are the server API and plugin API. Native
 V2 config uses more ergonomic shapes, but conversion is optional. When the user
 requests conversion, inspect the complete configuration, preserve behavior and
-unrelated settings, and apply only the relevant migrations from the guide. For
+unrelated settings, and apply only the relevant migrations from the guide. Update
+`$schema` to `https://opencode.ai/v2/config.json` when a file is fully converted;
+do not rewrite the V1 URL merely because V2 loads its legacy contents. For
 plugin migrations, fetch and follow both the migration guide and the full
 [plugins guide](https://opencode.ai/v2/docs/build/plugins). If non-API V1
 functionality fails in V2, use the `report` skill to file it as a compatibility

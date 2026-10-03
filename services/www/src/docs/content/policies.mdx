@@ -17,7 +17,7 @@ Deny one provider everywhere by adding a statement to `opencode.jsonc`:
 
 ```jsonc
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "experimental": {
     "policies": [{ "action": "provider.use", "resource": "openai", "effect": "deny" }],
   },

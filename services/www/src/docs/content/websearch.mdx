@@ -34,7 +34,7 @@ Set a provider in `opencode.jsonc` to skip the selection prompt.
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "websearch": {
     "provider": "tavily",
   },
@@ -45,7 +45,7 @@ Use `"random"` to choose an available provider automatically. Each session keeps
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "websearch": {
     "provider": "random",
   },
@@ -70,7 +70,7 @@ Web searches use the `websearch` permission action and the search query as the r
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "permissions": [
     {
       "action": "websearch",
@@ -89,7 +89,7 @@ Set `websearch` to `false` to remove the web search tool from model requests.
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "websearch": false,
 }
 ```

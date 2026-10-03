@@ -65,7 +65,7 @@ Define agents under `agents` in any [OpenCode configuration file](/config):
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "agents": {
     "reviewer": {
       "description": "Reviews current changes",
@@ -85,7 +85,7 @@ Set the primary agent used when a session has not selected one:
 
 ```jsonc title="opencode.jsonc"
 {
-  "$schema": "https://opencode.ai/config.json",
+  "$schema": "https://opencode.ai/v2/config.json",
   "default_agent": "writer",
   "agents": {
     "writer": { "mode": "primary" },
