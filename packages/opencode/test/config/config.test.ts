@@ -692,6 +692,40 @@ it.instance("handles environment variable substitution", () =>
   ),
 )
 
+it.instance("keeps mcp servers when an env substitution contains JSON escapes", () =>
+  withProcessEnv(
+    "TEST_PATH",
+    'C:\\Windows\\system32"extra',
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* writeConfigEffect(test.directory, {
+        $schema: "https://opencode.ai/config.json",
+        mcp: {
+          demo: {
+            type: "local",
+            command: ["python.exe", "server.py"],
+            environment: { PATH: "{env:TEST_PATH};C:\\extra\\bin" },
+          },
+          other: {
+            type: "remote",
+            url: "https://example.com/mcp",
+          },
+        },
+      })
+      const config = yield* Config.use.get()
+      expect(config.mcp?.demo).toEqual({
+        type: "local",
+        command: ["python.exe", "server.py"],
+        environment: { PATH: 'C:\\Windows\\system32"extra;C:\\extra\\bin' },
+      })
+      expect(config.mcp?.other).toEqual({
+        type: "remote",
+        url: "https://example.com/mcp",
+      })
+    }),
+  ),
+)
+
 it.instance("preserves env variables when adding $schema to config", () =>
   withProcessEnv(
     "PRESERVE_VAR",
