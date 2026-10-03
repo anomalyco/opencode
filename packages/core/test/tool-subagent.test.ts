@@ -813,4 +813,86 @@ describe("SubagentTool", () => {
       ),
     ),
   )
+
+  it.live("waits for pending child background work before notifying the parent", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.gen(function* () {
+          const location = Location.Ref.make({ directory: AbsolutePath.make(dir.path) })
+          const sessions = yield* Session.Service
+          const parent = yield* sessions.create({ location })
+          const child = yield* sessions.create({
+            parentID: parent.id,
+            title: "review",
+            agent: Agent.ID.make("reviewer"),
+            model: childModel,
+          })
+          yield* withSubagent(parent.location)
+          const locations = yield* LocationServiceMap.Service
+          const registry = yield* Tool.Service.pipe(Effect.provide(locations.get(parent.location)))
+          const jobs = yield* Job.Service
+          const bus = yield* Bus.Service
+
+          // The child ends its turn while its own background shell is still running.
+          const shellGate = yield* Deferred.make<void>()
+          const shell = yield* jobs.start({
+            id: "sh_child_pending",
+            type: "shell",
+            title: "sleep",
+            recovery: { kind: "shell", sessionID: child.id, shellID: "sh_child_pending", command: "sleep" },
+            run: Deferred.await(shellGate).pipe(Effect.as("")),
+          })
+          const marker = yield* jobs.background(shell.id)
+          if (!marker?.notificationID) return yield* Effect.die("Expected a pending shell marker")
+
+          const childTurn = yield* bus.subscribe(SessionEvent.Text.Ended).pipe(
+            Stream.filter((event) => event.data.sessionID === child.id),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const notified = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === parent.id && event.data.item.type === "synthetic"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+
+          const settled = yield* executeTool(registry, {
+            sessionID: parent.id,
+            ...toolIdentity,
+            call: {
+              type: "tool-call",
+              id: "call-child-pending",
+              name: SubagentTool.name,
+              input: {
+                agent: "reviewer",
+                description: "background review",
+                prompt: "review",
+                sessionID: child.id,
+                background: true,
+              },
+            },
+          })
+          expect(settled.metadata).toMatchObject({ sessionID: child.id, status: "running" })
+
+          yield* Fiber.join(childTurn)
+          yield* Effect.sleep("20 millis")
+          expect((yield* jobs.get(child.id))?.status).toBe("running")
+          expect((yield* sessions.inbox(parent.id)).filter((item) => item.type === "synthetic")).toEqual([])
+
+          // Acknowledging the shell notification clears its marker; only then may the child settle.
+          yield* jobs.completeBackground(marker.notificationID)
+          const admission = Array.from(yield* Fiber.join(notified))[0]
+          expect(admission?.data.item.type).toBe("synthetic")
+          if (admission?.data.item.type !== "synthetic") return yield* Effect.die("Expected a synthetic inbox item")
+          expect(admission.data.item.payload.text).toContain(`<subagent sessionID="${child.id}" state="completed"`)
+          expect((yield* jobs.get(child.id))?.status).toBe("completed")
+        }),
+      ),
+    ),
+  )
 })
