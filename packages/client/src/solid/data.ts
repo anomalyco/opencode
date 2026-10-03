@@ -253,6 +253,7 @@ export function createData(config: CreateDataInput) {
   const sync = createSync()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   const pendingUpdates = new Map<string, Map<string, SessionInboxInfo | SessionInbox.Delivery | undefined>>()
+  const permissionUpdates = new Map<string, Map<string, PermissionRequest | undefined>>()
 
   function setSessionActive(sessionID: string, status: DataSessionStatus) {
     activeUpdates?.set(sessionID, status)
@@ -272,6 +273,7 @@ export function createData(config: CreateDataInput) {
   }
 
   function removePermission(sessionID: string, requestID: string) {
+    permissionUpdates.get(sessionID)?.set(requestID, undefined)
     const requests = store.session.permission[sessionID]
     if (!requests?.some((request) => request.id === requestID)) return
     setStore(
@@ -1158,6 +1160,7 @@ export function createData(config: CreateDataInput) {
         if (event.data.inputID) compacting.get(event.data.sessionID)?.observed.add(event.data.inputID)
         return
       case "permission.asked":
+        permissionUpdates.get(event.data.sessionID)?.set(event.data.id, event.data)
         if (store.session.permission[event.data.sessionID]?.some((request) => request.id === event.data.id)) return
         setStore("session", "permission", event.data.sessionID, [
           ...(store.session.permission[event.data.sessionID] ?? []),
@@ -1728,7 +1731,20 @@ export function createData(config: CreateDataInput) {
         },
         sync(sessionID: string) {
           return sync.run(`session.permission:${sessionID}`, async () => {
-            setStore("session", "permission", sessionID, await api().permission.list({ sessionID }))
+            const updates = new Map<string, PermissionRequest | undefined>()
+            permissionUpdates.set(sessionID, updates)
+            try {
+              const snapshot = await api().permission.list({ sessionID })
+              // Live asks and replies may overtake the HTTP snapshot, including on reconnect.
+              const current = new Map(snapshot.map((request) => [request.id, request]))
+              updates.forEach((request, id) => {
+                if (request === undefined) current.delete(id)
+                else current.set(id, request)
+              })
+              setStore("session", "permission", sessionID, [...current.values()])
+            } finally {
+              if (permissionUpdates.get(sessionID) === updates) permissionUpdates.delete(sessionID)
+            }
           })
         },
         invalidate(sessionID: string) {
