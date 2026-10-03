@@ -82,3 +82,21 @@ describe("Model.Settings", () => {
     })
   })
 })
+
+describe("Model.Capabilities", () => {
+  test("defaults omitted tools to the unknown-model assumption", () => {
+    const decode = Schema.decodeUnknownSync(Model.Capabilities)
+
+    expect(decode({ input: ["text", "image"], output: ["text"] })).toEqual({
+      tools: true,
+      input: ["text", "image"],
+      output: ["text"],
+    })
+    expect(decode({ tools: false, input: ["text"], output: ["text"] })).toEqual({
+      tools: false,
+      input: ["text"],
+      output: ["text"],
+    })
+    expect(() => decode({ tools: "yes", input: ["text"], output: ["text"] })).toThrow()
+  })
+})

@@ -19,6 +19,27 @@ describe("Config.Entry", () => {
     expect(() => decode({ worktree: { directory: " " } })).toThrow()
     expect(() => decode({ worktree: { directory: false } })).toThrow()
   })
+  test("defaults omitted model capability tools for custom providers", () => {
+    const decoded = Schema.decodeUnknownSync(Config.Info)({
+      providers: {
+        acme: {
+          package: "aisdk:@ai-sdk/openai-compatible",
+          models: {
+            coder: {
+              limit: { context: 262144, output: 32768 },
+              capabilities: { input: ["text", "image"], output: ["text"] },
+            },
+          },
+        },
+      },
+    })
+    expect(decoded.providers?.acme?.models?.coder?.capabilities).toEqual({
+      tools: true,
+      input: ["text", "image"],
+      output: ["text"],
+    })
+  })
+
   test("round-trips canonical provider IDs without changing config keys", () => {
     const input = { providers: { "console-anthropic": { canonical: "anthropic" } } }
     const decoded = Schema.decodeUnknownSync(Config.Info)(input)
