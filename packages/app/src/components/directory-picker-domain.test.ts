@@ -20,6 +20,11 @@ import {
   pickerParent,
   pickerRoot,
   pickerAbsoluteInput,
+  pickerDirname,
+  pickerDisplaySeparator,
+  resolvePickerStart,
+  stripPickerTrailingSeparator,
+  withPickerSeparator,
 } from "./directory-picker-domain"
 
 test("maps server directory entries into Pierre paths", () => {
@@ -302,9 +307,72 @@ test("wraps autocomplete keyboard navigation", () => {
   expect(nextSuggestionIndex(0, 1, 0)).toBe(-1)
 })
 
+test("prefers the server directory over home for the picker start", () => {
+  const home = "C:/Users/boyanzh"
+  const directory = "C:/Users/boyanzh/Desktop/Programs/repos"
+  expect(resolvePickerStart(undefined, directory, home, undefined, undefined)).toBe(directory)
+  expect(resolvePickerStart(undefined, "/repo", "/home/luke", undefined, undefined)).toBe("/repo")
+  expect(resolvePickerStart("D:/explicit", directory, home, undefined, undefined)).toBe("D:/explicit")
+  expect(resolvePickerStart(undefined, "", home, undefined, undefined)).toBe(home)
+  expect(resolvePickerStart(undefined, "", "", "C:/fallback/dir", "C:/fallback/home")).toBe("C:/fallback/dir")
+  expect(resolvePickerStart(undefined, "", "", "", "C:/fallback/home")).toBe("C:/fallback/home")
+  expect(resolvePickerStart(undefined, "", "", "", "")).toBeFalsy()
+})
+
+test("walks nested Windows directories level by level", () => {
+  const home = "C:/Users/boyanzh"
+  const levels = ["Desktop", "Programs", "repos", "ApexLayer"]
+  const descended = levels.reduce((root, segment) => absoluteTreePath(root, segment + "/"), home)
+  expect(descended).toBe("C:/Users/boyanzh/Desktop/Programs/repos/ApexLayer")
+  expect(pickerParent(descended)).toBe("C:/Users/boyanzh/Desktop/Programs/repos")
+  expect(pickerParent("C:/Users/boyanzh")).toBe("C:/Users")
+  expect(pickerParent("C:/Users")).toBe("C:/")
+  expect(pickerParent("C:/")).toBe("C:/")
+  expect(pickerRoot(descended)).toBe("C:/")
+})
+
+test("accepts absolute Windows drive input with either separator", () => {
+  const home = "C:/Users/boyanzh"
+  const current = "C:/Users/boyanzh/Desktop/Programs/repos"
+  expect(pickerAbsoluteInput("C:\\Users\\boyanzh\\Desktop\\Programs\\repos\\ApexLayer", home, current)).toBe(
+    "C:/Users/boyanzh/Desktop/Programs/repos/ApexLayer",
+  )
+  expect(pickerAbsoluteInput("C:/Users/boyanzh/Desktop/Programs/repos/ApexLayer", home, current)).toBe(
+    "C:/Users/boyanzh/Desktop/Programs/repos/ApexLayer",
+  )
+  expect(pickerAbsoluteInput("D:/code/python-demo", home, current)).toBe("D:/code/python-demo")
+  expect(pickerRoot("D:/code/python-demo")).toBe("D:/")
+  expect(pickerAbsoluteInput("C:", home, current)).toBe("C:/")
+  expect(pickerAbsoluteInput("Desktop", home, current)).toBe("C:/Users/boyanzh/Desktop/Programs/repos/Desktop")
+})
+
 test("returns absolute directories and relative files", () => {
   expect(selectedTreePath("/home/luke/repo", "src/", "directory")).toBe("/home/luke/repo/src")
   expect(selectedTreePath("/home/luke/repo", "src/index.ts", "file")).toBe("src/index.ts")
   expect(selectedTreePath("/home/luke/repo/src", "index.ts", "file", "/home/luke/repo")).toBe("src/index.ts")
   expect(selectedTreePath("/home/luke/repo", "src/", "file")).toBeUndefined()
+})
+
+test("completes Windows display paths with a backslash", () => {
+  expect(pickerDisplaySeparator("C:\\Users\\boyanzh\\Desktop")).toBe("\\")
+  expect(pickerDisplaySeparator("/home/luke/repos")).toBe("/")
+  expect(withPickerSeparator("C:\\Users\\boyanzh\\Desktop")).toBe("C:\\Users\\boyanzh\\Desktop\\")
+  expect(withPickerSeparator("C:\\Users\\boyanzh\\Desktop\\")).toBe("C:\\Users\\boyanzh\\Desktop\\")
+  expect(withPickerSeparator("C:\\Users\\boyanzh\\Desktop/")).toBe("C:\\Users\\boyanzh\\Desktop/")
+  expect(withPickerSeparator("/home/luke/repos")).toBe("/home/luke/repos/")
+  expect(withPickerSeparator("/home/luke/repos/")).toBe("/home/luke/repos/")
+  expect(withPickerSeparator("")).toBe("")
+  expect(stripPickerTrailingSeparator("C:\\Users\\boyanzh\\Desktop\\")).toBe("C:\\Users\\boyanzh\\Desktop")
+  expect(stripPickerTrailingSeparator("C:\\Users\\boyanzh\\Desktop/")).toBe("C:\\Users\\boyanzh\\Desktop")
+  expect(stripPickerTrailingSeparator("/home/luke/repos/")).toBe("/home/luke/repos")
+})
+
+test("renders candidate rows with native separators", () => {
+  expect(pickerDirname("C:\\Users\\boyanzh\\.agents")).toBe("C:\\Users\\boyanzh\\")
+  expect(pickerDirname("C:\\Users\\boyanzh\\Desktop\\Programs\\repos")).toBe("C:\\Users\\boyanzh\\Desktop\\Programs\\")
+  expect(pickerDirname("C:/Users/boyanzh/.agents")).toBe("C:/Users/boyanzh/")
+  expect(pickerDirname("/home/luke/repos")).toBe("/home/luke/")
+  expect(pickerDirname("repos")).toBe("")
+  expect(pickerDirname("C:\\")).toBe("")
+  expect(pickerDirname("")).toBe("")
 })

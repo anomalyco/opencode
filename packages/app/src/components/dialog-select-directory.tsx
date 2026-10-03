@@ -3,12 +3,20 @@ import { Dialog } from "@opencode-ai/ui/dialog"
 import { FileIcon } from "@opencode-ai/ui/file-icon"
 import { List } from "@opencode-ai/ui/list"
 import type { ListRef } from "@opencode-ai/ui/list"
-import { getDirectory, getFilename } from "@opencode-ai/core/util/path"
+import { getFilename } from "@opencode-ai/core/util/path"
 import { createMemo, createResource, createSignal } from "solid-js"
 import { useLanguage } from "@/context/language"
 import { ServerConnection } from "@/context/server"
 import { useGlobal } from "@/context/global"
-import { cleanPickerInput, createDirectorySearch, displayPickerPath } from "./directory-picker-domain"
+import {
+  cleanPickerInput,
+  createDirectorySearch,
+  displayPickerPath,
+  pickerDirname,
+  pickerDisplaySeparator,
+  resolvePickerStart,
+  withPickerSeparator,
+} from "./directory-picker-domain"
 import type { Path } from "@opencode-ai/sdk/v2/client"
 
 interface DialogSelectDirectoryProps {
@@ -29,11 +37,7 @@ type Row = {
 function toRow(absolute: string, home: string, group: Row["group"]): Row {
   const full = displayPickerPath(absolute, "", "")
   const tilde = displayPickerPath(full, "~", home)
-  const withSlash = (value: string) => {
-    if (!value) return ""
-    if (value.endsWith("/")) return value
-    return value + "/"
-  }
+  const withSlash = (value: string) => withPickerSeparator(value)
 
   const search = Array.from(
     new Set([full, withSlash(full), tilde, withSlash(tilde), getFilename(full)].filter(Boolean)),
@@ -59,9 +63,9 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   const [filter, setFilter] = createSignal("")
   let list: ListRef | undefined
 
-  const missingHome = createMemo(() => !sync.data.path.home)
+  const missingBase = createMemo(() => !(sync.data.path.home || sync.data.path.directory))
   const [fallbackPath] = createResource(
-    () => (missingHome() ? true : undefined),
+    () => (missingBase() ? true : undefined),
     async (): Promise<Path | undefined> => {
       if ((await sdk.protocol) !== "v1") return
       return sdk.client.path
@@ -73,8 +77,14 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
   )
 
   const home = createMemo(() => sync.data.path.home || fallbackPath()?.home || "")
-  const start = createMemo(
-    () => sync.data.path.home || sync.data.path.directory || fallbackPath()?.home || fallbackPath()?.directory,
+  const start = createMemo(() =>
+    resolvePickerStart(
+      undefined,
+      sync.data.path.directory,
+      sync.data.path.home,
+      fallbackPath()?.directory,
+      fallbackPath()?.home,
+    ),
   )
 
   const directories = createDirectorySearch({
@@ -157,7 +167,7 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
           e.stopPropagation()
 
           const value = displayPickerPath(item.absolute, filter(), home())
-          list?.setFilter(value.endsWith("/") ? value : value + "/")
+          list?.setFilter(withPickerSeparator(value))
         }}
         onSelect={(path) => {
           if (!path) return
@@ -185,10 +195,10 @@ export function DialogSelectDirectory(props: DialogSelectDirectoryProps) {
                 <FileIcon node={{ path: item.absolute, type: "directory" }} class="shrink-0 size-4" />
                 <div class="flex items-center text-14-regular min-w-0">
                   <span class="text-text-weak whitespace-nowrap overflow-hidden overflow-ellipsis truncate min-w-0">
-                    {getDirectory(path)}
+                    {pickerDirname(path)}
                   </span>
                   <span class="text-text-strong whitespace-nowrap">{getFilename(path)}</span>
-                  <span class="text-text-weak whitespace-nowrap">/</span>
+                  <span class="text-text-weak whitespace-nowrap">{pickerDisplaySeparator(path)}</span>
                 </div>
               </div>
             </div>

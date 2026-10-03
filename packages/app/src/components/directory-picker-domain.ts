@@ -80,6 +80,19 @@ export function pickerAbsoluteInput(input: string, home: string, current: string
   return canonicalPickerPath(absolute)
 }
 
+// Explicit start wins, then the server/current directory, then home, then
+// fallback values. The server directory must beat home so the project picker
+// opens where the server runs instead of the OS user home (e.g. another drive).
+export function resolvePickerStart(
+  explicit?: string,
+  directory?: string,
+  home?: string,
+  fallbackDirectory?: string,
+  fallbackHome?: string,
+) {
+  return explicit || directory || home || fallbackDirectory || fallbackHome
+}
+
 export function treePathWithin(base: string | undefined, path: string) {
   return pickerRelativePath(base, path) !== undefined
 }
@@ -319,6 +332,27 @@ export function displayPickerPath(path: string, input: string, home: string) {
   const value = trimPickerPath(path)
   if (/^[A-Za-z]:\//.test(trimPickerPath(home)) || /^[A-Za-z]:\//.test(value)) return value.replaceAll("/", "\\")
   return pickerTilde(value, home) || value
+}
+
+export function pickerDisplaySeparator(value: string) {
+  return value.includes("\\") ? "\\" : "/"
+}
+
+export function withPickerSeparator(value: string) {
+  if (!value || value.endsWith("/") || value.endsWith("\\")) return value
+  return value + pickerDisplaySeparator(value)
+}
+
+export function stripPickerTrailingSeparator(value: string) {
+  return value.replace(/[/\\]+$/, "")
+}
+
+export function pickerDirname(path: string) {
+  const trimmed = stripPickerTrailingSeparator(path ?? "")
+  if (!trimmed) return ""
+  const separator = pickerDisplaySeparator(trimmed)
+  const head = trimmed.split(/[/\\]/).slice(0, -1).join(separator)
+  return head ? head + separator : ""
 }
 
 export function createDirectorySearch(args: { sdk: ServerSDK; base: () => string | undefined; home: () => string }) {
