@@ -6,17 +6,27 @@ import { ProviderTransform } from "@/provider/transform"
 import type { MessageV2 } from "./message-v2"
 
 const COMPACTION_BUFFER = 20_000
+const CONTEXT_SAFETY_FRACTION = 0.1
 
 export function usable(input: { cfg: ConfigV1.Info; model: Provider.Model; outputTokenMax?: number }) {
   const context = input.model.limit.context
   if (context === 0) return 0
 
-  const reserved =
-    input.cfg.compaction?.reserved ??
-    Math.min(COMPACTION_BUFFER, ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
-  return input.model.limit.input
-    ? Math.max(0, input.model.limit.input - reserved)
-    : Math.max(0, context - ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax))
+  const outputReserve = ProviderTransform.maxOutputTokens(input.model, input.outputTokenMax)
+  const safety = Math.floor(context * CONTEXT_SAFETY_FRACTION)
+  const configured = input.cfg.compaction?.reserved
+  if (configured !== undefined) {
+    return input.model.limit.input
+      ? Math.max(0, input.model.limit.input - configured)
+      : Math.max(0, context - outputReserve)
+  }
+
+  const inputReserve = Math.max(Math.min(COMPACTION_BUFFER, outputReserve), safety)
+  const contextReserve = Math.max(outputReserve, COMPACTION_BUFFER, safety)
+  if (input.model.limit.input) {
+    return Math.max(0, Math.min(input.model.limit.input - inputReserve, context - contextReserve))
+  }
+  return Math.max(0, context - contextReserve)
 }
 
 export function isOverflow(input: {

@@ -545,6 +545,39 @@ describe("session.compaction.isOverflow", () => {
   )
 
   it.live(
+    "compacts 1M-context models before the provider real limit (#50574)",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        // deepseek-v4.1-flash shape: 1M context, large output cap (capped to 32k reserve).
+        // Old ceiling was 1000000 - 32000 = 968000, but the gateway rejects at ~941k.
+        // With a 10% safety margin the ceiling is 900000.
+        const model = createModel({ context: 1_000_000, output: 384_000 })
+        const below = { input: 850_000, output: 5_000, reasoning: 0, cache: { read: 6_534, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens: below, model })).toBe(false)
+        const above = { input: 930_000, output: 5_000, reasoning: 0, cache: { read: 6_114, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens: above, model })).toBe(true)
+      }),
+    ),
+  )
+
+  it.live(
+    "keeps 200k-model ceiling unchanged with safety margin (#50574)",
+    provideTmpdirInstance(() =>
+      Effect.gen(function* () {
+        const compact = yield* SessionCompaction.Service
+        // big-pickle shape: 200k context / 160k input. Safety (10% = 20k) equals
+        // the existing 20k buffer, so the 140k ceiling from 13 real compactions holds.
+        const model = createModel({ context: 200_000, input: 160_000, output: 32_000 })
+        const below = { input: 120_000, output: 5_000, reasoning: 0, cache: { read: 5_000, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens: below, model })).toBe(false)
+        const above = { input: 135_000, output: 5_000, reasoning: 0, cache: { read: 5_000, write: 0 } }
+        expect(yield* compact.isOverflow({ tokens: above, model })).toBe(true)
+      }),
+    ),
+  )
+
+  it.live(
     "returns false when compaction.auto is disabled",
     provideTmpdirInstance(
       () =>

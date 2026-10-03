@@ -10,6 +10,7 @@ import { SessionSchema } from "./schema"
 import { Token } from "../util/token"
 
 const DEFAULT_BUFFER = 20_000
+const CONTEXT_SAFETY_FRACTION = 0.1
 const DEFAULT_KEEP_TOKENS = 8_000
 const TOOL_OUTPUT_MAX_CHARS = 2_000
 const SUMMARY_OUTPUT_TOKENS = 4_096
@@ -234,9 +235,14 @@ export const make = (dependencies: Dependencies) => {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+    // Catalog context values are optimistic: gateways may reject requests
+    // before the advertised limit (e.g. ~940k on a 1M model while the
+    // default ceiling sits at 968k). Keep at least a 10% safety margin so
+    // auto-compaction fires before the provider's real limit.
+    const safety = Math.floor(context * CONTEXT_SAFETY_FRACTION)
     if (
       estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
-      context - Math.max(output, config.buffer)
+      context - Math.max(output, config.buffer, safety)
     )
       return false
     return yield* compactAfterOverflow(input)
