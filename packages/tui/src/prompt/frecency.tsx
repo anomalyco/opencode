@@ -15,12 +15,12 @@ export function parseFrecency(text: string) {
     .filter(Boolean)
     .map((line) => {
       try {
-        return JSON.parse(line) as FrecencyEntry
+        return JSON.parse(line) as unknown
       } catch {
         return undefined
       }
     })
-    .filter((line): line is FrecencyEntry => line !== undefined)
+    .filter(isFrecencyEntry)
     .reduce<Record<string, FrecencyEntry>>((result, entry) => {
       result[entry.path] = entry
       return result
@@ -28,6 +28,13 @@ export function parseFrecency(text: string) {
   return Object.values(latest)
     .sort((a, b) => b.lastOpen - a.lastOpen)
     .slice(0, MAX_FRECENCY_ENTRIES)
+}
+
+function isFrecencyEntry(value: unknown): value is FrecencyEntry {
+  if (!value || typeof value !== "object") return false
+  if (!("path" in value) || typeof value.path !== "string" || !value.path) return false
+  if (!("frequency" in value) || typeof value.frequency !== "number" || !Number.isFinite(value.frequency)) return false
+  return "lastOpen" in value && typeof value.lastOpen === "number" && Number.isFinite(value.lastOpen)
 }
 
 function calculateFrecency(entry?: { frequency: number; lastOpen: number }) {
