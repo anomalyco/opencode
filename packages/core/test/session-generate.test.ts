@@ -24,7 +24,7 @@ import { Instructions } from "@opencode/core/instructions/index"
 import { InstructionBuiltIns } from "@opencode/core/instructions/builtins"
 import { Location } from "@opencode/core/location"
 import { McpInstructions } from "@opencode/core/mcp/instructions"
-import { ID } from "@opencode/core/model"
+import { ID, Model } from "@opencode/core/model"
 import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
 import { ReferenceInstructions } from "@opencode/core/reference/instructions"
@@ -60,6 +60,7 @@ let instruction: string | Instructions.Unavailable = "Initial context"
 const sessionID = SessionSchema.ID.make("ses_generate_test")
 
 const model = LanguageModel.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
+const alternate = LanguageModel.make({ id: "cheap-model", provider: "other", route: OpenAIChat.route })
 const client = Layer.mock(LLMClient.Service)({
   stream: () => Stream.die(new Error("unused")),
   generate: (request, requestOptions) =>
@@ -83,10 +84,11 @@ const client = Layer.mock(LLMClient.Service)({
     }),
 })
 const models = Layer.mock(SessionRunnerModel.Service)({
-  resolve: () =>
+  resolve: (session) =>
     Effect.succeed(
-      SessionRunnerModel.resolved(model, {
+      SessionRunnerModel.resolved(session.model?.id === "cheap-model" ? alternate : model, {
         capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+        variant: session.model?.variant,
         cost: [],
         limit: { context: 200_000, output: 32_000 },
       }),
@@ -352,6 +354,39 @@ it.effect(
       expect(requests[0]?.tools).toMatchObject([{ name: "lookup", description: "Lookup" }])
       expect(requests[0]?.toolChoice).toBeUndefined()
       expect(options[0]?.webSocket).toBeUndefined()
+      expect(yield* durableState(db, sessionID)).toEqual(before)
+
+      const hooks = yield* PluginHooks.Service
+      const override = Model.Ref.make({
+        providerID: Provider.ID.make("other"),
+        id: ID.make("cheap-model"),
+        variant: Model.VariantID.make("low"),
+      })
+      let generates = 0
+      yield* hooks.register(
+        "session",
+        "generate",
+        (event) =>
+          Effect.sync(() => {
+            generates++
+            expect(event.model).toEqual(override)
+          }),
+        { providerID: override.providerID },
+      )
+      yield* SessionGenerate.generate({ session, prompt: "Summarize cheaply", model: override }).pipe(
+        Effect.provideService(Instance.Service, instances),
+      )
+      expect(generates).toBe(1)
+      expect(requests[1]?.model).toBe(alternate)
+      expect(requests[1]?.promptCacheKey).toBe(sessionID)
+      expect(userTexts(requests[1])).toEqual(["Existing durable context", "Summarize cheaply"])
+      expect(yield* durableState(db, sessionID)).toEqual(before)
+
+      yield* SessionGenerate.generate({ session, prompt: "Use the session model again" }).pipe(
+        Effect.provideService(Instance.Service, instances),
+      )
+      expect(requests[2]?.model).toBe(model)
+      expect(generates).toBe(1)
       expect(yield* durableState(db, sessionID)).toEqual(before)
     }),
   { timeout: 15_000 },

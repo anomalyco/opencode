@@ -821,6 +821,22 @@ effect: (ctx) =>
   }),
 ```
 
+`session.generate` uses the session's model by default, retaining the opportunity to reuse its prompt cache.
+Supply `model` to override it for one request without changing the session; switching models generally cannot reuse
+the existing model's cache.
+
+```ts
+effect: (ctx) =>
+  Effect.gen(function* () {
+    const created = yield* ctx.session.create({ title: "Review" }).pipe(Effect.orDie)
+    const generated = yield* ctx.session.generate({
+      sessionID: created.id,
+      prompt: "Summarize this project",
+      model: { providerID: Provider.ID.make("openai"), id: Model.ID.make("gpt-5-mini") },
+    }).pipe(Effect.orDie)
+  }),
+```
+
 Remove a temporary session with `remove`. Removal stops active execution and recursively deletes child sessions.
 
 ```ts
