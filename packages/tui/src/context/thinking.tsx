@@ -1,9 +1,9 @@
-import { createMemo, type Setter } from "solid-js"
+import { createMemo, Show, type Accessor, type ParentProps, type Setter } from "solid-js"
 import { useKV } from "./kv"
 
-export type ThinkingMode = "show" | "hide"
+export type ThinkingMode = "show" | "hide" | "off"
 
-const MODES: readonly ThinkingMode[] = ["show", "hide"] as const
+const MODES: readonly ThinkingMode[] = ["show", "hide", "off"] as const
 
 // OpenAI's Responses API surfaces reasoning summaries that start with a bolded
 // title block: "**Inspecting PR workflow**\n\n<body>". Treat that first block,
@@ -20,10 +20,28 @@ export function isThinkingMode(value: unknown): value is ThinkingMode {
   return typeof value === "string" && (MODES as readonly string[]).includes(value)
 }
 
-// Cycle order matches the slash command: show → hide → show.
+export function isThinkingVisible(mode: ThinkingMode) {
+  return mode !== "off"
+}
+
+export function ThinkingVisibility(props: ParentProps<{ mode: Accessor<ThinkingMode> }>) {
+  return <Show when={isThinkingVisible(props.mode())}>{props.children}</Show>
+}
+
+export function thinkingModeActionTitle(mode: ThinkingMode) {
+  if (mode === "show") return "Collapse thinking"
+  if (mode === "hide") return "Hide thinking"
+  return "Show thinking"
+}
+
+// Cycle order matches the slash command: show → hide → off → show.
 export function nextThinkingMode(current: ThinkingMode): ThinkingMode {
   const idx = MODES.indexOf(current)
   return MODES[(idx + 1) % MODES.length] ?? "show"
+}
+
+export function normalizeThinkingMode(value: unknown): ThinkingMode {
+  return isThinkingMode(value) ? value : "hide"
 }
 
 export function useThinkingMode() {
@@ -56,8 +74,7 @@ export function useThinkingMode() {
   if ((stored() as string) === "minimal") set("hide")
 
   const mode = createMemo<ThinkingMode>(() => {
-    const value = stored()
-    return isThinkingMode(value) ? value : "hide"
+    return normalizeThinkingMode(stored())
   })
 
   return {
