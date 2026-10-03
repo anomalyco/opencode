@@ -94,6 +94,8 @@ const toPlatformError = (
   })
 }
 
+const EXIT_DRAIN_MS = 1_000
+
 type ExitSignal = Deferred.Deferred<readonly [code: number | null, signal: NodeJS.Signals | null]>
 
 export const make = Effect.gen(function* () {
@@ -268,17 +270,18 @@ export const make = Effect.gen(function* () {
     Effect.callback<readonly [NodeChildProcess.ChildProcess, ExitSignal], PlatformError.PlatformError>((resume) => {
       const signal = Deferred.makeUnsafe<readonly [code: number | null, signal: NodeJS.Signals | null]>()
       const proc = launch(command.command, command.args, opts)
-      let end = false
       let exit: readonly [code: number | null, signal: NodeJS.Signals | null] | undefined
       proc.on("error", (err) => {
         resume(Effect.fail(toPlatformError("spawn", err, command)))
       })
       proc.on("exit", (...args) => {
         exit = args
+        // "close" waits for stdio EOF, which never arrives while a descendant that outlived the
+        // process still holds the inherited pipes. Give buffered output a moment to drain, then
+        // settle from the exit itself so awaiting the process stays bounded.
+        setTimeout(() => Deferred.doneUnsafe(signal, Exit.succeed(args)), EXIT_DRAIN_MS).unref()
       })
       proc.on("close", (...args) => {
-        if (end) return
-        end = true
         Deferred.doneUnsafe(signal, Exit.succeed(exit ?? args))
       })
       proc.on("spawn", () => {

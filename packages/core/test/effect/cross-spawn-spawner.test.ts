@@ -277,6 +277,41 @@ describe("cross-spawn spawner", () => {
     )
 
     fx.effect(
+      "kill does not wait for descendants holding stdio",
+      Effect.gen(function* () {
+        const started = Date.now()
+        const exit = yield* Effect.exit(
+          Effect.gen(function* () {
+            // The detached grandchild leaves the process group, so it survives the kill and keeps stdout open.
+            const handle = yield* js(
+              'require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 5_000)"], { detached: true, stdio: "inherit" }).unref(); console.log("ready"); setInterval(() => {}, 10_000)',
+            )
+            yield* Stream.runHead(handle.stdout)
+            yield* handle.kill({ forceKillAfter: 100 })
+            return yield* handle.exitCode
+          }),
+        )
+
+        expect(Date.now() - started).toBeLessThan(3_000)
+        expect(Exit.isFailure(exit) ? true : exit.value !== ChildProcessSpawner.ExitCode(0)).toBe(true)
+      }),
+    )
+
+    fx.effect(
+      "exitCode does not wait for descendants holding stdio",
+      Effect.gen(function* () {
+        const started = Date.now()
+        const handle = yield* js(
+          'require("node:child_process").spawn(process.execPath, ["-e", "setTimeout(() => {}, 5_000)"], { detached: true, stdio: "inherit" }).unref()',
+        )
+        const code = yield* handle.exitCode
+
+        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
+        expect(Date.now() - started).toBeLessThan(3_000)
+      }),
+    )
+
+    fx.effect(
       "isRunning reflects process state",
       Effect.gen(function* () {
         const handle = yield* js('process.stdout.write("done")')
