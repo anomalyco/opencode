@@ -519,6 +519,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
     }
 
+    const skill = {
+      async toggle(name: string, enabled: boolean) {
+        if (enabled) {
+          // Disable: mark the skill as disabled at runtime
+          await sdk.client.app.disableSkill({ name })
+        } else {
+          // Enable: re-enable a previously disabled skill
+          await sdk.client.app.enableSkill({ name })
+        }
+      },
+    }
+
     createEffect(() => {
       const value = agent.current()
       if (!value?.model) return
@@ -534,6 +546,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       model,
       agent,
       mcp,
+      skill,
       session,
       permission,
     }

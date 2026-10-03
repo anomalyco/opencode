@@ -208,6 +208,7 @@ export const Definitions = {
   "dialog.select.submit": keybind("return", "Submit selected dialog item"),
   "dialog.prompt.submit": keybind("return", "Submit dialog prompt"),
   "dialog.mcp.toggle": keybind("space", "Toggle MCP in MCP dialog"),
+  "dialog.skill.toggle": keybind("space", "Toggle skill in skill dialog"),
   "dialog.move_session.new": keybind("ctrl+m", "New project copy"),
   "dialog.move_session.delete": keybind("ctrl+d", "Delete project copy"),
   "dialog.move_session.refresh": keybind("ctrl+r", "Refresh project copies"),
