@@ -34,7 +34,6 @@
     "./mini/tool": "./src/mini/tool.public.ts",
     "./model-preference": "./src/model-preference.ts",
     "./runtime": "./src/runtime.tsx",
-    "./terminal-win32": "./src/terminal-win32.ts",
     "./context/keymap": "./src/context/keymap.tsx",
     "./prompt/content": "./src/prompt/content.ts",
     "./prompt/display": "./src/prompt/display.ts",
