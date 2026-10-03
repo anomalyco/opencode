@@ -7,7 +7,7 @@ import {
   LanguageModel,
   LLM,
   LLMRequest,
-  type Media,
+  Media,
   Message,
   SystemPart,
 } from "@opencode/ai"
@@ -139,22 +139,47 @@ const mediaBytes = (media: Media.Asset) => {
   return 0
 }
 
+// Inspect only the tail, not a decoded copy of every PDF in the conversation.
+const mediaTail = (media: Media.Asset | undefined) => {
+  const source = media?.source
+  if (source?.type === "bytes") return Buffer.from(source.data.subarray(-1024)).toString("latin1")
+  if (source?.type === "base64")
+    return Buffer.from(source.data.slice(-(2048 + (source.data.length % 4))), "base64")
+      .subarray(-1024)
+      .toString("latin1")
+}
+
 /** Replaces media with the returned text; messages without replacements are returned unchanged. */
 const replaceMedia = (
   messages: LLMRequest["messages"],
-  replace: (media: { mime: string; name: string | undefined; bytes: () => number }) => string | undefined,
+  replace: (media: {
+    mime: string
+    name: string | undefined
+    bytes: () => number
+    tail: () => string | undefined
+  }) => string | undefined,
 ) =>
   messages.map((message) => {
     const content = message.content.map((part) => {
       if (part.type === "media") {
-        const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
+        const text = replace({
+          mime: part.media.mediaType,
+          name: part.filename,
+          bytes: () => mediaBytes(part.media),
+          tail: () => mediaTail(part.media),
+        })
         return text === undefined ? part : Message.text(text)
       }
       if (part.type !== "tool-result" || part.result.type !== "content") return part
       const result = part.result
       const value = result.value.map((item): Content => {
         if (item.type !== "file") return item
-        const text = replace({ mime: item.mime, name: item.name, bytes: () => Buffer.byteLength(item.uri) })
+        const text = replace({
+          mime: item.mime,
+          name: item.name,
+          bytes: () => Buffer.byteLength(item.uri),
+          tail: () => mediaTail(Media.parseDataUrl(item.uri)),
+        })
         return text === undefined ? item : { type: "text", text }
       })
       return value.every((item, index) => item === result.value[index])
@@ -168,6 +193,15 @@ const replaceMedia = (
 
 export const unsupportedParts = (messages: LLMRequest["messages"], capabilities: Model.Capabilities) =>
   replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities))
+
+/** A missing PDF end marker catches interrupted downloads; it is not full PDF validation. */
+export const omitIncompletePdfs = (messages: LLMRequest["messages"]) =>
+  replaceMedia(messages, (media) => {
+    if (media.mime.toLowerCase() !== "application/pdf") return
+    const tail = media.tail()
+    if (tail === undefined || tail.includes("%%EOF")) return
+    return `ERROR: Cannot read ${media.name ? `"${media.name}"` : "PDF"} (the PDF is missing its end-of-file marker and may be incomplete). Download or regenerate the file before reading it again. Inform the user.`
+  })
 
 export const boundImages = (messages: LLMRequest["messages"]) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
@@ -277,7 +311,7 @@ export const layer = Layer.effect(
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         system: shaped.system,
-        messages: boundImages(unsupportedParts(shaped.messages, model.capabilities)),
+        messages: boundImages(omitIncompletePdfs(unsupportedParts(shaped.messages, model.capabilities))),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         generation: Object.keys(generation).length === 0 ? undefined : generation,

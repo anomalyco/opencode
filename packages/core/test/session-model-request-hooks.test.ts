@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { Media, Message, ToolResultPart } from "@opencode/ai"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
 import { Session } from "@opencode/schema/session"
@@ -37,6 +38,53 @@ const transport = SessionModelTransport.Service.of({
   bind: () => ({ execute: () => Effect.die("unused WebSocket execution") }),
   close: () => Effect.void,
   closeAll: Effect.void,
+})
+
+describe("SessionModelRequest PDF guard", () => {
+  it.effect("omits incomplete PDFs from every request kind without changing stored history", () =>
+    Effect.gen(function* () {
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const pdf = Buffer.from("%PDF-1.7\ninterrupted download").toString("base64")
+      const original = Message.tool(
+        ToolResultPart.make({
+          id: "call_pdf",
+          name: "read",
+          result: {
+            type: "content",
+            value: [{ type: "file", uri: `data:application/pdf;base64,${pdf}`, mime: "application/pdf" }],
+          },
+        }),
+      )
+      const next = Message.user("continue")
+      const selected = SessionRunnerModel.resolved(OpenAIChat.route.model({ id: "example-model", provider: "test" }), {
+        capabilities: { tools: true, input: ["text", "pdf"], output: ["text"] },
+        cost: [],
+        limit: { context: 200_000, output: 32_000 },
+      })
+
+      for (const kind of KINDS) {
+        const prepared = yield* requests[kind]({
+          session,
+          agent: Agent.ID.make("build"),
+          model: selected,
+          system: [],
+          messages: [original, next, Message.user({ type: "media", media: Media.base64(pdf, "application/pdf") })],
+        })
+
+        expect(prepared.request.messages[0]?.content[0]).toMatchObject({
+          type: "tool-result",
+          id: "call_pdf",
+          result: { value: [{ type: "text", text: expect.stringContaining("end-of-file marker") }] },
+        })
+        expect(prepared.request.messages[1]).toBe(next)
+        expect(prepared.request.messages[2]?.content).toEqual([
+          Message.text(expect.stringContaining("end-of-file marker")),
+        ])
+      }
+
+      expect(original.content[0]).toMatchObject({ result: { value: [{ type: "file" }] } })
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
 })
 
 describe("SessionModelRequest HTTP hooks", () => {
