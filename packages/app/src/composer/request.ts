@@ -65,6 +65,9 @@ const parseCommentMentions = (comment: string) => {
 
     if (!path) return []
 
+    // Bare words like @here are mention-style text, not workspace paths.
+    if (!path.startsWith("~") && !/[\\/.#]/.test(path)) return []
+
     return [path]
   })
 }
