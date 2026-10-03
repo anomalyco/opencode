@@ -262,3 +262,33 @@ describe("Instruction.systemPaths global config", () => {
     }),
   )
 })
+
+describe("Instruction.globalInstructionFiles", () => {
+  // Regression coverage for #28658: OPENCODE_CONFIG_DIR replaced the global
+  // AGENTS.md lookup instead of adding to it.
+  test("checks the overridden config dir in addition to the real global default", () => {
+    const files = Instruction.globalInstructionFiles({ home: "/home/user", config: "/override" }, false)
+    expect(files).toContain(path.join("/override", "AGENTS.md"))
+    expect(files).toContain(path.join(Global.Path.config, "AGENTS.md"))
+  })
+
+  test("prioritizes the overridden config dir over the real global default", () => {
+    const files = Instruction.globalInstructionFiles({ home: "/home/user", config: "/override" }, false)
+    expect(files[0]).toBe(path.join("/override", "AGENTS.md"))
+  })
+
+  test("does not duplicate the path when config matches the real global default", () => {
+    const files = Instruction.globalInstructionFiles({ home: "/home/user", config: Global.Path.config }, false)
+    expect(files.filter((file) => file === path.join(Global.Path.config, "AGENTS.md"))).toHaveLength(1)
+  })
+
+  test("includes CLAUDE.md alongside the additive AGENTS.md list when the Claude Code prompt is enabled", () => {
+    const files = Instruction.globalInstructionFiles({ home: "/home/user", config: "/override" }, false)
+    expect(files).toContain(path.join("/home/user", ".claude", "CLAUDE.md"))
+  })
+
+  test("omits CLAUDE.md when the Claude Code prompt is disabled", () => {
+    const files = Instruction.globalInstructionFiles({ home: "/home/user", config: "/override" }, true)
+    expect(files).not.toContain(path.join("/home/user", ".claude", "CLAUDE.md"))
+  })
+})

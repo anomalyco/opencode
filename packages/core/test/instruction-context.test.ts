@@ -109,6 +109,50 @@ describe("InstructionContext", () => {
     ),
   )
 
+  it.live("still loads the real global AGENTS.md when OPENCODE_CONFIG_DIR points elsewhere", () =>
+    // Regression coverage for #28658: OPENCODE_CONFIG_DIR replaced the
+    // global AGENTS.md lookup instead of adding to it.
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.acquireRelease(
+          Effect.promise(async () => {
+            const realGlobalFile = path.join(Global.Path.config, "AGENTS.md")
+            await fs.writeFile(realGlobalFile, "real global")
+            return realGlobalFile
+          }),
+          (file) => Effect.promise(() => fs.rm(file)),
+        ).pipe(
+          Effect.flatMap((realGlobalFile) =>
+            Effect.gen(function* () {
+              const overrideDir = path.join(tmp.path, "override")
+              yield* Effect.promise(() => fs.mkdir(overrideDir, { recursive: true }))
+
+              const context = yield* SystemContextRegistry.Service.pipe(
+                Effect.flatMap((service) => service.load()),
+                Effect.provide(
+                  instructionLayer({
+                    config: overrideDir,
+                    locationServiceLayer: Layer.succeed(
+                      Location.Service,
+                      Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+                    ),
+                  }),
+                ),
+              )
+
+              expect((yield* SystemContext.initialize(context)).baseline).toContain(
+                `Instructions from: ${realGlobalFile}\nreal global`,
+              )
+            }),
+          ),
+        ),
+      ),
+    ),
+  )
+
   it.live("keeps an empty AGENTS.md as available context", () =>
     Effect.acquireRelease(
       Effect.promise(() => tmpdir()),
