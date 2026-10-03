@@ -86,6 +86,21 @@ describe("Patch namespace", () => {
       }
     })
 
+    test("should reject update lines that come before the first @@ header", () => {
+      const patchText = `*** Begin Patch
+*** Update File: existing.txt
+ old line
+-new line
++updated line
+@@
+ other line
+-x
++y
+*** End Patch`
+
+      expect(() => Patch.parsePatch(patchText)).toThrow("Invalid update file line:  old line")
+    })
+
     test("should throw error for invalid patch format", () => {
       const invalidPatch = `This is not a valid patch`
 

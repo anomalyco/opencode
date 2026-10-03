@@ -146,6 +146,8 @@ function parseUpdateFileChunks(lines: string[], startIdx: number): { chunks: Upd
         change_context: contextLine || undefined,
         is_end_of_file: isEndOfFile || undefined,
       })
+    } else if (lines[i].trim()) {
+      throw new Error(`Invalid update file line: ${lines[i]}`)
     } else {
       i++
     }
