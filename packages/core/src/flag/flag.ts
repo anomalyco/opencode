@@ -72,6 +72,9 @@ export const Flag = {
   get OPENCODE_PLUGIN_META_FILE() {
     return process.env["OPENCODE_PLUGIN_META_FILE"]
   },
+  get OPENCODE_WEB_UI_TITLE() {
+    return process.env["OPENCODE_WEB_UI_TITLE"]
+  },
   get OPENCODE_CLIENT() {
     return process.env["OPENCODE_CLIENT"] ?? "cli"
   },

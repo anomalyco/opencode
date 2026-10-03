@@ -3,7 +3,7 @@ import { preloadMarkdown } from "@opencode-ai/session-ui/markdown-cache"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useQuery } from "@tanstack/solid-query"
 import { DateTime } from "luxon"
-import { type Accessor, createEffect, createMemo, createRoot, type JSX, startTransition } from "solid-js"
+import { type Accessor, createEffect, createMemo, createRoot, createSignal, type JSX, startTransition } from "solid-js"
 import { produce } from "solid-js/store"
 import { useCommand } from "@/context/command"
 import {
@@ -86,12 +86,55 @@ export function createHomeSessionsController(home: HomeController) {
       Date.now(),
     ),
   )
+  // Workspace-bound sessions belong to the directory they were started from
+  // (workspace.extra.origin); the workspace directory itself is per-session
+  // plumbing and must not surface as a project on the home page.
+  const [workspaceOrigins, setWorkspaceOrigins] = createSignal<ReadonlyMap<string, string | undefined>>(new Map())
+  // IDs we asked the server about already; a referenced workspace missing from
+  // a successful list response (dangling, reclaimed, other project, flag off)
+  // must not retrigger the fetch forever.
+  const originsQueried = new Set<string>()
+  let originsQueryInFlight = false
+  const loadWorkspaceOrigins = async () => {
+    const ctx = home.server.focusedContext()
+    if (!ctx || originsQueryInFlight) return
+    originsQueryInFlight = true
+    try {
+      const pending = indexedSessions().flatMap((session) => (session.workspaceID ? [session.workspaceID] : []))
+      const result = await ctx.sdk.client.experimental.workspace.list()
+      const next = new Map<string, string | undefined>()
+      for (const item of (result.data ?? []) as Array<{ id: string; extra?: unknown }>) {
+        const origin = (item.extra as { origin?: unknown } | null | undefined)?.origin
+        next.set(item.id, typeof origin === "string" && origin ? origin : undefined)
+      }
+      for (const id of pending) originsQueried.add(id)
+      setWorkspaceOrigins((current) => {
+        const merged = new Map(current)
+        for (const entry of next) merged.set(entry[0], entry[1])
+        return merged
+      })
+    } catch {
+    } finally {
+      originsQueryInFlight = false
+    }
+  }
+  void loadWorkspaceOrigins()
+  createEffect(() => {
+    const known = workspaceOrigins()
+    if (
+      indexedSessions().some(
+        (session) => session.workspaceID && !known.has(session.workspaceID) && !originsQueried.has(session.workspaceID),
+      )
+    )
+      void loadWorkspaceOrigins()
+  })
   const allRecords = createMemo(() =>
     buildHomeSessionRecords({
       sessions: indexedSessions,
       projectDirectories,
       projects: home.project.list,
       projectByID,
+      workspaceOrigins,
     }),
   )
   const records = createMemo(() => allRecords().slice(0, HOME_SESSION_LIMIT))
@@ -179,7 +222,8 @@ export function createHomeSessionsController(home: HomeController) {
       canCreate: () => !!home.project.newSession(),
       create: home.project.openNewSession,
       open: (session: Session, options?: OpenSessionOptions) => {
-        const directoryKey = pathKey(session.directory)
+        const origin = session.workspaceID ? workspaceOrigins().get(session.workspaceID) : undefined
+        const directoryKey = pathKey(origin ?? session.directory)
         const project =
           home.project
             .list()
@@ -187,10 +231,15 @@ export function createHomeSessionsController(home: HomeController) {
               (item) =>
                 pathKey(item.worktree) === directoryKey ||
                 item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
-            ) ?? projectForSession(session, home.project.list(), projectByID())
+            ) ??
+          projectForSession(
+            origin ? { ...session, directory: origin } : session,
+            home.project.list(),
+            projectByID(),
+          )
         const conn = home.server.focused()
         if (!conn) return
-        const directory = project?.worktree ?? session.directory
+        const directory = project?.worktree ?? origin ?? session.directory
         const ctx = home.server.focusedContext()
         if (!ctx) return
         ctx.projects.open(directory)
@@ -252,20 +301,27 @@ function buildHomeSessionRecords(input: {
   projectDirectories: () => string[]
   projects: () => LocalProject[]
   projectByID: () => Map<string, LocalProject>
+  workspaceOrigins: () => ReadonlyMap<string, string | undefined>
 }) {
   const directories = new Set(input.projectDirectories().map(pathKey))
-  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.directory)))
+  const sessions = input.sessions().filter(
+    (session) => session.workspaceID || directories.has(pathKey(session.directory)),
+  )
   return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
     .sort(compareSessionTime)
     .flatMap((session) => {
-      const directory = pathKey(session.directory)
+      const origin = session.workspaceID ? input.workspaceOrigins().get(session.workspaceID) : undefined
+      const directory = pathKey(origin ?? session.directory)
+      const located = origin ? { ...session, directory: origin } : session
       const project =
         input
           .projects()
           .find(
             (item) =>
               pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-          ) ?? projectForSession(session, input.projects(), input.projectByID())
+          ) ??
+        projectForSession(located, input.projects(), input.projectByID()) ??
+        (session.workspaceID ? { worktree: origin ?? session.directory, expanded: true } : undefined)
       if (!project) return []
       return { session, project, projectName: displayName(project) }
     })
