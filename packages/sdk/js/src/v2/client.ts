@@ -60,21 +60,23 @@ export function createOpencodeClient(config?: Config & { directory?: string; exp
     }
   }
 
+  const client = createClient(config)
   if (config?.directory) {
-    config.headers = {
-      ...config.headers,
-      "x-opencode-directory": encodeURIComponent(config.directory),
-    }
+    client.setConfig({
+      headers: {
+        "x-opencode-directory": encodeURIComponent(config.directory),
+      },
+    })
   }
 
   if (config?.experimental_workspaceID) {
-    config.headers = {
-      ...config.headers,
-      "x-opencode-workspace": config.experimental_workspaceID,
-    }
+    client.setConfig({
+      headers: {
+        "x-opencode-workspace": config.experimental_workspaceID,
+      },
+    })
   }
 
-  const client = createClient(config)
   client.interceptors.request.use((request) =>
     rewrite(request, {
       directory: config?.directory,
