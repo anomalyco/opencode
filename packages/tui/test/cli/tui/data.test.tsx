@@ -46,9 +46,9 @@ function emitEvent(events: ReturnType<typeof createEventStream>, event: OpenCode
 
 const config = createTuiResolvedConfig()
 
-function DataProvider(props: ParentProps) {
+function DataProvider(props: ParentProps & { config?: typeof config }) {
   return (
-    <ConfigProvider config={config}>
+    <ConfigProvider config={props.config ?? config}>
       <DataProviderBase directory={process.cwd()}>
         <LocationProvider>
           <SyncLocation />
@@ -3089,6 +3089,96 @@ test("renders admitted prompts immediately and tracks them until promoted", asyn
   }
 })
 
+test("low verbosity merges live instruction updates with adjacent activity", async () => {
+  const events = createEventStream()
+  const sessionID = "session-instruction-activity"
+  const calls = createFetch((url) => {
+    if (url.pathname === `/api/session/${sessionID}/message`) return json({ data: [], cursor: {} })
+  }, events)
+  let rows!: ReturnType<typeof createSessionRows>
+  let client!: ReturnType<typeof useClient>
+  let data!: ReturnType<typeof useData>
+
+  function Probe() {
+    client = useClient()
+    data = useData()
+    rows = createSessionRows(() => sessionID)
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <TestTuiContexts>
+      <ClientProvider api={createApi(calls.fetch)}>
+        <ProjectProvider>
+          <DataProvider config={createTuiResolvedConfig({ session: { verbosity: "low" } }, { terminal: false })}>
+            <Probe />
+          </DataProvider>
+        </ProjectProvider>
+      </ClientProvider>
+    </TestTuiContexts>
+  ))
+
+  try {
+    await wait(() => client.connection.status() === "connected")
+    emitEvent(events, {
+      id: "evt_instruction_step",
+      created: 1,
+      type: "session.step.started",
+      durable: durable(sessionID),
+      data: {
+        started: 1,
+        sessionID,
+        assistantMessageID: "message-assistant",
+        agent: "build",
+        model: { id: "model", providerID: "provider" },
+      },
+    })
+    emitEvent(events, {
+      id: "evt_instruction_tool_1",
+      created: 2,
+      type: "session.tool.input.started",
+      durable: durable(sessionID, 1),
+      data: { sessionID, assistantMessageID: "message-assistant", id: "call-before", name: "shell" },
+    })
+    await wait(() => rows.some((row) => row.type === "group" && row.kind === "activity"))
+    emitEvent(events, {
+      id: "evt_instruction_update",
+      created: 3,
+      type: "session.instructions.updated",
+      durable: durable(sessionID, 2, 2),
+      data: {
+        sessionID,
+        delta: { "core/codemode": "1".repeat(64), "core/mcp-guidance": "2".repeat(64) },
+        text: "Updated instructions",
+      },
+    })
+    const updateID = SessionMessage.ID.fromEvent(Event.ID.make("evt_instruction_update"))
+    await wait(() => rows[0]?.type === "group" && rows[0].size === 2)
+    expect(rows).toHaveLength(1)
+    expect(data.session.message.get(sessionID, updateID)?.metadata?.notice).toBe("instructions")
+    emitEvent(events, {
+      id: "evt_instruction_tool_2",
+      created: 4,
+      type: "session.tool.input.started",
+      durable: durable(sessionID, 3),
+      data: { sessionID, assistantMessageID: "message-assistant", id: "call-after", name: "shell" },
+    })
+    await wait(() => rows[0]?.type === "group" && rows[0].size === 3)
+    expect(rows).toHaveLength(1)
+    const activity = rows[0]
+    if (activity.type !== "group") throw new Error("Expected activity")
+    expect(activity.kind).toBe("activity")
+    expect(activity.children.map((child) => (child.type === "entry" ? child.entry.type : child.kind))).toEqual([
+      "part",
+      "message",
+      "part",
+    ])
+    expect(groupRefs(activity).map((ref) => ref.partID)).toEqual(["call-before", "call-after"])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
 test("skips initial instruction state and projects later updates with their message ID", async () => {
   const events = createEventStream()
   const calls = createFetch(undefined, events)
@@ -3153,13 +3243,16 @@ test("skips initial instruction state and projects later updates with their mess
 
     await wait(() => sync.session.message.list("session-1")?.some((message) => message.time.created === 2))
     expect(sync.session.message.list("session-1")).toHaveLength(1)
-    expect(sync.session.message.list("session-1")?.[0]).toMatchObject({
+    const update = sync.session.message.list("session-1")?.[0]
+    expect(update).toMatchObject({
       id: SessionMessage.ID.fromEvent(Event.ID.make("evt_instructions_3")),
       type: "system",
       text: "The current date has changed.",
       description: "Instructions updated: core/date",
       time: { created: 2 },
     })
+    expect(update?.metadata?.notice).toBe("instructions")
+    expect(update?.metadata?.instructionSources).toEqual(["core/date"])
   } finally {
     app.renderer.destroy()
   }
