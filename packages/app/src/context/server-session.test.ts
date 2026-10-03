@@ -1639,4 +1639,68 @@ describe("server session", () => {
     expect(ctx.store.data.message.active?.map((message) => message.id)).toEqual(["message"])
     expect(ctx.store.data.session_status["session-0"]).toBeUndefined()
   })
+
+  test("fetches todos with the session directory on v2 and refetches with force", async () => {
+    const todos = [
+      { content: "one", status: "pending", priority: "high" },
+      { content: "two", status: "completed", priority: "medium" },
+    ]
+    const calls: unknown[] = []
+    const client = {
+      session: {
+        get: async () => ({ data: session("child") }),
+        messages: async () => response(),
+        diff: async () => ({ data: [] }),
+        todo: async (input: unknown) => {
+          calls.push(input)
+          return { data: todos }
+        },
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client, { protocol: Promise.resolve("v2"), retry: retryImmediately })
+    store.remember(session("child"))
+
+    await store.todo("child")
+    expect(calls).toEqual([{ sessionID: "child", directory: "/repo" }])
+    expect(store.data.todo.child).toEqual(todos)
+
+    // Cached result short-circuits without force.
+    await store.todo("child")
+    expect(calls).toHaveLength(1)
+
+    // Forced refetch reconciles, e.g. after a missed todo.updated event.
+    await store.todo("child", { force: true })
+    expect(calls).toHaveLength(2)
+    expect(store.data.todo.child).toEqual(todos)
+  })
+
+  test("suppresses forced todo refetch after a client wipe until a fresh event", async () => {
+    const todos = [{ content: "fresh", status: "pending", priority: "high" }]
+    const calls: unknown[] = []
+    const client = {
+      session: {
+        get: async () => ({ data: session("child") }),
+        messages: async () => response(),
+        diff: async () => ({ data: [] }),
+        todo: async (input: unknown) => {
+          calls.push(input)
+          return { data: todos }
+        },
+      },
+    } as unknown as OpencodeClient
+    const store = createServerSession(client, { protocol: Promise.resolve("v2"), retry: retryImmediately })
+    store.remember(session("child"))
+
+    // Turn-boundary wipe (composer / optimistic submit path).
+    store.set("todo", "child", [])
+    await store.todo("child", { force: true })
+    expect(calls).toHaveLength(0)
+    expect(store.data.todo.child).toEqual([])
+
+    // A fresh server event re-enables reconciliation.
+    store.apply({ type: "todo.updated", properties: { sessionID: "child", todos: todos } })
+    await store.todo("child", { force: true })
+    expect(calls).toHaveLength(1)
+    expect(store.data.todo.child).toEqual(todos)
+  })
 })
