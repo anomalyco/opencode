@@ -1890,6 +1890,46 @@ export default function Page() {
     return restoreMutation.mutateAsync(id)
   }
 
+  const resend = async (input: { sessionID: string; messageID: string }) => {
+    if (reverting()) return
+
+    const currentModel = local.model.current()
+    const currentAgent = local.agent.current()
+    if (!currentModel || !currentAgent) {
+      showToast({
+        title: language.t("prompt.toast.modelAgentRequired.title"),
+        description: language.t("prompt.toast.modelAgentRequired.description"),
+      })
+      return
+    }
+
+    const item: FollowupDraft = {
+      sessionID: input.sessionID,
+      sessionDirectory: sdk().directory,
+      prompt: draft(input.messageID),
+      context: [],
+      agent: currentAgent.name,
+      model: { providerID: currentModel.provider.id, modelID: currentModel.id },
+      variant: local.model.variant.current(),
+    }
+
+    await halt(input.sessionID)
+      .then(() => sdk().api.session.revert.stage(input))
+      .then(() =>
+        sendFollowupDraft({
+          api: sdk().api.session,
+          sync: sync(),
+          serverSync: serverSync(),
+          draft: item,
+          optimisticBusy: item.sessionDirectory === sdk().directory,
+        }),
+      )
+      .then((ok) => {
+        if (ok) resumeScroll()
+      })
+      .catch(fail)
+  }
+
   const rolled = createMemo(() => {
     const id = revertMessageID()
     if (!id) return []
@@ -1923,7 +1963,7 @@ export default function Page() {
     download()
   }
 
-  const actions = { revert, openAttachment }
+  const actions = { revert, resend, openAttachment }
 
   createEffect(() => {
     const sessionID = params.id

@@ -178,6 +178,7 @@ export type SessionAction = (input: { sessionID: string; messageID: string }) =>
 export type UserActions = {
   fork?: SessionAction
   revert?: SessionAction
+  resend?: SessionAction
   openAttachment?: (file: FilePart) => void
 }
 
@@ -207,12 +208,13 @@ export interface MessagePartProps {
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy" | "reset"
+    icon: "check" | "copy" | "reset" | "share"
     label: JSX.Element
     useV2?: boolean
   },
 ) {
-  const icon = () => (props.icon === "copy" ? "outline-copy" : props.icon)
+  const icon = () =>
+    props.icon === "copy" ? "outline-copy" : props.icon === "share" ? "outline-share" : props.icon
   return (
     <Show
       when={props.useV2}
@@ -1261,6 +1263,20 @@ export function UserMessageDisplay(props: {
       .finally(() => setState("busy", false))
   }
 
+  const resend = () => {
+    const act = props.actions?.resend
+    if (!act || busy()) return
+    setState("busy", true)
+    void Promise.resolve()
+      .then(() =>
+        act({
+          sessionID: props.message.sessionID,
+          messageID: props.message.id,
+        }),
+      )
+      .finally(() => setState("busy", false))
+  }
+
   const renderAttachments = () => (
     <Show when={attachments().length > 0}>
       <div data-slot="user-message-attachments">
@@ -1370,6 +1386,20 @@ export function UserMessageDisplay(props: {
                 revert()
               }}
               aria-label={i18n.t("ui.message.revertMessage")}
+            />
+          </Show>
+          <Show when={props.actions?.resend}>
+            <MessageActionButton
+              icon="share"
+              label={i18n.t("ui.message.resendMessage")}
+              useV2={props.useV2Actions}
+              disabled={!!busy()}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                resend()
+              }}
+              aria-label={i18n.t("ui.message.resendMessage")}
             />
           </Show>
           <Show when={text()}>
@@ -1668,16 +1698,19 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     return match?.models?.[message.modelID]?.name ?? message.modelID
   })
 
-  const duration = createMemo(() => {
-    if (props.message.role !== "assistant") return ""
+  const durationMs = createMemo(() => {
+    if (props.message.role !== "assistant") return -1
     const message = props.message as AssistantMessage
     const completed = message.time.completed
-    const ms =
-      typeof props.turnDurationMs === "number"
-        ? props.turnDurationMs
-        : typeof completed === "number"
-          ? completed - message.time.created
-          : -1
+    return typeof props.turnDurationMs === "number"
+      ? props.turnDurationMs
+      : typeof completed === "number"
+        ? completed - message.time.created
+        : -1
+  })
+
+  const duration = createMemo(() => {
+    const ms = durationMs()
     if (!(ms >= 0)) return ""
     const total = Math.round(ms / 1000)
     if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt().format(total) })
@@ -1689,13 +1722,32 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     })
   })
 
+  const tokenCount = createMemo(() => {
+    if (props.message.role !== "assistant") return ""
+    const tokens = (props.message as AssistantMessage).tokens.output
+    if (tokens <= 0) return ""
+    return i18n.t("ui.message.tokens", { count: numfmt().format(tokens) })
+  })
+
+  const tokensPerSecond = createMemo(() => {
+    if (props.message.role !== "assistant") return ""
+    const ms = durationMs()
+    const tokens = (props.message as AssistantMessage).tokens.output
+    if (!(ms >= 0) || tokens <= 0) return ""
+    return i18n.t("ui.message.tokensPerSecond", {
+      count: numfmt().format(Math.round(tokens / (ms / 1000))),
+    })
+  })
+
   const meta = createMemo(() => {
     if (props.message.role !== "assistant") return ""
     const agent = (props.message as AssistantMessage).agent
     const items = [
       agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
+      tokenCount(),
       model(),
       duration(),
+      tokensPerSecond(),
       interrupted() ? i18n.t("ui.message.interrupted") : "",
     ]
     return items.filter((x) => !!x).join(" \u00B7 ")

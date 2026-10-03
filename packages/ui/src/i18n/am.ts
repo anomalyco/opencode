@@ -176,6 +176,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "መልዕክት ቅዳ",
   "ui.message.forkMessage": "ወደ አዲስ ክፍለ ጊዜ ቅርንጫፍ ፍጠር",
   "ui.message.revertMessage": "መልዕክት ቀይር",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "መልስ ቅጂ",
   "ui.message.copied": "የተገለበጠ",
   "ui.message.duration.seconds": "{{count}} ሰ",
@@ -193,4 +194,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "የሚመለከተውን ሁሉንም መልሶች ይምረጡ",
   "ui.question.singleHint": "አንድ መልስ ምረጥ",
   "ui.question.custom.placeholder": "መልስዎን ይተይቡ...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

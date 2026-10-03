@@ -185,6 +185,7 @@ export const dict = {
   "ui.message.copyMessage": "คัดลอกข้อความ",
   "ui.message.forkMessage": "แตกแขนงไปยังเซสชันใหม่",
   "ui.message.revertMessage": "รีเซ็ตไปยังจุดนี้",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "คัดลอกคำตอบ",
   "ui.message.copied": "คัดลอกแล้ว!",
   "ui.message.interrupted": "ถูกขัดจังหวะ",
@@ -214,4 +215,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "คัดลอกข้อผิดพลาด",
   "ui.message.duration.seconds": "{{count}} วินาที",
   "ui.message.duration.minutesSeconds": "{{minutes}} นาที {{seconds}} วินาที",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

@@ -177,6 +177,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Bericht kopiëren",
   "ui.message.forkMessage": "Afsplitsen in nieuwe sessie",
   "ui.message.revertMessage": "Bericht terugdraaien",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Antwoord kopiëren",
   "ui.message.copied": "Gekopieerd",
   "ui.message.duration.seconds": "{{count}}s",
@@ -194,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Selecteer alle antwoorden die van toepassing zijn",
   "ui.question.singleHint": "Selecteer één antwoord",
   "ui.question.custom.placeholder": "Typ je antwoord...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

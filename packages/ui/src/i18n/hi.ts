@@ -179,6 +179,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "संदेश कॉपी करें",
   "ui.message.forkMessage": "नए सेशन में फ़ोर्क करें",
   "ui.message.revertMessage": "संदेश पूर्ववत करें",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "प्रतिक्रिया कॉपी करें",
   "ui.message.copied": "कॉपी किया गया",
   "ui.message.duration.seconds": "{{count}}s",
@@ -196,4 +197,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "लागू होने वाले सभी उत्तर चुनें",
   "ui.question.singleHint": "एक उत्तर चुनें",
   "ui.question.custom.placeholder": "अपना उत्तर लिखें...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

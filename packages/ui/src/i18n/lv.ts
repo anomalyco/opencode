@@ -181,6 +181,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Kopēt ziņu",
   "ui.message.forkMessage": "Atzarot jaunā sesijā",
   "ui.message.revertMessage": "Atjaunot ziņu",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Kopēt atbildi",
   "ui.message.copied": "Nokopēts",
   "ui.message.duration.seconds": "{{count}} s",
@@ -198,4 +199,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Izvēlies visas atbilstošās atbildes",
   "ui.question.singleHint": "Izvēlies vienu atbildi",
   "ui.question.custom.placeholder": "Ieraksti savu atbildi...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

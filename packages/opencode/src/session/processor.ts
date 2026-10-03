@@ -11,6 +11,8 @@ import { Plugin } from "@/plugin"
 import { Snapshot } from "@/snapshot"
 import { Session } from "./session"
 import { LLM } from "./llm"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { MessageV2 } from "./message-v2"
 import { isOverflow } from "./overflow"
 import { PartID } from "./schema"
@@ -651,7 +653,22 @@ const layer = Layer.effect(
             ctx.currentText = undefined
             ctx.reasoningMap = {}
             yield* status.set(ctx.sessionID, { type: "busy" })
-            const stream = llm.stream(streamInput)
+            const stream = llm.stream({
+              ...streamInput,
+              onModelRaceUpdate: (update) =>
+                Effect.gen(function* () {
+                  if (update.winner) {
+                    ctx.assistantMessage.providerID = ProviderV2.ID.make(update.winner.providerID)
+                    ctx.assistantMessage.modelID = ModelV2.ID.make(update.winner.modelID)
+                    yield* session.updateMessage(ctx.assistantMessage)
+                  }
+                  yield* events.publish(Session.Event.ModelRaceUpdated, {
+                    ...update,
+                    sessionID: ctx.sessionID,
+                    messageID: ctx.assistantMessage.id,
+                  })
+                }),
+            })
 
             yield* stream.pipe(
               Stream.tap((event) => handleEvent(event)),

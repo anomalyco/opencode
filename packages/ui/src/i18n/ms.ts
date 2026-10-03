@@ -177,6 +177,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Salin mesej",
   "ui.message.forkMessage": "Cabang ke sesi baharu",
   "ui.message.revertMessage": "Kembalikan mesej",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Salin respons",
   "ui.message.copied": "Disalin",
   "ui.message.duration.seconds": "{{count}}s",
@@ -194,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Pilih semua jawapan yang berkaitan",
   "ui.question.singleHint": "Pilih satu jawapan",
   "ui.question.custom.placeholder": "Taip jawapan anda...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

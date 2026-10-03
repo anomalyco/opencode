@@ -181,6 +181,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Copia el missatge",
   "ui.message.forkMessage": "Bifurca en una sessió nova",
   "ui.message.revertMessage": "Reverteix el missatge",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Copia la resposta",
   "ui.message.copied": "Copiat",
   "ui.message.duration.seconds": "{{count}}s",
@@ -198,4 +199,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Seleccioneu totes les respostes aplicables",
   "ui.question.singleHint": "Seleccioneu una resposta",
   "ui.question.custom.placeholder": "Escriu la teva resposta...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

@@ -177,6 +177,7 @@ export const dict = {
   "ui.message.copyMessage": "Зурвас хуулах",
   "ui.message.forkMessage": "Шинэ сесс рүү салаалах",
   "ui.message.revertMessage": "Мессежийг буцаах",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Хариултыг хуулах",
   "ui.message.copied": "Хуулсан",
   "ui.message.duration.seconds": "{{count}}сек",
@@ -194,4 +195,7 @@ export const dict = {
   "ui.question.multiHint": "Холбогдох бүх хариултыг сонгоно уу",
   "ui.question.singleHint": "Нэг хариултыг сонгоно уу",
   "ui.question.custom.placeholder": "Хариугаа бичнэ үү...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

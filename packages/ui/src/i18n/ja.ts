@@ -184,6 +184,7 @@ export const dict = {
   "ui.message.copyMessage": "メッセージをコピー",
   "ui.message.forkMessage": "新しいセッションにフォーク",
   "ui.message.revertMessage": "この時点までリセット",
+  "ui.message.resendMessage": "メッセージを再送",
   "ui.message.copyResponse": "応答をコピー",
   "ui.message.copied": "コピーしました！",
   "ui.message.interrupted": "中断",
@@ -213,4 +214,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "エラーをコピー",
   "ui.message.duration.seconds": "{{count}}秒",
   "ui.message.duration.minutesSeconds": "{{minutes}}分 {{seconds}}秒",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

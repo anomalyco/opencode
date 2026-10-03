@@ -177,6 +177,7 @@ export const dict: Record<string, string> = {
   "ui.message.copyMessage": "Kopeeri sõnum",
   "ui.message.forkMessage": "Hargne uude seanssi",
   "ui.message.revertMessage": "Taasta sõnum",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Kopeeri vastus",
   "ui.message.copied": "Kopeeritud",
   "ui.message.duration.seconds": "{{count}}s",
@@ -194,4 +195,7 @@ export const dict: Record<string, string> = {
   "ui.question.multiHint": "Valige kõik sobivad vastused",
   "ui.question.singleHint": "Valige üks vastus",
   "ui.question.custom.placeholder": "Sisesta oma vastus...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }

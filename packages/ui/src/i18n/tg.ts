@@ -177,6 +177,7 @@ export const dict = {
   "ui.message.copyMessage": "Паёмро нусхабардорӣ кунед",
   "ui.message.forkMessage": "Дар сессияи нав шоха созед",
   "ui.message.revertMessage": "Баргардонидани паём",
+  "ui.message.resendMessage": "Resend message",
   "ui.message.copyResponse": "Ҷавобро нусхабардорӣ кунед",
   "ui.message.copied": "Нусхабардорӣ",
   "ui.message.duration.seconds": "{{count}}с",
@@ -194,4 +195,7 @@ export const dict = {
   "ui.question.multiHint": "Ҳамаи ҷавобҳои мувофиқро интихоб кунед",
   "ui.question.singleHint": "Як ҷавобро интихоб кунед",
   "ui.question.custom.placeholder": "Ҷавоби худро нависед...",
+
+  "ui.message.tokensPerSecond": "{{count}} tokens/s",
+  "ui.message.tokens": "{{count}} tokens",
 }
