@@ -295,6 +295,31 @@ export const TuiThreadCommand = cmd({
             },
           }),
         )
+      } catch (error) {
+        const msg = errorMessage(error)
+        if (msg.includes("OpenTUI") || msg.includes("TinyCC") || msg.includes("dlopen")) {
+          UI.println(
+            UI.Style.TEXT_WARNING_BOLD +
+              "!  OpenTUI render library is not supported on this platform/Bun build (bun:ffi dlopen unavailable)." +
+              UI.Style.TEXT_NORMAL,
+          )
+          UI.println(UI.Style.TEXT_WARNING_BOLD + "!  Falling back to minimal interactive mode (--mini)..." + UI.Style.TEXT_NORMAL)
+          const { runMini } = await import("./run")
+          await runMini({
+            directory: cwd,
+            continue: args.continue,
+            session: args.session,
+            fork: args.fork,
+            model: args.model,
+            agent: args.agent,
+            prompt,
+            replay: noReplay ? false : undefined,
+            replayLimit: args.replayLimit,
+            demo: args.demo,
+          })
+          return
+        }
+        throw error
       } finally {
         await stop()
       }

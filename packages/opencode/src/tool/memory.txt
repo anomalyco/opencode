@@ -1,0 +1,8 @@
+Manage long-term persistent memory across sessions and conversations.
+Backing storage is a persistent SQLite .db file.
+Use this tool to:
+- 'teach': Save important project guidelines, coding rules, user preferences, or architectural facts for the long term.
+- 'recall': Search and retrieve relevant memories when working on tasks to adhere to past teachings.
+- 'learn': Persist valuable insights, bug fixes, or user corrections discovered during the session.
+- 'list': Explore and inspect saved memories.
+- 'delete': Remove obsolete or incorrect memories.
