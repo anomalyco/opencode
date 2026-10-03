@@ -87,14 +87,31 @@ const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
   if (typeof value === "string") return Auth.value(value)
 }
 
+const authToken = (model: ModelV2.Info) => {
+  const value = model.request.body.authToken ?? model.api.settings?.authToken
+  if (typeof value === "string" && value !== "") return Auth.value(value)
+}
+
+const endpointURL = (model: ModelV2.Info) => {
+  if (model.api.url !== undefined) return model.api.url
+  const settingsURL = model.api.type === "aisdk" ? model.api.settings?.baseURL : undefined
+  if (typeof settingsURL === "string" && settingsURL !== "") return settingsURL
+  const bodyURL = model.request.body.baseURL
+  if (typeof bodyURL === "string" && bodyURL !== "") return bodyURL
+}
+
 const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
   const body = model.request.body
-  const httpBody = Object.hasOwn(body, "apiKey")
-    ? Object.fromEntries(Object.entries(body).filter(([key]) => key !== "apiKey"))
-    : body
+  const httpBody =
+    Object.hasOwn(body, "apiKey") || Object.hasOwn(body, "authToken") || Object.hasOwn(body, "baseURL")
+      ? Object.fromEntries(
+          Object.entries(body).filter(([key]) => key !== "apiKey" && key !== "authToken" && key !== "baseURL"),
+        )
+      : body
+  const baseURL = endpointURL(model)
   return route.with({
     provider: model.providerID,
-    endpoint: model.api.url === undefined ? undefined : { baseURL: model.api.url },
+    endpoint: baseURL === undefined ? undefined : { baseURL },
     headers: model.request.headers,
     http: { body: httpBody },
     limits: { context: model.limit.context, output: model.limit.output },
@@ -147,6 +164,18 @@ export const fromCatalogModel = (
     )
   }
   if (resolved.api.type === "aisdk" && resolved.api.package === "@ai-sdk/anthropic") {
+    // Anthropic supports two credential styles: `apiKey` sends `x-api-key`
+    // while `authToken` sends `Authorization: Bearer` (used by OAuth and by
+    // gateways that expect bearer tokens). Prefer an explicit authToken so a
+    // custom baseURL + authToken gateway does not 401 on `x-api-key`.
+    const token = authToken(resolved)
+    if (token !== undefined) {
+      return Effect.succeed(
+        withDefaults(resolved, AnthropicMessages.route)
+          .with({ auth: Auth.bearer(token) })
+          .model({ id: resolved.api.id }),
+      )
+    }
     return Effect.succeed(
       withDefaults(resolved, AnthropicMessages.route)
         .with({ auth: key === undefined ? Auth.none : Auth.header("x-api-key", key) })

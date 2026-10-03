@@ -247,6 +247,61 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("sends Anthropic authToken as bearer auth for custom gateways", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({
+            type: "aisdk",
+            package: "@ai-sdk/anthropic",
+            url: "https://gateway.example.com/v1",
+            settings: { authToken: "gateway-secret" },
+          }),
+          request: { headers: {}, body: {} },
+        }),
+      )
+      const request = LLM.request({ model: resolved, prompt: "Hello" })
+      const headers = yield* resolved.route.auth.apply({
+        request,
+        method: "POST",
+        url: "https://gateway.example.com/v1/messages",
+        body: "{}",
+        headers: Headers.empty,
+      })
+
+      expect(headers.authorization).toBe("Bearer gateway-secret")
+      expect(resolved.route.defaults.http?.body).toEqual({})
+      expect(JSON.stringify(resolved.route.defaults.http?.body)).not.toContain("gateway-secret")
+    }),
+  )
+
+  it.effect("prefers Anthropic authToken over apiKey and falls back to settings baseURL", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({
+            type: "aisdk",
+            package: "@ai-sdk/anthropic",
+            settings: { baseURL: "https://gateway.example.com/v1", authToken: "bearer-secret", apiKey: "key-secret" },
+          }),
+          request: { headers: {}, body: {} },
+        }),
+      )
+      const request = LLM.request({ model: resolved, prompt: "Hello" })
+      const headers = yield* resolved.route.auth.apply({
+        request,
+        method: "POST",
+        url: "https://gateway.example.com/v1/messages",
+        body: "{}",
+        headers: Headers.empty,
+      })
+
+      expect(headers.authorization).toBe("Bearer bearer-secret")
+      expect(headers["x-api-key"]).toBeUndefined()
+      expect(resolved.route.endpoint).toMatchObject({ baseURL: "https://gateway.example.com/v1" })
+    }),
+  )
+
   it.effect("uses resolved credentials for bearer auth", () =>
     Effect.gen(function* () {
       const resolved = yield* SessionRunnerModel.fromCatalogModel(
