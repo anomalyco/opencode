@@ -1142,6 +1142,65 @@ describe("V1Migration database workflow", () => {
     )
   })
 
+  test("attributes V1 global sessions to the project owning their directory", async () => {
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('project-repo', '/tmp/repo', 1, 2, '[]')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO worktree (project_id, directory, time_created) VALUES ('project-repo', '/tmp/repo/packages/app', 1)`,
+        )
+        yield* Effect.forEach(
+          [
+            { id: "ses_root", directory: "/tmp/repo" },
+            { id: "ses_nested", directory: "/tmp/repo/packages/app/src" },
+            { id: "ses_elsewhere", directory: "/tmp/elsewhere" },
+          ],
+          (session) =>
+            db.run(
+              sql`INSERT INTO session (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES (${session.id}, 'global', ${session.id}, ${session.directory}, 'Legacy', '1', 1, 2)`,
+            ),
+        )
+
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(
+          yield* db.all(sql`SELECT id, project_id, path FROM session_v2 WHERE project_id = 'project-repo' ORDER BY id`),
+        ).toEqual([
+          { id: "ses_nested", project_id: "project-repo", path: "src" },
+          { id: "ses_root", project_id: "project-repo", path: "" },
+        ])
+        expect(yield* db.get(sql`SELECT project_id FROM session_v2 WHERE id = 'ses_elsewhere'`)).toEqual({
+          project_id: "global",
+        })
+      }),
+    )
+  })
+
+  test("attributes sessions a completed migration left under the global project", async () => {
+    await database(
+      Effect.gen(function* () {
+        const { db } = yield* Database.Service
+        yield* db.run(
+          sql`INSERT INTO project (id, worktree, time_created, time_updated, sandboxes) VALUES ('project-repo', '/tmp/repo', 1, 2, '[]')`,
+        )
+        yield* db.run(
+          sql`INSERT INTO session_v2 (id, project_id, slug, directory, title, version, time_created, time_updated) VALUES ('ses_global', 'global', 'legacy', '/tmp/repo/sub', 'Legacy', '1', 1, 2)`,
+        )
+        yield* db.run(
+          sql`INSERT INTO kv (key, value, time_created, time_updated) VALUES ('migration.v1-v2', '{"phase":"completed"}', 1, 1)`,
+        )
+
+        expect(yield* V1Migration.run()).toEqual({ status: "completed" })
+        expect(yield* db.get(sql`SELECT project_id, path FROM session_v2 WHERE id = 'ses_global'`)).toEqual({
+          project_id: "project-repo",
+          path: "sub",
+        })
+      }),
+    )
+  })
+
   test("replaces projections containing apostrophes and checkpoints completion", async () => {
     await database(
       Effect.gen(function* () {
