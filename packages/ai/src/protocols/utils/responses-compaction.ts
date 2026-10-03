@@ -81,7 +81,7 @@ const Response = Schema.Struct({
 })
 
 export const make = (
-  adapter: OpenResponses.ProviderAdapter,
+  adapter: OpenResponses.ProviderAdapter<OpenResponses.HostedToolReplayItem, unknown, unknown>,
   lowerTools: (request: LLMRequest) => Effect.Effect<ReadonlyArray<Record<string, unknown>>, AIError>,
 ): CompactOperation =>
   Effect.fn("ResponsesCompaction.execute")(function* (request, executor, options) {

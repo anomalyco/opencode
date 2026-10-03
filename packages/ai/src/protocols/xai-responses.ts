@@ -41,9 +41,8 @@ const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(XAIResponsesHostedToolItem)(item) ? item : undefined),
-} satisfies OpenResponses.ProviderAdapter
+} satisfies OpenResponses.ProviderAdapter<Schema.Schema.Type<typeof XAIResponsesHostedToolItem>>
 
-const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(XAIResponsesBody))
 const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LLMRequest) {
   if (request.providerOptions?.contextManagement !== undefined)
     return yield* ProviderShared.unsupportedOperation({
@@ -53,7 +52,7 @@ const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LL
       message:
         "xAI requires explicit compaction through LLMClient.compact; automatic context management is not supported",
     })
-  return yield* decodeBody(yield* OpenResponses.fromRequestWithAdapter(request, adapter))
+  return yield* OpenResponses.fromRequestWithAdapter(request, adapter)
 })
 
 const HOSTED_TOOLS = {

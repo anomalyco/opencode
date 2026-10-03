@@ -37,7 +37,10 @@ const adapter = {
   name: "Alibaba Responses",
   nativeTool: (native) => ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(native.alibaba),
   restoreHostedToolItem: (item: unknown) => (Schema.is(WebExtractorItem)(item) ? item : undefined),
-} satisfies OpenResponses.ProviderAdapter
+} satisfies OpenResponses.ProviderAdapter<
+  Schema.Schema.Type<typeof WebExtractorItem>,
+  Schema.Schema.Type<typeof NativeTool>
+>
 
 const tools = {
   web_search_call: { name: "web_search", input: (item) => item.action ?? {} },
@@ -52,7 +55,7 @@ export const protocol = Protocol.make({
       const opts = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(req.providerOptions ?? {})
       const body = yield* OpenResponses.fromRequestWithAdapter(req, adapter)
       const choice = body.tool_choice
-      return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))({
+      return {
         ...body,
         enable_thinking: opts.enableThinking,
         previous_response_id: opts.previousResponseId,
@@ -62,7 +65,7 @@ export const protocol = Protocol.make({
           typeof choice === "object" && choice.type === "function"
             ? { type: "allowed_tools" as const, mode: "required" as const, tools: [choice] }
             : choice,
-      })
+      }
     }),
   },
   stream: {

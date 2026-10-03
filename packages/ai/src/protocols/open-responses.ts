@@ -168,7 +168,7 @@ export const ConfigurationUpdate = Schema.Struct({
   type: Schema.Literal("configuration_update"),
   reasoning: Schema.Struct({ effort: OpenResponsesOptions.ReasoningEffort }),
 })
-type ConfigurationUpdate = Schema.Schema.Type<typeof ConfigurationUpdate>
+export type ConfigurationUpdate = Schema.Schema.Type<typeof ConfigurationUpdate>
 
 export const InputItem = Schema.Union([
   CompactionItem,
@@ -211,17 +211,6 @@ export type HostedToolReplayItem = {
   readonly id: string
   readonly [key: string]: unknown
 }
-type LoweredInputItem =
-  | OpenResponsesInputItem
-  | HostedToolReplayItem
-  | ConfigurationUpdate
-  | {
-      readonly type: "message"
-      readonly id?: string
-      readonly role: "assistant"
-      readonly content: ReadonlyArray<{ readonly type: "output_text"; readonly text: string }>
-      readonly phase?: MessagePhase | null
-    }
 
 // Mutable counterpart of the schema reasoning item so `lowerMessages` can fold
 // multiple streamed summary parts into the same item before flushing.
@@ -394,19 +383,26 @@ export const decodeChannelEvent = (frame: string) =>
     ),
   )
 
-export interface ProviderAdapter {
+export interface ProviderAdapter<
+  out Hosted extends HostedToolReplayItem = never,
+  out NativeTool = never,
+  out Update = never,
+> {
   readonly id: string
   readonly name: string
   readonly nativeTool?: (
     native: NonNullable<ToolDefinition["native"]>,
-  ) => Effect.Effect<{ readonly type: string }, AIError>
+  ) => Effect.Effect<NativeTool, AIError>
   readonly lowerMedia?: (input: {
     readonly part: MediaPart
     readonly media: Media.Inline | undefined
     readonly request: LLMRequest
   }) => MediaInput | undefined
-  readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
+  readonly restoreHostedToolItem?: (item: unknown) => Hosted | undefined
+  readonly lowerEffortUpdate?: (effort: OpenResponsesOptions.ReasoningEffort) => Update
 }
+
+type AnyProviderAdapter = ProviderAdapter<HostedToolReplayItem, unknown, unknown>
 
 const BASE_ADAPTER: ProviderAdapter = { id: ADAPTER, name: NAME }
 
@@ -454,9 +450,18 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (protoco
   }
 })
 
-export const lowerTools = (tools: ReadonlyArray<ToolDefinition>, adapter: ProviderAdapter) =>
-  Effect.forEach(tools, (tool) =>
-    tool.native !== undefined && adapter.nativeTool ? adapter.nativeTool(tool.native) : lowerTool(adapter.name, tool),
+export const lowerTools = <
+  Hosted extends HostedToolReplayItem = never,
+  NativeTool = never,
+  Update = never,
+>(
+  tools: ReadonlyArray<ToolDefinition>,
+  adapter: ProviderAdapter<Hosted, NativeTool, Update>,
+) =>
+  Effect.forEach(
+    tools,
+    (tool): Effect.Effect<Schema.Schema.Type<typeof Tool> | NativeTool, AIError> =>
+      tool.native !== undefined && adapter.nativeTool ? adapter.nativeTool(tool.native) : lowerTool(adapter.name, tool),
   )
 
 export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -507,7 +512,7 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
 const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   part: MediaPart,
   request: LLMRequest,
-  adapter: ProviderAdapter,
+  adapter: AnyProviderAdapter,
   target: "message" | "tool-result",
 ) {
   const media = part.media.inline()
@@ -539,14 +544,18 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
 const lowerUserContent = Effect.fnUntraced(function* (
   part: LLMRequest["messages"][number]["content"][number],
   request: LLMRequest,
-  adapter: ProviderAdapter,
+  adapter: AnyProviderAdapter,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
   if (part.type === "media") return yield* lowerMessageMedia(part, request, adapter)
   return yield* ProviderShared.unsupportedContent(adapter.name, "user", ["text", "media"])
 })
 
-const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
+const lowerMessageMedia = Effect.fnUntraced(function* (
+  part: MediaPart,
+  request: LLMRequest,
+  adapter: AnyProviderAdapter,
+) {
   const lowered = yield* lowerMedia(part, request, adapter, "message")
   if (lowered.type === "input_video")
     return yield* ProviderShared.invalidRequest(`${adapter.name} user messages do not support input_video`)
@@ -558,7 +567,7 @@ const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request:
 const lowerToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
-  adapter: ProviderAdapter,
+  adapter: AnyProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
   return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter, "tool-result")
@@ -567,7 +576,7 @@ const lowerToolResultContentItem = Effect.fnUntraced(function* (
 const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
-  adapter: ProviderAdapter,
+  adapter: AnyProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
   return yield* lowerMessageMedia(ProviderShared.toolFileMedia(item), request, adapter)
@@ -576,7 +585,7 @@ const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
 const lowerToolResultOutput = Effect.fnUntraced(function* (
   part: ToolResultPart,
   request: LLMRequest,
-  adapter: ProviderAdapter,
+  adapter: AnyProviderAdapter,
 ) {
   // Text/json/error results are encoded as a plain string for backward
   // compatibility with existing cassettes and provider expectations.
@@ -588,26 +597,31 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
+const lowerMessages = <
+  Hosted extends HostedToolReplayItem = never,
+  NativeTool = never,
+  Update = never,
+>(
   request: LLMRequest,
-  adapter: ProviderAdapter,
-) {
-  const input: LoweredInputItem[] = []
-  const providerMetadataKey = metadataKey(request.model)
+  adapter: ProviderAdapter<Hosted, NativeTool, Update>,
+) =>
+  Effect.gen(function* () {
+    const input: Array<OpenResponsesInputItem | Hosted | Update> = []
+    const providerMetadataKey = metadataKey(request.model)
 
-  for (const message of request.messages) {
-    const metadata = yield* ProviderShared.validateWith(
-      Schema.decodeUnknownEffect(Schema.UndefinedOr(MessageMetadata)),
-    )(message.providerMetadata?.[providerMetadataKey])
-    if (message.role === "system") {
-      const update = effortUpdate(message)
-      if (update) {
-        // Consecutive updates are rejected, so a newer one replaces its predecessor.
-        const last = input.at(-1)
-        if (last !== undefined && "type" in last && last.type === "configuration_update") input.pop()
-        input.push({ type: "configuration_update", reasoning: { effort: update.effort ?? DEFAULT_EFFORT } })
-        continue
-      }
+    for (const message of request.messages) {
+      const metadata = yield* ProviderShared.validateWith(
+        Schema.decodeUnknownEffect(Schema.UndefinedOr(MessageMetadata)),
+      )(message.providerMetadata?.[providerMetadataKey])
+      if (message.role === "system") {
+        const update = effortUpdate(message)
+        if (update && adapter.lowerEffortUpdate) {
+          // Consecutive updates are rejected, so a newer one replaces its predecessor.
+          const last = input.at(-1)
+          if (last !== undefined && ProviderShared.isRecord(last) && last.type === "configuration_update") input.pop()
+          input.push(adapter.lowerEffortUpdate(update.effort ?? DEFAULT_EFFORT))
+          continue
+        }
       input.push({
         type: "message",
         role: "developer",
@@ -752,17 +766,22 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
   return input
 })
 
-export const lowerConversation = Effect.fn("OpenResponses.lowerConversation")(function* (
+export const lowerConversation = <
+  Hosted extends HostedToolReplayItem = never,
+  NativeTool = never,
+  Update = never,
+>(
   request: LLMRequest,
-  adapter: ProviderAdapter,
-) {
-  const instructions = ProviderShared.joinText(request.system)
-  return {
-    model: request.model.id,
-    input: yield* lowerMessages(request, adapter),
-    ...(instructions ? { instructions } : {}),
-  }
-})
+  adapter: ProviderAdapter<Hosted, NativeTool, Update>,
+) =>
+  Effect.gen(function* () {
+    const instructions = ProviderShared.joinText(request.system)
+    return {
+      model: request.model.id,
+      input: yield* lowerMessages(request, adapter),
+      ...(instructions ? { instructions } : {}),
+    }
+  })
 
 export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
   const generation = request.generation
@@ -812,25 +831,28 @@ export const allowedToolChoice = (request: LLMRequest) => {
   }
 }
 
-export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAdapter")(function* (
+export const fromRequestWithAdapter = <
+  Hosted extends HostedToolReplayItem = never,
+  NativeTool = never,
+  Update = never,
+>(
   request: LLMRequest,
-  adapter: ProviderAdapter,
-) {
-  const projected = ProviderShared.flattenToolRequest(request)
-  return {
-    ...(yield* lowerConversation(projected.request, adapter)),
-    ...lowerGeneration(request),
-    tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter),
-    tool_choice:
-      allowedToolChoice(request) ??
-      (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice) : undefined),
-  }
-})
-
-const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesBody))
+  adapter: ProviderAdapter<Hosted, NativeTool, Update>,
+) =>
+  Effect.gen(function* () {
+    const projected = ProviderShared.flattenToolRequest(request)
+    return {
+      ...(yield* lowerConversation(projected.request, adapter)),
+      ...lowerGeneration(request),
+      tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter),
+      tool_choice:
+        allowedToolChoice(request) ??
+        (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice) : undefined),
+    }
+  })
 
 export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (request: LLMRequest) {
-  return yield* decodeBody(yield* fromRequestWithAdapter(request, BASE_ADAPTER))
+  return yield* fromRequestWithAdapter(request, BASE_ADAPTER)
 })
 
 // =============================================================================
@@ -1465,7 +1487,7 @@ export const step = (state: ParserState, event: NormalizedEvent) => {
  * The provider-neutral Open Responses protocol. Provider-specific Responses
  * implementations compose this baseline with their own tools and event variants.
  */
-export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADAPTER): ParserState => ({
+export const initial = (request: LLMRequest, adapter: AnyProviderAdapter = BASE_ADAPTER): ParserState => ({
   provider: request.model.provider,
   completedCompactions: new Set<string>(),
   id: adapter.id,

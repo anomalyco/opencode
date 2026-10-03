@@ -108,7 +108,9 @@ export const make = <Body>(body: RouteBody<Body>): TriggerCompactOperation =>
       auth: source.auth,
       transport: source.transport,
     })
-    const native = yield* body.from(request)
+    const native = yield* body
+      .from(request)
+      .pipe(Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(body.schema))))
     const prepared = yield* route.prepareTransport(native, request, options)
     yield* route.streamPrepared(prepared, request, { http: executor }, options).pipe(Stream.runDrain)
     if (!result) return yield* ProviderShared.eventError(source.id, "Compaction response ended without a checkpoint")

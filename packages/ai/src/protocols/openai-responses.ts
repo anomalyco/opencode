@@ -141,7 +141,15 @@ const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
-} satisfies OpenResponses.ProviderAdapter
+  lowerEffortUpdate: (effort: OpenResponsesOptions.ReasoningEffort) => ({
+    type: "configuration_update" as const,
+    reasoning: { effort },
+  }),
+} satisfies OpenResponses.ProviderAdapter<
+  Schema.Schema.Type<typeof OpenAIResponsesHostedToolItem>,
+  never,
+  OpenResponses.ConfigurationUpdate
+>
 
 // GPT-6 and later default to `configuration_update` support, except in `reasoning.mode: "pro"`
 // or alongside automatic `context_management` compaction.
@@ -202,15 +210,13 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>, tool
         : { type: "function" as const, name },
   })
 
-const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenAIResponsesBody))
-
 const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request: LLMRequest) {
   const management = yield* ProviderShared.validateWith(
     Schema.decodeUnknownEffect(Schema.UndefinedOr(ContextManagement)),
   )(request.providerOptions?.contextManagement)
   const options = OpenResponsesOptions.resolve(request)
   const updates = resolveEffortUpdates(request, options.reasoningEffort)
-  return yield* decodeBody({
+  return {
     ...(yield* OpenResponses.lowerConversation(updates.request, adapter)),
     ...OpenResponses.lowerGeneration(request, { ...options, reasoningEffort: updates.effort }),
     context_management: management?.map((edit) => ({ type: edit.type, compact_threshold: edit.compactThreshold })),
@@ -220,7 +226,7 @@ const fromRequest = Effect.fn("OpenAIResponses.fromRequest")(function* (request:
         ? undefined
         : (OpenResponses.allowedToolChoice(request) ??
           (request.toolChoice ? yield* lowerToolChoice(request.toolChoice, request.tools) : undefined)),
-  })
+  }
 })
 
 const checkpointBody = {
