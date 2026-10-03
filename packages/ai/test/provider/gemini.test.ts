@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, AIError, LLMRequest, Message, ToolCallPart, ToolDefinition, Usage, Media } from "../../src/index.js"
+import { LLM, AIError, LLMRequest, Message, SystemPart, ToolCallPart, ToolDefinition, Usage, Media } from "../../src/index.js"
 import { Auth, LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import * as Gemini from "../../src/protocols/gemini.js"
@@ -40,6 +40,27 @@ describe("Gemini route", () => {
         systemInstruction: { parts: [{ text: "You are concise." }] },
         generationConfig: { maxOutputTokens: 20, temperature: 0 },
       })
+    }),
+  )
+
+  it.effect("preserves system text parts in order", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          system: [
+            SystemPart.make("First instructions.\nKeep this newline."),
+            SystemPart.make("Second instructions."),
+          ],
+          prompt: "Say hello.",
+        }),
+      )
+      const empty = yield* compileRequest(LLM.request({ model, prompt: "Say hello." }))
+
+      expect(prepared.body.systemInstruction).toEqual({
+        parts: [{ text: "First instructions.\nKeep this newline." }, { text: "Second instructions." }],
+      })
+      expect(empty.body.systemInstruction).toBeUndefined()
     }),
   )
 
