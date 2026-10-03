@@ -333,6 +333,44 @@ const mode = await context.ui.dialog.select({
 })
 ```
 
+### Select search
+
+Pass `search` to own matching and result order. It runs for every query, including the empty one, and receives only enabled options. Results are listed in the returned order, with each category shown inline.
+
+```ts
+const project = await context.ui.dialog.select({
+  title: "Projects",
+  options: [
+    { title: "Alpha", value: "alpha", category: "Recent" },
+    { title: "Beta", value: "beta", category: "Pinned" },
+  ],
+  search: (query, options) =>
+    options
+      .filter((option) => option.title.toLowerCase().includes(query.toLowerCase()))
+      .toSorted((left, right) => right.title.localeCompare(left.title)),
+})
+```
+
+### Select shortcuts
+
+Shortcuts add footer actions that run from their key, a click, or Tab focus followed by Enter. By default they receive the selected value and are unavailable without a selection. Use `selection: "none"` for actions that need no selection.
+
+```ts
+await context.ui.dialog.select({
+  title: "Projects",
+  options: [{ title: "Alpha", value: "alpha" }],
+  shortcuts: [
+    { key: "ctrl+o", title: "Inspect", onTrigger: (value) => context.ui.toast.show({ message: value }) },
+    { key: "ctrl+a", title: "Close", side: "right", selection: "none", onTrigger: () => context.ui.dialog.clear() },
+  ],
+})
+```
+
+- A shortcut does not close the dialog or settle the promise.
+- Enter or clicking an option resolves the selected value.
+- Escape, `clear()`, or showing another dialog resolves `undefined`.
+- Do not use `ctrl+n` or `ctrl+p`. The dialog reserves them for navigation, and its own bindings take precedence.
+
 Custom JSX dialogs can set their size and close themselves.
 
 ```tsx

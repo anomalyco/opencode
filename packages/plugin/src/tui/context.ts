@@ -361,11 +361,34 @@ export interface DialogSelectOption<Value> {
   readonly disabled?: boolean
 }
 
+export type DialogSelectShortcut<Value> = {
+  readonly key: string
+  readonly title: string
+  readonly side?: "left" | "right"
+} & (
+  | {
+      /** Unavailable while no option is selected. */
+      readonly selection?: "required"
+      readonly onTrigger: (value: Value) => void
+    }
+  | {
+      readonly selection: "none"
+      readonly onTrigger: () => void
+    }
+)
+
 export interface DialogSelectOptions<Value> {
   readonly title: string
   readonly placeholder?: string
   readonly options: readonly DialogSelectOption<Value>[]
   readonly current?: Value
+  /** Returns matching options in display order, including for an empty query. Receives only enabled options. Results are listed flat. */
+  readonly search?: (
+    query: string,
+    options: readonly DialogSelectOption<Value>[],
+  ) => readonly DialogSelectOption<Value>[]
+  /** Modal shortcuts shown in the footer. Triggering one does not close the dialog. */
+  readonly shortcuts?: readonly DialogSelectShortcut<Value>[]
 }
 
 export interface Dialog {

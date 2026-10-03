@@ -1,6 +1,15 @@
 import { PluginContextProvider } from "@opencode/plugin/tui"
-import type { JSX } from "solid-js"
-import type { Context, Dialog, Page, SlotClaim, SlotMap, SlotPath, Toast } from "@opencode/plugin/tui/context"
+import { createUniqueId, type JSX } from "solid-js"
+import type {
+  Context,
+  Dialog,
+  DialogSelectOptions,
+  Page,
+  SlotClaim,
+  SlotMap,
+  SlotPath,
+  Toast,
+} from "@opencode/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
@@ -356,16 +365,37 @@ export function createDialogApi(
         )
       })
     },
-    select(options) {
-      return new Promise((resolve) => {
-        const done = settle<(typeof options.options)[number]["value"] | undefined>(resolve)
+    select<Value>(options: DialogSelectOptions<Value>) {
+      return new Promise<Value | undefined>((resolve) => {
+        const done = settle<Value | undefined>(resolve)
+        const search = options.search
+        const id = createUniqueId()
         api.show(
           () => (
-            <DialogSelect
+            <DialogSelect<Value>
               title={options.title}
               placeholder={options.placeholder}
               options={options.options.map((option) => ({ ...option }))}
               current={options.current}
+              search={
+                search &&
+                ((query) =>
+                  search(
+                    query,
+                    options.options.filter((option) => !option.disabled),
+                  ))
+              }
+              actions={options.shortcuts?.map((shortcut, index) => {
+                const action = {
+                  command: `plugin.dialog.select.${id}.${index}`,
+                  title: shortcut.title,
+                  side: shortcut.side,
+                  bind: shortcut.key,
+                }
+                if (shortcut.selection === "none")
+                  return { ...action, selection: shortcut.selection, onTrigger: shortcut.onTrigger }
+                return { ...action, onTrigger: (option) => shortcut.onTrigger(option.value) }
+              })}
               onSelect={(option) => {
                 done(option.value)
                 api.clear()
