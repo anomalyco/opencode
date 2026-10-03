@@ -232,6 +232,19 @@ export const layer = Layer.effect(
       // An encrypted native window estimates as nothing, so wait for a response to measure it.
       const measured = messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
       if (measured < messages.findLastIndex(SessionProviderContext.isCheckpoint)) return false
+      // A real prompt cannot exceed the model's context window. Providers can report impossible
+      // usage after image-heavy histories (#50474); treating that as an overflow makes
+      // auto-compaction loop on every step. Genuine overflow still recovers through the
+      // context-overflow failure path.
+      const anchor = messages[measured]
+      const window = context.model.limit.context
+      if (
+        window > 0 &&
+        anchor?.type === "assistant" &&
+        anchor.tokens !== undefined &&
+        anchor.tokens.input + anchor.tokens.cache.read + anchor.tokens.cache.write > window
+      )
+        return false
       return estimateContext(context) >= ceiling
     }
 
