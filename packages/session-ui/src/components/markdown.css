@@ -259,6 +259,15 @@
     );
   }
 
+  [data-path-links] :not(pre) > code[data-inline-code-kind="path"] {
+    cursor: pointer;
+  }
+
+  [data-path-links] :not(pre) > code[data-inline-code-kind="path"]:hover {
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+
   a.external-link > code[data-inline-code-kind="url"] {
     color: var(--markdown-inline-code-color);
     background: none;

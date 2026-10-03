@@ -32,6 +32,7 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import { getCachedMarkdown, sanitizeMarkdown, touchCachedMarkdown, type MarkdownCacheEntry } from "./markdown-cache"
 import { inlineCodeKind } from "./markdown-inline-code-kind"
+import { codePath } from "./markdown-path"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -330,6 +331,26 @@ function setupCodeCopy(root: HTMLDivElement, getLabels: () => CopyLabels) {
   }
 }
 
+function setupPathLinks(root: HTMLDivElement, open: (path: string, line?: number) => void) {
+  const handleClick = (event: MouseEvent) => {
+    const target = event.target
+    if (!(target instanceof Element)) return
+    const code = target.closest('code[data-inline-code-kind="path"]')
+    if (!(code instanceof HTMLElement)) return
+    const parsed = codePath(code.textContent)
+    if (!parsed) return
+    open(parsed.path, parsed.line)
+  }
+
+  root.setAttribute("data-path-links", "")
+  root.addEventListener("click", handleClick)
+
+  return () => {
+    root.removeEventListener("click", handleClick)
+    root.removeAttribute("data-path-links")
+  }
+}
+
 function initialResult(text: string, key: string | undefined, projection: Projection, owner: string): RenderResult {
   if (!text) return { text, blocks: [] }
   const base = key ?? checksum(text)
@@ -368,9 +389,10 @@ export function Markdown(
     streaming?: boolean
     class?: string
     classList?: Record<string, boolean>
+    onOpenPath?: (path: string, line?: number) => void
   },
 ) {
-  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList"])
+  const [local, others] = splitProps(props, ["text", "cacheKey", "streaming", "class", "classList", "onOpenPath"])
   const i18n = useI18n()
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
@@ -491,6 +513,7 @@ export function Markdown(
   )
 
   let copyCleanup: (() => void) | undefined
+  let pathLinkCleanup: (() => void) | undefined
 
   createEffect(() => {
     const container = root()
@@ -503,6 +526,14 @@ export function Markdown(
       disposeCopyButtons(container)
       container.innerHTML = ""
       return
+    }
+
+    if (local.onOpenPath) {
+      // Reads the prop live so a new callback identity is always used.
+      if (!pathLinkCleanup) pathLinkCleanup = setupPathLinks(container, (path, line) => local.onOpenPath?.(path, line))
+    } else {
+      pathLinkCleanup?.()
+      pathLinkCleanup = undefined
     }
 
     const labels = {
@@ -534,6 +565,7 @@ export function Markdown(
 
   onCleanup(() => {
     if (copyCleanup) copyCleanup()
+    pathLinkCleanup?.()
     disposeMarkdownProjection(owner)
     activeCodeKeys.forEach(disposeCode)
     completedCode.clear()
