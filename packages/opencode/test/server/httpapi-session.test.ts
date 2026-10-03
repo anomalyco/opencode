@@ -2,7 +2,7 @@ import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { afterEach, describe, expect } from "bun:test"
 import { NodeHttpServer, NodeServices } from "@effect/platform-node"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { mkdir } from "node:fs/promises"
+import { mkdir, rename } from "node:fs/promises"
 import path from "node:path"
 import { Cause, Config, Effect, Exit, Layer } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse, HttpRouter, HttpServer } from "effect/unstable/http"
@@ -425,6 +425,36 @@ describe("session HttpApi", () => {
         root: sessionDirectory,
       })
     }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
+  )
+
+  it.live("rejects prompt_async when the session directory no longer exists", () =>
+    Effect.gen(function* () {
+      const sessionDirectory = yield* tmpdirScoped({ git: true })
+      const requestDirectory = yield* tmpdirScoped({ git: true })
+      const session = yield* createSession({ title: "moved directory" }).pipe(provideInstanceEffect(sessionDirectory))
+
+      // Simulate the user renaming the project folder after the session was created.
+      const moved = `${sessionDirectory}-renamed`
+      yield* Effect.acquireRelease(
+        Effect.promise(() => rename(sessionDirectory, moved)),
+        () => Effect.promise(() => rename(moved, sessionDirectory)),
+      )
+
+      const response = yield* request(
+        `${pathFor(SessionPaths.promptAsync, { sessionID: session.id })}?directory=${encodeURIComponent(requestDirectory)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ parts: [{ type: "text", text: "hello?" }] }),
+        },
+      )
+
+      expect(response.status).toBe(404)
+      expect(yield* responseJson(response)).toMatchObject({
+        name: "NotFoundError",
+        data: { message: expect.stringContaining(`Session directory no longer exists: ${sessionDirectory}`) },
+      })
+    }),
   )
 
   it.instance(
