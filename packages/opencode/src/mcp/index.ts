@@ -4,6 +4,9 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Client, type ClientOptions } from "@modelcontextprotocol/sdk/client/index.js"
+import { AjvJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/ajv"
+import Ajv from "ajv"
+import addFormats from "ajv-formats"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
@@ -36,6 +39,14 @@ import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
 
 const DEFAULT_TIMEOUT = 30_000
+// Google APIs encode protobuf Duration as "3600s". Register it so Ajv
+// stops warning per subschema on listTools for Monitoring/Billing servers.
+const validator = (() => {
+  const ajv = new Ajv({ strict: false, validateFormats: true, validateSchema: false, allErrors: true })
+  addFormats(ajv)
+  ajv.addFormat("google-duration", /^-?\d+(\.\d{1,9})?s$/)
+  return new AjvJsonSchemaValidator(ajv)
+})()
 const CLIENT_OPTIONS = {
   capabilities: {
     // https://github.com/anomalyco/opencode/issues/11948
@@ -47,6 +58,7 @@ const CLIENT_OPTIONS = {
     // https://github.com/anomalyco/opencode/issues/28567
     // tasks: {},
   },
+  jsonSchemaValidator: validator,
 } satisfies ClientOptions
 
 export const Resource = Schema.Struct({
