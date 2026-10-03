@@ -14,208 +14,226 @@
     "nightOwlMuted": "#5f7e97",
     "nightOwlGray": "#637777",
     "nightOwlLightGray": "#89a4bb",
-    "nightOwlPanel": "#0b253a"
+    "nightOwlPanel": "#0b253a",
+    "lightOwlBg": "#FBFBFB",
+    "lightOwlPanel": "#F0F0F0",
+    "lightOwlElement": "#F6F6F6",
+    "lightOwlFg": "#403f53",
+    "lightOwlFgMuted": "#989fb1",
+    "lightOwlBlue": "#4876d6",
+    "lightOwlRed": "#de3d3b",
+    "lightOwlCyan": "#2aa298",
+    "lightOwlGreen": "#08916a",
+    "lightOwlYellow": "#daaa01",
+    "lightOwlPurple": "#994cc3",
+    "lightOwlNumber": "#aa0982",
+    "lightOwlOperator": "#0c969b",
+    "lightOwlQuote": "#697098",
+    "lightOwlBorder": "#d9d9d9",
+    "lightOwlBorderActive": "#7e57c2",
+    "lightOwlDiffAdd": "#2aa298",
+    "lightOwlDiffDelete": "#de3d3b"
   },
   "theme": {
     "primary": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBlue"
     },
     "secondary": {
       "dark": "nightOwlCyan",
-      "light": "nightOwlCyan"
+      "light": "lightOwlCyan"
     },
     "accent": {
       "dark": "nightOwlPurple",
-      "light": "nightOwlPurple"
+      "light": "lightOwlPurple"
     },
     "error": {
       "dark": "nightOwlRed",
-      "light": "nightOwlRed"
+      "light": "lightOwlRed"
     },
     "warning": {
       "dark": "nightOwlYellow",
-      "light": "nightOwlYellow"
+      "light": "lightOwlYellow"
     },
     "success": {
       "dark": "nightOwlGreen",
-      "light": "nightOwlGreen"
+      "light": "lightOwlGreen"
     },
     "info": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBlue"
     },
     "text": {
       "dark": "nightOwlFg",
-      "light": "nightOwlFg"
+      "light": "lightOwlFg"
     },
     "textMuted": {
       "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "light": "lightOwlFgMuted"
     },
     "background": {
       "dark": "nightOwlBg",
-      "light": "nightOwlBg"
+      "light": "lightOwlBg"
     },
     "backgroundPanel": {
       "dark": "nightOwlPanel",
-      "light": "nightOwlPanel"
+      "light": "lightOwlPanel"
     },
     "backgroundElement": {
       "dark": "nightOwlPanel",
-      "light": "nightOwlPanel"
+      "light": "lightOwlElement"
     },
     "border": {
       "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "light": "lightOwlBorder"
     },
     "borderActive": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBorderActive"
     },
     "borderSubtle": {
       "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "light": "lightOwlBorder"
     },
     "diffAdded": {
       "dark": "nightOwlGreen",
-      "light": "nightOwlGreen"
+      "light": "lightOwlDiffAdd"
     },
     "diffRemoved": {
       "dark": "nightOwlRed",
-      "light": "nightOwlRed"
+      "light": "lightOwlDiffDelete"
     },
     "diffContext": {
       "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "light": "lightOwlFgMuted"
     },
     "diffHunkHeader": {
       "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "light": "lightOwlFgMuted"
     },
     "diffHighlightAdded": {
       "dark": "nightOwlGreen",
-      "light": "nightOwlGreen"
+      "light": "lightOwlDiffAdd"
     },
     "diffHighlightRemoved": {
       "dark": "nightOwlRed",
-      "light": "nightOwlRed"
+      "light": "lightOwlDiffDelete"
     },
     "diffAddedBg": {
       "dark": "#0a2e1a",
-      "light": "#0a2e1a"
+      "light": "#dceeec"
     },
     "diffRemovedBg": {
       "dark": "#2d1b1b",
-      "light": "#2d1b1b"
+      "light": "#f7dfde"
     },
     "diffContextBg": {
       "dark": "nightOwlPanel",
-      "light": "nightOwlPanel"
+      "light": "lightOwlPanel"
     },
     "diffLineNumber": {
       "dark": "#7791a6",
-      "light": "#7791a6"
+      "light": "lightOwlFgMuted"
     },
     "diffAddedLineNumberBg": {
       "dark": "#0a2e1a",
-      "light": "#0a2e1a"
+      "light": "#cde7e5"
     },
     "diffRemovedLineNumberBg": {
       "dark": "#2d1b1b",
-      "light": "#2d1b1b"
+      "light": "#f5d1d1"
     },
     "markdownText": {
       "dark": "nightOwlFg",
-      "light": "nightOwlFg"
+      "light": "lightOwlFg"
     },
     "markdownHeading": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBlue"
     },
     "markdownLink": {
       "dark": "nightOwlCyan",
-      "light": "nightOwlCyan"
+      "light": "lightOwlCyan"
     },
     "markdownLinkText": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBlue"
     },
     "markdownCode": {
       "dark": "nightOwlGreen",
-      "light": "nightOwlGreen"
+      "light": "lightOwlGreen"
     },
     "markdownBlockQuote": {
       "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "light": "lightOwlQuote"
     },
     "markdownEmph": {
       "dark": "nightOwlPurple",
-      "light": "nightOwlPurple"
+      "light": "lightOwlPurple"
     },
     "markdownStrong": {
       "dark": "nightOwlYellow",
-      "light": "nightOwlYellow"
+      "light": "lightOwlYellow"
     },
     "markdownHorizontalRule": {
       "dark": "nightOwlMuted",
-      "light": "nightOwlMuted"
+      "light": "lightOwlBorder"
     },
     "markdownListItem": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBlue"
     },
     "markdownListEnumeration": {
       "dark": "nightOwlCyan",
-      "light": "nightOwlCyan"
+      "light": "lightOwlCyan"
     },
     "markdownImage": {
       "dark": "nightOwlCyan",
-      "light": "nightOwlCyan"
+      "light": "lightOwlCyan"
     },
     "markdownImageText": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBlue"
     },
     "markdownCodeBlock": {
       "dark": "nightOwlFg",
-      "light": "nightOwlFg"
+      "light": "lightOwlFg"
     },
     "syntaxComment": {
       "dark": "nightOwlGray",
-      "light": "nightOwlGray"
+      "light": "lightOwlFgMuted"
     },
     "syntaxKeyword": {
       "dark": "nightOwlPurple",
-      "light": "nightOwlPurple"
+      "light": "lightOwlPurple"
     },
     "syntaxFunction": {
       "dark": "nightOwlBlue",
-      "light": "nightOwlBlue"
+      "light": "lightOwlBlue"
     },
     "syntaxVariable": {
       "dark": "nightOwlFg",
-      "light": "nightOwlFg"
+      "light": "lightOwlFg"
     },
     "syntaxString": {
       "dark": "nightOwlYellow",
-      "light": "nightOwlYellow"
+      "light": "lightOwlBlue"
     },
     "syntaxNumber": {
       "dark": "nightOwlOrange",
-      "light": "nightOwlOrange"
+      "light": "lightOwlNumber"
     },
     "syntaxType": {
       "dark": "nightOwlGreen",
-      "light": "nightOwlGreen"
+      "light": "lightOwlBlue"
     },
     "syntaxOperator": {
       "dark": "nightOwlCyan",
-      "light": "nightOwlCyan"
+      "light": "lightOwlOperator"
     },
     "syntaxPunctuation": {
       "dark": "nightOwlFg",
-      "light": "nightOwlFg"
+      "light": "lightOwlFg"
     }
   }
 }
