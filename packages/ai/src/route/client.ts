@@ -183,6 +183,8 @@ export interface Interface {
 export interface StreamOptions {
   readonly http?: HttpMiddleware
   readonly webSocket?: WebSocketChannelExecutor
+  /** Aborted when the caller cancels the stream, so providers can stop their own work. */
+  readonly abortSignal?: AbortSignal
 }
 
 export interface StreamMethod {
