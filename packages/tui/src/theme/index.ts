@@ -32,6 +32,8 @@ import tokyonight from "./assets/tokyonight.json" with { type: "json" }
 import vercel from "./assets/vercel.json" with { type: "json" }
 import vesper from "./assets/vesper.json" with { type: "json" }
 import zenburn from "./assets/zenburn.json" with { type: "json" }
+import zenblue from "./assets/zenblue.json" with { type: "json" }
+
 
 export type Theme = {
   readonly primary: RGBA
@@ -161,6 +163,7 @@ export const DEFAULT_THEMES: Record<string, ThemeJson> = {
   vercel,
   zenburn,
   carbonfox,
+  zenblue,
 }
 
 const pluginThemes: Record<string, ThemeJson> = {}

@@ -1,0 +1,238 @@
+{
+  "$schema": "https://opencode.ai/theme.json",
+  "defs": {
+    "bg0": "#000520",
+    "bg1": "#00031a",
+    "bg2": "#01072b",
+    "bg3": "#010a3c",
+    "bg4": "#0e3672",
+    "bgHover": "#0e3672a8",
+    "bgSelect": "#007ce252",
+    "fg0": "#ffffff",
+    "fg1": "#c8d4ff",
+    "muted": "#6289bd",
+    "faint": "#3a6090",
+    "disabled": "#334d75",
+    "accent": "#007ce2",
+    "accentHover": "#229bff",
+    "accentDim": "#007ce230",
+    "cyan": "#00eeff",
+    "sky": "#2ec0ff",
+    "keyword": "#006eff",
+    "deepBlue": "#438eff",
+    "azure": "#229bff",
+    "khaki": "#edf9b1",
+    "peach": "#ffe4c2",
+    "gold": "#ffcb6b",
+    "silver": "#bbbbbb",
+    "grey": "#65737e",
+    "navyLight": "#1e4872",
+    "green": "#4ec994",
+    "red": "#ff6b6b",
+    "diffAddBg": "#00eeff20",
+    "diffDelBg": "#438eff30",
+    "findMatch": "#edf9b144"
+  },
+  "theme": {
+    "primary": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "secondary": {
+      "dark": "sky",
+      "light": "sky"
+    },
+    "accent": {
+      "dark": "cyan",
+      "light": "cyan"
+    },
+    "error": {
+      "dark": "red",
+      "light": "red"
+    },
+    "warning": {
+      "dark": "gold",
+      "light": "gold"
+    },
+    "success": {
+      "dark": "green",
+      "light": "green"
+    },
+    "info": {
+      "dark": "azure",
+      "light": "azure"
+    },
+    "text": {
+      "dark": "fg0",
+      "light": "fg0"
+    },
+    "textMuted": {
+      "dark": "muted",
+      "light": "muted"
+    },
+    "background": {
+      "dark": "bg0",
+      "light": "bg0"
+    },
+    "backgroundPanel": {
+      "dark": "bg1",
+      "light": "bg1"
+    },
+    "backgroundElement": {
+      "dark": "bg3",
+      "light": "bg3"
+    },
+    "border": {
+      "dark": "accentDim",
+      "light": "accentDim"
+    },
+    "borderActive": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "borderSubtle": {
+      "dark": "navyLight",
+      "light": "navyLight"
+    },
+    "diffAdded": {
+      "dark": "green",
+      "light": "green"
+    },
+    "diffRemoved": {
+      "dark": "red",
+      "light": "red"
+    },
+    "diffContext": {
+      "dark": "muted",
+      "light": "muted"
+    },
+    "diffHunkHeader": {
+      "dark": "faint",
+      "light": "faint"
+    },
+    "diffHighlightAdded": {
+      "dark": "green",
+      "light": "green"
+    },
+    "diffHighlightRemoved": {
+      "dark": "red",
+      "light": "red"
+    },
+    "diffAddedBg": {
+      "dark": "diffAddBg",
+      "light": "diffAddBg"
+    },
+    "diffRemovedBg": {
+      "dark": "diffDelBg",
+      "light": "diffDelBg"
+    },
+    "diffContextBg": {
+      "dark": "bg3",
+      "light": "bg3"
+    },
+    "diffLineNumber": {
+      "dark": "navyLight",
+      "light": "navyLight"
+    },
+    "diffAddedLineNumberBg": {
+      "dark": "diffAddBg",
+      "light": "diffAddBg"
+    },
+    "diffRemovedLineNumberBg": {
+      "dark": "diffDelBg",
+      "light": "diffDelBg"
+    },
+    "markdownText": {
+      "dark": "fg0",
+      "light": "fg0"
+    },
+    "markdownHeading": {
+      "dark": "sky",
+      "light": "sky"
+    },
+    "markdownLink": {
+      "dark": "accent",
+      "light": "accent"
+    },
+    "markdownLinkText": {
+      "dark": "cyan",
+      "light": "cyan"
+    },
+    "markdownCode": {
+      "dark": "sky",
+      "light": "sky"
+    },
+    "markdownBlockQuote": {
+      "dark": "silver",
+      "light": "silver"
+    },
+    "markdownEmph": {
+      "dark": "gold",
+      "light": "gold"
+    },
+    "markdownStrong": {
+      "dark": "fg0",
+      "light": "fg0"
+    },
+    "markdownHorizontalRule": {
+      "dark": "grey",
+      "light": "grey"
+    },
+    "markdownListItem": {
+      "dark": "sky",
+      "light": "sky"
+    },
+    "markdownListEnumeration": {
+      "dark": "cyan",
+      "light": "cyan"
+    },
+    "markdownImage": {
+      "dark": "sky",
+      "light": "sky"
+    },
+    "markdownImageText": {
+      "dark": "cyan",
+      "light": "cyan"
+    },
+    "markdownCodeBlock": {
+      "dark": "fg0",
+      "light": "fg0"
+    },
+    "syntaxComment": {
+      "dark": "muted",
+      "light": "muted"
+    },
+    "syntaxKeyword": {
+      "dark": "keyword",
+      "light": "keyword"
+    },
+    "syntaxFunction": {
+      "dark": "cyan",
+      "light": "cyan"
+    },
+    "syntaxVariable": {
+      "dark": "khaki",
+      "light": "khaki"
+    },
+    "syntaxString": {
+      "dark": "khaki",
+      "light": "khaki"
+    },
+    "syntaxNumber": {
+      "dark": "cyan",
+      "light": "cyan"
+    },
+    "syntaxType": {
+      "dark": "sky",
+      "light": "sky"
+    },
+    "syntaxOperator": {
+      "dark": "sky",
+      "light": "sky"
+    },
+    "syntaxPunctuation": {
+      "dark": "muted",
+      "light": "muted"
+    }
+  }
+}
