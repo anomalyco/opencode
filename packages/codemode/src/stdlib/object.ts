@@ -1,4 +1,4 @@
-import { type AstNode, InterpreterRuntimeError } from "../interpreter/model.js"
+import { type AstNode, InterpreterRuntimeError, isRecord } from "../interpreter/model.js"
 import { isBlockedMember } from "../tool-runtime.js"
 import { isSandboxValue, SandboxMap, SandboxURLSearchParams } from "../values.js"
 import { boundedData, coerceToString } from "./value.js"
@@ -7,13 +7,13 @@ export const objectStatics = new Set(["keys", "values", "entries", "hasOwn", "as
 
 export const invokeObjectMethod = (name: string, args: Array<unknown>, node: AstNode): unknown => {
   if (!objectStatics.has(name)) throw new InterpreterRuntimeError(`Object.${name} is not available in CodeMode.`, node)
-  const requireObject = (): Record<string, unknown> => {
+  const requireObject = (): Record<string, unknown> | Array<unknown> => {
     const value = boundedData(args[0], `Object.${name} input`)
     if (isSandboxValue(value)) return {}
-    if (value === null || typeof value !== "object" || Array.isArray(value)) {
+    if (!isRecord(value)) {
       throw new InterpreterRuntimeError(`Object.${name} expects a data object.`, node)
     }
-    return value as Record<string, unknown>
+    return value
   }
   const guardedSet = (out: Record<string, unknown>, key: string, item: unknown): void => {
     if (isBlockedMember(key)) throw new InterpreterRuntimeError(`Property '${key}' is not available in CodeMode.`, node)
