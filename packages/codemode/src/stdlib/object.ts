@@ -104,7 +104,7 @@ const propertyKey = (value: Value): PropertyKey =>
 
 // SetIntegrityLevel: primitives pass through. A typed array's bytes cannot carry attributes, so JS throws after
 // already making it non-extensible.
-const restrict = (level: "freeze" | "seal" | "preventExtensions", value: Value): Value => {
+export const restrict = (level: "freeze" | "seal" | "preventExtensions", value: Value): Value => {
   if (!(value instanceof Obj)) return value
   value.extensible = false
   if (level === "preventExtensions") return value

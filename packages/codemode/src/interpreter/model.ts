@@ -7,10 +7,15 @@ import type { ErrorObj, Value } from "./objects.js"
 /** Any parsed node; the interpreter narrows on `type` and reads `loc` for diagnostics. */
 export type AstNode = Node
 
-/** The program call a built-in is running under: where to locate failures born inside it, and how deep the stack is there. */
-export const CallSite = Context.Reference<{ readonly node?: AstNode; readonly depth: number }>("codemode/CallSite", {
-  defaultValue: () => ({ depth: 0 }),
-})
+/**
+ * The program call a built-in is running under: where to locate failures born inside it, how deep the stack is there,
+ * and how many built-ins have invoked one another since program code last called one.
+ */
+export const CallSite = Context.Reference<{
+  readonly node?: AstNode
+  readonly depth: number
+  readonly natives: number
+}>("codemode/CallSite", { defaultValue: () => ({ depth: 0, natives: 0 }) })
 
 export type Binding = {
   mutable: boolean
