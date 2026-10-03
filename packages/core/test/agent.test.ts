@@ -167,6 +167,32 @@ describe("Agent", () => {
     }),
   )
 
+  it.effect("add() inserts a brand-new agent with explicit info", () =>
+    Effect.gen(function* () {
+      const agent = yield* Agent.Service
+      const id = Agent.ID.make("plugin-registered")
+      const info = {
+        ...Agent.Info.default(id),
+        name: Agent.Name.make("Plugin Agent"),
+        description: "Added via editor.add()",
+        mode: "subagent" as const,
+        permissions: [{ action: "read" as const, resource: "*", effect: "allow" as const }],
+      }
+      info.id = id
+
+      yield* agent.transform((editor) => editor.add(info))
+      const stored = yield* agent.get(id)
+      expect(String(stored?.name)).toBe("Plugin Agent")
+      expect(stored?.description).toBe("Added via editor.add()")
+      expect(stored?.mode).toBe("subagent")
+      expect(stored?.permissions).toEqual([{ action: "read", resource: "*", effect: "allow" }])
+      expect(yield* agent.list()).toMatchObject([{ id }])
+
+      yield* agent.transform((editor) => editor.remove(id))
+      expect(yield* agent.get(id)).toBeUndefined()
+    }),
+  )
+
   it.effect("applies managed external directories without opting built-in agents into bash", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service
