@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Agent } from "@opencode/core/agent"
 import { ToolInputRepairPlugin } from "@opencode/core/plugin/tool-input-repair"
 import { Session } from "@opencode/core/session"
+import { CapturedTool } from "@opencode/core/tool/runtime"
 import { SessionMessage } from "@opencode/core/session/message"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"
 import { Tool } from "@opencode/schema/tool"
@@ -23,7 +24,6 @@ function run(input: unknown, inputSchema: JsonSchema.JsonSchema) {
     "execute.after": { ...event, status: "error", error: new Tool.Error({ message: "unused" }) },
   }
   const tool = {
-    id: "test",
     name: "test",
     description: "Test repair",
     input: inputSchema,
@@ -34,11 +34,13 @@ function run(input: unknown, inputSchema: JsonSchema.JsonSchema) {
     host({
       tool: {
         ...base.tool,
-        list: () => Effect.succeed([tool]),
         hook: (name, callback) => callback(events[name]).pipe(Effect.orDie, Effect.as({ dispose: Effect.void })),
       },
     }),
-  ).pipe(Effect.as(event))
+  ).pipe(
+    Effect.provideService(CapturedTool, (name) => (name === tool.name ? tool : undefined)),
+    Effect.as(event),
+  )
 }
 
 const object = (properties: Record<string, unknown>, required?: string[]) => ({
