@@ -191,9 +191,8 @@ export function configured(options?: Options) {
         const { Location } = yield* Effect.promise(() => import("./location.js"))
         const { SessionTable } = yield* Effect.promise(() => import("./session/sql.js"))
         const pubsub = {
-          live: yield* PubSub.unbounded<Event.Payload>(),
+          live: new Map<string, Map<string | undefined, { hub: PubSub.PubSub<Event.Payload>; subscribers: number }>>(),
           durable: new Map<string, Set<PubSub.PubSub<void>>>(),
-          typed: new Map<string, PubSub.PubSub<Event.Payload>>(),
         }
         const projectors = new Map<string, Subscriber[]>()
         const listeners = new Array<Subscriber>()
@@ -260,24 +259,21 @@ export function configured(options?: Options) {
           }
         })
 
-        const getOrCreate = (definition: Event.Definition) =>
-          Effect.gen(function* () {
-            const existing = pubsub.typed.get(definition.type)
-            if (existing) return existing
-            const created = yield* PubSub.unbounded<Event.Payload>()
-            pubsub.typed.set(definition.type, created)
-            return created
-          })
+        const locationKey = (ref: Location.Ref) => JSON.stringify([ref.directory, ref.workspaceID])
 
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
-            yield* PubSub.shutdown(pubsub.live)
+            yield* Effect.forEach(
+              pubsub.live.values(),
+              (channels) =>
+                Effect.forEach(channels.values(), (channel) => PubSub.shutdown(channel.hub), { discard: true }),
+              { discard: true },
+            )
             yield* Effect.forEach(
               pubsub.durable.values(),
               (pubsubs) => Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
               { discard: true },
             )
-            yield* Effect.forEach(pubsub.typed.values(), PubSub.shutdown, { discard: true })
           }),
         )
 
@@ -498,9 +494,18 @@ export function configured(options?: Options) {
               (listener) => (isolateListeners ? observe(event, listener) : listener(event)),
               { discard: true },
             )
-            const typed = pubsub.typed.get(event.type)
-            if (typed) yield* PubSub.publish(typed, event)
-            yield* PubSub.publish(pubsub.live, event)
+            const refs = routes.get(event) ?? (event.location ? [event.location] : undefined)
+            // Only broadcasts visit every Location. Ordinary events look up their
+            // publication-time owners, deduplicating same-Location moves.
+            const keys = refs ? new Set(["", ...refs.map(locationKey)]) : pubsub.live.keys()
+            for (const key of keys) {
+              const channels = pubsub.live.get(key)
+              if (!channels) continue
+              const typed = channels.get(event.type)
+              if (typed) yield* PubSub.publish(typed.hub, event)
+              const live = channels.get(undefined)
+              if (live) yield* PubSub.publish(live.hub, event)
+            }
           })
         }
 
@@ -723,26 +728,46 @@ export function configured(options?: Options) {
             .pipe(Effect.orDie)
         }
 
-        const local = <A extends Event.Payload>(stream: Stream.Stream<A>) =>
+        const streamLive = (type?: string): Stream.Stream<Event.Payload> =>
           Stream.unwrap(
-            Effect.serviceOption(Location.Service).pipe(
-              Effect.map((location) =>
-                Option.match(location, {
-                  onNone: () => stream,
-                  onSome: (location) => {
-                    const matches = (ref: Location.Ref) =>
-                      ref.directory === location.directory && ref.workspaceID === location.workspaceID
-                    return stream.pipe(
-                      Stream.filter((event) => {
-                        const refs = routes.get(event)
-                        if (refs) return refs.some(matches)
-                        return !event.location || matches(event.location)
-                      }),
-                    )
-                  },
+            Effect.gen(function* () {
+              const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+              const key = location ? locationKey(location) : ""
+              const channel = yield* Effect.acquireRelease(
+                Effect.gen(function* () {
+                  const existing = pubsub.live.get(key)?.get(type)
+                  if (existing) {
+                    existing.subscribers++
+                    return existing
+                  }
+                  const hub = yield* PubSub.unbounded<Event.Payload>()
+                  // Another subscription may have installed the channel while
+                  // this fiber was creating its PubSub.
+                  const channels =
+                    pubsub.live.get(key) ?? new Map<string | undefined, { hub: typeof hub; subscribers: number }>()
+                  const current = channels.get(type)
+                  if (current) {
+                    current.subscribers++
+                    yield* PubSub.shutdown(hub)
+                    return current
+                  }
+                  const created = { hub, subscribers: 1 }
+                  channels.set(type, created)
+                  pubsub.live.set(key, channels)
+                  return created
                 }),
-              ),
-            ),
+                (channel) =>
+                  Effect.suspend(() => {
+                    if (--channel.subscribers > 0) return Effect.void
+                    const channels = pubsub.live.get(key)
+                    channels?.delete(type)
+                    if (channels?.size === 0) pubsub.live.delete(key)
+                    return PubSub.shutdown(channel.hub)
+                  }),
+              )
+              const subscription = yield* PubSub.subscribe(channel.hub)
+              return Stream.fromSubscription(subscription)
+            }),
           )
 
         function subscribe(): Stream.Stream<Event.Payload>
@@ -753,13 +778,13 @@ export function configured(options?: Options) {
         function subscribe(input?: Event.Definition | readonly Event.Definition[]): Stream.Stream<Event.Payload> {
           if (input === undefined) return streamLive()
           if (isDefinition(input)) {
-            return local(Stream.unwrap(getOrCreate(input).pipe(Effect.map((pubsub) => Stream.fromPubSub(pubsub)))))
+            return streamLive(input.type)
           }
+          // ponytail: one Location feed preserves mixed-type FIFO. Index type sets
+          // only if same-Location filtering becomes a measured bottleneck.
           const types = new Set(input.map((definition) => definition.type))
           return streamLive().pipe(Stream.filter((event) => types.has(event.type)))
         }
-
-        const streamLive = (): Stream.Stream<Event.Payload> => local(Stream.fromPubSub(pubsub.live))
 
         const readAfter = (
           aggregateID: string,
