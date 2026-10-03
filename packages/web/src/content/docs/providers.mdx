@@ -1708,8 +1708,9 @@ Ollama can automatically configure itself for OpenCode. See the [Ollama integrat
         "baseURL": "http://localhost:11434/v1"
       },
       "models": {
-        "llama2": {
-          "name": "Llama 2"
+        "qwen3.5": {
+          "name": "Qwen 3.5",
+          "reasoning": true
         }
       }
     }
@@ -1719,11 +1720,12 @@ Ollama can automatically configure itself for OpenCode. See the [Ollama integrat
 
 In this example:
 
-- `ollama` is the custom provider ID. This can be any string you want.
+- `ollama` is the custom provider ID. Keep this ID to use the built-in Ollama reasoning variants.
 - `npm` specifies the package to use for this provider. Here, `@ai-sdk/openai-compatible` is used for any OpenAI-compatible API.
 - `name` is the display name for the provider in the UI.
 - `options.baseURL` is the endpoint for the local server.
 - `models` is a map of model IDs to their configurations. The model name will be displayed in the model selection list.
+- Set `reasoning` to `true` for thinking models. Use `ctrl+t` to switch between the `none` and `high` reasoning variants; `/thinking` only changes whether reasoning blocks are displayed.
 
 :::tip
 If tool calls aren't working, try increasing `num_ctx` in Ollama. Start around 16k - 32k.
