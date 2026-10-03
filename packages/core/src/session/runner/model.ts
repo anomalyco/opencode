@@ -81,6 +81,13 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/v2
 export const layerWith = (resolve: Interface["resolve"]) => Layer.succeed(Service, Service.of({ resolve }))
 
 const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
+  // Authentication precedence for one Location (highest first):
+  // 1. Stored credential selected by `Integration.connection.active`:
+  //    per-directory `providers.<id>.auth` pin, else the global active credential,
+  //    else an environment connection from `providers.<id>.env`.
+  // 2. Explicit `apiKey` in provider/model config (`request.body.apiKey` or `api.settings.apiKey`),
+  //    used only when no connection resolves.
+  // The credential argument already reflects (1); explicit config is the fallback.
   if (credential?.type === "key") return Auth.value(credential.key)
   if (credential?.type === "oauth") return Auth.value(credential.access)
   const value = model.request.body.apiKey ?? model.api.settings?.apiKey

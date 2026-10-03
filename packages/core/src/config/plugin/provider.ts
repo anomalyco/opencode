@@ -3,6 +3,7 @@ export * as ConfigProviderPlugin from "./provider"
 import { define } from "../../plugin/internal"
 import { Effect } from "effect"
 import { Config } from "../../config"
+import { Integration } from "../../integration"
 import { ModelV2 } from "../../model"
 import { ProviderV2 } from "../../provider"
 
@@ -10,6 +11,7 @@ export const Plugin = define({
   id: "config-provider",
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
+    const integrations = yield* Integration.Service
     yield* ctx.integration.transform(
       Effect.fn(function* (integrations) {
         const files = (yield* config.entries()).filter((entry): entry is Config.Document => entry.type === "document")
@@ -37,6 +39,22 @@ export const Plugin = define({
         }
       }),
     )
+
+    // Per-directory credential pins: `providers.<id>.auth` selects a stored
+    // credential (ID or label) for sessions under this directory. The global
+    // active credential remains the fallback. Pins are location-local, so
+    // switching accounts in one project never affects another.
+    const entries = yield* config.entries()
+    const pins = new Map<string, string>()
+    for (const entry of entries) {
+      if (entry.type !== "document") continue
+      for (const [id, provider] of Object.entries(entry.info.providers ?? {})) {
+        if (typeof provider.auth === "string" && provider.auth.length > 0) pins.set(id, provider.auth)
+      }
+    }
+    for (const [id, selector] of pins) {
+      yield* integrations.connection.pin(Integration.ID.make(id), selector)
+    }
 
     yield* ctx.catalog.transform(
       Effect.fn(function* (catalog) {

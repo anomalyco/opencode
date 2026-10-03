@@ -1,6 +1,6 @@
 export * as Credential from "./credential"
 
-import { asc, eq } from "drizzle-orm"
+import { desc, eq } from "drizzle-orm"
 import { Context, Effect, Layer, Schema } from "effect"
 import { Credential } from "@opencode-ai/schema/credential"
 import { Integration } from "@opencode-ai/schema/integration"
@@ -28,18 +28,20 @@ export class Info extends Schema.Class<Info>("Credential.Info")({
 }) {}
 
 export interface Interface {
-  /** Returns every stored credential. */
+  /** Returns every stored credential, global active first. */
   readonly all: () => Effect.Effect<Info[]>
-  /** Returns stored credentials belonging to one integration. */
+  /** Returns stored credentials belonging to one integration, global active first. */
   readonly list: (integrationID: Integration.ID) => Effect.Effect<Info[]>
   /** Returns one stored credential by ID. */
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
-  /** Replaces any credential for an integration and returns the new record. */
+  /** Stores an additional credential for an integration and makes it the global active. */
   readonly create: (input: {
     readonly integrationID: Integration.ID
     readonly value: Value
     readonly label?: string
   }) => Effect.Effect<Info>
+  /** Makes one stored credential the global active for its integration. */
+  readonly activate: (id: ID) => Effect.Effect<void>
   /** Updates the label or secret value of a stored credential. */
   readonly update: (id: ID, updates: Partial<Pick<Info, "label" | "value">>) => Effect.Effect<void>
   /** Removes a stored credential. */
@@ -68,7 +70,7 @@ const layer = Layer.effect(
         return (yield* db
           .select()
           .from(CredentialTable)
-          .orderBy(asc(CredentialTable.time_created))
+          .orderBy(desc(CredentialTable.active), desc(CredentialTable.time_created))
           .all()
           .pipe(Effect.orDie)).flatMap((row) => {
           const credential = stored(row)
@@ -80,7 +82,7 @@ const layer = Layer.effect(
           .select()
           .from(CredentialTable)
           .where(eq(CredentialTable.integration_id, integrationID))
-          .orderBy(asc(CredentialTable.time_created))
+          .orderBy(desc(CredentialTable.active), desc(CredentialTable.time_created))
           .all()
           .pipe(Effect.orDie)).flatMap((row) => {
           const credential = stored(row)
@@ -102,7 +104,8 @@ const layer = Layer.effect(
           .transaction((tx) =>
             Effect.gen(function* () {
               yield* tx
-                .delete(CredentialTable)
+                .update(CredentialTable)
+                .set({ active: false })
                 .where(eq(CredentialTable.integration_id, credential.integrationID))
                 .run()
               yield* tx
@@ -112,12 +115,29 @@ const layer = Layer.effect(
                   integration_id: credential.integrationID,
                   label: credential.label,
                   value: credential.value,
+                  active: true,
                 })
                 .run()
             }),
           )
           .pipe(Effect.orDie)
         return credential
+      }),
+      activate: Effect.fn("Credential.activate")(function* (id) {
+        const row = yield* db.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get().pipe(Effect.orDie)
+        if (!row?.integration_id) return
+        yield* db
+          .transaction((tx) =>
+            Effect.gen(function* () {
+              yield* tx
+                .update(CredentialTable)
+                .set({ active: false })
+                .where(eq(CredentialTable.integration_id, row.integration_id!))
+                .run()
+              yield* tx.update(CredentialTable).set({ active: true }).where(eq(CredentialTable.id, id)).run()
+            }),
+          )
+          .pipe(Effect.orDie)
       }),
       update: Effect.fn("Credential.update")(function* (id, updates) {
         if (!updates.label && !updates.value) return
@@ -129,7 +149,25 @@ const layer = Layer.effect(
           .pipe(Effect.orDie)
       }),
       remove: Effect.fn("Credential.remove")(function* (id) {
+        const row = yield* db.select().from(CredentialTable).where(eq(CredentialTable.id, id)).get().pipe(Effect.orDie)
         yield* db.delete(CredentialTable).where(eq(CredentialTable.id, id)).run().pipe(Effect.orDie)
+        if (row?.active && row.integration_id) {
+          const next = yield* db
+            .select()
+            .from(CredentialTable)
+            .where(eq(CredentialTable.integration_id, row.integration_id))
+            .orderBy(desc(CredentialTable.time_created))
+            .get()
+            .pipe(Effect.orDie)
+          if (next) {
+            yield* db
+              .update(CredentialTable)
+              .set({ active: true })
+              .where(eq(CredentialTable.id, next.id))
+              .run()
+              .pipe(Effect.orDie)
+          }
+        }
       }),
     })
   }),
