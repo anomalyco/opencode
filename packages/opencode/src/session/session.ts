@@ -169,7 +169,14 @@ function getForkedTitle(title: string): string {
 }
 
 function sessionPath(worktree: string, cwd: string) {
-  return path.relative(path.resolve(worktree), cwd).replaceAll("\\", "/")
+  // Global-project sessions have no real worktree ("/"): anchor at the
+  // session directory's own drive root so the stored path doesn't depend
+  // on which drive the server runs on — otherwise a C:-drive server mints
+  // absolute paths a D:-drive TUI's relative-path query can never match.
+  const normalized = cwd.replaceAll("\\", "/")
+  const drive =
+    worktree === "/" && process.platform === "win32" ? /^[A-Za-z]:\//.exec(normalized) : null
+  return path.relative(path.resolve(drive ? drive[0] : worktree), cwd).replaceAll("\\", "/")
 }
 
 const Summary = Schema.Struct({
