@@ -6,7 +6,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Stream } from "effect"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -552,6 +552,142 @@ it.instance("loop calls LLM and returns assistant message", () =>
     expect(parts.some((p) => p.type === "text" && p.text === "world")).toBe(true)
     expect(yield* llm.hits).toHaveLength(1)
   }),
+)
+
+it.instance(
+  "generates a real title when the session still has its default title",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const created = yield* sessions.create({
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+      expect(Session.isDefaultTitle(created.title)).toBe(true)
+
+      yield* prompt.prompt({
+        sessionID: created.id,
+        agent: "build",
+        parts: [{ type: "text", text: "Make the login button purple" }],
+      })
+      yield* llm.text("done")
+
+      const session = yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const info = yield* sessions.get(created.id).pipe(Effect.orDie)
+          if (Session.isDefaultTitle(info.title)) return undefined
+          return info
+        }),
+        "session title was never updated",
+        "20 seconds",
+      )
+      expect(session.title).toBe("E2E Title")
+    }),
+  undefined,
+  { timeout: 60_000 },
+)
+
+it.instance(
+  "generates a title even when several user messages are already in the session",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const created = yield* sessions.create({
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* prompt.prompt({
+        sessionID: created.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "First question" }],
+      })
+      yield* prompt.prompt({
+        sessionID: created.id,
+        agent: "build",
+        noReply: true,
+        parts: [{ type: "text", text: "Second question" }],
+      })
+      yield* prompt.loop({ sessionID: created.id })
+      yield* llm.text("done")
+
+      const session = yield* pollWithTimeout(
+        Effect.gen(function* () {
+          const info = yield* sessions.get(created.id).pipe(Effect.orDie)
+          if (Session.isDefaultTitle(info.title)) return undefined
+          return info
+        }),
+        "session title was never updated",
+        "20 seconds",
+      )
+      expect(session.title).toBe("E2E Title")
+    }),
+  undefined,
+  { timeout: 60_000 },
+)
+
+it.instance(
+  "leaves a custom session title untouched",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const sessions = yield* Session.Service
+      const created = yield* sessions.create({
+        title: "Pinned",
+        permission: [{ permission: "*", pattern: "*", action: "allow" }],
+      })
+
+      yield* prompt.prompt({
+        sessionID: created.id,
+        agent: "build",
+        parts: [{ type: "text", text: "hello" }],
+      })
+      yield* llm.text("ok")
+
+      const titleHits = (yield* llm.hits).filter((hit) => JSON.stringify(hit.body).includes("Generate a title for this conversation"))
+      expect(titleHits).toHaveLength(0)
+      expect((yield* sessions.get(created.id).pipe(Effect.orDie)).title).toBe("Pinned")
+    }),
+  undefined,
+  { timeout: 60_000 },
+)
+
+it.instance(
+  "falls back to the first user message when title generation fails",
+  () =>
+    Effect.gen(function* () {
+      yield* useServerConfig(providerCfg)
+      const sessions = yield* Session.Service
+      const provider = yield* ProviderSvc.Service
+      const agents = yield* AgentSvc.Service
+      const created = yield* sessions.create()
+      yield* user(created.id, "Fix the color of the login button")
+      const history = yield* MessageV2.filterCompactedEffect(created.id)
+      const failingLLM = LLM.Service.of({
+        stream: () => Stream.fail(new Error("title model unavailable")),
+      })
+
+      yield* SessionPrompt.generateTitle({
+        session: created,
+        history,
+        providerID: ref.providerID,
+        modelID: ref.modelID,
+      }).pipe(
+        Effect.provideService(Session.Service, sessions),
+        Effect.provideService(ProviderSvc.Service, provider),
+        Effect.provideService(AgentSvc.Service, agents),
+        Effect.provideService(LLM.Service, failingLLM),
+      )
+
+      const info = yield* sessions.get(created.id).pipe(Effect.orDie)
+      expect(info.title).toBe("Fix the color of the login button")
+    }),
+  undefined,
+  { timeout: 60_000 },
 )
 
 withMcpInstructions.instance(

@@ -2,7 +2,7 @@ import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
 import { useSync } from "../context/sync"
-import { createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js"
+import { createEffect, createMemo, createResource, createSignal, on, onCleanup, onMount } from "solid-js"
 import path from "path"
 import { Locale } from "../util/locale"
 import { useProject } from "../context/project"
@@ -89,8 +89,38 @@ export function DialogSessionList() {
     const query = search().trim().toLowerCase()
     return [...result.map((session) => synced.get(session.id) ?? session), ...extra]
       .filter((session) => !deleted().has(session.id))
-      .filter((session) => !query || session.title.toLowerCase().includes(query))
+      .filter((session) => {
+        if (!query) return true
+        if (session.title.toLowerCase().includes(query)) return true
+        const fallback = fallbackTitles()[session.id]
+        return fallback !== undefined && fallback.toLowerCase().includes(query)
+      })
   })
+
+  const [fallbackTitles, setFallbackTitles] = createSignal<Record<string, string>>({})
+  const loadingFallbacks = new Set<string>()
+
+  createEffect(
+    on(
+      () => sessions(),
+      (list) => {
+        for (const session of list) {
+          const cached = fallbackTitles()
+          if (!isDefaultSessionTitle(session.title) || session.id in cached || loadingFallbacks.has(session.id)) continue
+          loadingFallbacks.add(session.id)
+          void fetchFirstUserSnippet(session.id, sdk).then(
+            (snippet) => {
+              loadingFallbacks.delete(session.id)
+              if (snippet) setFallbackTitles((current) => ({ ...current, [session.id]: snippet }))
+            },
+            () => {
+              loadingFallbacks.delete(session.id)
+            },
+          )
+        }
+      },
+    ),
+  )
 
   onCleanup(
     event.on("session.deleted", (event) => {
@@ -234,6 +264,7 @@ export function DialogSessionList() {
         directory && directory !== project.data.project.mainDir ? Locale.truncate(path.basename(directory), 20) : ""
 
       const isDeleting = toDelete() === x.id
+      const fallback = fallbackTitles()[x.id]
       const status = sync.data.session_status?.[x.id]
       const isWorking = status?.type === "busy" || status?.type === "retry"
       const slot = slotByID.get(x.id)
@@ -243,7 +274,11 @@ export function DialogSessionList() {
           ? () => <text fg={theme.accent}>{slot}</text>
           : undefined
       return {
-        title: isDeleting ? `Press ${deleteHint()} again to confirm` : x.title,
+        title: isDeleting
+          ? `Press ${deleteHint()} again to confirm`
+          : isDefaultSessionTitle(x.title)
+            ? fallback ?? x.title
+            : x.title,
         bg: isDeleting ? theme.error : undefined,
         value: x.id,
         category,
@@ -361,4 +396,37 @@ function quickSwitchRange(first: string, last: string) {
   const prefix = first.slice(0, -1)
   if (first.endsWith("1") && last === `${prefix}9`) return `${prefix}1-9`
   return `${first} through ${last}`
+}
+
+function isDefaultSessionTitle(title: string) {
+  return /^(New session - |Child session - )\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(title)
+}
+
+function sessionMessageText(message: { info: { role: string }; parts: Array<{ type: string; text?: string }> }) {
+  if (message.info.role !== "user") return undefined
+  const text = message.parts
+    .filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
+    .map((part) => part.text)
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim()
+  if (!text) return undefined
+  return text.length > 60 ? `${text.slice(0, 57)}...` : text
+}
+
+async function fetchFirstUserSnippet(sessionID: string, sdk: ReturnType<typeof useSDK>) {
+  let before: string | undefined
+  for (let page = 0; page < 5; page++) {
+    const result = await sdk.client.session.messages({ sessionID, limit: 50, ...(before ? { before } : {}) })
+    const items = result.data ?? []
+    if (items.length === 0) return undefined
+    for (const message of items) {
+      const snippet = sessionMessageText(message)
+      if (snippet) return snippet
+    }
+    const lastID = items[items.length - 1]?.info.id
+    if (!lastID || lastID === before) return undefined
+    before = lastID
+  }
+  return undefined
 }
