@@ -273,6 +273,18 @@ const live: Layer.Layer<
         "llm.provider": input.model.providerID,
         "llm.model": input.model.id,
       })
+      // Dynamically loaded providers can return a runtime LanguageModelV2 even though
+      // Provider.getLanguage() is typed as LanguageModelV3. wrapLanguageModel() always
+      // labels its result "v3" (ai/src/middleware/wrap-language-model.ts), which skips
+      // AI SDK's own V2->V3 compat conversion (asLanguageModelV3 in resolveLanguageModel)
+      // and silently drops finish-step usage for those models. Route V2 models around the
+      // wrapper instead, applying the same message transform directly to the ModelMessage[]
+      // input, so AI SDK's built-in compat layer still runs.
+      const isV3LanguageModel = language.specificationVersion === "v3"
+      const messages = isV3LanguageModel
+        ? prepared.messages
+        : ProviderTransform.message(prepared.messages, input.model, prepared.messageTransformOptions)
+
       // Default runtime path: AI SDK owns provider execution and tool dispatch;
       // LLMAISDK.toLLMEvents below normalizes fullStream parts for the processor.
       return {
@@ -321,26 +333,28 @@ const live: Layer.Layer<
           abortSignal: input.abort,
           headers: prepared.headers,
           maxRetries: input.retries ?? 0,
-          messages: prepared.messages,
-          model: wrapLanguageModel({
-            model: language,
-            middleware: [
-              {
-                specificationVersion: "v3" as const,
-                async transformParams(args) {
-                  if (args.type === "stream") {
-                    // @ts-expect-error
-                    args.params.prompt = ProviderTransform.message(
-                      args.params.prompt,
-                      input.model,
-                      prepared.messageTransformOptions,
-                    )
-                  }
-                  return args.params
-                },
-              },
-            ],
-          }),
+          messages,
+          model: isV3LanguageModel
+            ? wrapLanguageModel({
+                model: language,
+                middleware: [
+                  {
+                    specificationVersion: "v3" as const,
+                    async transformParams(args) {
+                      if (args.type === "stream") {
+                        // @ts-expect-error
+                        args.params.prompt = ProviderTransform.message(
+                          args.params.prompt,
+                          input.model,
+                          prepared.messageTransformOptions,
+                        )
+                      }
+                      return args.params
+                    },
+                  },
+                ],
+              })
+            : language,
           experimental_telemetry: {
             isEnabled: cfg.experimental?.openTelemetry,
             functionId: "session.llm",
