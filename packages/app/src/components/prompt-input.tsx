@@ -284,12 +284,20 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     return text.trim().length === 0 && imageAttachments().length === 0 && commentCount() === 0
   })
   const stopping = createMemo(() => working() && blank())
+  const queueHint = () => working() && !stopping() && props.getDelivery?.() === "queue"
   const tip = () => {
     if (stopping()) {
       return (
         <div class="flex items-center gap-2">
           <span>{language.t("prompt.action.stop")}</span>
           <span class="text-icon-base text-12-medium text-[10px]!">{language.t("common.key.esc")}</span>
+        </div>
+      )
+    }
+    if (queueHint()) {
+      return (
+        <div class="flex items-center gap-2">
+          <span>{language.t("prompt.hint.queueSteer")}</span>
         </div>
       )
     }
@@ -1223,6 +1231,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       newSessionWorktree: () => props.newSessionWorktree,
       onNewSessionWorktreeReset: props.onNewSessionWorktreeReset,
       shouldQueue: props.shouldQueue,
+      getDelivery: props.getDelivery,
       onQueue: props.onQueue,
       onAbort: props.onAbort,
       onSubmit: props.onSubmit,
@@ -1584,7 +1593,13 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                   icon={stopping() ? "stop" : store.mode === "shell" ? "arrow-undo-down" : "arrow-up"}
                   variant="primary"
                   class="size-8"
-                  aria-label={stopping() ? language.t("prompt.action.stop") : language.t("prompt.action.send")}
+                  aria-label={
+                    stopping()
+                      ? language.t("prompt.action.stop")
+                      : queueHint()
+                        ? language.t("prompt.action.queue")
+                        : language.t("prompt.action.send")
+                  }
                 />
               </Tooltip>
             </div>

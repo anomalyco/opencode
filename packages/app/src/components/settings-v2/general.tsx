@@ -28,6 +28,7 @@ import {
 import "./settings-v2.css"
 
 const schemeOptions: ("system" | "light" | "dark")[] = ["system", "light", "dark"]
+const followupOptions: ("queue" | "steer")[] = ["queue", "steer"]
 const fontSettings = {
   ui: {
     action: "settings-ui-font",
@@ -243,6 +244,31 @@ const SoundSetting: Component<{
   )
 }
 
+const FollowupSetting = () => {
+  const language = useLanguage()
+  const settings = useSettings()
+  return (
+    <SettingsRowV2
+      title={language.t("settings.general.row.followup.title")}
+      description={language.t("settings.general.row.followup.description")}
+    >
+      <SelectV2
+        appearance="inline"
+        data-action="settings-followup"
+        options={followupOptions}
+        placement="bottom-end"
+        gutter={6}
+        current={followupOptions.find((option) => option === settings.general.followup())}
+        label={(option) => {
+          if (option === "queue") return language.t("settings.general.row.followup.option.queue")
+          return language.t("settings.general.row.followup.option.steer")
+        }}
+        onSelect={(option) => option && settings.general.setFollowup(option)}
+      />
+    </SettingsRowV2>
+  )
+}
+
 const LanguageSetting = () => {
   const language = useLanguage()
   const options = createMemo(() =>
@@ -332,6 +358,8 @@ export const SettingsGeneralV2: Component<{
         <PermissionScopeSetting controller={permissionScope} />
 
         <ShellSetting controller={shell} />
+
+        <FollowupSetting />
 
         <SettingsRowV2
           title={language.t("settings.general.row.reasoningSummaries.title")}
