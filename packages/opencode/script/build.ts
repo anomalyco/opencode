@@ -113,6 +113,12 @@ const allTargets: {
   },
 ]
 
+// Baseline variants only exist for x64, so --baseline should not also build the
+// regular target on those platforms.
+const hasBaseline = allTargets.some(
+  (item) => item.os === process.platform && item.arch === process.arch && item.avx2 === false,
+)
+
 const targets = singleFlag
   ? allTargets.filter((item) => {
       if (item.os !== process.platform || item.arch !== process.arch) {
@@ -127,6 +133,10 @@ const targets = singleFlag
 
       // also skip abi-specific builds for the same reason
       if (item.abi !== undefined) {
+        return false
+      }
+
+      if (baselineFlag && hasBaseline) {
         return false
       }
 
