@@ -66,7 +66,7 @@ describe("session diff with missing patch (#26574)", () => {
   )
 
   it.instance(
-    "GET /session/<id>/diff returns requested turn diffs",
+    "GET /session/<id>/diff returns requested turn diffs with quoted Unicode paths",
     () =>
       Effect.gen(function* () {
         const test = yield* TestInstance
@@ -80,7 +80,10 @@ describe("session diff with missing patch (#26574)", () => {
           agent: "build",
           model: { providerID: ProviderV2.ID.make("test"), modelID: ModelV2.ID.make("model") },
           summary: {
-            diffs: [{ file: "turn.ts", additions: 1, deletions: 0, status: "modified" }],
+            diffs: [
+              { file: "turn.ts", additions: 1, deletions: 0, status: "modified" },
+              { file: '"文\\303\\251😀\\t\\\".txt"', additions: 2, deletions: 1, status: "modified" },
+            ],
           },
         } satisfies SessionV1.User)
 
@@ -90,7 +93,10 @@ describe("session diff with missing patch (#26574)", () => {
         )
 
         expect(response.status).toBe(200)
-        expect(yield* response.json).toEqual([{ file: "turn.ts", additions: 1, deletions: 0, status: "modified" }])
+        expect(yield* response.json).toEqual([
+          { file: "turn.ts", additions: 1, deletions: 0, status: "modified" },
+          { file: '文é😀\t".txt', additions: 2, deletions: 1, status: "modified" },
+        ])
       }),
     { git: true, config: { formatter: false, lsp: false } },
   )
