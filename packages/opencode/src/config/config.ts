@@ -2,6 +2,7 @@ import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { httpClient } from "@opencode-ai/core/effect/app-node-platform"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import path from "path"
+import { isDeepStrictEqual } from "node:util"
 import { pathToFileURL } from "url"
 import os from "os"
 import { mergeDeep } from "remeda"
@@ -31,6 +32,7 @@ import { ConfigCommand } from "./command"
 import { ConfigManaged } from "./managed"
 import { ConfigParse } from "./parse"
 import { ConfigPaths } from "./paths"
+import { ConfigResources } from "./resources"
 import { ConfigPlugin } from "./plugin"
 import { ConfigVariable } from "./variable"
 import { ConfigV2Compat } from "./v2-compat"
@@ -115,6 +117,72 @@ type Info = ConfigV1.Info & {
   plugin_origins?: ConfigPlugin.Origin[]
 }
 
+const RESOURCE_KEYS = [
+  "agent",
+  "mode",
+  "command",
+  "skills",
+  "permission",
+  "tools",
+  "default_agent",
+  "subagent_depth",
+  "model",
+  "small_model",
+] as const
+
+function resourceConfig(config: Info): Info {
+  return Object.fromEntries(RESOURCE_KEYS.map((key) => [key, config[key]]))
+}
+
+// Preserve config-hook contributions without executing or reinstalling plugins
+// on a file save. Only mutations relative to the authored snapshot are replayed.
+function applyOverrides(next: unknown, authored: unknown, effective: unknown): unknown {
+  if (isDeepStrictEqual(authored, effective)) return next
+  if (!isRecord(authored) || !isRecord(effective)) return effective
+  const result = isRecord(next) ? { ...next } : {}
+  for (const key of new Set([...Object.keys(authored), ...Object.keys(effective)])) {
+    if (isDeepStrictEqual(authored[key], effective[key])) continue
+    if (!(key in effective)) {
+      delete result[key]
+      continue
+    }
+    result[key] = applyOverrides(result[key], authored[key], effective[key])
+  }
+  return result
+}
+
+const normalizeResources = Effect.fnUntraced(function* (result: Info) {
+  for (const [name, mode] of Object.entries(result.mode ?? {})) {
+    result.agent = mergeDeep(result.agent ?? {}, {
+      [name]: {
+        ...mode,
+        mode: "primary" as const,
+      },
+    })
+  }
+
+  if (Flag.OPENCODE_PERMISSION) {
+    try {
+      result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
+    } catch (err) {
+      yield* Effect.logWarning("OPENCODE_PERMISSION contains invalid JSON, skipping", { err })
+    }
+  }
+
+  if (result.tools) {
+    const perms: Record<string, ConfigPermissionV1.Action> = {}
+    for (const [tool, enabled] of Object.entries(result.tools)) {
+      const action: ConfigPermissionV1.Action = enabled ? "allow" : "deny"
+      if (tool === "write" || tool === "edit" || tool === "patch") {
+        perms.edit = action
+        continue
+      }
+      perms[tool] = action
+    }
+    result.permission = mergeDeep(perms, result.permission ?? {})
+  }
+})
+
 type State = {
   config: Info
   directories: string[]
@@ -177,6 +245,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const fs = yield* FSUtil.Service
+    const resources = yield* ConfigResources.Service
     const authSvc = yield* Auth.Service
     const accountSvc = yield* Account.Service
     const env = yield* Env.Service
@@ -228,13 +297,14 @@ const layer = Layer.effect(
       text: string,
       options: { path: string } | { dir: string; source: string },
       env?: Record<string, string>,
+      onFile?: (file: string) => void,
     ) {
       const source = "path" in options ? options.path : options.source
       const expanded = yield* Effect.promise(() =>
         ConfigVariable.substitute(
           "path" in options
-            ? { text, type: "path", path: options.path, env }
-            : { text, type: "virtual", ...options, env },
+            ? { text, type: "path", path: options.path, env, onFile }
+            : { text, type: "virtual", ...options, env, onFile },
         ),
       )
       const parsed = ConfigParse.jsonc(expanded, source)
@@ -250,11 +320,32 @@ const layer = Layer.effect(
       return data
     })
 
+    const loadTrackedConfig = Effect.fnUntraced(function* (
+      text: string,
+      options: { path: string } | { dir: string; source: string },
+      env?: Record<string, string>,
+    ) {
+      const files = new Set<string>()
+      return yield* loadConfig(text, options, env, (file) => files.add(file)).pipe(
+        Effect.ensuring(Effect.suspend(() => resources.watch(Array.from(files, (file) => ({ file }))))),
+      )
+    })
+
     const loadFile = Effect.fnUntraced(function* (filepath: string, env?: Record<string, string>) {
       yield* Effect.logInfo("loading", { path: filepath })
       const text = yield* readConfigFile(filepath)
       if (!text) return {} as Info
-      return yield* loadConfig(text, { path: filepath }, env)
+      return yield* loadTrackedConfig(text, { path: filepath }, env)
+    })
+
+    const loadResourceFile = Effect.fnUntraced(function* (file: string, env?: Record<string, string>) {
+      if (!(yield* fs.existsSafe(file))) return {} as Info
+      const text = yield* fs.readFileString(file).pipe(
+        Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+        Effect.orDie,
+      )
+      if (!text) return {} as Info
+      return yield* loadTrackedConfig(text, { dir: path.dirname(file), source: file }, env)
     })
 
     const loadGlobal = Effect.fnUntraced(function* (env?: Record<string, string>) {
@@ -331,6 +422,7 @@ const layer = Layer.effect(
 
         let result: Info = {}
         const authEnv: Record<string, string> = {}
+        const sources: Effect.Effect<Info>[] = []
         const consoleManagedProviders = new Set<string>()
         let activeOrgName: string | undefined
 
@@ -362,10 +454,38 @@ const layer = Layer.effect(
           result.plugin_origins = plugins
         })
 
-        const merge = (source: string, next: Info, kind?: ConfigPlugin.Scope) => {
+        const merge = (source: string, next: Info, kind?: ConfigPlugin.Scope, retain = true) => {
+          if (retain) sources.push(Effect.succeed(next))
           result = mergeConfigConcatArrays(result, next)
           return mergePluginOrigins(source, next.plugin, kind)
         }
+
+        const projectResources = Effect.gen(function* () {
+          const files = yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)
+          const configs = yield* Effect.forEach(files, (file) => loadResourceFile(file, authEnv))
+          return configs.reduce(mergeConfigConcatArrays, {})
+        }).pipe(Effect.provideService(FSUtil.Service, fs), Effect.orDie)
+
+        const directoryResources = Effect.gen(function* () {
+          const directories = yield* ConfigPaths.directories(ctx.directory, ctx.worktree)
+          const configs = yield* Effect.forEach(directories, (dir) =>
+            Effect.gen(function* () {
+              const configs =
+                dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR
+                  ? yield* Effect.forEach(ConfigPaths.fileInDirectory(dir, "opencode"), (file) =>
+                      loadResourceFile(file, authEnv),
+                    )
+                  : []
+              return [
+                ...configs,
+                { command: yield* Effect.promise(() => ConfigCommand.load(dir, { strict: true })) },
+                { agent: yield* Effect.promise(() => ConfigAgent.load(dir, { strict: true })) },
+                { agent: yield* Effect.promise(() => ConfigAgent.loadMode(dir, { strict: true })) },
+              ].reduce<Info>(mergeConfigConcatArrays, {})
+            }),
+          )
+          return configs.reduce(mergeConfigConcatArrays, {})
+        }).pipe(Effect.provideService(FSUtil.Service, fs), Effect.orDie)
 
         for (const [key, value] of Object.entries(auth)) {
           if (value.type === "wellknown") {
@@ -410,16 +530,23 @@ const layer = Layer.effect(
         }
 
         const global = Object.keys(authEnv).length ? yield* loadGlobal(authEnv) : yield* getGlobal()
-        yield* merge(Global.Path.config, global, "global")
+        sources.push(
+          Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (file) =>
+            loadResourceFile(path.join(Global.Path.config, file), authEnv),
+          ).pipe(Effect.map((configs) => configs.reduce(mergeConfigConcatArrays, {}))),
+        )
+        yield* merge(Global.Path.config, global, "global", false)
 
         if (Flag.OPENCODE_CONFIG) {
-          yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv))
+          sources.push(loadResourceFile(Flag.OPENCODE_CONFIG, authEnv))
+          yield* merge(Flag.OPENCODE_CONFIG, yield* loadFile(Flag.OPENCODE_CONFIG, authEnv), undefined, false)
           yield* Effect.logDebug("loaded custom config", { path: Flag.OPENCODE_CONFIG })
         }
 
         if (!Flag.OPENCODE_DISABLE_PROJECT_CONFIG) {
+          sources.push(projectResources)
           for (const file of yield* ConfigPaths.files("opencode", ctx.directory, ctx.worktree).pipe(Effect.orDie)) {
-            yield* merge(file, yield* loadFile(file, authEnv), "local")
+            yield* merge(file, yield* loadFile(file, authEnv), "local", false)
           }
         }
 
@@ -434,13 +561,14 @@ const layer = Layer.effect(
         }
 
         const deps: Fiber.Fiber<void>[] = []
+        sources.push(directoryResources)
 
         for (const dir of directories) {
           if (dir.endsWith(".opencode") || dir === Flag.OPENCODE_CONFIG_DIR) {
             for (const file of ["opencode.json", "opencode.jsonc"]) {
               const source = path.join(dir, file)
               yield* Effect.logDebug(`loading config from ${source}`)
-              yield* merge(source, yield* loadFile(source, authEnv))
+              yield* merge(source, yield* loadFile(source, authEnv), undefined, false)
               result.agent ??= {}
               result.mode ??= {}
               result.plugin ??= []
@@ -538,44 +666,15 @@ const layer = Layer.effect(
         // macOS managed preferences (.mobileconfig deployed via MDM) override everything
         const managed = yield* Effect.promise(() => ConfigManaged.readManagedPreferences())
         if (managed) {
-          result = mergeConfigConcatArrays(
-            result,
-            yield* loadConfig(managed.text, {
-              dir: path.dirname(managed.source),
-              source: managed.source,
-            }),
-          )
-        }
-
-        for (const [name, mode] of Object.entries(result.mode ?? {})) {
-          result.agent = mergeDeep(result.agent ?? {}, {
-            [name]: {
-              ...mode,
-              mode: "primary" as const,
-            },
+          const next = yield* loadConfig(managed.text, {
+            dir: path.dirname(managed.source),
+            source: managed.source,
           })
+          sources.push(Effect.succeed(next))
+          result = mergeConfigConcatArrays(result, next)
         }
 
-        if (Flag.OPENCODE_PERMISSION) {
-          try {
-            result.permission = mergeDeep(result.permission ?? {}, JSON.parse(Flag.OPENCODE_PERMISSION))
-          } catch (err) {
-            yield* Effect.logWarning("OPENCODE_PERMISSION contains invalid JSON, skipping", { err })
-          }
-        }
-
-        if (result.tools) {
-          const perms: Record<string, ConfigPermissionV1.Action> = {}
-          for (const [tool, enabled] of Object.entries(result.tools)) {
-            const action: ConfigPermissionV1.Action = enabled ? "allow" : "deny"
-            if (tool === "write" || tool === "edit" || tool === "patch") {
-              perms.edit = action
-              continue
-            }
-            perms[tool] = action
-          }
-          result.permission = mergeDeep(perms, result.permission ?? {})
-        }
+        yield* normalizeResources(result)
 
         if (!result.username) {
           try {
@@ -601,6 +700,12 @@ const layer = Layer.effect(
           config: result,
           directories,
           deps,
+          reload: Effect.gen(function* () {
+            const configs = yield* Effect.all(sources)
+            const config = configs.reduce(mergeConfigConcatArrays, {})
+            yield* normalizeResources(config)
+            return { config, directories: yield* ConfigPaths.directories(ctx.directory, ctx.worktree) }
+          }).pipe(Effect.provideService(FSUtil.Service, fs), Effect.orDie),
           consoleState: {
             consoleManagedProviders: Array.from(consoleManagedProviders),
             activeOrgName,
@@ -611,26 +716,75 @@ const layer = Layer.effect(
       Effect.provideService(FSUtil.Service, fs),
     )
 
-    const state = yield* InstanceState.make<State>(
-      Effect.fn("Config.state")(function* (ctx) {
-        return yield* loadInstanceState(ctx).pipe(Effect.orDie)
+    const initial = yield* InstanceState.make((ctx) => loadInstanceState(ctx).pipe(Effect.orDie))
+    const state = ConfigResources.make(
+      Effect.fn("Config.resources")(function* (ctx, previous?: State & { authored: Info; baseline: Info }) {
+        const ancestors = Flag.OPENCODE_DISABLE_PROJECT_CONFIG ? [] : ConfigPaths.ancestors(ctx.directory, ctx.worktree)
+        const directories = Array.from(
+          new Set([
+            Global.Path.config,
+            path.join(Global.Path.home, ".opencode"),
+            ...ancestors.map((directory) => path.join(directory, ".opencode")),
+            ...(Flag.OPENCODE_CONFIG_DIR ? [Flag.OPENCODE_CONFIG_DIR] : []),
+          ]),
+        )
+        yield* resources.watch([
+          ...ancestors.flatMap((directory) =>
+            ConfigPaths.fileInDirectory(directory, "opencode").map((file) => ({ file })),
+          ),
+          ...["config.json", "opencode.json", "opencode.jsonc"].map((name) => ({
+            file: path.join(Global.Path.config, name),
+          })),
+          ...(Flag.OPENCODE_CONFIG ? [{ file: Flag.OPENCODE_CONFIG }] : []),
+          ...directories.map((directory) => ({
+            directory,
+            pattern:
+              "{{agent,agents,command,commands}/**/*.md,{mode,modes}/*.md,{skill,skills}/**/SKILL.md,opencode.{json,jsonc}}",
+          })),
+        ])
+        const loaded = yield* InstanceState.get(initial).pipe(
+          Effect.catchCause((cause) => InstanceState.invalidate(initial).pipe(Effect.andThen(Effect.failCause(cause)))),
+        )
+        const next = yield* loaded.reload
+        const baseline = previous?.baseline ?? structuredClone(next.config)
+        const fields = Object.keys({ ...baseline, ...next.config }) as (keyof Info)[]
+        yield* resources.requireRestart(
+          fields.filter(
+            (key) =>
+              key !== "$schema" &&
+              !RESOURCE_KEYS.some((field) => field === key) &&
+              !isDeepStrictEqual(baseline[key], next.config[key]),
+          ),
+        )
+        const authored = resourceConfig(next.config)
+        const effective = previous
+          ? (applyOverrides(authored, previous.authored, resourceConfig(previous.config)) as Info)
+          : authored
+        return {
+          ...loaded,
+          config: { ...(previous?.config ?? loaded.config), ...effective },
+          directories: next.directories,
+          authored: structuredClone(authored),
+          baseline,
+        }
       }),
+      { pin: true },
     )
 
     const get = Effect.fn("Config.get")(function* () {
-      return yield* InstanceState.use(state, (s) => s.config)
+      return (yield* resources.get(state)).config
     })
 
     const directories = Effect.fn("Config.directories")(function* () {
-      return yield* InstanceState.use(state, (s) => s.directories)
+      return (yield* resources.get(state)).directories
     })
 
     const getConsoleState = Effect.fn("Config.getConsoleState")(function* () {
-      return yield* InstanceState.use(state, (s) => s.consoleState)
+      return yield* InstanceState.use(initial, (s) => s.consoleState)
     })
 
     const waitForDependencies = Effect.fn("Config.waitForDependencies")(function* () {
-      yield* InstanceState.useEffect(state, (s) =>
+      yield* InstanceState.useEffect(initial, (s) =>
         Effect.forEach(s.deps, Fiber.join, { concurrency: "unbounded" }).pipe(Effect.asVoid),
       )
     })
@@ -695,7 +849,7 @@ const layer = Layer.effect(
 export const node = LayerNode.make({
   service: Service,
   layer: layer,
-  deps: [FSUtil.node, Auth.node, Account.node, Env.node, Npm.node, httpClient],
+  deps: [FSUtil.node, ConfigResources.node, Auth.node, Account.node, Env.node, Npm.node, httpClient],
 })
 
 export * as Config from "./config"

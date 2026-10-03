@@ -20,6 +20,7 @@ type SubstituteInput = ParseSource & {
   text: string
   missing?: "error" | "empty"
   env?: Record<string, string>
+  onFile?: (path: string) => void
 }
 
 function source(input: ParseSource) {
@@ -64,6 +65,7 @@ export async function substitute(input: SubstituteInput) {
     }
 
     const resolvedPath = path.isAbsolute(filePath) ? filePath : path.resolve(configDir, filePath)
+    input.onFile?.(resolvedPath)
     const fileContent = (
       await Filesystem.readText(resolvedPath).catch((error: NodeJS.ErrnoException) => {
         if (missing === "empty") return ""

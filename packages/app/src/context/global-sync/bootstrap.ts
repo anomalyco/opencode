@@ -80,6 +80,11 @@ function errors(list: PromiseSettledResult<unknown>[]) {
 }
 
 const providerRev = new Map<string, number>()
+const configResourceRev = new Map<string, number>()
+
+export function clearConfigResourceRev(scope: ServerScope, directory: string) {
+  configResourceRev.delete(ScopedKey.from(scope, directory))
+}
 
 export function clearProviderRev(scope: ServerScope, directory: string) {
   providerRev.delete(ScopedKey.from(scope, directory))
@@ -280,7 +285,8 @@ export const loadCommands = (
   retry(async () => {
     if ((await protocol) === "v1" && legacy) {
       return ((await legacy.command.list()).data ?? []).map((command) => {
-        const [providerID, id] = command.model?.split("/") ?? []
+        const [providerID, ...model] = command.model?.split("/") ?? []
+        const id = model.join("/")
         return {
           name: command.name,
           template: command.template,
@@ -294,6 +300,42 @@ export const loadCommands = (
     }
     return api.list({ location: { directory } }).then((result) => result.data)
   })
+
+export async function loadConfigResources(input: {
+  scope: ServerScope
+  directory: string
+  api: { agent: AgentListApi; command: CommandListApi }
+  sdk?: OpencodeClient
+  protocol?: Promise<ServerProtocol>
+  queryClient: QueryClient
+  setStore: SetStoreFunction<State>
+  commands?: boolean
+  refresh?: boolean
+}) {
+  const key = ScopedKey.from(input.scope, input.directory)
+  const revision = (configResourceRev.get(key) ?? 0) + 1
+  configResourceRev.set(key, revision)
+  const query = loadAgentsQuery(input.scope, input.directory, input.api.agent, input.sdk, input.protocol)
+  if (input.refresh) {
+    await input.queryClient.cancelQueries({ queryKey: query.queryKey, exact: true }, { silent: true })
+    await input.queryClient.invalidateQueries({ queryKey: query.queryKey, exact: true, refetchType: "none" })
+  }
+  const [agents, commands, config] = await Promise.allSettled([
+    input.queryClient.fetchQuery(query),
+    input.commands === false ? undefined : loadCommands(input.directory, input.api.command, input.sdk, input.protocol),
+    input.sdk && (await input.protocol) === "v1" ? input.sdk.config.get().then((result) => result.data) : undefined,
+  ])
+  if (configResourceRev.get(key) !== revision) return
+  batch(() => {
+    input.setStore("agent", agents.status === "fulfilled" ? agents.value : [])
+    if (commands.status === "rejected") input.setStore("command", [])
+    if (commands.status === "fulfilled" && commands.value) input.setStore("command", commands.value)
+    if (config.status === "fulfilled" && config.value)
+      input.setStore("config", reconcile(config.value, { merge: false }))
+  })
+  const failures = errors([agents, commands, config])
+  if (failures.length) throw failures[0]
+}
 
 export const loadPathQuery = (
   scope: ServerScope,
@@ -374,15 +416,7 @@ export async function bootstrapDirectory(input: {
   ;(async () => {
     const slow = [
       () => Promise.resolve(input.loadSessions(input.directory)),
-      () =>
-        input.queryClient
-          .ensureQueryData(loadAgentsQuery(input.scope, input.directory, input.api.agent, input.sdk, input.protocol))
-          .then((data) => input.setStore("agent", data)),
-      () =>
-        retry(async () => {
-          if ((await input.protocol) !== "v1") return
-          return input.sdk.config.get().then((x) => input.setStore("config", reconcile(x.data!, { merge: false })))
-        }),
+      () => loadConfigResources({ ...input, commands: input.mcp }),
       () =>
         retry(() =>
           (async () => {
@@ -432,11 +466,7 @@ export async function bootstrapDirectory(input: {
             if (next) input.vcsCache.setStore("value", next)
           })
         }),
-      input.mcp &&
-        (() =>
-          loadCommands(input.directory, input.api.command, input.sdk, input.protocol).then((commands) =>
-            input.setStore("command", commands),
-          )),
+
       () =>
         input.queryClient.fetchQuery(
           loadReferencesQuery(input.scope, input.directory, input.api.reference, input.sdk, input.protocol),

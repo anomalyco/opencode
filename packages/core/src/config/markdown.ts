@@ -3,9 +3,11 @@ export * as ConfigMarkdown from "./markdown"
 import matter from "gray-matter"
 export function parse(content: string) {
   try {
-    return matter(content)
+    // gray-matter caches before parsing, including partially parsed failures.
+    // Resource snapshots own caching; retries must validate the actual input.
+    return matter(content, {})
   } catch {
-    return matter(sanitize(content))
+    return matter(sanitize(content), {})
   }
 }
 

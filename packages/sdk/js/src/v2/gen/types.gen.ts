@@ -53,6 +53,7 @@ export type Event =
   | EventSessionError
   | EventInstallationUpdated
   | EventInstallationUpdateAvailable
+  | EventConfigResourcesUpdated
   | EventFileEdited
   | EventReferenceUpdated
   | EventPermissionV2Asked
@@ -1237,6 +1238,16 @@ export type GlobalEvent = {
         type: "installation.update-available"
         properties: {
           version: string
+        }
+      }
+    | {
+        id: string
+        type: "config.resources.updated"
+        properties: {
+          revision: number
+          status: "ready" | "error"
+          error?: string
+          restartRequired: Array<string>
         }
       }
     | {
@@ -2904,6 +2915,7 @@ export type V2Event =
   | SessionError
   | InstallationUpdated
   | InstallationUpdateAvailable
+  | ConfigResourcesUpdated
   | FileEdited
   | ReferenceUpdated
   | PermissionV2Asked
@@ -5402,6 +5414,26 @@ export type InstallationUpdateAvailable = {
   }
 }
 
+export type ConfigResourcesUpdated = {
+  id: string
+  metadata?: {
+    [key: string]: unknown
+  }
+  type: "config.resources.updated"
+  durable?: {
+    aggregateID: string
+    seq: number
+    version: number
+  }
+  location?: LocationRef
+  data: {
+    revision: number
+    status: "ready" | "error"
+    error?: string
+    restartRequired: Array<string>
+  }
+}
+
 export type FileEdited = {
   id: string
   metadata?: {
@@ -6706,6 +6738,17 @@ export type EventInstallationUpdateAvailable = {
   type: "installation.update-available"
   properties: {
     version: string
+  }
+}
+
+export type EventConfigResourcesUpdated = {
+  id: string
+  type: "config.resources.updated"
+  properties: {
+    revision: number
+    status: "ready" | "error"
+    error?: string
+    restartRequired: Array<string>
   }
 }
 
