@@ -53,14 +53,31 @@ export function sessionNotFoundError(sessionID: string) {
 }
 
 export function isLocalSessionNotFoundError(error: unknown, sessionID: string) {
-  return error instanceof Error && error.message === sessionNotFoundMessage(sessionID)
+  if (error instanceof Error && error.message === sessionNotFoundMessage(sessionID)) return true
+  if (typeof error === "string" && error.includes(sessionNotFoundMessage(sessionID))) return true
+  return false
 }
 
 export function isSessionNotFoundError(error: unknown, sessionID: string) {
+  if (isLocalSessionNotFoundError(error, sessionID)) return true
   const unwrapped = unwrapNamedError(error)
   if (typeof unwrapped !== "object" || unwrapped === null) return false
   const value = unwrapped as Record<string, unknown>
-  return value._tag === "SessionNotFoundError" && value.sessionID === sessionID
+  if (value._tag === "SessionNotFoundError" && value.sessionID === sessionID) return true
+  if (
+    value.name === "NotFoundError" &&
+    typeof value.data === "object" &&
+    value.data !== null &&
+    (value.data as Record<string, unknown>).message === sessionNotFoundMessage(sessionID)
+  )
+    return true
+  if (
+    "message" in value &&
+    typeof value.message === "string" &&
+    value.message.includes(sessionNotFoundMessage(sessionID))
+  )
+    return true
+  return false
 }
 
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {
