@@ -1,3 +1,4 @@
+import { RGBA } from "@opentui/core"
 import { createMemo, type Setter } from "solid-js"
 import { useKV } from "./kv"
 
@@ -14,6 +15,19 @@ export function reasoningSummary(text: string) {
   const match = content.match(/^\*\*([^*\n]+)\*\*(?:\r?\n\r?\n|$)/)
   if (!match) return { title: null, body: content }
   return { title: match[1].trim(), body: content.slice(match[0].length).trimEnd() }
+}
+
+// Collapsed completed titles dim with the theme's thinkingOpacity. Expanded,
+// hovered, and in-progress headers stay at the full warning color.
+export function reasoningHeaderColor(input: {
+  done: boolean
+  open: boolean
+  hover: boolean
+  warning: RGBA
+  thinkingOpacity: number
+}) {
+  if (!input.done || input.open || input.hover) return input.warning
+  return RGBA.fromValues(input.warning.r, input.warning.g, input.warning.b, input.thinkingOpacity)
 }
 
 export function isThinkingMode(value: unknown): value is ThinkingMode {
