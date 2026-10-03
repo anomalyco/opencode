@@ -6,21 +6,6 @@ import { useTheme } from "../context/theme"
 import { usePromptStash, type StashEntry } from "./prompt/stash"
 import { useCommandShortcut } from "../keymap"
 
-function getRelativeTime(timestamp: number): string {
-  const now = Date.now()
-  const diff = now - timestamp
-  const seconds = Math.floor(diff / 1000)
-  const minutes = Math.floor(seconds / 60)
-  const hours = Math.floor(minutes / 60)
-  const days = Math.floor(hours / 24)
-
-  if (seconds < 60) return "just now"
-  if (minutes < 60) return `${minutes}m ago`
-  if (hours < 24) return `${hours}h ago`
-  if (days < 7) return `${days}d ago`
-  return Locale.datetime(timestamp)
-}
-
 function getStashPreview(input: string, maxLength: number = 50): string {
   const firstLine = input.split("\n")[0].trim()
   return Locale.truncate(firstLine, maxLength)
@@ -45,7 +30,7 @@ export function DialogStash(props: { onSelect: (entry: StashEntry) => void }) {
           title: isDeleting ? `Press ${deleteHint()} again to confirm` : getStashPreview(entry.input),
           bg: isDeleting ? theme.error : undefined,
           value: index,
-          description: getRelativeTime(entry.timestamp),
+          description: Locale.relative(entry.timestamp),
           footer: lineCount > 1 ? `~${lineCount} lines` : undefined,
         }
       })
