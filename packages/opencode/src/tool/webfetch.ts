@@ -7,7 +7,7 @@ import TurndownService from "turndown"
 import DESCRIPTION from "./webfetch.txt"
 import { isImageAttachment } from "@/util/media"
 
-export const DEFAULT_maxResponseSize = 5 * 1024 * 1024 // 5MB
+export const DEFAULT_MAX_RESPONSE_SIZE = 5 * 1024 * 1024 // 5MB
 
 function parsePositiveIntEnv(raw: string | undefined) {
   if (raw == null || raw === "") return undefined
@@ -18,7 +18,7 @@ function parsePositiveIntEnv(raw: string | undefined) {
 
 export function resolveMaxResponseSize(config?: { webfetch?: { max_response_size?: number } }) {
   if (config?.webfetch?.max_response_size != null) return config.webfetch.max_response_size
-  return parsePositiveIntEnv(process.env["OPENCODE_WEBFETCH_MAX_SIZE"]) ?? DEFAULT_maxResponseSize
+  return parsePositiveIntEnv(process.env["OPENCODE_WEBFETCH_MAX_SIZE"]) ?? DEFAULT_MAX_RESPONSE_SIZE
 }
 const DEFAULT_TIMEOUT = 30 * 1000 // 30 seconds
 const MAX_TIMEOUT = 120 * 1000 // 2 minutes
