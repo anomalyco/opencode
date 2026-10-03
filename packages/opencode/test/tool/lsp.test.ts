@@ -3,6 +3,7 @@ import { afterEach, describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Effect, Layer } from "effect"
 import path from "path"
+import { pathToFileURL } from "url"
 import { Agent } from "../../src/agent/agent"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -31,6 +32,7 @@ const ctx = {
 }
 
 const workspaceSymbolQueries: string[] = []
+const searchSymbolResults: LSP.Symbol[] = []
 
 const lsp = Layer.succeed(
   LSP.Service,
@@ -53,6 +55,9 @@ const lsp = Layer.succeed(
     prepareCallHierarchy: () => Effect.succeed([]),
     incomingCalls: () => Effect.succeed([]),
     outgoingCalls: () => Effect.succeed([]),
+    searchSymbols: () => Effect.succeed(searchSymbolResults),
+    serverExtensions: () => Effect.succeed([".cs", ".ts", ".go"]),
+    rename: () => Effect.succeed(null),
   }),
 )
 
@@ -177,6 +182,66 @@ describe("tool.lsp", () => {
           yield* run({ operation: "workspaceSymbol", filePath: file, line: 3, character: 7 })
 
           expect(workspaceSymbolQueries).toEqual(["TestSymbol", ""])
+        }),
+      { git: true },
+    )
+  })
+
+  describe("types discovery", () => {
+    it.instance(
+      "drops fuzzy workspace symbols and non-types for a name substring",
+      () =>
+        Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
+          const file = path.join(dir, "types.cs")
+          yield* put(file)
+          const sym = (name: string, kind: number): LSP.Symbol => ({
+            name,
+            kind,
+            containerName: "project test (net10.0)",
+            location: {
+              uri: pathToFileURL(file).href,
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+            },
+          })
+          searchSymbolResults.length = 0
+          searchSymbolResults.push(
+            sym("SqlBuilder", 23),
+            sym("SqliteDataContextOptionsBuilderExtensions", 5),
+            sym("BuildSqlBuilder", 6),
+          )
+
+          const result = yield* run({ operation: "types", query: "SqlBuilder" })
+
+          expect(result.output).toContain("SqlBuilder [struct]")
+          expect(result.output).not.toContain("SqliteDataContextOptionsBuilderExtensions")
+          expect(result.output).not.toContain("BuildSqlBuilder")
+        }),
+      { git: true },
+    )
+  })
+
+  describe("symbol bootstrap", () => {
+    it.instance(
+      "starts from a non-C# file when only that extension is present",
+      () =>
+        Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
+          const file = path.join(dir, "main.go")
+          yield* put(file)
+          searchSymbolResults.length = 0
+          searchSymbolResults.push({
+            name: "Greet",
+            kind: 12,
+            location: {
+              uri: pathToFileURL(file).href,
+              range: { start: { line: 0, character: 0 }, end: { line: 0, character: 0 } },
+            },
+          })
+
+          const result = yield* run({ operation: "symbols", symbol: "Greet" })
+
+          expect(result.output).toContain("Greet [function]")
         }),
       { git: true },
     )
