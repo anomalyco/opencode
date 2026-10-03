@@ -405,6 +405,7 @@ export function Autocomplete(props: {
       .map(
         (agent): AutocompleteOption => ({
           display: "@" + agent.name,
+          description: agent.description,
           onSelect: () => {
             insertPart(agent.name, {
               type: "agent",
