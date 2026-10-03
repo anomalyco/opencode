@@ -4,6 +4,8 @@ import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
 import { Global } from "@opencode/util/global"
 import path from "node:path"
+import { mkdir, writeFile } from "node:fs/promises"
+import { isDeepEqual } from "remeda"
 import { createEventStream, createFetch, directory, json } from "./fixture/tui-client"
 import { tmpdir } from "./fixture/fixture"
 import { createAppFixture } from "./fixture/app"
@@ -338,6 +340,89 @@ test("session lifecycle updates the terminal title and prints the epilogue after
     expect(stdout).toContain("Renamed session")
     expect(stdout).toContain("opencode -s dummy")
     expect(promptRequests).toBe(0)
+  } finally {
+    process.stdout.write = originalWrite
+    if (!setup.renderer.isDestroyed) setup.renderer.destroy()
+    await server.stop()
+  }
+})
+
+test.each([
+  ["replaces", "`Resume: embedder -s ${input.sessionID}`", "Resume: embedder -s dummy"],
+  ["hides", "undefined", ""],
+] as const)("a plugin epilogue claim %s the built-in epilogue", async (_, result, expected) => {
+  await using state = await tmpdir()
+  const plugin = path.join(state.path, "epilogue-plugin")
+  await mkdir(plugin)
+  await writeFile(
+    path.join(plugin, "tui.ts"),
+    `export default {
+      id: "test.epilogue",
+      setup(context) {
+        context.ui.epilogue((input) => {
+          void fetch(context.options.claimed, { method: "POST", body: JSON.stringify(input) })
+          return ${result}
+        })
+      },
+    }`,
+  )
+  // The claim is resolved while the session is open; wait until it has seen the loaded session.
+  const claimed = Promise.withResolvers<void>()
+  const setup = await createTestRenderer({ width: 80, height: 24, useThread: false })
+  const session = {
+    id: "dummy",
+    title: "Demo session",
+    projectID: "project",
+    location: { directory },
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 0, updated: 0 },
+  }
+  const calls = createFetch(async (url, request) => {
+    if (url.pathname === "/claimed") {
+      if (isDeepEqual(await request.json(), { sessionID: "dummy", title: "Demo session" })) claimed.resolve()
+      return new Response(null, { status: 204 })
+    }
+    if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
+    if (url.pathname === "/api/session/dummy") return json({ data: session })
+    if (url.pathname === "/api/session/dummy/message") return json({ data: [], cursor: {} })
+    if (url.pathname === "/api/session/dummy/inbox") return json({ data: [] })
+    if (url.pathname === "/api/session/dummy/permission") return json({ data: [] })
+  }, createEventStream())
+  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+  const originalWrite = process.stdout.write.bind(process.stdout)
+  let stdout = ""
+  process.stdout.write = ((chunk: string | Uint8Array) => {
+    stdout += String(chunk)
+    return true
+  }) as typeof process.stdout.write
+
+  try {
+    const { run } = await import("../src/app")
+    const task = Effect.runPromise(
+      run({
+        app: { name: "test", version: "test", channel: "test" },
+        server: { endpoint: { url: server.url.toString() } },
+        config: {
+          get: async () => ({
+            plugins: [{ package: plugin, options: { claimed: new URL("/claimed", server.url).href } }],
+          }),
+          update: async () => ({}),
+        },
+        packages: { prepare: async () => ({ directory: "" }) },
+        terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
+        args: { sessionID: "dummy" },
+        log: () => {},
+      }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
+    )
+
+    await claimed.promise
+    setup.renderer.destroy()
+    await task
+
+    expect(stdout).not.toContain("opencode -s")
+    if (expected) expect(stdout).toContain(expected)
+    else expect(stdout).toBe("")
   } finally {
     process.stdout.write = originalWrite
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()

@@ -87,6 +87,7 @@ import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
 import { Slot } from "../../plugin/render"
 import { usePlugin } from "../../plugin/context"
+import { useLog } from "../../context/log"
 import {
   cacheReuseDrop,
   completeGroupBoundary,
@@ -145,6 +146,8 @@ export function Session(props: {
   width?: number
 }) {
   const setEpilogue = useEpilogue()
+  const plugins = usePlugin()
+  const log = useLog({ component: "session" })
   const clipboard = useClipboard()
   const writeExport = async (file: string, content: string) => {
     await mkdir(path.dirname(file), { recursive: true })
@@ -181,9 +184,21 @@ export function Session(props: {
 
   createEffect(() => currentLocation.set(location()))
 
+  // Resolved while the session is open, not at exit: plugins are disposed
+  // before the epilogue is written, so their claims are gone by then.
   createEffect(() => {
-    const title = Locale.truncate(session()?.title ?? "", 50)
-    setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
+    const render = plugins.epilogue()
+    if (!render) {
+      const title = Locale.truncate(session()?.title ?? "", 50)
+      setEpilogue(sessionEpilogue({ title, sessionID: session()?.id }))
+      return
+    }
+    try {
+      setEpilogue(render({ sessionID: route.sessionID, title: session()?.title ?? "" }))
+    } catch (error) {
+      log.error("plugin epilogue failed", { error: errorMessage(error) })
+      setEpilogue()
+    }
   })
   onCleanup(() => setEpilogue())
   const descendantSessionIDs = createMemo(() => {

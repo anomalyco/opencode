@@ -1,6 +1,15 @@
 import { PluginContextProvider } from "@opencode/plugin/tui"
 import type { JSX } from "solid-js"
-import type { Context, Dialog, Page, SlotClaim, SlotMap, SlotPath, Toast } from "@opencode/plugin/tui/context"
+import type {
+  Context,
+  Dialog,
+  EpilogueInput,
+  Page,
+  SlotClaim,
+  SlotMap,
+  SlotPath,
+  Toast,
+} from "@opencode/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
 import { useRenderer } from "@opentui/solid"
@@ -36,19 +45,24 @@ export type RegisteredSlot = {
   readonly render: SlotRender
 }
 
+export type EpilogueRender = (input: EpilogueInput) => string | undefined
+
 const placements = ["prepend", "append", "before", "after", "replace"] as const satisfies readonly PlacementKind[]
 
 // The provider's registration store, narrowed to what a plugin context needs:
 // route/slot registration lands there, but ordering and lifecycle stay owned
 // by the provider.
 export type Registry = {
-  has(kind: "routes" | "slots" | "markdown", name: string): boolean
+  has(kind: Contribution, name: string): boolean
   set(kind: "routes", name: string, page: Page): void
   set(kind: "slots", name: string, claim: RegisteredSlot): void
   set(kind: "markdown", name: string, render: MarkdownCodeBlockRenderer): void
-  remove(kind: "routes" | "slots" | "markdown", name: string): void
+  set(kind: "epilogue", name: string, render: EpilogueRender): void
+  remove(kind: Contribution, name: string): void
   active(): boolean
 }
+
+export type Contribution = "routes" | "slots" | "markdown" | "epilogue"
 
 // The host services a plugin context adapts. Collected once by the provider
 // (hooks must run during component setup) and shared by every activation.
@@ -122,7 +136,7 @@ export function createPluginContext(input: {
   }
   // Unregistering after deactivation is a no-op: deactivate already resets
   // the registration's routes and slots wholesale.
-  const registration = (kind: "routes" | "slots" | "markdown", name: string) => {
+  const registration = (kind: Contribution, name: string) => {
     let registered = true
     const unregister = () => {
       if (!registered) return
@@ -281,6 +295,11 @@ export function createPluginContext(input: {
           render: (slotInput) => provide(() => (value.render as SlotRender)(slotInput)),
         })
         return registration("slots", key)
+      },
+      epilogue(render) {
+        const key = `epilogue#${claims++}`
+        input.registry.set("epilogue", key, render)
+        return registration("epilogue", key)
       },
     },
   }

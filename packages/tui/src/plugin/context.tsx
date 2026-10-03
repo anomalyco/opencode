@@ -27,7 +27,15 @@ import { useTuiLifecycle } from "../context/runtime"
 import { useClient } from "../context/client"
 import { useData } from "../context/data"
 import { errorMessage } from "../util/error"
-import { createPluginContext, usePluginHost, type Dispose, type RegisteredSlot, type SlotRender } from "./api"
+import {
+  createPluginContext,
+  usePluginHost,
+  type Contribution,
+  type Dispose,
+  type EpilogueRender,
+  type RegisteredSlot,
+  type SlotRender,
+} from "./api"
 import { createSourceWatcher } from "./watch"
 import { discoverPluginTargets, localSource, mergePluginTargets } from "./discovery"
 import { createPluginSources } from "./source"
@@ -62,6 +70,8 @@ type Value = {
     readonly resolved: () => ReturnType<typeof resolveSlots<SlotRender>>
   }
   readonly markdown: () => MarkdownOptions["renderNode"]
+  // The exit epilogue claim that wins: the last one in enable order.
+  readonly epilogue: () => EpilogueRender | undefined
   readonly activate: (id: string) => Promise<boolean>
   readonly deactivate: (id: string) => Promise<boolean>
 }
@@ -76,6 +86,7 @@ type Registration = {
   routes: Record<string, Page>
   slots: Record<string, RegisteredSlot>
   markdown: Record<string, MarkdownCodeBlockRenderer>
+  epilogue: Record<string, EpilogueRender>
   cleanups: Dispose[]
 }
 
@@ -145,6 +156,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
     setStore("registrations", id, "routes", reconcileStore({}))
     setStore("registrations", id, "slots", reconcileStore({}))
     setStore("registrations", id, "markdown", reconcileStore({}))
+    setStore("registrations", id, "epilogue", reconcileStore({}))
   }
 
   const activate = async (id: string) => {
@@ -164,9 +176,9 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       registry: {
         has: (kind, name) => Boolean(store.registrations[id]?.[kind][name]),
         set: (
-          kind: "routes" | "slots" | "markdown",
+          kind: Contribution,
           name: string,
-          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer,
+          value: Page | RegisteredSlot | MarkdownCodeBlockRenderer | EpilogueRender,
         ) => setStore("registrations", id, kind, name, () => value),
         remove: (kind, name) =>
           setStore(
@@ -521,6 +533,12 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
       }),
     ),
   )
+  // Same enable order as slot claims, so the last enabled plugin wins.
+  const epilogue = createMemo(() =>
+    Object.values(store.registrations)
+      .flatMap((registration) => (registration.active ? Object.values(registration.epilogue) : []))
+      .at(-1),
+  )
   // Object.keys tracks the store's keys node only: refcount changes on an
   // already-mounted path (a second tab's composer) skip re-resolution.
   const resolved = createMemo(() => resolveSlots({ paths: new Set(Object.keys(mounted)), claims: claims() }))
@@ -608,6 +626,7 @@ export function PluginProvider(props: ParentProps<{ packages: PackageSource; dir
         route: (id, name) => store.registrations[id]?.routes[name]?.render,
         slots: { register: registerSlot, resolved },
         markdown,
+        epilogue,
         // Manual dialog toggles join the same chain as reconciles so a
         // toggle mid-reload cannot mix registrations across generations.
         activate: (id) => enqueue(() => activate(id)),
@@ -708,6 +727,7 @@ function toRegistration(item: Desired): Registration {
     routes: {},
     slots: {},
     markdown: {},
+    epilogue: {},
     cleanups: [],
   }
 }
