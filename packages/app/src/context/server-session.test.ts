@@ -344,6 +344,24 @@ describe("server session", () => {
     expect(store.data.session_message.root.map((message) => message.id)).toEqual([user.id, assistant.id])
   })
 
+  test("replaces the optimistic row when the server time differs instead of forking a duplicate", () => {
+    const ctx = setup({ child: session("child") })
+    ctx.store.remember(session("child"))
+
+    const clientTime = 1_000
+    const serverTime = 1_007
+    const optimistic = userMessage("message-1", { time: { created: clientTime } })
+    ctx.store.optimistic.add({ sessionID: "child", message: optimistic, parts: [textPart(optimistic.id)] })
+
+    ctx.store.apply({
+      type: "message.updated",
+      properties: { sessionID: "child", info: userMessage("message-1", { time: { created: serverTime } }) },
+    })
+
+    expect(ctx.store.data.message.child?.map((message) => message.id)).toEqual(["message-1"])
+    expect(ctx.store.data.message.child?.[0]?.time.created).toBe(serverTime)
+  })
+
   test("backfills an assistant-only initial page through its user root", async () => {
     const user = userMessage("message-1")
     const assistants = [assistantMessage("message-2", user.id), assistantMessage("message-3", user.id)]
