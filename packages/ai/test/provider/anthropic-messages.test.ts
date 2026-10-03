@@ -9,6 +9,7 @@ import {
   Message,
   ToolCallPart,
   ToolDefinition,
+  ToolChoice,
   Usage,
   Media,
 } from "../../src/index.js"
@@ -196,6 +197,131 @@ describe("Anthropic Messages route", () => {
 
       expect(error.reason._tag).toBe("InvalidRequest")
       expect(error.message).toContain("budgetTokens")
+    }),
+  )
+
+  it.effect("sends Sonnet 5.5 between-tools thinking without binding or a binding beta", () =>
+    Effect.gen(function* () {
+      const sonnet = AnthropicMessages.route.model({ id: "claude-sonnet-5-5" })
+      const input = LLM.request({
+        model: sonnet,
+        prompt: "Hello",
+        providerOptions: { thinking: { type: "between_tools" }, effort: "medium" },
+      })
+      const compiled = yield* compileRequest(input)
+      const prepared = yield* AnthropicMessages.route.prepareTransport(compiled.body, input)
+
+      expect(compiled.body.thinking).toEqual({ type: "between_tools" })
+      expect(compiled.body.output_config).toEqual({ effort: "medium" })
+      expect(prepared.request.headers["anthropic-beta"]).not.toContain("thinking-binding-controls")
+      expect(
+        (yield* compileRequest(LLMRequest.update(input, { providerOptions: { effort: "high" } }))).body.thinking,
+      ).toEqual({
+        type: "adaptive",
+        block_binding: { prefix_mismatch_behavior: "drop_block" },
+      })
+    }),
+  )
+
+  it.effect("rejects Sonnet 5.5 thinking settings that cannot retain caller intent", () =>
+    Effect.gen(function* () {
+      const sonnet = AnthropicMessages.route.model({ id: "anthropic/claude-sonnet-5-5" })
+      const invalid = [
+        { thinking: { type: "disabled" } },
+        { thinking: { type: "enabled", budgetTokens: 2048 } },
+        { thinking: { type: "between_tools", block_binding: { prefix_mismatch_behavior: "drop_block" } } },
+        { thinking: { type: "between_tools", display: "summarized" } },
+        { thinking: { type: "between_tools", budget_tokens: 2048 } },
+        { thinking: { type: "between_tools" }, effort: "xhigh" },
+        { thinking: { type: "between_tools" }, output_config: { effort: "max" } },
+      ]
+      const errors = yield* Effect.forEach(invalid, (providerOptions) =>
+        compileRequest(LLM.request({ model: sonnet, prompt: "Hello", providerOptions })).pipe(Effect.flip),
+      )
+      expect(errors.map((error) => error.reason._tag)).toEqual(invalid.map(() => "InvalidRequest"))
+      expect(errors[0]?.message).toContain("between_tools")
+      expect(errors[1]?.message).toContain("adaptive")
+      expect(errors[2]?.message).toContain("block_binding")
+      expect(errors[3]?.message).toContain("display")
+      expect(errors[4]?.message).toContain("budgets")
+      expect(errors[5]?.message).toContain("effort")
+      const older = yield* compileRequest(
+        LLM.request({
+          model: AnthropicMessages.route.model({ id: "claude-sonnet-5" }),
+          prompt: "Hello",
+          providerOptions: { thinking: { type: "between_tools" } },
+        }),
+      ).pipe(Effect.flip)
+      expect(older.reason._tag).toBe("InvalidRequest")
+    }),
+  )
+
+  it.effect("rejects forced tools and non-default sampling only on Sonnet 5.5", () =>
+    Effect.gen(function* () {
+      const sonnet = AnthropicMessages.route.model({ id: "claude-sonnet-5-5" })
+      const tools = [{ name: "lookup", description: "Look up", inputSchema: { type: "object", properties: {} } }]
+      for (const toolChoice of ["required", ToolChoice.named("lookup")] as const) {
+        const error = yield* compileRequest(LLM.request({ model: sonnet, prompt: "Hello", tools, toolChoice })).pipe(
+          Effect.flip,
+        )
+        expect(error.reason._tag).toBe("InvalidRequest")
+        expect(error.message).toContain("tool choice")
+      }
+      for (const generation of [{ temperature: 0.5 }, { topP: 0.98 }, { topK: 10 }]) {
+        const error = yield* compileRequest(LLM.request({ model: sonnet, prompt: "Hello", generation })).pipe(
+          Effect.flip,
+        )
+        expect(error.reason._tag).toBe("InvalidRequest")
+        expect(error.message).toContain("sampling")
+      }
+      const accepted = yield* compileRequest(
+        LLM.request({
+          model: sonnet,
+          prompt: "Hello",
+          tools,
+          toolChoice: "auto",
+          generation: { temperature: 1, topP: 0.99 },
+        }),
+      )
+      expect(accepted.body.tool_choice).toEqual({ type: "auto" })
+      expect(accepted.body.temperature).toBe(1)
+      expect(accepted.body.top_p).toBe(0.99)
+      expect(
+        (yield* compileRequest(LLM.request({ model: sonnet, prompt: "Hello", tools, toolChoice: "none" }))).body
+          .tool_choice,
+      ).toEqual({ type: "none" })
+      expect(
+        (yield* compileRequest(
+          LLM.request({
+            model: AnthropicMessages.route.model({ id: "claude-sonnet-5" }),
+            prompt: "Hello",
+            tools,
+            toolChoice: "required",
+          }),
+        )).body.tool_choice,
+      ).toEqual({ type: "any" })
+    }),
+  )
+
+  it.effect("does not send per-message effort changes with Sonnet 5.5 between-tools thinking", () =>
+    Effect.gen(function* () {
+      const sonnet = AnthropicMessages.route.model({
+        id: "claude-sonnet-5-5",
+        compatibility: { supportsEffortUpdates: true },
+      })
+      const error = yield* compileRequest(
+        LLM.request({
+          model: sonnet,
+          messages: [
+            Message.user("Before"),
+            Message.effort({ effort: "low", previous: "medium" }),
+            Message.user("After"),
+          ],
+          providerOptions: { thinking: { type: "between_tools" }, effort: "low" },
+        }),
+      ).pipe(Effect.flip)
+      expect(error.reason._tag).toBe("InvalidRequest")
+      expect(error.message).toContain("mid-conversation")
     }),
   )
 
