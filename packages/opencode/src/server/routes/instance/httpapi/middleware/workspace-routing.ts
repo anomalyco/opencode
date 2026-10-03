@@ -13,6 +13,7 @@ import { HttpClient, HttpServerRequest, HttpServerResponse } from "effect/unstab
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
 import * as Socket from "effect/unstable/socket/Socket"
 import { InvalidRequestError } from "../errors"
+import { ServerDirectory } from "@opencode-ai/server/server-directory"
 
 // Query fields this middleware reads from the URL. Spread into every
 // endpoint query schema in groups that apply WorkspaceRoutingMiddleware,
@@ -27,11 +28,20 @@ export const WorkspaceRoutingQueryFields = {
 export const WorkspaceRoutingQuery = Schema.Struct(WorkspaceRoutingQueryFields)
 
 type RemoteTarget = Extract<Target, { type: "remote" }>
+type DirectoryHint = {
+  readonly source: "query" | "header" | "default" | "session" | "workspace"
+  readonly value: string
+}
+type DirectoryParse = { readonly directory: string } | { readonly error: InvalidRequestError }
 
 type RequestPlan = Data.TaggedEnum<{
+  InvalidDirectory: { readonly error: InvalidRequestError }
   InvalidWorkspace: {}
   MissingWorkspace: { readonly workspaceID: WorkspaceV2.ID }
-  Local: { readonly directory: string; readonly workspaceID?: WorkspaceV2.ID }
+  Local: {
+    readonly directory: string
+    readonly workspaceID?: WorkspaceV2.ID
+  }
   Remote: {
     readonly request: HttpServerRequest.HttpServerRequest
     readonly workspace: Workspace.Info
@@ -83,8 +93,48 @@ function selectedV2WorkspaceID(
   return workspaceID.value
 }
 
-function defaultDirectory(request: HttpServerRequest.HttpServerRequest, url: URL): string {
-  return url.searchParams.get("directory") || request.headers["x-opencode-directory"] || process.cwd()
+function directoryHint(request: HttpServerRequest.HttpServerRequest, url: URL): DirectoryHint {
+  const query = url.searchParams.get("directory")
+  if (query) return { source: "query", value: query }
+  const header = request.headers["x-opencode-directory"]
+  if (!header) return { source: "default", value: process.cwd() }
+  try {
+    return { source: "header", value: decodeURIComponent(header) }
+  } catch {
+    return { source: "header", value: header }
+  }
+}
+
+function parseDirectoryHint(hint: DirectoryHint): DirectoryParse {
+  if (hint.source !== "query" && hint.source !== "header") return { directory: hint.value }
+  const target = ServerDirectory.profile()
+  try {
+    return { directory: ServerDirectory.parse(hint.value, target) }
+  } catch (error) {
+    return { error: invalidDirectoryError(hint, target, error) }
+  }
+}
+
+function invalidDirectoryError(hint: DirectoryHint, target: ServerDirectory.Profile, error: unknown) {
+  const kind = hint.source === "query" ? "Query" : hint.source === "header" ? "Header" : undefined
+  return new InvalidRequestError({
+    message: invalidDirectoryMessage(target, error),
+    field: "directory",
+    ...(kind ? { kind } : {}),
+  })
+}
+
+function invalidDirectoryMessage(target: ServerDirectory.Profile, error: unknown) {
+  if (error instanceof ServerDirectory.ParseError && error.reason === "drive-relative") {
+    return "The directory must be an absolute path, not a Windows drive-relative path"
+  }
+  if (error instanceof ServerDirectory.ParseError && error.reason === "foreign" && target.kind === "wsl") {
+    return "The directory uses a Windows path, but this OpenCode server expects a WSL/POSIX path. Select the directory using the server picker or use /mnt/<drive>/..."
+  }
+  if (error instanceof ServerDirectory.ParseError && error.reason === "foreign") {
+    return "The directory uses a path syntax that is not native to this OpenCode server"
+  }
+  return "The directory must be a valid server-native path"
 }
 
 function shouldStayOnControlPlane(request: HttpServerRequest.HttpServerRequest, url: URL): boolean {
@@ -153,7 +203,10 @@ function planWorkspaceRequest(
   return Effect.gen(function* () {
     const target = yield* resolveTarget(workspace)
     if (target.type === "remote") return RequestPlan.Remote({ request, workspace, target, url })
-    return RequestPlan.Local({ directory: target.directory, workspaceID: workspace.id })
+    return RequestPlan.Local({
+      directory: target.directory,
+      workspaceID: workspace.id,
+    })
   })
 }
 
@@ -178,8 +231,11 @@ function planRequest(
       return yield* planWorkspaceRequest(request, url, workspace)
     }
 
+    const hint = session?.directory ? { source: "session" as const, value: session.directory } : directoryHint(request, url)
+    const directory = parseDirectoryHint(hint)
+    if ("error" in directory) return RequestPlan.InvalidDirectory({ error: directory.error })
     return RequestPlan.Local({
-      directory: session?.directory || defaultDirectory(request, url),
+      directory: directory.directory,
       workspaceID: envWorkspaceID ?? workspaceID,
     })
   })
@@ -191,6 +247,7 @@ function routeWorkspace<E>(
   plan: RequestPlan,
 ): Effect.Effect<HttpServerResponse.HttpServerResponse, E, Socket.WebSocketConstructor | Workspace.Service> {
   return RequestPlan.$match(plan, {
+    InvalidDirectory: ({ error }) => Effect.succeed(HttpServerResponse.jsonUnsafe(error, { status: 400 })),
     InvalidWorkspace: () =>
       Effect.succeed(
         HttpServerResponse.jsonUnsafe(

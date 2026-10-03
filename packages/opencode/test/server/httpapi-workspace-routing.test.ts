@@ -524,6 +524,64 @@ describe("HttpApi workspace routing middleware", () => {
     }),
   )
 
+  it.live("preserves relative directory query behavior", () =>
+    Effect.gen(function* () {
+      yield* serveProbe
+
+      const response = yield* HttpClient.get("/probe?directory=relative/repo")
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toEqual({ directory: "relative/repo", workspaceID: null })
+    }),
+  )
+
+  it.live("falls back when directory query is empty", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const headerDir = path.join(dir, "header-target")
+      yield* serveProbe
+
+      const headerResponse = yield* HttpClientRequest.get("/probe?directory=").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", headerDir),
+        HttpClient.execute,
+      )
+      const defaultResponse = yield* HttpClient.get("/probe?directory=")
+
+      expect(headerResponse.status).toBe(200)
+      expect(yield* headerResponse.json).toEqual({ directory: headerDir, workspaceID: null })
+      expect(defaultResponse.status).toBe(200)
+      expect(yield* defaultResponse.json).toEqual({ directory: process.cwd(), workspaceID: null })
+    }),
+  )
+
+  it.live("preserves raw malformed percent directory headers", () =>
+    Effect.gen(function* () {
+      yield* serveProbe
+
+      const response = yield* HttpClientRequest.get("/probe").pipe(
+        HttpClientRequest.setHeader("x-opencode-directory", "%E0%A4%A"),
+        HttpClient.execute,
+      )
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toEqual({ directory: "%E0%A4%A", workspaceID: null })
+    }),
+  )
+
+  it.live("preserves POSIX directory values with literal backslash components", () =>
+    Effect.gen(function* () {
+      if (process.platform === "win32") return
+      const dir = yield* tmpdirScoped()
+      const directory = path.join(dir, "literal\\slash")
+      yield* serveProbe
+
+      const response = yield* HttpClient.get(`/probe?directory=${encodeURIComponent(directory)}`)
+
+      expect(response.status).toBe(200)
+      expect(yield* response.json).toEqual({ directory, workspaceID: null })
+    }),
+  )
+
   it.live("routes local workspace requests through WorkspaceRouteContext", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
