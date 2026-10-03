@@ -877,7 +877,7 @@ export function Prompt(props: PromptProps) {
               return false
             }
 
-            const item = history.move(-1, input.plainText)
+            const item = history.move(-1, input.plainText, props.sessionID)
             if (!item) return false
             input.setText(item.input)
             setStore("prompt", item)
@@ -913,7 +913,7 @@ export function Prompt(props: PromptProps) {
               return false
             }
 
-            const item = history.move(1, input.plainText)
+            const item = history.move(1, input.plainText, props.sessionID)
             if (!item) return false
             input.setText(item.input)
             setStore("prompt", item)
@@ -1122,6 +1122,7 @@ export function Prompt(props: PromptProps) {
     history.append({
       ...store.prompt,
       mode: currentMode,
+      sessionID: props.sessionID,
     })
     input.extmarks.clear()
     setStore("prompt", {
@@ -1274,6 +1275,7 @@ export function Prompt(props: PromptProps) {
       history.append({
         ...store.prompt,
         mode: store.mode,
+        sessionID: props.sessionID,
       })
     }
     input.clear()
