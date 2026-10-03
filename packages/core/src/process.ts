@@ -146,9 +146,11 @@ const layer = Layer.effect(
       const collect = Effect.scoped(
         Effect.gen(function* () {
           const handle = yield* spawner.spawn(command)
+          const collect = (stream: Stream.Stream<Uint8Array, PlatformError>, maxOutputBytes: number | undefined) =>
+            collectStream(stream.pipe(Stream.interruptWhen(handle.exitCode)), maxOutputBytes)
           if (options?.combineOutput) {
             const [output, exitCode] = yield* Effect.all(
-              [collectStream(handle.all, options.maxOutputBytes), handle.exitCode],
+              [collect(handle.all, options.maxOutputBytes), handle.exitCode],
               { concurrency: "unbounded" },
             )
             return {
@@ -164,8 +166,8 @@ const layer = Layer.effect(
           }
           const [stdout, stderr, exitCode] = yield* Effect.all(
             [
-              collectStream(handle.stdout, options?.maxOutputBytes),
-              collectStream(handle.stderr, options?.maxErrorBytes),
+              collect(handle.stdout, options?.maxOutputBytes),
+              collect(handle.stderr, options?.maxErrorBytes),
               handle.exitCode,
             ],
             { concurrency: "unbounded" },
@@ -221,13 +223,16 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const handle = yield* spawner.spawn(command)
           const stderrFiber = yield* Effect.forkScoped(
-            collectStream(handle.stderr, options?.maxErrorBytes).pipe(Effect.map((x) => x.buffer.toString("utf8"))),
+            collectStream(handle.stderr.pipe(Stream.interruptWhen(handle.exitCode)), options?.maxErrorBytes).pipe(
+              Effect.map((x) => x.buffer.toString("utf8")),
+            ),
           )
           const source = options?.includeStderr === true ? handle.all : handle.stdout
           const lines = source.pipe(
             Stream.decodeText,
             Stream.splitLines,
             Stream.filter((line) => line.length > 0),
+            Stream.interruptWhen(handle.exitCode),
           )
           const tail = Stream.unwrap(
             Effect.gen(function* () {
