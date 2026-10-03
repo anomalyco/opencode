@@ -30,7 +30,6 @@ export default $config({
   async run() {
     const stage = await import("./infra/stage.js")
     await import("./infra/app.js")
-    const lake = stage.deployAws ? await import("./infra/lake.js") : undefined
     const stats = stage.deployAws ? await import("./infra/stats.js") : undefined
     const { stat } = await import("./infra/console.js")
     await import("./infra/enterprise.js")
@@ -41,12 +40,6 @@ export default $config({
     return {
       StatWorkerUrl: stat.url,
       ...(stats ? { StatsUrl: stats.app.url } : {}),
-      ...(lake
-        ? {
-            LakeUrl: lake.lakeIngest.properties.url,
-            LakeSecretSsm: lake.ingestSecretSsm.name,
-          }
-        : {}),
       AwsStage: stage.awsStage,
     }
   },

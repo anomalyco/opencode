@@ -260,7 +260,7 @@ All issues **must** use one of our issue templates:
 - **Feature request** — for suggesting enhancements (requires verification checkbox and description)
 - **Question** — for asking questions (requires the question)
 
-Blank issues are not allowed. When a new issue is opened, an automated check verifies that it follows a template and meets our contributing guidelines. If an issue doesn't meet the requirements, you'll receive a comment explaining what needs to be fixed and have **2 hours** to edit the issue. After that, it will be automatically closed.
+Blank issues are not allowed. When a new issue is opened, an automated check verifies that it follows a template and meets our contributing guidelines. If an issue doesn't meet the requirements, you'll receive a comment explaining what needs to be fixed and have **72 hours** to edit the issue. After that, it will be automatically closed.
 
 Issues may be flagged for:
 
