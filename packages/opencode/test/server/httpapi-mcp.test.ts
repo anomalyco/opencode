@@ -190,6 +190,92 @@ describe("mcp HttpApi", () => {
   )
 
   it.instance(
+    "tests a connection without persisting it",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const handler = HttpApiApp.webHandler()
+        const response = yield* request(handler, McpPaths.test, tmp.directory, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name: "probe",
+            config: {
+              type: "local",
+              command: ["opencode-nonexistent-binary-xyz"],
+              timeout: 2000,
+            },
+          }),
+        })
+        expect(response.status).toBe(200)
+        const result = yield* json<{
+          status: { status: string }
+          reachable: boolean
+          authStatus: string
+          tools: string[]
+        }>(response)
+        expect(result.status.status).toBe("failed")
+        expect(result.reachable).toBe(false)
+        expect(result.authStatus).toBe("not_authenticated")
+        expect(result.tools).toEqual([])
+
+        // A test must not add the server to the running instance.
+        const status = yield* request(handler, McpPaths.status, tmp.directory)
+        expect(yield* json<Record<string, unknown>>(status)).not.toHaveProperty("probe")
+      }),
+    { config: { formatter: false, lsp: false, mcp: {} } },
+  )
+
+  it.instance(
+    "saves and removes an MCP server in config",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const handler = HttpApiApp.webHandler()
+
+        const saved = yield* request(handler, "/mcp/saved", tmp.directory, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            config: {
+              type: "local",
+              command: ["echo", "saved"],
+              enabled: false,
+            },
+          }),
+        })
+        expect(saved.status).toBe(200)
+        expect(yield* json(saved)).toMatchObject({ saved: { status: "disabled" } })
+
+        // The saved server is now visible via the status endpoint.
+        const afterSave = yield* request(handler, McpPaths.status, tmp.directory)
+        expect(yield* json<Record<string, unknown>>(afterSave)).toHaveProperty("saved")
+
+        const removed = yield* request(handler, "/mcp/saved", tmp.directory, { method: "DELETE" })
+        expect(removed.status).toBe(200)
+        expect(yield* json(removed)).toEqual({ success: true })
+      }),
+    { config: { formatter: false, lsp: false, mcp: {} } },
+  )
+
+  it.instance(
+    "returns not found when removing a missing MCP server",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const handler = HttpApiApp.webHandler()
+        const response = yield* request(handler, "/mcp/missing", tmp.directory, { method: "DELETE" })
+        expect(response.status).toBe(404)
+        expect(yield* json(response)).toEqual({
+          _tag: "McpServerNotFoundError",
+          name: "missing",
+          message: "MCP server not found: missing",
+        })
+      }),
+    { config: { formatter: false, lsp: false, mcp: {} } },
+  )
+
+  it.instance(
     "returns typed not found errors for missing MCP servers",
     () =>
       Effect.gen(function* () {

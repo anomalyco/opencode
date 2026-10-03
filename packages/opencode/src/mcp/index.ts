@@ -106,6 +106,27 @@ export const Status = Schema.Union([
 ]).annotate({ identifier: "MCPStatus", discriminator: "status" })
 export type Status = Schema.Schema.Type<typeof Status>
 
+const AuthStatusSchema = Schema.Union([
+  Schema.Literal("authenticated"),
+  Schema.Literal("expired"),
+  Schema.Literal("not_authenticated"),
+]).annotate({ identifier: "MCPAuthStatus" })
+
+/**
+ * Result of a non-persistent connection test. Reports whether the server was
+ * reachable, the resulting status (incl. auth needs), the discovered tool names,
+ * the current auth status, and the raw error message on failure.
+ */
+export const TestResult = Schema.Struct({
+  status: Status,
+  reachable: Schema.Boolean,
+  authStatus: AuthStatusSchema,
+  tools: Schema.Array(Schema.String),
+  instructions: Schema.optional(Schema.String),
+  error: Schema.optional(Schema.String),
+}).annotate({ identifier: "MCPTestResult" })
+export type TestResult = Schema.Schema.Type<typeof TestResult>
+
 // Store transports for OAuth servers to allow finishing auth
 type TransportWithAuth = StreamableHTTPClientTransport | SSEClientTransport
 const pendingOAuthTransports = new Map<string, { transport: TransportWithAuth; provider?: McpOAuthPendingProvider }>()
@@ -172,6 +193,18 @@ export interface Interface {
     clientName?: string,
   ) => Effect.Effect<Record<string, ResourceTemplateInfo & { client: string }>>
   readonly add: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<{ status: Record<string, Status> | Status }>
+  /**
+   * Test a server config without persisting it or mounting it into instance state.
+   * Connects, discovers tools, then closes the client. Safe to call with unsaved config.
+   */
+  readonly test: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<TestResult>
+  /**
+   * Persist an MCP server to the global config file (add or edit) and reflect the
+   * change in the running instance. Enable/disable is expressed via `mcp.enabled`.
+   */
+  readonly save: (name: string, mcp: ConfigMCPV1.Info) => Effect.Effect<{ status: Record<string, Status> }>
+  /** Remove an MCP server from the global config file and the running instance. */
+  readonly remove: (name: string) => Effect.Effect<void, NotFoundError>
   readonly connect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly disconnect: (name: string) => Effect.Effect<void, NotFoundError>
   readonly getPrompt: (
@@ -957,6 +990,58 @@ const layer = Layer.effect(
       return !!entry?.tokens
     })
 
+    const authStatusFor = Effect.fnUntraced(function* (name: string, mcp: ConfigMCPV1.Info) {
+      if (mcp.type !== "remote") return "not_authenticated" as AuthStatus
+      const entry = yield* auth.getForUrl(name, mcp.url)
+      if (!entry?.tokens) return "not_authenticated" as AuthStatus
+      if (entry.tokens.expiresAt && entry.tokens.expiresAt < Date.now() / 1000) return "expired" as AuthStatus
+      return "authenticated" as AuthStatus
+    })
+
+    const test = Effect.fn("MCP.test")(function* (name: string, mcp: ConfigMCPV1.Info) {
+      // Force enabled so a disabled config can still be tested, and never persist/store.
+      const result = yield* create(name, { ...mcp, enabled: true })
+      if (result.mcpClient) yield* Effect.tryPromise(() => result.mcpClient!.close()).pipe(Effect.ignore)
+      const authStatus = yield* authStatusFor(name, mcp)
+      const status = result.status
+      return {
+        status,
+        reachable: status.status !== "failed",
+        authStatus,
+        tools: (result.defs ?? []).map((def) => def.name),
+        instructions: result.instructions,
+        error: "error" in status ? status.error : undefined,
+      } satisfies TestResult
+    })
+
+    const save = Effect.fn("MCP.save")(function* (name: string, mcp: ConfigMCPV1.Info) {
+      yield* cfgSvc.updateGlobalMcp(name, mcp)
+      const s = yield* InstanceState.get(state)
+      s.config[name] = mcp
+      if (mcp.enabled === false) {
+        yield* closeClient(s, name)
+        delete s.clients[name]
+        s.status[name] = { status: "disabled" }
+      } else {
+        yield* createAndStore(name, mcp)
+      }
+      return { status: s.status }
+    })
+
+    const remove = Effect.fn("MCP.remove")(function* (name: string) {
+      const existing = yield* getMcpConfig(name)
+      if (!existing) return yield* new NotFoundError({ name })
+      yield* cfgSvc.updateGlobalMcp(name, undefined)
+      const s = yield* InstanceState.get(state)
+      yield* closeClient(s, name)
+      delete s.clients[name]
+      delete s.config[name]
+      delete s.status[name]
+      yield* auth.remove(name).pipe(Effect.ignore)
+      McpOAuthCallback.cancelPending(name)
+      pendingOAuthTransports.delete(name)
+    })
+
     const getAuthStatus = Effect.fn("MCP.getAuthStatus")(function* (mcpName: string) {
       const runtimeConfig = (yield* InstanceState.has(state))
         ? (yield* InstanceState.get(state)).config[mcpName]
@@ -978,6 +1063,9 @@ const layer = Layer.effect(
       resources,
       resourceTemplates,
       add,
+      test,
+      save,
+      remove,
       connect,
       disconnect,
       getPrompt,
