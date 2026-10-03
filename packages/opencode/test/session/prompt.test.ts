@@ -1844,6 +1844,156 @@ unix(
   30_000,
 )
 
+unix(
+  "command with noReply creates the user message without an LLM call",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        command: {
+          note: {
+            template: "Note: $ARGUMENTS",
+          },
+        },
+      }))
+
+      const { prompt, chat } = yield* boot()
+
+      const result = yield* prompt.command({
+        sessionID: chat.id,
+        command: "note",
+        arguments: "hello",
+        noReply: true,
+      })
+
+      expect(result.info.role).toBe("user")
+      expect(yield* llm.calls).toBe(0)
+      const parts = result.parts.filter((p) => p.type === "text")
+      expect(parts.some((p) => p.type === "text" && p.text === "Note: hello")).toBe(true)
+    }),
+  30_000,
+)
+
+unix(
+  "command.execute.before can set noReply to skip the agent loop",
+  () =>
+    Effect.gen(function* () {
+      const pluginSource = [
+        "export default async () => ({",
+        '  "command.execute.before": async (_input, output) => {',
+        '    output.parts.push({ type: "text", text: "handled by plugin" })',
+        "    output.noReply = true",
+        "  },",
+        "})",
+        "",
+      ].join("\n")
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        plugin: ["./plugin.ts"],
+        command: {
+          note: {
+            template: "Note: $ARGUMENTS",
+          },
+        },
+      }))
+      const { directory: dir } = yield* TestInstance
+      yield* Effect.all(
+        [
+          Effect.promise(() => Bun.write(path.join(dir, "plugin.ts"), pluginSource)),
+          Effect.promise(() =>
+            Bun.write(
+              path.join(dir, "opencode.json"),
+              JSON.stringify({
+                $schema: "https://opencode.ai/config.json",
+                ...providerCfg(llm.url),
+                plugin: ["./plugin.ts"],
+                command: {
+                  note: {
+                    template: "Note: $ARGUMENTS",
+                  },
+                },
+              }),
+            ),
+          ),
+        ],
+        { discard: true, concurrency: 2 },
+      )
+
+      const { prompt, chat } = yield* boot()
+
+      const result = yield* prompt.command({
+        sessionID: chat.id,
+        command: "note",
+        arguments: "hello",
+      })
+
+      expect(result.info.role).toBe("user")
+      expect(yield* llm.calls).toBe(0)
+      const parts = result.parts.filter((p) => p.type === "text")
+      expect(parts.some((p) => p.type === "text" && p.text === "handled by plugin")).toBe(true)
+    }),
+  30_000,
+)
+
+unix(
+  "command.execute.before cannot force a turn the client suppressed",
+  () =>
+    Effect.gen(function* () {
+      const pluginSource = [
+        "export default async () => ({",
+        '  "command.execute.before": async (_input, output) => {',
+        "    output.noReply = false",
+        "  },",
+        "})",
+        "",
+      ].join("\n")
+      const { llm } = yield* useServerConfig((url) => ({
+        ...providerCfg(url),
+        plugin: ["./plugin.ts"],
+        command: {
+          note: {
+            template: "Note: $ARGUMENTS",
+          },
+        },
+      }))
+      const { directory: dir } = yield* TestInstance
+      yield* Effect.all(
+        [
+          Effect.promise(() => Bun.write(path.join(dir, "plugin.ts"), pluginSource)),
+          Effect.promise(() =>
+            Bun.write(
+              path.join(dir, "opencode.json"),
+              JSON.stringify({
+                $schema: "https://opencode.ai/config.json",
+                ...providerCfg(llm.url),
+                plugin: ["./plugin.ts"],
+                command: {
+                  note: {
+                    template: "Note: $ARGUMENTS",
+                  },
+                },
+              }),
+            ),
+          ),
+        ],
+        { discard: true, concurrency: 2 },
+      )
+
+      const { prompt, chat } = yield* boot()
+
+      const result = yield* prompt.command({
+        sessionID: chat.id,
+        command: "note",
+        arguments: "hello",
+        noReply: true,
+      })
+
+      expect(result.info.role).toBe("user")
+      expect(yield* llm.calls).toBe(0)
+    }),
+  30_000,
+)
+
 unixNoLLMServer(
   "cancel interrupts shell and resolves cleanly",
   () =>
