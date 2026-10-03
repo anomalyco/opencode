@@ -66,11 +66,14 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   ]
 
   const header = system[0]
-  yield* input.plugin.trigger(
-    "experimental.chat.system.transform",
-    { sessionID: input.sessionID, model: input.model },
-    { system },
-  )
+  // Title generation is not a chat turn: it has its own prompt, reads only the first message,
+  // and already skips experimental.chat.messages.transform.
+  if (input.agent.name !== "title")
+    yield* input.plugin.trigger(
+      "experimental.chat.system.transform",
+      { sessionID: input.sessionID, model: input.model },
+      { system },
+    )
   if (system.length > 2 && system[0] === header) {
     const rest = system.slice(1)
     system.length = 0
