@@ -228,6 +228,60 @@ test("reports a contender that fails to start", async () => {
   ).rejects.toThrow("Server process exited with code 1")
 })
 
+test("reports overlapping contender failures without recruiting replacements", async () => {
+  await using fixture = await serviceFixture()
+  const started = Date.now()
+  const pending = run(
+    ensure({ file: fixture.registration, version: "test", command: fixture.command("controlled") }),
+  ).catch((error: unknown) => error)
+  const [first, second] = await fixture.waitForStarts(2)
+  await fixture.release(first, "fail")
+  // Let discovery observe the exit across two accelerated spawn windows before the survivor exits.
+  await Bun.sleep(450)
+  await fixture.release(second, "fail")
+  const error = await pending
+
+  expect(Date.now() - started).toBeLessThan(3_000)
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).toContain("Server process exited with code 23")
+  expect(error.message).toContain("storage initialization denied")
+  expect(await fixture.starts()).toHaveLength(2)
+})
+
+test("retains a contender failure until the deadline while its survivor stalls", async () => {
+  await using fixture = await serviceFixture()
+  const started = Date.now()
+  const pending = run(
+    ensure({ file: fixture.registration, version: "test", command: fixture.command("controlled") }),
+  ).catch((error: unknown) => error)
+  const [first, second] = await fixture.waitForStarts(2)
+  await fixture.release(first, "fail")
+  const error = await pending
+
+  expect(Date.now() - started).toBeGreaterThanOrEqual(3_000)
+  expect(error).toBeInstanceOf(Error)
+  if (!(error instanceof Error)) throw error
+  expect(error.message).toContain("Server process exited with code 23")
+  expect(error.message).toContain("storage initialization denied")
+  expect(await fixture.starts()).toHaveLength(2)
+  expect(() => process.kill(second, 0)).not.toThrow()
+})
+
+test("accepts a surviving contender after a failure without recruiting replacements", async () => {
+  await using fixture = await serviceFixture()
+  const pending = run(ensure({ file: fixture.registration, version: "test", command: fixture.command("controlled") }))
+  const [first, second] = await fixture.waitForStarts(2)
+  await fixture.release(first, "fail")
+  await Bun.sleep(450)
+  await fixture.release(second, "ready")
+  const endpoint = await pending
+
+  expect((await run(Service.discover({ file: fixture.registration, version: "test" })))?.url).toBe(endpoint.url)
+  expect((await Bun.file(fixture.registration).json()).pid).toBe(second)
+  expect(await fixture.starts()).toHaveLength(2)
+})
+
 test("reports a bounded contender stderr tail", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration

@@ -38,6 +38,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   let announced = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
+  let failure: Error | undefined
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
     if (announced) return
@@ -56,7 +57,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
   try {
     while (true) {
-      if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
+      if (Date.now() >= deadline) throw failure ?? new Error("Timed out waiting for the background service to start")
       const registration = await registered(options.file, timing.requestTimeout)
       if (registration.timedOut && registration.info !== undefined) {
         timeouts = {
@@ -95,14 +96,15 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       } else {
         if (lastSpawn === 0 && registration.info !== undefined) lastSpawn = Date.now()
         const finished = [...contenders].filter(contenderFinished)
-        const failure = finished.map(contenderFailure).find((error) => error !== undefined)
+        failure ??= finished.map(contenderFailure).find((error) => error !== undefined)
         if (finished.some((item) => item.child.exitCode === 0)) {
           spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
         }
         finished.forEach((item) => contenders.delete(item))
         if (failure !== undefined && contenders.size === 0) throw failure
-        // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
-        if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
+        // Keep one candidate plus one lock probe for pre-lock stalls. After a failure, let the
+        // survivors finish without recruiting replacements that could hide the error indefinitely.
+        if (failure === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
           announce("missing")
           contenders.add(await spawnContender())
           lastSpawn = Date.now()
