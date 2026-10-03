@@ -57,6 +57,7 @@ import { useDialog } from "../../ui/dialog"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogImagePreview } from "../../component/dialog-image-preview"
+import { statusLabel } from "../../component/dialog-workspace-file-changes"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
@@ -2086,12 +2087,6 @@ function CompactionQueued() {
       <box border={["top"]} borderColor={theme.border.base} flexGrow={1} />
     </box>
   )
-}
-
-function statusLabel(status: "added" | "modified" | "deleted") {
-  if (status === "added") return "A"
-  if (status === "deleted") return "D"
-  return "M"
 }
 
 function RevertMessage(props: {
