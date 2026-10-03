@@ -70,7 +70,8 @@ function sessionRow(info: SessionV1.SessionInfo): typeof SessionTable.$inferInse
     time_created: info.time.created,
     time_updated: info.time.updated,
     time_compacting: info.time.compacting,
-    time_archived: info.time.archived,
+    // null, not undefined: Drizzle omits undefined keys from .set(), leaving a stale value.
+    time_archived: info.time.archived ?? null,
   }
 }
 

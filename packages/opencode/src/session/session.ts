@@ -154,7 +154,8 @@ export function toRow(info: Info) {
     time_created: info.time.created,
     time_updated: info.time.updated,
     time_compacting: info.time.compacting,
-    time_archived: info.time.archived,
+    // null, not undefined — same .set() hazard as the projector's sessionRow.
+    time_archived: info.time.archived ?? null,
   }
 }
 
