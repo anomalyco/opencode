@@ -171,6 +171,7 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
   return (
     <header
       data-slot={useV2Titlebar() ? "titlebar-v2" : undefined}
+      dir={language.systemDirection()}
       classList={{
         "shrink-0 relative flex flex-row": true,
         "h-9 bg-v2-background-bg-deep overflow-visible": useV2Titlebar(),
@@ -183,8 +184,11 @@ export function Titlebar(props: { update?: TitlebarUpdate; debugTools?: { visibl
         "padding-left": macTrafficLights() ? `${macTrafficLightsBaseWidth / zoom()}px` : 0,
         width: windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
         "max-width": windows() ? `env(titlebar-area-width, calc(100vw - ${windowsControlsWidth()}))` : undefined,
-        // Native Windows caption controls remain on the physical right in both writing directions.
-        "margin-right": windows() ? "auto" : undefined,
+        // The native Windows caption buttons sit on the left in RTL system languages
+        // and on the right in LTR ones. The header reserves space on that side.
+        // Its direction follows the OS language only, never the UI language or content.
+        "margin-right": windows() && language.systemDirection() === "ltr" ? "auto" : undefined,
+        "margin-left": windows() && language.systemDirection() === "rtl" ? "auto" : undefined,
       }}
       data-tauri-drag-region
     >

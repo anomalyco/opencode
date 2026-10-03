@@ -115,6 +115,7 @@ export const dict = {
   "theme.scheme.light": "светлина",
   "theme.scheme.dark": "Тъмно",
   "command.sidebar.toggle": "Превключване на страничната лента",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Отворен проект",
   "command.project.previous": "Предишен проект",
   "command.project.next": "Следващ проект",

@@ -114,6 +114,7 @@ export const dict = {
   "theme.scheme.light": "Нур",
   "theme.scheme.dark": "Торик",
   "command.sidebar.toggle": "Паҳлӯи паҳлӯро иваз кунед",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Лоиҳаи кушода",
   "command.project.previous": "Лоиҳаи қаблӣ",
   "command.project.next": "Лоиҳаи навбатӣ",

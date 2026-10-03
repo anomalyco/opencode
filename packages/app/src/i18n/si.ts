@@ -113,6 +113,7 @@ export const dict: Record<string, string> = {
   "theme.scheme.light": "ආලෝකය",
   "theme.scheme.dark": "අඳුරු",
   "command.sidebar.toggle": "පැති තීරුව ටොගල් කරන්න",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "විවෘත ව්යාපෘතිය",
   "command.project.previous": "පෙර ව්යාපෘතිය",
   "command.project.next": "ඊළඟ ව්යාපෘතිය",

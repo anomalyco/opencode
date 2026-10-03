@@ -119,6 +119,7 @@ export const dict = {
   "theme.scheme.light": "ライト",
   "theme.scheme.dark": "ダーク",
   "command.sidebar.toggle": "サイドバーの切り替え",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "プロジェクトを開く",
   "command.project.previous": "前のプロジェクト",
   "command.project.next": "次のプロジェクト",

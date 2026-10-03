@@ -117,6 +117,7 @@ export const dict = {
   "theme.scheme.light": "Ljóst",
   "theme.scheme.dark": "Dökkt",
   "command.sidebar.toggle": "Skiptu um hliðarstiku",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Opna verkefni",
   "command.project.previous": "Fyrra verkefni",
   "command.project.next": "Næsta verkefni",

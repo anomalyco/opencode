@@ -113,6 +113,7 @@ export const dict = {
   "theme.scheme.light": "Licht",
   "theme.scheme.dark": "Donker",
   "command.sidebar.toggle": "Zijbalk tonen of verbergen",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Project openen",
   "command.project.previous": "Vorig project",
   "command.project.next": "Volgende project",

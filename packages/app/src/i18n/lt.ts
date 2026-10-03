@@ -117,6 +117,7 @@ export const dict = {
   "theme.scheme.light": "Šviesi",
   "theme.scheme.dark": "Tamsi",
   "command.sidebar.toggle": "Perjungti šoninę juostą",
+  "command.direction.toggle": "Toggle layout direction",
   "command.project.open": "Atidaryti projektą",
   "command.project.previous": "Ankstesnis projektas",
   "command.project.next": "Kitas projektas",
