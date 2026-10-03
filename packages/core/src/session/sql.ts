@@ -62,6 +62,10 @@ export const SessionTable = sqliteTable(
     index("session_project_idx").on(table.project_id),
     index("session_workspace_idx").on(table.workspace_id),
     index("session_parent_idx").on(table.parent_id),
+    // SessionV2.list orders by (time_created, id) and paginates with a
+    // cursor on the same pair; without a covering index every list call
+    // sorts the whole table through a temp B-tree.
+    index("session_time_created_id_idx").on(table.time_created, table.id),
   ],
 )
 
