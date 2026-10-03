@@ -110,7 +110,7 @@ describe("FileAccess.resolve", () => {
     ),
   )
 
-  it.live("resolves a prospective target below an external symlink lexically", () =>
+  it.live("requires external-directory authorization for a prospective target below an external symlink", () =>
     withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         if (process.platform === "win32") return
@@ -119,8 +119,82 @@ describe("FileAccess.resolve", () => {
         const access = yield* FileAccess.Service
         const target = yield* access.resolve({ path: path.join("escape", "new.txt") })
         expect(target).toMatchObject({
-          absolute: path.join(directory, "escape", "new.txt"),
-          resource: "escape/new.txt",
+          absolute: path.join(outside.path, "new.txt"),
+          resource: path.join(outside.path, "new.txt").replaceAll("\\", "/"),
+        })
+        expect(target.externalDirectory).toMatchObject({
+          directory: outside.path,
+          resource: path.join(outside.path, "*").replaceAll("\\", "/"),
+        })
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("requires external-directory authorization for an existing target behind an external symlink", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const outside = yield* tmpdirScoped()
+        yield* Effect.promise(async () => {
+          await fs.writeFile(path.join(outside.path, "secret.txt"), "secret")
+          await fs.symlink(path.join(outside.path, "secret.txt"), path.join(directory, "key"))
+        })
+        const access = yield* FileAccess.Service
+        const target = yield* access.resolve({ path: "key" })
+        expect(target).toMatchObject({ absolute: path.join(outside.path, "secret.txt") })
+        expect(target.externalDirectory).toMatchObject({ directory: outside.path })
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("keeps an internal target reached through an outside symlink internal", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        if (process.platform === "win32") return
+        const outside = yield* tmpdirScoped()
+        yield* Effect.promise(() => fs.symlink(directory, path.join(outside.path, "alias")))
+        const access = yield* FileAccess.Service
+        const target = yield* access.resolve({ path: path.join(outside.path, "alias", "notes.md") })
+        expect(target).toMatchObject({
+          absolute: path.join(outside.path, "alias", "notes.md"),
+        })
+        expect(target.externalDirectory).toBeUndefined()
+      }).pipe(provide(directory)),
+    ),
+  )
+
+  it.live("keeps targets internal when the location itself is a symlink", () =>
+    withTempDir(({ path: directory }) => {
+      const alias = path.join(path.dirname(directory), `${path.basename(directory)}-alias`)
+      return Effect.acquireRelease(
+        Effect.promise(() =>
+          process.platform === "win32" ? Promise.resolve() : fs.symlink(directory, alias),
+        ),
+        () => Effect.promise(() => (process.platform === "win32" ? Promise.resolve() : fs.rm(alias))),
+      ).pipe(
+        Effect.andThen(
+          Effect.gen(function* () {
+            const access = yield* FileAccess.Service
+            const target = yield* access.resolve({ path: path.join(alias, "notes.md") })
+            expect(target).toMatchObject({
+              absolute: path.join(alias, "notes.md"),
+              resource: "notes.md",
+            })
+            expect(target.externalDirectory).toBeUndefined()
+          }).pipe(provide(alias)),
+        ),
+      )
+    }),
+  )
+
+  it.live("resolves a deep prospective target whose parent chain does not exist lexically", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        const access = yield* FileAccess.Service
+        const target = yield* access.resolve({ path: path.join("new", "nested", "file.txt") })
+        expect(target).toMatchObject({
+          absolute: path.join(directory, "new", "nested", "file.txt"),
+          resource: "new/nested/file.txt",
         })
         expect(target.externalDirectory).toBeUndefined()
       }).pipe(provide(directory)),
