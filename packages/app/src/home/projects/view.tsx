@@ -1,5 +1,6 @@
 import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Popover } from "@kobalte/core/popover"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
@@ -155,10 +156,20 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
 }
 
 function HomeProjectsPanel(props: HomeProjectsViewProps) {
-  const [contextMenu, setContextMenu] = createStore({ open: undefined as string | undefined })
+  let observer: MutationObserver | undefined
+  let frame = 0
+  const [state, setState] = createStore({ contextMenu: undefined as string | undefined })
+  const updateFades = (element: HTMLDivElement) => {
+    element.toggleAttribute("data-fade-top", element.scrollTop > 0)
+    element.toggleAttribute("data-fade-bottom", element.scrollTop + element.clientHeight < element.scrollHeight - 1)
+  }
+  onCleanup(() => {
+    observer?.disconnect()
+    cancelAnimationFrame(frame)
+  })
   const contextMenuProps = {
-    contextMenuOpen: (id: string) => contextMenu.open === id,
-    onSetContextMenuOpen: (id: string, open: boolean) => setContextMenu("open", open ? id : undefined),
+    contextMenuOpen: (id: string) => state.contextMenu === id,
+    onSetContextMenuOpen: (id: string, open: boolean) => setState("contextMenu", open ? id : undefined),
   }
   return (
     <aside
@@ -195,7 +206,17 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           </Show>
         </div>
       </Show>
-      <ScrollView data-slot="home-projects-scroll" class="min-h-0 min-w-0 shrink">
+      <ScrollView
+        data-slot="home-projects-scroll"
+        class="min-h-0 min-w-0 shrink"
+        viewportRef={(element) => {
+          createResizeObserver(element, () => updateFades(element))
+          observer = new MutationObserver(() => updateFades(element))
+          observer.observe(element, { childList: true, subtree: true })
+          frame = requestAnimationFrame(() => updateFades(element))
+        }}
+        onScroll={(event) => updateFades(event.currentTarget)}
+      >
         <Show when={props.dropdown && props.servers.length === 1}>
           <HomeProjectNavButton
             type="button"
