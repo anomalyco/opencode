@@ -795,4 +795,61 @@ describe("Config", () => {
       }),
     ),
   )
+
+  it.live("skips project configuration when the project config opt-out is set", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) => {
+        const global = path.join(tmp.path, "global")
+        const root = path.join(tmp.path, "repo")
+        const parent = path.join(root, "packages")
+        const directory = path.join(parent, "app")
+        const previous = process.env.OPENCODE_DISABLE_PROJECT_CONFIG
+        process.env.OPENCODE_DISABLE_PROJECT_CONFIG = "1"
+        return Effect.gen(function* () {
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global, { recursive: true })
+            await fs.mkdir(directory, { recursive: true })
+            await fs.mkdir(path.join(root, ".opencode"), { recursive: true })
+            await Promise.all([
+              fs.writeFile(path.join(global, "opencode.json"), JSON.stringify({ $schema: "global" })),
+              fs.writeFile(path.join(root, "opencode.json"), JSON.stringify({ $schema: "root" })),
+              fs.writeFile(path.join(parent, "opencode.jsonc"), JSON.stringify({ $schema: "parent" })),
+              fs.writeFile(path.join(directory, "opencode.json"), JSON.stringify({ $schema: "directory" })),
+              fs.writeFile(path.join(root, ".opencode", "opencode.json"), JSON.stringify({ $schema: "root-dot" })),
+            ])
+          })
+
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const entries = yield* config.entries()
+
+            expect(entries.filter((entry) => entry.type === "directory").map((entry) => entry.path)).toEqual([
+              AbsolutePath.make(global),
+            ])
+            expect(entries.map((entry) => (entry.type === "document" ? entry.info.$schema : entry.path))).toEqual([
+              "global",
+              AbsolutePath.make(global),
+            ])
+          }).pipe(
+            Effect.provide(
+              testLayer(directory, global, root, {
+                type: "git",
+                store: AbsolutePath.make(path.join(root, ".git")),
+              }),
+            ),
+          )
+        }).pipe(
+          Effect.ensuring(
+            Effect.sync(() => {
+              if (previous === undefined) delete process.env.OPENCODE_DISABLE_PROJECT_CONFIG
+              else process.env.OPENCODE_DISABLE_PROJECT_CONFIG = previous
+            }),
+          ),
+        )
+      }),
+    ),
+  )
 })
