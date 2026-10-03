@@ -41,6 +41,7 @@ async function renderSessionTabs(
     newLocation?: "launch" | "inherit"
     launchDirectory?: string
     tabsEnabled?: boolean
+    restore?: boolean
     viewFailures?: number
     experimental?: Record<string, boolean>
   },
@@ -135,7 +136,7 @@ async function renderSessionTabs(
   let storage!: ReturnType<typeof useStorage>
   let config!: ReturnType<typeof useConfig>
   let configuration = {
-    tabs: { mode: options?.tabsEnabled === false ? ("off" as const) : ("on" as const) },
+    tabs: { mode: options?.tabsEnabled === false ? ("off" as const) : ("on" as const), restore: options?.restore },
     experimental: options?.experimental,
     session: { new_location: options?.newLocation ?? "launch" },
   }
@@ -318,6 +319,24 @@ test("keeps each visited session open", async () => {
     await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "third"))
 
     expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["first", "second", "third"])
+  } finally {
+    await setup.destroy()
+  }
+})
+
+test("starts empty and leaves saved tabs untouched when restore is off", async () => {
+  const setup = await renderSessionTabs("first", { home: true, persisted: ["first", "second"], restore: false })
+
+  try {
+    expect(setup.tabs.tabs()).toEqual([])
+    setup.route.navigate({ type: "session", sessionID: "third" })
+    await wait(() => setup.tabs.tabs().some((tab) => tab.sessionID === "third"))
+    await setup.flush()
+
+    expect(setup.tabs.tabs().map((tab) => tab.sessionID)).toEqual(["third"])
+    expect(await Bun.file(path.join(setup.state, "test", "tui", "tabs.json")).json()).toMatchObject({
+      cwd: { [directory]: { tabs: [{ sessionID: "first" }, { sessionID: "second" }] } },
+    })
   } finally {
     await setup.destroy()
   }
