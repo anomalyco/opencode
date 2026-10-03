@@ -387,6 +387,7 @@ export type SessionStatus =
       next: number
     }
   | { type: "busy" }
+  | { type: "waiting" }
 
 export type PtyTicketConnectToken = { ticket: string; expires_in: number }
 
