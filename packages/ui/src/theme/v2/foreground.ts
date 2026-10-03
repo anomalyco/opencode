@@ -28,6 +28,21 @@ function pickGrey(primitives: Record<string, V2ColorValue>, background: HexColor
   return matches.reduce((best, step) => (Math.abs(step - target) < Math.abs(best - target) ? step : best))
 }
 
+export function accentForeground(tokens: Record<string, V2ColorValue>): V2ColorValue {
+  const resolve = (value: V2ColorValue, depth = 0): HexColor | undefined => {
+    if (value.startsWith("#")) return value as HexColor
+    if (depth > 10) return
+    const key = value.match(/^var\(--([\w-]+)\)$/)?.[1]
+    return key && tokens[key] ? resolve(tokens[key], depth + 1) : undefined
+  }
+  const background = resolve(tokens["v2-background-bg-accent"])
+  if (!background) return tokens["v2-text-text-contrast"]
+  const step = pickGrey(tokens, background, 4.5, 100)
+  const grey = greyHex(tokens, step)
+  if (grey && contrastRatio(grey, background) >= 4.5) return greyRef(step)
+  return contrastRatio("#000000", background) > contrastRatio("#ffffff", background) ? "#000000" : "#ffffff"
+}
+
 export function mapV2Foreground(
   ink: HexColor,
   isDark: boolean,

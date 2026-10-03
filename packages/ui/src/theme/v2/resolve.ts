@@ -1,7 +1,7 @@
 // @refresh reload
 
 import { generateNeutralScale, hexToOklch, oklchToHex, shift } from "../color"
-import { mapV2Foreground } from "./foreground"
+import { accentForeground, mapV2Foreground } from "./foreground"
 import { mapV2Semantics, mergeV2Tokens } from "./mapping"
 import type { DesktopTheme, HexColor, ResolvedV2Theme, ThemeVariant, V2ColorValue } from "../types"
 import { V2_PRIMITIVES_DEFAULT } from "./default-primitives"
@@ -136,7 +136,9 @@ export function resolveThemeVariantV2(variant: ThemeVariant, isDark: boolean): R
   const primitives = generateV2Primitives(variant, isDark)
   const semantics = mapV2Semantics(isDark)
   const foreground = mapV2Foreground(readPalette(variant).ink, isDark, primitives, variant.overrides)
-  return mergeV2Tokens(primitives, semantics, foreground, variant.v2Overrides ?? {})
+  const tokens = mergeV2Tokens(primitives, semantics, foreground, variant.v2Overrides ?? {})
+  if (!variant.v2Overrides?.["v2-text-text-on-accent"]) tokens["v2-text-text-on-accent"] = accentForeground(tokens)
+  return tokens
 }
 
 export function resolveThemeV2(theme: DesktopTheme): { light: ResolvedV2Theme; dark: ResolvedV2Theme } {
