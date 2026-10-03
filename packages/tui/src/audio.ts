@@ -1,11 +1,17 @@
 import { Audio, type AudioErrorContext, type AudioPlayOptions, type AudioSound } from "@opentui/core"
 import { readFile } from "node:fs/promises"
+import { hasAudioPlaybackDevice } from "./audio-device"
 
 let audio: Audio | null | undefined
 const sounds = new Map<string, Promise<AudioSound | null>>()
 
 function getAudio() {
   if (audio !== undefined) return audio
+  if (!hasAudioPlaybackDevice()) {
+    console.debug("tui audio skipped: no playback device")
+    audio = null
+    return null
+  }
   try {
     const next = Audio.create({ autoStart: false })
     next.on("error", (error: Error, context: AudioErrorContext) => {
