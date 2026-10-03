@@ -124,7 +124,15 @@ const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMR
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(request.providerOptions ?? {})
   const flattened = ProviderShared.flattenToolRequest(request)
   const messages: (typeof Message.Type)[] = request.system.length
-    ? [{ role: "system", content: ProviderShared.joinText(request.system) }]
+    ? [
+        {
+          role: "system",
+          content:
+            request.system.length === 1
+              ? request.system[0].text
+              : request.system.map((part) => ({ type: "text", text: part.text })),
+        },
+      ]
     : []
   for (const message of flattened.request.messages) {
     if (message.role === "system") {
