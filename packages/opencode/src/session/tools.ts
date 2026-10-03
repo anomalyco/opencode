@@ -102,13 +102,14 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
       execute(args, options) {
         return run.promise(
           Effect.gen(function* () {
+            const hookOutput = { args }
             const ctx = context(args, options)
             yield* plugin.trigger(
               "tool.execute.before",
               { tool: item.id, sessionID: ctx.sessionID, callID: ctx.callID },
-              { args },
+              hookOutput,
             )
-            const result = yield* item.execute(args, ctx)
+            const result = yield* item.execute(hookOutput.args, ctx)
             const output = {
               ...result,
               attachments: result.attachments?.map((attachment) => ({
@@ -398,15 +399,16 @@ export const resolve = Effect.fn("SessionTools.resolve")(function* (input: {
     item.execute = (args, opts) =>
       run.promise(
         Effect.gen(function* () {
+          const hookOutput = { args }
           const ctx = context(args, opts)
           yield* plugin.trigger(
             "tool.execute.before",
             { tool: key, sessionID: ctx.sessionID, callID: opts.toolCallId },
-            { args },
+            hookOutput,
           )
           const result: Awaited<ReturnType<NonNullable<typeof execute>>> = yield* Effect.gen(function* () {
             yield* ctx.ask({ permission: key, metadata: {}, patterns: ["*"], always: ["*"] })
-            return yield* Effect.promise(() => execute(args, opts))
+            return yield* Effect.promise(() => execute(hookOutput.args, opts))
           }).pipe(
             Effect.withSpan("Tool.execute", {
               attributes: {
