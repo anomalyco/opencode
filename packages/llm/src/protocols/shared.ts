@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer"
 import { Effect, Schema, Stream } from "effect"
+import { isSome } from "effect/Option"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
 import {
@@ -18,6 +19,7 @@ export { isRecord }
 
 export const Json = Schema.fromJsonString(Schema.Unknown)
 export const decodeJson = Schema.decodeUnknownSync(Json)
+export const decodeJsonOption = Schema.decodeUnknownOption(Json)
 export const encodeJson = Schema.encodeSync(Json)
 const isJson = Schema.is(Schema.Json)
 export const JsonObject = Schema.Record(Schema.String, Schema.Unknown)
@@ -233,20 +235,39 @@ export const errorText = (error: unknown) => {
 
 /**
  * `framing` step for Server-Sent Events. Decodes UTF-8, runs the SSE channel
- * decoder, and drops empty / `[DONE]` keep-alive events so the downstream
- * `decodeChunk` sees one JSON string per element. The SSE channel emits a
- * `Retry` control event on its error channel; we drop it here (we don't
- * implement client-driven retries) so the public error channel stays
- * `LLMError`.
+ * decoder, and drops keep-alive events — empty, `[DONE]`, and JSON payloads
+ * that are not objects — so the downstream `decodeChunk` sees one JSON string
+ * per element. The SSE channel emits a `Retry` control event on its error
+ * channel; we drop it here (we don't implement client-driven retries) so the
+ * public error channel stays `LLMError`.
  */
 export const sseFraming = (bytes: Stream.Stream<Uint8Array, LLMError>): Stream.Stream<string, LLMError> =>
   bytes.pipe(
     Stream.decodeText(),
     Stream.pipeThroughChannel(Sse.decode()),
     Stream.catchTag("Retry", () => Stream.empty),
-    Stream.filter((event) => event.data.length > 0 && event.data !== "[DONE]"),
+    Stream.filter((event) => isEventPayload(event.data)),
     Stream.map((event) => event.data),
   )
+
+/**
+ * Keep-alive test for one `data:` payload.
+ *
+ * A non-object payload carries no event for any route: every protocol event
+ * schema is a struct, so passing one through makes the decoder fail and the
+ * whole run abort. Some OpenAI-compatible gateways interleave a bare
+ * `data: null` between real deltas, which is what turns that into a lost step
+ * (issue #50314) — it is dropped here for the same reason `[DONE]` is.
+ *
+ * Only JSON that decodes to a non-object is dropped. Corrupt JSON keeps
+ * reaching the decoder, and so does an object that fails the event schema, so
+ * a genuine provider mismatch still fails with the offending payload attached.
+ */
+const isEventPayload = (data: string) => {
+  if (data.length === 0 || data === "[DONE]") return false
+  const decoded = decodeJsonOption(data)
+  return !isSome(decoded) || isRecord(decoded.value)
+}
 
 /**
  * Canonical invalid-request constructor. Lift one-line `const invalid =
