@@ -68,12 +68,29 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         "session.create",
         Effect.fn(function* (ctx) {
           return {
-            data: yield* session.create({
-              id: ctx.payload.id,
-              agent: ctx.payload.agent,
-              model: ctx.payload.model,
-              location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
-            }),
+            data: yield* session
+              .create({
+                id: ctx.payload.id,
+                agent: ctx.payload.agent,
+                model: ctx.payload.model,
+                location: ctx.payload.location ?? { directory: AbsolutePath.make(process.cwd()) },
+              })
+              .pipe(
+                Effect.catchCause((cause) => {
+                  const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+                  return Effect.logError("failed to create session", { cause }).pipe(
+                    Effect.annotateLogs({ ref }),
+                    Effect.andThen(
+                      Effect.fail(
+                        new UnknownError({
+                          message: "Unexpected server error. Check server logs for details.",
+                          ref,
+                        }),
+                      ),
+                    ),
+                  )
+                }),
+              ),
           }
         }),
       )

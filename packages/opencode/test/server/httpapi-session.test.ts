@@ -664,6 +664,31 @@ describe("session HttpApi", () => {
   )
 
   it.instance(
+    "returns a structured error when session creation hits a mismatched database",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const { db } = yield* Database.Service
+        yield* db.run("ALTER TABLE session DROP COLUMN title")
+
+        const response = yield* request("/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ location: { directory: test.directory } }),
+        })
+        const body = yield* responseJson(response)
+
+        expect(response.status).toBe(500)
+        expect(body).toMatchObject({
+          _tag: "UnknownError",
+          message: "Unexpected server error. Check server logs for details.",
+        })
+        expect((body as { ref?: unknown }).ref).toMatch(/^err_[0-9a-f-]{8}$/)
+      }),
+    { git: true, config: { formatter: false, lsp: false } },
+  )
+
+  it.instance(
     "returns safe v2 unknown errors for corrupt projected messages",
     () =>
       Effect.gen(function* () {
