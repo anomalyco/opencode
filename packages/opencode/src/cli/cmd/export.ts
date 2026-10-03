@@ -66,7 +66,7 @@ function filepart(part: SessionV1.FilePart): SessionV1.FilePart {
   }
 }
 
-function part(part: SessionV1.Part): SessionV1.Part {
+export function sanitizePart(part: typeof SessionV1.Part.Type): typeof SessionV1.Part.Type {
   switch (part.type) {
     case "text":
       return {
@@ -92,7 +92,10 @@ function part(part: SessionV1.Part): SessionV1.Part {
     case "tool":
       return {
         ...part,
-        metadata: data("tool-metadata", part.id, part.metadata),
+        metadata:
+          part.metadata?.opencodeAdvisor !== undefined
+            ? { providerExecuted: true, opencodeAdvisor: { version: 1, redacted: true } }
+            : data("tool-metadata", part.id, part.metadata),
         state:
           part.state.status === "pending"
             ? {
@@ -141,6 +144,10 @@ function part(part: SessionV1.Part): SessionV1.Part {
     case "step-finish":
       return {
         ...part,
+        metadata:
+          part.metadata?.opencodeAdvisor !== undefined
+            ? { opencodeAdvisor: { version: 1, redacted: true } }
+            : data("step-metadata", part.id, part.metadata),
         snapshot: part.snapshot === undefined ? undefined : redact("snapshot", part.id, part.snapshot),
       }
     case "agent":
@@ -158,7 +165,7 @@ function part(part: SessionV1.Part): SessionV1.Part {
   }
 }
 
-const partFn = part
+const partFn = sanitizePart
 
 function sanitize(data: { info: Session.Info; messages: SessionV1.WithParts[] }) {
   return {

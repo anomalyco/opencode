@@ -29,6 +29,7 @@ import type { SQL } from "drizzle-orm"
 import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { MessageV2 } from "./message-v2"
+import { SessionAdvisor } from "./advisor"
 import type { InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
@@ -715,13 +716,17 @@ const layer: Layer.Layer<
           ...(parentID && { parentID }),
         })
 
+        const partIDs = new Map(msg.parts.map((part) => [part.id, PartID.ascending()] as const))
         for (const part of msg.parts) {
-          const p: SessionV1.Part = {
-            ...part,
-            id: PartID.ascending(),
-            messageID: cloned.id,
-            sessionID: session.id,
-          }
+          const p: SessionV1.Part = SessionAdvisor.remap(
+            {
+              ...part,
+              id: partIDs.get(part.id)!,
+              messageID: cloned.id,
+              sessionID: session.id,
+            },
+            partIDs,
+          )
           if (p.type === "compaction" && p.tail_start_id) {
             p.tail_start_id = idMap.get(p.tail_start_id)
           }

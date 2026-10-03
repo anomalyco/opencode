@@ -5,6 +5,7 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { Deferred, Effect, Exit, Layer } from "effect"
 import { Session as SessionNs } from "@/session/session"
 import { MessageV2 } from "../../src/session/message-v2"
+import { SessionAdvisor } from "../../src/session/advisor"
 import { MessageID, PartID, type SessionID } from "../../src/session/schema"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideInstance, tmpdirScoped } from "../fixture/fixture"
@@ -267,6 +268,64 @@ describe("Session", () => {
 
       expect((yield* session.messages({ sessionID: beforeWrap.id })).map((msg) => msg.info.time.created)).toEqual([1])
       expect((yield* session.messages({ sessionID: afterWrap.id })).map((msg) => msg.info.time.created)).toEqual([1, 2])
+    }),
+  )
+
+  it.instance("remaps advisor response ledgers to the copied parts on fork", () =>
+    Effect.gen(function* () {
+      const session = yield* SessionNs.Service
+      const created = yield* Effect.acquireRelease(session.create({}), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const messageID = MessageID.make("msg_advisor")
+      yield* session.updateMessage({
+        id: messageID,
+        sessionID: created.id,
+        role: "assistant",
+        time: { created: 1 },
+        parentID: MessageID.make("msg_user"),
+        modelID: "claude-sonnet-4-6",
+        providerID: "anthropic",
+        mode: "build",
+        agent: "build",
+        path: { cwd: "/", root: "/" },
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      } as SessionV1.Assistant)
+      const origin = {
+        version: 1,
+        providerID: "anthropic",
+        executorModelID: "claude-sonnet-4-6",
+        endpoint: "https://api.anthropic.com/v1",
+      }
+      yield* session.updatePart({
+        id: PartID.make("prt_text"),
+        sessionID: created.id,
+        messageID,
+        type: "text",
+        text: "Before.",
+      })
+      yield* session.updatePart({
+        id: PartID.make("prt_step"),
+        sessionID: created.id,
+        messageID,
+        type: "step-finish",
+        reason: "stop",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        metadata: {
+          opencodeAdvisor: { ...origin, interrupted: false, entries: [{ type: "part", partID: "prt_text" }] },
+        },
+      })
+
+      const fork = yield* Effect.acquireRelease(session.fork({ sessionID: created.id }), (info) =>
+        session.remove(info.id).pipe(Effect.ignore),
+      )
+      const [copied] = yield* session.messages({ sessionID: fork.id })
+      const text = copied!.parts.find((part) => part.type === "text")!
+      const step = copied!.parts.find((part) => part.type === "step-finish")!
+      expect(text.id).not.toBe("prt_text")
+      expect(SessionAdvisor.response(step)?.entries).toEqual([{ type: "part", partID: text.id }])
     }),
   )
 

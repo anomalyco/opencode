@@ -130,6 +130,7 @@ export type AgentsListOutput = {
   readonly data: ReadonlyArray<{
     readonly id: string
     readonly model?: { readonly id: string; readonly providerID: string; readonly variant?: string }
+    readonly advisor?: false | { readonly model?: string; readonly maxUses?: number }
     readonly request: {
       readonly headers: { readonly [x: string]: string }
       readonly body: { readonly [x: string]: JsonValue }

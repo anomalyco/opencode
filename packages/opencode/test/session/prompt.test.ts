@@ -6,7 +6,8 @@ import { SessionProjector } from "@opencode-ai/core/session/projector"
 import { eq } from "drizzle-orm"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Stream } from "effect"
+import { LLMEvent } from "@opencode-ai/llm"
 import path from "path"
 import { fileURLToPath } from "url"
 import { NamedError } from "@opencode-ai/core/util/error"
@@ -286,6 +287,331 @@ const cfg = {
     },
   },
 }
+
+function advisorLLM(mode: "complete" | "pause" | "wait" | "restart" = "complete") {
+  return Layer.effect(
+    LLM.Service,
+    Effect.sync(() => {
+      let request = 0
+      return LLM.Service.of({
+        stream: (input) => {
+          if (input.agent.name !== "build") return Stream.empty
+          if (request > 5) throw new Error("Unexpected extra advisor invocation")
+          if (mode === "restart") {
+            // A call left pending by a previous process must never be replayed as a live tool-call.
+            if (JSON.stringify(input.messages).includes('"toolCallId":"srv_stale"'))
+              throw new Error("Stale advisor call was resumed after restart")
+            return Stream.make(
+              LLMEvent.textStart({ id: "after-restart" }),
+              LLMEvent.textDelta({ id: "after-restart", text: "Continued." }),
+              LLMEvent.textEnd({ id: "after-restart" }),
+              LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+              LLMEvent.finish({ reason: "stop" }),
+            )
+          }
+          if (mode === "wait" && request++ === 0)
+            return Stream.concat(
+              Stream.make(
+                LLMEvent.stepStart({ index: 0 }),
+                LLMEvent.toolCall({ id: "srv_loop", name: "advisor", input: {}, providerExecuted: true }),
+              ),
+              Stream.never,
+            )
+          if (mode === "wait") {
+            if (JSON.stringify(input.messages).includes('"toolCallId":"srv_loop"'))
+              throw new Error("Abandoned advisor was resumed")
+            return Stream.make(
+              LLMEvent.textStart({ id: "after-interruption" }),
+              LLMEvent.textDelta({ id: "after-interruption", text: "Continued." }),
+              LLMEvent.textEnd({ id: "after-interruption" }),
+              LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+              LLMEvent.finish({ reason: "stop" }),
+            )
+          }
+          if (request++ === 0 || mode === "pause")
+            return Stream.make(
+              LLMEvent.stepStart({ index: 0 }),
+              LLMEvent.toolCall({ id: "srv_loop", name: "advisor", input: {}, providerExecuted: true }),
+              LLMEvent.stepFinish({
+                index: 0,
+                reason: "stop",
+                providerMetadata: { opencode: { rawFinishReason: "pause_turn" } },
+              }),
+              LLMEvent.finish({ reason: "stop" }),
+            )
+          const history = JSON.stringify(input.messages)
+          if (!history.includes('"toolCallId":"srv_loop"')) throw new Error("Pending advisor call was lost")
+          return Stream.make(
+            LLMEvent.stepStart({ index: 0 }),
+            LLMEvent.toolResult({
+              id: "srv_loop",
+              name: "advisor",
+              providerExecuted: true,
+              result: { type: "json", value: { type: "advisor_result", text: "Bound concurrency." } },
+            }),
+            LLMEvent.textStart({ id: "continued" }),
+            LLMEvent.textDelta({ id: "continued", text: "Continued." }),
+            LLMEvent.textEnd({ id: "continued" }),
+            LLMEvent.stepFinish({ index: 0, reason: "stop" }),
+            LLMEvent.finish({ reason: "stop" }),
+          )
+        },
+      })
+    }),
+  )
+}
+const advisorPrompt = testEffect(
+  LayerNode.compile(promptRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [LLM.node, advisorLLM()],
+  ]),
+)
+const pausedAdvisorPrompt = testEffect(
+  LayerNode.compile(promptRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [LLM.node, advisorLLM("pause")],
+  ]),
+)
+const interruptedAdvisorPrompt = testEffect(
+  LayerNode.compile(promptRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [LLM.node, advisorLLM("wait")],
+  ]),
+)
+
+const restartedAdvisorPrompt = testEffect(
+  LayerNode.compile(promptRoot, [
+    [SessionSummary.node, summary],
+    [LSP.node, lsp],
+    [MCP.node, makeMcp()],
+    [RuntimeFlags.node, runtimeFlags],
+    [LLM.node, advisorLLM("restart")],
+  ]),
+)
+
+const advisorConfig = {
+  ...cfg,
+  enabled_providers: ["test"],
+  small_model: "test/test-model",
+  agent: { build: { advisor: { model: "claude-opus-4-6", maxUses: 1 }, steps: 8 } },
+  provider: {
+    test: {
+      ...cfg.provider.test,
+      npm: "@ai-sdk/anthropic",
+      api: "https://api.anthropic.com/v1",
+      options: { apiKey: "fixture", baseURL: "https://api.anthropic.com/v1" },
+    },
+  },
+}
+
+advisorPrompt.instance(
+  "continues a paused advisor without inserting another user prompt",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const prompt = yield* SessionPrompt.Service
+      const session = yield* sessions.create({})
+      const result = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "Consult advisor" }],
+      })
+      expect(result.parts.some((part) => part.type === "text" && part.text === "Continued.")).toBe(true)
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      expect(messages.filter((message) => message.info.role === "user")).toHaveLength(1)
+      expect(
+        messages.flatMap((message) => message.parts).find((part) => part.type === "tool" && part.callID === "srv_loop"),
+      ).toMatchObject({ state: { status: "completed" } })
+    }),
+  { config: advisorConfig },
+  30000,
+)
+
+pausedAdvisorPrompt.instance(
+  "bounds advisor pause resumptions and abandons unfinished calls",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const prompt = yield* SessionPrompt.Service
+      const session = yield* sessions.create({})
+      const result = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "Consult advisor" }],
+      })
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      expect(messages.filter((message) => message.info.role === "assistant")).toHaveLength(4)
+      expect(result.info).toMatchObject({
+        error: { data: { message: expect.stringContaining("Advisor continuation limit") } },
+      })
+      expect(
+        messages.flatMap((message) => message.parts).find((part) => part.type === "tool" && part.callID === "srv_loop"),
+      ).toMatchObject({ state: { status: "error" }, metadata: { opencodeAdvisor: { state: "abandoned" } } })
+    }),
+  { config: advisorConfig },
+  30000,
+)
+
+interruptedAdvisorPrompt.instance(
+  "cancels pending advice and permits a later prompt without resuming it",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const prompt = yield* SessionPrompt.Service
+      const provider = yield* ProviderSvc.Service
+      const session = yield* sessions.create({})
+      const running = yield* prompt
+        .prompt({
+          sessionID: session.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "Consult advisor" }],
+        })
+        .pipe(Effect.forkChild)
+      yield* pollWithTimeout(
+        sessions
+          .messages({ sessionID: session.id })
+          .pipe(
+            Effect.map((messages) =>
+              messages
+                .flatMap((message) => message.parts)
+                .some((part) => part.type === "tool" && part.callID === "srv_loop" && part.state.status === "running")
+                ? true
+                : undefined,
+            ),
+          ),
+        "Advisor did not start",
+      )
+      yield* prompt.cancel(session.id)
+      yield* Fiber.await(running)
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      const model = yield* provider.getModel(ref.providerID, ref.modelID)
+      const replay = yield* MessageV2.toModelMessagesEffect(messages, model)
+      expect(JSON.stringify(replay)).toContain("Advisor consultation interrupted")
+      expect(JSON.stringify(replay)).not.toContain('"toolCallId":"srv_loop"')
+      const followup = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "Continue" }],
+      })
+      expect(followup.parts.some((part) => part.type === "text" && part.text === "Continued.")).toBe(true)
+    }),
+  { config: advisorConfig },
+  30000,
+)
+
+restartedAdvisorPrompt.instance(
+  "abandons a consultation left pending by a previous process before sending anything",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const prompt = yield* SessionPrompt.Service
+      const provider = yield* ProviderSvc.Service
+      const session = yield* sessions.create({})
+      // Simulate a process that died mid-consultation: pending call, ledger recorded, no completion.
+      const { assistant } = yield* seed(session.id, { finish: "stop" })
+      const model = yield* provider.getModel(ref.providerID, ref.modelID)
+      const origin = {
+        version: 1,
+        providerID: model.providerID,
+        executorModelID: model.api.id,
+        endpoint: model.api.url,
+        model: "claude-opus-4-6",
+        maxUses: 1,
+      }
+      const callPart = PartID.ascending()
+      yield* sessions.updatePart({
+        id: callPart,
+        messageID: assistant.id,
+        sessionID: session.id,
+        type: "tool",
+        tool: "advisor",
+        callID: "srv_stale",
+        metadata: { providerExecuted: true, opencodeAdvisor: { ...origin, state: "pending" } },
+        state: { status: "running", input: {}, time: { start: Date.now() } },
+      })
+      yield* sessions.updatePart({
+        id: PartID.ascending(),
+        messageID: assistant.id,
+        sessionID: session.id,
+        type: "step-finish",
+        reason: "stop",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        metadata: {
+          opencodeAdvisor: {
+            ...origin,
+            interrupted: false,
+            rawFinishReason: "pause_turn",
+            entries: [{ type: "part", partID: callPart }],
+          },
+        },
+      })
+
+      const result = yield* prompt.prompt({
+        sessionID: session.id,
+        agent: "build",
+        model: ref,
+        parts: [{ type: "text", text: "Continue" }],
+      })
+      expect(result.parts.some((part) => part.type === "text" && part.text === "Continued.")).toBe(true)
+      const stale = (yield* sessions.messages({ sessionID: session.id }))
+        .flatMap((message) => message.parts)
+        .find((part) => part.type === "tool" && part.callID === "srv_stale")
+      expect(stale).toMatchObject({ state: { status: "error" }, metadata: { opencodeAdvisor: { state: "abandoned" } } })
+    }),
+  { config: advisorConfig },
+  30000,
+)
+
+advisorPrompt.instance(
+  "reports an incomplete advisor config with the agent name instead of crashing the run",
+  () =>
+    Effect.gen(function* () {
+      const sessions = yield* Session.Service
+      const prompt = yield* SessionPrompt.Service
+      const session = yield* sessions.create({})
+      const exit = yield* prompt
+        .prompt({
+          sessionID: session.id,
+          agent: "build",
+          model: ref,
+          parts: [{ type: "text", text: "Consult advisor" }],
+        })
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(exit)).toBe(true)
+      if (Exit.isFailure(exit)) {
+        const err = Cause.squash(exit.cause)
+        expect(NamedError.Unknown.isInstance(err)).toBe(true)
+        if (NamedError.Unknown.isInstance(err)) {
+          expect(err.data.message).toContain('Advisor config for agent "build" is incomplete')
+          expect(err.data.message).toContain("maxUses")
+        }
+      }
+      // The failure happened before an assistant message was created; nothing is left dangling.
+      const messages = yield* sessions.messages({ sessionID: session.id })
+      expect(messages.filter((message) => message.info.role === "assistant")).toHaveLength(0)
+    }),
+  {
+    config: {
+      ...advisorConfig,
+      agent: { build: { advisor: { model: "claude-opus-4-6" }, steps: 8 } },
+    },
+  },
+  30000,
+)
 
 function providerCfg(url: string) {
   return {

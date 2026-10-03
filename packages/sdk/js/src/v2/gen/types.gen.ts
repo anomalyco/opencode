@@ -558,6 +558,9 @@ export type StepFinishPart = {
   messageID: string
   type: "step-finish"
   reason: string
+  metadata?: {
+    [key: string]: unknown
+  }
   snapshot?: string
   cost: number
   tokens: {
@@ -1685,6 +1688,7 @@ export type PermissionConfig =
 
 export type AgentConfig = {
   model?: string
+  advisor?: AdvisorInput
   variant?: string
   temperature?: number
   top_p?: number
@@ -1709,6 +1713,7 @@ export type AgentConfig = {
   [key: string]:
     | unknown
     | string
+    | AdvisorInput
     | number
     | {
         [key: string]: boolean
@@ -2352,6 +2357,7 @@ export type Command = {
 
 export type Agent = {
   name: string
+  advisor?: AdvisorInput
   description?: string
   mode: "subagent" | "primary" | "all"
   native?: boolean
@@ -3839,6 +3845,13 @@ export type ConfigV2ReferenceLocal = {
   hidden?: boolean
 }
 
+export type AdvisorInput =
+  | false
+  | {
+      model?: string
+      maxUses?: number
+    }
+
 export type PolicyEffect = "allow" | "deny"
 
 export type ConfigV2ExperimentalPolicy = {
@@ -3895,6 +3908,7 @@ export type PermissionV2Ruleset = Array<PermissionV2Rule>
 export type AgentV2Info = {
   id: string
   model?: ModelRef
+  advisor?: AdvisorInput
   request: ProviderRequest
   system?: string
   description?: string
