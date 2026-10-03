@@ -8,6 +8,7 @@ import { parseDesktopNativeBundle, type DesktopNativeBundle } from "@opencode-ai
 
 import type { FatalRendererError, ServerReadyData, TitlebarTheme } from "../preload/types"
 import { runDesktopMenuAction } from "./desktop-menu-actions"
+import { isPowerShellApp, openPowerShellWindow } from "./windows-terminal"
 import { setForceFocus } from "./debug"
 import { assertAttachmentBudget, createPickedFileAuthorizations } from "./attachment-picker"
 import { getStore, removeStoreFileIfEmpty } from "./store"
@@ -218,6 +219,10 @@ export function registerIpcHandlers(deps: Deps) {
 
   ipcMain.handle("open-path", async (_event: IpcMainInvokeEvent, path: string, app?: string) => {
     if (!app) return shell.openPath(path)
+    if (process.platform === "win32" && isPowerShellApp(app)) {
+      await openPowerShellWindow(app, path)
+      return
+    }
     await new Promise<void>((resolve, reject) => {
       const [cmd, args] =
         process.platform === "darwin" ? (["open", ["-a", app, path]] as const) : ([app, [path]] as const)
