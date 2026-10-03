@@ -52,7 +52,10 @@ export const UpdatePayload = Schema.Struct({
   permission: Schema.optional(PermissionV1.Ruleset),
   time: Schema.optional(
     Schema.Struct({
-      archived: Schema.optional(Session.ArchivedTimestamp),
+      // null clears the archive timestamp (unarchive); a number sets it.
+      // Note: the OpenAPI emitter renders optional+nullable as plain number,
+      // so SDK callers pass null through a documented cast.
+      archived: Schema.optional(Schema.NullOr(Session.ArchivedTimestamp)),
     }),
   ),
 })

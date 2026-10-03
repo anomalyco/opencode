@@ -1,16 +1,27 @@
-import { createEffect, Suspense, type ParentProps } from "solid-js"
+import { createEffect, createMemo, lazy, Show, Suspense, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createMediaQuery } from "@solid-primitives/media"
 import { DebugBar } from "@/components/debug-bar"
 import { TabsInfoPopup } from "@/components/help-button"
 import { Titlebar, type TitlebarUpdate } from "@/components/titlebar"
 import { usePlatform } from "@/context/platform"
+import { useSettings } from "@/context/settings"
 import { setV2Toast, ToastRegion } from "@/utils/toast"
+
+const NavigationSidebar = lazy(() =>
+  import("@/pages/layout/navigation-sidebar").then((mod) => ({ default: mod.NavigationSidebar })),
+)
 
 export default function NewLayout(props: ParentProps) {
   const platform = usePlatform()
+  const settings = useSettings()
+  const mobile = createMediaQuery("(max-width: 767px)")
   const [state, setState] = createStore({ debugTools: true })
 
   createEffect(() => setV2Toast(true))
+
+  // Sidebar navigation mode replaces the titlebar tab strip on desktop widths.
+  const sidebarNavigation = createMemo(() => !mobile() && settings.general.navigationMode() === "sidebar")
 
   const update: TitlebarUpdate = {
     version: () => {
@@ -38,9 +49,16 @@ export default function NewLayout(props: ParentProps) {
             : undefined
         }
       />
-      <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
-        <Suspense>{props.children}</Suspense>
-      </main>
+      <div class="flex-1 min-h-0 min-w-0 flex flex-row items-stretch overflow-hidden">
+        <Show when={sidebarNavigation()}>
+          <Suspense>
+            <NavigationSidebar />
+          </Suspense>
+        </Show>
+        <main class="flex-1 min-h-0 min-w-0 overflow-x-hidden flex flex-col items-start contain-strict">
+          <Suspense>{props.children}</Suspense>
+        </main>
+      </div>
       {import.meta.env.DEV && state.debugTools && <DebugBar inline />}
       <TabsInfoPopup />
       <ToastRegion v2 />

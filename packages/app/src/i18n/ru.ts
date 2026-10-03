@@ -894,6 +894,15 @@ export const dict = {
   "sidebar.project.clearNotifications": "Очистить уведомления",
   "sidebar.empty.title": "Нет открытых проектов",
   "sidebar.empty.description": "Откройте проект, чтобы начать",
+  "sidebar.settled": "Отложенные",
+  "sidebar.settle": "Отложить тред",
+  "sidebar.unsettle": "Вернуть тред",
+  "sidebar.thread.new": "Новый тред",
+  "sidebar.thread.pin": "Закрепить тред",
+  "sidebar.thread.unpin": "Открепить тред",
+  "sidebar.status.working": "В работе",
+  "sidebar.status.done": "Готово",
+  "sidebar.status.attention": "Нужен ввод",
 
   "app.name.desktop": "OpenCode Desktop",
   "settings.section.desktop": "Приложение",
@@ -914,6 +923,12 @@ export const dict = {
 
   "settings.general.row.language.title": "Язык",
   "settings.general.row.language.description": "Изменить язык отображения OpenCode",
+  "settings.general.row.navigation.description": "Вкладки в заголовке или постоянная боковая панель",
+  "settings.general.row.navigation.tabs": "Вкладки",
+  "settings.general.row.navigation.sidebar": "Боковая панель",
+  "settings.general.row.sidebarSessions.title": "Откладывать неактивные треды через",
+  "settings.general.row.sidebarSessions.description": "Неактивные треды переносятся в отложенные. Активные треды остаются видимыми.",
+  "settings.general.row.sidebarSessions.always": "Всегда показывать",
   "settings.general.row.shell.title": "Оболочка терминала",
   "settings.general.row.shell.description":
     "Выберите оболочку для терминала. Совместимые оболочки также используются агентом при вызове инструментов.",

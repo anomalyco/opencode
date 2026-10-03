@@ -22,6 +22,8 @@ export interface TextInputV2Props extends Omit<ComponentProps<"input">, "type"> 
   invalid?: boolean
   /** `base` is 28px tall; `large` is 32px tall. */
   appearance?: "base" | "large"
+  /** Stretch to the parent width instead of the fixed 280px field width. */
+  fluid?: boolean
   type?: ComponentProps<"input">["type"]
 }
 
@@ -40,6 +42,7 @@ export function TextInputV2(props: TextInputV2Props) {
     "numeric",
     "invalid",
     "appearance",
+    "fluid",
     "disabled",
   ])
 
@@ -50,6 +53,7 @@ export function TextInputV2(props: TextInputV2Props) {
       data-invalid={local.invalid ? "" : undefined}
       data-numeric={local.numeric ? "" : undefined}
       data-appearance={local.appearance ?? "base"}
+      data-fluid={local.fluid ? "true" : undefined}
       data-leading-icon={local.leadingIcon ? "" : undefined}
       classList={{
         ...local.classList,

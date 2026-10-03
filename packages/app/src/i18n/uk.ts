@@ -966,6 +966,15 @@ export const dict = {
   "sidebar.project.clearNotifications": "Очистити сповіщення",
   "sidebar.empty.title": "Немає відкритих проєктів",
   "sidebar.empty.description": "Відкрийте проєкт, щоб почати",
+  "sidebar.settled": "Відкладені",
+  "sidebar.settle": "Відкласти тред",
+  "sidebar.unsettle": "Повернути тред",
+  "sidebar.thread.new": "Новий тред",
+  "sidebar.thread.pin": "Закріпити тред",
+  "sidebar.thread.unpin": "Відкріпити тред",
+  "sidebar.status.working": "У роботі",
+  "sidebar.status.done": "Готово",
+  "sidebar.status.attention": "Потрібне введення",
 
   "debugBar.ariaLabel": "Діагностика продуктивності розробки",
   "debugBar.na": "н/д",
@@ -1019,6 +1028,12 @@ export const dict = {
 
   "settings.general.row.language.title": "Мова",
   "settings.general.row.language.description": "Змінити мову інтерфейсу OpenCode",
+  "settings.general.row.navigation.description": "Вкладки в заголовку або постійна бічна панель",
+  "settings.general.row.navigation.tabs": "Вкладки",
+  "settings.general.row.navigation.sidebar": "Бічна панель",
+  "settings.general.row.sidebarSessions.title": "Відкладати неактивні треди через",
+  "settings.general.row.sidebarSessions.description": "Неактивні треди переходять у відкладені. Активні треди залишаються видимими.",
+  "settings.general.row.sidebarSessions.always": "Завжди показувати",
   "settings.general.row.shell.title": "Командна оболонка термінала",
   "settings.general.row.shell.description":
     "Виберіть оболонку для термінала. Сумісні оболонки також використовуються для викликів інструментів агента.",
