@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 import * as path from "path"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import * as Tool from "./tool"
 import { LSP } from "@/lsp/lsp"
 import { createTwoFilesPatch } from "diff"
@@ -13,7 +13,8 @@ import { FSUtil } from "@opencode-ai/core/fs-util"
 import { InstanceState } from "@/effect/instance-state"
 import { trimDiff } from "./edit"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import * as Bom from "@/util/bom"
+import { Config } from "@/config/config"
+import { Encoding } from "@/util/encoding"
 
 const MAX_PROJECT_DIAGNOSTICS_FILES = 5
 
@@ -38,15 +39,22 @@ export const WriteTool = Tool.define(
       execute: (params: { content: string; filePath: string }, ctx: Tool.Context) =>
         Effect.gen(function* () {
           const instance = yield* InstanceState.context
+          const configSvc = yield* Effect.serviceOption(Config.Service)
+          const config = Option.isSome(configSvc)
+            ? yield* configSvc.value.get().pipe(Effect.catch(() => Effect.succeed(undefined)))
+            : undefined
+          const fallback = config?.file_encoding ?? "utf-8"
           const filepath = path.isAbsolute(params.filePath)
             ? params.filePath
             : path.join(instance.directory, params.filePath)
           yield* assertExternalDirectoryEffect(ctx, filepath)
 
           const exists = yield* fs.existsSafe(filepath)
-          const source = exists ? yield* Bom.readFile(fs, filepath) : { bom: false, text: "" }
-          const next = Bom.split(params.content)
-          const desiredBom = source.bom || next.bom
+          const source = exists
+            ? yield* Encoding.readFile(fs, filepath, fallback)
+            : { encoding: fallback, bom: false, text: "" }
+          const next = Encoding.split(params.content)
+          const target = { encoding: source.encoding, bom: source.bom || next.bom }
           const contentOld = source.text
           const contentNew = next.text
 
@@ -61,9 +69,9 @@ export const WriteTool = Tool.define(
             },
           })
 
-          yield* fs.writeWithDirs(filepath, Bom.join(contentNew, desiredBom))
+          yield* Encoding.writeFile(fs, filepath, contentNew, target)
           if (yield* format.file(filepath)) {
-            yield* Bom.syncFile(fs, filepath, desiredBom)
+            yield* Encoding.syncFile(fs, filepath, target)
           }
           yield* events.publish(FileSystem.Event.Edited, { file: filepath })
           yield* events.publish(Watcher.Event.Updated, {

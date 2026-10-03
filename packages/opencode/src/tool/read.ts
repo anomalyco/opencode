@@ -9,6 +9,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { Config } from "@/config/config"
+import { Encoding } from "@/util/encoding"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -134,47 +136,63 @@ export const ReadTool = Tool.define<
       )
     })
 
-    const lines = Effect.fn("ReadTool.lines")(function* (filepath: string, opts: { limit: number; offset: number }) {
+    const lines = Effect.fn("ReadTool.lines")(function* (
+      filepath: string,
+      opts: { limit: number; offset: number },
+      encoding = "utf-8",
+    ) {
       const start = opts.offset - 1
       const raw: string[] = []
       const flags = { bytes: 0, count: 0, cut: false, more: false, done: false }
 
-      // Note: prefer manual TextDecoder over Stream.decodeText — when the source stream
-      // ends without flushing, decodeText drops the final unterminated line. We also
-      // avoid Stream.runForEachWhile (it currently swallows the final unterminated
-      // line of the upstream splitLines pipeline) and use a tagged error to stop the
-      // upstream file stream as soon as the byte cap is reached.
-      const decoder = new TextDecoder("utf-8")
-      yield* fs.stream(filepath).pipe(
-        Stream.map((bytes) => decoder.decode(bytes, { stream: true })),
-        Stream.splitLines,
-        Stream.runForEach((text) =>
-          Effect.gen(function* () {
-            if (flags.done) return yield* new ReadStop()
-            flags.count += 1
-            if (flags.count <= start) return
+      const consume = (text: string) =>
+        Effect.gen(function* () {
+          if (flags.done) return yield* new ReadStop()
+          flags.count += 1
+          if (flags.count <= start) return
 
-            if (raw.length >= opts.limit) {
-              flags.more = true
-              return
-            }
-
-            const line = text.length > MAX_LINE_LENGTH ? text.substring(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : text
-            const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
-            if (flags.bytes + size <= MAX_BYTES) {
-              raw.push(line)
-              flags.bytes += size
-              return
-            }
-
-            flags.cut = true
+          if (raw.length >= opts.limit) {
             flags.more = true
-            flags.done = true
-            return yield* new ReadStop()
-          }),
-        ),
-        Effect.catchTag("ReadStop", () => Effect.void),
-      )
+            return
+          }
+
+          const line = text.length > MAX_LINE_LENGTH ? text.substring(0, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX : text
+          const size = Buffer.byteLength(line, "utf-8") + (raw.length > 0 ? 1 : 0)
+          if (flags.bytes + size <= MAX_BYTES) {
+            raw.push(line)
+            flags.bytes += size
+            return
+          }
+
+          flags.cut = true
+          flags.more = true
+          flags.done = true
+          return yield* new ReadStop()
+        })
+
+      if (encoding === "utf-8") {
+        // Note: prefer manual TextDecoder over Stream.decodeText — when the source stream
+        // ends without flushing, decodeText drops the final unterminated line. We also
+        // avoid Stream.runForEachWhile (it currently swallows the final unterminated
+        // line of the upstream splitLines pipeline) and use a tagged error to stop the
+        // upstream file stream as soon as the byte cap is reached.
+        const decoder = new TextDecoder("utf-8")
+        yield* fs.stream(filepath).pipe(
+          Stream.map((bytes) => decoder.decode(bytes, { stream: true })),
+          Stream.splitLines,
+          Stream.runForEach(consume),
+          Effect.catchTag("ReadStop", () => Effect.void),
+        )
+        return { raw, count: flags.count, cut: flags.cut, more: flags.more, offset: opts.offset }
+      }
+
+      const source = yield* Encoding.readFile(fs, filepath, encoding)
+      const all = source.text.split(/\r\n|\r|\n/)
+      if (all[all.length - 1] === "") all.pop()
+      for (const text of all) {
+        yield* consume(text)
+        if (flags.done) break
+      }
 
       return { raw, count: flags.count, cut: flags.cut, more: flags.more, offset: opts.offset }
     })
@@ -231,6 +249,11 @@ export const ReadTool = Tool.define<
       ctx: Tool.Context<Metadata>,
     ) {
       const instance = yield* InstanceState.context
+      const configSvc = yield* Effect.serviceOption(Config.Service)
+      const config = Option.isSome(configSvc)
+        ? yield* configSvc.value.get().pipe(Effect.catch(() => Effect.succeed(undefined)))
+        : undefined
+      const fallback = config?.file_encoding ?? "utf-8"
       let filepath = params.filePath
       if (!path.isAbsolute(filepath)) {
         filepath = path.resolve(instance.directory, filepath)
@@ -324,11 +347,12 @@ export const ReadTool = Tool.define<
         }
       }
 
-      if (isBinaryFile(filepath, sample)) {
+      const detected = Encoding.detect(sample, fallback)
+      if (detected.encoding !== "utf-16le" && detected.encoding !== "utf-16be" && isBinaryFile(filepath, sample)) {
         return yield* Effect.fail(new Error(`Cannot read binary file: ${filepath}`))
       }
 
-      const file = yield* lines(filepath, { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset || 1 })
+      const file = yield* lines(filepath, { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset || 1 }, detected.encoding)
       if (file.count < file.offset && !(file.count === 0 && file.offset === 1)) {
         return yield* Effect.fail(
           new Error(`Offset ${file.offset} is out of range for this file (${file.count} lines)`),

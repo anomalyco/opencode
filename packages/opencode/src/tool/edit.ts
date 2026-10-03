@@ -4,7 +4,7 @@
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
 import * as path from "path"
-import { Effect, Schema, Semaphore } from "effect"
+import { Effect, Option, Schema, Semaphore } from "effect"
 import * as Tool from "./tool"
 import { LSP } from "@/lsp/lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -17,7 +17,8 @@ import { InstanceState } from "@/effect/instance-state"
 import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { FSUtil } from "@opencode-ai/core/fs-util"
-import * as Bom from "@/util/bom"
+import { Config } from "@/config/config"
+import { Encoding } from "@/util/encoding"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -77,6 +78,11 @@ export const EditTool = Tool.define(
           }
 
           const instance = yield* InstanceState.context
+          const configSvc = yield* Effect.serviceOption(Config.Service)
+          const config = Option.isSome(configSvc)
+            ? yield* configSvc.value.get().pipe(Effect.catch(() => Effect.succeed(undefined)))
+            : undefined
+          const fallback = config?.file_encoding ?? "utf-8"
           const filePath = path.isAbsolute(params.filePath)
             ? params.filePath
             : path.join(instance.directory, params.filePath)
@@ -94,8 +100,8 @@ export const EditTool = Tool.define(
                     "oldString cannot be empty when editing an existing file. Provide the exact text to replace, or use write for an intentional full-file replacement.",
                   )
                 }
-                const next = Bom.split(params.newString)
-                const desiredBom = next.bom
+                const next = Encoding.split(params.newString)
+                const target = { encoding: fallback, bom: next.bom }
                 contentOld = ""
                 contentNew = next.text
                 diff = trimDiff(createTwoFilesPatch(filePath, filePath, contentOld, contentNew))
@@ -108,9 +114,9 @@ export const EditTool = Tool.define(
                     diff,
                   },
                 })
-                yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
+                yield* Encoding.writeFile(afs, filePath, contentNew, target)
                 if (yield* format.file(filePath)) {
-                  contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
+                  contentNew = yield* Encoding.syncFile(afs, filePath, target)
                 }
                 yield* events.publish(FileSystem.Event.Edited, { file: filePath })
                 yield* events.publish(Watcher.Event.Updated, {
@@ -123,15 +129,15 @@ export const EditTool = Tool.define(
               const info = yield* afs.stat(filePath).pipe(Effect.catch(() => Effect.succeed(undefined)))
               if (!info) throw new Error(`File ${filePath} not found`)
               if (info.type === "Directory") throw new Error(`Path is a directory, not a file: ${filePath}`)
-              const source = yield* Bom.readFile(afs, filePath)
+              const source = yield* Encoding.readFile(afs, filePath, fallback)
               contentOld = source.text
 
               const ending = detectLineEnding(contentOld)
               const old = convertToLineEnding(normalizeLineEndings(params.oldString), ending)
               const replacement = convertToLineEnding(normalizeLineEndings(params.newString), ending)
 
-              const next = Bom.split(replace(contentOld, old, replacement, params.replaceAll))
-              const desiredBom = source.bom || next.bom
+              const next = Encoding.split(replace(contentOld, old, replacement, params.replaceAll))
+              const target = { encoding: source.encoding, bom: source.bom || next.bom }
               contentNew = next.text
 
               diff = trimDiff(
@@ -152,9 +158,9 @@ export const EditTool = Tool.define(
                 },
               })
 
-              yield* afs.writeWithDirs(filePath, Bom.join(contentNew, desiredBom))
+              yield* Encoding.writeFile(afs, filePath, contentNew, target)
               if (yield* format.file(filePath)) {
-                contentNew = yield* Bom.syncFile(afs, filePath, desiredBom)
+                contentNew = yield* Encoding.syncFile(afs, filePath, target)
               }
               yield* events.publish(FileSystem.Event.Edited, { file: filePath })
               yield* events.publish(Watcher.Event.Updated, {
