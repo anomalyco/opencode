@@ -812,6 +812,53 @@ describe("session.compaction.prune", () => {
 })
 
 describe("session.compaction.process", () => {
+  itCompaction.instance(
+    "finishes disabled compaction with an actionable error",
+    Effect.gen(function* () {
+      const ssn = yield* SessionNs.Service
+      const session = yield* ssn.create({})
+      yield* createUserMessage(session.id, "hello")
+      yield* createSummaryCompaction(session.id)
+      const msgs = yield* ssn.messages({ sessionID: session.id })
+      const parent = msgs.at(-1)!
+
+      const result = yield* SessionCompaction.use.process({
+        parentID: parent.info.id,
+        messages: msgs,
+        sessionID: session.id,
+        auto: true,
+      })
+
+      const all = yield* ssn.messages({ sessionID: session.id })
+      const summary = all.at(-1)
+      expect(result).toBe("stop")
+      expect(all).toHaveLength(msgs.length + 1)
+      expect(summary?.info).toMatchObject({
+        role: "assistant",
+        summary: true,
+        finish: "error",
+        parentID: parent.info.id,
+        error: {
+          name: "UnknownError",
+          data: { message: 'Agent not found: "compaction". Enable the compaction agent to compact this session.' },
+        },
+      })
+      expect(MessageV2.latest(all).tasks).toEqual([])
+    }).pipe(
+      withCompaction({
+        config: Layer.succeed(
+          Config.Service,
+          TestConfig.make({
+            get: () =>
+              Effect.succeed(
+                Schema.decodeUnknownSync(ConfigV1.Info)({ agent: { compaction: { disable: true } } }) as ConfigV1.Info,
+              ),
+          }),
+        ),
+      }),
+    ),
+  )
+
   it.instance(
     "throws when parent is not a user message",
     Effect.gen(function* () {
