@@ -700,6 +700,190 @@ describe("MessageV2.filterCompacted", () => {
     ),
   )
 
+  it.instance("filterCompactedEffect matches full stream filtering with tail retention", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const old = yield* fill(sessionID, 75, (i: number) => Date.now() - 100_000 + i)
+
+        const u1 = yield* addUser(sessionID, "first")
+        const a1 = yield* addAssistant(sessionID, u1, { finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: a1,
+          type: "text",
+          text: "first reply",
+        })
+
+        const u2 = yield* addUser(sessionID, "second")
+        const a2 = yield* addAssistant(sessionID, u2, { finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: a2,
+          type: "text",
+          text: "second reply",
+        })
+
+        const c1 = yield* addUser(sessionID)
+        yield* addCompactionPart(sessionID, c1, u2)
+        const s1 = yield* addAssistant(sessionID, c1, { summary: true, finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: s1,
+          type: "text",
+          text: "summary",
+        })
+
+        const u3 = yield* addUser(sessionID, "third")
+        const a3 = yield* addAssistant(sessionID, u3, { finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: a3,
+          type: "text",
+          text: "third reply",
+        })
+
+        const full = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const optimized = yield* MessageV2.filterCompactedEffect(sessionID)
+
+        expect(optimized.map((item) => item.info.id)).toEqual(full.map((item) => item.info.id))
+        expect(optimized.map((item) => item.info.id)).toEqual([c1, s1, u2, a2, u3, a3])
+        expect(optimized.some((item) => old.includes(item.info.id))).toBe(false)
+      }),
+    ),
+  )
+
+  it.instance("filterCompactedEffect keeps retained tail across page boundaries", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const old = yield* fill(sessionID, 10, (i: number) => Date.now() - 200_000 + i)
+        const tail = yield* fill(sessionID, 60, (i: number) => Date.now() - 100_000 + i)
+        const tailStart = tail[0]
+        if (!tailStart) throw new Error("expected retained tail")
+        const tailEnd = tail[tail.length - 1]
+        if (!tailEnd) throw new Error("expected retained tail end")
+
+        const c1 = yield* addUser(sessionID)
+        yield* addCompactionPart(sessionID, c1, tailStart)
+        const s1 = yield* addAssistant(sessionID, c1, { summary: true, finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: s1,
+          type: "text",
+          text: "summary",
+        })
+
+        const u1 = yield* addUser(sessionID, "next")
+        const a1 = yield* addAssistant(sessionID, u1, { finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: a1,
+          type: "text",
+          text: "next reply",
+        })
+
+        const full = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const optimized = yield* MessageV2.filterCompactedEffect(sessionID)
+        const ids = optimized.map((item) => item.info.id)
+
+        expect(ids).toEqual(full.map((item) => item.info.id))
+        expect(ids.slice(0, 2)).toEqual([c1, s1])
+        expect(ids).toContain(tailStart)
+        expect(ids).toContain(tailEnd)
+        expect(ids.slice(-2)).toEqual([u1, a1])
+        expect(ids.some((item) => old.includes(item))).toBe(false)
+      }),
+    ),
+  )
+
+  it.instance("filterCompactedEffect stops at completed compaction without retained tail", () =>
+    withSession(({ session, sessionID }) =>
+      Effect.gen(function* () {
+        const old = yield* fill(sessionID, 75, (i: number) => Date.now() - 100_000 + i)
+
+        const c1 = yield* addUser(sessionID)
+        yield* addCompactionPart(sessionID, c1)
+        const s1 = yield* addAssistant(sessionID, c1, { summary: true, finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: s1,
+          type: "text",
+          text: "summary",
+        })
+
+        const u1 = yield* addUser(sessionID, "next")
+        const a1 = yield* addAssistant(sessionID, u1, { finish: "end_turn" })
+        yield* session.updatePart({
+          id: PartID.ascending(),
+          sessionID,
+          messageID: a1,
+          type: "text",
+          text: "next reply",
+        })
+
+        const full = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const optimized = yield* MessageV2.filterCompactedEffect(sessionID)
+
+        expect(optimized.map((item) => item.info.id)).toEqual(full.map((item) => item.info.id))
+        expect(optimized.map((item) => item.info.id)).toEqual([c1, s1, u1, a1])
+        expect(optimized.some((item) => old.includes(item.info.id))).toBe(false)
+      }),
+    ),
+  )
+
+  it.instance("filterCompactedEffect keeps full history without compaction", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        yield* fill(sessionID, 75, (i: number) => Date.now() - 100_000 + i)
+
+        const full = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const optimized = yield* MessageV2.filterCompactedEffect(sessionID)
+
+        expect(optimized.map((item) => item.info.id)).toEqual(full.map((item) => item.info.id))
+        expect(optimized).toHaveLength(full.length)
+      }),
+    ),
+  )
+
+  it.instance("filterCompactedEffect keeps full history without completed compaction", () =>
+    withSession(({ sessionID }) =>
+      Effect.gen(function* () {
+        const old = yield* fill(sessionID, 75, (i: number) => Date.now() - 100_000 + i)
+
+        const missing = yield* addUser(sessionID)
+        yield* addCompactionPart(sessionID, missing)
+
+        const errorParent = yield* addUser(sessionID)
+        yield* addCompactionPart(sessionID, errorParent)
+        const error = new SessionV1.APIError({
+          message: "boom",
+          isRetryable: true,
+        }).toObject() as SessionV1.Assistant["error"]
+        yield* addAssistant(sessionID, errorParent, { summary: true, finish: "end_turn", error })
+
+        const unfinished = yield* addUser(sessionID)
+        yield* addCompactionPart(sessionID, unfinished)
+        yield* addAssistant(sessionID, unfinished, { summary: true })
+
+        const full = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const optimized = yield* MessageV2.filterCompactedEffect(sessionID)
+        const ids = optimized.map((item) => item.info.id)
+
+        expect(ids).toEqual(full.map((item) => item.info.id))
+        expect(ids).toContain(missing)
+        expect(ids).toContain(errorParent)
+        expect(ids).toContain(unfinished)
+        expect(ids).toContain(old[0])
+      }),
+    ),
+  )
+
   it.instance("retains original tail when compaction stores tail_start_id", () =>
     withSession(({ session, sessionID }) =>
       Effect.gen(function* () {
@@ -745,8 +929,10 @@ describe("MessageV2.filterCompacted", () => {
         })
 
         const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const optimized = yield* MessageV2.filterCompactedEffect(sessionID)
 
         expect(result.map((item) => item.info.id)).toEqual([c1, s1, u2, a2, u3, a3])
+        expect(optimized.map((item) => item.info.id)).toEqual(result.map((item) => item.info.id))
       }),
     ),
   )
@@ -802,7 +988,9 @@ describe("MessageV2.filterCompacted", () => {
 
       const forked = yield* session.fork({ sessionID: created.id })
       const childFiltered = MessageV2.filterCompacted(yield* MessageV2.stream(forked.id))
+      const childOptimized = yield* MessageV2.filterCompactedEffect(forked.id)
       expect(childFiltered).toHaveLength(parentFiltered.length)
+      expect(childOptimized.map((item) => item.info.id)).toEqual(childFiltered.map((item) => item.info.id))
 
       const tailPart = childFiltered.flatMap((m) => m.parts).find((p) => p.type === "compaction")
       expect(tailPart?.type).toBe("compaction")
@@ -868,8 +1056,10 @@ describe("MessageV2.filterCompacted", () => {
         })
 
         const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const optimized = yield* MessageV2.filterCompactedEffect(sessionID)
 
         expect(result.map((item) => item.info.id)).toEqual([c1, s1, a3, u3, a4])
+        expect(optimized.map((item) => item.info.id)).toEqual(result.map((item) => item.info.id))
       }),
     ),
   )
@@ -940,8 +1130,10 @@ describe("MessageV2.filterCompacted", () => {
         })
 
         const result = MessageV2.filterCompacted(yield* MessageV2.stream(sessionID))
+        const optimized = yield* MessageV2.filterCompactedEffect(sessionID)
 
         expect(result.map((item) => item.info.id)).toEqual([c2, s2, u3, a3, u4, a4])
+        expect(optimized.map((item) => item.info.id)).toEqual(result.map((item) => item.info.id))
       }),
     ),
   )
