@@ -2,6 +2,8 @@
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
+import path from "node:path"
+import os from "node:os"
 import { resolve, ConfigProvider, Info, useConfig, type Interface } from "../src/config"
 import { settings } from "../src/component/dialog-config"
 import { TuiKeybind } from "../src/config/keybind"
@@ -319,6 +321,25 @@ test("provides config and its host interface", async () => {
     })
     await app.renderOnce()
     expect(app.captureCharFrame()).toContain("none ctrl+o")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("keeps the TUI usable when the CLI config directory cannot be watched", async () => {
+  const service: Interface = {
+    path: path.join(os.tmpdir(), `missing-opencode-config-${crypto.randomUUID()}`, "cli.json"),
+    get: async () => ({}),
+    update: async () => ({}),
+  }
+  const app = await testRender(() => (
+    <ConfigProvider config={resolve({}, { terminalSuspend: true })} service={service}>
+      <text>ready</text>
+    </ConfigProvider>
+  ))
+  try {
+    await app.renderOnce()
+    expect(app.captureCharFrame()).toContain("ready")
   } finally {
     app.renderer.destroy()
   }
