@@ -7,6 +7,7 @@ import { Skill } from "../../src/skill"
 import { Permission } from "../../src/permission"
 import type { Provider } from "../../src/provider/provider"
 import { SystemPrompt } from "../../src/session/system"
+import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { MCP } from "../../src/mcp"
 import { testEffect } from "../lib/effect"
 
@@ -108,6 +109,25 @@ describe("session.system", () => {
       expect(prompt).toContain("# Prompt and Tool Use")
     }
   })
+
+  it.instance("environment exposes version, provider and model", () =>
+    Effect.gen(function* () {
+      const prompt = yield* SystemPrompt.Service
+      const model = {
+        name: "Test Model",
+        providerID: "test-provider",
+        api: { id: "test-model-id" },
+      } as unknown as Provider.Model
+      const parts = yield* prompt.environment(model)
+      const block = parts.join("\n")
+
+      expect(block).toContain(`OpenCode version: ${InstallationVersion}`)
+      expect(block).toContain("Provider: test-provider")
+      expect(block).toContain("Model: Test Model (test-model-id)")
+      expect(block).toContain("You are powered by the model named Test Model.")
+      expect(block).toContain("The exact model ID is test-provider/test-model-id")
+    }),
+  )
 
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {
