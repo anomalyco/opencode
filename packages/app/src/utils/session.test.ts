@@ -85,6 +85,22 @@ describe("listAllSessions", () => {
     expect(result.map((session) => session.id)).toEqual(["session-1"])
     expect(cursors).toEqual([undefined, "terminal"])
   })
+
+  test("rejects a repeated pagination cursor", async () => {
+    const cursors: Array<string | undefined> = []
+    const api = {
+      list: async (query = {}) => {
+        cursors.push(query.cursor)
+        if (cursors.length > 2) throw new Error("requested the repeated cursor again")
+        return { data: [sessionInfo(`session-${cursors.length}`)], cursor: { next: "repeat" } }
+      },
+    } satisfies Pick<SessionApi, "list">
+
+    expect(listAllSessions(api, { directory: "/repo" })).rejects.toThrow(
+      "Session list returned duplicate cursor: repeat",
+    )
+    expect(cursors).toEqual([undefined, "repeat"])
+  })
 })
 
 function sessionInfo(id: string, archived = false) {
