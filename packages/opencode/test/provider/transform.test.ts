@@ -2577,6 +2577,21 @@ describe("ProviderTransform.message - empty image handling", () => {
     expect(result[0].content[1]).toEqual({ type: "image", image: `data:image/png;base64,${validBase64}` })
   })
 
+  test("should keep images when custom-provider input capabilities use modalities", () => {
+    const image = { type: "image" as const, image: "data:image/png;base64,abcd" }
+    const model = {
+      ...mockModel,
+      capabilities: {
+        ...mockModel.capabilities,
+        input: ["text", "image"],
+      },
+    } as unknown as Parameters<typeof ProviderTransform.message>[1]
+
+    const result = ProviderTransform.message([{ role: "user", content: [image] }], model, {})
+
+    expect(result[0].content[0]).toEqual(image)
+  })
+
   test("should handle mixed valid and empty images", () => {
     const validBase64 =
       "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
