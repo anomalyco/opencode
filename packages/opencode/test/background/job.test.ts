@@ -1,8 +1,10 @@
-import { describe, expect } from "bun:test"
+import { afterEach, describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Deferred, Effect } from "effect"
+import { Deferred, Effect, Scope, Exit } from "effect"
 import { BackgroundJob } from "@/background/job"
-import { testEffect } from "../lib/effect"
+import { BackgroundJob as CoreBackgroundJob } from "@opencode-ai/core/background-job"
+import { testEffect, awaitWithTimeout } from "../lib/effect"
+import { disposeAllInstances } from "../fixture/fixture"
 
 const it = testEffect(LayerNode.compile(BackgroundJob.node))
 
@@ -239,6 +241,34 @@ describe("background.job", () => {
       if (job.metadata) job.metadata.value = "changed"
 
       expect((yield* jobs.get(job.id))?.metadata?.value).toBe("initial")
+    }),
+  )
+
+  it.live("scope close resolves pending done deferreds", () =>
+    Effect.gen(function* () {
+      const scope = yield* Scope.make()
+      const jobs = yield* CoreBackgroundJob.make.pipe(Effect.provideService(Scope.Scope, scope))
+
+      const waiterDone = yield* Deferred.make<boolean>()
+
+      const job = yield* jobs.start({ type: "test", run: Effect.never })
+      expect(job.status).toBe("running")
+
+      yield* jobs
+        .wait({ id: job.id })
+        .pipe(
+          Effect.flatMap((result) => Deferred.succeed(waiterDone, result.info?.status === "cancelled")),
+          Effect.forkDetach,
+        )
+      yield* Effect.yieldNow
+
+      yield* Scope.close(scope, Exit.void)
+
+      const resolved = yield* awaitWithTimeout(
+        Deferred.await(waiterDone),
+        "waiter should resolve after scope close",
+      )
+      expect(resolved).toBe(true)
     }),
   )
 })
