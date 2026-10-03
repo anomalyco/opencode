@@ -35,6 +35,7 @@ import {
   onCleanup,
   type ParentProps,
   Show,
+  Suspense,
 } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -65,11 +66,17 @@ import { useCheckServerHealth } from "./utils/server-health"
 import { legacySessionHref, legacySessionServer, requireServerKey, sessionHref } from "./utils/session-route"
 import { createSessionLineage } from "@/pages/session/session-lineage"
 
-import { SessionPage, SessionRouteErrorBoundary, TargetSessionRouteContent } from "@/pages/session"
 import { NewHome } from "@/pages/home"
 import { LegacyHome } from "@/pages/home/legacy-home"
 
 const NewSession = lazy(() => import("@/pages/new-session"))
+const SessionPage = lazy(() => import("@/pages/session").then((module) => ({ default: module.SessionPage })))
+const TargetSessionRouteContent = lazy(() =>
+  import("@/pages/session").then((module) => ({ default: module.TargetSessionRouteContent })),
+)
+const SessionRouteErrorBoundary = lazy(() =>
+  import("@/pages/session").then((module) => ({ default: module.SessionRouteErrorBoundary })),
+)
 
 const SessionRoute = () => {
   const settings = useSettings()
@@ -101,9 +108,11 @@ const SessionRoute = () => {
   })
 
   return (
-    <SessionRouteErrorBoundary sessionID={params.id}>
-      <SessionPage />
-    </SessionRouteErrorBoundary>
+    <Suspense>
+      <SessionRouteErrorBoundary sessionID={params.id}>
+        <SessionPage />
+      </SessionRouteErrorBoundary>
+    </Suspense>
   )
 }
 
@@ -129,7 +138,9 @@ function TargetServerRoute(props: ParentProps) {
 
 const TargetSessionRoute = () => (
   <TargetServerRoute>
-    <TargetSessionRouteContent />
+    <Suspense>
+      <TargetSessionRouteContent />
+    </Suspense>
   </TargetServerRoute>
 )
 
@@ -137,9 +148,11 @@ function LegacyTargetSessionRoute() {
   const params = useParams<{ serverKey: string; id: string }>()
   return (
     <TargetServerRoute>
-      <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
-        <LegacyTargetSessionRedirect />
-      </SessionRouteErrorBoundary>
+      <Suspense>
+        <SessionRouteErrorBoundary sessionID={params.id} serverKey={requireServerKey(params.serverKey)}>
+          <LegacyTargetSessionRedirect />
+        </SessionRouteErrorBoundary>
+      </Suspense>
     </TargetServerRoute>
   )
 }
