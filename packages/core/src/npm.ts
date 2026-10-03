@@ -4,7 +4,7 @@ import path from "path"
 import { createRequire } from "module"
 import { pathToFileURL } from "url"
 import npa from "npm-package-arg"
-import { Effect, Schema, Context, Layer, Option, FileSystem } from "effect"
+import { Cache, Duration, Effect, Exit, Schema, Context, Layer, Option, FileSystem } from "effect"
 import { NodeFileSystem } from "@effect/platform-node"
 import { FSUtil } from "./fs-util"
 import { Global } from "./global"
@@ -43,6 +43,15 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/Npm") {}
 
 const illegal = process.platform === "win32" ? new Set(["<", ">", ":", '"', "|", "?", "*"]) : undefined
+
+function normalize(pkg: string) {
+  try {
+    const spec = npa(pkg)
+    return spec.name && spec.raw === spec.name ? `${spec.name}@latest` : pkg
+  } catch {
+    return pkg
+  }
+}
 
 export function sanitize(pkg: string) {
   if (!illegal) return pkg
@@ -84,7 +93,7 @@ const layer = Layer.effect(
     const global = yield* Global.Service
     const fs = yield* FileSystem.FileSystem
     const flock = yield* EffectFlock.Service
-    const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(pkg))
+    const directory = (pkg: string) => path.join(global.cache, "packages", sanitize(normalize(pkg)))
     const reify = (input: { dir: string; add?: string[] }) =>
       Effect.gen(function* () {
         yield* flock.acquire(`npm-install:${input.dir}`)
@@ -122,19 +131,41 @@ const layer = Layer.effect(
 
     const add = Effect.fn("Npm.add")(function* (pkg: string) {
       const dir = directory(pkg)
-      const name = (() => {
+      const spec = (() => {
         try {
-          return npa(pkg).name ?? pkg
+          return npa(pkg)
         } catch {
-          return pkg
+          return undefined
         }
       })()
+      const name = spec?.name ?? pkg
+      const refresh = spec?.registry && (spec.type === "tag" || spec.type === "range")
+      const installed = yield* afs.existsSafe(path.join(dir, "node_modules", name))
 
-      if (yield* afs.existsSafe(path.join(dir, "node_modules", name))) {
+      if (!refresh && installed) {
         return resolveEntryPoint(name, path.join(dir, "node_modules", name))
       }
 
-      const tree = yield* reify({ dir, add: [pkg] })
+      const tree = yield* reify({ dir, add: [pkg] }).pipe(
+        Effect.catchTag("NpmInstallFailedError", (error) =>
+          Effect.gen(function* () {
+            const cached = installed
+              ? path.join(dir, "node_modules", name)
+              : pkg === `${name}@latest`
+                ? path.join(global.cache, "packages", sanitize(name), "node_modules", name)
+                : undefined
+            if (!cached || !(yield* afs.existsSafe(cached))) return yield* error
+            const entry = resolveEntryPoint(name, cached)
+            if (!entry.entrypoint) return yield* error
+            yield* Effect.logWarning("Package refresh failed; using installed version", {
+              package: pkg,
+              cause: error.cause,
+            })
+            return entry
+          }),
+        ),
+      )
+      if ("directory" in tree) return tree
       const first = tree.edgesOut.values().next().value?.to
       if (!first) {
         const result = resolveEntryPoint(name, path.join(dir, "node_modules", name))
@@ -143,6 +174,11 @@ const layer = Layer.effect(
       }
       return resolveEntryPoint(first.name, first.path)
     }, Effect.scoped)
+
+    const packages = yield* Cache.makeWith(add, {
+      capacity: 1_000,
+      timeToLive: (exit) => (Exit.isSuccess(exit) ? Duration.infinity : Duration.zero),
+    })
 
     const install: Interface["install"] = Effect.fn("Npm.install")(function* (dir, input) {
       const canWrite = yield* afs.access(dir, { writable: true }).pipe(
@@ -236,7 +272,7 @@ const layer = Layer.effect(
 
           yield* fs.remove(path.join(dir, "package-lock.json")).pipe(Effect.orElseSucceed(() => {}))
 
-          yield* add(pkg)
+          yield* Cache.get(packages, normalize(pkg))
 
           const resolved = yield* pick()
           if (Option.isNone(resolved)) return Option.none<string>()
@@ -249,7 +285,7 @@ const layer = Layer.effect(
     })
 
     return Service.of({
-      add,
+      add: (pkg) => Cache.get(packages, normalize(pkg)),
       install,
       which,
     })

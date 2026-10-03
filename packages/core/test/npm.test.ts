@@ -2,7 +2,7 @@ import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "url"
 import { describe, expect, test } from "bun:test"
-import { Effect, Option } from "effect"
+import { Effect } from "effect"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { Global } from "@opencode-ai/core/global"
 import { Npm } from "@opencode-ai/core/npm"
@@ -38,6 +38,125 @@ describe("Npm.sanitize", () => {
 })
 
 describe("Npm.add", () => {
+  test.each(["fixture-provider", "@fixture/provider"])(
+    "shares and refreshes bare/latest installs of %s",
+    async (name) => {
+      await using tmp = await tmpdir()
+      const manifests = ["1.0.0", "1.1.0"].map((version) => ({ name, version, main: "index.js" }))
+      const archives = await Promise.all(
+        manifests.map((manifest) =>
+          new Bun.Archive(
+            {
+              "package/package.json": JSON.stringify(manifest),
+              "package/index.js": `export default ${JSON.stringify(manifest.version)}\n`,
+            },
+            { compress: "gzip" },
+          ).bytes(),
+        ),
+      )
+      let latest = 0
+      let downloads = 0
+      const server = Bun.serve({
+        port: 0,
+        fetch(request) {
+          const url = new URL(request.url)
+          const archive = manifests.findIndex((manifest) => url.pathname === `/${manifest.version}.tgz`)
+          if (archive !== -1) {
+            downloads++
+            return new Response(archives[archive])
+          }
+          if (decodeURIComponent(url.pathname) !== `/${name}`) return new Response("not found", { status: 404 })
+          return Response.json({
+            name,
+            "dist-tags": { latest: manifests[latest].version },
+            versions: Object.fromEntries(
+              manifests.map((manifest) => [
+                manifest.version,
+                { ...manifest, dist: { tarball: new URL(`/${manifest.version}.tgz`, url).href } },
+              ]),
+            ),
+          })
+        },
+      })
+      const cache = path.join(tmp.path, "cache")
+      const dir = path.join(cache, "packages", `${name}@latest`)
+      await Promise.all(
+        [dir, path.join(cache, "packages", name)].map((directory) =>
+          Bun.write(path.join(directory, ".npmrc"), `registry=${server.url.href}\ncache=${tmp.path}/npm\n`),
+        ),
+      )
+
+      try {
+        const first = await Effect.gen(function* () {
+          const npm = yield* Npm.Service
+          return yield* Effect.all([npm.add(name), npm.add(`${name}@latest`)], { concurrency: "unbounded" })
+        }).pipe(Effect.provide(npmLayer(cache)), Effect.runPromise)
+        expect(first[0]).toEqual(first[1])
+        expect(first[0].directory).toBe(path.join(dir, "node_modules", name))
+        expect(await Bun.file(path.join(first[0].directory, "package.json")).json()).toMatchObject({ version: "1.0.0" })
+        expect(downloads).toBe(1)
+
+        latest = 1
+        const second = await Effect.gen(function* () {
+          const npm = yield* Npm.Service
+          return yield* npm.add(name)
+        }).pipe(Effect.provide(npmLayer(cache)), Effect.runPromise)
+        expect(second.directory).toBe(first[0].directory)
+        expect(await Bun.file(path.join(second.directory, "package.json")).json()).toMatchObject({ version: "1.1.0" })
+        expect(downloads).toBe(2)
+
+        await Bun.write(
+          path.join(dir, ".npmrc"),
+          `registry=${server.url.href}\ncache=${tmp.path}/offline\noffline=true\n`,
+        )
+        const offline = await Effect.gen(function* () {
+          const npm = yield* Npm.Service
+          return yield* npm.add(name)
+        }).pipe(Effect.provide(npmLayer(cache)), Effect.runPromise)
+        expect(offline).toEqual(second)
+        expect(await Bun.file(path.join(offline.directory, "package.json")).json()).toMatchObject({ version: "1.1.0" })
+        expect(downloads).toBe(2)
+      } finally {
+        await server.stop(true)
+      }
+    },
+  )
+
+  test("reuses an installed exact version without contacting the registry", async () => {
+    await using tmp = await tmpdir()
+    const dir = path.join(tmp.path, "cache", "packages", "fixture-provider@1.0.0")
+    const installed = path.join(dir, "node_modules", "fixture-provider")
+    await writePackage(installed, { name: "fixture-provider", main: "index.js" })
+    await Bun.write(path.join(installed, "index.js"), "export default true\n")
+    await Bun.write(path.join(dir, ".npmrc"), `offline=true\ncache=${tmp.path}/npm\n`)
+
+    const entry = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add("fixture-provider@1.0.0")
+    }).pipe(Effect.provide(npmLayer(path.join(tmp.path, "cache"))), Effect.runPromise)
+    expect(entry.directory).toBe(installed)
+    expect(entry.entrypoint).toBeDefined()
+  })
+
+  test("keeps a legacy bare-name cache usable offline", async () => {
+    await using tmp = await tmpdir()
+    const cache = path.join(tmp.path, "cache")
+    const installed = path.join(cache, "packages", "fixture-provider", "node_modules", "fixture-provider")
+    await writePackage(installed, { name: "fixture-provider", main: "index.js" })
+    await Bun.write(path.join(installed, "index.js"), "export default true\n")
+    await Bun.write(
+      path.join(cache, "packages", "fixture-provider@latest", ".npmrc"),
+      `offline=true\ncache=${tmp.path}/npm\n`,
+    )
+
+    const entry = await Effect.gen(function* () {
+      const npm = yield* Npm.Service
+      return yield* npm.add("fixture-provider")
+    }).pipe(Effect.provide(npmLayer(cache)), Effect.runPromise)
+    expect(entry.directory).toBe(installed)
+    expect(entry.entrypoint).toBeDefined()
+  })
+
   test("reifies when package cache directory exists without the package installed", async () => {
     await using tmp = await tmpdir()
     await fs.mkdir(path.join(tmp.path, "fixture-provider"))
