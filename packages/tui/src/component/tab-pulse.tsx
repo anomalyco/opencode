@@ -777,7 +777,6 @@ export function TabPulse(props: {
   flashColor?: RGBA
   outerFlashColor?: RGBA
   flashTail?: number
-  outerFlashTail?: number
   completionColor?: RGBA
   outerCompletionColor?: RGBA
   backgroundColor: RGBA
@@ -808,7 +807,7 @@ export function TabPulse(props: {
       flashColor={props.flashColor ?? props.color}
       outerFlashColor={props.outerFlashColor ?? props.flashColor ?? props.outerColor ?? props.color}
       flashTail={props.flashTail}
-      outerFlashTail={props.outerFlashTail ?? props.flashTail}
+      outerFlashTail={props.flashTail}
       completionColor={props.completionColor ?? props.color}
       outerCompletionColor={props.outerCompletionColor ?? props.completionColor ?? props.outerColor ?? props.color}
       backgroundColor={props.backgroundColor}
