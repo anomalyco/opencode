@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
+import { Buffer } from "node:buffer"
 import { ConfigProvider, Effect, Layer, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMError, Message, Model, ToolCallPart, Usage } from "../../src"
+import { LLM, LLMEvent, LLMError, Message, Model, ToolCallPart, Usage } from "../../src"
 import { Auth, LLMClient, RequestExecutor, WebSocketExecutor } from "../../src/route"
 import * as Azure from "../../src/providers/azure"
 import * as OpenAI from "../../src/providers/openai"
@@ -1219,6 +1220,170 @@ describe("OpenAI Responses route", () => {
       ])
     }),
   )
+
+  describe("truncated tool arguments", () => {
+    const truncatedArgs = '{"path":"docs/open-code'
+    const deltaBytes = Buffer.byteLength(truncatedArgs, "utf8")
+    const truncatedRequest = LLM.updateRequest(request, {
+      tools: [{ name: "read", description: "Read a file", inputSchema: { type: "object" } }],
+    })
+    const truncatedToolEvents = () =>
+      [
+        {
+          type: "response.output_item.added",
+          item: { type: "function_call", id: "item_1", call_id: "call_1", name: "read", arguments: "" },
+        },
+        { type: "response.function_call_arguments.delta", item_id: "item_1", delta: truncatedArgs },
+        {
+          type: "response.output_item.done",
+          item: {
+            type: "function_call",
+            id: "item_1",
+            call_id: "call_1",
+            name: "read",
+            arguments: truncatedArgs,
+          },
+        },
+      ] as const
+
+    const expectTruncated = (
+      events: ReadonlyArray<{ readonly type: string }>,
+      message: string,
+      metadata: Record<string, unknown>,
+    ) => {
+      expect(events.some(LLMEvent.is.toolCall)).toBe(false)
+      expect(JSON.stringify(events)).not.toContain(truncatedArgs)
+      expect(events.filter(LLMEvent.is.providerError)).toEqual([
+        {
+          type: "provider-error",
+          message,
+          classification: "truncated",
+          retryable: true,
+          providerMetadata: { openai: metadata },
+        },
+      ])
+    }
+
+    it.effect("classifies max_output_tokens as provider truncation", () =>
+      Effect.gen(function* () {
+        const body = sseEvents(...truncatedToolEvents(), {
+          type: "response.incomplete",
+          response: { incomplete_details: { reason: "max_output_tokens" } },
+        })
+        const response = yield* LLMClient.generate(truncatedRequest).pipe(Effect.provide(fixedResponse(body)))
+
+        expectTruncated(
+          response.events,
+          `OpenAI Responses truncated tool call read (${deltaBytes} argument bytes, response.incomplete, reason=max_output_tokens)`,
+          {
+            toolArgumentFailure: "provider-truncated",
+            argumentBytes: deltaBytes,
+            terminalEvent: "response.incomplete",
+            itemFinalized: true,
+            incompleteReason: "max_output_tokens",
+          },
+        )
+        expect(response.finishReason).toBe("length")
+      }),
+    )
+
+    it.effect("classifies a clean completed response as incomplete adapter buffer finalization", () =>
+      Effect.gen(function* () {
+        const body = sseEvents(...truncatedToolEvents(), { type: "response.completed", response: {} })
+        const response = yield* LLMClient.generate(truncatedRequest).pipe(Effect.provide(fixedResponse(body)))
+
+        expectTruncated(
+          response.events,
+          `OpenAI Responses finalized an incomplete argument buffer for tool call read (${deltaBytes} argument bytes, response.completed)`,
+          {
+            toolArgumentFailure: "incomplete-buffer",
+            argumentBytes: deltaBytes,
+            terminalEvent: "response.completed",
+            itemFinalized: true,
+          },
+        )
+        expect(response.finishReason).toBe("error")
+      }),
+    )
+
+    it.effect("classifies a stream halt without a terminal event as stream-ended", () =>
+      Effect.gen(function* () {
+        const body = sseEvents(...truncatedToolEvents())
+        const response = yield* LLMClient.generate(truncatedRequest).pipe(Effect.provide(fixedResponse(body)))
+
+        expectTruncated(
+          response.events,
+          `OpenAI Responses stream ended early with incomplete tool call read (${deltaBytes} argument bytes, no terminal event)`,
+          {
+            toolArgumentFailure: "stream-ended",
+            argumentBytes: deltaBytes,
+            terminalEvent: "stream-halt",
+            itemFinalized: true,
+          },
+        )
+        expect(response.finishReason).toBe("error")
+      }),
+    )
+
+    it.effect("classifies pending arguments without output_item.done as provider truncation when incomplete", () =>
+      Effect.gen(function* () {
+        const body = sseEvents(
+          {
+            type: "response.output_item.added",
+            item: { type: "function_call", id: "item_1", call_id: "call_1", name: "read", arguments: "" },
+          },
+          { type: "response.function_call_arguments.delta", item_id: "item_1", delta: truncatedArgs },
+          {
+            type: "response.incomplete",
+            response: { incomplete_details: { reason: "max_output_tokens" } },
+          },
+        )
+        const response = yield* LLMClient.generate(truncatedRequest).pipe(Effect.provide(fixedResponse(body)))
+
+        expectTruncated(
+          response.events,
+          `OpenAI Responses truncated tool call read (${deltaBytes} argument bytes, response.incomplete, reason=max_output_tokens)`,
+          {
+            toolArgumentFailure: "provider-truncated",
+            argumentBytes: deltaBytes,
+            terminalEvent: "response.incomplete",
+            itemFinalized: false,
+            incompleteReason: "max_output_tokens",
+          },
+        )
+        expect(response.events.some(LLMEvent.is.toolCall)).toBe(false)
+      }),
+    )
+
+    it.effect("appends unparsed tool diagnostics to response.failed", () =>
+      Effect.gen(function* () {
+        const body = sseEvents(...truncatedToolEvents(), {
+          type: "response.failed",
+          response: { error: { code: "server_error", message: "upstream" } },
+        })
+        const response = yield* LLMClient.generate(truncatedRequest).pipe(Effect.provide(fixedResponse(body)))
+
+        expect(response.events.filter(LLMEvent.is.providerError)).toEqual([
+          { type: "provider-error", message: "server_error: upstream" },
+          {
+            type: "provider-error",
+            message: `OpenAI Responses stream ended early with incomplete tool call read (${deltaBytes} argument bytes, no terminal event)`,
+            classification: "truncated",
+            retryable: true,
+            providerMetadata: {
+              openai: {
+                toolArgumentFailure: "stream-ended",
+                argumentBytes: deltaBytes,
+                terminalEvent: "response.failed",
+                itemFinalized: true,
+              },
+            },
+          },
+        ])
+        expect(response.events.some(LLMEvent.is.toolCall)).toBe(false)
+      }),
+    )
+  })
 
   it.effect("decodes web_search_call as provider-executed tool-call + tool-result", () =>
     Effect.gen(function* () {

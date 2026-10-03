@@ -41,3 +41,6 @@ export const isContextOverflowFailure = (failure: unknown) =>
   failure instanceof LLMError
     ? failure.reason._tag === "InvalidRequest" && failure.reason.classification === "context-overflow"
     : Schema.is(ProviderErrorEvent)(failure) && failure.classification === "context-overflow"
+
+export const isTruncatedToolArgumentFailure = (failure: unknown) =>
+  Schema.is(ProviderErrorEvent)(failure) && failure.classification === "truncated"
