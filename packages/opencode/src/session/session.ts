@@ -35,6 +35,7 @@ import { Snapshot } from "@/snapshot"
 import { ProjectV2 } from "@opencode-ai/core/project"
 import { WorkspaceV2 } from "@opencode-ai/core/workspace"
 import { SessionID, MessageID, PartID } from "./schema"
+import { unquoteGitPath } from "./git-path"
 
 import type { Provider } from "@/provider/provider"
 import { Global } from "@opencode-ai/core/global"
@@ -821,8 +822,20 @@ const layer: Layer.Layer<
     })
 
     const diff = Effect.fn("Session.diff")(function* (sessionID: SessionID) {
-      void sessionID
-      return [] as Snapshot.FileDiff[]
+      const all = yield* messages({ sessionID }).pipe(Effect.orDie)
+      const merged = new Map<string, Snapshot.FileDiff>()
+      for (const m of all) {
+        if (m.info.role !== "user") continue
+        for (const d of m.info.summary?.diffs ?? []) {
+          if (d.file === undefined) continue
+          const file = unquoteGitPath(d.file)
+          const prev = merged.get(file)
+          merged.set(file, prev
+            ? { ...prev, additions: (prev.additions ?? 0) + (d.additions ?? 0), deletions: (prev.deletions ?? 0) + (d.deletions ?? 0) }
+            : { ...d, file })
+        }
+      }
+      return [...merged.values()]
     })
 
     const messages: Interface["messages"] = Effect.fn("Session.messages")(function* (input) {

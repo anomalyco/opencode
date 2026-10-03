@@ -100,7 +100,10 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       query: typeof DiffQuery.Type
     }) {
-      return yield* summary.diff({ sessionID: ctx.params.sessionID, messageID: ctx.query.messageID })
+      if (ctx.query.messageID) {
+        return yield* summary.diff({ sessionID: ctx.params.sessionID, messageID: ctx.query.messageID })
+      }
+      return yield* session.diff(ctx.params.sessionID)
     })
 
     const messages = Effect.fn("SessionHttpApi.messages")(function* (ctx: {
