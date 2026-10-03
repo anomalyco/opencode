@@ -5,8 +5,11 @@ import { InstanceBootstrap } from "@/project/bootstrap"
 import { InstanceStore } from "@/project/instance-store"
 import { makeGlobalNode, Node } from "@opencode-ai/core/effect/app-node"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Currency } from "@opencode-ai/core/currency"
+import { ConfigV1 } from "@opencode-ai/core/v1/config/config"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Config } from "@/config/config"
 import { Provider } from "@/provider/provider"
 import { Context, Effect, Layer, SynchronizedRef } from "effect"
 
@@ -42,6 +45,10 @@ export interface ContextLimitLoaderInterface {
   readonly providers: (directory: string) => Effect.Effect<Record<ProviderV2.ID, Provider.Info>, unknown>
 }
 
+export interface ConfigLoaderInterface {
+  readonly display: (directory: string) => Effect.Effect<ConfigV1.Info["display"], unknown>
+}
+
 export type UsageConnection = Pick<AgentSideConnection, "sessionUpdate">
 
 export interface Interface {
@@ -66,6 +73,10 @@ export class MessageLoader extends Context.Service<MessageLoader, MessageLoaderI
 
 export class ContextLimitLoader extends Context.Service<ContextLimitLoader, ContextLimitLoaderInterface>()(
   "@opencode/ACPUsageContextLimitLoader",
+) {}
+
+export class ConfigLoader extends Context.Service<ConfigLoader, ConfigLoaderInterface>()(
+  "@opencode/ACPUsageConfigLoader",
 ) {}
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/ACPUsage") {}
@@ -122,6 +133,26 @@ export function findContextLimit(
   return providers[providerID]?.models[modelID]?.limit.context
 }
 
+export function findCurrency(
+  providers: Record<ProviderV2.ID, Provider.Info>,
+  providerID: ProviderV2.ID,
+  modelID: ModelV2.ID,
+): string {
+  return providers[providerID]?.models[modelID]?.cost.currency ?? "USD"
+}
+
+export function displayCost(
+  amount: number,
+  source: string,
+  display: ConfigV1.Info["display"],
+): { amount: number; currency: string } {
+  const target = display?.currency?.trim()
+  if (!target) return { amount, currency: source }
+  const converted = Currency.convert(amount, source, target, display?.exchangeRates)
+  if (converted === undefined) return { amount, currency: source }
+  return { amount: converted, currency: Currency.normalize(target) }
+}
+
 export const contextLimitLoaderLayer = Layer.effect(
   ContextLimitLoader,
   Effect.gen(function* () {
@@ -139,11 +170,30 @@ export const contextLimitLoaderLayer = Layer.effect(
   }),
 )
 
+export const configLoaderLayer = Layer.effect(
+  ConfigLoader,
+  Effect.gen(function* () {
+    const store = yield* InstanceStore.Service
+    const config = yield* Config.Service
+
+    return ConfigLoader.of({
+      display: Effect.fn("ACPUsageConfigLoader.display")(function* (directory) {
+        const ctx = yield* store.load({ directory })
+        return yield* Effect.gen(function* () {
+          const info = yield* config.get()
+          return info.display
+        }).pipe(Effect.provideService(InstanceRef, ctx))
+      }),
+    })
+  }),
+)
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const messageLoader = yield* MessageLoader
     const contextLimitLoader = yield* ContextLimitLoader
+    const configLoader = yield* ConfigLoader
     const limits = yield* SynchronizedRef.make(new Map<string, Effect.Effect<number | undefined>>())
 
     const cachedLimit = Effect.fnUntraced(function* (input: {
@@ -180,6 +230,58 @@ const layer = Layer.effect(
       return yield* yield* cachedLimit(input)
     })
 
+    const currencies = yield* SynchronizedRef.make(new Map<string, Effect.Effect<string>>())
+
+    const cachedCurrency = Effect.fnUntraced(function* (input: {
+      readonly directory: string
+      readonly providerID: ProviderV2.ID
+      readonly modelID: ModelV2.ID
+    }) {
+      return yield* SynchronizedRef.modifyEffect(
+        currencies,
+        Effect.fnUntraced(function* (items) {
+          const key = `${input.directory}\u0000${input.providerID}\u0000${input.modelID}`
+          const current = items.get(key)
+          if (current) return [current, items] as const
+          const next = yield* Effect.cached(
+            contextLimitLoader.providers(input.directory).pipe(
+              Effect.map((providers) => findCurrency(providers, input.providerID, input.modelID)),
+              Effect.catch(() => Effect.succeed("USD")),
+            ),
+          )
+          return [next, new Map(items).set(key, next)] as const
+        }),
+      )
+    })
+
+    const modelCurrency = Effect.fn("ACPUsage.modelCurrency")(function* (input: {
+      readonly directory: string
+      readonly providerID: ProviderV2.ID
+      readonly modelID: ModelV2.ID
+    }) {
+      return yield* yield* cachedCurrency(input)
+    })
+
+    const displays = yield* SynchronizedRef.make(new Map<string, Effect.Effect<ConfigV1.Info["display"]>>())
+
+    const cachedDisplay = Effect.fnUntraced(function* (input: { readonly directory: string }) {
+      return yield* SynchronizedRef.modifyEffect(
+        displays,
+        Effect.fnUntraced(function* (items) {
+          const current = items.get(input.directory)
+          if (current) return [current, items] as const
+          const next = yield* Effect.cached(
+            configLoader.display(input.directory).pipe(Effect.catch(() => Effect.succeed(undefined))),
+          )
+          return [next, new Map(items).set(input.directory, next)] as const
+        }),
+      )
+    })
+
+    const displayConfig = Effect.fn("ACPUsage.displayConfig")(function* (input: { readonly directory: string }) {
+      return yield* yield* cachedDisplay(input)
+    })
+
     const sendUpdate = Effect.fn("ACPUsage.sendUpdate")(function* (input: {
       readonly connection: UsageConnection
       readonly sessionID: string
@@ -205,6 +307,15 @@ const layer = Layer.effect(
       })
       if (!size) return
 
+      const currency = yield* modelCurrency({
+        directory: input.directory,
+        providerID: ProviderV2.ID.make(message.providerID),
+        modelID: ModelV2.ID.make(message.modelID),
+      })
+
+      const display = yield* displayConfig({ directory: input.directory })
+      const cost = displayCost(totalSessionCost(messages), currency, display)
+
       yield* Effect.promise(() =>
         input.connection
           .sessionUpdate({
@@ -213,7 +324,7 @@ const layer = Layer.effect(
               sessionUpdate: "usage_update",
               used: contextTokens(message),
               size,
-              cost: { amount: totalSessionCost(messages), currency: "USD" },
+              cost,
             },
           })
           .catch(() => {}),
@@ -238,6 +349,16 @@ export const contextLimitLoaderNode = makeGlobalNode({
   deps: [Provider.node, InstanceStore.node],
 })
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [messageLoaderNode, contextLimitLoaderNode] })
+export const configLoaderNode = makeGlobalNode({
+  service: ConfigLoader,
+  layer: configLoaderLayer,
+  deps: [Config.node, InstanceStore.node],
+})
+
+export const node = makeGlobalNode({
+  service: Service,
+  layer,
+  deps: [messageLoaderNode, contextLimitLoaderNode, configLoaderNode],
+})
 
 export * as UsageService from "./usage"
