@@ -5,6 +5,7 @@ import path from "node:path"
 import { Effect, FileSystem, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/unstable/http"
 import { OPENCODE_VERSION } from "../version"
+import { ServerAddress } from "./server-address"
 
 const infoJson = Schema.fromJsonString(Service.Info)
 const encodeInfo = Schema.encodeEffect(infoJson)
@@ -23,7 +24,7 @@ export const register = Effect.fnUntraced(function* (options: {
   const info = {
     id: options.id,
     version: OPENCODE_VERSION,
-    url: HttpServer.formatAddress(options.address),
+    url: ServerAddress.formatAddress(options.address),
     pid: process.pid,
     password: options.password,
   }
