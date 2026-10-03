@@ -16,6 +16,7 @@ import type { Plugin } from "@/plugin"
 import { mergeDeep } from "remeda"
 
 const USER_AGENT = `opencode/${InstallationVersion}`
+const SUMMARY_OUTPUT_MAX = 32_000
 
 type PrepareInput = {
   readonly user: SessionV1.User
@@ -111,6 +112,7 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
           ...input.messages,
         ]
 
+  const outputTokenLimit = ProviderTransform.maxOutputTokens(input.model, input.flags.outputTokenMax)
   const params = yield* input.plugin.trigger(
     "chat.params",
     {
@@ -126,7 +128,8 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         : undefined,
       topP: input.agent.topP ?? ProviderTransform.topP(input.model),
       topK: ProviderTransform.topK(input.model),
-      maxOutputTokens: ProviderTransform.maxOutputTokens(input.model, input.flags.outputTokenMax),
+      maxOutputTokens:
+        input.agent.name === "compaction" ? Math.min(outputTokenLimit, SUMMARY_OUTPUT_MAX) : outputTokenLimit,
       options,
     },
   )

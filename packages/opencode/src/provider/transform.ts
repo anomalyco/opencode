@@ -15,7 +15,9 @@ function mimeToModality(mime: string): Modality | undefined {
   return undefined
 }
 
-export const OUTPUT_TOKEN_MAX = 32_000
+export const OUTPUT_TOKEN_MAX = 256_000
+const OUTPUT_TOKEN_FALLBACK = 32_000
+const REASONING_BUDGET_MAX = 32_000
 
 // OpenAI Responses `include` value that returns the encrypted reasoning state
 // needed for stateless multi-turn reasoning (store: false). Hoisted so every
@@ -1479,7 +1481,7 @@ export function providerOptions(model: Provider.Model, options: { [x: string]: a
 }
 
 export function maxOutputTokens(model: Provider.Model, outputTokenMax = OUTPUT_TOKEN_MAX): number {
-  return Math.min(model.limit.output, outputTokenMax) || outputTokenMax
+  return Math.min(model.limit.output > 0 ? model.limit.output : OUTPUT_TOKEN_FALLBACK, outputTokenMax)
 }
 
 type JsonRecord = Record<string, unknown>
@@ -1747,7 +1749,7 @@ function effortVariants(model: Provider.Model, values: readonly unknown[]) {
 }
 
 function budgetVariants(model: Provider.Model, min?: number, max?: number) {
-  const maximum = Math.min(max ?? OUTPUT_TOKEN_MAX - 1, model.limit.output - 1, OUTPUT_TOKEN_MAX - 1)
+  const maximum = Math.min(max ?? REASONING_BUDGET_MAX - 1, model.limit.output - 1, REASONING_BUDGET_MAX - 1)
   if (maximum <= 0) return {}
   const high = Math.min(Math.max(min ?? 0, Math.floor((maximum + 1) / 2)), maximum)
   return Object.fromEntries(

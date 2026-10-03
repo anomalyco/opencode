@@ -841,7 +841,7 @@ describe("session.llm.stream", () => {
   })
 
   it.instance(
-    "sends temperature, tokens, and reasoning options for openai-compatible models",
+    "sends catalog output limits and caps compaction requests for openai-compatible models",
     () =>
       Effect.gen(function* () {
         const fixture = loadFixture(vivgridFixture.providerID, vivgridFixture.modelID)
@@ -857,6 +857,7 @@ describe("session.llm.stream", () => {
           ProviderV2.ID.make(vivgridFixture.providerID),
           ModelV2.ID.make(fixture.model.id),
         )
+        const model = { ...resolved, limit: { ...resolved.limit, output: 131_072 } }
         const sessionID = SessionID.make("session-test-1")
         const agent = {
           name: "test",
@@ -879,7 +880,7 @@ describe("session.llm.stream", () => {
         yield* drain({
           user,
           sessionID,
-          model: resolved,
+          model,
           agent,
           system: ["You are a helpful assistant."],
           messages: [{ role: "user", content: "Hello" }],
@@ -901,11 +902,28 @@ describe("session.llm.stream", () => {
         expect(body.stream).toBe(true)
 
         const maxTokens = (body.max_tokens as number | undefined) ?? (body.max_output_tokens as number | undefined)
-        const expectedMaxTokens = ProviderTransform.maxOutputTokens(resolved)
-        expect(maxTokens).toBe(expectedMaxTokens)
+        expect(maxTokens).toBe(131_072)
 
         const reasoning = (body.reasoningEffort as string | undefined) ?? (body.reasoning_effort as string | undefined)
         expect(reasoning).toBe("high")
+
+        const compaction = waitRequest(
+          "/chat/completions",
+          new Response(createChatStream("Summary"), {
+            status: 200,
+            headers: { "Content-Type": "text/event-stream" },
+          }),
+        )
+        yield* drain({
+          user: { ...user, agent: "compaction" },
+          sessionID,
+          model,
+          agent: { ...agent, name: "compaction" },
+          system: ["Summarize the conversation."],
+          messages: [{ role: "user", content: "Summarize" }],
+          tools: {},
+        })
+        expect((yield* Effect.promise(() => compaction)).body.max_tokens).toBe(32_000)
       }),
     {
       config: () => ({
