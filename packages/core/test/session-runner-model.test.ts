@@ -313,6 +313,46 @@ describe("SessionRunnerModel", () => {
     }),
   )
 
+  it.effect("treats empty configured apiKey as Auth.none", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
+          request: { headers: {}, body: { apiKey: "" } },
+        }),
+      )
+      const headers = yield* resolved.route.auth.apply({
+        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        method: "POST",
+        url: "https://openai.example/v1/responses",
+        body: "{}",
+        headers: Headers.empty,
+      })
+
+      expect(headers.authorization).toBeUndefined()
+    }),
+  )
+
+  it.effect("treats omitted apiKey as Auth.none", () =>
+    Effect.gen(function* () {
+      const resolved = yield* SessionRunnerModel.fromCatalogModel(
+        ModelV2.Info.make({
+          ...model({ type: "aisdk", package: "@ai-sdk/openai", url: "https://openai.example/v1" }),
+          request: { headers: {}, body: {} },
+        }),
+      )
+      const headers = yield* resolved.route.auth.apply({
+        request: LLM.request({ model: resolved, prompt: "Hello" }),
+        method: "POST",
+        url: "https://openai.example/v1/responses",
+        body: "{}",
+        headers: Headers.empty,
+      })
+
+      expect(headers.authorization).toBeUndefined()
+    }),
+  )
+
   it.effect("rejects catalog APIs without a native route", () =>
     Effect.gen(function* () {
       const failure = yield* SessionRunnerModel.fromCatalogModel(

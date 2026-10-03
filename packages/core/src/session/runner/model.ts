@@ -84,7 +84,7 @@ const apiKey = (model: ModelV2.Info, credential?: Credential.Value) => {
   if (credential?.type === "key") return Auth.value(credential.key)
   if (credential?.type === "oauth") return Auth.value(credential.access)
   const value = model.request.body.apiKey ?? model.api.settings?.apiKey
-  if (typeof value === "string") return Auth.value(value)
+  if (typeof value === "string" && value !== "") return Auth.value(value)
 }
 
 const withDefaults = (model: ModelV2.Info, route: AnyRoute) => {
