@@ -1,54 +1,65 @@
 import { createMemo, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
+import type { Definition } from "@opencode/gui-extensions/sdk"
 import { builtins } from "./builtins"
 import { createInstalled } from "./installed"
-import { createMenubar, ExtensionMenubarProvider } from "./menubar"
+import { createMenubarItems, MenubarItemsProvider } from "./menubar-items"
 import { usePlatform } from "@/runtime/platform/platform"
 import { ExtensionHostProvider, useExtensionHost } from "./host"
-import { createRemotes } from "./remote"
-import {
-  createExtensionAttachment,
-  createExtensionServices,
-  ExtensionAttachmentProvider,
-  type ExtensionServices,
-} from "./services"
+import { createIpcClients } from "./ipc"
+import { createExtensionAttachment, createHostApis, ExtensionAttachmentProvider, type HostApis } from "./host-apis"
 import { ExtensionCommands } from "./commands"
 import { ExtensionStyles } from "./render"
 import { ExtensionServersProvider } from "./servers"
 import { ExtensionServerEndpoints } from "./server-shell"
 import { createContext, useContext } from "solid-js"
 
-const ServicesContext = createContext<ExtensionServices>()
+const HostApisContext = createContext<HostApis>()
+
 const ExtensionHotReload = import.meta.env.DEV ? lazy(() => import("./hmr")) : undefined
 
-export function useExtensionServices() {
-  const value = useContext(ServicesContext)
-  if (!value) throw new Error("Extension services are unavailable")
+export function useHostApis() {
+  const value = useContext(HostApisContext)
+
+  if (!value) throw new Error("Host APIs are unavailable")
+
   return value
 }
 
 /** Mounts the extension host for the window. Lives above the app interface so extensions can contribute servers. */
 export function ExtensionRoot(props: ParentProps) {
   const platform = usePlatform()
-  const services = createExtensionServices()
+  const apis = createHostApis()
   const bridge = platform.extensions
-  const menubar = createMenubar(bridge)
-  const remotes = createRemotes(bridge)
-  onCleanup(remotes.dispose)
+  const menubar = createMenubarItems(bridge)
+  const ipcs = createIpcClients(bridge)
+  onCleanup(ipcs.dispose)
   const installed = createInstalled(bridge)
+
   const disabled = createMemo(() => {
     if (!installed.loaded()) return undefined
+
     return new Set(installed.list().flatMap((item) => (item.enabled ? [] : [item.id])))
   })
+
   const os = platform.platform === "desktop" ? platform.os : undefined
+
   // Built-ins only: installed `.ocdx` archives run their main entry until that format ships renderer bundles.
-  const definitions = builtins.filter((definition) => !definition.os || (!!os && definition.os.includes(os)))
+  const definitions = builtins.filter(
+    (definition: Definition) => !definition.os || (!!os && definition.os.includes(os)),
+  )
+
+  const failed = (id: string) => installed.list().some((item) => item.id === id && item.error !== undefined)
+
   return (
-    <ServicesContext.Provider value={services}>
+    <HostApisContext.Provider value={apis}>
       <ExtensionHostProvider
         definitions={definitions}
         disabled={disabled}
-        services={services.services}
-        remote={(token) => remotes.client(token)}
+        apis={apis.apis}
+        whenMounted={apis.whenMounted}
+        ipc={bridge ? (token) => ipcs.client(token) : undefined}
+        generation={ipcs.generation}
+        failed={failed}
       >
         <ExtensionStyles />
         {ExtensionHotReload && (
@@ -56,22 +67,19 @@ export function ExtensionRoot(props: ParentProps) {
             <ExtensionHotReload />
           </Suspense>
         )}
-        <ExtensionMenubarProvider value={menubar}>
-          <ExtensionServersProvider
-            failed={(id) => installed.list().some((item) => item.id === id && item.error !== undefined)}
-          >
-            {props.children}
-          </ExtensionServersProvider>
-        </ExtensionMenubarProvider>
+        <MenubarItemsProvider value={menubar}>
+          <ExtensionServersProvider failed={failed}>{props.children}</ExtensionServersProvider>
+        </MenubarItemsProvider>
       </ExtensionHostProvider>
-    </ServicesContext.Provider>
+    </HostApisContext.Provider>
   )
 }
 
-/** Attaches session and layout services and publishes extension commands. Renders once extensions are active. */
+/** Attaches the session and layout HostApis and publishes extension commands. Renders once extensions are active. */
 export function ExtensionAttachment(props: ParentProps) {
   const host = useExtensionHost()
-  const attachment = createExtensionAttachment(useExtensionServices())
+  const attachment = createExtensionAttachment(useHostApis())
+
   return (
     <ExtensionAttachmentProvider value={attachment}>
       <ExtensionCommands />

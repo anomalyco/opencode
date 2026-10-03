@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Kemas Kini Sedia",
   "dialog.restart": "Mulakan Semula",
   "dialog.later": "Nanti",
+  "releaseNotes.action.getStarted": "Mula",
+  "releaseNotes.action.next": "Seterusnya",
+  "releaseNotes.action.hideFuture": "Jangan paparkan ini pada masa hadapan",
+  "releaseNotes.media.alt": "Pratonton keluaran",
 }

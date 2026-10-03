@@ -14,4 +14,6 @@ export default {
   "git.description": "Śledź, przeglądaj i cofaj zmiany w tym projekcie",
   loadingChanges: "Ładowanie zmian…",
   noChanges: "Brak zmian",
+  "settings.wrapLines.title": "Zawijaj wiersze",
+  "settings.wrapLines.description": "Zawijaj długie linie w różnicach mobilnych, zamiast przewijać w poziomie",
 }

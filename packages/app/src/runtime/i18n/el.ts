@@ -298,10 +298,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Επιλογή {{color}} χρώματος",
   "dialog.project.edit.worktree.startup": "Σενάριο εκκίνησης χώρου εργασίας",
   "dialog.project.edit.worktree.startup.placeholder": "π.χ. εγκατάσταση bun",
-  "dialog.releaseNotes.action.getStarted": "Ξεκινήστε",
-  "dialog.releaseNotes.action.next": "Επόμενο",
-  "dialog.releaseNotes.action.hideFuture": "Να μην εμφανίζονται αυτά στο μέλλον",
-  "dialog.releaseNotes.media.alt": "Προεπισκόπηση έκδοσης",
   "toast.permissions.autoaccept.on.title": "Αυτόματη αποδοχή δικαιωμάτων",
   "toast.permissions.autoaccept.on.description": "Τα αιτήματα άδειας θα εγκρίνονται αυτόματα",
   "toast.permissions.autoaccept.off.title": "Διακοπή αυτόματης αποδοχής δικαιωμάτων",
@@ -723,7 +719,6 @@ export const dict = {
   "session.view.select": "Προβολή συνεδρίας",
   "session.background.moveRunning": "Μετακίνηση στο παρασκήνιο",
   "session.timeline.working": "Εργασία",
-  "session.review.wrapLines": "Αναδίπλωση γραμμών",
   "session.websearch.title": "Αναζήτηση ιστού τρίτων",
   "session.websearch.description":
     "Επιλέξτε τους πράκτορες παρόχου αναζήτησης που χρησιμοποιούν για την αναζήτηση στον ιστό",
@@ -788,8 +783,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Υποπράκτορες",
   "settings.timeline.category.notices": "Ειδοποιήσεις",
   "settings.timeline.category.tools": "Άλλα εργαλεία",
-  "settings.general.row.mobileDiffWrap.description":
-    "Τυλίξτε τις μακριές γραμμές σε κινητές διαφορές αντί να κάνετε κύλιση οριζόντια",
   "provider.connect.error.unsupportedFields": "Αυτή η φόρμα ελέγχου ταυτότητας περιέχει μη υποστηριζόμενα πεδία",
   "settings.about.writtenByNames": "Γράφτηκε από {{names}}",
   "settings.about.illustratedByNames": "Εικονογράφηση από {{names}}",

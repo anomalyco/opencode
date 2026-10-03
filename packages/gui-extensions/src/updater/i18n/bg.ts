@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Актуализацията е готова",
   "dialog.restart": "Рестартирайте",
   "dialog.later": "по-късно",
+  "releaseNotes.action.getStarted": "Започнете",
+  "releaseNotes.action.next": "Следваща",
+  "releaseNotes.action.hideFuture": "Не ги показвайте в бъдеще",
+  "releaseNotes.media.alt": "Визуализация на изданието",
 }

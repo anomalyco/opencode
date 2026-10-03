@@ -305,10 +305,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Pilih warna {{color}}",
   "dialog.project.edit.worktree.startup": "Skrip permulaan ruang kerja",
   "dialog.project.edit.worktree.startup.placeholder": "cth. bun install",
-  "dialog.releaseNotes.action.getStarted": "Mula",
-  "dialog.releaseNotes.action.next": "Seterusnya",
-  "dialog.releaseNotes.action.hideFuture": "Jangan paparkan ini pada masa hadapan",
-  "dialog.releaseNotes.media.alt": "Pratonton keluaran",
   "toast.permissions.autoaccept.on.title": "Kebenaran diterima secara automatik",
   "toast.permissions.autoaccept.on.description": "Permintaan kebenaran akan diluluskan secara automatik",
   "toast.permissions.autoaccept.off.title": "Penerimaan kebenaran automatik dihentikan",
@@ -719,7 +715,6 @@ export const dict = {
   "session.view.select": "Paparan sesi",
   "session.background.moveRunning": "Beralih ke latar belakang",
   "session.timeline.working": "sedang bekerja",
-  "session.review.wrapLines": "Balut garisan",
   "session.websearch.title": "Carian web pihak ketiga",
   "session.websearch.description": "Pilih ejen pembekal carian yang digunakan untuk mencari di web",
   "session.websearch.provider": "Penyedia carian",
@@ -778,8 +773,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Subagen",
   "settings.timeline.category.notices": "Notis",
   "settings.timeline.category.tools": "Alat lain",
-  "settings.general.row.mobileDiffWrap.description":
-    "Balut garisan panjang dalam perbezaan mudah alih dan bukannya menatal secara mendatar",
 
   "provider.connect.error.unsupportedFields": "Borang pengesahan ini mengandungi medan yang tidak disokong",
   "settings.about.writtenByNames": "Ditulis oleh {{names}}",

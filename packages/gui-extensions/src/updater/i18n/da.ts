@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Opdateringen er klar",
   "dialog.restart": "Genstart",
   "dialog.later": "Senere",
+  "releaseNotes.action.getStarted": "Kom i gang",
+  "releaseNotes.action.next": "Næste",
+  "releaseNotes.action.hideFuture": "Vis ikke disse i fremtiden",
+  "releaseNotes.media.alt": "Forhåndsvisning af udgivelse",
 }

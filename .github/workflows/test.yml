@@ -252,6 +252,13 @@ jobs:
           CI: true
         timeout-minutes: 15
 
+      - name: Run app component tests
+        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' }}
+        run: bun --cwd packages/app test:components
+        env:
+          CI: true
+        timeout-minutes: 15
+
       - name: Upload Playwright artifacts
         if: always() && env.E2E_ENABLED == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -264,3 +271,5 @@ jobs:
             packages/app/e2e/playwright-report
             packages/session-ui/component-tests/test-results
             packages/session-ui/component-tests/playwright-report
+            packages/app/component-tests/test-results
+            packages/app/component-tests/playwright-report

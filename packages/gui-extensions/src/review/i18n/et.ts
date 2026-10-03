@@ -10,4 +10,6 @@ export default {
   "git.description": "Selle projekti muudatuste jälgimine, ülevaatamine ja tagasivõtmine",
   loadingChanges: "Muudatuste laadimine…",
   noChanges: "Muudatusi pole",
+  "settings.wrapLines.title": "Ridade murdmine",
+  "settings.wrapLines.description": "Horisontaalselt kerimise asemel mähkige pikad jooned mobiilidiffidesse",
 }

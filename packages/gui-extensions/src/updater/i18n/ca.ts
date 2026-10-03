@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Actualització llesta",
   "dialog.restart": "Reinicieu",
   "dialog.later": "Més tard",
+  "releaseNotes.action.getStarted": "Comença",
+  "releaseNotes.action.next": "A continuació",
+  "releaseNotes.action.hideFuture": "No mostris aquestes en el futur",
+  "releaseNotes.media.alt": "Allibera la vista prèvia",
 }

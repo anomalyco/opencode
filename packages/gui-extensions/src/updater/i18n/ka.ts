@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "განახლება მზად არის",
   "dialog.restart": "გადატვირთვა",
   "dialog.later": "მოგვიანებით",
+  "releaseNotes.action.getStarted": "დაწყება",
+  "releaseNotes.action.next": "შემდეგი",
+  "releaseNotes.action.hideFuture": "მომავალში არ მაჩვენო",
+  "releaseNotes.media.alt": "გამოშვების გადახედვა",
 }

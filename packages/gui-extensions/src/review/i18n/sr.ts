@@ -12,4 +12,7 @@ export default {
   "git.description": "Пратите, прегледајте и опозовите промене у овом пројекту",
   loadingChanges: "Учитавање промена…",
   noChanges: "Нема промена",
+  "settings.wrapLines.title": "Преламај редове",
+  "settings.wrapLines.description":
+    "Умотајте дугачке редове у разлике између мобилних уређаја уместо хоризонталног померања",
 }

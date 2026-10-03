@@ -61,12 +61,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
-    label: "session.review.wrapLines",
-    target: "settings-mobile-diff-wrap",
-    keywords: "diff wrap lines",
-  },
-  {
-    tab: "general",
     label: "settings.general.row.mobileTitlebarBottom.title",
     target: "settings-mobile-titlebar-bottom",
     available: "mobile",

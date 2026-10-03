@@ -1,7 +1,8 @@
-import { batch, createEffect, on, onCleanup } from "solid-js"
+import { batch, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { showToast } from "@opencode/ui/toast"
-import { Layout, Sessions, type Context, type SessionView } from "../sdk"
+import { createKeyed, type MountedSession, type SetupContext } from "../sdk"
+import type Btw from "./index"
 
 const instructions = [
   "The user is asking a quick side question about the conversation so far.",
@@ -17,39 +18,41 @@ const empty = {
 }
 
 /** Side questions per session. Window-local: a reload drops them, and with them the tab. */
-export function createBtw(ctx: Context) {
-  const sessions = ctx.use(Sessions)
-  const layout = ctx.use(Layout)
+export function createBtw(ctx: SetupContext<typeof Btw>) {
+  const sessions = ctx.sessions
+  const layout = ctx.layout
   const [states, setStates] = createStore<Record<string, typeof empty>>({})
   const requests = new Map<string, number>()
   const controllers = new Map<string, AbortController>()
 
   const stop = (key: string) => {
     const controller = controllers.get(key)
+
     if (!controller) return
     controller.abort()
     controllers.delete(key)
+
     if (states[key]?.pending) setStates(key, { pending: false, error: true })
   }
 
   // Leaving a session abandons its in-flight question.
-  createEffect(
-    on(
-      () => sessions.current()?.key,
-      (key) => {
-        if (key) onCleanup(() => stop(key))
-      },
-    ),
+  createKeyed(
+    () => sessions.current(),
+    (view) => onCleanup(() => stop(view.key)),
   )
-  ctx.cleanup(() => Array.from(controllers.keys()).forEach(stop))
+  onCleanup(() => Array.from(controllers.keys()).forEach(stop))
 
   const ask = (value?: string) => {
     const question = value?.trim()
+
     if (!question) {
       showToast({ title: ctx.t("question.required") })
+
       return
     }
+
     const session = sessions.current()
+
     if (!session?.id) return
 
     const key = session.key
@@ -64,6 +67,7 @@ export function createBtw(ctx: Context) {
       setStates(key, { question, answer: "", error: false, pending: true })
       layout.open(`${ctx.id}:main`, session)
     })
+
     return session.server.client.session
       .generate(
         {
@@ -85,16 +89,16 @@ export function createBtw(ctx: Context) {
       })
   }
 
-  const state = (session: SessionView) => states[session.key]
+  const state = (session: MountedSession) => states[session.key]
 
   return {
     ask,
-    has: (session: SessionView) => !!state(session),
-    answer: (session: SessionView) => (state(session) ?? empty).answer,
-    error: (session: SessionView) => (state(session) ?? empty).error,
-    pending: (session: SessionView) => (state(session) ?? empty).pending,
-    question: (session: SessionView) => (state(session) ?? empty).question,
-    retry: (session: SessionView) => ask((state(session) ?? empty).question),
+    has: (session: MountedSession) => !!state(session),
+    answer: (session: MountedSession) => (state(session) ?? empty).answer,
+    error: (session: MountedSession) => (state(session) ?? empty).error,
+    pending: (session: MountedSession) => (state(session) ?? empty).pending,
+    question: (session: MountedSession) => (state(session) ?? empty).question,
+    retry: (session: MountedSession) => ask((state(session) ?? empty).question),
   }
 }
 

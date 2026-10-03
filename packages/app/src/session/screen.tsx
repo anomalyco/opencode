@@ -1,7 +1,18 @@
-import { ErrorBoundary, Show, Match, Switch, createMemo, createEffect, on, onCleanup } from "solid-js"
+import {
+  ErrorBoundary,
+  Show,
+  Match,
+  Switch,
+  createMemo,
+  createEffect,
+  on,
+  onCleanup,
+  untrack,
+  type Accessor,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
-import { Slot, type BackgroundTask, type SessionView } from "@opencode/gui-extensions/sdk"
+import { Slot, type BackgroundTask, type MountedSession } from "@opencode/gui-extensions/sdk"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { ComposerDropzone } from "@/composer/dropzone"
 import type { SessionModel } from "@/session/model"
@@ -11,8 +22,8 @@ import { useExtensionHost } from "@/runtime/extension/host"
 import { ExtensionLinks } from "@/runtime/extension/render"
 import { createPanelSidebar, createRegion, DockRegion, MobilePanel } from "@/runtime/extension/panels"
 import { createMobileViews, MobileViewTabs } from "@/runtime/extension/mobile"
-import { useExtensionAttachment } from "@/runtime/extension/services"
-import { createSessionView } from "@/runtime/extension/view"
+import { useExtensionAttachment } from "@/runtime/extension/host-apis"
+import { createMountedSession } from "@/runtime/extension/mounted-session"
 import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionScreenLayout } from "./screen-layout"
@@ -28,17 +39,19 @@ import { createTimelineCache } from "./timeline/cache"
 
 export function SessionScreen(props: { session: SessionModel }) {
   // The timeline cache captures its owner when created, so link handling must be provided above it.
-  const view = createSessionView(props.session)
+  const mounted = createMountedSession(props.session)
+
   return (
-    <ExtensionLinks session={view.view}>
-      <SessionScreenContent session={props.session} view={view.view} bindBackground={view.bindBackground} />
+    <ExtensionLinks session={mounted.view()}>
+      <SessionScreenContent session={props.session} view={mounted.view} bindBackground={mounted.bindBackground} />
     </ExtensionLinks>
   )
 }
 
 function SessionScreenContent(props: {
   session: SessionModel
-  view: SessionView
+  /** One object per routed session; renders receive each through a reactive prop instead of remounting. */
+  view: Accessor<MountedSession>
   bindBackground: (tasks: () => readonly BackgroundTask[]) => void
 }) {
   const session = props.session
@@ -49,18 +62,23 @@ function SessionScreenContent(props: {
   const region = createRegion({ region: "side", view: props.view, tabs: session.layout.tabs })
   onCleanup(attachment.region(region))
   const mobile = createMobileViews()
+
   const screen = createSessionScreenLayout(session, {
     wide: region.wide,
     sidebar: () => host.items(Slot).some((item) => item.value.at === "session.panel.sidebar"),
   })
+
   const timeline = createSessionTimelineInteraction(session)
+
   const timelineSearch = createTimelineSearchController({
     sessionID: session.identity.sessionID,
     scrollRef: timeline.scroller,
     revealMessage: timeline.actions.revealMessage,
     pauseAutoScroll: timeline.view.unpin,
   })
+
   const messagesReady = timeline.ready
+
   const [store, setStore] = createStore({
     bottomDockCached: false,
     sideWidthMotion: false,
@@ -71,23 +89,28 @@ function SessionScreenContent(props: {
     sideDockPresent: false,
     mobileDockCached: false,
   })
+
   const [elements, setElements] = createStore<{
     side?: HTMLDivElement
     bottomDock?: HTMLDivElement
   }>({})
+
   const sideVisible = createMemo(() => isDesktop() && screen.side.layout().visible)
   const sideDockVisible = createMemo(() => isDesktop() && screen.dock.side() && screen.dock.open())
   const bottomDockVisible = createMemo(() => isDesktop() && screen.dock.open() && screen.dock.bottom())
+
   const sidePresence = createAnimatedPresence(
     () => sideVisible() || undefined,
     () => elements.side ?? null,
     session.layout.tabKey,
   )
+
   const bottomDockPresence = createAnimatedPresence(
     () => bottomDockVisible() || undefined,
     () => elements.bottomDock ?? null,
     session.layout.tabKey,
   )
+
   const sideMotion = createMemo<{
     key?: string
     region: boolean
@@ -99,6 +122,7 @@ function SessionScreenContent(props: {
     const region = screen.side.region.open()
     const dock = sideDockVisible()
     const sameTab = previous?.key === key
+
     return {
       key,
       region,
@@ -107,53 +131,71 @@ function SessionScreenContent(props: {
       animateDock: !!previous && sameTab && previous.dock !== dock,
     }
   })
-  const paneAnimating = () =>
+
+  const regionAnimating = () =>
     sidePresence.animate() || sideMotion().animateRegion || sideMotion().animateDock || bottomDockPresence.animate()
+
   const trackSideWidthMotion = (event: TransitionEvent) => {
     if (event.currentTarget !== event.target || event.propertyName !== "width") return
     setStore("sideWidthMotion", event.type === "transitionrun")
   }
+
   const hideTimelineScrollbar = () => setStore("timelineScrollbarHidden", true)
+
   const revealTimelineScrollbar = (event: Event) => {
     if (!store.timelineScrollbarHidden || store.sideWidthMotion) return
+
     if (!(event.target instanceof Element) || !event.target.closest('[data-slot="session-timeline-scroll"]')) return
     setStore("timelineScrollbarHidden", false)
   }
+
   createEffect(() => {
     if (sideDockVisible()) setStore("sideDockPresent", true)
+
     if (bottomDockVisible()) setStore("bottomDockCached", true)
+
     if (!sideVisible()) setStore("sideHeightMotion", false)
   })
   createEffect(() => {
     if (!isDesktop() || screen.dock.bottom()) setStore("sideDockPresent", false)
+
     if (isDesktop() && screen.dock.side()) setStore("bottomDockCached", false)
   })
   createEffect(() => {
     if (screen.side.region.open()) setStore("sideRegionPresent", true)
+
     if (screen.side.tabs.open()) setStore("sideTabsPresent", true)
   })
 
   // The dock's narrow-screen view follows the dock's open state; other views are a selection.
   const dockView = createMemo(() => mobile.entries().find((entry) => entry.provider.region === "dock"))
+
   const mobileView = createMemo(() =>
     screen.dock.open() ? (dockView()?.key ?? "session") : attachment.mobile.current(),
   )
+
   const mobileEntry = createMemo(() => {
     const key = mobileView()
+
     return key === "session" ? undefined : mobile.find(key)
   })
+
   const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
   createEffect(() => {
     if (!isDesktop() && screen.dock.open()) setStore("mobileDockCached", true)
   })
+
   const selectMobile = (key: string) => {
     if (key === dockView()?.key) {
       session.layout.view().dock.open()
+
       return
     }
+
     attachment.mobile.select(key)
     session.layout.view().dock.close()
   }
+
   const composer = createActiveSessionRegion({
     session,
     screen,
@@ -161,47 +203,58 @@ function SessionScreenContent(props: {
     region,
     visible: conversationVisible,
   })
+
   props.bindBackground(composer.requests.background.tasks)
   useUsageExceededDialogs()
 
-  const sessionErrorFallback = (error: unknown, reset: () => void) => {
+  const sessionErrorFallback = (cause: unknown, reset: () => void) => {
     createEffect(on(session.identity.sessionKey, reset, { defer: true }))
-    return <SessionErrorFallback error={error} sessionID={session.identity.params.id} />
+
+    return <SessionErrorFallback error={cause} sessionID={session.identity.params.id} />
   }
 
   const timelineView = createTimelineCache(
     session,
-    (source, active) => (
-      <MessageTimeline
-        active={active()}
-        hideHeader={!isDesktop()}
-        session={source}
-        view={props.view}
-        background={composer.requests.background}
-        actions={composer.actions.timeline}
-        scroll={timeline.scroll}
-        onResumeScroll={timeline.actions.resume}
-        setScrollRef={timeline.view.setScrollRef}
-        onScheduleScrollState={timeline.view.scheduleScrollState}
-        onPin={timeline.view.pin}
-        onUnpin={timeline.view.unpin}
-        onUserScroll={timeline.view.markUserScroll}
-        onHistoryScroll={timeline.view.onHistoryScroll}
-        onSelectionInteraction={timeline.view.selectionInteraction}
-        pinned={timeline.view.pinned()}
-        centered={screen.centered()}
-        reserveReviewToggle={!sideVisible()}
-        setContentRef={timeline.view.setContentRef}
-        anchor={timeline.view.anchor}
-        setRevealMessage={timeline.view.setRevealMessage}
-        setScrollToEnd={timeline.view.setScrollToEnd}
-        search={
-          <Show when={active()}>
-            <TimelineSearchBar controller={timelineSearch} />
-          </Show>
-        }
-      />
-    ),
+    (source, active) => {
+      // A cached timeline keeps its own session's latest object while another session is routed.
+      const own = createMemo<MountedSession>((previous) => {
+        const view = props.view()
+
+        return view.id === source.identity.sessionID() ? view : previous
+      }, untrack(props.view))
+
+      return (
+        <MessageTimeline
+          active={active()}
+          hideHeader={!isDesktop()}
+          session={source}
+          view={own()}
+          background={composer.requests.background}
+          actions={composer.actions.timeline}
+          scroll={timeline.scroll}
+          onResumeScroll={timeline.actions.resume}
+          setScrollRef={timeline.view.setScrollRef}
+          onScheduleScrollState={timeline.view.scheduleScrollState}
+          onPin={timeline.view.pin}
+          onUnpin={timeline.view.unpin}
+          onUserScroll={timeline.view.markUserScroll}
+          onHistoryScroll={timeline.view.onHistoryScroll}
+          onSelectionInteraction={timeline.view.selectionInteraction}
+          pinned={timeline.view.pinned()}
+          centered={screen.centered()}
+          reserveReviewToggle={!sideVisible()}
+          setContentRef={timeline.view.setContentRef}
+          anchor={timeline.view.anchor}
+          setRevealMessage={timeline.view.setRevealMessage}
+          setScrollToEnd={timeline.view.setScrollToEnd}
+          search={
+            <Show when={active()}>
+              <TimelineSearchBar controller={timelineSearch} />
+            </Show>
+          }
+        />
+      )
+    },
     () => conversationVisible() && messagesReady(),
   )
 
@@ -219,7 +272,7 @@ function SessionScreenContent(props: {
               views={mobile}
               region={region}
               current={mobileView()}
-              session={props.view}
+              session={props.view()}
               sidebar={sidebar}
               onSelect={selectMobile}
             />
@@ -235,7 +288,7 @@ function SessionScreenContent(props: {
       <div class="relative flex-1 min-h-0 overflow-hidden">
         <Show when={!isDesktop() && store.mobileDockCached}>
           <div class="absolute inset-0" classList={{ invisible: mobileView() !== dockView()?.key }}>
-            <DockRegion view={props.view} sidebar={sidebar} fill embedded present contentHeight="100%" />
+            <DockRegion view={props.view()} sidebar={sidebar} fill embedded present contentHeight="100%" />
           </div>
         </Show>
         <Switch>
@@ -246,7 +299,7 @@ function SessionScreenContent(props: {
             {(entry) => (
               <MobilePanel
                 entry={entry()}
-                view={props.view}
+                view={props.view()}
                 sidebar={sidebar}
                 visible
                 open={() => region.openFor(entry().extension)}
@@ -333,6 +386,7 @@ function SessionScreenContent(props: {
               data-opened={sidePresence.animate() ? sidePresence.show() : undefined}
               onAnimationEnd={(event) => {
                 if (event.currentTarget !== event.target) return
+
                 if (event.animationName !== "side-region-presence-in" || !sideVisible()) return
                 setStore("sideHeightMotion", true)
               }}
@@ -351,8 +405,8 @@ function SessionScreenContent(props: {
                   data-slot="session-side-region"
                   classList={{
                     "absolute inset-x-0 top-0 min-h-0 overflow-visible transition-[height] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none": true,
-                    "will-change-[height]": !screen.size.active() && store.sideHeightMotion && paneAnimating(),
-                    "transition-none": screen.size.active() || !store.sideHeightMotion || !paneAnimating(),
+                    "will-change-[height]": !screen.size.active() && store.sideHeightMotion && regionAnimating(),
+                    "transition-none": screen.size.active() || !store.sideHeightMotion || !regionAnimating(),
                   }}
                   style={{ height: sideVisible() ? screen.side.region.height() : "100%" }}
                 >
@@ -363,15 +417,18 @@ function SessionScreenContent(props: {
                       class="absolute inset-0"
                       onAnimationEnd={(event) => {
                         if (event.currentTarget !== event.target) return
+
                         if (event.animationName !== "side-region-presence-out") return
+
                         if (screen.side.region.open()) return
+
                         if (sideDockVisible()) return
                         setStore("sideRegionPresent", false)
                         setStore("sideTabsPresent", false)
                       }}
                     >
                       <SideRegion
-                        view={props.view}
+                        view={props.view()}
                         region={region}
                         sidebar={sidebar}
                         fileTree={screen.files.open()}
@@ -389,7 +446,7 @@ function SessionScreenContent(props: {
                       "relative z-0 shrink-0 overflow-visible bg-v2-background-bg-deep transition-[height] duration-[40ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none": true,
                       "delay-0": !screen.side.gap.closing(),
                       "delay-[200ms]": screen.side.gap.closing(),
-                      "transition-none": !paneAnimating(),
+                      "transition-none": !regionAnimating(),
                     }}
                     style={{ height: screen.side.gap.height() }}
                     onPointerDown={() => screen.size.start()}
@@ -414,8 +471,8 @@ function SessionScreenContent(props: {
                     data-slot="session-side-terminal-region"
                     classList={{
                       "relative z-10 min-h-0 shrink-0 overflow-visible transition-[height] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none": true,
-                      "will-change-[height]": !screen.size.active() && store.sideHeightMotion && paneAnimating(),
-                      "transition-none": screen.size.active() || !store.sideHeightMotion || !paneAnimating(),
+                      "will-change-[height]": !screen.size.active() && store.sideHeightMotion && regionAnimating(),
+                      "transition-none": screen.size.active() || !store.sideHeightMotion || !regionAnimating(),
                     }}
                     style={{ height: screen.side.dock.height() }}
                   >
@@ -427,7 +484,7 @@ function SessionScreenContent(props: {
                       >
                         <div data-slot="side-terminal-panel-clip" class="size-full overflow-clip rounded-[10px]">
                           <DockRegion
-                            view={props.view}
+                            view={props.view()}
                             sidebar={sidebar}
                             fill
                             framed={false}
@@ -474,7 +531,7 @@ function SessionScreenContent(props: {
               </div>
             </Show>
             <DockRegion
-              view={props.view}
+              view={props.view()}
               sidebar={sidebar}
               stacked={isDesktop()}
               present={store.bottomDockCached}

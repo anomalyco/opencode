@@ -10,4 +10,6 @@ export default {
   "git.description": "Spor, gennemgå og fortryd ændringer i dette projekt",
   loadingChanges: "Indlæser ændringer…",
   noChanges: "Ingen ændringer",
+  "settings.wrapLines.title": "Ombryd linjer",
+  "settings.wrapLines.description": "Ombryd lange linjer i mobile diffs i stedet for at rulle vandret",
 }

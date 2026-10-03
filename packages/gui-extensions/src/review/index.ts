@@ -1,8 +1,68 @@
-import { Extension } from "../sdk"
+import { Schema, Struct } from "effect"
+import { FileTree } from "../file/contract"
+import { Extension, Store } from "../sdk"
+import { Changes } from "./contract"
 import en from "./i18n/en"
+
+const DiffState = Schema.Struct({ diffStyle: Schema.Literals(["unified", "split"]) }).mapFields(
+  Struct.map(Schema.mutableKey),
+)
+
+const PanelState = Schema.Struct({ expandMode: Schema.Literals(["expand", "collapse"]) }).mapFields(
+  Struct.map(Schema.mutableKey),
+)
+
+const MobileDiff = Schema.Struct({ wrap: Schema.Boolean }).mapFields(Struct.map(Schema.mutableKey))
+
+const SessionState = Schema.Struct({
+  mode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
+  file: Schema.optional(Schema.String),
+  open: Schema.mutable(Schema.Array(Schema.String)),
+}).mapFields(Struct.map(Schema.mutableKey))
 
 export default Extension.define({
   id: "review",
+  provides: { changes: Changes },
+  // The changed files list in the file browser's tree; without it the list stays empty.
+  uses: { tree: FileTree },
+  stores: {
+    diff: Store.global(
+      DiffState,
+      { diffStyle: "split" },
+      {
+        key: "layout",
+        pick: (value: { review?: { diffStyle?: unknown } } | null) => ({ diffStyle: value?.review?.diffStyle }),
+      },
+    ),
+    panel: Store.global(
+      PanelState,
+      { expandMode: "collapse" },
+      {
+        key: "review-panel-v2",
+        pick: (value: { expandMode?: unknown } | null) => ({ expandMode: value?.expandMode }),
+      },
+    ),
+    // Whether narrow screens wrap long diff lines; stored before in the app settings.
+    mobileDiff: Store.global(
+      MobileDiff,
+      { wrap: true },
+      {
+        key: "settings.v3",
+        pick: (value: { general?: { mobileDiffWrap?: unknown } } | null) => ({ wrap: value?.general?.mobileDiffWrap }),
+      },
+    ),
+    // The mode, selected file and open files of each session.
+    session: Store.session(
+      SessionState,
+      { open: [] },
+      {
+        key: "layout",
+        sessions: "sessionView",
+        pick: (entry: { reviewMode?: unknown; reviewFile?: unknown; reviewOpen?: unknown } | undefined) =>
+          entry && { mode: entry.reviewMode, file: entry.reviewFile, open: entry.reviewOpen },
+      },
+    ),
+  },
   i18n: {
     en,
     am: () => import("./i18n/am"),

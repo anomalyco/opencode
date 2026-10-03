@@ -24,3 +24,11 @@ jobs:
 
       - name: Run checks
         run: bun run check
+
+      # Every GUI package file (app, desktop, gui-extensions, ui, session-ui) a pull request adds or edits must be free of
+      # oxlint problems, warn-level rules (anti-slop) included. Other packages are not affected.
+      - name: Lint changed files
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin ${{ github.event.pull_request.base.sha }}
+          bun run lint:changed ${{ github.event.pull_request.base.sha }}

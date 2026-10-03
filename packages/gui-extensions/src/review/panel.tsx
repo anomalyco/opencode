@@ -19,8 +19,8 @@ import type {
   SessionReviewFocus,
   SessionReviewLineComment,
 } from "@opencode/session-ui/session-review"
-import { FileTree } from "../file/contract"
-import { useExtension, usePanel, type PanelSidebar, type SessionView } from "../sdk"
+import { useExtension, usePanel, type MountedSession, type PanelSidebar, type SessionScreen } from "../sdk"
+import type Review from "./index"
 import {
   applyFileListKeyDown,
   filterReviewFiles,
@@ -41,7 +41,9 @@ type ReviewPanelState = {
 }
 
 type ReviewPanelProps = {
-  session: SessionView
+  session: MountedSession
+  /** The session screen, whose workspace the panel reads files from. */
+  screen: SessionScreen
   title?: JSX.Element
   empty?: JSX.Element
   /** Renderable diffs and their change kinds, computed once by the review model. */
@@ -67,16 +69,18 @@ type ReviewPanelProps = {
 /** The desktop review panel. */
 export default function ReviewPanelContent(props: {
   review: ReviewModel
-  session: SessionView
+  session: MountedSession
   diffStyle: SessionReviewDiffStyle
   onDiffStyleChange: (style: SessionReviewDiffStyle) => void
   expandMode: SessionReviewExpandMode
   onExpandModeChange: (mode: SessionReviewExpandMode) => void
 }) {
   const panel = usePanel()
+
   return (
     <ReviewPanel
       session={props.session}
+      screen={props.review.screen}
       title={<ReviewTitle review={props.review} />}
       empty={<ReviewPanelEmpty review={props.review} />}
       diffs={props.review.renderable()}
@@ -109,54 +113,72 @@ export default function ReviewPanelContent(props: {
 function ReviewPanel(props: ReviewPanelProps) {
   const readFile = async (path: string) =>
     props.session.server.client.file
-      .read({ path, location: { directory: props.session.file.root } })
+      .read({ path, location: { directory: props.screen.file.root } })
       .then((data) => ({ type: "text" as const, content: new TextDecoder().decode(data) }))
       .catch((error) => {
         console.debug("[session-review-v2] failed to read file", { path, error })
+
         return undefined
       })
 
   const diffs = () => props.diffs
+
   const filteredFiles = createMemo(() =>
     filterReviewFiles(
       diffs().map((diff) => diff.file),
       props.state.filter(),
     ),
   )
+
   const searching = createMemo(() => props.state.filter().trim().length > 0)
   const navigationFiles = createMemo(() => (searching() ? filteredFiles() : sortReviewPaths(filteredFiles())))
   const kinds = () => props.kinds
   // Changes-only trees omit "M" — every row is already a change; A/D stay visible.
   const treeKinds = createMemo(() => new Map([...kinds()].filter(([, kind]) => kind !== "mix")))
+
   const activeDiff = createMemo(() => {
     // A focused comment takes over the preview until the preview applies it and
     // clears the focus; the owner then persists the file as the active selection.
     const focus = props.focusedComment
+
     if (focus && diffs().some((diff) => diff.file === focus.file)) return focus.file
     const active = props.activeFile
+
     if (searching()) return active
     const files = navigationFiles()
+
     if (active && files.includes(active)) return active
+
     return files[0]
   })
+
   const sourceActiveItem = createMemo(() => diffs().find((diff) => diff.file === activeDiff()))
+
   const detailSource = createMemo(() => {
     const diff = sourceActiveItem()
     const load = props.loadDiff
+
     if (!diff || !load || !reviewDiffNeedsLoad(diff)) return undefined
+
     return { diff, load, version: props.diffVersion }
   })
+
   const [loadedDiff] = createResource(detailSource, async ({ diff, load, version }) => {
     const value = await load(diff.file, version)
+
     if (value?.file !== diff.file) return undefined
+
     return { source: diff, version, value }
   })
 
   const activeItem = createMemo(() => {
     const source = sourceActiveItem()
+
     if (loadedDiff.state !== "ready") return source
     const loaded = loadedDiff()
+
     if (loaded && loaded.source === source && loaded.version === props.diffVersion) return loaded.value
+
     return source
   })
 
@@ -221,7 +243,7 @@ function ReviewPanel(props: ReviewPanelProps) {
 }
 
 function ReviewPanelSidebar(props: {
-  session: SessionView
+  session: MountedSession
   title?: JSX.Element
   state: ReviewPanelState
   diffsReady: boolean
@@ -232,16 +254,26 @@ function ReviewPanelSidebar(props: {
   kinds: ReturnType<typeof reviewDiffKinds>
   activeDiff: string | undefined
 }) {
-  const ctx = useExtension()
-  // The file extension draws the change tree; without it the list stays empty.
-  const views = ctx.use(FileTree)
+  const ctx = useExtension<typeof Review>()
+
+  // The file extension draws the change tree; while it is unavailable the list stays empty.
+  const views = () => {
+    const tree = ctx.uses.tree()
+
+    return tree.status === "active" ? tree.value : undefined
+  }
+
   const [explicitHighlight, setExplicitHighlight] = createSignal<string | undefined>()
+
   const highlightedPath = createMemo(() => {
     if (!props.searching) return undefined
     const files = props.filteredFiles
+
     if (files.length === 0) return undefined
     const explicit = explicitHighlight()
+
     if (explicit && files.includes(explicit)) return explicit
+
     return files[0]
   })
 

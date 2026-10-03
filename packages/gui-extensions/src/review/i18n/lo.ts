@@ -10,4 +10,6 @@ export default {
   "git.description": "ຕິດຕາມ, ທົບທວນ, ແລະຍົກເລີກການປ່ຽນແປງໃນໂຄງການນີ້",
   loadingChanges: "ກຳລັງໂຫຼດການປ່ຽນແປງ…",
   noChanges: "ບໍ່ມີການປ່ຽນແປງ",
+  "settings.wrapLines.title": "ຫໍ່ສາຍ",
+  "settings.wrapLines.description": "ຫໍ່ເສັ້ນຍາວຢູ່ໃນຄວາມແຕກຕ່າງຂອງມືຖືແທນທີ່ຈະເລື່ອນຕາມແນວນອນ",
 }

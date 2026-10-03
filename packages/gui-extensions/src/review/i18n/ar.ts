@@ -18,4 +18,6 @@ export default {
   "git.description": "تتبع ومراجعة والتراجع عن التغييرات في هذا المشروع",
   loadingChanges: "جارٍ تحميل التغييرات…",
   noChanges: "لا توجد تغييرات",
+  "settings.wrapLines.title": "التفاف الأسطر",
+  "settings.wrapLines.description": "التفاف الأسطر الطويلة في فروقات الهاتف بدلًا من تمريرها أفقيًا",
 }

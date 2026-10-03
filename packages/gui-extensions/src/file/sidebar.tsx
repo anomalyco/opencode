@@ -1,47 +1,53 @@
-import { createEffect, createMemo, Match, onCleanup, Show, Switch } from "solid-js"
+import { createMemo, Match, onCleanup, Show, Switch } from "solid-js"
 import { Tabs } from "@opencode/ui/tabs"
 import type { ChangeKind } from "../review/contract"
-import { useExtension, type SessionView } from "../sdk"
-import { useShared } from "./context"
+import { createKeyed, useExtension, type MountedSession, type SessionScreen } from "../sdk"
+import { current, useShared } from "./context"
 import FileTree from "./tree"
 
 /** The file tree beside the side panel: the session's changed files, or every workspace file. */
-export default function FileSidebar(props: { session: SessionView }) {
+export default function FileSidebar(props: { session: MountedSession; screen: SessionScreen }) {
   const ctx = useExtension()
   const shared = useShared()
-  const file = props.session.file
+  const file = props.screen.file
   const empty = new Map<string, ChangeKind>()
+  const changes = () => current(shared.changes())
 
   // The host mounts this only while the tree is open, which is when its changes should stay loaded.
-  createEffect(() => {
-    const changes = shared.changes()
-    if (!changes) return
-    onCleanup(changes.watch(props.session, "tree"))
-  })
+  createKeyed(shared.changes, (service) => onCleanup(service.watch(props.session, "tree")))
 
-  createEffect(() => {
-    const directory = file.root
-    if (!props.session.server.connected) return
-    shared.tree.tab()
-    const refresh = shared.tree.directory !== directory
-    shared.tree.directory = directory
-    void file.tree.sync("", refresh ? { force: true } : undefined)
-  })
+  // Lists the root again when the directory, the tree tab or the connection changes, and whenever the root
+  // listing is unloaded, e.g. after the workspace's tree resets.
+  createKeyed(
+    () => {
+      const directory = file.root
+
+      if (!props.session.server.connected) return
+
+      const root = file.tree.state("")
+
+      return { directory, tab: shared.tree.tab(), root, loaded: root?.loaded }
+    },
+    (listing) => {
+      const refresh = shared.tree.directory !== listing.directory
+
+      shared.tree.directory = listing.directory
+      void file.tree.sync("", refresh ? { force: true } : undefined)
+    },
+  )
 
   // Without the review extension only the workspace files can show.
-  const tab = createMemo(() => (shared.changes() ? shared.tree.tab() : "all"))
-  const count = createMemo(() => shared.changes()?.diffs(props.session).length ?? 0)
-  const ready = createMemo(() => shared.changes()?.ready(props.session) ?? false)
-  const diffFiles = createMemo(() =>
-    (shared.changes()?.diffs(props.session) ?? []).flatMap((diff) =>
-      typeof diff.file === "string" ? [diff.file] : [],
-    ),
-  )
-  const kinds = createMemo(() => shared.changes()?.kinds(props.session) ?? empty)
+  const tab = createMemo(() => (changes() ? shared.tree.tab() : "all"))
+  const count = createMemo(() => changes()?.diffs(props.session).length ?? 0)
+  const ready = createMemo(() => changes()?.ready(props.session) ?? false)
+  const diffFiles = createMemo(() => (changes()?.diffs(props.session) ?? []).map((diff) => diff.file))
+  const kinds = createMemo(() => changes()?.kinds(props.session) ?? empty)
 
   const nofiles = createMemo(() => {
     const state = file.tree.state("")
+
     if (!state?.loaded) return false
+
     return file.tree.list("").length === 0
   })
 
@@ -66,7 +72,7 @@ export default function FileSidebar(props: { session: SessionView }) {
       data-scope="filetree"
     >
       <Tabs.List>
-        <Show when={shared.changes()}>
+        <Show when={changes()}>
           <Tabs.Trigger value="changes" class="flex-1" classes={{ button: "w-full" }}>
             {ctx.plural("tree.changes", count())}
           </Tabs.Trigger>
@@ -90,13 +96,21 @@ export default function FileSidebar(props: { session: SessionView }) {
               >
                 <FileTree
                   session={props.session}
+                  screen={props.screen}
                   path=""
                   class="pt-3"
                   allowed={diffFiles()}
                   kinds={kinds()}
                   draggable={false}
-                  active={shared.changes()?.active(props.session)}
-                  onFileClick={(node) => shared.changes()?.focus(props.session, node.path)}
+                  active={changes()?.active(props.session)}
+                  onFileClick={(node) => {
+                    const live = shared.changes()
+
+                    // Review shows the change; while it is pending or off, the file opens instead.
+                    if (live.status === "active") return live.value.focus(props.session, node.path)
+
+                    shared.open(props.session, node.path)
+                  }}
                 />
               </Show>
             </Match>
@@ -110,6 +124,7 @@ export default function FileSidebar(props: { session: SessionView }) {
             <Match when={true}>
               <FileTree
                 session={props.session}
+                screen={props.screen}
                 path=""
                 class="pt-3"
                 modified={diffFiles()}
