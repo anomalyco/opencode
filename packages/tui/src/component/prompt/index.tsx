@@ -1442,7 +1442,7 @@ export function Prompt(props: PromptProps) {
               syntaxStyle={syntax()}
             />
             <box flexDirection="row" flexShrink={0} paddingTop={1} gap={1} justifyContent="space-between">
-              <box flexDirection="row" gap={1}>
+              <box flexDirection="row" gap={1} flexShrink={0}>
                 <Show when={local.agent.current()} fallback={<box height={1} />}>
                   {(agent) => (
                     <>
@@ -1477,7 +1477,7 @@ export function Prompt(props: PromptProps) {
                 </Show>
               </box>
               <Show when={hasRightContent()}>
-                <box flexDirection="row" gap={1} alignItems="center">
+                <box flexDirection="row" gap={1} alignItems="center" flexShrink={1} minWidth={0} overflow="hidden">
                   {props.right}
                 </box>
               </Show>
@@ -1510,7 +1510,7 @@ export function Prompt(props: PromptProps) {
             }
           />
         </box>
-        <box width="100%" flexDirection="row" justifyContent="space-between">
+        <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>
           <Switch>
             <Match when={status().type !== "idle"}>
               <box
@@ -1645,15 +1645,17 @@ export function Prompt(props: PromptProps) {
             <Match when={true}>
               {props.hint ?? (
                 <Show when={props.sessionID} fallback={<text />}>
-                  <box marginLeft={1}>
-                    <text fg={theme.textMuted}>{location()?.directory ?? paths.cwd}</text>
+                  <box marginLeft={1} flexShrink={1} minWidth={0}>
+                    <text fg={theme.textMuted} wrapMode="none" truncate>
+                      {location()?.directory ?? paths.cwd}
+                    </text>
                   </box>
                 </Show>
               )}
             </Match>
           </Switch>
           <Show when={status().type !== "retry"}>
-            <box gap={2} flexDirection="row">
+            <box gap={2} flexDirection="row" flexShrink={0}>
               <Show when={editorContextLabelState() !== "none" ? editorFileLabelDisplay() : undefined}>
                 {(file) => (
                   <text fg={editorContextLabelState() === "pending" ? theme.secondary : theme.textMuted}>{file()}</text>
