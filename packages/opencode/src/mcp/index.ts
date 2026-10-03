@@ -22,6 +22,7 @@ import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { withTimeout } from "@/util/timeout"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { McpOAuthPendingProvider, McpOAuthProvider, OAUTH_CALLBACK_PATH } from "./oauth-provider"
+import { oauthFetch } from "./oauth-fetch"
 import { McpOAuthCallback } from "./oauth-callback"
 import { McpAuth } from "./auth"
 import { EventV2Bridge } from "@/event-v2-bridge"
@@ -272,6 +273,7 @@ const layer = Layer.effect(
           transport: new StreamableHTTPClientTransport(url, {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            fetch: oauthFetch,
           }),
         },
         {
@@ -279,6 +281,7 @@ const layer = Layer.effect(
           transport: new SSEClientTransport(url, {
             authProvider,
             requestInit: mcp.headers ? { headers: mcp.headers } : undefined,
+            fetch: oauthFetch,
           }),
         },
       ]
@@ -846,6 +849,7 @@ const layer = Layer.effect(
       const transport = new StreamableHTTPClientTransport(url, {
         authProvider,
         requestInit: mcpConfig.headers ? { headers: mcpConfig.headers } : undefined,
+        fetch: oauthFetch,
       })
       const directory = yield* InstanceState.directory
 
