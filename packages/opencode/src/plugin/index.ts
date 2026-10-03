@@ -189,7 +189,9 @@ const layer = Layer.effect(
             kind: "server",
             report: {
               start(candidate) {},
-              missing(candidate, _retry, message) {},
+              missing(candidate, _retry, message) {
+                publishPluginError(`Failed to load plugin ${candidate.plan.spec}: ${message}`)
+              },
               error(candidate, _retry, stage, error, resolved) {
                 const spec = candidate.plan.spec
                 const cause = error instanceof Error ? (error.cause ?? error) : error
