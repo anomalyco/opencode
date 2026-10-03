@@ -150,6 +150,10 @@ function bind(hostname: string, port: number) {
     const parentScope = yield* Scope.Scope
     const serverScope = yield* Scope.fork(parentScope)
     const server = createServer()
+    // Bun's node:http compat destroys sockets after keepAliveTimeout even while a large
+    // single-write body is still draining to a slow client (no further write() calls to
+    // reset its timer). Disable it so in-flight responses are never cut mid-body.
+    server.keepAliveTimeout = 0
     return yield* Effect.gen(function* () {
       const http = yield* NodeHttpServer.make(() => server, { port, host: hostname })
       yield* Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()))
