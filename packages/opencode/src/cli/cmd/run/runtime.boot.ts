@@ -112,7 +112,8 @@ const layer = Layer.effect(
       const limits = Object.fromEntries(
         providers.flatMap((provider) =>
           Object.entries(provider.models ?? {}).flatMap(([modelID, info]) => {
-            const limit = info?.limit?.context
+            // Use limit.input when available (for split-window models), otherwise limit.context
+            const limit = (info?.limit?.input && info.limit.input > 0) ? info.limit.input : info?.limit?.context
             if (typeof limit !== "number" || limit <= 0) {
               return []
             }
