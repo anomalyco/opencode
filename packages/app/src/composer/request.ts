@@ -1,6 +1,5 @@
-import { getFilename } from "@opencode/util/path"
+import { encodeFilePath, getFilename } from "@opencode/util/path"
 import type { FileSelection } from "@/workspaces/files/model"
-import { encodeFilePath } from "@/workspaces/files/path"
 import type {
   AgentPart,
   ContextItem,
@@ -12,8 +11,8 @@ import type {
 } from "@/composer/state"
 import {
   formatAttachmentReference,
-  formatBrowserCommentNote,
   formatCommentNote,
+  formatNoteComment,
   type PromptAttachmentReference,
   type PromptComment,
 } from "@/composer/comment-note"
@@ -93,15 +92,17 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
       return [{ uri, mime: "text/plain", name: getFilename(path) }]
     })
   const context = input.context.flatMap((item) => {
-    if (item.type === "browser") {
+    if (item.type === "note") {
       const comment = item.comment.trim()
       if (!comment) return []
       comments.push({
-        type: "browser",
-        tabID: item.tabID,
-        url: item.url,
-        ...(item.title ? { title: item.title } : {}),
-        element: { ...item.element },
+        type: "note",
+        origin: item.origin,
+        label: item.label,
+        icon: item.icon,
+        subject: item.subject,
+        ...(item.href ? { href: item.href } : {}),
+        ...(item.live ? { live: { ...item.live } } : {}),
         comment,
       })
       return mentioned(comment)
@@ -139,9 +140,7 @@ export function buildPromptRequest(input: BuildPromptRequestInput): PromptReques
     text: [
       ...(input.text.trim() ? [input.text] : []),
       ...attachments.map(formatAttachmentReference),
-      ...comments.map((comment) =>
-        comment.type === "browser" ? formatBrowserCommentNote(comment) : formatCommentNote(comment),
-      ),
+      ...comments.map((comment) => (comment.type === "note" ? formatNoteComment(comment) : formatCommentNote(comment))),
     ].join("\n"),
     displayText: input.text,
     files: [...files, ...context, ...inline],

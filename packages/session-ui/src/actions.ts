@@ -11,10 +11,11 @@ export type SessionUserComment =
       }
     }
   | {
-      type: "browser"
+      /** A comment on something other than file lines, such as an element picked in a page. */
+      type: "note"
       comment: string
-      url: string
-      element: { label: string }
+      label: string
+      icon: string
     }
 
 /** An attachment delivered to the model as a path on the server instead of inline bytes. */

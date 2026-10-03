@@ -20,10 +20,10 @@ import { tmpdir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]), [
-    Global.node.replace(tempGlobalLayer),
-    offlineModels,
-  ]),
+  AppNodeBuilder.build(
+    LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node, Global.node]),
+    [Global.node.replace(tempGlobalLayer), offlineModels],
+  ),
 )
 type ConfigInput = typeof Info.Encoded
 
@@ -59,7 +59,117 @@ function withFormatter<A, E, R>(
   )
 }
 
+function append(expression: string) {
+  return [process.execPath, "-e", `require('fs').appendFileSync(process.argv.at(-1), ${expression})`, "$FILE"]
+}
+
+const markdown = { command: append("'md'"), extensions: [".md"] }
+const project = { command: append("'project'"), extensions: [".project"] }
+
+// Writes formatter config layers from lowest to highest priority: global, project, then project .opencode.
+function withLayers<A, E, R>(
+  layers: ConfigInput["formatter"][],
+  body: (formatter: Formatter.Interface, directory: string) => Effect.Effect<A, E, R>,
+) {
+  return withTemp((directory) =>
+    Effect.gen(function* () {
+      const global = yield* Global.Service
+      yield* Effect.promise(async () => {
+        await fs.mkdir(path.join(directory, ".opencode"))
+        const files = [
+          path.join(global.config, "opencode.jsonc"),
+          path.join(directory, "opencode.json"),
+          path.join(directory, ".opencode", "opencode.jsonc"),
+        ]
+        await Promise.all(layers.map((formatter, index) => fs.writeFile(files[index], JSON.stringify({ formatter }))))
+      })
+      return yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        return yield* body(yield* Formatter.Service, directory)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(LocationServiceMap.Service.get(Location.Ref.make({ directory: AbsolutePath.make(directory) }))),
+      )
+    }),
+  )
+}
+
+const layered: { name: string; layers: ConfigInput["formatter"][]; expected: Record<string, string | false> }[] = [
+  {
+    name: "keeps lower formatters when a higher config adds another",
+    layers: [{ markdown }, undefined, { project }],
+    expected: { "test.md": "md", "test.project": "project" },
+  },
+  {
+    name: "inherits omitted fields and replaces supplied arrays",
+    layers: [
+      { markdown: { command: append("'A'"), extensions: [".md", ".project"] } },
+      { markdown: { command: append("'B'"), extensions: [".project"] } },
+    ],
+    expected: { "test.md": false, "test.project": "B" },
+  },
+  {
+    name: "merges environment variables by key",
+    layers: [
+      {
+        markdown: {
+          ...markdown,
+          command: append("process.env.FIRST + process.env.SECOND"),
+          environment: { FIRST: "global", SECOND: "global" },
+        },
+      },
+      { markdown: { environment: { SECOND: "project" } } },
+    ],
+    expected: { "test.md": "globalproject" },
+  },
+  {
+    name: "keeps a lower disable through overrides that omit it",
+    layers: [{ markdown: { ...markdown, disabled: true } }, { markdown: { command: append("'override'") }, project }],
+    expected: { "test.md": false, "test.project": "project" },
+  },
+  {
+    name: "re-enables a lower disabled formatter",
+    layers: [{ markdown: { ...markdown, disabled: true } }, { markdown: { disabled: false } }],
+    expected: { "test.md": "md" },
+  },
+  {
+    name: "keeps lower formatters through an empty object",
+    layers: [{ markdown }, {}],
+    expected: { "test.md": "md" },
+  },
+  {
+    name: "clears lower formatters when a higher config is false",
+    layers: [{ markdown }, false],
+    expected: { "test.md": false },
+  },
+  {
+    name: "clears lower formatters before a later object when a higher config is true",
+    layers: [{ markdown }, true, { project }],
+    expected: { "test.md": false, "test.project": "project" },
+  },
+  {
+    name: "enables only formatters configured after false",
+    layers: [{ markdown }, false, { project }],
+    expected: { "test.md": false, "test.project": "project" },
+  },
+]
+
 describe("Formatter", () => {
+  layered.forEach((entry) =>
+    it.live(entry.name, () =>
+      withLayers(entry.layers, (formatter, directory) =>
+        Effect.forEach(Object.entries(entry.expected), ([name, expected]) =>
+          Effect.gen(function* () {
+            const file = path.join(directory, name)
+            yield* Effect.promise(() => fs.writeFile(file, ""))
+            const formatted = yield* formatter.file(file)
+            expect(formatted && (yield* Effect.promise(() => fs.readFile(file, "utf8")))).toBe(expected)
+          }),
+        ),
+      ),
+    ),
+  )
   ;[
     { file: "test.match", extension: ".match", matches: true },
     { file: "test.other", extension: ".match", matches: false },

@@ -2716,6 +2716,32 @@ describe("SessionRunnerLLM", () => {
     )
   })
 
+  scenario("explains a compaction blocked by the provider", function* (s) {
+    yield* s.llm.push(TestLLM.text("Earlier answer", "history"))
+    yield* s.runPrompt("Earlier question")
+    yield* s.llm.push(
+      TestLLM.complete({
+        reason: {
+          normalized: "content-filter",
+          raw: "refusal",
+          category: "cyber",
+          explanation: "This request was declined because it could enable cyber harm.",
+        },
+      }),
+    )
+    const compaction = yield* s.session.compact({ sessionID })
+    yield* s.resume
+
+    expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({
+      status: "failed",
+      error: {
+        type: "provider.content-filter",
+        message:
+          "Compaction summary was blocked by the provider (cyber): This request was declined because it could enable cyber harm.",
+      },
+    })
+  })
+
   for (const header of [false, true]) {
     scenario(`stops compaction retries through the ${header ? "provider header" : "retry hook"}`, function* (s) {
       yield* s.llm.push(TestLLM.text("Earlier answer", "history"))

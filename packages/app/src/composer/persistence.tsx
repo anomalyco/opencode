@@ -12,7 +12,6 @@ import {
   createComposerReady,
   createComposerState,
   type ContextItem,
-  type FileContextItem,
   type Prompt,
   type PromptModel,
   type PromptScope,
@@ -28,7 +27,6 @@ export {
 } from "./state"
 export type {
   AgentPart,
-  BrowserContextItem,
   ContentPart,
   ContextItem,
   FileAttachmentPart,
@@ -158,9 +156,9 @@ export const { use: useComposerState, provider: ComposerPersistenceProvider } = 
         items: withSuspense(() => session().context.items()),
         add: (item: ContextItem) => session().context.add(item),
         remove: (key: string) => session().context.remove(key),
-        removeComment: (path: string, commentID: string) => session().context.removeComment(path, commentID),
-        updateComment: (path: string, commentID: string, next: Partial<FileContextItem> & { comment?: string }) =>
-          session().context.updateComment(path, commentID, next),
+        removeComment: (commentID: string) => session().context.removeComment(commentID),
+        updateComment: (commentID: string, next: { readonly comment?: string; readonly preview?: string }) =>
+          session().context.updateComment(commentID, next),
         replaceComments: (items: ContextItem[]) => session().context.replaceComments(items),
       },
       set: (prompt: Prompt, cursorPosition?: number, scope?: PromptScope) => pick(scope).set(prompt, cursorPosition),

@@ -302,6 +302,7 @@ describe("Google Vertex providers", () => {
 
       expect(model.provider).toBe("google-vertex")
       expect(response.text).toBe("Hello.")
+      expect(response.usage?.providerMetadata).toHaveProperty("vertex")
     }),
   )
 

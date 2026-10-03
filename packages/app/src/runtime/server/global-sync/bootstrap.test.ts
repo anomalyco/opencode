@@ -104,24 +104,20 @@ test("recovers project metadata after the connection to the server is dropped", 
 })
 
 describe("query keys", () => {
-  test("partitions identical directories by server scope", () => {
-    const location = {} as ServerApi["location"]
-    const remote = "https://debian.example" as typeof ServerScope.local
-
-    expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual(["local", "/repo", "path"])
-    expect([...loadPathQuery(remote, "/repo", location).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
-  })
-
-  test("loads current location metadata", async () => {
+  test("partitions identical directories by server scope and loads current location metadata", async () => {
     const calls: unknown[] = []
-    const api = {
+    const location = {
       get: async (input: unknown) => {
         calls.push(input)
         return { directory: "/repo/subpath", project: { id: "project", directory: "/repo" } }
       },
     } as ServerApi["location"]
+    const remote = "https://debian.example" as typeof ServerScope.local
 
-    const result = await new QueryClient().fetchQuery(loadPathQuery(ServerScope.local, "/repo/subpath", api))
+    expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual(["local", "/repo", "path"])
+    expect([...loadPathQuery(remote, "/repo", location).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
+
+    const result = await new QueryClient().fetchQuery(loadPathQuery(ServerScope.local, "/repo/subpath", location))
 
     expect(calls).toEqual([{ location: { directory: "/repo/subpath" } }])
     expect(result).toMatchObject({ directory: "/repo/subpath", worktree: "/repo" })

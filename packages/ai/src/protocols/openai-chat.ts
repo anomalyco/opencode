@@ -14,7 +14,6 @@ import {
   ProviderInternalError,
   UnknownProviderError,
   Usage,
-  type FinishReason,
   type FinishReasonDetails,
   type CacheHint,
   type LLMRequest,
@@ -45,12 +44,6 @@ const OpenAIChatCacheControl = Schema.Struct({
   ttl: Schema.optional(Schema.String),
 })
 type OpenAIChatCacheControl = Schema.Schema.Type<typeof OpenAIChatCacheControl>
-
-const OpenAIChatFunction = Schema.Struct({
-  name: Schema.String,
-  description: Schema.String,
-  parameters: JsonObject,
-})
 
 const OpenAIChatTool = Schema.Struct({
   type: Schema.tag("function"),
@@ -212,9 +205,11 @@ const OpenAIChatUsage = Schema.StructWithRest(
     prompt_tokens: optionalNull(Schema.Number),
     completion_tokens: optionalNull(Schema.Number),
     total_tokens: optionalNull(Schema.Number),
-    // Zai reports cache hits as top-level `cached_tokens`; DeepSeek uses `prompt_cache_hit_tokens`.
+    // Provider-specific cache accounting fields.
     cached_tokens: optionalNull(Schema.Number),
     prompt_cache_hit_tokens: optionalNull(Schema.Number),
+    cache_read_input_tokens: optionalNull(Schema.Number),
+    cache_created_input_tokens: optionalNull(Schema.Number),
     prompt_tokens_details: optionalNull(
       Schema.StructWithRest(
         Schema.Struct({
@@ -903,16 +898,19 @@ const mapFinishReason = Effect.fn("OpenAIChat.mapFinishReason")(function* (event
 // satisfied on both sides.
 // Providers differ on cache-hit location: OpenAI uses
 // `prompt_tokens_details.cached_tokens`, DeepSeek uses
-// `prompt_cache_hit_tokens`, and Zai uses top-level `cached_tokens`.
+// `prompt_cache_hit_tokens`, Zai uses top-level `cached_tokens`, and
+// DigitalOcean uses top-level `cache_read_input_tokens` / `cache_created_input_tokens`.
 const mapUsage = (usage: OpenAIChatEvent["usage"], providerMetadataKey: string): Usage | undefined => {
   if (!usage) return undefined
   const input = usage.prompt_tokens ?? undefined
   const output = usage.completion_tokens ?? undefined
-  const cached = (usage.prompt_tokens_details?.cached_tokens ??
-    (usage as { prompt_cache_hit_tokens?: number | null }).prompt_cache_hit_tokens ??
-    (usage as { cached_tokens?: number | null }).cached_tokens ??
-    undefined) as number | undefined
-  const cacheWrite = usage.prompt_tokens_details?.cache_write_tokens ?? undefined
+  const cached =
+    usage.prompt_tokens_details?.cached_tokens ??
+    usage.prompt_cache_hit_tokens ??
+    usage.cached_tokens ??
+    usage.cache_read_input_tokens ??
+    undefined
+  const cacheWrite = usage.prompt_tokens_details?.cache_write_tokens ?? usage.cache_created_input_tokens ?? undefined
   const reasoning = usage.completion_tokens_details?.reasoning_tokens ?? undefined
   const nonCached = ProviderShared.subtractTokens(input, ProviderShared.sumTokens(cached, cacheWrite))
   return new Usage({

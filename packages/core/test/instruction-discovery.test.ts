@@ -465,7 +465,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
 
   it.effect("canonicalizes boundaries and honors project opt-out", () =>
     Effect.gen(function* () {
-      const observed: { values: { targets: string[]; start: string; stop?: string }[] } = { values: [] }
+      const observed: { values: FSUtil.UpOptions[] } = { values: [] }
       const observingFS = Layer.effect(
         FSUtil.Service,
         FSUtil.Service.pipe(
@@ -521,7 +521,7 @@ describe("ConfigInstructionPlugin.Plugin", () => {
       )
 
       const repo = path.resolve("/repo")
-      expect(observed.values).toEqual([{ targets: ["AGENTS.md"], start: repo, stop: repo }])
+      expect(observed.values).toEqual([{ targets: ["AGENTS.md"], start: repo, stop: repo, type: "file" }])
     }),
   )
 })

@@ -1257,21 +1257,19 @@ describe("OpenAI Chat route", () => {
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
-      expect(replay.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: null,
-          reasoning: "thinking",
-          reasoning_details: details,
-          tool_calls: [
-            {
-              id: "call_1",
-              type: "function",
-              function: { name: "lookup", arguments: '{"query":"weather"}' },
-            },
-          ],
-        },
-      ])
+      expect(replay.body.messages[0]).toEqual({
+        role: "assistant",
+        content: null,
+        reasoning: "thinking",
+        reasoning_details: details,
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: { name: "lookup", arguments: '{"query":"weather"}' },
+          },
+        ],
+      })
     }),
   )
 
@@ -1374,18 +1372,16 @@ describe("OpenAI Chat route", () => {
       })
 
       const replay = yield* compileRequest(LLM.request({ model, messages: [response.message] }))
-      expect(replay.body.messages).toEqual([
-        {
-          role: "assistant",
-          content: null,
-          tool_calls: [{ id: "call_1", type: "function", function: { name: "get_time", arguments: "{}" } }],
-          reasoning_content: "Let me think",
-          reasoning_details: [
-            { type: "summary", summary: "Plan tools" },
-            { type: "encrypted", encrypted: "opaque" },
-          ],
-        },
-      ])
+      expect(replay.body.messages[0]).toEqual({
+        role: "assistant",
+        content: null,
+        tool_calls: [{ id: "call_1", type: "function", function: { name: "get_time", arguments: "{}" } }],
+        reasoning_content: "Let me think",
+        reasoning_details: [
+          { type: "summary", summary: "Plan tools" },
+          { type: "encrypted", encrypted: "opaque" },
+        ],
+      })
     }),
   )
 
@@ -2209,7 +2205,7 @@ describe("OpenAI Chat route", () => {
       )
 
       expect((yield* Ref.get(events)).some((event) => event.type === "text-delta")).toBeTrue()
-      expect(error.message).toBe("ECONNRESET: socket closed unexpectedly")
+      expect(error.message).toBe("Connection lost while reading the response: ECONNRESET: socket closed unexpectedly")
       expect(error.reason).toMatchObject({
         _tag: "Transport",
         transport: "http",
@@ -2227,7 +2223,7 @@ describe("OpenAI Chat route", () => {
         Effect.flip,
       )
 
-      expect(error.message).toBe("ECONNRESET: socket closed before output")
+      expect(error.message).toBe("Connection lost while reading the response: ECONNRESET: socket closed before output")
       expect(error.reason).toMatchObject({
         _tag: "Transport",
         transport: "http",

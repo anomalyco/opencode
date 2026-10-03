@@ -59,22 +59,20 @@ export const Plugin = define({
         yield* Effect.logDebug("instruction file skipped", { path, reason: "unavailable" })
       })
 
-      // Case-insensitive filesystems can match AGENTS.md to a directory such as agents.md/.
-      const notDirectory = (path: string) => fs.isDir(path).pipe(Effect.map((directory) => !directory))
-
       const globalSource = Effect.fn("ConfigInstructionPlugin.globalSource")(function* () {
-        if (!discovery.global || !(yield* notDirectory(globalFile))) return []
+        if (!discovery.global || !(yield* fs.isFile(globalFile))) return []
         const file = yield* read(globalFile)
         return file ? [file] : []
       })
 
       const projectSource = Effect.fn("ConfigInstructionPlugin.projectSource")(function* () {
         if (!project) return []
-        const walked = yield* Effect.forEach(yield* fs.up({ targets: ["AGENTS.md"], start, stop }), fs.resolve)
+        const walked = yield* Effect.forEach(
+          yield* fs.up({ targets: ["AGENTS.md"], start, stop, type: "file" }),
+          fs.resolve,
+        )
         const discovered = new Set(walked.filter((file) => discovery.global || file !== globalFile))
-        const files = yield* Effect.forEach(yield* Effect.filter(discovered, notDirectory), read, {
-          concurrency: "unbounded",
-        })
+        const files = yield* Effect.forEach(discovered, read, { concurrency: "unbounded" })
         if (files.some((file) => file === undefined)) return Instructions.unavailable
         return files.filter((file): file is InstructionDiscovery.File => file !== undefined)
       })

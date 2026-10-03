@@ -320,7 +320,7 @@ export function queuedPromptAttachments(item: QueuedPrompt): (ImageAttachmentPar
 // Use the full model-visible text so comment notes and path references remain
 // in the draft. Convert mentioned files, agents, and skills back into editor
 // parts; a detached draft cannot represent non-mentioned file context.
-export function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
+function queuedPromptUndoDraft(item: QueuedPrompt): Prompt | undefined {
   if (
     item.payload.files?.some((file) => !isComposerAttachment(file) && !file.mention) ||
     item.payload.agents?.some((agent) => !agent.mention) ||

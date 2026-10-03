@@ -8,7 +8,6 @@ import { Model } from "@opencode/schema/model"
 import { Provider } from "@opencode/schema/provider"
 import { Project } from "@opencode/schema/project"
 import { Worktree } from "@opencode/schema/worktree"
-import { PermissionV1 } from "@opencode/schema/permission-v1"
 import { Prompt } from "@opencode/schema/prompt"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -38,7 +37,6 @@ test("Core reuses the canonical shared schemas", async () => {
     coreAI,
     coreModel,
     corePermission,
-    corePermissionV1,
     coreWorktree,
     corePty,
     coreProject,
@@ -59,7 +57,6 @@ test("Core reuses the canonical shared schemas", async () => {
     import("@opencode/ai"),
     import("@opencode/core/model"),
     import("@opencode/core/permission"),
-    import("@opencode/core/v1/permission"),
     import("@opencode/core/worktree"),
     import("@opencode/core/pty"),
     import("@opencode/core/project/schema"),
@@ -113,7 +110,6 @@ test("Core reuses the canonical shared schemas", async () => {
     [corePermission.Effect, Permission.Effect],
     [corePermission.Rule, Permission.Rule],
     [corePermission.Ruleset, Permission.Ruleset],
-    [corePermissionV1.Event, PermissionV1.Event],
     [coreWorktree.CreateInput, Worktree.CreateInput],
     [coreWorktree.RemoveInput, Worktree.RemoveInput],
     [coreWorktree.Info, Worktree.Info],

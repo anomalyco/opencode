@@ -13,7 +13,6 @@ import { type ServerSDK, useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { createWorktree } from "@/workspaces/create"
-import { useSessionKey } from "@/session/session-layout"
 import { showToast } from "@/shell/notifications/toast"
 import { SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 import { clearSessionMessageHandoff, setSessionMessageHandoff } from "@/session/handoff"
@@ -26,7 +25,6 @@ export function createNewSessionComposerAdapter(props: {
   submitted: () => void
   mcp: DraftMcpControls
 }) {
-  const route = useSessionKey()
   const prompt = useComposerState()
   const state = prompt.capture()
   const local = useLocal()
@@ -37,7 +35,7 @@ export function createNewSessionComposerAdapter(props: {
   const location = useWorkspaceLocation()
   const language = useLanguage()
   const model = createComposerModelSelection({ agent: () => local.agent.current() })
-  const controls = createComposerControls({ sessionKey: route.sessionKey, model })
+  const controls = createComposerControls({ model })
 
   const adapter: NewSessionComposerAdapter = {
     kind: "new-session",

@@ -1,0 +1,44 @@
+export default {
+  label: "SSH",
+  placeholder: "ssh user@example.com",
+  add: "Thêm máy chủ SSH",
+  "server.menu.label": "Máy chủ SSH",
+  target: "Host hoặc lệnh SSH",
+  connect: "Kết nối",
+  connectTo: "Kết nối với {{host}}",
+  authenticate: "Xác thực SSH",
+  "session.disconnected": "Kết nối SSH không hoạt động",
+  "session.connecting": "Đang kết nối với máy chủ SSH",
+  "session.reconnectDescription":
+    "Kết nối lại để xem phiên này và tiếp tục làm việc. Phiên làm việc từ xa của bạn đã được lưu.",
+  "session.reconnect": "Kết nối lại",
+  trust: "Tin cậy và kết nối",
+  continue: "Tiếp tục",
+  update: "Cập nhật và kết nối lại",
+  project: "Mở dự án trên {{host}}",
+  "stage.incompatible": "Cần cập nhật máy chủ",
+  "error.input":
+    "Nhập một máy chủ hoặc lệnh kết nối SSH. Các lệnh từ xa và tùy chọn SSH không được hỗ trợ sẽ không được phép.",
+  "error.connection": "Không thể thiết lập kết nối SSH. Kiểm tra mạng và cấu hình SSH của bạn.",
+  "error.platform":
+    "Nền tảng từ xa này không được hỗ trợ. Việc thiết lập tự động hiện yêu cầu Linux hoặc macOS trên x64 hoặc arm64.",
+  "error.version": "Dịch vụ từ xa phải khớp với phiên bản Desktop này trước khi kết nối.",
+  "error.install":
+    "Không thể cài đặt máy chủ từ xa. Kiểm tra kết nối, dung lượng đĩa và việc tar đã được cài đặt chưa.",
+  "error.unpublished":
+    "Phiên bản Desktop này không có máy chủ từ xa đã công bố. Đối với bản phát triển, cài đặt và khởi động V2 trên máy chủ, sau đó thử lại.",
+  "error.service": "Đã kết nối SSH, nhưng máy chủ OpenCode chưa sẵn sàng.",
+  "error.host-key":
+    "Không thể xác minh danh tính của máy chủ. Xác minh dấu vân tay của nó trước khi cập nhật các máy chủ đã biết trong SSH của bạn.",
+  "error.ssh-missing": "Không tìm thấy OpenSSH. Cài đặt một khách hàng OpenSSH và đảm bảo ssh có sẵn trên PATH.",
+  "action.authenticate": "Xác thực",
+  "stage.connecting": "Đang kết nối qua SSH…",
+  "stage.authentication": "Cần xác thực",
+  "form.name": "Tên máy chủ (tùy chọn)",
+  "form.namePlaceholder": "Máy chủ cục bộ",
+  "form.add": "Thêm máy chủ",
+  "server.default": "Mặc định",
+  "menu.default": "Đặt làm mặc định",
+  "menu.defaultRemove": "Xóa mặc định",
+  "menu.delete": "Xóa",
+}

@@ -184,8 +184,8 @@ function UserMessageComments(props: { comments: SessionUserComment[]; bounded: b
           <CommentCard
             comment={comment.comment}
             target={
-              comment.type === "browser"
-                ? { type: "browser", element: comment.element.label }
+              comment.type === "note"
+                ? { type: "note", label: comment.label, icon: comment.icon }
                 : { type: "file", path: comment.path, selection: comment.selection }
             }
             title={comment.comment}

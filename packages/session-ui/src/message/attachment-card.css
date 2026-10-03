@@ -68,7 +68,7 @@
       flex: none;
     }
 
-    [data-slot="attachment-card-element"] {
+    [data-slot="attachment-card-label"] {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;

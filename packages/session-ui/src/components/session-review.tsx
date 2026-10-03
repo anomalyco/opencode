@@ -69,7 +69,6 @@ type RawReviewDiff = (PresentationFileDiff | FileDiffInfo) & {
 type ReviewDiff = ((PresentationFileDiff & { file: string }) | FileDiffInfo) & {
   preloaded?: PreloadMultiFileDiffResult<unknown, undefined>
 }
-type Item = ViewDiff & { preloaded?: PreloadMultiFileDiffResult<unknown, undefined> }
 
 function diff(value: unknown): value is ReviewDiff {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false

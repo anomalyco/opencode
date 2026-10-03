@@ -1,8 +1,8 @@
 import path from "node:path"
 import { parseArgs } from "node:util"
 import { createMockServerHandler } from "../utils/mock-server"
-import { fixture } from "./timeline/session-timeline-stress.fixture"
-import { messages } from "./timeline/session-tab-switch.fixture"
+import { fixture } from "../utils/session-fixture"
+import { messages } from "../utils/markdown-sessions"
 import { createReviewDiffs } from "./timeline/timeline-test-helpers"
 
 const args = parseArgs({
