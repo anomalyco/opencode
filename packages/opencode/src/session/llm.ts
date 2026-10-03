@@ -294,8 +294,9 @@ const live: Layer.Layer<
           // Copilot returns the authoritative billed amount only in provider-specific response fields.
           includeRawChunks: input.model.providerID.includes("github-copilot"),
           async experimental_repairToolCall(failed) {
-            const lower = failed.toolCall.toolName.toLowerCase()
-            if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
+            const name = failed.toolCall.toolName ?? ""
+            const lower = name.toLowerCase()
+            if (lower !== name && prepared.tools[lower]) {
               return {
                 ...failed.toolCall,
                 toolName: lower,
@@ -304,8 +305,10 @@ const live: Layer.Layer<
             return {
               ...failed.toolCall,
               input: JSON.stringify({
-                tool: failed.toolCall.toolName,
-                error: failed.error.message,
+                tool: name || "unknown",
+                error: name
+                  ? failed.error.message
+                  : "The call did not include a tool name. Use the exact name of an available tool and try again.",
               }),
               toolName: "invalid",
             }
