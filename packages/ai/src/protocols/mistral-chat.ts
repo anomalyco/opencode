@@ -68,7 +68,10 @@ const MistralAssistantToolCall = Schema.Struct({
 type MistralAssistantToolCall = Schema.Schema.Type<typeof MistralAssistantToolCall>
 
 const MistralMessage = Schema.Union([
-  Schema.Struct({ role: Schema.Literal("system"), content: Schema.String }),
+  Schema.Struct({
+    role: Schema.Literal("system"),
+    content: Schema.Union([Schema.String, Schema.Array(MistralTextContent)]),
+  }),
   Schema.Struct({
     role: Schema.Literal("user"),
     content: Schema.Union([Schema.String, Schema.Array(MistralUserContent)]),
@@ -335,7 +338,17 @@ const lowerToolResults = Effect.fn("MistralChat.lowerToolResults")(function* (
 const lowerMessages = Effect.fn("MistralChat.lowerMessages")(function* (request: LLMRequest) {
   const normalizeID = MistralToolID.normalizer(request)
   const messages: MistralMessage[] =
-    request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
+    request.system.length === 0
+      ? []
+      : [
+          {
+            role: "system",
+            content:
+              request.system.length === 1
+                ? request.system[0].text
+                : request.system.map((part) => ({ type: "text", text: part.text })),
+          },
+        ]
   for (const message of request.messages) {
     if (message.role === "system") {
       const update = yield* ProviderShared.wrappedSystemUpdate("Mistral Chat", message)
