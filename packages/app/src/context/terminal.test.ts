@@ -4,6 +4,7 @@ import { ServerScope } from "@/utils/server-scope"
 let getWorkspaceTerminalCacheKey: typeof import("./terminal").getWorkspaceTerminalCacheKey
 let getLegacyTerminalStorageKeys: (dir: string, legacySessionID?: string) => string[]
 let migrateTerminalState: (value: unknown) => unknown
+let createWorkspaceTerminalRegistry: typeof import("./terminal").createWorkspaceTerminalRegistry
 
 beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
@@ -22,6 +23,7 @@ beforeAll(async () => {
   getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
   getLegacyTerminalStorageKeys = mod.getLegacyTerminalStorageKeys
   migrateTerminalState = mod.migrateTerminalState
+  createWorkspaceTerminalRegistry = mod.createWorkspaceTerminalRegistry
 })
 
 describe("getWorkspaceTerminalCacheKey", () => {
@@ -87,5 +89,41 @@ describe("migrateTerminalState", () => {
         { id: "two", title: "shell", titleNumber: 7 },
       ],
     })
+  })
+})
+
+describe("createWorkspaceTerminalRegistry", () => {
+  test("reuses one terminal session across chats in the same workspace", () => {
+    const registry = createWorkspaceTerminalRegistry<{ id: string }>()
+    const disposed: string[] = []
+    const first = registry.get("server\u0000repo-a", () => ({
+      value: { id: "terminal-a" },
+      dispose: () => disposed.push("terminal-a"),
+    }))
+    const second = registry.get("server\u0000repo-a", () => ({
+      value: { id: "replacement" },
+      dispose: () => disposed.push("replacement"),
+    }))
+
+    expect(second).toBe(first)
+    expect(disposed).toEqual([])
+    registry.dispose()
+    expect(disposed).toEqual(["terminal-a"])
+  })
+
+  test("keeps workspaces separate and evicts the least recently used entry", () => {
+    const registry = createWorkspaceTerminalRegistry<{ id: string }>(2)
+    const disposed: string[] = []
+    const create = (id: string) => ({ value: { id }, dispose: () => disposed.push(id) })
+
+    expect(registry.get("server\u0000repo-a", () => create("a")).id).toBe("a")
+    expect(registry.get("server\u0000repo-b", () => create("b")).id).toBe("b")
+    expect(registry.get("server\u0000repo-a", () => create("replacement")).id).toBe("a")
+    expect(registry.get("server\u0000repo-c", () => create("c")).id).toBe("c")
+
+    expect(registry.peek("server\u0000repo-a")?.id).toBe("a")
+    expect(registry.peek("server\u0000repo-b")).toBeUndefined()
+    expect(registry.peek("server\u0000repo-c")?.id).toBe("c")
+    expect(disposed).toEqual(["b"])
   })
 })
