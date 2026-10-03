@@ -230,19 +230,28 @@ function remoteCost(input: NonNullable<(typeof ConfigProviderV1.Model.Type)["cos
     output: input.output,
     cache: { read: input.cache_read ?? 0, write: input.cache_write ?? 0 },
   }
-  if (!input.context_over_200k) return [base]
-  return [
-    base,
-    {
-      tier: { type: "context" as const, size: 200_000 },
-      input: input.context_over_200k.input,
-      output: input.context_over_200k.output,
-      cache: {
-        read: input.context_over_200k.cache_read ?? 0,
-        write: input.context_over_200k.cache_write ?? 0,
-      },
-    },
+  const tiers = [
+    ...(input.context_over_200k
+      ? [
+          {
+            tier: { type: "context" as const, size: 200_000 },
+            input: input.context_over_200k.input,
+            output: input.context_over_200k.output,
+            cache: {
+              read: input.context_over_200k.cache_read ?? 0,
+              write: input.context_over_200k.cache_write ?? 0,
+            },
+          },
+        ]
+      : []),
+    ...(input.tiers?.map((tier) => ({
+      tier: tier.tier,
+      input: tier.input,
+      output: tier.output,
+      cache: { read: tier.cache_read ?? 0, write: tier.cache_write ?? 0 },
+    })) ?? []),
   ]
+  return [base, ...Array.from(new Map(tiers.map((tier) => [`${tier.tier.type}:${tier.tier.size}`, tier])).values())]
 }
 
 function poll(http: HttpClient.HttpClient, server: string, deviceCode: string, interval: Duration.Duration) {

@@ -209,6 +209,12 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type, packageName?: st
           },
         ]
       : []),
+    ...(info.cost.tiers?.map((cost) => ({
+      tier: cost.tier,
+      input: cost.input,
+      output: cost.output,
+      cache: { read: cost.cache_read, write: cost.cache_write },
+    })) ?? []),
   ]
   const capabilities =
     info.tool_call !== undefined || info.modalities?.input !== undefined || info.modalities?.output !== undefined

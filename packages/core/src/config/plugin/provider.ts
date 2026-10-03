@@ -91,15 +91,28 @@ export const Plugin = define({
                   }
                 }
                 if (config.cost !== undefined) {
-                  model.cost = (Array.isArray(config.cost) ? config.cost : [config.cost]).map((cost) => ({
-                    tier: cost.tier && { ...cost.tier },
-                    input: cost.input,
-                    output: cost.output,
-                    cache: {
-                      read: cost.cache?.read ?? 0,
-                      write: cost.cache?.write ?? 0,
-                    },
-                  }))
+                  for (const cost of Array.isArray(config.cost) ? config.cost : [config.cost]) {
+                    const existing = model.cost.find(
+                      (item) => item.tier?.type === cost.tier?.type && item.tier?.size === cost.tier?.size,
+                    )
+                    const next = {
+                      tier: cost.tier && { ...cost.tier },
+                      input: cost.input,
+                      output: cost.output,
+                      cache: {
+                        read: cost.cache?.read ?? existing?.cache.read ?? 0,
+                        write: cost.cache?.write ?? existing?.cache.write ?? 0,
+                      },
+                    }
+                    if (existing) {
+                      existing.tier = next.tier
+                      existing.input = next.input
+                      existing.output = next.output
+                      existing.cache = next.cache
+                      continue
+                    }
+                    model.cost.push(next)
+                  }
                 }
                 if (config.disabled !== undefined) model.enabled = !config.disabled
                 if (config.limit !== undefined) model.limit = { ...model.limit, ...config.limit }

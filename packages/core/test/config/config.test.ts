@@ -115,6 +115,44 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("migrates v1 provider cost tiers", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        provider: {
+          gateway: {
+            models: {
+              "gpt-6-sol": {
+                cost: {
+                  input: 2,
+                  output: 10,
+                  tiers: [
+                    {
+                      tier: { type: "context", size: 272_000 },
+                      input: 4,
+                      output: 15,
+                      cache_read: 0.4,
+                      cache_write: 5,
+                    },
+                  ],
+                },
+              },
+            },
+          },
+        },
+      })
+
+      expect(migrated.providers?.gateway?.models?.["gpt-6-sol"]?.cost).toEqual([
+        { input: 2, output: 10, cache: { read: undefined, write: undefined } },
+        {
+          tier: { type: "context", size: 272_000 },
+          input: 4,
+          output: 15,
+          cache: { read: 0.4, write: 5 },
+        },
+      ])
+    }),
+  )
+
   it.effect("migrates v1 command configuration", () =>
     Effect.sync(() => {
       expect(
