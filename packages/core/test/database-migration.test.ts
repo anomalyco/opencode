@@ -4,7 +4,7 @@ import { fileURLToPath } from "url"
 import path from "path"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
-import { Deferred, Effect, Fiber, Layer } from "effect"
+import { Context, Deferred, Effect, Fiber, Layer } from "effect"
 import { Reactivity } from "effect/unstable/reactivity"
 import { SqlClient, Statement } from "effect/unstable/sql"
 import { sql } from "drizzle-orm"
@@ -36,17 +36,21 @@ const run = <A, E>(
 
 const makeDb = EffectDrizzleSqlite.makeWithDefaults()
 
-// A real in-memory SqlClient whose schema inspection signals `arrived` and then
-// waits on `gate`. Bootstrap inspects the schema as its first locked statement,
+// A real SqlClient whose first statement matching `statement` signals `arrived` and then waits on
+// `gate`. Bootstrap opens its transaction and inspects the schema as its first locked statements,
 // so a database built over this client parks while holding its migration lock.
-const parkedClient = (arrived: Deferred.Deferred<void>, gate: Deferred.Deferred<void>) =>
+const parkedClient = (
+  arrived: Deferred.Deferred<void>,
+  gate: Deferred.Deferred<void>,
+  options: { readonly filename?: string; readonly statement?: string } = {},
+) =>
   Layer.effect(
     SqlClient.SqlClient,
     Effect.gen(function* () {
       const client = yield* SqlClient.SqlClient
       const connection = yield* client.reserve
       const park = <A, E>(query: string, effect: Effect.Effect<A, E>) =>
-        query.includes("sqlite_master")
+        query.includes(options.statement ?? "sqlite_master")
           ? Deferred.succeed(arrived, undefined).pipe(Effect.andThen(Deferred.await(gate)), Effect.andThen(effect))
           : effect
       return yield* SqlClient.make({
@@ -59,7 +63,10 @@ const parkedClient = (arrived: Deferred.Deferred<void>, gate: Deferred.Deferred<
         spanAttributes: [],
       })
     }),
-  ).pipe(Layer.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Layer.provide(Reactivity.layer))
+  ).pipe(
+    Layer.provide(SqliteClient.layer({ filename: options.filename ?? ":memory:", disableWAL: true })),
+    Layer.provide(Reactivity.layer),
+  )
 
 describe("DatabaseMigration", () => {
   test("defaults missing workspace names while preserving legacy workspace data", async () => {
@@ -135,6 +142,38 @@ describe("DatabaseMigration", () => {
         ),
         { concurrency: "unbounded" },
       ).pipe(Effect.provideService(Global.Service, Global.make({ data: tmp.path }))),
+    )
+  })
+
+  test("bootstraps one file from two connections that both found it empty", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "shared.sqlite")
+    // Separate clients over one file stand in for two processes: neither shares the per-process
+    // bootstrap lock, so only the database transaction can keep them from racing.
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const arrived = yield* Deferred.make<void>()
+        const gate = yield* Deferred.make<void>()
+        // Park the first connection at the start of its bootstrap transaction, before it holds any
+        // SQLite lock, so the second connection bootstraps the whole schema underneath it.
+        const parked = yield* Effect.forkScoped(
+          Layer.build(
+            Database.layerFromClient.pipe(Layer.provide(parkedClient(arrived, gate, { filename, statement: "begin" }))),
+          ),
+        )
+        yield* Deferred.await(arrived)
+        yield* Layer.build(
+          Database.layerFromClient.pipe(Layer.provide(SqliteClient.layer({ filename, disableWAL: true }))),
+        )
+        yield* Deferred.succeed(gate, undefined)
+        const first = yield* Fiber.join(parked)
+
+        const db = Context.get(first, Database.Service).db
+        expect(yield* db.get(sql`SELECT count(*) AS count FROM migration`)).toEqual({ count: migrations.length })
+      }).pipe(
+        Effect.provideService(Global.Service, Global.make({ data: tmp.path })),
+        Effect.scoped,
+      ),
     )
   })
 
