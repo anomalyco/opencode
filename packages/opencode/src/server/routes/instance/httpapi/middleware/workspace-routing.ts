@@ -163,6 +163,10 @@ function planRequest(
 ): Effect.Effect<RequestPlan, never, Workspace.Service> {
   return Effect.gen(function* () {
     const url = requestURL(request)
+    const forkDirectory =
+      request.method === "POST" && /^\/session\/[^/]+\/fork$/.test(url.pathname)
+        ? url.searchParams.get("directory") || request.headers["x-opencode-directory"]
+        : undefined
     const envWorkspaceID = configuredWorkspaceID()
     const workspaceID = url.pathname.startsWith("/api/")
       ? selectedV2WorkspaceID(url, session?.workspaceID)
@@ -179,7 +183,7 @@ function planRequest(
     }
 
     return RequestPlan.Local({
-      directory: session?.directory || defaultDirectory(request, url),
+      directory: forkDirectory || session?.directory || defaultDirectory(request, url),
       workspaceID: envWorkspaceID ?? workspaceID,
     })
   })
