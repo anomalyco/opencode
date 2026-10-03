@@ -812,6 +812,152 @@ describe("session.compaction.prune", () => {
 })
 
 describe("session.compaction.process", () => {
+  itCompaction.instance(
+    "uses opt-in replay for an eligible OpenAI-compatible request",
+    () => {
+      const provider = ProviderTest.fake({
+        model: createModel({ context: 100_000, output: 32_000, npm: "@ai-sdk/openai-compatible" }),
+      })
+      let replayed = false
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const first = yield* createUserMessage(session.id, "earlier")
+        yield* createAssistantMessage(session.id, first.id, test.directory)
+        const msg = yield* createUserMessage(session.id, "latest")
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+
+        const result = yield* SessionCompaction.use.process({
+          parentID: msg.id,
+          messages: msgs,
+          sessionID: session.id,
+          auto: false,
+          run: (input) =>
+            Effect.sync(() => {
+              replayed = true
+              expect(input.user.id).toBe(msg.id)
+              expect(input.prompt).toContain("Create a new anchored summary")
+              return "continue" as const
+            }),
+        })
+
+        expect(result).toBe("continue")
+        expect(replayed).toBe(true)
+      }).pipe(
+        withCompaction({
+          provider,
+          config: cfg({ preserve_prefix_cache: true, tail_turns: 1 }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "keeps serialized fallback for unsupported providers",
+    () => {
+      const provider = ProviderTest.fake({
+        model: createModel({ context: 100_000, output: 32_000, npm: "@ai-sdk/anthropic" }),
+      })
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const msg = yield* createUserMessage(session.id, "hello")
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+        const fail = () => Effect.die("unexpected replay")
+
+        expect(
+          yield* SessionCompaction.use.process({
+            parentID: msg.id,
+            messages: msgs,
+            sessionID: session.id,
+            auto: false,
+            run: fail,
+          }),
+        ).toBe("continue")
+      }).pipe(
+        withCompaction({
+          provider,
+          config: cfg({ preserve_prefix_cache: true }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "keeps serialized fallback during overflow recovery",
+    () => {
+      const provider = ProviderTest.fake({
+        model: createModel({ context: 100_000, output: 32_000, npm: "@ai-sdk/openai-compatible" }),
+      })
+      return Effect.gen(function* () {
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const msg = yield* createUserMessage(session.id, "hello")
+        const msgs = yield* ssn.messages({ sessionID: session.id })
+
+        expect(
+          yield* SessionCompaction.use.process({
+            parentID: msg.id,
+            messages: msgs,
+            sessionID: session.id,
+            auto: false,
+            overflow: true,
+            run: () => Effect.die("unexpected replay"),
+          }),
+        ).toBe("continue")
+      }).pipe(
+        withCompaction({
+          provider,
+          config: cfg({ preserve_prefix_cache: true }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
+  itCompaction.instance(
+    "keeps serialized fallback after a prior compaction",
+    () => {
+      const provider = ProviderTest.fake({
+        model: createModel({ context: 100_000, output: 32_000, npm: "@ai-sdk/openai-compatible" }),
+      })
+      return Effect.gen(function* () {
+        const test = yield* TestInstance
+        const ssn = yield* SessionNs.Service
+        const session = yield* ssn.create({})
+        const first = yield* createUserMessage(session.id, "first")
+        yield* createAssistantMessage(session.id, first.id, test.directory)
+        yield* SessionCompaction.use.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+        const prior = (yield* ssn.messages({ sessionID: session.id })).at(-1)!
+        yield* createSummaryAssistantMessage(session.id, prior.info.id, test.directory, "prior summary")
+        const latest = yield* createUserMessage(session.id, "latest")
+        yield* createAssistantMessage(session.id, latest.id, test.directory)
+        yield* SessionCompaction.use.create({ sessionID: session.id, agent: "build", model: ref, auto: false })
+        const messages = yield* ssn.messages({ sessionID: session.id })
+        const marker = messages.at(-1)!
+
+        expect(
+          yield* SessionCompaction.use.process({
+            parentID: marker.info.id,
+            messages,
+            sessionID: session.id,
+            auto: false,
+            run: () => Effect.die("unexpected replay"),
+          }),
+        ).toBe("continue")
+      }).pipe(
+        withCompaction({
+          provider,
+          config: cfg({ preserve_prefix_cache: true }),
+        }),
+      )
+    },
+    { git: true },
+  )
+
   it.instance(
     "throws when parent is not a user message",
     Effect.gen(function* () {
