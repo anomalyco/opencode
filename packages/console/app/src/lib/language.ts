@@ -12,6 +12,7 @@ export const LOCALES = [
   "pl",
   "ru",
   "uk",
+  "be",
   "ar",
   "no",
   "br",
@@ -43,6 +44,7 @@ const LABEL = {
   pl: "Polski",
   ru: "Русский",
   uk: "Українська",
+  be: "Беларуская",
   ar: "العربية",
   no: "Norsk",
   br: "Português (Brasil)",
@@ -64,6 +66,7 @@ const TAG = {
   pl: "pl",
   ru: "ru",
   uk: "uk",
+  be: "be",
   ar: "ar",
   no: "no",
   br: "pt-BR",
@@ -85,6 +88,7 @@ const DOCS = {
   pl: "pl",
   ru: "ru",
   uk: "uk",
+  be: "root",
   ar: "ar",
   no: "nb",
   br: "pt-br",
@@ -130,6 +134,7 @@ const DOCS_LOCALE = {
   th: "th",
   tr: "tr",
   uk: "uk",
+  be: "be",
   "zh-cn": "zh",
   "zh-tw": "zht",
 } as const satisfies Record<string, Locale>
@@ -149,6 +154,7 @@ const GO_USAGE_LIMITS = {
   pl: "limity-użycia",
   ru: "лимиты-использования",
   uk: "usage-limits",
+  be: "usage-limits",
   ar: "حدود-الاستخدام",
   no: "bruksgrenser",
   br: "limites-de-uso",
@@ -157,8 +163,8 @@ const GO_USAGE_LIMITS = {
 } satisfies Record<Locale, string>
 
 export function goUsageLimits(locale: Locale) {
-  // No Ukrainian Go docs yet; the explicit English path overrides the locale cookie.
-  if (locale === "uk") return "/docs/en/go/#usage-limits"
+  // No Ukrainian/Belarusian Go docs yet; the explicit English path overrides the locale cookie.
+  if (locale === "uk" || locale === "be") return "/docs/en/go/#usage-limits"
   return docs(locale, `/docs/go/#${GO_USAGE_LIMITS[locale]}`)
 }
 
@@ -274,6 +280,7 @@ function match(input: string): Locale | null {
   if (value.startsWith("pl")) return "pl"
   if (value.startsWith("ru")) return "ru"
   if (value.startsWith("uk")) return "uk"
+  if (value.startsWith("be")) return "be"
   if (value.startsWith("ar")) return "ar"
   if (value.startsWith("tr")) return "tr"
   if (value.startsWith("th")) return "th"

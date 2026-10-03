@@ -34,6 +34,7 @@
   <a href="README.th.md">ไทย</a> |
   <a href="README.tr.md">Türkçe</a> |
   <a href="README.uk.md">Українська</a> |
+  <a href="README.be.md">Беларуская</a> |
   <a href="README.bn.md">বাংলা</a> |
   <a href="README.gr.md">Ελληνικά</a> |
   <a href="README.vi.md">Tiếng Việt</a>
