@@ -122,14 +122,23 @@ const makeLayer = (options: Options = {}) =>
       const context = yield* Effect.context()
       const runFork = Effect.runForkWith(context)
       let binary: Promise<string> | undefined
-      const daemon = yield* makeDaemonTransport(
-        options.handoff?.directory ?? runtimeDirectory(),
-        () =>
-          (binary ??= resolveBinary(global.bin).catch((error) => {
-            binary = undefined
-            throw error
-          })),
-        options.handoff,
+      const executable = () =>
+        (binary ??= resolveBinary(global.bin).catch((error) => {
+          binary = undefined
+          throw error
+        }))
+      const daemon = yield* (
+        options.handoff === undefined
+          ? makeDaemonTransport(runtimeDirectory(), executable)
+          : makeDaemonTransport(options.handoff.directory, executable, options.handoff).pipe(
+              // A failed boot would stay registered and block every client until a manual restart. The skipped
+              // daemon stops by itself when its handoff ticket expires.
+              Effect.catch((error) =>
+                Effect.logWarning("starting without persistent terminals from the previous server", {
+                  error: error.message,
+                }).pipe(Effect.andThen(makeDaemonTransport(runtimeDirectory(), executable))),
+              ),
+            )
       ).pipe(Effect.mapError(unavailable))
       const removing = new Set<Pty.ID>()
       // Controller activity selects a terminal; observer reads and pane visibility do not.

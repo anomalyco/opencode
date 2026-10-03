@@ -385,6 +385,97 @@ smoke(
   30_000,
 )
 
+smoke(
+  "hands off a live daemon after its registration file was removed",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory("xdg")
+      const scope = yield* Scope.Scope
+      const originalScope = yield* Scope.fork(scope)
+      const options = {
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        fs: { filewatcher: false },
+      }
+      const original = yield* ServerProcess.start<never, never>(options).pipe(
+        Effect.provideService(Scope.Scope, originalScope),
+      )
+      const base = HttpServer.formatAddress(original.address)
+      const sessionID = Session.ID.make("ses_persistent_pty_cleaned")
+      const terminal = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "stty -echo; printf before-cleanup; exec cat"],
+          cwd: process.cwd(),
+          title: "survivor",
+          env: {},
+        })).data,
+      )
+      expect(yield* waitForText(base, terminal.id, "before-cleanup")).toContain("before-cleanup")
+      const [directory] = yield* Effect.promise(() => fs.readdir(fixture.directory))
+      if (!directory) throw new Error("Missing daemon directory")
+      const file = path.join(fixture.directory, directory, "service.json")
+      const registration = Schema.decodeUnknownSync(Schema.Struct({ pid: Schema.Number }))(
+        yield* Effect.promise(() => Bun.file(file).json()),
+      )
+      // Age-based temporary cleanup removes the registration while the daemon and its owner stay alive.
+      yield* Effect.promise(() => fs.rm(file))
+      expect((yield* request(base, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toMatchObject([
+        { id: terminal.id, pid: terminal.pid },
+      ])
+
+      const handoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
+        (yield* request(base, "POST", "/api/experimental/persistent-pty/handoff")).handoff,
+      )
+      yield* Scope.close(originalScope, Exit.void)
+      expect(process.kill(registration.pid, 0)).toBeTrue()
+
+      const replacementScope = yield* Scope.fork(scope)
+      const replacement = yield* ServerProcess.start<never, never>({ ...options, pty: { handoff } }).pipe(
+        Effect.provideService(Scope.Scope, replacementScope),
+      )
+      const replacementBase = HttpServer.formatAddress(replacement.address)
+      expect(
+        (yield* request(replacementBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data,
+      ).toMatchObject([{ id: terminal.id, pid: terminal.pid }])
+      expect(yield* waitForText(replacementBase, terminal.id, "before-cleanup")).toContain("before-cleanup")
+
+      yield* Scope.close(replacementScope, Exit.void)
+      yield* waitForExit(registration.pid)
+      yield* waitForExit(terminal.pid)
+    }),
+  30_000,
+)
+
+it.live("starts without inherited terminals when a handoff cannot be adopted", () =>
+  Effect.gen(function* () {
+    const fixture = yield* testDirectory("xdg")
+    // An older owner can hand off after its registration file is gone, leaving nothing for the replacement to adopt.
+    const handoff = {
+      directory: path.join(fixture.directory, "unregistered"),
+      instanceID: "previous",
+      ticket: "ticket",
+      expiresAt: Date.now() + 60_000,
+    }
+    const server = yield* ServerProcess.start<never, never>({
+      hostname: "127.0.0.1",
+      port: 0,
+      password: "secret",
+      app: { version: "test-version" },
+      database: { path: fixture.database },
+      fs: { filewatcher: false },
+      pty: { handoff },
+    })
+    const base = HttpServer.formatAddress(server.address)
+    expect(
+      (yield* request(base, "GET", "/api/experimental/session/ses_persistent_pty_orphaned/terminal")).data,
+    ).toEqual([])
+  }),
+)
+
 function testDirectory(mode: "xdg" | "override") {
   return Effect.acquireRelease(
     Effect.promise(async () => {

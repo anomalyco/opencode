@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process"
-import { readFile } from "node:fs/promises"
+import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import net from "node:net"
 import path from "node:path"
 import { Data, Duration, Effect, Schema, Semaphore } from "effect"
@@ -336,6 +336,10 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       const current = owner
       const registered = registration
       if (!current || !registered) return null
+      yield* Effect.tryPromise({
+        try: () => restoreRegistration(directory, registered),
+        catch: (cause) => failure("registration", cause),
+      })
       const response = yield* Effect.tryPromise({
         try: (signal) => current.exchange({ op: "prepare_handoff" }, signal),
         catch: (cause) => failure("response", cause),
@@ -383,6 +387,17 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
 
   return { request, requestIfRunning, shutdown, handoff, subscribe } satisfies DaemonTransport
 })
+
+// The daemon writes its registration once at startup, so temporary-file cleaners can delete it while the daemon
+// keeps running. The replacement server can only adopt the daemon by rediscovering this file.
+async function restoreRegistration(directory: string, registration: Registration) {
+  const file = path.join(directory, "service.json")
+  if (await stat(file).catch(() => undefined)) return
+  await mkdir(directory, { recursive: true, mode: 0o700 })
+  const temporary = path.join(directory, `service.${registration.instance_id}.${crypto.randomUUID()}.tmp`)
+  await writeFile(temporary, JSON.stringify(registration), { mode: 0o600, flag: "wx" })
+  await rename(temporary, file).finally(() => rm(temporary, { force: true }))
+}
 
 async function openOwner(registration: Registration, ticket: string | undefined, signal: AbortSignal) {
   const socket = net.createConnection({ path: registration.socket })

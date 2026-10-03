@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { spawn } from "node:child_process"
-import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises"
 import net from "node:net"
 import os from "node:os"
 import path from "node:path"
@@ -133,6 +133,34 @@ it.live("does not replay a dispatched mutating request when its response is lost
   }),
 )
 
+it.live("restores a removed registration before preparing a handoff", () =>
+  Effect.gen(function* () {
+    const directory = yield* temporaryDirectory()
+    const socketPath = path.join(directory, "daemon.sock")
+    yield* listen(socketPath, (_socket, request) => {
+      if (request.op === "ping") return pong
+      if (request.op === "prepare_handoff")
+        return { type: "handoff", ticket: "ticket", expires_at: Date.now() + 60_000 }
+      return { type: "terminals", terminals: [] }
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath))
+    const file = path.join(directory, "service.json")
+    const registration = yield* Effect.promise(() => Bun.file(file).json())
+    const original = yield* makeDaemonTransport(directory)
+    yield* original.request({ op: "list" })
+    yield* Effect.promise(() => rm(file))
+
+    const handoff = yield* original.handoff
+    expect(handoff).toMatchObject({ directory, instanceID: "test", ticket: "ticket" })
+    expect(yield* Effect.promise(() => Bun.file(file).json())).toEqual(registration)
+    expect((yield* Effect.promise(() => stat(file))).mode & 0o777).toBe(0o600)
+
+    if (!handoff) throw new Error("Expected a handoff")
+    const replacement = yield* makeDaemonTransport(directory, undefined, handoff)
+    expect(yield* replacement.request({ op: "list" })).toEqual({ type: "terminals", terminals: [] })
+  }),
+)
+
 it.live("rejects incompatible daemons without replacing or killing them", () =>
   Effect.gen(function* () {
     const directory = yield* temporaryDirectory()
@@ -187,13 +215,15 @@ function listen(
       const server = net.createServer((socket) => {
         sockets.add(socket)
         socket.once("close", () => sockets.delete(socket))
-        void readRequest(socket)
-          .then((envelope) => {
+        const serve = (): Promise<void> =>
+          readRequest(socket).then((envelope) => {
             const response =
               envelope.request.op === "own" ? { type: "owned" } : handle(socket, envelope.request, envelope.token)
             if (response) socket.write(frame(response))
+            // Owner connections stay open for later handoff requests.
+            if (envelope.request.op === "own") return serve()
           })
-          .catch(() => socket.destroy())
+        void serve().catch(() => socket.destroy())
       })
       await new Promise<void>((resolve, reject) => {
         server.once("error", reject)
