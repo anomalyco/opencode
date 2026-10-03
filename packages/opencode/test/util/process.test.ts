@@ -110,6 +110,26 @@ describe("util.process", () => {
     expect(await proc.exited).toBe(0)
   })
 
+  test("spawns nvm-style .cmd shims instead of .ps1", async () => {
+    if (process.platform !== "win32") return
+
+    await using tmp = await tmpdir()
+    const bin = path.join(tmp.path, "bin")
+    await fs.mkdir(bin, { recursive: true })
+    await Bun.write(path.join(bin, "npm.ps1"), "Write-Host ps1\r\n")
+    await Bun.write(path.join(bin, "npm.cmd"), "@echo off\r\necho spawn-cmd\r\n")
+
+    const out = await Process.run(["npm"], {
+      env: {
+        PATH: bin,
+        PATHEXT: ".PS1;.CMD",
+      },
+    })
+
+    expect(out.code).toBe(0)
+    expect(out.stdout.toString()).toContain("spawn-cmd")
+  })
+
   test("rejects missing commands without leaking unhandled errors", async () => {
     await using tmp = await tmpdir()
     const cmd = path.join(tmp.path, "missing" + (process.platform === "win32" ? ".cmd" : ""))
