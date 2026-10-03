@@ -170,6 +170,20 @@ export type ParsedAPICallError =
     }
 
 export function parseAPICallError(input: { providerID: ProviderV2.ID; error: APICallError }): ParsedAPICallError {
+  // Newer SDKs wrap response-body failures, including our retryable stream timeout.
+  if (input.error.cause instanceof ResponseStreamError) {
+    return {
+      type: "api_error",
+      message: input.error.cause.message,
+      isRetryable: true,
+      responseHeaders: input.error.responseHeaders,
+      metadata: {
+        code: input.error.cause.name,
+        ...(input.error.url ? { url: input.error.url } : {}),
+      },
+    }
+  }
+
   const m = message(input.providerID, input.error)
   const body = json(input.error.responseBody)
   if (isContextOverflow(m) || input.error.statusCode === 413 || body?.error?.code === "context_length_exceeded") {
