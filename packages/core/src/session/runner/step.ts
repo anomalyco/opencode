@@ -18,6 +18,7 @@ import { Snapshot } from "../../snapshot.js"
 import { Tool } from "../../tool.js"
 import { ToolOutput } from "../../tool-output.js"
 import { QuestionTool } from "../../tool/plugin/question.js"
+import { SessionAttachment } from "../attachment.js"
 import { StepFailedError } from "../error.js"
 import { SessionEvent } from "../event.js"
 import { SessionMessage } from "../message.js"
@@ -56,6 +57,8 @@ interface Input {
   readonly recoverContinuation: boolean
   /** The runner owns compaction policy; the attempt invokes it only before durable output. */
   readonly recoverOverflow: Effect.Effect<boolean>
+  /** Attachments the model has not accepted yet, named in the error if the provider rejects one. */
+  readonly attachments?: ReadonlyArray<SessionAttachment.Candidate>
 }
 
 const TOOLS_INTERRUPTED = { type: "aborted", message: "Tool execution interrupted" } as const
@@ -170,7 +173,10 @@ export const make = Effect.gen(function* () {
               })
             : undefined
         const llmFailure = streamFailure instanceof AIError ? streamFailure : unknownFinish
-        const llmError = llmFailure && !recorded.providerFailed ? toSessionError(llmFailure) : undefined
+        const llmError =
+          llmFailure && !recorded.providerFailed
+            ? SessionAttachment.describe(toSessionError(llmFailure), input.attachments ?? [])
+            : undefined
         if (
           input.recoverContinuation &&
           llmFailure?.reason._tag === "Transport" &&

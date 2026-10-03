@@ -209,6 +209,7 @@ const makeRunnerState = (compaction?: SessionRunnerModel.Resolved["compaction"])
     }).pipe(Effect.andThen(Deferred.succeed(barrier.release, undefined)), Effect.asVoid)
   return {
     currentModel: model,
+    inputModalities: ["text", "image"] as Model.Capabilities["input"],
     compaction,
     modelResolveHook: resolvesModel,
     systemBaseline: "Initial context",
@@ -325,7 +326,7 @@ const layer = Layer.unwrap(
           Effect.map(() => {
             const selected = session.model?.id === "replacement" ? replacementModel : state.currentModel
             return SessionRunnerModel.resolved(selected, {
-              capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+              capabilities: { tools: true, input: state.inputModalities, output: ["text"] },
               cost: [],
               limit: modelLimits.get(String(selected.id)) ?? defaultModelLimit,
               variant: session.model?.variant,
@@ -672,6 +673,17 @@ const INCOMPLETE_STREAM_CONTINUATION =
 const invalidRequest = () =>
   new AIError({
     reason: new InvalidRequestError({ message: "Invalid request" }),
+  })
+
+const CORRUPT_PDF = "data:application/pdf;base64,JVBERi0xLjQKdHJ1bmNhdGVk"
+const HEALTHY_PDF = "data:application/pdf;base64,JVBERi0xLjQKJSVFT0YK"
+
+const mediaRejected = () =>
+  new AIError({
+    reason: new InvalidRequestError({
+      message: "The file you uploaded is badly formatted or corrupted. Please fix the file and try again.",
+      classification: "media-rejected",
+    }),
   })
 
 const payloadTooLarge = () =>
@@ -4370,6 +4382,117 @@ describe("SessionRunnerLLM", () => {
     yield* execution.wake(sessionID)
     yield* Effect.yieldNow
     expect(s.requests).toHaveLength(2)
+  })
+
+  scenario("continues without a rejected attachment the user excludes", function* (s) {
+    s.inputModalities = ["text", "image", "pdf"]
+    yield* transformTools(
+      yield* Tool.Service,
+      {
+        attach: {
+          name: "attach",
+          description: "Return two documents",
+          input: Schema.Struct({}),
+          output: Schema.Struct({}),
+          execute: () =>
+            Effect.sync(() => {
+              s.executions.push("attach")
+              return {
+                output: {},
+                content: [
+                  { type: "text" as const, text: "Documents ready" },
+                  { type: "file" as const, uri: CORRUPT_PDF, mime: "application/pdf", name: "report.pdf" },
+                  { type: "file" as const, uri: HEALTHY_PDF, mime: "application/pdf", name: "notes.pdf" },
+                ],
+              }
+            }),
+        },
+      },
+      { codemode: false },
+    )
+    yield* s.llm.push(TestLLM.tool("call-attach", "attach", {}), Stream.fail(mediaRejected()))
+    expect(yield* s.runPrompt("Read the documents").pipe(Effect.flip)).toMatchObject({
+      reason: { classification: "media-rejected" },
+    })
+
+    const failed = (yield* s.context).findLast((message) => message.type === "assistant")
+    expect(failed).toMatchObject({
+      error: {
+        type: "provider.media-rejected",
+        message: expect.stringContaining("report.pdf (application/pdf), notes.pdf (application/pdf)"),
+      },
+    })
+    const reader = (yield* s.context).find(
+      (message) => message.type === "assistant" && message.content.some((part) => part.type === "tool"),
+    )
+    if (reader?.type !== "assistant") throw new Error("Expected the assistant message that read the documents")
+    // Only attachments added since the last accepted request are suspects.
+    expect(yield* s.session.attachments(sessionID)).toEqual([
+      { messageID: reader.id, callID: "call-attach", index: 1, mime: "application/pdf", name: "report.pdf" },
+      { messageID: reader.id, callID: "call-attach", index: 2, mime: "application/pdf", name: "notes.pdf" },
+    ])
+
+    s.requests.length = 0
+    yield* s.llm.push(TestLLM.text("The report could not be read", "text-without-report"))
+    yield* s.session.excludeAttachments({
+      sessionID,
+      attachments: [{ messageID: reader.id, callID: "call-attach", index: 1 }],
+      resume: false,
+    })
+    yield* s.resume
+
+    const toolResult = (request: LLMRequest | undefined) =>
+      request?.messages
+        .flatMap((message) => message.content)
+        .find((part) => part.type === "tool-result" && part.id === "call-attach")
+    const filtered = {
+      type: "content",
+      value: [
+        { type: "text", text: "Documents ready" },
+        { type: "text", text: expect.stringContaining('[Attachment omitted: "report.pdf" (application/pdf).') },
+        { type: "file", uri: HEALTHY_PDF, mime: "application/pdf", name: "notes.pdf" },
+      ],
+    }
+    expect(s.requests).toHaveLength(1)
+    expect(toolResult(s.requests[0])).toMatchObject({ result: filtered })
+    expect(s.executions).toEqual(["attach"])
+    // Stored history keeps the original content, read back from the projection as a restart would.
+    expect((yield* s.context).find((message) => message.id === reader.id)).toMatchObject({
+      content: [
+        expect.objectContaining({
+          id: "call-attach",
+          excludedContent: [1],
+          state: expect.objectContaining({
+            content: [
+              { type: "text", text: "Documents ready" },
+              { type: "file", uri: CORRUPT_PDF, mime: "application/pdf", name: "report.pdf" },
+              { type: "file", uri: HEALTHY_PDF, mime: "application/pdf", name: "notes.pdf" },
+            ],
+          }),
+        }),
+      ],
+    })
+    expect(yield* s.session.attachments(sessionID)).toEqual([])
+
+    // Compaction requests apply the same exclusion.
+    yield* s.llm.push(TestLLM.text("Later answer", "text-later"))
+    yield* s.runPrompt("Anything else?")
+    s.requests.length = 0
+    yield* s.llm.push(TestLLM.text("## Objective\n- Read documents", "text-summary"))
+    yield* s.session.compact({ sessionID, delivery: "steer" })
+    yield* s.resume
+    expect(s.requests).toHaveLength(1)
+    expect(toolResult(s.requests[0])).toMatchObject({ result: filtered })
+  })
+
+  scenario("rejects excluding an attachment that is not in the session", function* (s) {
+    yield* s.llm.push(TestLLM.text("Done", "text-done"))
+    const user = yield* s.runPrompt("No attachments here")
+    expect(
+      yield* s.session
+        .excludeAttachments({ sessionID, attachments: [{ messageID: user.id, index: 0 }], resume: false })
+        .pipe(Effect.flip),
+    ).toMatchObject({ _tag: "Session.AttachmentNotFoundError" })
   })
 
   scenario("runs steering input accepted while the active step fails", function* (s) {

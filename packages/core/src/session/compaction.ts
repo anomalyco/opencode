@@ -24,6 +24,7 @@ import { Database } from "../database/database.js"
 import { llmClient } from "../effect/app-node-platform.js"
 import { State } from "../state.js"
 import { Token } from "../util/token.js"
+import { SessionAttachment } from "./attachment.js"
 import type { SessionContext } from "./context.js"
 import { SessionEvent } from "./event.js"
 import { SessionHistory } from "./history.js"
@@ -409,7 +410,10 @@ export const layer = Layer.effect(
         if (Result.isSuccess(attempt)) return attempt.success
         const cause = attempt.failure
         if (!(cause instanceof AIError)) return yield* Effect.fail(cause)
-        const error = toSessionError(cause)
+        const error = SessionAttachment.describe(
+          toSessionError(cause),
+          SessionAttachment.candidates(context.messages, context.model.ref),
+        )
         const tooLarge = cause.reason._tag === "InvalidRequest" && cause.reason.classification === "payload-too-large"
 
         if (tooLarge && request === prepared.request) {

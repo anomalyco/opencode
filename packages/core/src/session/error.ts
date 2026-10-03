@@ -68,6 +68,20 @@ export class AttachmentError extends Schema.TaggedError<AttachmentError>()("Sess
   message: Schema.String,
 }) {}
 
+export class AttachmentNotFoundError extends Schema.TaggedError<AttachmentNotFoundError>()(
+  "Session.AttachmentNotFoundError",
+  {
+    sessionID: SessionSchema.ID,
+    attachments: Schema.Array(SessionMessage.AttachmentRef),
+  },
+) {
+  override get message() {
+    return `No attachment in session ${this.sessionID} matches ${this.attachments
+      .map((ref) => [ref.messageID, ref.callID, ref.index].filter((part) => part !== undefined).join("/"))
+      .join(", ")}`
+  }
+}
+
 export class CompactionConflictError extends Schema.TaggedError<CompactionConflictError>()(
   "Session.CompactionConflictError",
   {

@@ -812,6 +812,25 @@ export function createData(config: CreateDataInput) {
           time: { created: event.created },
         })
         return
+      case "session.attachments.excluded":
+        for (const ref of event.data.attachments) {
+          const callID = ref.callID
+          if (callID !== undefined) {
+            message.editTool(event.data.sessionID, ref.messageID, callID, (tool) => {
+              tool.excludedContent = [...new Set([...(tool.excludedContent ?? []), ref.index])].toSorted(
+                (a, b) => a - b,
+              )
+            })
+            continue
+          }
+          message.update(event.data.sessionID, (draft, index) => {
+            const position = index.get(ref.messageID)
+            const item = position === undefined ? undefined : draft[position]
+            if (item?.type === "user")
+              item.excludedFiles = [...new Set([...(item.excludedFiles ?? []), ref.index])].toSorted((a, b) => a - b)
+          })
+        }
+        return
       case "session.shell.started":
         message.insert(event.data.sessionID, {
           id: messageIDFromEvent(event.id),

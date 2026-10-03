@@ -332,6 +332,25 @@ function run(db: DatabaseService, event: MessageEvent) {
           return message.type === "assistant" ? message : undefined
         })
       },
+      getUser(messageID) {
+        return Effect.gen(function* () {
+          const row = yield* db
+            .select()
+            .from(SessionMessageTable)
+            .where(
+              and(
+                eq(SessionMessageTable.id, messageID),
+                eq(SessionMessageTable.session_id, event.data.sessionID),
+                eq(SessionMessageTable.type, "user"),
+              ),
+            )
+            .get()
+            .pipe(Effect.orDie)
+          if (!row) return
+          const message = decodeRow(row)
+          return message.type === "user" ? message : undefined
+        })
+      },
       getShell(shellID) {
         return Effect.gen(function* () {
           const row = yield* db
@@ -375,6 +394,7 @@ function run(db: DatabaseService, event: MessageEvent) {
         })
       },
       updateAssistant: updateMessage,
+      updateUser: updateMessage,
       updateShell: updateMessage,
       updateCompaction: updateMessage,
       appendMessage,
@@ -678,6 +698,7 @@ const layer = Layer.effectDiscard(
       }),
     )
     yield* bus.project(SessionEvent.Synthetic, (event) => run(db, event))
+    yield* bus.project(SessionEvent.AttachmentsExcluded, (event) => run(db, event))
     yield* bus.project(SessionEvent.Skill.Activated, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Started, (event) => run(db, event))
     yield* bus.project(SessionEvent.Shell.Ended, (event) => run(db, event))

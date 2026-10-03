@@ -300,6 +300,28 @@ export type SessionSkillInput = {
 export type SessionSkillOutput = void
 export type SessionSkillOperation<E = never> = (input: SessionSkillInput) => Effect.Effect<SessionSkillOutput, E>
 
+export type SessionAttachmentCandidatesInput = { readonly sessionID: Session.ID }
+export type SessionAttachmentCandidatesOutput = ReadonlyArray<{
+  readonly messageID: SessionMessage.ID
+  readonly callID?: string | undefined
+  readonly index: number
+  readonly mime: string
+  readonly name?: string | undefined
+}>
+export type SessionAttachmentCandidatesOperation<E = never> = (
+  input: SessionAttachmentCandidatesInput,
+) => Effect.Effect<SessionAttachmentCandidatesOutput, E>
+
+export type SessionAttachmentExcludeInput = {
+  readonly sessionID: Session.ID
+  readonly attachments: readonly [SessionMessage.AttachmentRef, ...Array<SessionMessage.AttachmentRef>]
+  readonly resume?: boolean | undefined
+}
+export type SessionAttachmentExcludeOutput = void
+export type SessionAttachmentExcludeOperation<E = never> = (
+  input: SessionAttachmentExcludeInput,
+) => Effect.Effect<SessionAttachmentExcludeOutput, E>
+
 export type SessionSyntheticInput = {
   readonly sessionID: Session.ID
   readonly id?: SessionMessage.ID | undefined
@@ -772,6 +794,23 @@ export type SessionLogOutput =
             readonly text: string
             readonly description?: string | undefined
             readonly metadata?: { readonly [x: string]: unknown } | undefined
+          }
+        }
+      | {
+          readonly id: Event.ID
+          readonly created: number
+          readonly metadata?: { readonly [x: string]: unknown } | undefined
+          readonly type: "session.attachments.excluded"
+          readonly durable: { readonly aggregateID: string; readonly seq: Event.Seq; readonly version: Event.Version }
+          readonly location?:
+            | {
+                readonly directory: AbsolutePath
+                readonly workspaceID?: (string & Brand.Brand<"Workspace.ID">) | undefined
+              }
+            | undefined
+          readonly data: {
+            readonly sessionID: Session.ID
+            readonly attachments: readonly [SessionMessage.AttachmentRef, ...Array<SessionMessage.AttachmentRef>]
           }
         }
       | {
@@ -1456,6 +1495,10 @@ export interface SessionApi<E = never> {
   readonly prompt: SessionPromptOperation<E>
   readonly command: SessionCommandOperation<E>
   readonly skill: SessionSkillOperation<E>
+  readonly attachment: {
+    readonly candidates: SessionAttachmentCandidatesOperation<E>
+    readonly exclude: SessionAttachmentExcludeOperation<E>
+  }
   readonly synthetic: SessionSyntheticOperation<E>
   readonly shell: SessionShellOperation<E>
   readonly compact: SessionCompactOperation<E>

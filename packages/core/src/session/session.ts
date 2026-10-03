@@ -12,6 +12,7 @@ import { Instance } from "../instance/service.js"
 import { ShellResult } from "../shell/result.js"
 import type { Skill } from "../skill.js"
 import {
+  AttachmentNotFoundError,
   BusyError,
   CompactionConflictError,
   InboxConflictError,
@@ -19,8 +20,10 @@ import {
   PromptConflictError,
   SyntheticConflictError,
 } from "./error.js"
+import { SessionAttachment } from "./attachment.js"
 import { SessionEvent } from "./event.js"
 import { SessionExecution } from "./execution.js"
+import { SessionHistory } from "./history.js"
 import { SessionInbox } from "./inbox.js"
 import { SessionMessage } from "./message.js"
 import { SessionPrompt } from "./prompt.js"
@@ -243,6 +246,31 @@ export const make = Effect.fn("Session.make")(function* () {
         .resume(sessionID)
         .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
   })
+  // Local summaries bound history; native windows are not, since a model that cannot replay them receives the
+  // original messages.
+  const attachments = Effect.fn("Session.attachments")(function* (sessionID: SessionSchema.ID) {
+    const session = yield* get(sessionID)
+    const messages = yield* SessionHistory.load(database.db, sessionID, "local")
+    const latest = messages.findLast((message): message is SessionMessage.Assistant => message.type === "assistant")
+    return SessionAttachment.candidates(messages, latest?.model ?? session.model)
+  })
+  const excludeAttachments = Effect.fn("Session.excludeAttachments")(function* (
+    sessionID: SessionSchema.ID,
+    input: { attachments: SessionEvent.AttachmentsExcluded["data"]["attachments"]; resume?: boolean },
+  ) {
+    yield* get(sessionID)
+    if (yield* execution.isActive(sessionID)) return yield* new BusyError({ sessionID })
+    const unknown = SessionAttachment.unknown(
+      yield* SessionHistory.load(database.db, sessionID, "local"),
+      input.attachments,
+    )
+    if (unknown.length > 0) return yield* new AttachmentNotFoundError({ sessionID, attachments: unknown })
+    yield* bus.publish(SessionEvent.AttachmentsExcluded, { sessionID, attachments: input.attachments })
+    if (input.resume !== false)
+      yield* execution
+        .resume(sessionID)
+        .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }), Effect.asVoid)
+  })
   const compact = Effect.fn("Session.compact")(function* (
     sessionID: SessionSchema.ID,
     input: { id?: SessionMessage.ID; delivery?: SessionInbox.Delivery },
@@ -357,6 +385,8 @@ export const make = Effect.fn("Session.make")(function* () {
     synthetic,
     shell,
     skill,
+    attachments,
+    excludeAttachments,
     compact,
     wait,
     resume,
@@ -381,6 +411,8 @@ export const make = Effect.fn("Session.make")(function* () {
     const synthetic = operations.synthetic.bind(undefined, sessionID)
     const shell = operations.shell.bind(undefined, sessionID)
     const skill = operations.skill.bind(undefined, sessionID)
+    const attachments = operations.attachments.bind(undefined, sessionID)
+    const excludeAttachments = operations.excludeAttachments.bind(undefined, sessionID)
     const compact = operations.compact.bind(undefined, sessionID)
     const wait = operations.wait.bind(undefined, sessionID)
     const resume = operations.resume.bind(undefined, sessionID)
@@ -408,6 +440,8 @@ export const make = Effect.fn("Session.make")(function* () {
       synthetic,
       shell,
       skill,
+      attachments,
+      excludeAttachments,
       compact,
       wait,
       resume,

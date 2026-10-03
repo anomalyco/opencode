@@ -9,9 +9,11 @@ export interface Adapter {
   readonly getLocation: () => Effect.Effect<SessionMessage.LocationSwitched["previous"]>
   readonly getCurrentAssistant: () => Effect.Effect<SessionMessage.Assistant | undefined>
   readonly getAssistant: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.Assistant | undefined>
+  readonly getUser: (messageID: SessionMessage.ID) => Effect.Effect<SessionMessage.User | undefined>
   readonly getShell: (shellID: SessionMessage.Shell["shellID"]) => Effect.Effect<SessionMessage.Shell | undefined>
   readonly getCompaction: () => Effect.Effect<SessionMessage.Compaction | undefined>
   readonly updateAssistant: (assistant: SessionMessage.Assistant) => Effect.Effect<void>
+  readonly updateUser: (user: SessionMessage.User) => Effect.Effect<void>
   readonly updateShell: (shell: SessionMessage.Shell) => Effect.Effect<void>
   readonly updateCompaction: (compaction: SessionMessage.Compaction) => Effect.Effect<void>
   readonly appendMessage: (message: SessionMessage.Info) => Effect.Effect<void>
@@ -27,6 +29,9 @@ const projectTerminalSnapshot = (draft: DraftAssistant, event: SessionEvent.Step
       files: event.data.files ? Array.from(event.data.files) : undefined,
     }
 }
+
+const include = (excluded: ReadonlyArray<number> | undefined, index: number) =>
+  excluded?.includes(index) ? Array.from(excluded) : [...(excluded ?? []), index].toSorted((a, b) => a - b)
 
 export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
   type DraftTool = WritableDraft<SessionMessage.AssistantTool>
@@ -170,6 +175,28 @@ export function update(adapter: Adapter, event: SessionEvent.DurableEvent) {
           }),
         )
       },
+      "session.attachments.excluded": (event) =>
+        Effect.forEach(
+          event.data.attachments,
+          (ref) => {
+            const callID = ref.callID
+            if (callID === undefined)
+              return Effect.gen(function* () {
+                const user = yield* adapter.getUser(ref.messageID)
+                if (!user) return
+                yield* adapter.updateUser(
+                  produce(user, (draft) => {
+                    draft.excludedFiles = include(draft.excludedFiles, ref.index)
+                  }),
+                )
+              })
+            return updateOwnedAssistant(ref.messageID, (draft) => {
+              const tool = latestTool(draft, callID)
+              if (tool) tool.excludedContent = include(tool.excludedContent, ref.index)
+            })
+          },
+          { discard: true },
+        ),
       "session.skill.activated": (event) => {
         return adapter.appendMessage(
           SessionMessage.Skill.make({

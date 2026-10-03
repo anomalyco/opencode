@@ -55,6 +55,31 @@ const patterns = [
 
 const payloadPatterns = [/request entity too large/i, /payload too large/i, /request too large/i]
 
+// Rejections of one attachment rather than the request as a whole. Only consulted for client errors, after
+// context-overflow and payload-size checks, so those keep their own recovery.
+const MEDIA_CODES = new Set([
+  "invalid_file",
+  "invalid_image",
+  "invalid_image_format",
+  "invalid_image_url",
+  "image_parse_error",
+])
+const mediaPatterns = [
+  // OpenAI
+  /file you uploaded is badly formatted or corrupted/i,
+  /you uploaded an unsupported image/i,
+  /^invalid image(?: data)?\.?$/im,
+  // Anthropic and Bedrock name the rejected block's path, e.g. `messages.3.content.1.image.source.base64`.
+  /content\.\d+\.(?:image|document)\.source\b/i,
+  /could not process image/i,
+  /does not appear to be a valid \w+ image/i,
+  /the pdf specified was not valid/i,
+  // Gemini
+  /unable to process input image/i,
+  /provided image is not valid/i,
+  /the document has no pages/i,
+]
+
 const exclusions = [
   /^(throttling error|service unavailable):/i,
   /rate limit/i,
@@ -258,6 +283,11 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     return new InvalidRequestError({ ...details, classification: "payload-too-large" })
   if (codes.some((code) => CONTENT_POLICY_CODES.has(code)) || (clientScoped && CONTENT_POLICY_TEXT.test(input.message)))
     return new ContentPolicyError(details)
+  if (
+    clientScoped &&
+    (codes.some((code) => MEDIA_CODES.has(code)) || mediaPatterns.some((pattern) => pattern.test(text)))
+  )
+    return new InvalidRequestError({ ...details, classification: "media-rejected" })
   if (
     input.status === 402 ||
     codes.some((code) => QUOTA_CODES.has(code)) ||

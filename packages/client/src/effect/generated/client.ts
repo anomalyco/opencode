@@ -53,6 +53,10 @@ import type {
   SessionCommandOutput,
   SessionSkillInput,
   SessionSkillOutput,
+  SessionAttachmentCandidatesInput,
+  SessionAttachmentCandidatesOutput,
+  SessionAttachmentExcludeInput,
+  SessionAttachmentExcludeOutput,
   SessionSyntheticInput,
   SessionSyntheticOutput,
   SessionShellInput,
@@ -529,6 +533,23 @@ const EndpointSessionSkill = (raw: RawClient["server.session"]) => (input: Sessi
     }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointSessionAttachmentCandidates =
+  (raw: RawClient["server.session"]) => (input: SessionAttachmentCandidatesInput) =>
+    preserveEffect<SessionAttachmentCandidatesOutput>()(
+      raw["session.attachment.candidates"]({ params: { sessionID: input["sessionID"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointSessionAttachmentExclude = (raw: RawClient["server.session"]) => (input: SessionAttachmentExcludeInput) =>
+  preserveEffect<SessionAttachmentExcludeOutput>()(
+    raw["session.attachment.exclude"]({
+      params: { sessionID: input["sessionID"] },
+      payload: { attachments: input["attachments"], resume: input["resume"] },
+    }).pipe(Effect.mapError(mapClientError)),
+  )
+
 const EndpointSessionSynthetic = (raw: RawClient["server.session"]) => (input: SessionSyntheticInput) =>
   preserveEffect<SessionSyntheticOutput>()(
     raw["session.synthetic"]({
@@ -776,6 +797,7 @@ const adaptGroupSession = (raw: RawClient["server.session"]) => ({
   prompt: EndpointSessionPrompt(raw),
   command: EndpointSessionCommand(raw),
   skill: EndpointSessionSkill(raw),
+  attachment: { candidates: EndpointSessionAttachmentCandidates(raw), exclude: EndpointSessionAttachmentExclude(raw) },
   synthetic: EndpointSessionSynthetic(raw),
   shell: EndpointSessionShell(raw),
   compact: EndpointSessionCompact(raw),

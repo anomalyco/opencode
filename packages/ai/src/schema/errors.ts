@@ -2,7 +2,15 @@ import { Schema } from "effect"
 import { Tool } from "@opencode/schema/tool"
 import { ModelID, ProviderID, RouteID } from "./ids.js"
 
-export const ProviderFailureClassification = Schema.Literals(["context-overflow", "payload-too-large"])
+/**
+ * `media-rejected` means the provider refused an image, document, or other file in the request, such as a corrupt
+ * PDF. Resending the same history fails the same way; recovery must change the attachments that are sent.
+ */
+export const ProviderFailureClassification = Schema.Literals([
+  "context-overflow",
+  "payload-too-large",
+  "media-rejected",
+])
 export type ProviderFailureClassification = typeof ProviderFailureClassification.Type
 
 export class HttpContext extends Schema.Class<HttpContext>("AI.HttpContext")({

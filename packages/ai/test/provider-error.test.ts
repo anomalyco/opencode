@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isContextOverflow } from "../src/index.js"
+import { AIError, isContextOverflow, isRetryable } from "../src/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
@@ -397,6 +397,95 @@ describe("provider error classification", () => {
     expect(classifyProviderFailure({ message: '{"type":"error","error":{"code":123}}' })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: "not-json" })._tag).toBe("UnknownProvider")
     expect(classifyProviderFailure({ message: "network error" })._tag).toBe("UnknownProvider")
+  })
+})
+
+describe("provider media rejection classification", () => {
+  const rejected = expect.objectContaining({ _tag: "InvalidRequest", classification: "media-rejected" })
+
+  test("classifies OpenAI file and image rejections by their codes", () => {
+    const failures = [
+      classifyProviderFailure({
+        message: "The file you uploaded is badly formatted or corrupted. Please fix the file and try again.",
+        status: 400,
+        rawBody:
+          '{"error":{"type":"invalid_request_error","code":"invalid_file","param":"input","message":"The file you uploaded is badly formatted or corrupted. Please fix the file and try again."}}',
+      }),
+      classifyProviderFailure({
+        message: "Invalid image.",
+        status: 400,
+        rawBody:
+          '{"error":{"message":"Invalid image.","type":"invalid_request_error","param":null,"code":"invalid_image"}}',
+      }),
+      classifyProviderFailure({
+        message: "Invalid image data.",
+        status: 400,
+        rawBody: '{"error":{"code":"BadRequest","message":"Invalid image data.","param":null,"type":null}}',
+      }),
+      // Responses streams report the rejection without an HTTP status.
+      classifyProviderFailure({
+        message: "You uploaded an unsupported image. Please make sure your image is valid.",
+        rawBody: '{"type":"error","error":{"type":"invalid_request_error","code":"image_parse_error"}}',
+      }),
+    ]
+
+    expect(failures).toEqual([rejected, rejected, rejected, rejected])
+  })
+
+  test("classifies Anthropic and Gemini attachment rejections by their explanations", () => {
+    const failures = [
+      classifyProviderFailure({
+        message:
+          "messages.2.content.1.image.source.base64: The image was specified using the image/png media type, but does not appear to be a valid png image",
+        status: 400,
+        rawBody:
+          '{"type":"error","error":{"type":"invalid_request_error","message":"messages.2.content.1.image.source.base64: The image was specified using the image/png media type, but does not appear to be a valid png image"}}',
+      }),
+      classifyProviderFailure({
+        message: "messages.4.content.0.content.1.document.source.base64.data: The PDF specified was not valid.",
+        status: 400,
+      }),
+      classifyProviderFailure({ message: "Could not process image", status: 400 }),
+      classifyProviderFailure({
+        message: "Unable to process input image. Please retry or report in https://example.com/troubleshooting",
+        status: 400,
+        rawBody:
+          '{"error":{"code":400,"message":"Unable to process input image. Please retry or report in https://example.com/troubleshooting","status":"INVALID_ARGUMENT"}}',
+      }),
+      classifyProviderFailure({ message: "The document has no pages.", status: 400 }),
+    ]
+
+    expect(failures).toEqual([rejected, rejected, rejected, rejected, rejected])
+  })
+
+  test("keeps context overflow, payload size, policy, and server failures separate", () => {
+    expect(
+      classifyProviderFailure({
+        message: "prompt is too long: 250000 tokens > 200000 maximum",
+        status: 400,
+        rawBody: '{"error":{"code":"invalid_image","message":"prompt is too long: 250000 tokens > 200000 maximum"}}',
+      }),
+    ).toMatchObject({ classification: "context-overflow" })
+    expect(
+      classifyProviderFailure({ message: "Could not process image: request entity too large", status: 413 }),
+    ).toMatchObject({ classification: "payload-too-large" })
+    expect(
+      classifyProviderFailure({
+        message: "Your image was rejected by our safety system.",
+        status: 400,
+        rawBody: '{"error":{"code":"image_content_policy_violation","message":"Your image was rejected."}}',
+      })._tag,
+    ).toBe("ContentPolicy")
+    expect(classifyProviderFailure({ message: "Could not process image", status: 500 })._tag).toBe("ProviderInternal")
+    expect(classifyProviderFailure({ message: "Invalid value for 'temperature'", status: 400 })).not.toMatchObject({
+      classification: "media-rejected",
+    })
+  })
+
+  test("never retries a rejected attachment", () => {
+    const reason = classifyProviderFailure({ message: "Could not process image", status: 400 })
+    const error = new AIError({ reason })
+    expect(isRetryable(error)).toBe(false)
   })
 })
 

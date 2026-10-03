@@ -13,8 +13,16 @@ import { fileURLToPath } from "url"
 import { SessionMessage } from "../message.js"
 import { SessionProviderContext } from "../provider-context.js"
 import type { FileAttachment } from "@opencode/schema/prompt"
+import type { Content } from "@opencode/schema/tool"
 
 const imageMimes = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
+
+/** Whether a user file reaches the model as media rather than as inlined text. */
+export const isMediaFile = (mime: string) => imageMimes.has(mime) || mime === "application/pdf"
+
+/** Stands in for an attachment the user excluded, so the model knows something was omitted. */
+export const excludedAttachmentNote = (attachment: { readonly mime: string; readonly name?: string }) =>
+  `[Attachment omitted: ${attachment.name === undefined ? attachment.mime : `"${attachment.name}" (${attachment.mime})`}. The model provider rejected a request that included it, so the user chose to continue without it. Its contents are not available; tell the user if you need them.]`
 
 const media = (file: FileAttachment): ContentPart => ({
   type: "media",
@@ -75,23 +83,27 @@ const directoryAttachment = (file: FileAttachment): ContentPart => ({
 const attachmentContent = (file: FileAttachment): ContentPart[] => {
   if (file.mime === "text/plain") return [textAttachment(file)]
   if (file.mime === "application/x-directory") return [directoryAttachment(file)]
-  if (imageMimes.has(file.mime) || file.mime === "application/pdf") {
+  if (isMediaFile(file.mime)) {
     const location = attachmentLocation(file)
     return [...(location === undefined ? [] : [Message.text(`Attached file: ${location}`)]), media(file)]
   }
   return []
 }
 
-const userAttachmentContent = (files: readonly FileAttachment[]) => {
+const userAttachmentContent = (files: readonly FileAttachment[], excluded: ReadonlyArray<number> = []) => {
+  const content = (file: FileAttachment, index: number) =>
+    excluded.includes(index) && isMediaFile(file.mime)
+      ? [Message.text(excludedAttachmentNote({ mime: file.mime, name: file.name }))]
+      : attachmentContent(file)
   const eligible = files.filter(
     (file) => imageMimes.has(file.mime) && file.source.type === "inline" && file.mention?.text,
   )
-  if (eligible.length < 2) return files.flatMap(attachmentContent)
+  if (eligible.length < 2) return files.flatMap(content)
 
   const seen = new Map<string, Set<string>>()
-  return files.flatMap((file) => {
-    if (!imageMimes.has(file.mime) || file.source.type !== "inline" || !file.mention?.text)
-      return attachmentContent(file)
+  return files.flatMap((file, index) => {
+    if (excluded.includes(index) || !imageMimes.has(file.mime) || file.source.type !== "inline" || !file.mention?.text)
+      return content(file, index)
     const metadata = JSON.stringify([file.mime, file.name ?? null, file.description ?? null, file.mention.text])
     const payloads = seen.get(metadata) ?? new Set<string>()
     if (payloads.has(file.data)) return []
@@ -122,10 +134,20 @@ const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: Provider
     providerMetadata,
   })
 
+const toolContent = (content: ReadonlyArray<Content>, excluded: ReadonlyArray<number> = []) =>
+  excluded.length === 0
+    ? content
+    : content.map(
+        (item, index): Content =>
+          item.type === "file" && excluded.includes(index)
+            ? { type: "text", text: excludedAttachmentNote(item) }
+            : item,
+      )
+
 const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined) => {
   if (tool.state.status === "completed") {
     // TODO: Materialize remote and managed URIs before provider-history lowering.
-    const content = tool.state.content
+    const content = toolContent(tool.state.content, tool.excludedContent)
     const single = content.length === 1 ? content[0] : undefined
     return ToolResultPart.make({
       id: tool.id,
@@ -142,7 +164,7 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
     return ToolResultPart.make({
       id: tool.id,
       name: tool.name,
-      result: { error: tool.state.error, content: tool.state.content ?? [] },
+      result: { error: tool.state.error, content: toolContent(tool.state.content ?? [], tool.excludedContent) },
       resultType: "error",
       providerExecuted: tool.executed,
       providerMetadata,
@@ -267,7 +289,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
       const content = [
         ...(message.skills ?? []).flatMap((skill) => (skill.text === undefined ? [] : [Message.text(skill.text)])),
         ...(message.text === "" ? [] : [Message.text(message.text)]),
-        ...userAttachmentContent(message.files ?? []),
+        ...userAttachmentContent(message.files ?? [], message.excludedFiles),
       ]
       if (content.length === 0) return []
       return [

@@ -173,6 +173,14 @@ export type SessionActive = { type: "running" }
 
 export type SessionInboxDelivery = "steer" | "queue"
 
+export type SessionAttachmentCandidate = {
+  messageID: string
+  callID?: string
+  index: number
+  mime: string
+  name?: string | null
+}
+
 export type SessionInboxSyntheticPayload = { text: string; description?: string; metadata?: { [x: string]: JsonValue } }
 
 export type SessionInboxCompactionPayload = {}
@@ -184,6 +192,8 @@ export type SessionGenerateResponse = { data: { text: string } }
 export type LocationRef = { directory: string; workspaceID?: string }
 
 export type SessionInboxSyntheticPayload1 = { text: string; description?: string; metadata?: { [x: string]: any } }
+
+export type SessionMessageAttachmentRef = { messageID: string; callID?: string; index: number }
 
 export type ShellInfo = {
   id: string
@@ -1254,6 +1264,16 @@ export type SessionMetadataUpdated = {
   data: { sessionID: string; metadata: SessionMetadata }
 }
 
+export type SessionAttachmentsExcluded = {
+  id: string
+  created: number
+  metadata?: { [x: string]: any }
+  type: "session.attachments.excluded"
+  durable: { aggregateID: string; seq: number; version: 1 }
+  location?: LocationRef
+  data: { sessionID: string; attachments: [SessionMessageAttachmentRef, ...Array<SessionMessageAttachmentRef>] }
+}
+
 export type SessionShellStarted = {
   id: string
   created: number
@@ -1761,6 +1781,7 @@ export type SessionMessageUser = {
   files?: Array<PromptFileAttachment>
   agents?: Array<PromptAgentAttachment>
   skills?: Array<PromptSkillAttachment>
+  excludedFiles?: Array<number>
   type: "user"
 }
 
@@ -2229,6 +2250,7 @@ export type SessionMessageAssistantTool = {
     | SessionMessageToolStateRunning
     | SessionMessageToolStateCompleted
     | SessionMessageToolStateError
+  excludedContent?: Array<number>
   time: { created: number; ran?: number; completed?: number }
 }
 
@@ -2249,6 +2271,7 @@ export type SessionMessageAssistantTool1 = {
     | SessionMessageToolStateRunning1
     | SessionMessageToolStateCompleted1
     | SessionMessageToolStateError1
+  excludedContent?: Array<number>
   time: { created: number; ran?: number; completed?: number }
 }
 
@@ -2386,6 +2409,7 @@ export type SessionEventDurable =
   | SessionExecutionInterrupted
   | SessionInstructionsUpdated
   | SessionSynthetic
+  | SessionAttachmentsExcluded
   | SessionSkillActivated
   | SessionShellStarted
   | SessionShellEnded
@@ -2450,6 +2474,7 @@ export type V2Event =
   | SessionExecutionInterrupted
   | SessionInstructionsUpdated
   | SessionSynthetic
+  | SessionAttachmentsExcluded
   | SessionSkillActivated
   | SessionShellStarted
   | SessionShellEnded
@@ -3160,6 +3185,7 @@ export type SessionImportInput = {
             readonly text?: string
             readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
           }>
+          readonly excludedFiles?: ReadonlyArray<number>
           readonly type: "user"
         }
       | {
@@ -3288,6 +3314,7 @@ export type SessionImportInput = {
                       ]
                       readonly metadata?: { readonly [x: string]: JsonValue }
                     }
+                readonly excludedContent?: ReadonlyArray<number>
                 readonly time: { readonly created: number; readonly ran?: number; readonly completed?: number }
               }
           >
@@ -3497,6 +3524,7 @@ export type SessionImportInput = {
             readonly text?: string
             readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
           }>
+          readonly excludedFiles?: ReadonlyArray<number>
           readonly type: "user"
         }
       | {
@@ -3625,6 +3653,7 @@ export type SessionImportInput = {
                       ]
                       readonly metadata?: { readonly [x: string]: JsonValue }
                     }
+                readonly excludedContent?: ReadonlyArray<number>
                 readonly time: { readonly created: number; readonly ran?: number; readonly completed?: number }
               }
           >
@@ -3834,6 +3863,7 @@ export type SessionImportInput = {
             readonly text?: string
             readonly mention?: { readonly start: number; readonly end: number; readonly text: string }
           }>
+          readonly excludedFiles?: ReadonlyArray<number>
           readonly type: "user"
         }
       | {
@@ -3962,6 +3992,7 @@ export type SessionImportInput = {
                       ]
                       readonly metadata?: { readonly [x: string]: JsonValue }
                     }
+                readonly excludedContent?: ReadonlyArray<number>
                 readonly time: { readonly created: number; readonly ran?: number; readonly completed?: number }
               }
           >
@@ -4447,6 +4478,30 @@ export type SessionSkillInput = {
 }
 
 export type SessionSkillOutput = void
+
+export type SessionAttachmentCandidatesInput = { readonly sessionID: { readonly sessionID: string }["sessionID"] }
+
+export type SessionAttachmentCandidatesOutput = { data: Array<SessionAttachmentCandidate> }["data"]
+
+export type SessionAttachmentExcludeInput = {
+  readonly sessionID: { readonly sessionID: string }["sessionID"]
+  readonly attachments: {
+    readonly attachments: readonly [
+      { readonly messageID: string; readonly callID?: string; readonly index: number },
+      ...Array<{ readonly messageID: string; readonly callID?: string; readonly index: number }>,
+    ]
+    readonly resume?: boolean | null
+  }["attachments"]
+  readonly resume?: {
+    readonly attachments: readonly [
+      { readonly messageID: string; readonly callID?: string; readonly index: number },
+      ...Array<{ readonly messageID: string; readonly callID?: string; readonly index: number }>,
+    ]
+    readonly resume?: boolean | null
+  }["resume"]
+}
+
+export type SessionAttachmentExcludeOutput = void
 
 export type SessionSyntheticInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]

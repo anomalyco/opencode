@@ -28,6 +28,7 @@ import { SessionStore } from "./session/store.js"
 import { SessionExecution } from "./session/execution.js"
 import {
   AttachmentError,
+  AttachmentNotFoundError,
   BusyError,
   CompactionConflictError,
   ForkEmptyError,
@@ -100,6 +101,7 @@ type ForkInput = {
 
 export {
   AttachmentError,
+  AttachmentNotFoundError,
   BusyError,
   CompactionConflictError,
   InboxConflictError,
@@ -209,6 +211,12 @@ export interface Interface {
   readonly skill: (
     input: Parameters<Session.Handle["skill"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["skill"]>
+  /** Attachments the Session's model has not accepted yet: the suspects when a provider rejects an attachment. */
+  readonly attachments: (sessionID: SessionSchema.ID) => ReturnType<Session.Handle["attachments"]>
+  /** Durably stops sending attachments to the model, then resumes unless `resume` is false. */
+  readonly excludeAttachments: (
+    input: Parameters<Session.Handle["excludeAttachments"]>[0] & { sessionID: SessionSchema.ID },
+  ) => ReturnType<Session.Handle["excludeAttachments"]>
   readonly compact: (
     input: CompactInput,
   ) => Effect.Effect<SessionInbox.Compaction, NotFoundError | CompactionConflictError>
@@ -430,6 +438,8 @@ const layer = Layer.effect(
       }),
       shell: (input) => sessions.forSession(input.sessionID).shell(input),
       skill: (input) => sessions.forSession(input.sessionID).skill(input),
+      attachments: (sessionID) => sessions.forSession(sessionID).attachments(),
+      excludeAttachments: (input) => sessions.forSession(input.sessionID).excludeAttachments(input),
       switchAgent: (input) => sessions.forSession(input.sessionID).switchAgent(input),
       switchModel: (input) => sessions.forSession(input.sessionID).switchModel(input),
       rename: (input) => sessions.forSession(input.sessionID).rename(input),

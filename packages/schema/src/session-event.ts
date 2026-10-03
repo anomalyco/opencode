@@ -288,6 +288,17 @@ export const Synthetic = Event.durable({
 })
 export type Synthetic = typeof Synthetic.Type
 
+/** The user chose to stop sending these attachments to the model, usually after a provider rejected one. */
+export const AttachmentsExcluded = Event.durable({
+  type: "session.attachments.excluded",
+  ...options,
+  schema: {
+    ...Base,
+    attachments: Schema.NonEmptyArray(SessionMessage.AttachmentRef),
+  },
+})
+export type AttachmentsExcluded = typeof AttachmentsExcluded.Type
+
 export namespace Skill {
   export const Activated = Event.durable({
     type: "session.skill.activated",
@@ -671,6 +682,7 @@ export const Definitions = Event.inventory(
   Execution.Interrupted,
   InstructionsUpdated,
   Synthetic,
+  AttachmentsExcluded,
   Skill.Activated,
   Shell.Started,
   Shell.Ended,

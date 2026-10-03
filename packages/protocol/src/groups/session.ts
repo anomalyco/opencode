@@ -145,6 +145,12 @@ const PublicInboxInfo = Schema.Union([
   PublicMove,
 ]).annotate({ identifier: "Session.Inbox.Info" })
 
+const AttachmentCandidate = Schema.Struct({
+  ...SessionMessage.AttachmentRef.fields,
+  mime: Schema.String,
+  name: Schema.String.pipe(Schema.optional),
+}).annotate({ identifier: "Session.AttachmentCandidate" })
+
 const FormCreatePayload = Schema.Struct({
   id: Form.ID.pipe(Schema.optional),
   title: Form.Info.fields.title,
@@ -448,6 +454,40 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             identifier: "experimental.session.skill",
             summary: "Activate skill",
             description: "Activate a skill for a session by appending a skill message and resuming execution.",
+          }),
+        ),
+    )
+    .add(
+      HttpApiEndpoint.get("session.attachment.candidates", "/api/session/:sessionID/attachment/candidates", {
+        params: { sessionID: Session.ID },
+        success: Schema.Struct({ data: Schema.Array(AttachmentCandidate) }),
+        error: [SessionNotFoundError, UnknownError],
+      }).annotateMerge(
+        OpenApi.annotations({
+          identifier: "session.attachment.candidates",
+          summary: "List rejected attachment candidates",
+          description:
+            "List media attachments the session's model has not accepted yet: everything added since the latest request that model accepted. When a provider rejects an attachment, these are the attachments that may have caused it.",
+        }),
+      ),
+    )
+    .add(
+      HttpApiEndpoint.post("session.attachment.exclude", "/api/session/:sessionID/attachment/exclude", {
+        params: { sessionID: Session.ID },
+        payload: Schema.Struct({
+          attachments: Schema.NonEmptyArray(SessionMessage.AttachmentRef),
+          resume: Schema.Boolean.pipe(Schema.optional),
+        }),
+        success: HttpApiSchema.NoContent,
+        error: [SessionNotFoundError, SessionBusyError, InvalidRequestError, UnknownError],
+      })
+        .middleware(sessionLocationMiddleware)
+        .annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.attachment.exclude",
+            summary: "Exclude attachments",
+            description:
+              "Stop sending attachments to the model, replacing each with a short note in future requests while keeping stored history, then resume execution unless resume is false.",
           }),
         ),
     )

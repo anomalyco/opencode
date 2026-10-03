@@ -47,6 +47,10 @@ import type {
   SessionCommandOutput,
   SessionSkillInput,
   SessionSkillOutput,
+  SessionAttachmentCandidatesInput,
+  SessionAttachmentCandidatesOutput,
+  SessionAttachmentExcludeInput,
+  SessionAttachmentExcludeOutput,
   SessionSyntheticInput,
   SessionSyntheticOutput,
   SessionShellInput,
@@ -762,6 +766,31 @@ export function make(options: ClientOptions) {
           },
           requestOptions,
         ),
+      attachment: {
+        candidates: (input: SessionAttachmentCandidatesInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: SessionAttachmentCandidatesOutput }>(
+            {
+              method: "GET",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/attachment/candidates`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 500],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        exclude: (input: SessionAttachmentExcludeInput, requestOptions?: RequestOptions) =>
+          request<SessionAttachmentExcludeOutput>(
+            {
+              method: "POST",
+              path: `/api/session/${encodeURIComponent(input.sessionID)}/attachment/exclude`,
+              body: { attachments: input["attachments"], resume: input["resume"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404, 409, 500],
+              empty: true,
+            },
+            requestOptions,
+          ),
+      },
       synthetic: (input: SessionSyntheticInput, requestOptions?: RequestOptions) =>
         request<{ readonly data: SessionSyntheticOutput }>(
           {

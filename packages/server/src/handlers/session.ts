@@ -397,6 +397,40 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         }),
       )
       .handle(
+        "session.attachment.candidates",
+        Effect.fn(function* (ctx) {
+          return {
+            data: yield* session
+              .attachments(ctx.params.sessionID)
+              .pipe(
+                Effect.catchTag("Session.NotFoundError", missingSession),
+                Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
+              ),
+          }
+        }),
+      )
+      .handle(
+        "session.attachment.exclude",
+        Effect.fn(function* (ctx) {
+          yield* session
+            .excludeAttachments({
+              sessionID: ctx.params.sessionID,
+              attachments: ctx.payload.attachments,
+              resume: ctx.payload.resume,
+            })
+            .pipe(
+              Effect.catchTag("Session.NotFoundError", missingSession),
+              Effect.catchTag("Session.BusyError", busySession),
+              Effect.catchTag("Session.MessageDecodeError", failedMessageDecode),
+              Effect.catchTag(
+                "Session.AttachmentNotFoundError",
+                (error) => new InvalidRequestError({ message: error.message, field: "attachments" }),
+              ),
+            )
+          return HttpApiSchema.NoContent.make()
+        }),
+      )
+      .handle(
         "session.synthetic",
         Effect.fn(function* (ctx) {
           const data = yield* session

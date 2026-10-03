@@ -7,6 +7,7 @@ import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
 import { InstructionState } from "../instruction-state.js"
+import { SessionAttachment } from "../attachment.js"
 import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
@@ -259,6 +260,7 @@ const layer = Layer.effect(
               retry: proposed,
             }),
           recoverContinuation,
+          attachments: SessionAttachment.candidates(loaded.messages, loaded.model.ref),
           recoverOverflow: Effect.suspend(() =>
             recoverOverflow
               ? compaction

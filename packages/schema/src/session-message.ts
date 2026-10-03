@@ -8,7 +8,7 @@ import { Location } from "./location.js"
 import { Model } from "./model.js"
 import { Project } from "./project.js"
 import { Prompt } from "./prompt.js"
-import { DateTimeUtcFromMillis, PositiveInt, RelativePath, statics } from "./schema.js"
+import { DateTimeUtcFromMillis, NonNegativeInt, PositiveInt, RelativePath, statics } from "./schema.js"
 import { ascending } from "./identifier.js"
 import { Event } from "./event.js"
 import { Shell as ShellSchema } from "./shell.js"
@@ -70,6 +70,23 @@ export const LocationSwitched = Schema.Struct({
   }).pipe(optional),
 }).annotate({ identifier: "Session.Message.LocationSwitched" })
 
+/**
+ * Positions of attachments the user chose to stop sending to the model. Stored content is kept; model requests
+ * replace each excluded attachment with a short note.
+ */
+const ExcludedAttachments = Schema.Array(NonNegativeInt)
+
+/**
+ * One attachment in Session history: a user file (`files[index]`), or a file in a tool result
+ * (`content[index]` of the tool call `callID` in an assistant message).
+ */
+export interface AttachmentRef extends Schema.Schema.Type<typeof AttachmentRef> {}
+export const AttachmentRef = Schema.Struct({
+  messageID: ID,
+  callID: Schema.String.pipe(optional),
+  index: NonNegativeInt,
+}).annotate({ identifier: "Session.Message.AttachmentRef" })
+
 export interface User extends Schema.Schema.Type<typeof User> {}
 export const User = Schema.Struct({
   ...Base,
@@ -77,6 +94,8 @@ export const User = Schema.Struct({
   files: Prompt.fields.files,
   agents: Prompt.fields.agents,
   skills: Prompt.fields.skills,
+  /** Indexes into `files`. */
+  excludedFiles: ExcludedAttachments.pipe(optional),
   type: Schema.tag("user"),
 }).annotate({ identifier: "Session.Message.User" })
 
@@ -166,6 +185,8 @@ export const AssistantTool = Schema.Struct({
   providerState: ProviderState.pipe(optional),
   providerResultState: ProviderState.pipe(optional),
   state: ToolState,
+  /** Indexes into the settled state's `content`. */
+  excludedContent: ExcludedAttachments.pipe(optional),
   time: Schema.Struct({
     created: DateTimeUtcFromMillis,
     ran: DateTimeUtcFromMillis.pipe(optional),

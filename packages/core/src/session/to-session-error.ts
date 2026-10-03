@@ -6,6 +6,7 @@ import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
 import { ModelResolver } from "../model-resolver.js"
 import { SessionRunnerModel } from "./runner/model.js"
+import { SessionAttachment } from "./attachment.js"
 
 const tokenSharingMessages = {
   subscription_sharing_user_not_eligible:
@@ -43,6 +44,10 @@ export function toSessionError(cause: unknown): SessionError.Error {
       case "InvalidProviderOutput":
         return providerError("provider.invalid-output", cause.reason)
       case "InvalidRequest":
+        if (cause.reason.classification === "media-rejected") {
+          const error = providerError(SessionAttachment.REJECTED, cause.reason)
+          return { ...error, message: `The model provider rejected an attachment: ${error.message}` }
+        }
         return providerError("provider.invalid-request", cause.reason)
       case "UnsupportedOperation":
         return providerError("provider.unsupported-operation", cause.reason)

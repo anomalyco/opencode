@@ -65,6 +65,7 @@ import { filetype } from "../../util/filetype"
 import parsers from "../../parsers-config"
 import { errorMessage } from "../../util/error"
 import { useToast } from "../../ui/toast"
+import { DialogConfirm } from "../../ui/dialog-confirm"
 import stripAnsi from "strip-ansi"
 import { usePromptRef } from "../../context/prompt"
 import { projectedPromptInput } from "../../prompt/codec"
@@ -127,6 +128,9 @@ addDefaultParsers(parsers.parsers)
 // Exclude temporary bottom space when measuring the real transcript height.
 const NAVIGATION_SLACK_ID = "session-navigation-slack"
 const BACKGROUND_TOOL_HINT_DELAY = 3_000
+// The Session error type for a provider rejecting an attachment, and the slash command that recovers from it.
+const ATTACHMENT_REJECTED = "provider.media-rejected"
+const CONTINUE_WITHOUT_ATTACHMENTS = "continue-without-attachments"
 
 // Budgets count rendered entries (see mount-budget.ts); a collapsed group costs one.
 // The tail comfortably overfills a tall viewport; older rows mount as the reader approaches them.
@@ -176,6 +180,11 @@ export function Session(props: {
     const index = messages().findIndex((message) => message.id === messageID)
     return index === -1 ? [] : messages().slice(index)
   }
+  const attachmentRejected = createMemo(() => {
+    const latest = messages().findLast((message) => message.type === "assistant" || message.type === "compaction")
+    if (latest?.type === "assistant") return latest.error?.type === ATTACHMENT_REJECTED
+    return latest?.type === "compaction" && latest.status === "failed" && latest.error.type === ATTACHMENT_REJECTED
+  })
   const currentLocation = useLocation()
   const location = createMemo(() => session()?.location ?? currentLocation.ref)
 
@@ -963,6 +972,54 @@ export function Session(props: {
           })
           .catch((error) => toast.show({ message: errorMessage(error), variant: "error" }))
         dialog.clear()
+      },
+    },
+    {
+      title: "Continue without rejected attachments",
+      id: "session.attachments.exclude",
+      group: "Session",
+      enabled: attachmentRejected(),
+      slash: { name: CONTINUE_WITHOUT_ATTACHMENTS },
+      run: () => {
+        const sessionID = route.sessionID
+        void client.api.session.attachment
+          .candidates({ sessionID })
+          .then((candidates) => {
+            const [first, ...rest] = candidates
+            if (first === undefined) {
+              toast.show({ message: "No attachments left to exclude", variant: "error", duration: 3000 })
+              dialog.clear()
+              return
+            }
+            const ref = (candidate: typeof first) => ({
+              messageID: candidate.messageID,
+              callID: candidate.callID,
+              index: candidate.index,
+            })
+            dialog.replace(() => (
+              <DialogConfirm
+                title="Continue without these attachments?"
+                message={[
+                  "The model provider rejected an attachment. These attachments were added since its last accepted request and will no longer be sent to the model. Each is replaced by a note; your history keeps them.",
+                  "",
+                  ...candidates.map(
+                    (candidate) =>
+                      `• ${candidate.name === undefined ? candidate.mime : `${candidate.name} (${candidate.mime})`}`,
+                  ),
+                ].join("\n")}
+                label={{ confirm: "Continue" }}
+                onConfirm={() =>
+                  void client.api.session.attachment
+                    .exclude({
+                      sessionID,
+                      attachments: [ref(first), ...rest.map(ref)],
+                    })
+                    .catch((error) => toast.error(error))
+                }
+              />
+            ))
+          })
+          .catch((error) => toast.error(error))
       },
     },
     {
@@ -1882,6 +1939,16 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
       <Show when={props.message.error && !interrupted() && !props.message.retry}>
         <box paddingLeft={3}>
           <text fg={theme.text.feedback.error.base}>Error: {errorMessage(props.message.error)}</text>
+        </box>
+      </Show>
+      <Show
+        when={
+          props.message.error?.type === ATTACHMENT_REJECTED &&
+          messages().findLast((message) => message.type === "assistant")?.id === props.message.id
+        }
+      >
+        <box paddingLeft={3}>
+          <text fg={theme.text.muted}>Run /{CONTINUE_WITHOUT_ATTACHMENTS} to stop sending them and continue.</text>
         </box>
       </Show>
       <AssistantRetry retry={props.message.retry} />
