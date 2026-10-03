@@ -197,6 +197,10 @@ export const dict = {
 
   "command.session.export": "匯出工作階段",
   "command.session.export.description": "將完整的工作階段記錄匯出為 JSON",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "搜尋檔案、命令和工作階段",
   "palette.search.placeholder.home": "搜尋命令和工作階段",

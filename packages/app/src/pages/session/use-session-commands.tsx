@@ -421,6 +421,12 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     )
   }
 
+  const toggleThinking = () => {
+    const next = !settings.general.showReasoningSummaries()
+    settings.general.setShowReasoningSummaries(next)
+    showToast(next ? language.t("toast.session.thinking.on") : language.t("toast.session.thinking.off"))
+  }
+
   const shareCmds = () => {
     if (sync().data.config.share === "disabled") return []
     return [
@@ -490,6 +496,13 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       slash: "fork",
       disabled: !params.id || visibleUserMessages().length === 0,
       onSelect: fork,
+    }),
+    sessionCommand({
+      id: "session.thinking",
+      title: language.t("command.session.thinking"),
+      description: language.t("command.session.thinking.description"),
+      slash: "thinking",
+      onSelect: toggleThinking,
     }),
     sessionCommand({
       id: "session.export",

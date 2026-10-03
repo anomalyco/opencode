@@ -195,6 +195,10 @@ export const dict = {
 
   "command.session.export": "Ekspor sesi",
   "command.session.export.description": "Ekspor transkrip sesi lengkap sebagai JSON",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "Cari berkas, perintah, dan sesi",
   "palette.search.placeholder.home": "Cari perintah dan sesi",

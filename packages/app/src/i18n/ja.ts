@@ -186,6 +186,10 @@ export const dict = {
   "command.session.unshare.description": "このセッションの共有を停止",
   "command.session.export": "セッションをエクスポート",
   "command.session.export.description": "セッションの全記録を JSON としてエクスポート",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "ファイル、コマンド、セッションを検索",
   "palette.search.placeholder.home": "コマンドとセッションを検索",

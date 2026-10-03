@@ -88,6 +88,10 @@ export const dict = {
   "command.session.unshare.description": "Interrompi la condivisione di questa sessione",
   "command.session.export": "Esporta sessione",
   "command.session.export.description": "Esporta la trascrizione completa della sessione in formato JSON",
+  "command.session.thinking": "Toggle reasoning",
+  "command.session.thinking.description": "Show or hide model reasoning in the session",
+  "toast.session.thinking.on": "Reasoning shown",
+  "toast.session.thinking.off": "Reasoning hidden",
 
   "palette.search.placeholder": "Cerca file, comandi e sessioni",
   "palette.search.placeholder.home": "Cerca comandi e sessioni",
