@@ -118,7 +118,12 @@ export const appendOrStart = <K extends StreamKey>(
   route: string,
   tools: State<K>,
   key: K,
-  delta: { readonly id?: string; readonly name?: string; readonly text: string },
+  delta: {
+    readonly id?: string
+    readonly name?: string
+    readonly text: string
+    readonly providerMetadata?: ProviderMetadata
+  },
   missingToolMessage: string,
 ): AppendOutcome<K> | LLMError => {
   const current = tools[key]
@@ -131,7 +136,7 @@ export const appendOrStart = <K extends StreamKey>(
     name,
     input: `${current?.input ?? ""}${delta.text}`,
     providerExecuted: current?.providerExecuted,
-    providerMetadata: current?.providerMetadata,
+    providerMetadata: delta.providerMetadata ?? current?.providerMetadata,
   }
   if (current && delta.text.length === 0 && current.id === id && current.name === name)
     return { tools, tool: current, events: [] }

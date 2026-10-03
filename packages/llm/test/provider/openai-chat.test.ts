@@ -552,14 +552,52 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("round-trips Google OpenAI-compatible tool thought signatures", () =>
+    Effect.gen(function* () {
+      const call = ToolCallPart.make({
+        id: "call_1",
+        name: "lookup",
+        input: { query: "weather" },
+        providerMetadata: { google: { thoughtSignature: "tool_sig" } },
+      })
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model,
+          messages: [Message.user("Check the weather."), Message.assistant([call])],
+          tools: [{ name: "lookup", description: "Lookup data", inputSchema: { type: "object" } }],
+        }),
+      )
+
+      expect(prepared.body.messages[1]).toEqual({
+        role: "assistant",
+        content: null,
+        tool_calls: [
+          {
+            id: "call_1",
+            type: "function",
+            function: { name: "lookup", arguments: '{"query":"weather"}' },
+            extra_content: { google: { thought_signature: "tool_sig" } },
+          },
+        ],
+      })
+    }),
+  )
+
   it.effect("assembles streamed tool call input", () =>
     Effect.gen(function* () {
       const body = sseEvents(
         deltaChunk({
           role: "assistant",
-          tool_calls: [{ index: 0, id: "call_1", function: { name: "lookup", arguments: '{"query"' } }],
+          tool_calls: [
+            {
+              index: 0,
+              id: "call_1",
+              function: { name: "lookup", arguments: '{"query"' },
+            },
+          ],
         }),
         deltaChunk({ tool_calls: [{ index: 0, function: { arguments: ':"weather"}' } }] }),
+        deltaChunk({ tool_calls: [{ index: 0, extra_content: { google: { thought_signature: "tool_sig_late" } } }] }),
         deltaChunk({}, "tool_calls"),
       )
       const response = yield* LLMClient.generate(
@@ -568,19 +606,20 @@ describe("OpenAI Chat route", () => {
         }),
       ).pipe(Effect.provide(fixedResponse(body)))
 
+      const signatureMetadata = { google: { thoughtSignature: "tool_sig_late" } }
       expect(response.events).toEqual([
         { type: "step-start", index: 0 },
-        { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata: undefined },
+        { type: "tool-input-start", id: "call_1", name: "lookup", providerMetadata: signatureMetadata },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: '{"query"' },
         { type: "tool-input-delta", id: "call_1", name: "lookup", text: ':"weather"}' },
-        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: undefined },
+        { type: "tool-input-end", id: "call_1", name: "lookup", providerMetadata: signatureMetadata },
         {
           type: "tool-call",
           id: "call_1",
           name: "lookup",
           input: { query: "weather" },
           providerExecuted: undefined,
-          providerMetadata: undefined,
+          providerMetadata: signatureMetadata,
         },
         { type: "step-finish", index: 0, reason: "tool-calls", usage: undefined, providerMetadata: undefined },
         { type: "finish", reason: "tool-calls", usage: undefined },

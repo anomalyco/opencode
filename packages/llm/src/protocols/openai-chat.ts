@@ -53,6 +53,9 @@ const OpenAIChatAssistantToolCall = Schema.Struct({
     name: Schema.String,
     arguments: Schema.String,
   }),
+  extra_content: Schema.optional(
+    Schema.Struct({ google: Schema.Struct({ thought_signature: Schema.optional(Schema.String) }) }),
+  ),
 })
 type OpenAIChatAssistantToolCall = Schema.Schema.Type<typeof OpenAIChatAssistantToolCall>
 
@@ -139,6 +142,9 @@ const OpenAIChatToolCallDelta = Schema.Struct({
   index: Schema.Number,
   id: optionalNull(Schema.String),
   function: optionalNull(OpenAIChatToolCallDeltaFunction),
+  extra_content: optionalNull(
+    Schema.Struct({ google: Schema.Struct({ thought_signature: optionalNull(Schema.String) }) }),
+  ),
 })
 type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta>
 
@@ -193,6 +199,13 @@ const lowerToolChoice = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ type: "function" as const, function: { name } }),
   })
 
+const thoughtSignature = (part: ToolCallPart) => {
+  const google = part.providerMetadata?.google
+  return ProviderShared.isRecord(google) && typeof google.thoughtSignature === "string"
+    ? google.thoughtSignature
+    : undefined
+}
+
 const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
   id: part.id,
   type: "function",
@@ -200,6 +213,9 @@ const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
     name: part.name,
     arguments: ProviderShared.encodeJson(part.input),
   },
+  extra_content: thoughtSignature(part)
+    ? { google: { thought_signature: thoughtSignature(part) } }
+    : undefined,
 })
 
 const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
@@ -431,7 +447,14 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
         ADAPTER,
         tools,
         tool.index,
-        { id: tool.id ?? undefined, name: tool.function?.name ?? undefined, text: tool.function?.arguments ?? "" },
+        {
+          id: tool.id ?? undefined,
+          name: tool.function?.name ?? undefined,
+          text: tool.function?.arguments ?? "",
+          providerMetadata: tool.extra_content?.google?.thought_signature
+            ? { google: { thoughtSignature: tool.extra_content.google.thought_signature } }
+            : undefined,
+        },
         "OpenAI Chat tool call delta is missing id or name",
       )
       if (ToolStream.isError(result)) return yield* result
