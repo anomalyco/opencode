@@ -2,6 +2,7 @@ import { createEffect, on, type Accessor } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { useFilteredList } from "@opencode-ai/ui/hooks"
 import { createPromptInputV2Attachments, type PromptInputV2AttachmentConfig } from "./attachments"
+import { isLargePaste, normalizePaste } from "./paste"
 import { createPromptInputV2Store, type PromptInputV2StoreInput } from "./store"
 import type {
   PromptInputV2Attachment,
@@ -45,8 +46,16 @@ export type PromptInputV2ViewConfig = {
     onClose: () => void
   }
   onKeyDown?: (event: KeyboardEvent) => void
+  onLargePaste?: () => void
   onPaste?: (event: ClipboardEvent) => void
   onDrop?: (event: DragEvent) => void
+}
+
+export function rejectLargePromptPaste(event: Pick<ClipboardEvent, "preventDefault">, text: string, notify?: () => void) {
+  if (!isLargePaste(text)) return false
+  event.preventDefault()
+  notify?.()
+  return true
 }
 
 export function createPromptInputV2State() {
@@ -77,7 +86,7 @@ export function createPromptInputV2Controller(input: {
     createEffect(on(input.identity, () => setState(reconcile(createPromptInputV2InteractionState())), { defer: true }))
   }
   function addPart(part: PromptInputV2PersistedState["prompt"][number]) {
-    if (part.type === "image") return false
+    if (part.type === "image" || part.type === "text-attachment") return false
     if (part.type === "file" || part.type === "agent") {
       draft.addMention(part)
       return true
@@ -167,7 +176,9 @@ export function createPromptInputV2Controller(input: {
       if (!action || state.popover.type !== "command-menu") result.commands.forEach(execute)
       if (action && event.item.kind === "command" && state.popover.type !== "command-menu") {
         draft.setPrompt(
-          draft.state.prompt.filter((part): part is PromptInputV2Attachment => part.type === "image"),
+          draft.state.prompt.filter(
+            (part): part is PromptInputV2Attachment => part.type === "image" || part.type === "text-attachment",
+          ),
           0,
         )
       }
@@ -309,7 +320,9 @@ export function createPromptInputV2Controller(input: {
       return draft.state.context.items.filter((item) => !!item.comment?.trim())
     },
     attachments(): PromptInputV2Attachment[] {
-      return draft.state.prompt.filter((part): part is PromptInputV2Attachment => part.type === "image")
+      return draft.state.prompt.filter(
+        (part): part is PromptInputV2Attachment => part.type === "image" || part.type === "text-attachment",
+      )
     },
     toggleContext(id: string) {
       dispatch({ type: "context.active", id })
@@ -329,7 +342,7 @@ export function createPromptInputV2Controller(input: {
     },
     canSubmit() {
       const persisted = draft.state
-      if (persisted.prompt.some((part) => part.type === "image")) return true
+      if (persisted.prompt.some((part) => part.type === "image" || part.type === "text-attachment")) return true
       if (persisted.context.items.some((item) => !!item.comment?.trim())) return true
       return persisted.prompt.some((part) => "content" in part && !!part.content.trim())
     },
@@ -380,9 +393,24 @@ export function createPromptInputV2Controller(input: {
         void attachments.handlePaste(event)
         return
       }
+      const text = normalizePaste(clipboard?.getData("text/plain") ?? "")
+      if (
+        rejectLargePromptPaste(event, text, () => {
+          if (!attachments) {
+            input.view.onLargePaste?.()
+            return
+          }
+          void attachments
+            .addTextAttachment(text)
+            .then((added) => {
+              if (!added) input.view.onLargePaste?.()
+            })
+            .catch(input.attachments?.onError)
+        })
+      )
+        return
       input.view.onPaste?.(event)
       if (event.defaultPrevented) return
-      const text = clipboard?.getData("text/plain")
       if (!text) return
       event.preventDefault()
       if (typeof document.execCommand === "function" && document.execCommand("insertText", false, text)) return

@@ -2598,6 +2598,11 @@ export type SubtaskPartInput = {
   command?: string
 }
 
+export type TextAttachment = {
+  id: string
+  url: string
+}
+
 export type SessionBusyError = {
   _tag: "SessionBusyError"
   sessionID: string
@@ -10241,6 +10246,78 @@ export type SessionCommandResponses = {
 }
 
 export type SessionCommandResponse = SessionCommandResponses[keyof SessionCommandResponses]
+
+export type SessionAttachmentUploadData = {
+  body?: {
+    filename: string
+    content: string
+  }
+  path: {
+    sessionID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/attachment"
+}
+
+export type SessionAttachmentUploadErrors = {
+  /**
+   * BadRequest | InvalidRequestError
+   */
+  400: EffectHttpApiErrorBadRequest | InvalidRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionAttachmentUploadError = SessionAttachmentUploadErrors[keyof SessionAttachmentUploadErrors]
+
+export type SessionAttachmentUploadResponses = {
+  /**
+   * Uploaded text attachment
+   */
+  200: TextAttachment
+}
+
+export type SessionAttachmentUploadResponse = SessionAttachmentUploadResponses[keyof SessionAttachmentUploadResponses]
+
+export type SessionAttachmentRemoveData = {
+  body?: never
+  path: {
+    sessionID: string
+    attachmentID: string
+  }
+  query?: {
+    directory?: string
+    workspace?: string
+  }
+  url: "/session/{sessionID}/attachment/{attachmentID}"
+}
+
+export type SessionAttachmentRemoveErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * NotFoundError
+   */
+  404: NotFoundError
+}
+
+export type SessionAttachmentRemoveError = SessionAttachmentRemoveErrors[keyof SessionAttachmentRemoveErrors]
+
+export type SessionAttachmentRemoveResponses = {
+  /**
+   * <No Content>
+   */
+  204: void
+}
+
+export type SessionAttachmentRemoveResponse = SessionAttachmentRemoveResponses[keyof SessionAttachmentRemoveResponses]
 
 export type SessionShellData = {
   body?: {

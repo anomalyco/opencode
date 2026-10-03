@@ -16,6 +16,7 @@ import { typeLabel } from "../../../components/message-file"
 import type {
   PromptInputV2Attachment,
   PromptInputV2Comment,
+  PromptInputV2TextAttachment,
   PromptInputV2Option,
   PromptInputV2PersistedState,
   PromptInputV2Prompt,
@@ -27,6 +28,7 @@ import "./attachments.css"
 export type {
   PromptInputV2Attachment,
   PromptInputV2Comment,
+  PromptInputV2TextAttachment,
   PromptInputV2Option,
   PromptInputV2PersistedState,
   PromptInputV2Suggestion,
@@ -165,9 +167,11 @@ export function PromptInputV2(props: PromptInputV2Props) {
             onInput={(event) => {
               const cursor = promptInputV2Cursor(event.currentTarget)
               const prompt = parsePromptInputV2Editor(event.currentTarget)
-              const images = props.controller.parts().filter((part) => part.type === "image")
+              const attachments = props.controller
+                .parts()
+                .filter((part) => part.type === "image" || part.type === "text-attachment")
               localInput = true
-              props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...images], cursor)
+              props.controller.onInput(prompt.map((part) => part.content).join(""), [...prompt, ...attachments], cursor)
             }}
             onKeyDown={(event) => {
               if (props.controller.onKeyDown(event)) return
@@ -273,7 +277,7 @@ function renderPromptInputV2Editor(editor: HTMLDivElement, prompt: PromptInputV2
   const active = document.activeElement === editor
   editor.replaceChildren(
     ...prompt.flatMap<Node>((part) => {
-      if (part.type === "image") return []
+      if (part.type === "image" || part.type === "text-attachment") return []
       if (part.type === "text") return [document.createTextNode(part.content)]
       const mention = document.createElement("span")
       mention.textContent = part.content
@@ -425,22 +429,30 @@ export function PromptInputV2Attachments(props: {
             {(attachment) => (
               <div class="relative group shrink-0">
                 <TooltipV2 value={attachment.filename} placement="top" contentClass="break-all">
-                  <Show
-                    when={attachment.mime.startsWith("image/")}
-                    fallback={
-                      <AttachmentCardV2 title={attachment.filename}>
-                        {typeLabel(attachment.filename, attachment.mime, i18n.t("ui.common.file"))}
-                      </AttachmentCardV2>
-                    }
-                  >
-                    <img
-                      src={attachment.blob.url}
-                      alt={attachment.filename}
-                      class="w-[58px] h-[46px] rounded-[6px] object-cover"
-                      onClick={() => props.onAttachmentClick?.(attachment)}
-                    />
-                    <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
-                  </Show>
+                  {attachment.type === "image" ? (
+                    <>
+                      <img
+                        src={attachment.blob.url}
+                        alt={attachment.filename}
+                        class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                        onClick={() => props.onAttachmentClick?.(attachment)}
+                      />
+                      <div class="absolute inset-0 rounded-[6px] shadow-[inset_0_0_0_0.5px_var(--v2-border-border-base)] pointer-events-none" />
+                    </>
+                  ) : (
+                    <AttachmentCardV2 title={attachment.filename}>
+                      <div class="flex flex-col gap-0.5">
+                        <span>{typeLabel(attachment.filename, attachment.mime, i18n.t("ui.common.file"))}</span>
+                        <span class="text-v2-text-text-faint text-[10px] leading-3">
+                          {new Intl.NumberFormat(undefined, {
+                            style: "unit",
+                            unit: "kilobyte",
+                            maximumFractionDigits: 1,
+                          }).format(attachment.size / 1024)}
+                        </span>
+                      </div>
+                    </AttachmentCardV2>
+                  )}
                 </TooltipV2>
                 <button
                   type="button"

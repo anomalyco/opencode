@@ -9,6 +9,7 @@ import { Session } from "@/session/session"
 import { SessionCompaction } from "@/session/compaction"
 import { MessageV2 } from "@/session/message-v2"
 import { SessionPrompt } from "@/session/prompt"
+import { RemoteAttachment } from "@/attachment"
 import { SessionRevert } from "@/session/revert"
 import { SessionRunState } from "@/session/run-state"
 import { SessionStatus } from "@/session/status"
@@ -24,6 +25,7 @@ import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/htt
 import { InstanceHttpApi } from "../api"
 import {
   CommandPayload,
+  AttachmentPayload,
   DiffQuery,
   ForkPayload,
   InitPayload,
@@ -50,6 +52,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const session = yield* Session.Service
     const shareSvc = yield* SessionShare.Service
     const promptSvc = yield* SessionPrompt.Service
+    const attachmentSvc = yield* RemoteAttachment.Service
     const revertSvc = yield* SessionRevert.Service
     const compactSvc = yield* SessionCompaction.Service
     const runState = yield* SessionRunState.Service
@@ -338,6 +341,24 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
     })
 
+    const attachment = Effect.fn("SessionHttpApi.attachment")(function* (ctx: {
+      params: { sessionID: SessionID }
+      payload: typeof AttachmentPayload.Type
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      return yield* attachmentSvc
+        .upload({ sessionID: ctx.params.sessionID, filename: ctx.payload.filename, content: ctx.payload.content })
+        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+    })
+
+    const removeAttachment = Effect.fn("SessionHttpApi.removeAttachment")(function* (ctx: {
+      params: { sessionID: SessionID; attachmentID: string }
+    }) {
+      yield* requireSession(ctx.params.sessionID)
+      yield* attachmentSvc.remove({ sessionID: ctx.params.sessionID, id: ctx.params.attachmentID })
+      return HttpApiSchema.NoContent.make()
+    })
+
     const shell = Effect.fn("SessionHttpApi.shell")(function* (ctx: {
       params: { sessionID: SessionID }
       payload: typeof ShellPayload.Type
@@ -431,6 +452,8 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       .handle("prompt", prompt)
       .handle("promptAsync", promptAsync)
       .handle("command", command)
+      .handle("attachment", attachment)
+      .handle("removeAttachment", removeAttachment)
       .handle("shell", shell)
       .handle("revert", revert)
       .handle("unrevert", unrevert)
