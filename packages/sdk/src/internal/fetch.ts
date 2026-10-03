@@ -10,11 +10,17 @@ export function make(handler: (request: Request) => Promise<Response>, dispose: 
       if (closePromise) return Promise.reject(closed)
       const source = new Request(input, init)
       if (source.signal.aborted) return Promise.reject(source.signal.reason)
-      const request = new Request(source, { signal: AbortSignal.any([source.signal, shutdown.signal]) })
+      const completed = new AbortController()
+      const request = new Request(source, {
+        signal: AbortSignal.any([source.signal, shutdown.signal, completed.signal]),
+      })
       const lifetime = Promise.withResolvers<void>()
       const finish = () => {
         requests.delete(lifetime.promise)
         lifetime.resolve()
+        // A Web handler may retain its request fiber through an abort listener.
+        // Release that listener when the response body is finished, not only at host shutdown.
+        completed.abort()
       }
       requests.add(lifetime.promise)
 
