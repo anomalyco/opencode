@@ -1,6 +1,7 @@
 import { expect } from "bun:test"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
+import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { Agent } from "@/agent/agent"
 import { MCP } from "@/mcp"
@@ -52,6 +53,11 @@ const fakePermission = Permission.Service.of({
   ask: () => Effect.void,
   reply: () => Effect.void,
   list: () => Effect.succeed([]),
+  autoList: () => Effect.succeed([]),
+  autoAcquire: (input) =>
+    Effect.succeed({ id: PermissionV1.AutoLeaseID.ascending(), scope: input.scope, ttl: 0, expires: 0 }),
+  autoRenew: (leaseID) => Effect.fail(new PermissionV1.AutoLeaseNotFoundError({ leaseID })),
+  autoRelease: () => Effect.succeed(false),
 } satisfies Permission.Interface)
 
 const fakeTruncate = Truncate.Service.of({

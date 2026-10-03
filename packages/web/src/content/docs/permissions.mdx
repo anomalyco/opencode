@@ -37,6 +37,15 @@ Explicit `"deny"` rules are still enforced. Auto mode only changes requests that
 
 In the TUI, open the command palette and select **Enable auto-approve permissions** or **Disable auto-approve permissions** to change modes. When auto mode is active, the prompt displays a muted `auto` indicator next to the current agent.
 
+Auto mode is applied by the server before it announces anything, so a request it approves never produces a `permission.asked` event. Integrations that watch the event stream can therefore treat `permission.asked` as meaning a person has to respond.
+
+The client that turns auto mode on holds it as a short-lived lease that it keeps renewing, and it only covers what that client owns:
+
+- The TUI covers the instance it is connected to, matching the sessions it can see.
+- `opencode run --auto` covers only the session that run created and the subagent sessions it spawns, so `opencode run --attach ... --auto` never auto-approves anyone else's work on a shared server.
+
+Because the lease has to be renewed, a client that exits, crashes, or is killed loses its auto mode within seconds instead of leaving the server approving on its own. Requests that were already waiting for an answer when auto mode was turned on stay pending — auto mode only applies to requests raised after it.
+
 ---
 
 ## Configuration

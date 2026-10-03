@@ -121,6 +121,15 @@ import type {
   PartUpdateResponses,
   PathGetErrors,
   PathGetResponses,
+  PermissionAutoAcquireErrors,
+  PermissionAutoAcquireResponses,
+  PermissionAutoListErrors,
+  PermissionAutoListResponses,
+  PermissionAutoReleaseErrors,
+  PermissionAutoReleaseResponses,
+  PermissionAutoRenewErrors,
+  PermissionAutoRenewResponses,
+  PermissionAutoScope,
   PermissionListErrors,
   PermissionListResponses,
   PermissionReplyErrors,
@@ -3108,6 +3117,149 @@ export class Permission extends HeyApiClient {
     )
     return (options?.client ?? this.client).get<PermissionListResponses, PermissionListErrors, ThrowOnError>({
       url: "/permission",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * List auto-approve leases
+   *
+   * List the auto-approve leases that have not expired or been released.
+   */
+  public autoList<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).get<PermissionAutoListResponses, PermissionAutoListErrors, ThrowOnError>({
+      url: "/permission/auto",
+      ...options,
+      ...params,
+    })
+  }
+
+  /**
+   * Acquire an auto-approve lease
+   *
+   * Auto-approve requests in scope that would otherwise ask, without publishing permission.asked. Explicit deny rules still apply, requests already pending are unaffected, and the lease expires unless renewed within its ttl.
+   */
+  public autoAcquire<ThrowOnError extends boolean = false>(
+    parameters?: {
+      directory?: string
+      workspace?: string
+      scope?: PermissionAutoScope
+      ttl?: number
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+            { in: "body", key: "scope" },
+            { in: "body", key: "ttl" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<
+      PermissionAutoAcquireResponses,
+      PermissionAutoAcquireErrors,
+      ThrowOnError
+    >({
+      url: "/permission/auto",
+      ...options,
+      ...params,
+      headers: {
+        "Content-Type": "application/json",
+        ...options?.headers,
+        ...params.headers,
+      },
+    })
+  }
+
+  /**
+   * Renew an auto-approve lease
+   *
+   * Extend a lease by its ttl. Fails once the lease has expired or been released.
+   */
+  public autoRenew<ThrowOnError extends boolean = false>(
+    parameters: {
+      leaseID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "leaseID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).post<PermissionAutoRenewResponses, PermissionAutoRenewErrors, ThrowOnError>(
+      {
+        url: "/permission/auto/{leaseID}/renew",
+        ...options,
+        ...params,
+      },
+    )
+  }
+
+  /**
+   * Release an auto-approve lease
+   *
+   * Release a lease immediately instead of waiting for it to expire.
+   */
+  public autoRelease<ThrowOnError extends boolean = false>(
+    parameters: {
+      leaseID: string
+      directory?: string
+      workspace?: string
+    },
+    options?: Options<never, ThrowOnError>,
+  ) {
+    const params = buildClientParams(
+      [parameters],
+      [
+        {
+          args: [
+            { in: "path", key: "leaseID" },
+            { in: "query", key: "directory" },
+            { in: "query", key: "workspace" },
+          ],
+        },
+      ],
+    )
+    return (options?.client ?? this.client).delete<
+      PermissionAutoReleaseResponses,
+      PermissionAutoReleaseErrors,
+      ThrowOnError
+    >({
+      url: "/permission/auto/{leaseID}",
       ...options,
       ...params,
     })

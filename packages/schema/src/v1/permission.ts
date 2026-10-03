@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { define, inventory } from "../event"
 import { ascending } from "../identifier"
 import { Project } from "../project"
-import { statics } from "../schema"
+import { NonNegativeInt, PositiveInt, statics } from "../schema"
 import { SessionID } from "../session-id"
 
 export const ID = Schema.String.check(Schema.isStartsWith("per")).pipe(
@@ -57,6 +57,47 @@ export const ReplyInput = Schema.Struct({ requestID: ID, ...ReplyBody.fields }).
   identifier: "PermissionReplyInput",
 })
 export type ReplyInput = typeof ReplyInput.Type
+
+// Auto mode is an ephemeral lease rather than a rule or a server-wide flag. A
+// lease turns requests that would resolve to `ask` into `allow` *before*
+// `permission.asked` is published, so that event keeps meaning "a human has to
+// respond". Explicit `deny` rules are evaluated first and are never affected.
+export const AutoLeaseID = Schema.String.check(Schema.isStartsWith("pal")).pipe(
+  Schema.brand("PermissionAutoLeaseID"),
+  statics((schema) => ({ ascending: (id?: string) => schema.make(id ?? "pal_" + ascending()) })),
+)
+export type AutoLeaseID = typeof AutoLeaseID.Type
+
+// `instance` matches what the TUI does today: everything in the connected
+// directory. `session` covers one session plus every session descended from it,
+// which is what a single `opencode run --auto` invocation owns.
+export const AutoScope = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("instance") }),
+  Schema.Struct({ type: Schema.Literal("session"), sessionID: SessionID }),
+]).annotate({ identifier: "PermissionAutoScope" })
+export type AutoScope = typeof AutoScope.Type
+
+// A lease only survives while its owner keeps renewing it, so a client that
+// crashes, is SIGKILLed, or loses the network cannot leave auto mode on.
+export const AUTO_LEASE_TTL_DEFAULT = 30_000
+export const AUTO_LEASE_TTL_MIN = 1_000
+export const AUTO_LEASE_TTL_MAX = 300_000
+
+export const AutoLease = Schema.Struct({
+  id: AutoLeaseID,
+  scope: AutoScope,
+  // Milliseconds the lease survives without a renewal, and the wall clock time
+  // it lapses at. Owners should renew well inside `ttl`.
+  ttl: NonNegativeInt,
+  expires: NonNegativeInt,
+}).annotate({ identifier: "PermissionAutoLease" })
+export type AutoLease = typeof AutoLease.Type
+
+export const AutoAcquireBody = Schema.Struct({
+  scope: AutoScope,
+  ttl: Schema.optional(PositiveInt),
+}).annotate({ identifier: "PermissionAutoAcquireBody" })
+export type AutoAcquireBody = typeof AutoAcquireBody.Type
 
 const Asked = define({ type: "permission.asked", schema: Request.fields })
 const Replied = define({
