@@ -347,7 +347,10 @@ export function tint(base: RGBA, overlay: RGBA, alpha: number): RGBA {
   const r = base.r + (overlay.r - base.r) * alpha
   const g = base.g + (overlay.g - base.g) * alpha
   const b = base.b + (overlay.b - base.b) * alpha
-  return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255))
+  // Preserve alpha so transparent themes stay transparent instead of
+  // getting forced opaque by RGBA.fromInts' default alpha of 255.
+  const a = base.a + (overlay.a - base.a) * alpha
+  return RGBA.fromInts(Math.round(r * 255), Math.round(g * 255), Math.round(b * 255), Math.round(a * 255))
 }
 
 export function terminalMode(colors: TerminalColors): "dark" | "light" | undefined {
