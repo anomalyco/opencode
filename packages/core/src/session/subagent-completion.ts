@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import type { Job } from "../job.js"
 import type { Session } from "../session.js"
 import type { SessionMessage } from "./message.js"
+import { SessionSchema } from "./schema.js"
 
 export const NO_TEXT = "Subagent completed without a text response."
 
@@ -16,6 +17,37 @@ export function text(message: SessionMessage.Info | undefined) {
       .join("") || NO_TEXT
   )
 }
+
+/**
+ * Runs the child session to quiescence and returns its final completed response.
+ * A child can end a turn while its own shell or nested subagent is still running;
+ * that work admits a wake-up notification and resumes the child, so the response
+ * is only final once no pending notification will wake it again.
+ */
+export const finalText = Effect.fnUntraced(function* (input: {
+  sessions: Pick<Session.Interface, "resume" | "messages">
+  jobs: Pick<Job.Interface, "pendingBackground" | "awaitBackground">
+  sessionID: SessionSchema.ID
+}) {
+  while (true) {
+    yield* input.sessions.resume(input.sessionID)
+    const pending = (yield* input.jobs.pendingBackground).filter((job) =>
+      job.recovery.kind === "shell"
+        ? job.recovery.sessionID === input.sessionID
+        : job.recovery.parentSessionID === input.sessionID,
+    )
+    if (pending.length === 0) break
+    yield* Effect.forEach(pending, (job) => input.jobs.awaitBackground(job.notificationID), {
+      concurrency: "unbounded",
+      discard: true,
+    })
+  }
+  const messages = yield* input.sessions.messages({ sessionID: input.sessionID, order: "desc", limit: 20 })
+  const assistant = messages.find(
+    (message) => message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
+  )
+  return text(assistant)
+})
 
 export const deliver = Effect.fnUntraced(function* (
   sessions: Pick<Session.Interface, "synthetic">,
