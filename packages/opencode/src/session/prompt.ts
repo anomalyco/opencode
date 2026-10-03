@@ -1108,6 +1108,23 @@ const layer = Layer.effect(
               (part) => part.type === "tool" && !part.metadata?.providerExecuted && !isOrphanedInterruptedTool(part),
             ) ?? false
 
+          const hasAssistantOutput =
+            (lastAssistantMsg?.parts.length ?? 0) > 2 ||
+            (lastAssistantMsg?.parts.some(
+              (part) => part.type === "text" || part.type === "reasoning" || part.type === "tool",
+            ) ??
+              false)
+
+          if (lastAssistant?.finish === "unknown" && !hasAssistantOutput && !lastAssistant.error) {
+            lastAssistant.error = MessageV2.fromError(new Error("Provider returned an empty response"), {
+              providerID: lastAssistant.providerID,
+            })
+            yield* sessions.updateMessage(lastAssistant)
+            yield* events.publish(Session.Event.Error, { sessionID, error: lastAssistant.error })
+            yield* status.set(sessionID, { type: "idle" })
+            break
+          }
+
           if (
             lastAssistant?.finish &&
             !["tool-calls", "unknown"].includes(lastAssistant.finish) &&
