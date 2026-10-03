@@ -930,7 +930,17 @@ export const dict = {
   "settings.general.row.terminalFont.title": "Шрифт терминала",
   "settings.general.row.terminalFont.description": "Настройте шрифт, используемый в терминале",
   "settings.general.row.uiFont.title": "Шрифт интерфейса",
+<<<<<<< HEAD
   "settings.general.row.uiFont.description": "Настройте шрифт, используемый во всём интерфейсе",
+||||||| parent of 32cbfa95c1 (feat: Added adjustable font size and line height support for desktop and web.)
+  "settings.general.row.uiFont.description": "Настройте шрифт, используемый во всем интерфейсе",
+=======
+  "settings.general.row.uiFont.description": "Настройте шрифт, используемый во всем интерфейсе",
+  "settings.general.row.fontSize.title": "Размер шрифта",
+  "settings.general.row.fontSize.description": "Настройте базовый размер шрифта во всем приложении",
+  "settings.general.row.lineHeight.title": "Высота строки",
+  "settings.general.row.lineHeight.description": "Настройте высоту строки для читаемого текста и кода",
+>>>>>>> 32cbfa95c1 (feat: Added adjustable font size and line height support for desktop and web.)
   "settings.general.row.followup.title": "Поведение уточняющих вопросов",
   "settings.general.row.followup.description":
     "Выберите, отправлять ли уточняющие вопросы сразу или помещать их в очередь",

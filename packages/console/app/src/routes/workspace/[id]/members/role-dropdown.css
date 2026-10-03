@@ -63,7 +63,7 @@
       }
 
       p {
-        font-size: var(--font-size-xs);
+        font-size: var(--font-size-x-small);
         color: var(--color-text-muted);
         margin: 0;
       }
