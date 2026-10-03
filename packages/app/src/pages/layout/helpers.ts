@@ -1,6 +1,6 @@
 import { getFilename } from "@opencode-ai/core/util/path"
 import { type Session } from "@opencode-ai/sdk/v2/client"
-import { pathKey } from "@/utils/path-key"
+import { isSubpath, pathKey } from "@/utils/path-key"
 import type { ServerConnection } from "@/context/server"
 import type { HomeProjectSelection } from "@/context/layout"
 
@@ -54,7 +54,12 @@ export function toggleHomeProjectSelection(
   server: ServerConnection.Key,
   directory: string,
 ): HomeProjectSelection {
-  if (current?.server === server && current.directory === directory) return { server }
+  if (
+    current?.server === server &&
+    current.directory !== undefined &&
+    pathKey(current.directory) === pathKey(directory)
+  )
+    return { server }
   return { server, directory }
 }
 
@@ -65,7 +70,12 @@ export function closeHomeProject(
   directory: string,
 ) {
   projects.close(directory)
-  if (selected?.server === server && selected.directory === directory) return { server }
+  if (
+    selected?.server === server &&
+    selected.directory !== undefined &&
+    pathKey(selected.directory) === pathKey(directory)
+  )
+    return { server }
   return selected
 }
 
@@ -100,10 +110,18 @@ export function projectForSession<T extends { id?: string; worktree: string; san
 ) {
   const direct = byID.get(session.projectID)
   if (direct) return direct
-  const directory = pathKey(session.directory)
-  return projects.find(
+  const directory = session.directory
+  // Exact match first (fast path), then subpath match so sessions in
+  // child dirs (e.g. C:/gitProjects/AIA_tennis under C:/gitProjects)
+  // still resolve instead of being dropped from the home list.
+  const exact = projects.find(
     (project) =>
-      pathKey(project.worktree) === directory || project.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
+      pathKey(project.worktree) === pathKey(directory) ||
+      project.sandboxes?.some((sandbox) => pathKey(sandbox) === pathKey(directory)),
+  )
+  if (exact) return exact
+  return projects.find(
+    (project) => isSubpath(directory, project.worktree) || project.sandboxes?.some((sandbox) => isSubpath(directory, sandbox)),
   )
 }
 

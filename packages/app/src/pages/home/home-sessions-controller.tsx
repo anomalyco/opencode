@@ -17,7 +17,7 @@ import { ServerConnection } from "@/context/server"
 import { sessionHasOpenTab, useTabs } from "@/context/tabs"
 import { compareSessionTime, displayName, errorMessage, projectForSession } from "@/pages/layout/helpers"
 import { useSessionTabAvatarState } from "@/pages/layout/project-avatar-state"
-import { pathKey } from "@/utils/path-key"
+import { isSubpath, pathKey } from "@/utils/path-key"
 import { showToast } from "@/utils/toast"
 import { Binary } from "@opencode-ai/core/util/binary"
 import { archiveHomeSession } from "../home-session-archive"
@@ -179,15 +179,17 @@ export function createHomeSessionsController(home: HomeController) {
       canCreate: () => !!home.project.newSession(),
       create: home.project.openNewSession,
       open: (session: Session, options?: OpenSessionOptions) => {
-        const directoryKey = pathKey(session.directory)
+        const directoryKey = session.directory
         const project =
           home.project
             .list()
             .find(
               (item) =>
-                pathKey(item.worktree) === directoryKey ||
-                item.sandboxes?.some((sandbox) => pathKey(sandbox) === directoryKey),
-            ) ?? projectForSession(session, home.project.list(), projectByID())
+                pathKey(item.worktree) === pathKey(directoryKey) ||
+                item.sandboxes?.some((sandbox) => pathKey(sandbox) === pathKey(directoryKey)),
+            ) ??
+          home.project.list().find((item) => isSubpath(directoryKey, item.worktree)) ??
+          projectForSession(session, home.project.list(), projectByID())
         const conn = home.server.focused()
         if (!conn) return
         const directory = project?.worktree ?? session.directory
@@ -253,20 +255,33 @@ function buildHomeSessionRecords(input: {
   projects: () => LocalProject[]
   projectByID: () => Map<string, LocalProject>
 }) {
-  const directories = new Set(input.projectDirectories().map(pathKey))
-  const sessions = input.sessions().filter((session) => directories.has(pathKey(session.directory)))
+  const bases = input.projectDirectories()
+  // Match exact dirs AND sessions nested under an open project (e.g.
+  // session in C:/gitProjects/AIA_tennis when C:/gitProjects is open).
+  // If no open projects are known yet, don't filter everything out —
+  // fall through so "all sessions" (unselected project) still shows data.
+  const sessions =
+    bases.length === 0
+      ? input.sessions()
+      : input.sessions().filter((session) => bases.some((base) => isSubpath(session.directory, base)))
   return [...new Map(sessions.map((session) => [session.id, session] as const)).values()]
     .sort(compareSessionTime)
     .flatMap((session) => {
-      const directory = pathKey(session.directory)
+      const directory = session.directory
       const project =
         input
           .projects()
           .find(
             (item) =>
-              pathKey(item.worktree) === directory || item.sandboxes?.some((sandbox) => pathKey(sandbox) === directory),
-          ) ?? projectForSession(session, input.projects(), input.projectByID())
-      if (!project) return []
+              pathKey(item.worktree) === pathKey(directory) ||
+              item.sandboxes?.some((sandbox) => pathKey(sandbox) === pathKey(directory)),
+          ) ??
+        input.projects().find((item) => isSubpath(directory, item.worktree)) ??
+        projectForSession(session, input.projects(), input.projectByID()) ??
+        // Fallback: keep the session visible even when its project isn't
+        // in the open-project list (e.g. different server cwd). Use the
+        // session directory as the project worktree so open() still works.
+        ({ worktree: session.directory, expanded: false } as LocalProject)
       return { session, project, projectName: displayName(project) }
     })
 }
