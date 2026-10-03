@@ -22,6 +22,7 @@ export function createPromptInputController(input: {
   sessionID: Accessor<string | undefined>
   queryOptions: Pick<QueryOptionsApi, "agents" | "providers">
   model?: ModelSelection
+  agent?: Pick<ReturnType<typeof useLocal>["agent"], "set">
 }) {
   const layout = useLayout()
   const local = useLocal()
@@ -41,7 +42,7 @@ export function createPromptInputController(input: {
         current: local.agent.current()?.name ?? "",
         loading: agentsQuery.isLoading,
         visible: local.agent.visible(),
-        select: local.agent.set,
+        select: (name) => (input.agent ?? local.agent).set(name),
       },
       model: {
         selection: input.model ?? local.model,
