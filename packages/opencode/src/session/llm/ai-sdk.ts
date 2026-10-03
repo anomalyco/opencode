@@ -236,7 +236,7 @@ export function toLLMEvents(
 
     case "tool-result":
       return Effect.sync(() => {
-        const name = state.toolNames[event.toolCallId] ?? "unknown"
+        const name = state.toolNames[event.toolCallId] ?? ("toolName" in event ? event.toolName : "unknown")
         delete state.toolNames[event.toolCallId]
         return [
           LLMEvent.toolResult({
