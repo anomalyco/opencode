@@ -2,14 +2,12 @@ import { Server } from "@/server/server"
 import { InstanceRuntime } from "@/project/instance-runtime"
 import { Rpc } from "@/util/rpc"
 import { upgrade } from "@/cli/upgrade"
-import { Config } from "@/config/config"
 import { GlobalBus } from "@/bus/global"
 import { ServerAuth } from "@/server/auth"
 import { writeHeapSnapshot } from "node:v8"
 import { Heap } from "@/cli/heap"
 import { AppRuntime } from "@/effect/app-runtime"
-import { Effect } from "effect"
-import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecycle"
+import { reloadWhenSessionsIdle } from "@/server/global-lifecycle"
 
 Heap.start()
 
@@ -26,6 +24,7 @@ GlobalBus.on("event", (event) => {
 })
 
 let server: Awaited<ReturnType<typeof Server.listen>> | undefined
+let reloading: Promise<void> | undefined
 
 export const rpc = {
   async fetch(input: { url: string; method: string; headers: Record<string, string>; body?: string }) {
@@ -61,13 +60,14 @@ export const rpc = {
     await upgrade().catch(() => {})
   },
   async reload() {
-    await AppRuntime.runPromise(
-      Effect.gen(function* () {
-        const cfg = yield* Config.Service
-        yield* cfg.invalidate()
-        yield* disposeAllInstancesAndEmitGlobalDisposed({ swallowErrors: true })
-      }),
-    )
+    // SIGUSR2 arrives from desktop environments on theme changes, so a reload
+    // can land mid-run. Signals that arrive while one is pending join it.
+    if (!reloading) {
+      reloading = AppRuntime.runPromise(reloadWhenSessionsIdle()).finally(() => {
+        reloading = undefined
+      })
+    }
+    await reloading
   },
   async shutdown() {
     await InstanceRuntime.disposeAllInstances()

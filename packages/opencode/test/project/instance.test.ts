@@ -50,6 +50,19 @@ describe("InstanceStore", () => {
     }),
   )
 
+  it.live("lists loaded instance contexts", () =>
+    Effect.gen(function* () {
+      const first = yield* tmpdirScoped({ git: true })
+      const second = yield* tmpdirScoped({ git: true })
+      const store = yield* InstanceStore.Service
+
+      yield* store.load({ directory: first })
+      yield* store.load({ directory: second })
+
+      expect((yield* store.list()).map((ctx) => ctx.directory).toSorted()).toEqual([first, second].toSorted())
+    }),
+  )
+
   it.live("runs bootstrap with InstanceRef provided", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped({ git: true })
