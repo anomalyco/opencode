@@ -15,30 +15,52 @@ type DatabaseShape = Effect.Success<typeof makeDatabase>
 
 export interface Interface {
   db: DatabaseShape
+  path: string
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/storage/Database") {}
 
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const db = yield* makeDatabase
+const layer = (filename: string) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const db = yield* makeDatabase
 
-    yield* db.run("PRAGMA journal_mode = WAL")
-    yield* db.run("PRAGMA synchronous = NORMAL")
-    yield* db.run("PRAGMA busy_timeout = 5000")
-    yield* db.run("PRAGMA cache_size = -64000")
-    yield* db.run("PRAGMA foreign_keys = ON")
-    yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
-    yield* DatabaseMigration.apply(db)
+      yield* db.run("PRAGMA journal_mode = WAL")
+      yield* db.run("PRAGMA synchronous = NORMAL")
+      yield* db.run("PRAGMA busy_timeout = 5000")
+      yield* db.run("PRAGMA cache_size = -64000")
+      yield* db.run("PRAGMA foreign_keys = ON")
+      yield* db.run("PRAGMA wal_checkpoint(PASSIVE)")
+      yield* DatabaseMigration.apply(db)
 
-    return { db }
-  }).pipe(Effect.orDie),
-)
+      return { db, path: filename }
+    }).pipe(Effect.orDie),
+  )
+
+const readOnlyLayer = (filename: string) =>
+  Layer.effect(
+    Service,
+    Effect.gen(function* () {
+      const db = yield* makeDatabase
+      return { db, path: filename }
+    }),
+  )
 
 export function layerFromPath(filename: string) {
-  return layer.pipe(Layer.provide(sqliteLayer({ filename })))
+  return layer(filename).pipe(Layer.provide(sqliteLayer({ filename })))
 }
+
+export function readOnlyLayerFromPath(filename: string) {
+  return readOnlyLayer(filename).pipe(
+    Layer.provide(sqliteLayer({ filename, readonly: true, readwrite: false, create: false, disableWAL: true })),
+  )
+}
+
+export const acquireExclusive = Effect.fn("Database.acquireExclusive")(function* (db: Interface["db"]) {
+  yield* db.run("PRAGMA locking_mode = EXCLUSIVE").pipe(Effect.orDie)
+  yield* db.transaction(() => Effect.void, { behavior: "exclusive" }).pipe(Effect.orDie)
+})
 
 export function path() {
   if (Flag.OPENCODE_DB) {

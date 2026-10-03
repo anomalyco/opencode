@@ -1,6 +1,7 @@
 import { describe, expect } from "bun:test"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Deferred, Effect } from "effect"
+import { DatabaseMaintenanceGate } from "@opencode-ai/core/database/maintenance-gate"
+import { Deferred, Effect, Fiber, Option } from "effect"
 import { BackgroundJob } from "@/background/job"
 import { testEffect } from "../lib/effect"
 
@@ -239,6 +240,32 @@ describe("background.job", () => {
       if (job.metadata) job.metadata.value = "changed"
 
       expect((yield* jobs.get(job.id))?.metadata?.value).toBe("initial")
+    }),
+  )
+
+  it.instance("waits to run detached work while database maintenance is active", () =>
+    Effect.gen(function* () {
+      const jobs = yield* BackgroundJob.Service
+      const maintenanceStarted = yield* Deferred.make<void>()
+      const releaseMaintenance = yield* Deferred.make<void>()
+      const jobStarted = yield* Deferred.make<void>()
+
+      const maintenance = yield* DatabaseMaintenanceGate.exclusive(
+        "vacuum",
+        Deferred.succeed(maintenanceStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseMaintenance))),
+      ).pipe(Effect.forkScoped)
+      yield* Deferred.await(maintenanceStarted)
+
+      const job = yield* jobs.start({
+        type: "test",
+        run: Deferred.succeed(jobStarted, undefined).pipe(Effect.as("done")),
+      })
+      expect(Option.isNone(yield* Deferred.poll(jobStarted))).toBe(true)
+
+      yield* Deferred.succeed(releaseMaintenance, undefined)
+      yield* Fiber.join(maintenance)
+      yield* Deferred.await(jobStarted)
+      expect((yield* jobs.wait({ id: job.id })).info?.output).toBe("done")
     }),
   )
 })

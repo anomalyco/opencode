@@ -12,6 +12,21 @@ export const ID = Schema.String.check(Schema.isStartsWith("evt_")).pipe(
 )
 export type ID = typeof ID.Type
 
+/**
+ * Replaces a durable snapshot that is represented by a later full snapshot.
+ * Keeping this small marker preserves the aggregate's contiguous sequence for
+ * strict sync replay while allowing the superseded payload to be reclaimed.
+ */
+export const Compacted = define({
+  type: "event.compacted",
+  durable: { version: 1, aggregate: "aggregateID" },
+  schema: {
+    aggregateID: Schema.String,
+    supersededType: Schema.String,
+    supersededBy: Schema.String,
+  },
+})
+
 export type Definition<
   Type extends string = string,
   DataSchema extends Schema.Codec<unknown, unknown> = Schema.Codec<unknown, unknown>,

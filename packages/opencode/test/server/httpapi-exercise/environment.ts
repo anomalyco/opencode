@@ -29,8 +29,17 @@ export const original = {
 export const cleanupExercisePaths = Effect.promise(async () => {
   const fs = await import("fs/promises")
   if (!preserveExerciseDatabase) {
+    const directory = path.dirname(exerciseDatabasePath)
+    const extension = path.extname(exerciseDatabasePath)
+    const backupPrefix = `${path.basename(exerciseDatabasePath, extension)}.backup-`
+    const backups = await fs
+      .readdir(directory)
+      .then((entries) =>
+        entries.filter((entry) => entry.startsWith(backupPrefix)).map((entry) => path.join(directory, entry)),
+      )
+      .catch(() => [])
     await Promise.all(
-      [exerciseDatabasePath, `${exerciseDatabasePath}-wal`, `${exerciseDatabasePath}-shm`].map((file) =>
+      [exerciseDatabasePath, `${exerciseDatabasePath}-wal`, `${exerciseDatabasePath}-shm`, ...backups].map((file) =>
         fs.rm(file, { force: true }).catch(() => undefined),
       ),
     )

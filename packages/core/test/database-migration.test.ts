@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test"
 import { $ } from "bun"
 import { fileURLToPath } from "url"
 import path from "path"
+import { readFile, readdir } from "node:fs/promises"
+import { Database as BunDatabase } from "bun:sqlite"
 import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { EffectDrizzleSqlite } from "@opencode-ai/effect-drizzle-sqlite"
 import { Effect, Layer } from "effect"
@@ -28,6 +30,7 @@ import sessionMetadataMigration from "@opencode-ai/core/database/migration/20260
 import type { SqlClient as SqlClientService } from "effect/unstable/sql/SqlClient"
 import { Database } from "@opencode-ai/core/database/database"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SessionEventLogCompaction } from "@opencode-ai/core/session/event-log-compaction"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { tmpdir } from "./fixture/tmpdir"
 
@@ -99,6 +102,75 @@ describe("DatabaseMigration", () => {
         }),
       ),
     ).rejects.toThrow("does not match any known migration")
+  })
+
+  test("opens inspection databases without changing the file or creating sidecars", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "readonly.sqlite")
+    const native = new BunDatabase(filename, { create: true })
+    native.run("CREATE TABLE sample (value TEXT NOT NULL)")
+    native.run("INSERT INTO sample VALUES ('preserved')")
+    native.close()
+    const before = await readFile(filename)
+
+    const value = await Effect.runPromise(
+      Effect.scoped(
+        Database.Service.use(({ db }) => db.get<{ value: string }>(sql`SELECT value FROM sample`)).pipe(
+          Effect.provide(Database.readOnlyLayerFromPath(filename)),
+        ),
+      ),
+    )
+
+    expect(value).toEqual({ value: "preserved" })
+    expect(await readFile(filename)).toEqual(before)
+    expect((await readdir(tmp.path)).sort()).toEqual(["readonly.sqlite"])
+  })
+
+  test("verifies a compact backup before vacuuming the source", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "source.sqlite")
+    const backup = path.join(tmp.path, "backup.sqlite")
+
+    const report = await Effect.runPromise(
+      Effect.scoped(
+        Database.Service.use(({ db }) =>
+          Effect.gen(function* () {
+            yield* db.run(sql`CREATE TABLE reclaim_test (data BLOB NOT NULL)`)
+            yield* db.run(sql`
+              WITH RECURSIVE rows(value) AS (
+                SELECT 1 UNION ALL SELECT value + 1 FROM rows WHERE value < 128
+              )
+              INSERT INTO reclaim_test SELECT zeroblob(4096) FROM rows
+            `)
+            yield* db.run(sql`DELETE FROM reclaim_test`)
+            return yield* SessionEventLogCompaction.reclaim(db, backup)
+          }),
+        ).pipe(Effect.provide(Database.layerFromPath(filename))),
+      ),
+    )
+
+    expect(report).toMatchObject({ backup, integrity: "ok", backupIntegrity: "ok" })
+    expect(report.bytesReclaimed).toBeGreaterThan(0)
+    expect((await readFile(backup)).byteLength).toBeGreaterThan(0)
+  })
+
+  test("holds an exclusive maintenance lock across transactions", async () => {
+    await using tmp = await tmpdir()
+    const filename = path.join(tmp.path, "exclusive.sqlite")
+
+    await Effect.runPromise(
+      Effect.scoped(
+        Database.Service.use(({ db }) =>
+          Effect.gen(function* () {
+            yield* db.run(sql`CREATE TABLE maintenance_test (value INTEGER NOT NULL)`)
+            yield* Database.acquireExclusive(db)
+            const other = new BunDatabase(filename, { readwrite: true })
+            expect(() => other.run("INSERT INTO maintenance_test VALUES (1)")).toThrow()
+            other.close()
+          }),
+        ).pipe(Effect.provide(Database.layerFromPath(filename))),
+      ),
+    )
   })
 
   test("serializes concurrent embedded initialization for one database path", async () => {
@@ -332,7 +404,7 @@ describe("DatabaseMigration", () => {
         yield* db.run(sql`DELETE FROM migration WHERE id = ${simplifySessionInputMigration.id}`)
         yield* DatabaseMigration.applyOnly(db, [simplifySessionInputMigration])
 
-        const database = Layer.succeed(Database.Service, { db })
+        const database = Layer.succeed(Database.Service, { db, path: ":memory:" })
         yield* EventV2.Service.use((service) =>
           service.publish(SessionV1.Event.Updated, {
             sessionID: SessionSchema.ID.make("session"),

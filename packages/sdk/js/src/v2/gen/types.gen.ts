@@ -2032,6 +2032,13 @@ export type Config = {
   }
 }
 
+export type StorageMaintenanceError = {
+  name: "StorageMaintenanceError"
+  data: {
+    message: string
+  }
+}
+
 export type Model = {
   id: string
   providerID: string
@@ -7388,6 +7395,368 @@ export type GlobalUpgradeResponses = {
 }
 
 export type GlobalUpgradeResponse = GlobalUpgradeResponses[keyof GlobalUpgradeResponses]
+
+export type StorageStatusData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/storage"
+}
+
+export type StorageStatusErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * StorageMaintenanceError
+   */
+  500: StorageMaintenanceError
+}
+
+export type StorageStatusError = StorageStatusErrors[keyof StorageStatusErrors]
+
+export type StorageStatusResponses = {
+  /**
+   * Database storage status
+   */
+  200: {
+    path: string
+    databaseBytes: number
+    walBytes: number
+    shmBytes: number
+    totalBytes: number
+    pageSize: number
+    pageCount: number
+    allocatedBytes: number
+    reusablePages: number
+    reusableBytes: number
+  }
+}
+
+export type StorageStatusResponse = StorageStatusResponses[keyof StorageStatusResponses]
+
+export type StorageProgressData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/storage/progress"
+}
+
+export type StorageProgressErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * StorageMaintenanceError
+   */
+  500: StorageMaintenanceError
+}
+
+export type StorageProgressError = StorageProgressErrors[keyof StorageProgressErrors]
+
+export type StorageProgressResponses = {
+  /**
+   * Storage maintenance progress
+   */
+  200: {
+    operation: "analyze" | "backup" | "compact" | "checkpoint" | "vacuum"
+    phase:
+      | "idle"
+      | "snapshot"
+      | "verify"
+      | "index"
+      | "analyze"
+      | "backup"
+      | "drain"
+      | "compact"
+      | "checkpoint"
+      | "vacuum"
+    completed: number
+    total: number
+    workers: number
+    startedAt: number
+    updatedAt: number
+  }
+}
+
+export type StorageProgressResponse = StorageProgressResponses[keyof StorageProgressResponses]
+
+export type StorageAnalyzeData = {
+  body?: never
+  path?: never
+  query?: never
+  url: "/global/storage/analyze"
+}
+
+export type StorageAnalyzeErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * StorageMaintenanceError
+   */
+  500: StorageMaintenanceError
+}
+
+export type StorageAnalyzeError = StorageAnalyzeErrors[keyof StorageAnalyzeErrors]
+
+export type StorageAnalyzeResponses = {
+  /**
+   * Event history cleanup analysis
+   */
+  200: {
+    snapshots: number
+    inspected: number
+    candidates: number
+    projectionMismatches: number
+    compatibilityRejected: number
+    malformed: number
+    payloadBytesReclaimable: number
+    byType: {
+      [key: string]: {
+        events: number
+        payloadBytesReclaimable: number
+      }
+    }
+  }
+}
+
+export type StorageAnalyzeResponse = StorageAnalyzeResponses[keyof StorageAnalyzeResponses]
+
+export type StorageBackupData = {
+  body?: {
+    confirmed: true
+  }
+  path?: never
+  query?: never
+  url: "/global/storage/backup"
+}
+
+export type StorageBackupErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * StorageMaintenanceError
+   */
+  500: StorageMaintenanceError
+}
+
+export type StorageBackupError = StorageBackupErrors[keyof StorageBackupErrors]
+
+export type StorageBackupResponses = {
+  /**
+   * Verified database backup
+   */
+  200: {
+    path: string
+    bytes: number
+    integrity: "ok"
+  }
+}
+
+export type StorageBackupResponse = StorageBackupResponses[keyof StorageBackupResponses]
+
+export type StorageCompactData = {
+  body?: {
+    confirmed: true
+  }
+  path?: never
+  query?: never
+  url: "/global/storage/compact"
+}
+
+export type StorageCompactErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * StorageMaintenanceError
+   */
+  500: StorageMaintenanceError
+}
+
+export type StorageCompactError = StorageCompactErrors[keyof StorageCompactErrors]
+
+export type StorageCompactResponses = {
+  /**
+   * Event history compaction result
+   */
+  200: {
+    snapshots: number
+    inspected: number
+    candidates: number
+    projectionMismatches: number
+    compatibilityRejected: number
+    malformed: number
+    payloadBytesReclaimable: number
+    byType: {
+      [key: string]: {
+        events: number
+        payloadBytesReclaimable: number
+      }
+    }
+    rewritten: number
+    backup: {
+      path: string
+      bytes: number
+      integrity: "ok"
+    }
+    before: {
+      path: string
+      databaseBytes: number
+      walBytes: number
+      shmBytes: number
+      totalBytes: number
+      pageSize: number
+      pageCount: number
+      allocatedBytes: number
+      reusablePages: number
+      reusableBytes: number
+    }
+    after: {
+      path: string
+      databaseBytes: number
+      walBytes: number
+      shmBytes: number
+      totalBytes: number
+      pageSize: number
+      pageCount: number
+      allocatedBytes: number
+      reusablePages: number
+      reusableBytes: number
+    }
+  }
+}
+
+export type StorageCompactResponse = StorageCompactResponses[keyof StorageCompactResponses]
+
+export type StorageCheckpointData = {
+  body?: {
+    confirmed: true
+  }
+  path?: never
+  query?: never
+  url: "/global/storage/checkpoint"
+}
+
+export type StorageCheckpointErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * StorageMaintenanceError
+   */
+  500: StorageMaintenanceError
+}
+
+export type StorageCheckpointError = StorageCheckpointErrors[keyof StorageCheckpointErrors]
+
+export type StorageCheckpointResponses = {
+  /**
+   * WAL checkpoint result
+   */
+  200: {
+    busy: number
+    logFrames: number
+    checkpointedFrames: number
+    before: {
+      path: string
+      databaseBytes: number
+      walBytes: number
+      shmBytes: number
+      totalBytes: number
+      pageSize: number
+      pageCount: number
+      allocatedBytes: number
+      reusablePages: number
+      reusableBytes: number
+    }
+    after: {
+      path: string
+      databaseBytes: number
+      walBytes: number
+      shmBytes: number
+      totalBytes: number
+      pageSize: number
+      pageCount: number
+      allocatedBytes: number
+      reusablePages: number
+      reusableBytes: number
+    }
+  }
+}
+
+export type StorageCheckpointResponse = StorageCheckpointResponses[keyof StorageCheckpointResponses]
+
+export type StorageVacuumData = {
+  body?: {
+    confirmed: true
+  }
+  path?: never
+  query?: never
+  url: "/global/storage/vacuum"
+}
+
+export type StorageVacuumErrors = {
+  /**
+   * Bad request
+   */
+  400: BadRequestError
+  /**
+   * StorageMaintenanceError
+   */
+  500: StorageMaintenanceError
+}
+
+export type StorageVacuumError = StorageVacuumErrors[keyof StorageVacuumErrors]
+
+export type StorageVacuumResponses = {
+  /**
+   * Database vacuum result
+   */
+  200: {
+    backup: {
+      path: string
+      bytes: number
+      integrity: "ok"
+    }
+    bytesReclaimed: number
+    checkpointBusy: number
+    before: {
+      path: string
+      databaseBytes: number
+      walBytes: number
+      shmBytes: number
+      totalBytes: number
+      pageSize: number
+      pageCount: number
+      allocatedBytes: number
+      reusablePages: number
+      reusableBytes: number
+    }
+    after: {
+      path: string
+      databaseBytes: number
+      walBytes: number
+      shmBytes: number
+      totalBytes: number
+      pageSize: number
+      pageCount: number
+      allocatedBytes: number
+      reusablePages: number
+      reusableBytes: number
+    }
+  }
+}
+
+export type StorageVacuumResponse = StorageVacuumResponses[keyof StorageVacuumResponses]
 
 export type EventSubscribeData = {
   body?: never
