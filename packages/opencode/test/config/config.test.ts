@@ -399,6 +399,49 @@ it.effect("updates global config and omits empty shell key in jsonc", () =>
   ),
 )
 
+it.live("sets global default model while preserving jsonc comments", () =>
+  withGlobalConfig({}, ({ dir }) =>
+    Effect.gen(function* () {
+      const fs = yield* FSUtil.Service
+      const file = path.join(dir, "opencode.jsonc")
+      yield* fs.writeFileString(
+        file,
+        `{
+  // personal preference
+  "username": "tester"
+}
+`,
+      )
+
+      const updated = yield* Config.use.updateGlobal({ model: "opencode/gpt-5.1-codex" })
+      const written = yield* fs.readFileString(file)
+
+      expect(updated.info.model).toBe("opencode/gpt-5.1-codex")
+      expect(written).toContain("// personal preference")
+      expect(written).toContain('"model": "opencode/gpt-5.1-codex"')
+      expect(written).toContain('"username": "tester"')
+    }),
+  ),
+)
+
+it.effect("sets global default model without rewriting project config", () =>
+  withConfigTree({ global: { username: "tester" }, project: { model: "project/keep" } }, Effect.gen(function* () {
+    const test = yield* TestInstance
+    const projectFile = path.join(test.directory, "opencode.json")
+    const before = yield* FSUtil.use.readFileString(projectFile)
+
+    yield* Config.use.updateGlobal({ model: "provider/new-default" })
+
+    const globalFile = path.join(Global.Path.config, "opencode.json")
+    const globalConfig = yield* FSUtil.use.readJson(globalFile)
+    const after = yield* FSUtil.use.readFileString(projectFile)
+
+    expect(globalConfig).toMatchObject({ username: "tester", model: "provider/new-default" })
+    expect(after).toBe(before)
+    expect(JSON.parse(after)).toMatchObject({ model: "project/keep" })
+  })),
+)
+
 it.effect("logs global update diagnostics once without exposing values", () =>
   withGlobalConfig(
     {
