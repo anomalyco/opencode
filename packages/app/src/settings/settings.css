@@ -233,6 +233,54 @@
   gap: 14px;
 }
 
+.settings-about-version-line {
+  display: flex;
+  align-items: center;
+}
+
+.settings-about-version {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  min-height: 24px;
+  align-items: center;
+  margin-block: -2px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  transition: color 120ms ease;
+}
+
+.settings-about-version::before {
+  position: absolute;
+  z-index: -1;
+  inset-block: 0;
+  inset-inline: -6px;
+  border-radius: 4px;
+  background: transparent;
+  content: "";
+  transition: background-color 120ms ease;
+}
+
+.settings-about-version:hover,
+.settings-about-version:focus-visible {
+  color: var(--v2-text-text-base);
+  outline: none;
+}
+
+.settings-about-version:hover::before,
+.settings-about-version:focus-visible::before {
+  background: var(--v2-background-bg-layer-02);
+}
+
+.settings-about-version:disabled {
+  cursor: default;
+}
+
 .settings-about-credits,
 .settings-about-publication,
 .settings-about-details {
