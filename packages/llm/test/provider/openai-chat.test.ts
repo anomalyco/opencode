@@ -107,6 +107,24 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("passes max reasoning effort through for DeepSeek-style providers (#52174)", () =>
+    Effect.gen(function* () {
+      // deepseek-flash (DeepSeek V4.1 Flash) advertises high/max and reuses the
+      // openai-chat protocol. Previously `max` was rejected locally with
+      // "OpenAI Chat does not support reasoning effort max", surfacing as a
+      // 400 before the request reached the provider.
+      const prepared = yield* LLMClient.prepare<OpenAIChat.OpenAIChatBody>(
+        LLM.request({
+          model: OpenAI.configure({ baseURL: "https://api.openai.test/v1/", apiKey: "test" }).chat("deepseek-flash"),
+          prompt: "think hard",
+          providerOptions: { openai: { reasoningEffort: "max" } },
+        }),
+      )
+
+      expect(prepared.body.reasoning_effort).toBe("max")
+    }),
+  )
+
   it.effect("adds native query params to the Chat Completions URL", () =>
     LLMClient.generate(
       LLM.updateRequest(request, {

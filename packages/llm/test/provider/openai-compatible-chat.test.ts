@@ -199,6 +199,22 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("passes max reasoning effort for deepseek-flash with large context (#52174)", () =>
+    Effect.gen(function* () {
+      const largePrompt = "x".repeat(1024)
+      const prepared = yield* LLMClient.prepare(
+        LLM.request({
+          id: "req_deepseek_max",
+          model,
+          prompt: largePrompt,
+          providerOptions: { openai: { reasoningEffort: "max" } },
+        }),
+      )
+
+      expect(prepared.body).toMatchObject({ model: "deepseek-chat", reasoning_effort: "max" })
+    }),
+  )
+
   it.effect("posts to the configured compatible endpoint and parses text usage", () =>
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(request).pipe(
