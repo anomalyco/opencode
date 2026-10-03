@@ -23,6 +23,30 @@
   "activationEvents": [],
   "main": "./dist/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "opencode",
+          "title": "OpenCode",
+          "icon": "images/activitybar.svg"
+        }
+      ]
+    },
+    "views": {
+      "opencode": [
+        {
+          "type": "webview",
+          "id": "opencode.sidebar",
+          "name": "OpenCode"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "opencode.sidebar",
+        "contents": "Run OpenCode in the integrated terminal.\n[Open OpenCode](command:opencode.openTerminal)\n[Open in New Tab](command:opencode.openNewTerminal)"
+      }
+    ],
     "commands": [
       {
         "command": "opencode.openTerminal",
@@ -49,6 +73,18 @@
       "editor/title": [
         {
           "command": "opencode.openNewTerminal",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "opencode.openTerminal",
+          "when": "view == opencode.sidebar",
+          "group": "navigation"
+        },
+        {
+          "command": "opencode.openNewTerminal",
+          "when": "view == opencode.sidebar",
           "group": "navigation"
         }
       ]
