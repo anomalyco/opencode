@@ -22,8 +22,8 @@ export function SessionErrorMessage(props: { message: string }) {
 export function SessionError(props: { message: string }) {
   return (
     <Card variant="error" class="error-card" data-kind="session-error-card">
-      <div class="flex w-full min-w-0 items-center gap-2">
-        <Icon name="outline-hexagonal-warning" class="shrink-0 text-v2-state-fg-danger" />
+      <div class="flex w-full min-w-0 items-start gap-2">
+        <Icon name="outline-hexagonal-warning" size="small" class="shrink-0 text-v2-state-fg-danger" />
         <div class="min-w-0">
           <SessionErrorMessage message={props.message} />
         </div>
