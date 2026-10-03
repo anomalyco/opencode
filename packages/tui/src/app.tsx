@@ -144,6 +144,7 @@ export type TuiInput = {
   args: Args
   config: TuiConfig.Resolved
   onSnapshot?: () => Promise<string[]>
+  onActiveSession?: (sessionID: string) => void
   directory?: string
   fetch?: typeof fetch
   headers?: RequestInit["headers"]
@@ -292,6 +293,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                           }
                                         : undefined
                                     }
+                                    onActiveSession={input.onActiveSession}
                                   >
                                     <TuiConfigProvider config={input.config}>
                                       <PluginRuntimeProvider value={pluginRuntime}>
