@@ -4,6 +4,9 @@ import { dict as en } from "./en"
 export const dict = {
   ...en,
   "go.promo.spaceBunny": "새로운 익명 모델 Space Bunny Free를 한정된 기간 동안 사용할 수 있습니다",
+  "go.referral.ended.label": "경고",
+  "go.referral.ended":
+    "추천 프로그램이 종료되었습니다. 추천 링크로는 더 이상 본인이나 링크를 공유한 사람에게 크레딧이 지급되지 않습니다.",
   "go.graph.bonus": "사용량 {{count}}배",
   "nav.github": "GitHub",
   "nav.docs": "문서",
@@ -258,6 +261,7 @@ export const dict = {
   "go.title": "OpenCode Go | 모두를 위한 저비용 코딩 모델",
   "go.meta.description": "Go는 월 $10이며, 넉넉한 사용 한도와 주요 코딩 모델에 대한 안정적인 액세스를 제공합니다.",
   "go.hero.title": "모두를 위한 저비용 코딩 모델",
+  "go.hero.tagline": "어떤 에이전트와도 사용할 수 있습니다. 필요하면 크레딧을 충전하세요. 언제든지 취소할 수 있습니다.",
   "go.hero.body":
     "Go는 전 세계 프로그래머들에게 에이전트 코딩을 제공합니다. 가장 유능한 오픈 소스 모델에 대한 넉넉한 한도와 안정적인 액세스를 제공하므로, 비용이나 가용성 걱정 없이 강력한 에이전트로 빌드할 수 있습니다.",
 
@@ -653,7 +657,6 @@ export const dict = {
   "workspace.payments.type.subscription": "구독",
   "workspace.payments.view": "보기",
 
-  "workspace.black.loading": "로드 중...",
   "workspace.black.time.day": "일",
   "workspace.black.time.days": "일",
   "workspace.black.time.hour": "시간",
@@ -663,7 +666,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "몇 초",
   "workspace.black.subscription.title": "구독",
   "workspace.black.subscription.message": "현재 월 ${{plan}} OpenCode Black 플랜을 구독 중입니다.",
-  "workspace.black.subscription.manage": "구독 관리",
+  "workspace.black.subscription.ending":
+    "OpenCode Black은 현재 결제 기간이 끝나면 종료되며 갱신되지 않습니다. 새 콘솔로 옮겨 드리겠습니다.",
   "workspace.black.subscription.rollingUsage": "5시간 사용량",
   "workspace.black.subscription.weeklyUsage": "주간 사용량",
   "workspace.black.subscription.resetsIn": "초기화까지 남은 시간:",

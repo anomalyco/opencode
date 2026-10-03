@@ -245,6 +245,19 @@ describe("inference stat normalization", () => {
     ).toMatchObject([{ period_key: "2026-W20" }])
   })
 
+  test("excludes hidden models from stats and retention queries", () => {
+    const source = { namespace: "inference", table: "generation", dataset: "zen", hiddenModels: ["hidden-model"] }
+    const queries = [
+      ...buildStatsQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-11T00:00:00.000Z"), source),
+      ...buildRetentionQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-24T00:00:00.000Z"), source).map(
+        (item) => item.query,
+      ),
+    ]
+
+    expect(queries.length).toBeGreaterThan(0)
+    queries.forEach((query) => expect(query).toContain("lower(model) NOT IN ('alpha-gpt-next', 'hidden-model')"))
+  })
+
   test("builds bounded R2 SQL queries for each day and week", () => {
     const queries = buildStatsQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-12T12:00:00.000Z"), {
       namespace: "inference",

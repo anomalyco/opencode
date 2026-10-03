@@ -46,7 +46,10 @@ export declare namespace ModelStatRepo {
     readonly listDaily: () => Effect.Effect<ModelStatMetric[], DatabaseError>
     readonly lastSyncedAt: () => Effect.Effect<Date | null, DatabaseError>
     readonly upsert: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
-    readonly deleteRetiredDimensions: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteRetiredDimensions: (
+      rows: ModelStatRow[],
+      hiddenModels: readonly string[],
+    ) => Effect.Effect<void, DatabaseError>
     readonly deleteUnknownDimensions: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
   }
 }
@@ -178,6 +181,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
 
       const deleteRetiredDimensions = Effect.fn("ModelStatRepo.deleteRetiredDimensions")(function* (
         rows: ModelStatRow[],
+        hiddenModels: readonly string[],
       ) {
         const scope = statRowScope(rows)
         if (!scope) return
@@ -195,7 +199,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
                   inArray(modelStat.source, scope.sources),
                   or(
                     inArray(modelStat.provider, RETIRED_STAT_PROVIDERS),
-                    inArray(modelStat.model, RETIRED_STAT_MODELS),
+                    inArray(modelStat.model, [...RETIRED_STAT_MODELS, ...hiddenModels]),
                     and(eq(modelStat.provider, "unknown"), eq(modelStat.model, "hy4-preview")),
                   ),
                 ),
