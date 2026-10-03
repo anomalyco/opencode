@@ -32,6 +32,21 @@ export const AttachCommand = cmd({
         type: "boolean",
         describe: "fork the session when continuing (use with --continue or --session)",
       })
+      .option("auto", {
+        type: "boolean",
+        describe: "auto-approve permissions that are not explicitly denied (dangerous!)",
+        default: false,
+      })
+      .option("yolo", {
+        type: "boolean",
+        hidden: true,
+        default: false,
+      })
+      .option("dangerously-skip-permissions", {
+        type: "boolean",
+        hidden: true,
+        default: false,
+      })
       .option("password", {
         alias: ["p"],
         type: "string",
@@ -88,6 +103,7 @@ export const AttachCommand = cmd({
         continue: args.continue,
         session: args.session,
         fork: args.fork,
+        auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
         replay: noReplay ? false : undefined,
         replayLimit: args.replayLimit,
       })
@@ -139,6 +155,7 @@ export const AttachCommand = cmd({
           continue: args.continue,
           sessionID: args.session,
           fork: args.fork,
+          auto: args.auto || args.yolo || args["dangerously-skip-permissions"],
         },
         directory,
         headers,
