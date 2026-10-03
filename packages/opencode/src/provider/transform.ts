@@ -1572,6 +1572,11 @@ function sanitizeOpenAISchema(value: unknown): unknown {
   return result
 }
 
+const GEMINI_TYPE_KEYWORDS: Record<string, string[]> = {
+  array: ["items", "minItems", "maxItems"],
+  object: ["properties", "required", "additionalProperties"],
+}
+
 export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {
   /*
   if (["openai", "azure"].includes(providerID)) {
@@ -1671,7 +1676,9 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
       // rewrites these into an `anyOf` of single-type schemas, but OpenAI-compatible
       // transports (e.g. GitHub Copilot proxying to Gemini) forward them verbatim
       // and the backend rejects the array form. Mirror the SDK: split non-null
-      // types into `anyOf`, and lift `null` into `nullable`.
+      // types into `anyOf`, and lift `null` into `nullable`. Keywords such as
+      // `items` or `properties` move into their type's branch; Gemini rejects
+      // them on a node without that type.
       if (Array.isArray(result.type)) {
         const hasNull = result.type.includes("null")
         const nonNull = result.type.filter((entry: unknown) => entry !== "null")
@@ -1679,7 +1686,15 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
           result.type = "null"
         } else {
           delete result.type
-          result.anyOf = nonNull.map((entry: unknown) => ({ type: entry }))
+          result.anyOf = nonNull.map((entry: unknown) => {
+            const branch: Record<string, unknown> = { type: entry }
+            for (const key of GEMINI_TYPE_KEYWORDS[String(entry)] ?? []) {
+              if (!(key in result)) continue
+              branch[key] = result[key]
+              delete result[key]
+            }
+            return branch
+          })
           if (hasNull) result.nullable = true
         }
       }
