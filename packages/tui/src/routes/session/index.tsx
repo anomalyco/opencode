@@ -435,11 +435,19 @@ export function Session(props: {
     if (revealingOlderRows || !scroll || scroll.isDestroyed || scroll.scrollTop > scroll.viewport.height) return false
     if (current === 0) return prependHistory(scrollBy)
     revealingOlderRows = true
-    const before = scroll.scrollHeight
+    let height = scroll.scrollHeight
+    const preservePosition = () => {
+      const next = scroll.scrollHeight
+      scroll.scrollBy(next - height)
+      height = next
+    }
     scroll.stickyScroll = false
+    // Content resize runs after scrollbar bounds update, before the new rows paint.
+    scroll.content.on("resize", preservePosition)
     setHiddenRows(rowsBefore(weights(), current, TRANSCRIPT_BACKFILL_CHUNK))
     afterLayout(() => {
-      scroll.scrollBy(scroll.scrollHeight - before + scrollBy)
+      scroll.content.off("resize", preservePosition)
+      scroll.scrollBy(scrollBy)
       scroll.stickyScroll = !navigationMessage()
       revealingOlderRows = false
     })
