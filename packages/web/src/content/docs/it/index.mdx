@@ -7,7 +7,7 @@ import { Tabs, TabItem } from "@astrojs/starlight/components"
 import config from "../../../../config.mjs"
 export const console = config.console
 
-[**OpenCode**](/) e un agente di programmazione AI open source. E disponibile come interfaccia per terminale, app desktop o estensione per IDE.
+[**OpenCode**](/) è un agente di programmazione AI open source. È disponibile come interfaccia per terminale, app desktop o estensione per IDE.
 
 ![OpenCode TUI con il tema opencode](../../../assets/lander/screenshot.png)
 
@@ -31,7 +31,7 @@ Per usare OpenCode nel terminale, ti serve:
 
 ## Installa
 
-Il modo piu semplice per installare OpenCode e usare lo script di installazione.
+Il modo piu semplice per installare OpenCode è usare lo script di installazione.
 
 ```bash
 curl -fsSL https://opencode.ai/install | bash
@@ -79,7 +79,7 @@ Puoi anche installarlo con i seguenti comandi:
   brew install anomalyco/tap/opencode
   ```
 
-  > Ti consigliamo di usare il tap di OpenCode per avere le release piu aggiornate. La formula ufficiale `brew install opencode` e mantenuta dal team Homebrew e viene aggiornata meno spesso.
+  > Ti consigliamo di usare il tap di OpenCode per avere le release piu aggiornate. La formula ufficiale `brew install opencode` è mantenuta dal team Homebrew e viene aggiornata meno spesso.
 
 - **Con Paru su Arch Linux**
 
@@ -124,7 +124,7 @@ Per la migliore esperienza su Windows, ti consigliamo di usare [Windows Subsyste
   docker run -it --rm ghcr.io/anomalyco/opencode
   ```
 
-Il supporto per installare OpenCode su Windows usando Bun e attualmente in lavorazione.
+Il supporto per installare OpenCode su Windows usando Bun è attualmente in lavorazione.
 
 Puoi anche scaricare il binario dalle [Releases](https://github.com/anomalyco/opencode/releases).
 
@@ -134,7 +134,7 @@ Puoi anche scaricare il binario dalle [Releases](https://github.com/anomalyco/op
 
 Con OpenCode puoi usare qualsiasi provider LLM configurando le relative chiavi API.
 
-Se e la prima volta che usi provider LLM, ti consigliamo [OpenCode Zen](/docs/zen).
+Se è la prima volta che usi provider LLM, ti consigliamo [OpenCode Zen](/docs/zen).
 E una lista curata di modelli testati e verificati dal team di OpenCode.
 
 1. Esegui il comando `/connect` nella TUI, seleziona opencode e vai su [opencode.ai/auth](https://opencode.ai/auth).
@@ -192,7 +192,7 @@ Questo aiuta OpenCode a capire la struttura del progetto e gli stili di codice u
 
 Ora sei pronto a usare OpenCode sul tuo progetto. Sentiti libero di chiedergli qualsiasi cosa!
 
-Se e la prima volta che usi un agente di programmazione AI, ecco alcuni esempi che possono aiutare.
+Se è la prima volta che usi un agente di programmazione AI, ecco alcuni esempi che possono aiutare.
 
 ---
 
@@ -208,7 +208,7 @@ Usa il tasto `@` per fare una ricerca fuzzy dei file nel progetto.
 How is authentication handled in @packages/functions/src/api/index.ts
 ```
 
-Questo e utile se c'e una parte della codebase su cui non hai lavorato.
+Questo è utile se c'e una parte della codebase su cui non hai lavorato.
 
 ---
 
@@ -293,7 +293,7 @@ Mettiamo che tu chieda a OpenCode di fare alcune modifiche.
 Can you refactor the function in @packages/functions/src/api/index.ts?
 ```
 
-Ma ti accorgi che non e quello che volevi. Puoi **annullare** le modifiche usando il comando `/undo`.
+Ma ti accorgi che non è quello che volevi. Puoi **annullare** le modifiche usando il comando `/undo`.
 
 ```bash frame="none"
 /undo
