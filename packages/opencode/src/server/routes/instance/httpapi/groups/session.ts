@@ -165,6 +165,19 @@ export const SessionApi = HttpApi.make("session")
             description: "Retrieve the todo list associated with a specific session, showing tasks and action items.",
           }),
         ),
+        HttpApiEndpoint.patch("todoUpdate", SessionPaths.todo, {
+          params: { sessionID: SessionID },
+          query: WorkspaceRoutingQuery,
+          payload: Schema.Array(Todo.Info),
+          success: described(Schema.Array(Todo.Info), "Updated todo list"),
+          error: [HttpApiError.BadRequest, ApiNotFoundError],
+        }).annotateMerge(
+          OpenApi.annotations({
+            identifier: "session.todoUpdate",
+            summary: "Update session todos",
+            description: "Replace the todo list for a specific session. Used for manual todo management by the user.",
+          }),
+        ),
         HttpApiEndpoint.get("diff", SessionPaths.diff, {
           params: { sessionID: SessionID },
           query: DiffQuery,
