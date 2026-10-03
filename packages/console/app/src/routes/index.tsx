@@ -50,7 +50,7 @@ export default function Home() {
       <Meta property="og:image" content="/social-share.png" />
       <Meta name="twitter:image" content="/social-share.png" />
       <div data-component="container">
-        <Header />
+        <Header login />
 
         <div data-component="content">
           <section data-component="hero">
