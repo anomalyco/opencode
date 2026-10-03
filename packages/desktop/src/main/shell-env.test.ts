@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 
-import { isNushell, mergeShellEnv, parseShellEnv, resolveUserShell } from "./shell-env"
+import { isNushell, loadShellEnv, mergeShellEnv, parseShellEnv, resolveUserShell } from "./shell-env"
 
 describe("shell env", () => {
   test("parseShellEnv supports null-delimited pairs", () => {
@@ -46,5 +46,17 @@ describe("shell env", () => {
     expect(isNushell("/opt/homebrew/bin/nu")).toBe(true)
     expect(isNushell("C:\\Program Files\\nu.exe")).toBe(true)
     expect(isNushell("/bin/zsh")).toBe(false)
+  })
+
+  test("loadShellEnv falls back to login shell after interactive timeout", () => {
+    const modes: string[] = []
+    const env = loadShellEnv("/bin/zsh", { log() {} }, (_shell, mode) => {
+      modes.push(mode)
+      if (mode === "-il") return { type: "Timeout" }
+      return { type: "Loaded", value: { PATH: "/usr/local/bin" } }
+    })
+
+    expect(modes).toEqual(["-il", "-l"])
+    expect(env?.PATH).toBe("/usr/local/bin")
   })
 })
