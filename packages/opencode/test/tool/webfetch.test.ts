@@ -98,6 +98,55 @@ describe("tool.webfetch", () => {
     ),
   )
 
+  it.instance("notes a non-200 status ahead of the body", () =>
+    withFetch(
+      () =>
+        new Response("<p>throttled</p>", {
+          status: 202,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      (url) =>
+        Effect.gen(function* () {
+          const result = yield* exec({ url: new URL("/page.html", url).toString(), format: "text" })
+          expect(result.output.startsWith("[HTTP 202")).toBe(true)
+          expect(result.output).toContain("throttled")
+          expect(result.metadata.status).toBe(202)
+        }),
+    ),
+  )
+
+  it.instance("surfaces the notice alone when a throttled response has no body", () =>
+    withFetch(
+      () =>
+        new Response("", {
+          status: 202,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      (url) =>
+        Effect.gen(function* () {
+          const result = yield* exec({ url: new URL("/page.html", url).toString(), format: "text" })
+          expect(result.output.startsWith("[HTTP 202")).toBe(true)
+          expect(result.output.trim().endsWith("]")).toBe(true)
+        }),
+    ),
+  )
+
+  it.instance("leaves 200 responses unannotated", () =>
+    withFetch(
+      () =>
+        new Response("<p>hello</p>", {
+          status: 200,
+          headers: { "content-type": "text/html; charset=utf-8" },
+        }),
+      (url) =>
+        Effect.gen(function* () {
+          const result = yield* exec({ url: new URL("/page.html", url).toString(), format: "text" })
+          expect(result.output).toBe("hello")
+          expect(result.metadata.status).toBe(200)
+        }),
+    ),
+  )
+
   it.instance("extracts text from html without scripts or styles", () =>
     withFetch(
       () =>
