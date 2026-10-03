@@ -20,6 +20,7 @@ import type {
   SnapshotFileDiff,
   ConsoleState,
 } from "@opencode-ai/sdk/v2"
+import type { TuiSidebarSkillItem } from "@opencode-ai/plugin/tui"
 import { createStore, produce, reconcile } from "solid-js/store"
 import { useProject } from "./project"
 import { useEvent } from "./event"
@@ -103,6 +104,7 @@ export const {
         [messageID: string]: Part[]
       }
       lsp: LspStatus[]
+      skills: TuiSidebarSkillItem[]
       mcp: {
         [key: string]: McpStatus
       }
@@ -137,6 +139,7 @@ export const {
       message: {},
       part: {},
       lsp: [],
+      skills: [],
       mcp: {},
       mcp_resource: {},
       formatter: [],
@@ -522,6 +525,7 @@ export const {
             consoleStatePromise.then((consoleState) => setStore("console_state", reconcile(consoleState))),
             sdk.client.command.list({ workspace }).then((x) => setStore("command", reconcile(x.data ?? []))),
             sdk.client.lsp.status({ workspace }).then((x) => setStore("lsp", reconcile(x.data ?? []))),
+            sdk.client.app.skills({ workspace }).then((x) => setStore("skills", reconcile(x.data ?? []))),
             sdk.client.mcp.status({ workspace }).then((x) => setStore("mcp", reconcile(x.data ?? {}))),
             sdk.client.experimental.resource
               .list({ workspace })

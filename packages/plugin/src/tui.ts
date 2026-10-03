@@ -396,6 +396,7 @@ export type TuiState = {
   part: (messageID: string) => ReadonlyArray<Part>
   lsp: () => ReadonlyArray<TuiSidebarLspItem>
   mcp: () => ReadonlyArray<TuiSidebarMcpItem>
+  skills: () => ReadonlyArray<TuiSidebarSkillItem>
 }
 
 type TuiBindingLookupView = {
@@ -445,6 +446,12 @@ export type TuiSidebarMcpItem = {
 export type TuiSidebarLspItem = Pick<LspStatus, "id" | "root" | "status">
 
 export type TuiSidebarTodoItem = Pick<Todo, "content" | "status">
+
+export type TuiSidebarSkillItem = {
+  name: string
+  description?: string
+  location: string
+}
 
 export type TuiSidebarFileItem = {
   file: string
