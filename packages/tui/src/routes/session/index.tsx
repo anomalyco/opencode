@@ -128,6 +128,7 @@ const sessionBindingCommands = [
   "session.toggle.actions",
   "session.toggle.scrollbar",
   "session.toggle.generic_tool_output",
+  "session.toggle.tool_output_expanded",
   "session.first",
   "session.last",
   "session.messages_last_user",
@@ -162,6 +163,7 @@ const context = createContext<{
   showTimestamps: () => boolean
   showDetails: () => boolean
   showGenericToolOutput: () => boolean
+  toolOutputExpandedTick: () => number
   diffWrapMode: () => "word" | "none"
   providers: () => ReadonlyMap<string, Provider>
   sync: ReturnType<typeof useSync>
@@ -266,6 +268,7 @@ export function Session() {
   const [diffWrapMode] = kv.signal<"word" | "none">("diff_wrap_mode", "word")
   const [_animationsEnabled, _setAnimationsEnabled] = kv.signal("animations_enabled", true)
   const [showGenericToolOutput, setShowGenericToolOutput] = kv.signal("generic_tool_output_visibility", false)
+  const [toolOutputExpandedTick, setToolOutputExpandedTick] = kv.signal("tool_output_expanded_tick", 0)
 
   const wide = createMemo(() => dimensions().width > 120)
   const sidebarVisible = createMemo(() => {
@@ -731,6 +734,15 @@ export function Session() {
       },
     },
     {
+      title: "Expand/collapse tool output blocks",
+      value: "session.toggle.tool_output_expanded",
+      category: "Session",
+      run: () => {
+        setToolOutputExpandedTick(toolOutputExpandedTick() + 1)
+        dialog.clear()
+      },
+    },
+    {
       title: "Toggle session scrollbar",
       value: "session.toggle.scrollbar",
       category: "Session",
@@ -1168,6 +1180,7 @@ export function Session() {
           showTimestamps,
           showDetails,
           showGenericToolOutput,
+          toolOutputExpandedTick,
           diffWrapMode,
           providers,
           sync,
@@ -1803,6 +1816,10 @@ function GenericTool(props: ToolProps) {
   const maxLines = 3
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
   const collapsed = createMemo(() => collapseToolOutput(output(), maxLines, maxChars()))
+  createEffect(() => {
+    ctx.toolOutputExpandedTick()
+    if (collapsed().overflow) setExpanded((prev) => !prev)
+  })
   const limited = createMemo(() => {
     if (expanded() || !collapsed().overflow) return output()
     return collapsed().output
@@ -2053,6 +2070,10 @@ function Shell(props: ToolProps) {
   const maxLines = 10
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 6))
   const collapsed = createMemo(() => collapseToolOutput(output(), maxLines, maxChars()))
+  createEffect(() => {
+    ctx.toolOutputExpandedTick()
+    if (collapsed().overflow) setExpanded((prev) => !prev)
+  })
   const limited = createMemo(() => {
     if (expanded() || !collapsed().overflow) return output()
     return collapsed().output
