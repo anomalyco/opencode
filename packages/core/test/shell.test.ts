@@ -63,6 +63,23 @@ describe("shell", () => {
     expect(zsh.at(-1)).toBe("/tmp")
   })
 
+  test("prepends a UTF-8 prologue to PowerShell commands on Windows", () => {
+    const command = Shell.utf8Command("C:/tools/pwsh.exe", "echo hi")
+    if (process.platform === "win32") {
+      expect(command).toContain("[Console]::OutputEncoding")
+      expect(command.endsWith("echo hi")).toBe(true)
+    } else {
+      expect(command).toBe("echo hi")
+    }
+    expect(Shell.args("C:/tools/pwsh.exe", "echo hi", "C:/tmp").at(-1)).toBe(command)
+  })
+
+  test("defaults Python stdio to UTF-8 for Windows shell commands", () => {
+    if (process.platform === "win32") expect(Shell.utf8Env({})).toEqual({ PYTHONIOENCODING: "utf-8" })
+    else expect(Shell.utf8Env({})).toEqual({})
+    expect(Shell.utf8Env({ PYTHONIOENCODING: "cp1256" })).toEqual({})
+  })
+
   if (process.platform === "win32") {
     test("rejects blacklisted shells case-insensitively", async () => {
       await withShell("NU.EXE", async () => {
