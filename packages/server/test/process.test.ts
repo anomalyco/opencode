@@ -167,6 +167,21 @@ it.live("authenticates API requests behind the frontend transform while allowing
   }),
 )
 
+it.live("allows requests without credentials when authentication is disabled", () =>
+  Effect.gen(function* () {
+    const server = yield* ServerProcess.start<never, never>({
+      hostname: "127.0.0.1",
+      port: 0,
+      app: { version: "test-version" },
+      database: { path: ":memory:" },
+    })
+    const response = yield* Effect.promise(() => fetch(new URL("/api/info", HttpServer.formatAddress(server.address))))
+
+    expect(response.status).toBe(200)
+    expect(yield* Effect.promise(() => response.json())).toMatchObject({ version: "test-version" })
+  }),
+)
+
 it.live("pairing links sign in browsers with a cookie and API clients with a token", () =>
   Effect.gen(function* () {
     const server = yield* ServerProcess.start<never, never>({

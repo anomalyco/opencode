@@ -539,6 +539,10 @@ const Root = Spec.make(typeof OPENCODE_CLI_NAME === "string" ? OPENCODE_CLI_NAME
       params: {
         hostname: Flag.string("hostname").pipe(Flag.optional),
         port: Flag.integer("port").pipe(Flag.optional),
+        noAuth: Flag.boolean("no-auth").pipe(
+          Flag.withDescription("Disable server authentication"),
+          Flag.withDefault(false),
+        ),
         cors: Flag.string("cors").pipe(
           Flag.withSchema(Schema.NonEmptyString),
           Flag.withDescription("Additional allowed CORS origin (repeat for multiple origins)"),
