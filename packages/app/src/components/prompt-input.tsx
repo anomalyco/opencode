@@ -24,6 +24,7 @@ import {
   ImageAttachmentPart,
   AgentPart,
   FileAttachmentPart,
+  CommandPart,
 } from "@/context/prompt"
 import { useLayout } from "@/context/layout"
 import { useSDK } from "@/context/sdk"
@@ -722,17 +723,29 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const images = imageAttachments()
 
     if (cmd.type === "custom") {
-      const text = `/${cmd.trigger} `
+      const content = `/${cmd.trigger}`
       if (menu) {
         editorRef.focus()
         setCursorPosition(editorRef, 0)
-        addPart({ type: "text", content: text, start: 0, end: text.length })
+        addPart({ type: "command", name: cmd.trigger, content, start: 0, end: content.length })
         focusEditorEnd()
         return
       }
-      setEditorText(text)
-      prompt.set([{ type: "text", content: text, start: 0, end: text.length }, ...images], text.length)
-      focusEditorEnd()
+
+      const cursor = getCursorPosition(editorRef)
+      const rawText = prompt
+        .current()
+        .map((part) => ("content" in part ? part.content : ""))
+        .join("")
+      const match = rawText.substring(0, cursor).match(/\/(\S*)$/)
+      if (!match) return
+      editorRef.focus()
+      const selection = window.getSelection()
+      if (!selection?.rangeCount) return
+      const range = selection.getRangeAt(0)
+      setRangeEdge(editorRef, range, "start", match.index ?? cursor - match[0].length)
+      setRangeEdge(editorRef, range, "end", cursor)
+      addPart({ type: "command", name: cmd.trigger, content, start: 0, end: content.length })
       return
     }
 
@@ -759,7 +772,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     onSelect: handleSlashSelect,
   })
 
-  const createPill = (part: FileAttachmentPart | AgentPart) => {
+  const createPill = (part: FileAttachmentPart | AgentPart | CommandPart) => {
     const pill = document.createElement("span")
     pill.textContent = part.content
     pill.setAttribute("data-type", part.type)
@@ -774,7 +787,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         pill.setAttribute("data-source-uri", part.source.uri)
       }
     }
-    if (part.type === "agent") pill.setAttribute("data-name", part.name)
+    if (part.type === "agent" || part.type === "command") pill.setAttribute("data-name", part.name)
     pill.setAttribute("contenteditable", "false")
     pill.style.userSelect = "text"
     pill.style.cursor = "default"
@@ -797,6 +810,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       const el = node as HTMLElement
       if (el.dataset.type === "file") return true
       if (el.dataset.type === "agent") return true
+      if (el.dataset.type === "command") return true
       return el.tagName === "BR"
     })
 
@@ -807,7 +821,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
         editorRef.appendChild(createTextFragment(part.content))
         continue
       }
-      if (part.type === "file" || part.type === "agent") {
+      if (part.type === "file" || part.type === "agent" || part.type === "command") {
         editorRef.appendChild(createPill(part))
       }
     }
@@ -927,6 +941,18 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       position += content.length
     }
 
+    const pushCommand = (command: HTMLElement) => {
+      const content = command.textContent ?? ""
+      parts.push({
+        type: "command",
+        name: command.dataset.name ?? content.slice(1),
+        content,
+        start: position,
+        end: position + content.length,
+      })
+      position += content.length
+    }
+
     const visit = (node: Node) => {
       if (node.nodeType === Node.TEXT_NODE) {
         buffer += node.textContent ?? ""
@@ -943,6 +969,11 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
       if (el.dataset.type === "agent") {
         flushText()
         pushAgent(el)
+        return
+      }
+      if (el.dataset.type === "command") {
+        flushText()
+        pushCommand(el)
         return
       }
       if (el.tagName === "BR") {
@@ -998,7 +1029,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
 
     if (!shellMode) {
       const atMatch = rawText.substring(0, cursorPosition).match(/@(\S*)$/)
-      const slashMatch = rawText.match(/^\/(\S*)$/)
+      const slashMatch = rawText.substring(0, cursorPosition).match(/\/(\S*)$/)
 
       if (atMatch) {
         atOnInput(atMatch[1])
@@ -1036,14 +1067,14 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
     const range = selection.getRangeAt(0)
     if (!editorRef.contains(range.startContainer)) return false
 
-    if (part.type === "file" || part.type === "agent") {
+    if (part.type === "file" || part.type === "agent" || part.type === "command") {
       const cursorPosition = getCursorPosition(editorRef)
       const rawText = prompt
         .current()
         .map((p) => ("content" in p ? p.content : ""))
         .join("")
       const textBeforeCursor = rawText.substring(0, cursorPosition)
-      const atMatch = textBeforeCursor.match(/@(\S*)$/)
+      const atMatch = part.type === "command" ? undefined : textBeforeCursor.match(/@(\S*)$/)
       const pill = createPill(part)
       const gap = document.createTextNode(" ")
 
@@ -1537,6 +1568,7 @@ export const PromptInput: Component<PromptInputProps> = (props) => {
                 "w-full pl-3 pr-2 pt-2 text-14-regular text-text-strong focus:outline-none whitespace-pre-wrap": true,
                 "[&_[data-type=file]]:text-syntax-property": true,
                 "[&_[data-type=agent]]:text-syntax-type": true,
+                "[&_[data-type=command]]:text-[#4582CC] [&_[data-type=command]]:font-medium": true,
                 "font-mono!": store.mode === "shell",
               }}
               style={{ "padding-bottom": space }}

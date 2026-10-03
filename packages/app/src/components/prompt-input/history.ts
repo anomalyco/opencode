@@ -35,7 +35,7 @@ export function clonePromptParts(prompt: Prompt): Prompt {
   return prompt.map((part) => {
     if (part.type === "text") return { ...part }
     if (part.type === "image") return { ...part }
-    if (part.type === "agent") return { ...part }
+    if (part.type === "agent" || part.type === "command") return { ...part }
     return {
       ...part,
       selection: part.selection ? { ...part.selection } : undefined,

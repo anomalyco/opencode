@@ -143,6 +143,20 @@ export function createPromptInputV2Controller(input: {
       draft.setText(command.value)
       return
     }
+    if (command.type === "draft.replaceText") {
+      draft.replaceText(command.start, command.end, command.value)
+      return
+    }
+    if (command.type === "command.add") {
+      draft.addCommand(command.start, command.end, {
+        type: "command",
+        name: command.name,
+        content: command.content,
+        start: 0,
+        end: command.content.length,
+      })
+      return
+    }
     if (command.type === "mention.add") {
       if (command.item.mention) draft.addMention(command.item.mention)
       return
