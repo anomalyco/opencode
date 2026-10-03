@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { literalReplace } from "@opencode-ai/core/util/template"
 import path from "path"
 import { InstanceState } from "@/effect/instance-state"
 import { EffectBridge } from "@/effect/bridge"
@@ -72,7 +73,7 @@ const layer = Layer.effect(
         description: "guided AGENTS.md setup",
         source: "command",
         get template() {
-          return PROMPT_INITIALIZE.replace("${path}", ctx.worktree)
+          return literalReplace(PROMPT_INITIALIZE, "${path}", ctx.worktree)
         },
         hints: hints(PROMPT_INITIALIZE),
       }
@@ -81,7 +82,7 @@ const layer = Layer.effect(
         description: "review changes [commit|branch|pr], defaults to uncommitted",
         source: "command",
         get template() {
-          return PROMPT_REVIEW.replace("${path}", ctx.worktree)
+          return literalReplace(PROMPT_REVIEW, "${path}", ctx.worktree)
         },
         subtask: true,
         hints: hints(PROMPT_REVIEW),

@@ -1,4 +1,5 @@
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { literalReplace } from "@opencode-ai/core/util/template"
 import { Effect, Layer, Context, Schema } from "effect"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { ChildProcess } from "effect/unstable/process"
@@ -79,7 +80,7 @@ const layer = Layer.effect(
 
             for (const { item, cmd } of formatters) {
               yield* Effect.logInfo("running", { command: cmd })
-              const replaced = cmd.map((x) => x.replace("$FILE", filepath))
+              const replaced = cmd.map((x) => literalReplace(x, "$FILE", filepath))
               const dir = yield* InstanceState.directory
               const result = yield* appProcess
                 .run(
