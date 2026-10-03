@@ -192,6 +192,9 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       externalOutputMode: "capture-stdout",
       consoleMode: "disabled",
       clearOnShutdown: false,
+      // Same as the TUI: avoid opentui's SSH auto-detection, which skips
+      // TERM/COLORTERM parsing and emits truecolor-only SGR.
+      remote: false,
     })
     const theme = await resolveRunTheme(renderer)
     renderer.setBackgroundColor(theme.background)
