@@ -1450,6 +1450,7 @@ describe("session.message-v2.fromError", () => {
       "The input token count (1196265) exceeds the maximum number of tokens allowed (1048575)",
       "tokens in request more than max tokens allowed",
       "Please reduce the length of the messages or completion",
+      "Error from provider (Console Go): Upstream request failed: [invalid_request_error] Too many images in request: 31 > 30",
       "400 status code (no body)",
       "413 status code (no body)",
     ]
