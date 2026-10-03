@@ -28,7 +28,7 @@ import {
   useSettings,
 } from "@/context/settings"
 import { decode64 } from "@/utils/base64"
-import { playSoundById, SOUND_OPTIONS } from "@/utils/sound"
+import { playSoundPreview, SOUND_OPTIONS } from "@/utils/sound"
 import { ExternalLink } from "./external-link"
 import { SettingsList } from "./settings-list"
 
@@ -72,7 +72,7 @@ const playDemoSound = (id: string | undefined) => {
 
   const run = ++demoSoundState.run
   demoSoundState.timeout = setTimeout(() => {
-    void playSoundById(id).then((cleanup) => {
+    void playSoundPreview(id).then((cleanup) => {
       if (demoSoundState.run !== run) {
         cleanup?.()
         return

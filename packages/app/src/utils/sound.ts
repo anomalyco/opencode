@@ -97,6 +97,40 @@ export function playSound(src: string | undefined) {
   }
 }
 
-export function playSoundById(id: string | undefined) {
-  return soundSrc(id).then((src) => playSound(src))
+export const SOUND_COOLDOWN_MS = 2_000
+
+export function createSoundPlayer(input: {
+  load: (id: string | undefined) => Promise<string | undefined>
+  play: (src: string | undefined) => (() => void) | undefined
+  now?: () => number
+  cooldownMs?: number
+}) {
+  const now = input.now ?? Date.now
+  const cooldownMs = input.cooldownMs ?? SOUND_COOLDOWN_MS
+  let lastPlayedAt = Number.NEGATIVE_INFINITY
+  let cleanup: (() => void) | undefined
+  let inflight: Promise<(() => void) | undefined> | undefined
+
+  return (id: string | undefined): Promise<(() => void) | undefined> => {
+    if (inflight) return inflight
+    if (now() - lastPlayedAt < cooldownMs) return Promise.resolve(undefined)
+    inflight = input
+      .load(id)
+      .then((src) => {
+        if (!src) return undefined
+        lastPlayedAt = now()
+        cleanup?.()
+        cleanup = input.play(src)
+        return cleanup
+      })
+      .finally(() => {
+        inflight = undefined
+      })
+    return inflight
+  }
 }
+
+export const playSoundById = createSoundPlayer({ load: soundSrc, play: playSound })
+
+// Settings previews play on explicit user action and must not be throttled.
+export const playSoundPreview = createSoundPlayer({ load: soundSrc, play: playSound, cooldownMs: 0 })
