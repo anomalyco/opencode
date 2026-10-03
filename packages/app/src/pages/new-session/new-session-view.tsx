@@ -46,22 +46,26 @@ export function NewSessionView(props: {
                 <PromptProjectAddButton controller={props.project} />
               </Show>
               <Show when={props.project.selected()}>
-                <div class="flex min-h-7 min-w-0 flex-col items-center justify-center gap-0 text-v2-text-text-faint sm:flex-row">
-                  <PromptProjectSelector controller={props.project} placement="bottom" />
+                <div class="flex w-full min-h-7 min-w-0 flex-col items-center justify-center gap-0 text-v2-text-text-faint sm:flex-row">
+                  <div class="flex min-w-0 flex-1 basis-1/2">
+                    <PromptProjectSelector controller={props.project} placement="bottom" />
+                  </div>
                   <Show
                     when={props.workspace.bar.visible()}
                     fallback={
                       <PromptGitStatus branch={props.workspace.bar.branch()} noGit={!props.workspace.project.git()} />
                     }
                   >
-                    <PromptWorkspaceSelector
-                      value={props.workspace.selection.value()}
-                      projectRoot={props.workspace.project.root()}
-                      workspaces={props.workspace.project.workspaces()}
-                      branch={props.workspace.bar.branch()}
-                      onChange={props.workspace.selection.set}
-                      onDone={props.input.restoreFocus}
-                    />
+                    <div class="flex min-w-0 flex-1 basis-1/2">
+                      <PromptWorkspaceSelector
+                        value={props.workspace.selection.value()}
+                        projectRoot={props.workspace.project.root()}
+                        projectBranch={props.workspace.project.branch()}
+                        workspaces={props.workspace.project.workspaces()}
+                        onChange={props.workspace.selection.set}
+                        onDone={props.input.restoreFocus}
+                      />
+                    </div>
                   </Show>
                 </div>
               </Show>

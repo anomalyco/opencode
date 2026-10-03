@@ -463,7 +463,7 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
       {...rest}
       data-action="prompt-project"
       type="button"
-      class="flex h-7 min-w-0 max-w-[203px] items-center gap-1.5 rounded-sm px-1.5 transition-colors focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+      class="flex h-7 min-w-0 max-w-full flex-1 items-center gap-1.5 rounded-sm px-1.5 transition-colors focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
       classList={{
         ...local.classList,
         "hover:bg-v2-overlay-simple-overlay-hover": !local.controller.open(),

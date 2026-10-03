@@ -3,7 +3,7 @@ import { useSDK } from "@/context/sdk"
 import { useServerSync } from "@/context/server-sync"
 import { useSync } from "@/context/sync"
 
-const workspaceBarEnabled = import.meta.env.VITE_OPENCODE_CHANNEL !== "prod"
+const workspaceBarEnabled = true
 
 export function resolveNewSessionWorktree(input: {
   enabled: boolean
@@ -64,7 +64,12 @@ export function createNewSessionWorkspaceController() {
     },
     project: {
       root: projectRoot,
-      workspaces: () => sync().project?.sandboxes ?? [],
+      branch: localBranch,
+      workspaces: () =>
+        (sync().project?.sandboxes ?? []).map((directory) => ({
+          directory,
+          branch: serverSync().child(directory)[0].vcs?.branch,
+        })),
       git: () => sync().project?.vcs === "git",
     },
     bar: {
