@@ -2468,3 +2468,79 @@ noLLMServer.instance(
     }),
   30_000,
 )
+
+// Session title generation
+
+const isTitleBody = (body: Record<string, unknown>) =>
+  JSON.stringify(body).includes("Generate a title for this conversation")
+
+it.instance("title generation falls back to a second attempt when the title request errors", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({})
+
+    yield* llm.titleError(400, { error: { message: "title request failed" } })
+    yield* llm.text("world")
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "hello" }],
+    })
+    yield* prompt.loop({ sessionID: chat.id })
+
+    yield* pollWithTimeout(
+      Effect.gen(function* () {
+        const session = yield* sessions.get(chat.id)
+        return session.title === "E2E Title" ? true : undefined
+      }),
+      "title fallback never set the session title",
+    )
+    expect(yield* llm.pending).toBe(0)
+
+    const titleBodies = (yield* llm.inputs).filter(isTitleBody)
+    expect(titleBodies).toHaveLength(2)
+  }),
+)
+
+it.instance("title generation retries on a later message while the title is still default", () =>
+  Effect.gen(function* () {
+    const { llm } = yield* useServerConfig(providerCfg)
+    const prompt = yield* SessionPrompt.Service
+    const sessions = yield* Session.Service
+    const chat = yield* sessions.create({})
+
+    yield* llm.titleError(400, { error: { message: "title request failed" } })
+    yield* llm.titleError(400, { error: { message: "title request failed" } })
+    yield* llm.text("world one")
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "first" }],
+    })
+    yield* prompt.loop({ sessionID: chat.id })
+    yield* llm.wait(3)
+    expect((yield* sessions.get(chat.id)).title).toMatch(/^New session - /)
+
+    yield* llm.text("world two")
+    yield* prompt.prompt({
+      sessionID: chat.id,
+      agent: "build",
+      noReply: true,
+      parts: [{ type: "text", text: "second" }],
+    })
+    yield* prompt.loop({ sessionID: chat.id })
+
+    yield* pollWithTimeout(
+      Effect.gen(function* () {
+        const session = yield* sessions.get(chat.id)
+        return session.title === "E2E Title" ? true : undefined
+      }),
+      "title generation did not retry on a later message",
+    )
+    expect(yield* llm.pending).toBe(0)
+  }),
+)
