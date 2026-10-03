@@ -15,8 +15,6 @@ export type TuiPaths = Readonly<{
 
 export type TuiTerminalEnvironment = Readonly<{
   platform: string
-  multiplexer?: "tmux" | "screen"
-  displayServer?: "wayland" | "x11"
   variables?: Readonly<Record<string, string>>
 }>
 
