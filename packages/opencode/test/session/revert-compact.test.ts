@@ -7,6 +7,7 @@ import path from "path"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { Effect } from "effect"
 import { Session } from "@/session/session"
+import { EventV2Bridge } from "@/event-v2-bridge"
 
 import { SessionRevert } from "../../src/session/revert"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -19,7 +20,14 @@ import { ModelV2 } from "@opencode-ai/core/model"
 
 const it = testEffect(
   LayerNode.compile(
-    LayerNode.group([Session.node, SessionRevert.node, Snapshot.node, SessionProjector.node, CrossSpawnSpawner.node]),
+    LayerNode.group([
+      Session.node,
+      SessionRevert.node,
+      Snapshot.node,
+      SessionProjector.node,
+      CrossSpawnSpawner.node,
+      EventV2Bridge.node,
+    ]),
   ),
 )
 
@@ -433,6 +441,96 @@ describe("revert + compact workflow", () => {
           expect(ids).toContain(a1.id)
           expect(ids).not.toContain(u2.id)
           expect(ids).not.toContain(a2.id)
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live(
+    "cleanup removes the revert boundary last so an interrupted cleanup stays resumable",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const events = yield* EventV2Bridge.Service
+
+          const info = yield* session.create({})
+          const sid = info.id
+
+          const u1 = yield* user(sid)
+          const u2 = yield* user(sid)
+          const a2 = yield* assistant(sid, u2.id, dir)
+          const u3 = yield* user(sid)
+
+          const removed: string[] = []
+          const unsubscribe = yield* events.listen((event) => {
+            if (event.type === SessionV1.Event.MessageRemoved.type)
+              removed.push((event.data as typeof SessionV1.Event.MessageRemoved.data.Type).messageID)
+            if (event.type === SessionV1.Event.PartRemoved.type)
+              removed.push((event.data as typeof SessionV1.Event.PartRemoved.data.Type).partID)
+            return Effect.void
+          })
+          yield* Effect.addFinalizer(() => unsubscribe)
+
+          yield* session.setRevert({
+            sessionID: sid,
+            revert: { messageID: u2.id },
+            summary: { additions: 0, deletions: 0, files: 0 },
+          })
+          yield* revert.cleanup(yield* session.get(sid))
+          expect(removed).toEqual([u3.id, a2.id, u2.id])
+          expect((yield* session.messages({ sessionID: sid })).map((msg) => msg.info.id)).toEqual([u1.id])
+
+          const other = yield* session.create({})
+          const o1 = yield* user(other.id)
+          const q1 = yield* text(other.id, o1.id, "first part")
+          const q2 = yield* text(other.id, o1.id, "second part")
+          const q3 = yield* text(other.id, o1.id, "third part")
+          removed.length = 0
+          yield* session.setRevert({
+            sessionID: other.id,
+            revert: { messageID: o1.id, partID: q2.id },
+            summary: { additions: 0, deletions: 0, files: 0 },
+          })
+          yield* revert.cleanup(yield* session.get(other.id))
+          expect(removed).toEqual([q3.id, q2.id])
+          expect((yield* session.messages({ sessionID: other.id }))[0]?.parts.map((part) => part.id)).toEqual([q1.id])
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live(
+    "cleanup resumes after an interruption that left the revert boundary in place",
+    provideTmpdirInstance(
+      (dir) =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+
+          const info = yield* session.create({})
+          const sid = info.id
+
+          const u1 = yield* user(sid)
+          const u2 = yield* user(sid)
+          const a2 = yield* assistant(sid, u2.id, dir)
+          const u3 = yield* user(sid)
+
+          yield* session.setRevert({
+            sessionID: sid,
+            revert: { messageID: u2.id },
+            summary: { additions: 0, deletions: 0, files: 0 },
+          })
+          // Newest-first deletion interrupted after its first removal.
+          yield* session.removeMessage({ sessionID: sid, messageID: u3.id })
+
+          yield* revert.cleanup(yield* session.get(sid))
+
+          const ids = (yield* session.messages({ sessionID: sid })).map((msg) => msg.info.id)
+          expect(ids).toEqual([u1.id])
+          expect(ids).not.toContain(a2.id)
+          expect((yield* session.get(sid)).revert).toBeUndefined()
         }),
       { git: true },
     ),
