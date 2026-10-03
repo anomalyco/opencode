@@ -10,7 +10,6 @@ import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
 import { Location } from "../location.js"
-import type { FileSystem } from "../filesystem.js"
 import { LocationServiceMap } from "../location-service-map.js"
 import { Project } from "../project.js"
 import { AbsolutePath, RelativePath } from "../schema.js"
@@ -46,11 +45,7 @@ export interface Interface {
     delivery?: SessionInbox.Delivery
   }) => Effect.Effect<
     void,
-    | NotFoundError
-    | DestinationNotFoundError
-    | DestinationNotDirectoryError
-    | DestinationUnavailableError
-    | FileSystem.DirectoryNotFoundError
+    NotFoundError | DestinationNotFoundError | DestinationNotDirectoryError | DestinationUnavailableError
   >
 }
 
@@ -112,7 +107,11 @@ const layer = Layer.effect(
       return yield* SessionRunner.Service.pipe(
         instances.provide(session),
         Effect.as(false),
-        Effect.catchCause((cause) => (Cause.hasInterrupts(cause) ? Effect.failCause(cause) : Effect.succeed(true))),
+        Effect.catchCause((cause) =>
+          Cause.hasInterrupts(cause)
+            ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
+            : Effect.succeed(true),
+        ),
       )
     })
 

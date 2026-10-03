@@ -381,7 +381,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         params: { sessionID: Session.ID },
         payload: Schema.Struct({ ...Location.PublicRef.fields, delivery: SessionInbox.Delivery.pipe(Schema.optional) }),
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, InvalidRequestError, LocationNotFoundError],
+        error: [SessionNotFoundError, InvalidRequestError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.move",

@@ -300,7 +300,6 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               Effect.catchTag("Session.DestinationUnavailableError", (error) =>
                 Effect.fail(new InvalidRequestError({ message: `Directory is unavailable: ${error.directory}` })),
               ),
-              locationErrors,
             )
           return HttpApiSchema.NoContent.make()
         }),
@@ -596,14 +595,15 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.generate",
         Effect.fn(function* (ctx) {
-          const text = yield* session.generate({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt }).pipe(
-            locationErrors,
-            Effect.mapError((error) =>
-              error._tag === "Session.NotFoundError"
-                ? missingSession(error)
-                : new ServiceUnavailableError({ message: error.message, service: "session generation" }),
-            ),
-          )
+          const text = yield* session
+            .generate({ sessionID: ctx.params.sessionID, prompt: ctx.payload.prompt })
+            .pipe(
+              Effect.mapError((error) =>
+                error._tag === "Session.NotFoundError"
+                  ? missingSession(error)
+                  : new ServiceUnavailableError({ message: error.message, service: "session generation" }),
+              ),
+            )
           return { data: { text } }
         }),
       )
