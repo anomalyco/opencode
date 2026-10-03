@@ -1,5 +1,6 @@
 import { Cause, Effect, Layer } from "effect"
 import { LocationServiceMap } from "../../location-service-map"
+import { InteractiveJobs } from "../../tool/interactive/store"
 import { makeGlobalNode } from "../../effect/app-node"
 import { SessionRunCoordinator } from "../run-coordinator"
 import { SessionRunner } from "../runner"
@@ -28,9 +29,22 @@ const layer = Layer.effect(
       }),
     })
 
+    // drain-interrupt support (spec R32/I10): kill the Session's interactive
+    // jobs that have a call in flight BEFORE the drain fibers are interrupted,
+    // while their in-flight claims are still observable; jobs without in-flight
+    // calls are untouched
+    const killInFlight = Effect.fn("SessionExecutionLocal.killInFlight")(function* (sessionID: SessionSchema.ID) {
+      const session = yield* store.get(sessionID)
+      if (!session) return
+      yield* InteractiveJobs.Service.use((jobs) => jobs.cancelInFlight({ sessionID, reason: "interrupt" })).pipe(
+        Effect.provide(locations.get(session.location)),
+        Effect.ignore,
+      )
+    })
+
     return SessionExecution.Service.of({
       active: coordinator.active,
-      interrupt: coordinator.interrupt,
+      interrupt: (sessionID) => killInFlight(sessionID).pipe(Effect.andThen(coordinator.interrupt(sessionID))),
       resume: coordinator.run,
       wake: coordinator.wake,
     })
