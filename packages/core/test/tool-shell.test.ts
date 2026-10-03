@@ -3,7 +3,7 @@ import { realpathSync, watch } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -68,6 +68,40 @@ const permission = permissionLayer({
           : Effect.void,
       ),
     ),
+})
+
+let beforeShellCreated = (_id: ID, _command: string): Effect.Effect<void> => Effect.void
+const shellEvents: string[] = []
+const l2bCreated = Schema.Struct({ info: Schema.Struct({ id: ID, command: Schema.String }) })
+const l2bBusBase = Bus.configured()
+// Location services build against a private dependency graph, so intercept the Bus node supplied to
+// Shell itself. This keeps the barrier after registration and immediately before the created publish.
+const l2bBusNode = makeGlobalNode({
+  service: Bus.Service,
+  layer: Layer.effect(
+    Bus.Service,
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const publish: Bus.Interface["publish"] = (definition, data, options) => {
+        const before =
+          definition.type === "shell.created"
+            ? Effect.sync(() => Schema.decodeUnknownSync(l2bCreated)(data)).pipe(
+                Effect.flatMap((event) => beforeShellCreated(event.info.id, event.info.command)),
+              )
+            : Effect.void
+        return before.pipe(
+          Effect.andThen(bus.publish(definition, data, options)),
+          Effect.tap(() =>
+            Effect.sync(() => {
+              if (definition.type.startsWith("shell.")) shellEvents.push(definition.type)
+            }),
+          ),
+        )
+      }
+      return Bus.Service.of({ ...bus, publish })
+    }),
+  ),
+  deps: [l2bBusBase],
 })
 
 const reset = () => {
@@ -163,6 +197,13 @@ const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
 const it = testEffect(
   AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
 )
+const l2bIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...replacements,
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    Bus.node.replace(l2bBusNode),
+  ]),
+)
 const permissionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, PermissionSaved.node]), [
     SessionExecution.node.replace(executionNode),
@@ -188,6 +229,21 @@ const mixedOutputCommand = isWindows
   ? "[Console]::Out.Write('stdout'); Start-Sleep -Milliseconds 50; [Console]::Error.Write('stderr'); Start-Sleep -Milliseconds 100"
   : "printf stdout; sleep 0.05; printf stderr >&2"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
+
+function alive(pid: number) {
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function requirePid(info: { readonly pid?: number }) {
+  if (info.pid === undefined) throw new Error("Expected running shell with PID")
+  return info.pid
+}
+
 const bodyExitCommand = isWindows
   ? "[Console]::Out.Write('body'); Start-Sleep -Milliseconds 100; exit 7"
   : "printf body && exit 7"
@@ -847,6 +903,154 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
+  l2bIt.live(
+    "reclaims shell when caller is interrupted before ready handoff",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        reset()
+        shellEvents.length = 0
+        const created = yield* Deferred.make<ID>()
+        const release = yield* Deferred.make<void>()
+        const handedOff = yield* Deferred.make<void>()
+        beforeShellCreated = (id, command) =>
+          command === idleCommand
+            ? Deferred.succeed(created, id).pipe(Effect.andThen(Deferred.await(release)))
+            : Effect.void
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            beforeShellCreated = () => Effect.void
+          }),
+        )
+        yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
+
+        yield* withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const caller = yield* executeTool(registry, {
+              ...call({ command: idleCommand }, "call-l2b-acquire"),
+              progress: () => Deferred.succeed(handedOff, undefined),
+            }).pipe(Effect.forkChild({ startImmediately: true }))
+            const first = yield* Effect.raceFirst(
+              Deferred.await(created).pipe(Effect.map((id) => ({ type: "created" as const, id }))),
+              Fiber.await(caller).pipe(Effect.map((exit) => ({ type: "caller" as const, exit }))),
+            ).pipe(
+              Effect.timeout("15 seconds"),
+              Effect.catchTag("TimeoutError", () => Effect.die("Timed out waiting for shell.created gate")),
+            )
+            const id =
+              first.type === "created"
+                ? first.id
+                : yield* Effect.die(
+                    `Caller settled before shell.created: ${Exit.isSuccess(first.exit) ? JSON.stringify(first.exit.value) : Cause.pretty(first.exit.cause)}`,
+                  )
+            const before = (yield* shell.list()).find((item) => item.id === id)
+            const running = before ?? (yield* Effect.die("Expected registered running shell"))
+            const pid = requirePid(running)
+            expect(running.status).toBe("running")
+            expect(alive(pid)).toBe(true)
+            expect(yield* Deferred.isDone(handedOff)).toBe(false)
+            const waiter = yield* shell.wait(id).pipe(Effect.exit, Effect.forkChild({ startImmediately: true }))
+
+            yield* Fiber.interrupt(caller).pipe(
+              Effect.timeout("15 seconds"),
+              Effect.catchTag("TimeoutError", () => Effect.die("Timed out waiting for caller interruption")),
+            )
+            const callerExit = yield* Fiber.await(caller)
+            const waiterExit = yield* Fiber.join(waiter).pipe(Effect.timeout("15 seconds"))
+            if (Exit.isFailure(waiterExit)) expect(Cause.squash(waiterExit.cause)).toBeInstanceOf(Shell.NotFoundError)
+            const after = (yield* shell.list()).find((item) => item.id === id)
+            const observation = {
+              callerInterrupted: Exit.hasInterrupts(callerExit),
+              handleHandedOff: yield* Deferred.isDone(handedOff),
+              shellRegistered: after !== undefined,
+              shellStatus: after?.status,
+              pidAlive: alive(pid),
+              outputFileExists: yield* Effect.promise(() => Bun.file(running.file).exists()),
+              events: [...shellEvents],
+            }
+
+            yield* Deferred.succeed(release, undefined)
+            yield* shell.remove(id).pipe(Effect.catchTag("Shell.NotFoundError", () => Effect.void))
+
+            expect(observation).toEqual({
+              callerInterrupted: true,
+              handleHandedOff: false,
+              shellRegistered: false,
+              shellStatus: undefined,
+              pidAlive: false,
+              outputFileExists: false,
+              events: ["shell.exited", "shell.deleted"],
+            })
+          }),
+        )
+      }),
+    { timeout: 30_000 },
+  )
+
+  l2bIt.live(
+    "reclaims a shell that exits before ready handoff is observed",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        reset()
+        shellEvents.length = 0
+        const created = yield* Deferred.make<ID>()
+        const release = yield* Deferred.make<void>()
+        const handedOff = yield* Deferred.make<void>()
+        const command = "exit 0"
+        beforeShellCreated = (id, candidate) =>
+          candidate === command
+            ? Deferred.succeed(created, id).pipe(Effect.andThen(Deferred.await(release)))
+            : Effect.void
+        yield* Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            beforeShellCreated = () => Effect.void
+          }),
+        )
+        yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
+
+        yield* withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const caller = yield* executeTool(registry, {
+              ...call({ command }, "call-l2b-fast-exit"),
+              progress: () => Deferred.succeed(handedOff, undefined),
+            }).pipe(Effect.forkChild({ startImmediately: true }))
+            const id = yield* Deferred.await(created).pipe(Effect.timeout("15 seconds"))
+            const waitForExit = (remaining = 5_000): Effect.Effect<void, Error> =>
+              Effect.suspend(() => {
+                if (shellEvents.includes("shell.exited")) return Effect.void
+                if (remaining === 0) return Effect.fail(new Error("Timed out waiting for fast shell exit"))
+                return Effect.sleep("1 millis").pipe(Effect.andThen(Effect.suspend(() => waitForExit(remaining - 1))))
+              })
+            yield* waitForExit()
+            const file = (yield* shell.get(id)).file
+
+            yield* Fiber.interrupt(caller).pipe(Effect.timeout("15 seconds"))
+            const observation = {
+              callerInterrupted: Exit.hasInterrupts(yield* Fiber.await(caller)),
+              handleHandedOff: yield* Deferred.isDone(handedOff),
+              shell: yield* shell.get(id).pipe(Effect.flip),
+              outputFileExists: yield* Effect.promise(() => Bun.file(file).exists()),
+              events: [...shellEvents],
+            }
+
+            yield* Deferred.succeed(release, undefined)
+
+            expect(observation).toMatchObject({
+              callerInterrupted: true,
+              handleHandedOff: false,
+              shell: { _tag: "Shell.NotFoundError" },
+              outputFileExists: false,
+              events: ["shell.exited", "shell.deleted"],
+            })
+          }),
+        )
+      }),
+    { timeout: 30_000 },
+  )
+
   it.live("returns both parallel CodeMode shell results", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
