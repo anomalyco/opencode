@@ -6,7 +6,7 @@ import type { AgentPart, FileAttachmentPart, ImageAttachmentPart, Prompt } from 
 import { Identifier } from "@/utils/id"
 import { createCommentMetadata, formatCommentNote } from "@/utils/comment-note"
 
-type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: string }
+type PromptRequestPart = (TextPartInput | FilePartInput | AgentPartInput) & { id: `prt${string}` }
 
 type ContextFile = {
   key: string
