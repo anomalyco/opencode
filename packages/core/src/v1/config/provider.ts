@@ -77,6 +77,11 @@ export const Model = Schema.Struct({
       ),
     ).annotate({ description: "Variant-specific configuration" }),
   ),
+  fallback: Schema.optional(
+    Schema.mutable(Schema.Array(Schema.String)).annotate({
+      description: "Ordered list of fallback models (provider/model-id) tried when this model fails with a transient error",
+    }),
+  ),
 })
 
 export const Info = Schema.Struct({

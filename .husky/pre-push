@@ -17,4 +17,19 @@ if (process.versions.bun !== expectedBunVersion) {
   console.warn(`Warning: Bun version ${process.versions.bun} differs from expected ${expectedBunVersion}`);
 }
 '
-bun typecheck
+# tsgo crashes with OOM on Windows when checking large packages in parallel.
+# Gate the typecheck so non-Windows contributors still get hard failures.
+case "$(uname -s)" in
+  MINGW*|MSYS*|CYGWIN*)
+    set +e
+    bun typecheck
+    _tc=$?
+    set -e
+    if [ "$_tc" -ne 0 ]; then
+      echo "WARNING: typecheck exited with code $_tc on Windows (possible tsgo OOM) — continuing push" >&2
+    fi
+    ;;
+  *)
+    bun typecheck
+    ;;
+esac

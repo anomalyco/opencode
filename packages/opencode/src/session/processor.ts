@@ -18,7 +18,10 @@ import type { SessionID } from "./schema"
 import { SessionRetry } from "./retry"
 import { SessionStatus } from "./status"
 import { SessionSummary } from "./summary"
-import type { Provider } from "@/provider/provider"
+import { Provider } from "@/provider/provider"
+import { ProviderFallback } from "@/provider/fallback"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 import { Question } from "@/question"
 import { errorMessage } from "@/util/error"
 import { isRecord } from "@/util/record"
@@ -94,6 +97,7 @@ const layer = Layer.effect(
     const image = yield* Image.Service
     const events = yield* EventV2Bridge.Service
     const database = yield* Database.Service
+    const provider = yield* Provider.Service
 
     const create = Effect.fn("SessionProcessor.create")(function* (input: Input) {
       // Pre-capture snapshot before the LLM stream starts. The AI SDK
@@ -638,6 +642,73 @@ const layer = Layer.effect(
         yield* status.set(ctx.sessionID, { type: "idle" })
       })
 
+      const triedFallbacks = new Set<string>()
+
+      const attemptFallback = Effect.fn("SessionProcessor.attemptFallback")(function* (streamInput: LLM.StreamInput, err: unknown) {
+        const parsed = parse(err)
+        if (!ProviderFallback.shouldFallback(parsed)) {
+          yield* halt(err)
+          return
+        }
+        const cfg = yield* config.get()
+        const next = ProviderFallback.resolveFallback(
+          { providerID: input.model.providerID, modelID: input.model.id },
+          cfg,
+          triedFallbacks,
+        )
+        if (!next) {
+          yield* halt(err)
+          return
+        }
+        const key = `${next.providerID}/${next.modelID}`
+        triedFallbacks.add(key)
+        yield* Effect.logInfo("model fallback", { from: `${input.model.providerID}/${input.model.id}`, to: key })
+        const fallbackModel = yield* provider.getModel(
+          ProviderV2.ID.make(next.providerID),
+          ModelV2.ID.make(next.modelID),
+        ).pipe(
+          Effect.catch((e) => Effect.gen(function* () {
+            yield* Effect.logWarning("fallback model not found", { target: key, error: errorMessage(e) })
+            return yield* Effect.fail(err)
+          })),
+        )
+        const fallbackInput = { ...streamInput, model: fallbackModel }
+        yield* Effect.gen(function* () {
+          ctx.currentText = undefined
+          ctx.reasoningMap = {}
+          ctx.toolcalls = {}
+          ctx.needsCompaction = false
+          yield* status.set(ctx.sessionID, { type: "busy" })
+          const stream = llm.stream(fallbackInput)
+          yield* stream.pipe(
+            Stream.tap((event) => handleEvent(event)),
+            Stream.takeUntil(() => ctx.needsCompaction),
+            Stream.runDrain,
+          )
+        }).pipe(
+          Effect.catchCauseIf(
+            (cause) => !Cause.hasInterruptsOnly(cause),
+            (cause) => Effect.fail(Cause.squash(cause)),
+          ),
+          Effect.retry(
+            SessionRetry.policy({
+              provider: next.providerID,
+              parse,
+              set: (info) => {
+                return status.set(ctx.sessionID, {
+                  type: "retry",
+                  attempt: info.attempt,
+                  message: info.message,
+                  action: info.action,
+                  next: info.next,
+                })
+              },
+            }),
+          ),
+          Effect.catch(halt),
+        )
+      })
+
       const process = Effect.fn("SessionProcessor.process")(function* (streamInput: LLM.StreamInput) {
         yield* Effect.logInfo("process", {
           "session.id": input.sessionID,
@@ -686,7 +757,7 @@ const layer = Layer.effect(
                 },
               }),
             ),
-            Effect.catch(halt),
+            Effect.catch((err) => Effect.gen(function* () { yield* attemptFallback(streamInput, err) }).pipe(Effect.catch(halt))),
             Effect.ensuring(cleanup()),
           )
 
@@ -726,6 +797,7 @@ export const node = LayerNode.make({
     Image.node,
     EventV2Bridge.node,
     Database.node,
+    Provider.node,
   ],
 })
 
