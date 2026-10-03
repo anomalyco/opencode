@@ -177,7 +177,8 @@ export function TextPart(props: {
   const plugins = usePlugin()
   return (
     <Show when={props.part.text.trim()}>
-      <box paddingLeft={3} flexShrink={0}>
+      {/* paddingRight mirrors the left inset so prose margins are symmetric */}
+      <box paddingLeft={3} paddingRight={3} flexShrink={0}>
         {/* Configure custom nodes before parsing; apply content before streaming so completion keeps the final tokens. */}
         <markdown
           syntaxStyle={syntax()}
