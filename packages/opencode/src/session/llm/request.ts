@@ -11,7 +11,7 @@ import { ProviderTransform } from "@/provider/transform"
 import { SystemPrompt } from "../system"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Record } from "effect"
-import { jsonSchema, tool as aiTool, type ModelMessage, type Tool } from "ai"
+import { jsonSchema, tool as aiTool, type JSONSchema7, type ModelMessage, type Tool } from "ai"
 import type { Plugin } from "@/plugin"
 import { mergeDeep } from "remeda"
 
@@ -181,7 +181,17 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
   return {
     system,
     messages,
-    tools: Object.fromEntries(Object.entries(tools).toSorted(([a], [b]) => a.localeCompare(b))),
+    tools: Object.fromEntries(
+      Object.entries(tools)
+        .toSorted(([a], [b]) => a.localeCompare(b))
+        .map(([name, tool]) => {
+          if (input.model.api.npm === "@ai-sdk/google" || input.model.api.npm === "@ai-sdk/google-vertex") {
+            const schema = extractJsonSchema(tool.inputSchema)
+            if (schema) return [name, { ...tool, inputSchema: jsonSchema(foldTypeKeywords(schema) as JSONSchema7) }]
+          }
+          return [name, tool]
+        }),
+    ),
     params,
     messageTransformOptions: options,
     headers: {
@@ -213,6 +223,83 @@ function resolveTools(input: Pick<PrepareInput, "tools" | "agent" | "permission"
     Permission.merge(input.agent.permission, input.permission ?? []),
   )
   return Record.filter(input.tools, (_, k) => input.user.tools?.[k] !== false && !disabled.has(k))
+}
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value)
+
+// @ai-sdk/google's convertJSONSchemaToOpenAPISchema splits a multi-type node
+// such as `type: ["object", "null"]` into `anyOf: [{ type: "object" }]` but
+// leaves type-specific keywords (`items`, `properties`, `required`, ...)
+// dangling at the parent, which Gemini rejects with errors like
+// `properties: only allowed for OBJECT type`. Move those keywords into the
+// branch of the type they belong to. Returns a deep clone — the caller's
+// original schema is never mutated, so tools shared across providers (or
+// defined once at module scope) stay untouched.
+export const foldTypeKeywords = (schema: unknown): unknown => {
+  const clone = structuredClone(schema)
+  fold(clone)
+  return clone
+}
+
+// Keywords that are only valid on a node of the given type.
+const TYPE_KEYWORDS: Record<string, string[]> = {
+  array: ["items", "minItems", "maxItems"],
+  object: ["properties", "required", "additionalProperties"],
+}
+
+// Only treat objects that actually look like JSON Schema as schemas; anything
+// else (e.g. a raw Zod instance passed as inputSchema) is left alone.
+function extractJsonSchema(inputSchema: unknown): Record<string, unknown> | undefined {
+  const candidate = isRecord(inputSchema) && isRecord(inputSchema.jsonSchema) ? inputSchema.jsonSchema : inputSchema
+  const JSON_SCHEMA_KEYS = ["type", "properties", "items", "$ref", "anyOf", "oneOf", "allOf", "$defs", "definitions"]
+  return isRecord(candidate) && JSON_SCHEMA_KEYS.some((key) => key in candidate) ? candidate : undefined
+}
+
+function fold(schema: unknown): void {
+  if (Array.isArray(schema)) {
+    for (const item of schema) fold(item)
+    return
+  }
+  if (!isRecord(schema)) return
+  for (const value of Object.values(schema)) fold(value)
+  const type = schema.type
+  if (Array.isArray(type)) {
+    const owned = (t: unknown) => (TYPE_KEYWORDS[String(t)] ?? []).filter((key) => key in schema)
+    if (!type.some((t) => owned(t).length > 0)) return
+    // Carry the other non-null members over as plain branches instead of
+    // discarding them; branches that own keywords go first.
+    const branches = type
+      .filter((t) => t !== "null")
+      .map((t) => Object.fromEntries([["type", t], ...owned(t).map((key) => [key, schema[key]])]))
+      .toSorted((a, b) => Object.keys(b).length - Object.keys(a).length)
+    if (type.includes("null")) branches.push({ type: "null" })
+    for (const t of type) for (const key of owned(t)) delete schema[key]
+    schema.anyOf = branches
+    delete schema.type
+    return
+  }
+  // A node with its own single type may legally carry its keywords.
+  if (type !== undefined) return
+  // Folding into every allOf branch would change intersection semantics, so
+  // restrict this to unions.
+  const combiner = ["anyOf", "oneOf"].find((key) => Array.isArray(schema[key]))
+  if (!combiner) return
+  const branches = (schema[combiner] as unknown[]).filter(isRecord)
+  for (const [t, keys] of Object.entries(TYPE_KEYWORDS)) {
+    const present = keys.filter((key) => key in schema)
+    if (present.length === 0) continue
+    const targets = branches.filter((branch) =>
+      Array.isArray(branch.type) ? branch.type.includes(t) : branch.type === t,
+    )
+    // If no branch has this type, dropping the keywords would silently weaken
+    // validation — keep them on the parent.
+    if (targets.length === 0) continue
+    for (const branch of targets) {
+      for (const key of present) if (!(key in branch)) branch[key] = schema[key]
+    }
+    for (const key of present) delete schema[key]
+  }
 }
 
 export function hasToolCalls(messages: ModelMessage[]): boolean {
