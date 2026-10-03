@@ -1,4 +1,5 @@
 import { MCP } from "@/mcp"
+import { McpTool } from "@/tool/mcp"
 import { Effect, Schema } from "effect"
 import { HttpApiBuilder, HttpApiError } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
@@ -8,6 +9,7 @@ import { AddPayload, AuthCallbackPayload, StatusMap, UnsupportedOAuthError } fro
 export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handlers) =>
   Effect.gen(function* () {
     const mcp = yield* MCP.Service
+    const mcpTool = yield* McpTool.Service
 
     const status = Effect.fn("McpHttpApi.status")(function* () {
       return yield* mcp.status()
@@ -15,6 +17,7 @@ export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handler
 
     const add = Effect.fn("McpHttpApi.add")(function* (ctx: { payload: typeof AddPayload.Type }) {
       const result = (yield* mcp.add(ctx.payload.name, ctx.payload.config)).status
+      yield* mcpTool.reconcile
       return yield* Schema.decodeUnknownEffect(StatusMap)(
         "status" in result ? { [ctx.payload.name]: result } : result,
       ).pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
@@ -82,6 +85,7 @@ export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handler
             ),
           ),
         )
+      yield* mcpTool.reconcile
       return true
     })
 
@@ -95,6 +99,7 @@ export const mcpHandlers = HttpApiBuilder.group(InstanceHttpApi, "mcp", (handler
             ),
           ),
         )
+      yield* mcpTool.reconcile
       return true
     })
 

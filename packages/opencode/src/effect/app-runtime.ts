@@ -34,6 +34,7 @@ import { LLM } from "@/session/llm"
 import { LSP } from "@/lsp/lsp"
 import { MCP } from "@/mcp"
 import { McpAuth } from "@/mcp/auth"
+import { McpTool } from "@/tool/mcp"
 import { Command } from "@/command"
 import { Truncate } from "@/tool/truncate"
 import { ToolRegistry } from "@/tool/registry"
@@ -92,6 +93,7 @@ export const AppLayer = AppNodeBuilderV1.build(
     LLM.node,
     LSP.node,
     MCP.node,
+    McpTool.node,
     McpAuth.node,
     Command.node,
     Truncate.node,
