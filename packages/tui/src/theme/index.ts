@@ -1,16 +1,9 @@
-import {
-  migrateV1,
-  parseThemeDocument,
-  resolveThemeDocument,
-  type ThemeDocument,
-  type ModeDefinition,
-} from "@opencode/theme/tui"
+import { migrateV1, parseThemeDocument, type ThemeDocument, type ModeDefinition } from "@opencode/theme/tui"
 import { resolveThemeColors } from "./resolve"
 import { DEFAULT_THEMES, type Theme, type ThemeV1Json } from "./v1"
 import opencode from "./assets/v2/opencode.json" with { type: "json" }
 
-export { DEFAULT_THEMES, generateSyntax, selectedForeground, type Theme, type ThemeV1Json } from "./v1"
-export { resolveThemeDocument, type ThemeDocument }
+export { DEFAULT_THEMES, type Theme, type ThemeV1Json } from "./v1"
 
 export type ThemeDocumentSource = Record<string, unknown>
 
