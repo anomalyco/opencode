@@ -1,4 +1,4 @@
-import { JsonPointer, Schema } from "effect"
+import { JsonPointer, Schema, SchemaAST } from "effect"
 import type { Tool, JsonSchema, SchemaType } from "./tool.js"
 
 const isEffectSchema = (schema: SchemaType): schema is Schema.Decoder<unknown> & Schema.Top => Schema.isSchema(schema)
@@ -9,11 +9,41 @@ export const identifierSegment = /^[A-Za-z_$][A-Za-z0-9_$]*$/
 
 const renderKey = (name: string): string => (identifierSegment.test(name) ? name : JSON.stringify(name))
 
+// Effect's JSON codec encodes every unchecked `number` as `finite | nonFiniteLiterals`, sharing one literal-union
+// AST. Code Mode decodes the Type side, which rejects those strings, so that exact AST is extracted into a reserved
+// definition and rendered as `number`, while authored literal unions keep their alternatives.
+const effectNumberJson = SchemaAST.toEncoded(Schema.toCodecJson(Schema.Number).ast)
+const effectNonFiniteNumbers = SchemaAST.isUnion(effectNumberJson)
+  ? effectNumberJson.types.find(SchemaAST.isUnion)
+  : undefined
+export const nonFiniteNumberDefinition = "codemode/NonFiniteNumber"
+
+/**
+ * Effect JSON Schema document as Code Mode renders it. Effect's synthetic non-finite number alternatives become a
+ * `$ref` to `nonFiniteNumberDefinition`; hosts that rewrite the document must keep that reference so
+ * `jsonSchemaToTypeScript` can still distinguish it from an authored literal union.
+ */
+export const signatureJsonSchema = (schema: Schema.Top) =>
+  Schema.toJsonSchemaDocument(schema, {
+    onExcessProperty: "error",
+    referencePolicy: (input) => (input.ast === effectNonFiniteNumbers ? nonFiniteNumberDefinition : input.identifier),
+  })
+
+const definitionName = (ref: string): string | undefined => {
+  const tokens = JsonPointer.parseUriFragment(ref)
+  return tokens?.length === 2 && (tokens[0] === "$defs" || tokens[0] === "definitions") ? tokens[1] : undefined
+}
+
+const nonFiniteNumberReference = (schema: JsonSchema) =>
+  schema.$ref !== undefined && definitionName(schema.$ref) === nonFiniteNumberDefinition
+
+// Raw schemas carry the reserved reference when a host preserved it, or other generators' singleton sentinels.
 const effectNumberSentinel = (schema: JsonSchema) =>
-  schema.type === "string" &&
-  Array.isArray(schema.enum) &&
-  schema.enum.length === 1 &&
-  (schema.enum[0] === "NaN" || schema.enum[0] === "Infinity" || schema.enum[0] === "-Infinity")
+  nonFiniteNumberReference(schema) ||
+  (schema.type === "string" &&
+    Array.isArray(schema.enum) &&
+    schema.enum.length === 1 &&
+    (schema.enum[0] === "NaN" || schema.enum[0] === "Infinity" || schema.enum[0] === "-Infinity"))
 
 const intersection = (members: ReadonlyArray<string>): string => {
   const concrete = members.filter((member) => member !== "unknown")
@@ -27,6 +57,7 @@ const MAX_RENDER_DEPTH = 8
 type RenderContext = {
   readonly definitions: Readonly<Record<string, JsonSchema>>
   readonly pretty: boolean
+  readonly numberSentinel: (schema: JsonSchema) => boolean
 }
 
 const hasUnresolvedRef = (
@@ -38,8 +69,7 @@ const hasUnresolvedRef = (
   if (visited.has(schema)) return false
   const nextVisited = new Set([...visited, schema])
   if (schema.$ref !== undefined) {
-    const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
-    const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
+    const name = definitionName(schema.$ref)
     if (name === undefined || definitions[name] === undefined || seen.has(name)) return true
     if (hasUnresolvedRef(definitions[name], definitions, new Set([...seen, name]), nextVisited)) return true
   }
@@ -130,8 +160,7 @@ const renderSchema = (
       ? ctx
       : { ...ctx, definitions: { ...ctx.definitions, ...(schema.definitions ?? {}), ...(schema.$defs ?? {}) } }
   if (schema.$ref) {
-    const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
-    const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
+    const name = definitionName(schema.$ref)
     if (!name || !nested.definitions[name] || seen.has(name)) return "unknown"
     return intersection([
       renderSchema(nested.definitions[name], nested, depth, new Set([...seen, name])),
@@ -144,7 +173,7 @@ const renderSchema = (
   if (alternatives) {
     if (
       alternatives.some((item) => item.type === "number") &&
-      alternatives.every((item) => item.type === "number" || effectNumberSentinel(item))
+      alternatives.every((item) => item.type === "number" || ctx.numberSentinel(item))
     )
       return "number"
     if (
@@ -202,12 +231,15 @@ const renderSchema = (
 
 export const toTypeScript = (schema: Schema.Top, decoded = false, pretty = false): string => {
   try {
-    const visible = decoded ? Schema.toType(schema) : schema
-    const document = Schema.toJsonSchemaDocument(visible) as {
+    const document = signatureJsonSchema(decoded ? Schema.toType(schema) : schema) as {
       readonly schema: JsonSchema
-      readonly definitions?: Readonly<Record<string, JsonSchema>>
+      readonly definitions: Readonly<Record<string, JsonSchema>>
     }
-    return renderSchema(document.schema, { definitions: document.definitions ?? {}, pretty })
+    return renderSchema(document.schema, {
+      definitions: document.definitions,
+      pretty,
+      numberSentinel: nonFiniteNumberReference,
+    })
   } catch {
     return "unknown"
   }
@@ -215,7 +247,7 @@ export const toTypeScript = (schema: Schema.Top, decoded = false, pretty = false
 
 export const jsonSchemaToTypeScript = (schema: JsonSchema, pretty = false): string => {
   try {
-    return renderSchema(schema, { definitions: {}, pretty })
+    return renderSchema(schema, { definitions: {}, pretty, numberSentinel: effectNumberSentinel })
   } catch {
     return "unknown"
   }
@@ -230,7 +262,7 @@ export type InputProperty = {
 export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
   try {
     const document = isEffectSchema(tool.input)
-      ? (Schema.toJsonSchemaDocument(tool.input) as {
+      ? (Schema.toJsonSchemaDocument(tool.input, { onExcessProperty: "error" }) as {
           readonly schema: JsonSchema
           readonly definitions?: Readonly<Record<string, JsonSchema>>
         })
@@ -241,8 +273,7 @@ export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
     const definitions = document.definitions ?? {}
     let schema = document.schema
     if (schema.$ref !== undefined) {
-      const segment = schema.$ref.match(/^#\/(?:\$defs|definitions)\/([^/]+)$/)?.[1]
-      const name = segment === undefined ? undefined : JsonPointer.unescapeToken(segment)
+      const name = definitionName(schema.$ref)
       const resolved = name === undefined ? undefined : definitions[name]
       if (resolved === undefined) return []
       schema = resolved
@@ -261,10 +292,13 @@ export const inputProperties = <R>(tool: Tool<R>): Array<InputProperty> => {
 export const inputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
   isEffectSchema(tool.input) ? toTypeScript(tool.input, false, pretty) : jsonSchemaToTypeScript(tool.input, pretty)
 
-// Empty object schemas render as `{}` in compact form; anything with properties,
-// an index signature, or union members renders differently, so equality is a
-// conservative emptiness test for both Effect and JSON Schema inputs.
-export const isEmptyInput = <R>(tool: Tool<R>): boolean => inputTypeScript(tool) === "{}"
+// Effect 4.0 models an empty Struct as a non-nullish object, so inspect the encoded AST callers supply.
+// Raw JSON Schema inputs retain the compact `{}` rendering check.
+export const isEmptyInput = <R>(tool: Tool<R>): boolean => {
+  if (!isEffectSchema(tool.input)) return inputTypeScript(tool) === "{}"
+  const encoded = SchemaAST.toEncoded(tool.input.ast)
+  return SchemaAST.isObjects(encoded) && encoded.propertySignatures.length === 0 && encoded.indexSignatures.length === 0
+}
 
 export const outputTypeScript = <R>(tool: Tool<R>, pretty = false): string =>
   tool.output === undefined

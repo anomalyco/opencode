@@ -1,6 +1,6 @@
 import { Cause, Effect, Queue, Stream } from "effect"
-import { Headers } from "effect/unstable/http"
-import { Socket } from "effect/unstable/socket"
+import { Headers } from "effect/http"
+import { Socket } from "effect/socket"
 import {
   AIError,
   AIErrorReason,

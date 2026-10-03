@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import { LLM, Message } from "../../src/index.js"
 import { AmazonBedrockMantle } from "../../src/providers.js"
 import { model } from "../../src/providers/amazon-bedrock/mantle.js"

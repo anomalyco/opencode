@@ -2,7 +2,7 @@ export * as Ipc from "./ipc"
 
 import { app, BrowserWindow, MessageChannelMain } from "electron"
 import { Effect, Layer } from "effect"
-import { RpcServer } from "effect/unstable/rpc"
+import { RpcServer } from "effect/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
 import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
 import { Extensions } from "./extension"

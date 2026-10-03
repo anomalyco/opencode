@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
-import { HttpClientRequest } from "effect/unstable/http"
+import { HttpClientRequest } from "effect/http"
 import { LLM, Message, ToolDefinition } from "../../src/index.js"
 import {
   AmazonBedrock,

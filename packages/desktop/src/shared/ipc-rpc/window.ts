@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Rpc, RpcGroup } from "effect/unstable/rpc"
+import { Rpc, RpcGroup } from "effect/rpc"
 
 export const WindowThemeReady = Rpc.make("WindowThemeReady")
 export const WindowGetFocused = Rpc.make("WindowGetFocused", { success: Schema.Boolean })

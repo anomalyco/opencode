@@ -1,4 +1,4 @@
-import { RpcClient, RpcClientError } from "effect/unstable/rpc"
+import { RpcClient, RpcClientError } from "effect/rpc"
 import { AppRpcs } from "./ipc-rpc/app"
 import { EventRpcs } from "./ipc-rpc/events"
 import { ExtensionRpcs } from "./ipc-rpc/extensions"

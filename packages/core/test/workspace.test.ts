@@ -9,7 +9,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { eq } from "drizzle-orm"
 import { Deferred, Effect, Fiber } from "effect"
 import { TestClock } from "effect/testing"
-import { ChildProcess } from "effect/unstable/process"
+import { ChildProcess } from "effect/process"
 import { testEffect } from "./lib/effect"
 
 const calls: Array<{ readonly operation: string; readonly binding?: WorkspaceDriver.Binding | null }> = []

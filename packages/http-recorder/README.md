@@ -30,7 +30,7 @@ Effect `4.0.0-beta.107` currently contains unresolved symbols in its published d
 ```ts
 import { assert, describe, it } from "@effect/vitest"
 import { Effect, Schema } from "effect"
-import { HttpClient, HttpClientRequest } from "effect/unstable/http"
+import { HttpClient, HttpClientRequest } from "effect/http"
 import { HttpRecorder } from "@opencode/http-recorder"
 
 const User = Schema.Struct({
@@ -111,26 +111,18 @@ Real applications often select WebSocket URLs inside domain services. Effect rep
 ```ts
 import { NodeSocket } from "@effect/platform-node"
 import { it } from "@effect/vitest"
-import { Deferred, Effect, Layer } from "effect"
-import { Socket } from "effect/unstable/socket"
+import { Effect, Layer } from "effect"
+import { Socket } from "effect/socket"
 import { HttpRecorder } from "@opencode/http-recorder"
 
 const roundTrip = Effect.fn("Echo.roundTrip")(function* (url: string, message: string) {
-  const socket = yield* Socket.makeWebSocket(url, { closeCodeIsError: () => false })
-  const write = yield* socket.writer
-  const echoed = yield* Deferred.make<string>()
-
-  yield* socket.runString(
-    (response) => {
-      return Deferred.succeed(echoed, response).pipe(
-        Effect.andThen(write(new Socket.CloseEvent(1000, "done"))),
-        Effect.orDie,
-      )
-    },
-    { onOpen: write(message).pipe(Effect.orDie) },
-  )
-
-  return yield* Deferred.await(echoed)
+  const socket = yield* Socket.makeWebSocket(url)
+  const writer = yield* socket.writer
+  const pull = yield* Socket.readerString(socket)
+  yield* writer.write(message)
+  const [echoed] = yield* pull
+  yield* writer.write(new Socket.CloseEvent(1000, "done"))
+  return echoed
 })
 
 it.effect("round trips a message", () =>

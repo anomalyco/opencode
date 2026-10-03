@@ -125,6 +125,15 @@ permissions:
     }
   }
 
+  it.live("keeps Markdown legacy permission precedence in source order", () =>
+    Effect.gen(function* () {
+      const agent = yield* loadMarkdownAgent('permission:\n  "*": allow\n  bash: ask\n  edit: deny')
+      expect(Permission.evaluate("shell", "ls", agent.permissions).effect).toBe("ask")
+      expect(Permission.evaluate("edit", "example.txt", agent.permissions).effect).toBe("deny")
+      expect(Permission.evaluate("webfetch", "*", agent.permissions).effect).toBe("allow")
+    }),
+  )
+
   for (const variant of [undefined, "high"]) {
     it.live(`loads Markdown legacy temperature ${variant ? "with" : "without"} a separate variant`, () =>
       Effect.gen(function* () {

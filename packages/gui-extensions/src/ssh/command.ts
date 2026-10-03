@@ -1,5 +1,5 @@
 import { Effect, PlatformError, Schema, Stream } from "effect"
-import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { RemoteCli } from "./remote-cli"
 
 export class SshFailure extends Schema.TaggedError<SshFailure>()("SshFailure", {

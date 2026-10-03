@@ -29,7 +29,7 @@ import type { SessionMessage } from "@opencode/schema/session-message"
 import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { BunRequest } from "bun"
 import { Duration, Effect, Exit, Logger, Option, Schema, Scope } from "effect"
-import { FetchHttpClient } from "effect/unstable/http"
+import { FetchHttpClient } from "effect/http"
 import { ACP } from "../../src/acp/agent"
 import { ACPTurn } from "../../src/acp/turn"
 

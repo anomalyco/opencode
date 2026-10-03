@@ -1,4 +1,4 @@
-import { Effect, JsonSchema, Schema } from "effect"
+import { Effect, JsonSchema, Schema, SchemaAST } from "effect"
 import { Tool } from "@opencode/schema/tool"
 import type {
   ToolCallPart,
@@ -6,6 +6,7 @@ import type {
   ToolOutput as ToolOutputType,
 } from "./schema/index.js"
 import { ToolDefinition, ToolFailure, ToolOutput } from "./schema/index.js"
+import { isRecord } from "./utils/record.js"
 
 /**
  * Schema constraint for tool parameters / success values: no decoding or
@@ -200,7 +201,7 @@ export function make(config: TypedToolConfig | DynamicToolConfig): AnyTool {
     _definition: new ToolDefinition({
       name: "",
       description: config.description,
-      inputSchema: toJsonSchema(config.parameters),
+      inputSchema: emptyInputJsonSchema(config.parameters) ?? toJsonSchema(config.parameters),
       outputSchema: toJsonSchema(config.success),
     }),
   }
@@ -230,8 +231,36 @@ export const toDefinitions = (tools: Tools): ReadonlyArray<ToolDefinitionClass> 
       }),
   )
 
+/**
+ * Describes a no-argument Effect tool input as an empty object, or returns
+ * `undefined` when the input takes arguments.
+ *
+ * Effect emits `{ not: { type: "null" } }` for `Struct({})`, but providers
+ * require tool parameters to describe an object. Emptiness is decided by the
+ * encoded side, which is what the model sends, so a transformation from an
+ * empty struct qualifies while one into an empty struct does not. The schema is
+ * inlined rather than a root `$ref`, and the title, description, and other
+ * metadata Effect emits are retained. Checked encoded structs are left as
+ * Effect emits them, because their constraints or JSON Schema overrides could
+ * contradict the closed object shape.
+ */
+export const emptyInputJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema | undefined => {
+  const encoded = SchemaAST.toEncoded(schema.ast)
+  if (
+    !SchemaAST.isObjects(encoded) ||
+    encoded.propertySignatures.length > 0 ||
+    encoded.indexSignatures.length > 0 ||
+    encoded.checks !== undefined
+  )
+    return undefined
+  const { not, ...metadata } = Schema.toJsonSchemaDocument(schema, { referencePolicy: () => undefined }).schema
+  // Rewrite only the shape Effect is known to emit for an empty struct.
+  if (!isRecord(not) || not.type !== "null" || Object.keys(not).length !== 1) return undefined
+  return { ...metadata, type: "object", properties: {}, additionalProperties: false }
+}
+
 const toJsonSchema = (schema: Schema.Top): JsonSchema.JsonSchema => {
-  const document = Schema.toJsonSchemaDocument(schema)
+  const document = Schema.toJsonSchemaDocument(schema, { onExcessProperty: "error" })
   if (Object.keys(document.definitions).length === 0) return document.schema
   return { ...document.schema, $defs: document.definitions }
 }

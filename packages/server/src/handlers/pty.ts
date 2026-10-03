@@ -3,9 +3,9 @@ import { PtyProtocol } from "@opencode/core/pty/protocol"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { Location } from "@opencode/core/location"
 import { Effect, Queue } from "effect"
-import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
-import { Socket } from "effect/unstable/socket"
+import { HttpServerRequest, HttpServerResponse } from "effect/http"
+import { HttpApiBuilder, HttpApiSchema } from "effect/http-api"
+import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { ForbiddenError, PtyNotFoundError } from "@opencode/protocol/errors"
@@ -165,15 +165,17 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
               : undefined
 
           const socket = yield* Effect.orDie(ctx.request.upgrade)
-          const write = yield* socket.writer
+          const writer = yield* socket.writer
           const closeAccepted = (event: Socket.CloseEvent) =>
-            socket
-              .runRaw(() => Effect.void, { onOpen: write(event).pipe(Effect.catch(() => Effect.void)) })
-              .pipe(
-                Effect.timeout("1 second"),
-                Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
-                Effect.catch(() => Effect.void),
-              )
+            Effect.gen(function* () {
+              const reader = yield* socket.reader
+              yield* writer.write(event).pipe(Effect.catch(() => Effect.void))
+              while (true) yield* reader.pull
+            }).pipe(
+              Effect.timeout("1 second"),
+              Effect.catchReason("SocketError", "SocketCloseError", () => Effect.void),
+              Effect.catch(() => Effect.void),
+            )
 
           // Outbound frames flow through one queue drained by a single writer so replay, live
           // output, and the close frame keep their order.
@@ -202,16 +204,22 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
           const drain = Effect.gen(function* () {
             while (true) {
               const item = yield* Queue.take(outbox)
-              yield* write(item)
+              yield* writer.write(item)
               if (item instanceof Socket.CloseEvent) return
             }
           })
 
           yield* runPtySocket(
             drain,
-            socket.runRaw((message) => {
-              const decoded = PtyProtocol.decodeInput(message)
-              if (decoded !== undefined) attachment.write(decoded)
+            Effect.gen(function* () {
+              const reader = yield* socket.reader
+              while (true) {
+                const messages = yield* reader.pull
+                messages.forEach((message) => {
+                  const decoded = PtyProtocol.decodeInput(message)
+                  if (decoded !== undefined) attachment.write(decoded)
+                })
+              }
             }),
             attachment.detach,
           ).pipe(
