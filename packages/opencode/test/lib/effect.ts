@@ -175,3 +175,25 @@ export const pollWithTimeout = <A, E, R>(
       orElse: () => Effect.fail(new Error(message)),
     }),
   )
+
+export const waitForPid = (file: string, message = "process did not publish its pid") =>
+  pollWithTimeout(
+    Effect.promise(async () => {
+      const f = Bun.file(file)
+      return (await f.exists()) ? Number(await f.text()) : undefined
+    }),
+    message,
+  )
+
+export const waitForExit = (pid: number, message = "process was not terminated") =>
+  pollWithTimeout(
+    Effect.sync(() => {
+      try {
+        process.kill(pid, 0)
+        return undefined
+      } catch {
+        return true
+      }
+    }),
+    message,
+  )
