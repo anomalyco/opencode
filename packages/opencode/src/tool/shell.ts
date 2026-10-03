@@ -6,7 +6,7 @@ import path from "path"
 import { containsPath, type InstanceContext } from "../project/instance-context"
 import { InstanceState } from "@/effect/instance-state"
 import { lazy } from "@/util/lazy"
-import { Language, type Node } from "web-tree-sitter"
+import type { Node } from "web-tree-sitter"
 
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { fileURLToPath } from "url"
@@ -309,7 +309,9 @@ function cmd(shell: string, command: string, cwd: string, env: NodeJS.ProcessEnv
   })
 }
 const parser = lazy(async () => {
-  const { Parser } = await import("web-tree-sitter")
+  // Parser.init stores the WASM module in module-scoped state that Language.load reads,
+  // so both must come from the same module instance.
+  const { Language, Parser } = await import("web-tree-sitter")
   const { default: treeWasm } = await import("web-tree-sitter/tree-sitter.wasm" as string, {
     with: { type: "wasm" },
   })
