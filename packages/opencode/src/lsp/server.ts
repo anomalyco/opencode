@@ -298,6 +298,8 @@ export const Biome: Info = {
   root: NearestRoot([
     "biome.json",
     "biome.jsonc",
+    ".biome.json",
+    ".biome.jsonc",
     "package-lock.json",
     "bun.lockb",
     "bun.lock",
