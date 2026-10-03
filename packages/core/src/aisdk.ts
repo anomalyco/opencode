@@ -849,20 +849,23 @@ function streamPartEvents(
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
-    case "finish":
+    case "finish": {
+      const reason = finishReason(event.finishReason)
+      const tokens = usage(event.usage)
       return Effect.succeed([
         LLMEvent.stepFinish({
           index: state.step++,
-          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
+          reason,
+          usage: tokens,
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
         LLMEvent.finish({
-          reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
+          reason,
+          usage: tokens,
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
+    }
     case "error":
       return Effect.fail(llmError(event.error, "read"))
   }
@@ -891,24 +894,47 @@ function fragmentEnd(kind: Fragment, id: string, providerMetadata?: ProviderMeta
   return kind === "text" ? LLMEvent.textEnd({ id, providerMetadata }) : LLMEvent.reasoningEnd({ id, providerMetadata })
 }
 
-function usage(input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["usage"]): UsageInput | undefined {
+// AI SDK V3 nests token counts and wraps the finish reason; a LanguageModelV2 provider
+// reports flat counts and a bare reason. Normalize both here, where provider stream parts
+// enter, so V2 providers keep their usage and finish reason (#50338).
+type ProviderInputTokens =
+  | number
+  | { readonly total?: number; readonly noCache?: number; readonly cacheRead?: number; readonly cacheWrite?: number }
+  | undefined
+type ProviderOutputTokens = number | { readonly total?: number; readonly reasoning?: number } | undefined
+
+const tokenTotal = (value: ProviderInputTokens | ProviderOutputTokens) =>
+  typeof value === "number" ? value : value?.total
+
+function usage(input: {
+  readonly inputTokens?: ProviderInputTokens
+  readonly outputTokens?: ProviderOutputTokens
+}): UsageInput | undefined {
+  const inputTokens = tokenTotal(input.inputTokens)
+  const outputTokens = tokenTotal(input.outputTokens)
+  const inputDetails = typeof input.inputTokens === "object" ? input.inputTokens : undefined
+  const outputDetails = typeof input.outputTokens === "object" ? input.outputTokens : undefined
   const output = {
-    inputTokens: input.inputTokens.total,
-    nonCachedInputTokens: input.inputTokens.noCache,
-    cacheReadInputTokens: input.inputTokens.cacheRead,
-    cacheWriteInputTokens: input.inputTokens.cacheWrite,
-    outputTokens: input.outputTokens.total,
-    reasoningTokens: input.outputTokens.reasoning,
-    totalTokens:
-      input.inputTokens.total === undefined || input.outputTokens.total === undefined
-        ? undefined
-        : input.inputTokens.total + input.outputTokens.total,
+    inputTokens,
+    nonCachedInputTokens: inputDetails?.noCache,
+    cacheReadInputTokens: inputDetails?.cacheRead,
+    cacheWriteInputTokens: inputDetails?.cacheWrite,
+    outputTokens,
+    reasoningTokens: outputDetails?.reasoning,
+    totalTokens: inputTokens === undefined || outputTokens === undefined ? undefined : inputTokens + outputTokens,
   }
   return Object.values(output).some((value) => value !== undefined) ? output : undefined
 }
 
-function finishReason(value: LanguageModelV3FinishReason): FinishReason {
-  return value.unified === "other" ? "unknown" : value.unified
+const isFinishReason = (value: string): value is Exclude<FinishReason, "unknown"> =>
+  value === "stop" || value === "length" || value === "tool-calls" || value === "content-filter" || value === "error"
+
+function finishReason(value: LanguageModelV3FinishReason | string) {
+  const unified = typeof value === "string" ? value : value.unified
+  return {
+    normalized: isFinishReason(unified) ? unified : ("unknown" as const),
+    raw: typeof value === "string" ? value : value.raw,
+  }
 }
 
 function providerMetadata(value: unknown) {
