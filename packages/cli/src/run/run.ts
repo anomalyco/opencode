@@ -15,6 +15,7 @@ import { errorMessage } from "../util/error"
 export type RunCommandInput = {
   server: ServerConnection.Resolved
   message: string[]
+  command?: string
   continue?: boolean
   session?: string
   fork?: boolean
@@ -73,8 +74,9 @@ async function run(input: RunCommandInput, options: ExecutionOptions) {
   const root = options.root ?? process.env.PWD ?? process.cwd()
   const local = localDirectory(root)
   const directory = options.useServerDirectory ? undefined : (options.directory ?? local)
-  const message = mergeInput(formatMessage(input.message), process.stdin.isTTY ? undefined : await readStdin())
-  if (!message?.trim()) fail("You must provide a message")
+  const message = mergeInput(formatMessage(input.message), process.stdin.isTTY ? undefined : await readStdin()) ?? ""
+  if (input.command !== undefined && !input.command.trim()) fail("You must provide a command name")
+  if (!message.trim() && !input.command) fail("You must provide a message or a command")
   const files = await Promise.all(input.file.map((file) => prepareFile(file, root, options)))
   const prepared = { directory, message, files }
   return execute(input, prepared, input.server.endpoint, options)
@@ -139,6 +141,7 @@ async function execute(input: RunCommandInput, prepared: Prepared, endpoint: End
     sessionID: target.session.id,
     location: target.location,
     message: prepared.message,
+    command: input.command,
     files: prepared.files,
     agent: target.agent,
     model,
