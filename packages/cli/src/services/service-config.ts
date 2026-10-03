@@ -32,10 +32,17 @@ export function filename(channel = OPENCODE_CHANNEL) {
   return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
 }
 
-export function defaultPort(channel = OPENCODE_CHANNEL) {
+// WSL distros share one network namespace, which WSL forwards to or mirrors with the Windows loopback, so a
+// service inside a distro prefers a port of its own. Channels sharing a registration must share the port.
+export function defaultPort(channel = OPENCODE_CHANNEL, distro?: string) {
+  if (distro) return hashedPort(`${filename(channel)}:${distro}`)
   if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return 0xc0de
   if (channel === "local") return 0xc0df
-  return 10_000 + (Number.parseInt(Hash.fast(channel).slice(0, 8), 16) % 50_000)
+  return hashedPort(channel)
+}
+
+function hashedPort(key: string) {
+  return 10_000 + (Number.parseInt(Hash.fast(key).slice(0, 8), 16) % 50_000)
 }
 
 export function legacyFilename(channel = OPENCODE_CHANNEL) {
