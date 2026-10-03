@@ -4,7 +4,17 @@ import { ServerConnection, useServer } from "@/context/server"
 import { useServerSync } from "@/context/server-sync"
 import { useTabs } from "@/context/tabs"
 import { toggleHomeProjectSelection } from "@/pages/layout/helpers"
+import { Persist, persisted } from "@/utils/persist"
 import { createEffect, createMemo } from "solid-js"
+import { createStore } from "solid-js/store"
+
+const HOME_PROJECTS_WIDTH_DEFAULT = 280
+const HOME_PROJECTS_WIDTH_MIN = 220
+const HOME_PROJECTS_WIDTH_MAX = 420
+
+function clampHomeProjectsWidth(width: number) {
+  return Math.min(HOME_PROJECTS_WIDTH_MAX, Math.max(HOME_PROJECTS_WIDTH_MIN, width))
+}
 
 export function createHomeController() {
   const sync = useServerSync()
@@ -12,6 +22,10 @@ export function createHomeController() {
   const server = useServer()
   const global = useGlobal()
   const tabs = useTabs()
+  const [homeLayout, setHomeLayout] = persisted(
+    Persist.global("home.layout"),
+    createStore({ projectsWidth: HOME_PROJECTS_WIDTH_DEFAULT }),
+  )
   const selection = layout.home.selection
   const focusedServer = createMemo(
     () => global.servers.list().find((conn) => ServerConnection.key(conn) === selection().server) ?? server.current,
@@ -115,6 +129,8 @@ export function createHomeController() {
       },
       openProjectNewSession,
     },
+    projectsWidth: () => clampHomeProjectsWidth(homeLayout.projectsWidth),
+    resizeProjects: (width: number) => setHomeLayout("projectsWidth", clampHomeProjectsWidth(width)),
   }
 }
 
