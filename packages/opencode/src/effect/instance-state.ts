@@ -1,4 +1,4 @@
-import { Effect, ScopedCache, Scope } from "effect"
+import { Effect, Exit, ScopedCache, Scope } from "effect"
 import type { InstanceContext } from "@/project/instance-context"
 import { InstanceRef, WorkspaceRef } from "./instance-ref"
 import { registerDisposer } from "./instance-registry"
@@ -46,7 +46,13 @@ export const make = <A, E = never, R = never>(
 
 export const get = <A, E, R>(self: InstanceState<A, E, R>) =>
   Effect.gen(function* () {
-    return yield* ScopedCache.get(self.cache, yield* directory)
+    const key = yield* directory
+    // ScopedCache keeps a failed lookup cached under the key, so one bad file
+    // (e.g. a command frontmatter schema error) wedged every later get until
+    // /global/dispose. Invalidate on failure so the next get retries.
+    return yield* ScopedCache.get(self.cache, key).pipe(
+      Effect.onExit((exit) => (Exit.isFailure(exit) ? ScopedCache.invalidate(self.cache, key) : Effect.void)),
+    )
   })
 
 export const use = <A, E, R, B>(self: InstanceState<A, E, R>, select: (value: A) => B) => Effect.map(get(self), select)
