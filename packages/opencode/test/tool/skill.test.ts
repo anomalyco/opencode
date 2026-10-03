@@ -9,6 +9,7 @@ import type { Permission } from "../../src/permission"
 import type { Tool } from "@/tool/tool"
 import { SkillTool } from "../../src/tool/skill"
 import { ToolRegistry } from "@/tool/registry"
+import { Command } from "@/command"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
 import { testEffect } from "../lib/effect"
@@ -27,7 +28,9 @@ afterEach(async () => {
   await disposeAllInstances()
 })
 
-const it = testEffect(LayerNode.compile(LayerNode.group([ToolRegistry.node, CrossSpawnSpawner.node, Ripgrep.node])))
+const it = testEffect(
+  LayerNode.compile(LayerNode.group([ToolRegistry.node, Command.node, CrossSpawnSpawner.node, Ripgrep.node])),
+)
 
 describe("tool.skill", () => {
   it.instance("execute returns skill content block with files", () =>
@@ -90,6 +93,30 @@ Use this skill.
       expect(result.output).toContain(`<skill_content name="tool-skill">`)
       expect(result.output).toContain(`Base directory for this skill: ${skill}`)
       expect(result.output).toContain(`<file>${file}</file>`)
+
+      const commands = yield* Command.Service
+      const command = yield* commands.get("tool-skill")
+      if (!command) throw new Error("Skill slash command not found")
+      expect(yield* Effect.promise(() => Promise.resolve(command.template))).toContain("Use this skill.")
+
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(skill, "SKILL.md"),
+          `---
+name: tool-skill
+description: Skill for tool tests.
+---
+
+# Tool Skill
+
+Updated skill content.
+`,
+        ),
+      )
+
+      const updated = yield* tool.execute({ name: "tool-skill" }, ctx)
+      expect(updated.output).toContain("Updated skill content.")
+      expect(yield* Effect.promise(() => Promise.resolve(command.template))).toContain("Updated skill content.")
     }),
   )
 
