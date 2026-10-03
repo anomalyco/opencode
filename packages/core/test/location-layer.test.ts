@@ -35,6 +35,7 @@ import { ApplicationTools } from "../src/tool/application-tools"
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([ApplicationTools.node, Database.node, EventV2.node, LocationServiceMap.node])),
 )
+const windowsIt = process.platform === "win32" ? it.live : it.live.skip
 
 describe("LocationServiceMap", () => {
   it.live("reuses cached services for constructed and decoded location refs", () =>
@@ -55,6 +56,34 @@ describe("LocationServiceMap", () => {
             expect(Equal.equals(constructed, decoded)).toBe(true)
             expect(Hash.hash(constructed)).toBe(Hash.hash(decoded))
             expect(yield* locations.contextEffect(constructed)).toBe(yield* locations.contextEffect(decoded))
+          }),
+        ),
+      ),
+    ),
+  )
+
+  windowsIt("coalesces case variants of the same Windows location", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((dir) =>
+        Effect.scoped(
+          Effect.gen(function* () {
+            const locations = yield* LocationServiceMap.Service
+            const canonical = dir.path
+            const index = canonical.slice(3).search(/[A-Za-z]/)
+            if (index < 0) throw new Error(`expected a cased path: ${canonical}`)
+            const offset = index + 3
+            const character = canonical[offset]
+            const alternate = `${canonical.slice(0, offset)}${
+              character === character.toUpperCase() ? character.toLowerCase() : character.toUpperCase()
+            }${canonical.slice(offset + 1)}`
+            const first = Location.Ref.make({ directory: AbsolutePath.make(canonical) })
+            const second = Location.Ref.make({ directory: AbsolutePath.make(alternate) })
+
+            const canonicalContext = yield* locations.contextEffect(first)
+            expect(yield* locations.contextEffect(second)).toBe(canonicalContext)
           }),
         ),
       ),
