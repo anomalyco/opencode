@@ -71,17 +71,15 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
+  // Errored turns still reuse their reasoning provider state when the model matches:
+  // providers like Anthropic require a tool_use block to be preceded by its thinking
+  // block, so dropping signed/redacted thinking from a replayed errored turn that
+  // still carries tool calls yields a request the provider rejects with a 400.
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
     if (item.type === "reasoning")
       return sameModel
-        ? [
-            {
-              type: "reasoning",
-              text: item.text,
-              providerMetadata: reuseProviderMetadata ? item.providerMetadata : undefined,
-            },
-          ]
+        ? [{ type: "reasoning", text: item.text, providerMetadata: item.providerMetadata }]
         : item.text.length > 0
           ? [{ type: "text", text: item.text }]
           : []
