@@ -1572,6 +1572,78 @@ function sanitizeOpenAISchema(value: unknown): unknown {
   return result
 }
 
+// Anthropic's tool input_schema rejects root-level anyOf/oneOf/allOf (it only
+// allows them nested inside a property). MCP servers commonly emit these to
+// express "exactly one of" or to split constraints into multiple branches, so
+// fold them into the root object schema instead of forwarding them verbatim
+// and taking the whole tool down with a 400. Only the root is affected; nested
+// content is returned untouched. `allOf` is an intersection, so its members'
+// properties/required are merged in; `anyOf`/`oneOf` express exclusive
+// alternatives Anthropic can't represent, so they're dropped to avoid both the
+// 400 and over-constraining the root object.
+function sanitizeAnthropicSchema(value: unknown): unknown {
+  if (!isPlainObject(value)) return value
+
+  const result: JsonRecord = { ...value }
+  const droppedCombinator = ["anyOf", "oneOf", "allOf"].some((key) => key in value)
+  const ownProperties = isPlainObject(value.properties) ? (value.properties as JsonRecord) : {}
+  const mergedProperties = { ...ownProperties }
+
+  if ("allOf" in value) {
+    delete result.allOf
+    if (Array.isArray(value.allOf)) {
+      for (const member of value.allOf) {
+        if (!isPlainObject(member)) continue
+        if (isPlainObject(member.properties)) {
+          // An intersection is exact only for distinct keys. When the same key
+          // is constrained by the root and a branch (or by two branches), the
+          // later definition wins, which relaxes the constraint. Deliberate:
+          // relaxing can never produce an unsatisfiable schema, whereas a
+          // stricter fold could break the tool entirely.
+          Object.assign(mergedProperties, member.properties)
+        }
+        if (Array.isArray(member.required)) {
+          const required = new Set(Array.isArray(result.required) ? (result.required as string[]) : [])
+          for (const name of member.required) {
+            if (typeof name === "string") required.add(name)
+          }
+          result.required = Array.from(required)
+        }
+      }
+      result.properties = mergedProperties
+    }
+  }
+
+  for (const key of ["anyOf", "oneOf"] as const) {
+    if (key in value) delete result[key]
+  }
+
+  // Dropping a root combinator can leave a bare schema with no structural
+  // keywords (e.g. `{ anyOf: [...] }`). Anthropic requires an object-typed
+  // input_schema and rejects an empty one, so fall back to a parameterless
+  // object schema — the same fallback a Claude-facing proxy applies for tools
+  // without parameters.
+  const structuralKeywords = [
+    "type",
+    "properties",
+    "items",
+    "prefixItems",
+    "required",
+    "additionalProperties",
+    "patternProperties",
+    "enum",
+    "const",
+    "$ref",
+    "not",
+  ] as const
+  if (droppedCombinator && !structuralKeywords.some((key) => key in result)) {
+    result.type = "object"
+    result.properties = {}
+  }
+
+  return result
+}
+
 export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 {
   /*
   if (["openai", "azure"].includes(providerID)) {
@@ -1594,6 +1666,21 @@ export function schema(model: Provider.Model, schema: JSONSchema7): JSONSchema7 
   if (model.api.npm === "@ai-sdk/openai" || model.api.npm === "@ai-sdk/azure") {
     schema = sanitizeOpenAISchema(schema) as JSONSchema7
     // Codex also applies lossy compaction above 4 KB; defer that until OpenCode needs the same schema budget.
+  }
+
+  // Anthropic (and GitHub Copilot proxying Claude models) rejects root-level
+  // anyOf/oneOf/allOf in a tool input_schema. Fold them into the root object.
+  const isAnthropicFamily =
+    model.api.npm === "@ai-sdk/anthropic" ||
+    model.api.npm === "@ai-sdk/google-vertex/anthropic" ||
+    // Copilot also proxies GPT models, so only its Claude models take this path.
+    (model.api.npm === "@ai-sdk/github-copilot" && model.id?.toLowerCase().includes("claude")) ||
+    // Covers Bedrock-hosted Claude (e.g. anthropic.claude-*) and custom
+    // providers exposing Anthropic-shaped model ids, mirroring the broad match
+    // used elsewhere in this file.
+    model.api.id.toLowerCase().includes("anthropic")
+  if (isAnthropicFamily) {
+    schema = sanitizeAnthropicSchema(schema) as JSONSchema7
   }
 
   if (model.providerID === "moonshotai" || model.api.id.toLowerCase().includes("kimi")) {
