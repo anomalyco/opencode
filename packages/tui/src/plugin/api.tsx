@@ -1,5 +1,5 @@
 import { PluginContextProvider } from "@opencode/plugin/tui"
-import type { JSX } from "solid-js"
+import { createRoot, getOwner, onCleanup, runWithOwner, untrack, type JSX } from "solid-js"
 import type { Context, Dialog, Page, SlotClaim, SlotMap, SlotPath, Toast } from "@opencode/plugin/tui/context"
 import type { Placement, PlacementKind } from "./structure"
 import { infoStringToFiletype, type MarkdownCodeBlockRenderer } from "@opentui/core"
@@ -54,6 +54,7 @@ export type Registry = {
 // (hooks must run during component setup) and shared by every activation.
 export function usePluginHost() {
   return {
+    owner: getOwner(),
     renderer: useRenderer(),
     client: useClient(),
     data: useData(),
@@ -133,6 +134,12 @@ export function createPluginContext(input: {
     input.owned.push(async () => unregister())
     return unregister
   }
+  let layers: Set<() => void> | undefined = new Set()
+  input.owned.push(async () => {
+    const active = layers
+    layers = undefined
+    active?.forEach((dispose) => dispose())
+  })
   context = {
     options: input.options ?? {},
     get location() {
@@ -161,7 +168,19 @@ export function createPluginContext(input: {
       },
     },
     keymap: {
-      layer: Keymap.createLayer,
+      layer(layer) {
+        const active = layers
+        if (!active) return
+        // Validate outside Solid, whose error routing would bypass the caller.
+        Keymap.validateLayer(untrack(layer))
+        const caller = getOwner()
+        createRoot((dispose) => {
+          active.add(dispose)
+          onCleanup(() => active.delete(dispose))
+          if (caller) runWithOwner(caller, () => onCleanup(dispose))
+          Keymap.createLayer(layer)
+        }, caller ?? host.owner)
+      },
       dispatch: host.keymap.dispatch,
       shortcuts: host.shortcuts.list,
       commands: host.keymapState.commands,

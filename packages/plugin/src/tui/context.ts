@@ -438,7 +438,12 @@ export interface KeymapActive {
 }
 
 export interface Keymap {
-  /** Creates a reactive keymap layer owned by the calling component. */
+  /**
+   * Creates a reactive keymap layer. It is removed when the plugin deactivates, or earlier when the component or reactive
+   * computation that created it is disposed. The factory must be pure. It runs once untracked for initial command-shape
+   * validation, then reactively. Initial command-shape errors throw synchronously. OpenTUI handles binding-parse errors.
+   * Errors from later reactive updates follow Solid's error handling.
+   */
   layer(input: () => KeymapLayer): void
   /** Dispatches a reachable command by ID. */
   dispatch(id: string, input?: string): void

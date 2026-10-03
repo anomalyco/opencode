@@ -207,27 +207,7 @@ function createLayer(input: () => KeymapLayer) {
   useBindings(() => {
     const layer = input()
     const { commands, bindings, mode, ...options } = layer
-    const grouped = (commands ?? []).reduce(
-      (result, command) => {
-        if (command.id !== undefined) {
-          if (!command.id) throw new Error("Keymap command IDs cannot be empty")
-          if (typeof command.bind === "string" && !command.bind)
-            throw new Error("Keymap command bindings cannot be empty")
-          result.named.push({ ...command, id: command.id })
-          return result
-        }
-        if (command.palette) throw new Error("Palette commands require an ID")
-        if (command.slash) throw new Error("Slash commands require an ID")
-        if (typeof command.bind !== "string") throw new Error("Inline keymap commands require bind")
-        if (!command.bind) throw new Error("Keymap command bindings cannot be empty")
-        result.inline.push({ ...command, id: undefined, bind: command.bind })
-        return result
-      },
-      {
-        named: [] as Array<KeymapCommand & { readonly id: string }>,
-        inline: [] as Array<KeymapCommand & { readonly id?: undefined; readonly bind: string }>,
-      },
-    )
+    const grouped = groupCommands(commands)
     return {
       ...options,
       enabled: enabled() ? options.enabled : false,
@@ -268,6 +248,30 @@ function createLayer(input: () => KeymapLayer) {
       ],
     }
   })
+}
+
+function groupCommands(commands: readonly KeymapCommand[] = []) {
+  return commands.reduce(
+    (result, command) => {
+      if (command.id !== undefined) {
+        if (!command.id) throw new Error("Keymap command IDs cannot be empty")
+        if (typeof command.bind === "string" && !command.bind)
+          throw new Error("Keymap command bindings cannot be empty")
+        result.named.push({ ...command, id: command.id })
+        return result
+      }
+      if (command.palette) throw new Error("Palette commands require an ID")
+      if (command.slash) throw new Error("Slash commands require an ID")
+      if (typeof command.bind !== "string") throw new Error("Inline keymap commands require bind")
+      if (!command.bind) throw new Error("Keymap command bindings cannot be empty")
+      result.inline.push({ ...command, id: undefined, bind: command.bind })
+      return result
+    },
+    {
+      named: [] as Array<KeymapCommand & { readonly id: string }>,
+      inline: [] as Array<KeymapCommand & { readonly id?: undefined; readonly bind: string }>,
+    },
+  )
 }
 
 function useShortcuts() {
@@ -403,6 +407,7 @@ export const Keymap = {
   Provider,
   use,
   createLayer,
+  validateLayer: (layer: KeymapLayer) => void groupCommands(layer.commands),
   useShortcuts,
   useShortcut,
   useLeaderActive,
