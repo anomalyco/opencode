@@ -13,7 +13,15 @@ type Experiment = {
 // In-flight features anyone can opt into. Each entry is temporary: an
 // experiment either graduates (delete the entry, make the behavior
 // unconditional) or dies (delete the entry and the branch it gated).
-export const experiments: Experiment[] = []
+export const SESSION_TAB_GROUPS_EXPERIMENT_ID = "session-tab-groups"
+
+export const experiments: Experiment[] = [
+  {
+    id: SESSION_TAB_GROUPS_EXPERIMENT_ID,
+    title: "Grouped session tabs",
+    description: "Group the vertical session-tabs rail by folder with collapsible sections",
+  },
+]
 
 export function DialogExperiments() {
   const config = useConfig()

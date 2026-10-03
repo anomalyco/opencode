@@ -356,10 +356,11 @@ test("stores session tabs for the current working directory by default", async (
       return stored.cwd[directory]?.tabs.some((tab: { sessionID: string }) => tab.sessionID === "first")
     })
     const stored = await Bun.file(file).json()
-    expect(stored.global).toEqual({ tabs: [], unread: {} })
+    expect(stored.global).toEqual({ tabs: [], unread: {}, collapsed: {} })
     expect(Object.keys(stored.cwd)).toEqual([directory])
     expect(stored.cwd[directory].tabs.map((tab: { sessionID: string }) => tab.sessionID)).toEqual(["first"])
     expect(stored.cwd[directory].unread).toEqual({})
+    expect(stored.cwd[directory].collapsed).toEqual({})
   } finally {
     await setup.destroy()
   }

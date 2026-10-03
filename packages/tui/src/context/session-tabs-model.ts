@@ -1,3 +1,5 @@
+import { directoryKey, projectName } from "../util/project"
+
 export type SessionTab = {
   sessionID: string
   title?: string
@@ -258,4 +260,72 @@ export function adaptiveSessionTabLayout(
     start: solved.start,
     total,
   }
+}
+
+export type SessionTabHeaderRow = {
+  kind: "header"
+  key: string
+  label: string
+  collapsed: boolean
+  firstTabIndex: number
+}
+
+export type SessionTabItemRow = {
+  kind: "tab"
+  key: string
+  tabIndex: number
+}
+
+export type SessionTabRow = SessionTabHeaderRow | SessionTabItemRow
+
+export function groupSessionTabRows(
+  tabs: readonly SessionTab[],
+  directoryOf: (sessionID: string) => string | undefined,
+  collapsed?: Record<string, boolean>,
+  labelOf?: (key: string, directory: string) => string,
+) {
+  const groups = tabs.reduce((acc, tab, tabIndex) => {
+    const raw = directoryOf(tab.sessionID)
+    const key = directoryKey(raw)
+    const directory = raw ?? ""
+    const entry = acc.get(key)
+    if (entry) {
+      acc.set(key, { directory: entry.directory, indices: [...entry.indices, tabIndex] })
+      return acc
+    }
+    acc.set(key, { directory, indices: [tabIndex] })
+    return acc
+  }, new Map<string, { directory: string; indices: number[] }>())
+  return [...groups.entries()].flatMap(([key, group]) => {
+    const isCollapsed = collapsed?.[key] ?? false
+    const label = labelOf ? labelOf(key, group.directory) : defaultSessionTabGroupLabel(group.directory)
+    const header: SessionTabHeaderRow = {
+      kind: "header",
+      key,
+      label,
+      collapsed: isCollapsed,
+      firstTabIndex: group.indices[0] ?? 0,
+    }
+    if (isCollapsed) return [header]
+    return [header, ...group.indices.map((tabIndex) => ({ kind: "tab" as const, key, tabIndex }))]
+  })
+}
+
+export function sessionTabRowTabIndex(rows: readonly SessionTabRow[], displayIndex: number) {
+  const row = rows[displayIndex]
+  if (!row) return undefined
+  if (row.kind === "header") return undefined
+  return row.tabIndex
+}
+
+export function sessionTabDropTabIndex(rows: readonly SessionTabRow[], displayIndex: number) {
+  const row = rows[displayIndex]
+  if (!row) return undefined
+  if (row.kind === "tab") return row.tabIndex
+  return row.firstTabIndex
+}
+
+function defaultSessionTabGroupLabel(directory: string) {
+  if (directory === "") return "Unknown"
+  return projectName(undefined, directory) || directory
 }
