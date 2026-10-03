@@ -97,7 +97,14 @@ const layer = Layer.effect(
       if (!agent) return
       const primary = yield* resolveModel(session).pipe(Effect.orElseSucceed(() => undefined))
       const info = yield* Effect.gen(function* () {
-        if (agent.model) return yield* model.get(agent.model.providerID, agent.model.id)
+        if (agent.model) {
+          const configured = yield* model.get(agent.model.providerID, agent.model.id)
+          if (!configured)
+            yield* Effect.logWarning(
+              `configured title model ${agent.model.providerID}/${agent.model.id} is unavailable; falling back to the session model`,
+            )
+          return configured
+        }
         if (!primary) return
         return yield* model.small(primary.ref.providerID)
       })
