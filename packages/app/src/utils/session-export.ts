@@ -16,6 +16,8 @@ export type SessionExportClient = {
   }
 }
 
+const MAX_EXPORT_BASENAME_LENGTH = 250
+
 export async function fetchSessionExport(input: {
   sessionID: string
   client: SessionExportClient
@@ -43,6 +45,7 @@ export function sessionExportFilename(session: { id: string; title?: string; slu
   const clean = name
     .toLowerCase()
     .replace(/[^a-z0-9_-]+/gi, "-")
+    .slice(0, MAX_EXPORT_BASENAME_LENGTH)
     .replace(/^-+|-+$/g, "")
   return `${clean || session.id}.json`
 }

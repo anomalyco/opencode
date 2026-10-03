@@ -16,6 +16,13 @@ describe("sessionExportFilename", () => {
   test("falls back to id when title and slug are empty", () => {
     expect(sessionExportFilename({ id: "ses_123" })).toBe("ses_123.json")
   })
+
+  test("limits filename length while preserving the extension", () => {
+    const filename = sessionExportFilename({ id: "ses_123", title: "x".repeat(300) })
+
+    expect(filename).toBe(`${"x".repeat(250)}.json`)
+    expect(new TextEncoder().encode(filename)).toHaveLength(255)
+  })
 })
 
 describe("fetchSessionExport", () => {
