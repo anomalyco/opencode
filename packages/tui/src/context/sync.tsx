@@ -325,7 +325,22 @@ export const {
             setStore("message", event.properties.info.sessionID, [event.properties.info])
             break
           }
-          const result = search(messages, messageKey(event.properties.info), messageKey)
+          const duplicate = messages.findIndex((message) => message.id === event.properties.info.id)
+          if (duplicate !== -1 && messages[duplicate].time.created === event.properties.info.time.created) {
+            setStore("message", event.properties.info.sessionID, duplicate, reconcile(event.properties.info))
+            break
+          }
+          if (duplicate !== -1) {
+            setStore(
+              "message",
+              event.properties.info.sessionID,
+              produce((draft) => {
+                draft.splice(duplicate, 1)
+              }),
+            )
+          }
+          const current = store.message[event.properties.info.sessionID] ?? []
+          const result = search(current, messageKey(event.properties.info), messageKey)
           if (result.found) {
             setStore("message", event.properties.info.sessionID, result.index, reconcile(event.properties.info))
             break
