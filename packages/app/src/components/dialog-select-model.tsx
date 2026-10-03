@@ -14,7 +14,7 @@ import { Tooltip } from "@opencode-ai/ui/tooltip"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { Tag as TagV2 } from "@opencode-ai/ui/v2/badge-v2"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { TooltipV2, TooltipV2Group } from "@opencode-ai/ui/v2/tooltip-v2"
 import { ModelTooltip } from "./model-tooltip"
 import { useLanguage } from "@/context/language"
 import { decode64 } from "@/utils/base64"
@@ -437,69 +437,71 @@ function ModelSelectorPopoverV2View(props: {
             </div>
           </div>
           <div class="h-px bg-v2-border-border-muted" />
-          <ScrollView data-slot="model-selector-scroll" class="max-h-[220px] min-h-0">
-            <div class="flex flex-col p-0.5 pt-0">
-              <Show
-                when={models().length > 0}
-                fallback={
-                  <div class="flex h-12 items-center px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint">
-                    {language.t("dialog.model.empty")}
-                  </div>
-                }
-              >
-                <For each={groups()}>
-                  {(group) => (
-                    <MenuV2.Group>
-                      <MenuV2.GroupLabel class="sticky top-0 z-10 gap-2 bg-v2-background-bg-layer-01 px-3">
-                        <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
-                      </MenuV2.GroupLabel>
-                      <MenuV2.RadioGroup value={props.current()}>
-                        <For each={group.items}>
-                          {(item) => (
-                            <TooltipV2
-                              class="w-full"
-                              placement="right-start"
-                              gutter={6}
-                              openDelay={0}
-                              value={
-                                <ModelTooltip
-                                  model={item}
-                                  latest={item.latest}
-                                  free={isFree(item.provider.id, item.cost)}
-                                  v2
-                                />
-                              }
-                            >
-                              <MenuV2.RadioItem
-                                value={modelKey(item)}
-                                data-option-key={modelKey(item)}
-                                data-selected-model={props.current() === modelKey(item) ? true : undefined}
-                                class="scroll-my-6 w-full"
-                                classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
-                                onMouseEnter={() => {
-                                  setStore("active", modelKey(item))
-                                  setTimeout(() => searchRef?.focus())
-                                }}
-                                onSelect={() => selectModel(item)}
+          <TooltipV2Group>
+            <ScrollView data-slot="model-selector-scroll" class="max-h-[220px] min-h-0">
+              <div class="flex flex-col p-0.5 pt-0">
+                <Show
+                  when={models().length > 0}
+                  fallback={
+                    <div class="flex h-12 items-center px-3 text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-faint">
+                      {language.t("dialog.model.empty")}
+                    </div>
+                  }
+                >
+                  <For each={groups()}>
+                    {(group) => (
+                      <MenuV2.Group>
+                        <MenuV2.GroupLabel class="sticky top-0 z-10 gap-2 bg-v2-background-bg-layer-01 px-3">
+                          <span class="min-w-0 truncate">{group.items[0].provider.name}</span>
+                        </MenuV2.GroupLabel>
+                        <MenuV2.RadioGroup value={props.current()}>
+                          <For each={group.items}>
+                            {(item) => (
+                              <TooltipV2
+                                class="w-full"
+                                placement="right-start"
+                                gutter={6}
+                                openDelay={0}
+                                value={
+                                  <ModelTooltip
+                                    model={item}
+                                    latest={item.latest}
+                                    free={isFree(item.provider.id, item.cost)}
+                                    v2
+                                  />
+                                }
                               >
-                                <span class="min-w-0 truncate leading-5">{item.name}</span>
-                                <Show when={isFree(item.provider.id, item.cost)}>
-                                  <TagV2 class="shrink-0">{language.t("model.tag.free")}</TagV2>
-                                </Show>
-                                <Show when={item.latest}>
-                                  <TagV2 class="shrink-0">{language.t("model.tag.latest")}</TagV2>
-                                </Show>
-                              </MenuV2.RadioItem>
-                            </TooltipV2>
-                          )}
-                        </For>
-                      </MenuV2.RadioGroup>
-                    </MenuV2.Group>
-                  )}
-                </For>
-              </Show>
-            </div>
-          </ScrollView>
+                                <MenuV2.RadioItem
+                                  value={modelKey(item)}
+                                  data-option-key={modelKey(item)}
+                                  data-selected-model={props.current() === modelKey(item) ? true : undefined}
+                                  class="scroll-my-6 w-full"
+                                  classList={{ "!bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
+                                  onMouseEnter={() => {
+                                    setStore("active", modelKey(item))
+                                    setTimeout(() => searchRef?.focus())
+                                  }}
+                                  onSelect={() => selectModel(item)}
+                                >
+                                  <span class="min-w-0 truncate leading-5">{item.name}</span>
+                                  <Show when={isFree(item.provider.id, item.cost)}>
+                                    <TagV2 class="shrink-0">{language.t("model.tag.free")}</TagV2>
+                                  </Show>
+                                  <Show when={item.latest}>
+                                    <TagV2 class="shrink-0">{language.t("model.tag.latest")}</TagV2>
+                                  </Show>
+                                </MenuV2.RadioItem>
+                              </TooltipV2>
+                            )}
+                          </For>
+                        </MenuV2.RadioGroup>
+                      </MenuV2.Group>
+                    )}
+                  </For>
+                </Show>
+              </div>
+            </ScrollView>
+          </TooltipV2Group>
           <div class="h-px bg-v2-border-border-muted" />
           <div class="flex flex-col p-0.5">
             <MenuV2.Item

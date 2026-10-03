@@ -5,7 +5,7 @@ import { TextInputV2 } from "@opencode-ai/ui/v2/text-input-v2"
 import { KeybindV2 } from "@opencode-ai/ui/v2/keybind-v2"
 import { Icon } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
-import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
+import { TooltipV2, TooltipV2Group } from "@opencode-ai/ui/v2/tooltip-v2"
 import type { SessionReviewDiffStyle } from "../../components/session-review"
 import { ResizeHandle } from "@opencode-ai/ui/resize-handle"
 import { ScrollView } from "@opencode-ai/ui/scroll-view"
@@ -218,53 +218,55 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           </Show>
         </div>
       </Show>
-      <div class="flex items-center">
-        <TooltipV2
-          openDelay={2000}
-          inactive={!prev()}
-          value={
-            <>
-              {i18n.t("ui.sessionReviewV2.previousFile")}
-              <KeybindV2 keys={[locale.direction() === "rtl" ? "→" : "←"]} variant="neutral" />
-            </>
-          }
-        >
-          <IconButton
-            icon="arrow-left"
-            variant="ghost"
-            size="small"
-            class="session-review-v2-file-nav-button"
-            disabled={!prev()}
-            onClick={() => cycle(prev())}
-            aria-label={i18n.t("ui.sessionReviewV2.previousFile")}
-          />
-        </TooltipV2>
-        <TooltipV2
-          openDelay={2000}
-          inactive={!next()}
-          value={
-            <>
-              {i18n.t("ui.sessionReviewV2.nextFile")}
-              <KeybindV2 keys={[locale.direction() === "rtl" ? "←" : "→"]} variant="neutral" />
-            </>
-          }
-        >
-          <IconButton
-            icon="arrow-right"
-            variant="ghost"
-            size="small"
-            class="session-review-v2-file-nav-button"
-            disabled={!next()}
-            onClick={() => cycle(next())}
-            aria-label={i18n.t("ui.sessionReviewV2.nextFile")}
-          />
-        </TooltipV2>
-      </div>
+      <TooltipV2Group>
+        <div class="flex items-center">
+          <TooltipV2
+            openDelay={2000}
+            inactive={!prev()}
+            value={
+              <>
+                {i18n.t("ui.sessionReviewV2.previousFile")}
+                <KeybindV2 keys={[locale.direction() === "rtl" ? "→" : "←"]} variant="neutral" />
+              </>
+            }
+          >
+            <IconButton
+              icon="arrow-left"
+              variant="ghost"
+              size="small"
+              class="session-review-v2-file-nav-button"
+              disabled={!prev()}
+              onClick={() => cycle(prev())}
+              aria-label={i18n.t("ui.sessionReviewV2.previousFile")}
+            />
+          </TooltipV2>
+          <TooltipV2
+            openDelay={2000}
+            inactive={!next()}
+            value={
+              <>
+                {i18n.t("ui.sessionReviewV2.nextFile")}
+                <KeybindV2 keys={[locale.direction() === "rtl" ? "←" : "→"]} variant="neutral" />
+              </>
+            }
+          >
+            <IconButton
+              icon="arrow-right"
+              variant="ghost"
+              size="small"
+              class="session-review-v2-file-nav-button"
+              disabled={!next()}
+              onClick={() => cycle(next())}
+              aria-label={i18n.t("ui.sessionReviewV2.nextFile")}
+            />
+          </TooltipV2>
+        </div>
+      </TooltipV2Group>
     </>
   )
 
   const toolbarEnd = () => (
-    <>
+    <TooltipV2Group>
       <SegmentedControlV2
         value={props.expandMode}
         onChange={(value) => {
@@ -307,7 +309,7 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
           </TooltipV2>
         </SegmentedControlV2>
       </Show>
-    </>
+    </TooltipV2Group>
   )
 
   return (
