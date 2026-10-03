@@ -62,6 +62,7 @@ function callProvider(
   provider: WebSearchProvider,
   params: Schema.Schema.Type<typeof Parameters>,
   ctx: Tool.Context,
+  sessionHeaders?: Record<string, string>,
 ) {
   if (provider === "parallel") {
     return McpWebSearch.call(
@@ -76,7 +77,7 @@ function callProvider(
         model_name: webSearchModelName(ctx.extra),
       },
       "25 seconds",
-      parallelAuthHeaders(),
+      { ...parallelAuthHeaders(), ...sessionHeaders },
     )
   }
 
@@ -93,8 +94,12 @@ function callProvider(
       contextMaxCharacters: params.contextMaxCharacters,
     },
     "25 seconds",
+    sessionHeaders,
   )
 }
+
+const otherProvider = (provider: WebSearchProvider): WebSearchProvider =>
+  provider === "parallel" ? "exa" : "parallel"
 
 export const WebSearchTool = Tool.define(
   "websearch",
@@ -130,12 +135,27 @@ export const WebSearchTool = Tool.define(
             },
           })
 
-          const result = yield* callProvider(http, provider, params, ctx)
+          const run = (p: WebSearchProvider) =>
+            Effect.gen(function* () {
+              // Optional handshake for providers that reject session-less calls.
+              let sessionHeaders: Record<string, string> | undefined
+              if (process.env.OPENCODE_WEBSEARCH_HANDSHAKE === "1") {
+                const url = p === "parallel" ? McpWebSearch.PARALLEL_URL : McpWebSearch.EXA_URL
+                const sid = yield* McpWebSearch.handshake(http, url, p === "parallel" ? parallelAuthHeaders() : undefined)
+                if (sid) sessionHeaders = { "Mcp-Session-Id": sid }
+              }
+              const output = yield* callProvider(http, p, params, ctx, sessionHeaders)
+              return { used: p, output }
+            })
+          // Fallback: a provider pinned by session checksum must not stay
+          // broken for the whole session — try the other one on failure.
+          const result = yield* run(provider).pipe(Effect.catch(() => run(otherProvider(provider))))
 
+          const finalTitle = webSearchProviderLabel(result.used)
           return {
-            output: result ?? "No search results found. Please try a different query.",
-            title: `${title}: ${params.query}`,
-            metadata: { provider },
+            output: result.output ?? "No search results found. Please try a different query.",
+            title: `${finalTitle}: ${params.query}`,
+            metadata: { provider: result.used },
           }
         }).pipe(Effect.orDie),
     }
