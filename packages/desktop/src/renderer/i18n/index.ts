@@ -68,6 +68,7 @@ import { dict as desktopSr } from "./sr"
 import { dict as desktopTg } from "./tg"
 import { dict as desktopTk } from "./tk"
 import { dict as desktopUz } from "./uz"
+import { dict as desktopGl } from "./gl"
 
 export type Locale = DesktopNativeLocale
 
@@ -175,6 +176,7 @@ function build(locale: Locale): Dictionary {
   if (locale === "tg") return { ...base, ...i18n.flatten(desktopTg) }
   if (locale === "tk") return { ...base, ...i18n.flatten(desktopTk) }
   if (locale === "uz") return { ...base, ...i18n.flatten(desktopUz) }
+  if (locale === "gl") return { ...base, ...i18n.flatten(desktopGl) }
   return { ...base, ...i18n.flatten(desktopKo) }
 }
 

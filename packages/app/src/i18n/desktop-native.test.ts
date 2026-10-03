@@ -77,6 +77,7 @@ describe("desktop native translations", () => {
       "Тоҷикӣ",
       "Türkmençe",
       "Oʻzbekcha",
+      "Galego",
     ])
   })
 
