@@ -33,6 +33,7 @@ import { Icon } from "@opencode-ai/ui/icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
+import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { DropdownMenu } from "@opencode-ai/ui/dropdown-menu"
 import { MenuV2 } from "@opencode-ai/ui/v2/menu-v2"
 import { Dialog } from "@opencode-ai/ui/dialog"
@@ -63,6 +64,8 @@ import { SessionContextUsage } from "@/components/session-context-usage"
 import { useDialog } from "@opencode-ai/ui/context/dialog"
 import { useLanguage } from "@/context/language"
 import { useSessionKey } from "@/pages/session/session-layout"
+import { useLayout } from "@/context/layout"
+import { useSessionLayout } from "@/pages/session/session-layout"
 import { useSessionArchive } from "@/pages/session/session-archive"
 import { useServerSDK } from "@/context/server-sdk"
 import { usePlatform } from "@/context/platform"
@@ -235,6 +238,17 @@ function TimelineDiffView(props: { diff: SummaryDiff }) {
   )
 }
 
+function openSessionAgents(args: {
+  view: ReturnType<ReturnType<typeof useLayout>["view"]>
+  layout: ReturnType<typeof useLayout>
+  tabs: ReturnType<ReturnType<typeof useLayout>["tabs"]>
+}) {
+  args.view.reviewPanel.open(args.view.reviewPanel.opened() ? "other" : "agents-button")
+  if (args.layout.fileTree.opened() && args.layout.fileTree.tab() !== "all") args.layout.fileTree.setTab("all")
+  void args.tabs.open("agents")
+  args.tabs.setActive("agents")
+}
+
 export function MessageTimeline(props: {
   actions?: UserActions
   scroll: { overflow: boolean; bottom: boolean; jump: boolean }
@@ -272,6 +286,28 @@ export function MessageTimeline(props: {
   const initialMeasurements = cached?.measurements
   const coldBottomMount = !initialMeasurements?.length && props.shouldAnchorBottom()
   const platform = usePlatform()
+  const layout = useLayout()
+  const { tabs: sessionTabs, view } = useSessionLayout()
+  const agentsVisible = createMemo(() => view().reviewPanel.opened() && sessionTabs().active() === "agents")
+  const hasOtherAgentTabs = createMemo(() =>
+    sessionTabs()
+      .all()
+      .some((tab) => tab !== "agents" && tab !== "review"),
+  )
+  const openAgents = () => {
+    if (!params.id) return
+    const sessionView = view()
+    if (agentsVisible()) {
+      sessionTabs().close("agents")
+      if (sessionView.reviewPanel.source() === "agents-button" && !hasOtherAgentTabs()) sessionView.reviewPanel.close()
+      return
+    }
+    openSessionAgents({
+      view: sessionView,
+      layout,
+      tabs: sessionTabs(),
+    })
+  }
 
   const [listRoot, setListRoot] = createSignal<HTMLDivElement>()
   const sessionID = createMemo(() => params.id)
@@ -279,6 +315,13 @@ export function MessageTimeline(props: {
     const id = sessionID()
     if (!id) return idle
     return sync().data.session_status[id] ?? idle
+  })
+  const hasBusyChildren = createMemo(() => {
+    const id = sessionID()
+    if (!id) return false
+    const sessions = sync().data.session ?? []
+    const statuses = sync().data.session_status
+    return sessions.some((s) => s.parentID === id && statuses[s.id]?.type === "busy")
   })
   const sessionMessages = createMemo(() => (sessionID() ? (sync().data.message[sessionID()!] ?? []) : []))
   const projectedMessages = createMemo(() => {
@@ -1478,6 +1521,26 @@ export function MessageTimeline(props: {
                       placement="bottom"
                       buttonAppearance={settings.general.newLayoutDesigns() ? "v2" : "default"}
                     />
+                    <Show when={params.id}>
+                      <TooltipV2 value={language.t("session.tab.agents")} placement="bottom" shift={-8}>
+                        <div class="relative inline-flex">
+                          <IconButtonV2
+                            type="button"
+                            variant="ghost-muted"
+                            size="large"
+                            icon={<Icon name="terminal" size="small" />}
+                            onClick={openAgents}
+                            aria-label={language.t("session.tab.agents")}
+                          />
+                          <span
+                            classList={{
+                              "absolute top-0.5 right-0.5 size-1.5 rounded-full bg-syntax-success": hasBusyChildren(),
+                              hidden: !hasBusyChildren(),
+                            }}
+                          />
+                        </div>
+                      </TooltipV2>
+                    </Show>
                     <Show when={!parentID()}>
                       <Show
                         when={settings.general.newLayoutDesigns()}
