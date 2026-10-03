@@ -1,0 +1,1 @@
+{"cooldown_ms":600000,"curator_enabled":true,"curation_timeout_ms":600000,"digest_messages":40,"enabled":true,"factcheck_enabled":true,"factcheck_timeout_ms":300000,"idle_ms":600000,"max":3,"model":null,"presence_away_ms":300000,"presence_enabled":true,"quiet_outside_tab":true}
