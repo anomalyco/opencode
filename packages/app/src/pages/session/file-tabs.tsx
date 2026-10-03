@@ -23,6 +23,7 @@ import { useSettings } from "@/context/settings"
 import { getSessionHandoff } from "@/pages/session/handoff"
 import { useSessionLayout } from "@/pages/session/session-layout"
 import { createSessionTabs } from "@/pages/session/helpers"
+import { clearFileFocus, pendingFileFocus } from "@/pages/session/file-focus"
 
 type SessionFileViewProps = {
   tab: string
@@ -95,6 +96,21 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
   let restoreFrame: number | undefined
   let pending: ScrollPos | undefined
   const [code, setCode] = createSignal<HTMLElement[]>([])
+  const [viewport, setViewportSignal] = createSignal<HTMLDivElement>()
+
+  const findLine = (line: number) => {
+    const el = viewport()
+    if (!el) return
+
+    const host = el.querySelector("diffs-container")
+    if (!(host instanceof HTMLElement)) return
+
+    const root = host.shadowRoot
+    if (!root) return
+
+    const target = root.querySelector(`[data-line="${line}"]`)
+    return target instanceof HTMLElement ? target : undefined
+  }
 
   const getCode = () => {
     const el = scroll
@@ -190,6 +206,7 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
 
   const setViewport = (el: HTMLDivElement) => {
     scroll = el
+    setViewportSignal(el)
     restore()
   }
 
@@ -202,6 +219,8 @@ function createScrollSync(input: { tab: () => string; view: ReturnType<typeof us
     handleScroll,
     queueRestore,
     setViewport,
+    viewport,
+    findLine,
   }
 }
 
@@ -211,6 +230,56 @@ export function FileTabContent(props: { tab: string }) {
       <SessionFileView tab={props.tab} />
     </Tabs.Content>
   )
+}
+
+// Applies a pending chat file reference: highlights the target line, scrolls it
+// into view, and clears the request. Retries for a short window because the
+// viewer renders line elements asynchronously.
+function followFileFocus(input: {
+  tab: string
+  path: () => string | undefined
+  loaded: () => boolean
+  ready: () => boolean
+  activeFileTab: () => string | undefined
+  viewport: () => HTMLDivElement | undefined
+  findLine: (line: number) => HTMLElement | undefined
+  select: (range: SelectedLineRange) => void
+}) {
+  createEffect(() => {
+    const target = pendingFileFocus()
+    const p = input.path()
+    if (!target || !p) return
+    if (target.path !== p) return
+    if (input.activeFileTab() !== input.tab) return
+    if (!input.loaded() || !input.ready()) return
+
+    const token = target.token
+    let frames = 0
+
+    const attempt = () => {
+      if (pendingFileFocus()?.token !== token) return
+      const el = input.findLine(target.line)
+      if (!el && frames++ < 60) {
+        requestAnimationFrame(attempt)
+        return
+      }
+      clearFileFocus(token)
+      if (!el) return
+
+      input.select({ start: target.line, end: target.end ?? target.line })
+
+      const view = input.viewport()
+      const box = view?.getBoundingClientRect()
+      if (view && box) {
+        const rect = el.getBoundingClientRect()
+        view.scrollTop = Math.max(0, view.scrollTop + rect.top - box.top - box.height / 2 + rect.height / 2)
+        return
+      }
+      el.scrollIntoView({ block: "center" })
+    }
+
+    requestAnimationFrame(attempt)
+  })
 }
 
 export function SessionFileView(props: SessionFileViewProps) {
@@ -444,6 +513,17 @@ function SessionFileViewV1(props: { tab: string }) {
     prev = { loaded, ready, active }
     if (!restore) return
     scrollSync.queueRestore()
+  })
+
+  followFileFocus({
+    tab: props.tab,
+    path,
+    loaded: () => !!state()?.loaded,
+    ready: () => file.ready(),
+    activeFileTab,
+    viewport: scrollSync.viewport,
+    findLine: scrollSync.findLine,
+    select: (range) => syncSelected(range),
   })
 
   const renderFile = (source: string) => (
@@ -727,6 +807,17 @@ function SessionFileViewV2(props: { tab: string }) {
     prev = { loaded, ready, active }
     if (!restore) return
     scrollSync.queueRestore()
+  })
+
+  followFileFocus({
+    tab: props.tab,
+    path,
+    loaded: () => !!state()?.loaded,
+    ready: () => file.ready(),
+    activeFileTab,
+    viewport: scrollSync.viewport,
+    findLine: scrollSync.findLine,
+    select: (range) => syncSelected(range),
   })
 
   const renderFile = (source: string) => (

@@ -72,6 +72,7 @@ import {
 } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
+import { requestFileFocus } from "@/pages/session/file-focus"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -529,6 +530,19 @@ export default function Page() {
 
   const openReviewPanel = () => {
     if (!view().reviewPanel.opened()) view().reviewPanel.open()
+  }
+
+  const openFileReference = (input: { path: string; line?: number; end?: number }) => {
+    const tab = normalizeTab(`file://${input.path}`)
+    tabs().open(tab)
+
+    const path = file.pathFromTab(tab)
+    if (!path) return
+
+    void file.load(path)
+    openReviewPanel()
+    tabs().setActive(tab)
+    if (input.line !== undefined) requestFileFocus({ path, line: input.line, end: input.end })
   }
 
   const info = createMemo(() => (params.id ? sync().session.get(params.id) : undefined))
@@ -2000,6 +2014,20 @@ export default function Page() {
 
   onMount(() => {
     makeEventListener(document, "keydown", handleKeyDown)
+    makeEventListener(window, "click", (event) => {
+      if (event.defaultPrevented || event.button !== 0) return
+      if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+      const target = event.target
+      if (!(target instanceof Element)) return
+      const link = target.closest("a[data-file-ref]")
+      if (!(link instanceof HTMLAnchorElement)) return
+      event.preventDefault()
+      const path = link.dataset.fileRef ?? ""
+      if (!path) return
+      const line = link.dataset.fileLine ? Number(link.dataset.fileLine) : undefined
+      const end = link.dataset.fileEnd ? Number(link.dataset.fileEnd) : undefined
+      openFileReference({ path, line, end })
+    })
   })
 
   onCleanup(() => {
