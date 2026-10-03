@@ -57,6 +57,8 @@ import { usePromptWorkspace } from "./workspace"
 import { usePromptMove } from "./move"
 import { readLocalAttachment } from "./local-attachment"
 import { useLocation } from "../../context/location"
+import { Identifier } from "@opencode-ai/core/id/id"
+import { createQuickUndo } from "./quick-undo"
 
 registerOpencodeSpinner()
 
@@ -139,6 +141,8 @@ function formatEditorContext(selection: EditorSelection) {
 }
 
 let stashed: { prompt: PromptInfo; cursor: number } | undefined
+// Module scope so a first prompt sent from the home route can still be undone from the session route.
+const quickUndo = createQuickUndo<PromptInfo>()
 
 export function Prompt(props: PromptProps) {
   let input: TextareaRenderable
@@ -286,6 +290,7 @@ export function Prompt(props: PromptProps) {
     mode: "normal" | "shell"
     extmarkToPartIndex: Map<number, number>
     interrupt: number
+    undo: boolean
     placeholder: number
   }>({
     placeholder: randomIndex(list().length),
@@ -296,8 +301,8 @@ export function Prompt(props: PromptProps) {
     mode: "normal",
     extmarkToPartIndex: new Map(),
     interrupt: 0,
+    undo: false,
   })
-
   createEffect(
     on(
       () => props.sessionID,
@@ -395,7 +400,7 @@ export function Prompt(props: PromptProps) {
         category: "Session",
         hidden: true,
         enabled: status().type !== "idle",
-        run: () => {
+        run: async () => {
           if (auto()?.visible) return
           if (!input.focused) return
           // TODO: this should be its own command
@@ -405,11 +410,37 @@ export function Prompt(props: PromptProps) {
           }
           if (!props.sessionID) return
 
+          const sessionID = props.sessionID
+          const recent = store.prompt.input
+            ? undefined
+            : quickUndo.candidate(sessionID, sync.data.message[sessionID] ?? [], (id) => sync.data.part[id] ?? [])
+
           setStore("interrupt", store.interrupt + 1)
+          setStore("undo", !!recent)
 
           setTimeout(() => {
             setStore("interrupt", 0)
           }, 5000)
+
+          if (store.interrupt >= 2 && recent) {
+            setStore("interrupt", 0)
+            quickUndo.clear()
+            ref.set(recent.value)
+            input.focus()
+            dialog.clear()
+            // Abort can take seconds to settle, so the prompt is restored before waiting on it.
+            await sdk.client.session.abort({ sessionID }).catch(() => {})
+            await sdk.client.session
+              .revert({ sessionID, messageID: recent.messageID }, { throwOnError: true })
+              .catch((error) => {
+                toast.show({
+                  title: "Failed to undo prompt",
+                  message: errorMessage(error),
+                  variant: "error",
+                })
+              })
+            return
+          }
 
           if (store.interrupt >= 2) {
             void sdk.client.session.abort({
@@ -1090,11 +1121,21 @@ export function Prompt(props: PromptProps) {
         parts: nonTextParts.filter((x) => x.type === "file"),
       })
     } else {
+      const messageID = Identifier.ascending("message")
+      quickUndo.submitted({
+        sessionID,
+        messageID,
+        value: {
+          input: store.prompt.input,
+          parts: [...unwrap(store.prompt.parts)],
+        },
+      })
       move.startSubmit()
       sdk.client.session
         .prompt(
           {
             sessionID,
+            messageID,
             ...selectedModel,
             agent: agent.name,
             model: selectedModel,
@@ -1587,7 +1628,7 @@ export function Prompt(props: PromptProps) {
                 <text fg={store.interrupt > 0 ? theme.primary : theme.text}>
                   esc{" "}
                   <span style={{ fg: store.interrupt > 0 ? theme.primary : theme.textMuted }}>
-                    {store.interrupt > 0 ? "again to interrupt" : "interrupt"}
+                    {store.interrupt > 0 ? (store.undo ? "again to undo" : "again to interrupt") : "interrupt"}
                   </span>
                 </text>
               </box>
