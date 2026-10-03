@@ -1220,12 +1220,36 @@ export const JDTLS: Info = {
 
       await fs.rm(path.join(distPath, archiveName), { force: true })
     }
+    const lombokDir = path.join(distPath, "lombok")
+    const installedLombok = await pathExists(lombokDir)
+    const lombokArchiveName = "lombok.jar"
+    if (!installedLombok) {
+      if (Flag.OPENCODE_DISABLE_LSP_DOWNLOAD) return
+      log.info("Downloading lombok agent.")
+      await fs.mkdir(lombokDir, { recursive: true })
+      const releaseURL = "https://projectlombok.org/downloads/lombok.jar"
+
+      log.info("Downloading lombok archive", { url: releaseURL, dest: lombokDir })
+      const download = await fetch(releaseURL)
+      if (!download.ok || !download.body) {
+        log.error("Failed to download lombok", { status: download.status, statusText: download.statusText })
+        return
+      }
+      await Filesystem.writeStream(path.join(lombokDir, lombokArchiveName), download.body)
+      log.info("lombok download completed")
+    }
+
     const jarFileName =
       (await fs.readdir(launcherDir).catch(() => []))
         .find((item) => /^org\.eclipse\.equinox\.launcher_.*\.jar$/.test(item))
         ?.trim() ?? ""
     const launcherJar = path.join(launcherDir, jarFileName)
     if (!(await pathExists(launcherJar))) {
+      return
+    }
+    const lombokJar = path.join(lombokDir, lombokArchiveName)
+    if (!(await pathExists(lombokJar))) {
+      log.error(`Failed to locate the lombok.jar in the installed directory: ${lombokDir}.`)
       return
     }
     const configFile = path.join(
@@ -1248,19 +1272,22 @@ export const JDTLS: Info = {
       process: spawn(
         java,
         [
-          "-jar",
-          launcherJar,
-          "-configuration",
-          configFile,
-          "-data",
-          dataDir,
+          "-javaagent:" + lombokJar,
           "-Declipse.application=org.eclipse.jdt.ls.core.id1",
           "-Dosgi.bundles.defaultStartLevel=4",
           "-Declipse.product=org.eclipse.jdt.ls.core.product",
           "-Dlog.level=ALL",
           "--add-modules=ALL-SYSTEM",
-          "--add-opens java.base/java.util=ALL-UNNAMED",
-          "--add-opens java.base/java.lang=ALL-UNNAMED",
+          "--add-opens=java.base/java.util=ALL-UNNAMED",
+          "--add-opens=java.base/java.lang=ALL-UNNAMED",
+
+          "-jar",
+          launcherJar,
+
+          "-configuration",
+          configFile,
+          "-data",
+          dataDir,
         ],
         {
           cwd: root,
