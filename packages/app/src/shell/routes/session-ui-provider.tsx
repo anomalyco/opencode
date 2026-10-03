@@ -62,10 +62,12 @@ export function SessionUIProvider(
     session_status: Object.fromEntries(
       data.session
         .list()
-        .map((session) => [
-          session.id,
-          data.session.status(session.id) === "running" ? ({ type: "busy" } as const) : ({ type: "idle" } as const),
-        ]),
+        .map((session) => {
+          const status = data.session.status(session.id)
+          if (status === "running") return [session.id, { type: "busy" } as const]
+          if (status === "waiting") return [session.id, { type: "waiting" } as const]
+          return [session.id, { type: "idle" } as const]
+        }),
     ),
     session_diff: {},
   }))

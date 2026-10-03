@@ -51,7 +51,7 @@ import { createStore, produce, reconcile } from "solid-js/store"
 import type { SessionInbox } from "@opencode/schema/session-inbox"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 
-export type DataSessionStatus = "idle" | "running"
+export type DataSessionStatus = "idle" | "running" | "waiting"
 type OpenCodeEventMap = { [Type in OpenCodeEvent["type"]]: Extract<OpenCodeEvent, { type: Type }> }
 
 export type CreateDataInput = {
@@ -1005,6 +1005,9 @@ export function createData(config: CreateDataInput) {
         message.editAssistant(event.data.sessionID, event.data.assistantMessageID, (assistant) => {
           assistant.retry = { attempt: event.data.attempt, at: event.data.at, error: event.data.error }
         })
+        return
+      case "session.status":
+        if (event.data.status.type === "waiting") setSessionActive(event.data.sessionID, "waiting")
         return
       case "session.execution.started":
         setSessionActive(event.data.sessionID, "running")

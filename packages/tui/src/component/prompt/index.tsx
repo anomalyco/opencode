@@ -1912,6 +1912,15 @@ export function Prompt(props: PromptProps) {
                       />
                     </box>
                   </Match>
+                  <Match when={status() === "waiting"}>
+                    <box flexDirection="row" gap={1} flexGrow={1} justifyContent="flex-start">
+                      <box marginLeft={1}>
+                        <text fg={theme.text.muted} wrapMode="none" truncate>
+                          waiting for background work…
+                        </text>
+                      </box>
+                    </box>
+                  </Match>
                   <Match when={move.progress()}>
                     {(progress) => (
                       <box paddingLeft={3} height={1} minHeight={0} flexShrink={1}>

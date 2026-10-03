@@ -94,7 +94,7 @@ function session(input: {
   calls: string[]
   prompt?: (value: Parameters<ComposerSession["data"]["session"]["prompt"]>[0]) => Promise<void>
   handoff?: ComposerSession["handoff"]
-  statuses?: ("idle" | "running")[]
+  statuses?: ("idle" | "running" | "waiting")[]
   current?: ComposerSession["current"]
   admitted?: (messageID: string) => boolean
   shell?: () => Promise<unknown>
@@ -302,7 +302,7 @@ describe("Composer submission", () => {
     ]
     state.set(prompt)
     const attempts: string[] = []
-    const statuses: ("idle" | "running")[] = []
+    const statuses: ("idle" | "running" | "waiting")[] = []
     const first = Promise.withResolvers<void>()
     const second = Promise.withResolvers<void>()
     const target = session({

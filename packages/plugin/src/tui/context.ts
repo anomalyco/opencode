@@ -72,7 +72,7 @@ export interface Data {
     root(sessionID: string): string
     family(sessionID: string): string[]
     cost(sessionID: string): number
-    status(sessionID: string): "idle" | "running"
+    status(sessionID: string): "idle" | "running" | "waiting"
     readonly pending: {
       list(sessionID: string): SessionInboxInfo[]
       sync(sessionID: string): Promise<void>

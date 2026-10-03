@@ -45,7 +45,10 @@ export function useSessionModel() {
   })
   const status = createMemo(() => {
     const id = sessionID()
-    return id && data.session.status(id) === "running" ? { type: "busy" as const } : idle
+    const value = id ? data.session.status(id) : undefined
+    if (value === "running") return { type: "busy" as const }
+    if (value === "waiting") return { type: "waiting" as const }
+    return idle
   })
   const messages = createMemo(() => {
     const id = sessionID()

@@ -9,7 +9,7 @@ export function createSessionBackground(input: {
   sessionID: () => string | undefined
   messages: (id: string) => SessionMessageInfo[]
   sessions: () => SessionInfo[]
-  status: (id: string) => "idle" | "running"
+  status: (id: string) => "idle" | "running" | "waiting"
   shells: () => ShellInfo[]
 }) {
   const history = createMemo(() => {
