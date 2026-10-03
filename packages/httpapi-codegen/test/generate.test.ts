@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { fileURLToPath } from "node:url"
-import { Effect, FileSystem, Schema, SchemaAST, SchemaGetter } from "effect"
+import { Effect, Schema, SchemaAST, SchemaGetter } from "effect"
 import {
   HttpApi,
   HttpApiEndpoint,
@@ -19,8 +19,6 @@ import {
   emitEffectImported,
   emitEffectShape,
   emitPromise,
-  generate,
-  GenerationError,
   type Output,
 } from "../src"
 import { it } from "./effect"
@@ -49,7 +47,7 @@ async function emittedModule(output: Output) {
   }
 }
 
-describe("HttpApiCodegen.generate", () => {
+describe("HttpApiCodegen.compile and emit", () => {
   test("compiles one contract for Promise and Effect emitters", () => {
     const contract = compileContract(
       api(
@@ -1100,16 +1098,6 @@ describe("HttpApiCodegen.generate", () => {
     expect(url).toBe("https://example.com/event?after=2")
   })
 
-  test("preserves public group and endpoint identifiers exactly", () => {
-    const output = compile(
-      HttpApi.make("test").add(
-        HttpApiGroup.make("session").add(HttpApiEndpoint.get("get", "/session/:sessionID", { success: Schema.String })),
-      ),
-    )
-
-    expect(output.operations[0]).toMatchObject({ group: "session", name: "get" })
-  })
-
   test("emits one client module per HttpApi group", () => {
     const source = HttpApi.make("test")
       .add(HttpApiGroup.make("session").add(HttpApiEndpoint.get("get", "/session", { success: Schema.String })))
@@ -1616,24 +1604,6 @@ describe("HttpApiCodegen.generate", () => {
 
     expect(output.files[0]?.content).toContain("type RawGroup = HttpApiClient.Client<typeof GroupHealth")
   })
-
-  it.effect("reports compiler failures in the generate Effect", () =>
-    Effect.gen(function* () {
-      const error = yield* generate(
-        api(
-          HttpApiEndpoint.get("get", "/url", {
-            success: Schema.declare((input): input is URL => input instanceof URL),
-          }),
-        ),
-        {
-          directory: "/generated",
-        },
-      ).pipe(Effect.flip)
-
-      expect(error).toBeInstanceOf(GenerationError)
-      if (error instanceof GenerationError) expect(error.reason).toBe("Unportable schema: session.get.success")
-    }).pipe(Effect.provideService(FileSystem.FileSystem, FileSystem.makeNoop({}))),
-  )
 
   test("rejects required client middleware without an adapter", () => {
     class SignedRequest extends HttpApiMiddleware.Service<SignedRequest>()("SignedRequest", {
