@@ -2,6 +2,30 @@ import { describe, expect, test } from "bun:test"
 import { Patch } from "@opencode-ai/core/patch"
 
 describe("Patch", () => {
+  test.each([
+    ["", "added\n"],
+    ["\n", "\nadded\n"],
+    ["before", "before\nadded\n"],
+    ["before\n", "before\nadded\n"],
+    ["before\n\n", "before\n\nadded\n"],
+    ["before\n\n\n", "before\n\n\nadded\n"],
+  ])("appends pure additions after all content lines in %j", (original, expected) => {
+    expect(Patch.derive("update.txt", [{ oldLines: [], newLines: ["added"] }], original).content).toBe(expected)
+  })
+
+  test.each(["\n", "\n\n", "\n\n\n"])("preserves an unchanged trailing %j", (ending) => {
+    expect(Patch.derive("update.txt", [{ oldLines: ["old"], newLines: ["new"] }], `\uFEFFold${ending}`)).toEqual({
+      content: `new${ending}`,
+      bom: true,
+    })
+  })
+
+  test("can explicitly remove a trailing blank line", () => {
+    expect(
+      Patch.derive("update.txt", [{ oldLines: ["old", ""], newLines: ["new"], endOfFile: true }], "old\n\n").content,
+    ).toBe("new\n")
+  })
+
   test("parses add, update, and delete hunks", () => {
     expect(
       Patch.parse(
