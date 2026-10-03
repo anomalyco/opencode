@@ -32,5 +32,9 @@
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/anomalyco/opencode.git"
   }
 }
