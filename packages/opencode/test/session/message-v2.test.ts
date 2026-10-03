@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { APICallError } from "ai"
-import { MessageV2 } from "../../src/session/message-v2"
+import { MessageV2, MAX_MODEL_IMAGES } from "../../src/session/message-v2"
 import { ProviderTransform } from "@/provider/transform"
 import type { Provider } from "@/provider/provider"
 
@@ -409,6 +409,58 @@ describe("session.message-v2.toModelMessage", () => {
         ],
       },
     ])
+  })
+
+  test("caps images at MAX_MODEL_IMAGES, omitting oldest with placeholder", async () => {
+    const total = MAX_MODEL_IMAGES + 5
+    const userID = "m-user-cap"
+    const assistantID = "m-assistant-cap"
+    const attachments = Array.from({ length: total }, (_, i) => ({
+      ...basePart(assistantID, `file-cap-${i}`),
+      type: "file",
+      mime: "image/png",
+      filename: `shot-${i}.png`,
+      url: `data:image/png;base64,Zm9v${i}`,
+    }))
+    const input: SessionV1.WithParts[] = [
+      {
+        info: userInfo(userID),
+        parts: [
+          {
+            ...basePart(userID, "u1-cap"),
+            type: "text",
+            text: "check screenshots",
+          },
+        ] as SessionV1.Part[],
+      },
+      {
+        info: assistantInfo(assistantID, userID),
+        parts: [
+          {
+            ...basePart(assistantID, "a1-cap"),
+            type: "tool",
+            callID: "call-cap-1",
+            tool: "read",
+            state: {
+              status: "completed",
+              input: { filePath: "/tmp/shot.png" },
+              output: "screenshots read",
+              title: "Read",
+              metadata: {},
+              time: { start: 0, end: 1 },
+              attachments,
+            },
+          },
+        ] as SessionV1.Part[],
+      },
+    ]
+
+    const result = await MessageV2.toModelMessages(input, model)
+    const dump = JSON.stringify(result)
+    // Oldest 5 omitted as text, newest MAX kept as media
+    expect(dump).toInclude("[Attached image/png: shot-0.png - omitted")
+    const mediaCount = (dump.match(/"media"/g) ?? []).length
+    expect(mediaCount).toBe(MAX_MODEL_IMAGES)
   })
 
   test("preserves jpeg tool-result media for anthropic models", async () => {
@@ -1452,6 +1504,7 @@ describe("session.message-v2.fromError", () => {
       "Please reduce the length of the messages or completion",
       "400 status code (no body)",
       "413 status code (no body)",
+      "Error from provider (Console Go): Upstream request failed: [invalid_request_error] request contains 51 images, exceeding the maximum of 50 allowed per request",
     ]
 
     cases.forEach((message) => {

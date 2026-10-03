@@ -18,6 +18,16 @@ describe("provider error classification", () => {
     expect(messages.every(isContextOverflow)).toBe(true)
   })
 
+  test("classifies provider image count limit as context overflow", () => {
+    const messages = [
+      "Error from provider (Console Go): Upstream request failed: [invalid_request_error] request contains 51 images, exceeding the maximum of 50 allowed per request",
+      "request contains 60 images, exceeding the maximum of 50 allowed per request",
+      "Too many images in request",
+    ]
+
+    expect(messages.every(isContextOverflow)).toBe(true)
+  })
+
   test("does not classify rate limits as context overflow", () => {
     const messages = [
       "Throttling error: Too many tokens, please wait before trying again.",
