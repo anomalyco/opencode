@@ -22,10 +22,17 @@ function blobUrl(id: string, blob: Blob) {
 }
 
 async function blobID(blob: Blob) {
-  const id = Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())))
+  if (crypto.subtle) {
+    return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await blob.arrayBuffer())))
+      .map((byte) => byte.toString(16).padStart(2, "0"))
+      .join("")
+  }
+  // crypto.subtle is only available in secure contexts (HTTPS or localhost); fall back to a
+  // random id when the UI is served over plain HTTP, e.g. a LAN address.
+  const bytes = crypto.getRandomValues(new Uint8Array(32))
+  return Array.from(bytes)
     .map((byte) => byte.toString(16).padStart(2, "0"))
     .join("")
-  return id
 }
 
 export async function createBlobReference(blob: Blob): Promise<BlobReference> {

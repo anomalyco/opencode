@@ -123,6 +123,30 @@ const platform: Platform = {
   openExternal,
   restart,
   notify,
+  openAttachmentPickerDialog: async (opts, onFile) => {
+    const input = document.createElement("input")
+    input.type = "file"
+    input.multiple = opts?.multiple ?? false
+    if (opts?.accept?.length) input.accept = opts.accept.join(",")
+    input.style.display = "none"
+    document.body.appendChild(input)
+    const cleanup = () => input.remove()
+    return new Promise<void>((resolve) => {
+      input.addEventListener("change", async () => {
+        try {
+          for (const file of Array.from(input.files ?? [])) await onFile(file)
+        } finally {
+          cleanup()
+          resolve()
+        }
+      })
+      input.addEventListener("cancel", () => {
+        cleanup()
+        resolve()
+      })
+      input.click()
+    })
+  },
   getDefaultServer: async () => {
     const stored = readDefaultServerUrl()
     return stored ? ServerConnection.Key.make(stored) : null
