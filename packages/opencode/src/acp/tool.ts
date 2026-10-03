@@ -1,3 +1,4 @@
+import { statSync } from "fs"
 import { isAbsolute, resolve } from "path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
 
@@ -70,30 +71,32 @@ export function toToolKind(toolName: string): ToolKind {
   }
 }
 
-export function toLocations(toolName: string, input: ToolInput, cwd?: string): ToolCallLocation[] {
+export function toLocations(toolName: string, input: ToolInput): ToolCallLocation[] {
   const tool = toolName.toLocaleLowerCase()
 
   switch (tool) {
     case "bash":
-    case "shell": {
-      const workdir = shellWorkdir(input, cwd)
-      return workdir ? [{ path: workdir }] : []
-    }
+    case "shell":
+      // The shell working directory is a directory, and ACP clients (for example
+      // Zed) try to open a buffer for every reported location, which fails for
+      // directories. The working directory is already exposed via `rawInput.cwd`,
+      // so it is intentionally not reported as a file location.
+      return []
 
     case "read":
     case "edit":
     case "write":
-      return locationFrom(input.filePath ?? input.filepath)
+      return fileLocations(input.filePath ?? input.filepath)
 
     case "external_directory":
-      return locationFrom(input.filePath ?? input.filepath, input.parentDir, input.directories)
+      return fileLocations(input.filePath ?? input.filepath, input.parentDir, input.directories)
 
     case "grep":
     case "glob":
     case "context":
     case "context7_resolve_library_id":
     case "context7_get_library_docs":
-      return locationFrom(input.path)
+      return fileLocations(input.path)
 
     default:
       return []
@@ -132,7 +135,7 @@ export function pendingToolCall(input: {
     title: toolTitle(input.toolName, input.state.input, input.state.title),
     kind: toToolKind(input.toolName),
     status: "pending",
-    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    locations: toLocations(input.toolName, input.state.input),
     rawInput: rawInput(input.toolName, input.state.input, input.cwd),
   }
 }
@@ -161,7 +164,7 @@ export function runningToolUpdate(input: {
     status: "in_progress",
     kind: toToolKind(input.toolName),
     title: toolTitle(input.toolName, input.state.input, input.state.title),
-    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    locations: toLocations(input.toolName, input.state.input),
     rawInput: rawInput(input.toolName, input.state.input, input.cwd),
     ...(content ? { content } : {}),
   }
@@ -178,7 +181,7 @@ export function duplicateRunningToolUpdate(input: {
     status: "in_progress",
     kind: toToolKind(input.toolName),
     title: toolTitle(input.toolName, input.state.input, input.state.title),
-    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    locations: toLocations(input.toolName, input.state.input),
     rawInput: rawInput(input.toolName, input.state.input, input.cwd),
   }
 }
@@ -209,7 +212,7 @@ export function errorToolUpdate(input: {
     status: "failed",
     kind: toToolKind(input.toolName),
     title: toolTitle(input.toolName, input.state.input, undefined),
-    locations: toLocations(input.toolName, input.state.input, input.cwd),
+    locations: toLocations(input.toolName, input.state.input),
     rawInput: rawInput(input.toolName, input.state.input, input.cwd),
     content: [
       {
@@ -320,6 +323,23 @@ function locationFrom(...values: unknown[]): ToolCallLocation[] {
     ),
     (path) => ({ path }),
   )
+}
+
+// Tool-call locations are file hints for the client. Directories are filtered
+// out: clients (for example Zed) attempt to open a buffer for every reported
+// path and fail on directories, which can flood the connection and desync the
+// client. Unknown paths (such as a `write` target that does not exist yet) are
+// kept, since they are not known to be directories.
+function fileLocations(...values: unknown[]): ToolCallLocation[] {
+  return locationFrom(...values).filter((location) => !isDirectory(location.path))
+}
+
+function isDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
 }
 
 function diffContent(input: ToolInput): ToolCallContent[] {

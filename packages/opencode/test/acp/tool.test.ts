@@ -1,4 +1,6 @@
-import { resolve } from "path"
+import { join } from "path"
+import { mkdtempSync, rmSync, writeFileSync } from "fs"
+import { tmpdir } from "os"
 import { describe, expect, test } from "bun:test"
 import {
   completedToolContent,
@@ -40,14 +42,32 @@ describe("acp tool conversion", () => {
     expect(toLocations("external_directory", { directories: ["/tmp/outside"], patterns: ["/tmp/outside/*"] })).toEqual([
       { path: "/tmp/outside" },
     ])
-    expect(toLocations("bash", { cmd: "pwd" }, "/workspace")).toEqual([{ path: "/workspace" }])
-    // Relative workdir resolves against cwd via the platform path resolver (backslashes on Windows).
-    expect(toLocations("bash", { command: "pwd", workdir: "subdir" }, "/workspace")).toEqual([
-      { path: resolve("/workspace", "subdir") },
-    ])
-    expect(toLocations("bash", { command: "pwd", workdir: "/abs/dir" }, "/workspace")).toEqual([{ path: "/abs/dir" }])
+    // Shell working directories are directories, so they are not reported as
+    // locations; the working directory is exposed via rawInput.cwd instead.
+    expect(toLocations("bash", { cmd: "pwd" })).toEqual([])
+    expect(toLocations("bash", { command: "pwd", workdir: "subdir" })).toEqual([])
+    expect(toLocations("bash", { command: "pwd", workdir: "/abs/dir" })).toEqual([])
     expect(toLocations("bash", { command: "printf hello" })).toEqual([])
     expect(toLocations("read", { path: "/tmp/missing-file-path.ts" })).toEqual([])
+  })
+
+  test("omits directory paths from tool locations", () => {
+    const dir = mkdtempSync(join(tmpdir(), "opencode-acp-tool-"))
+    const file = join(dir, "file.ts")
+    writeFileSync(file, "content")
+
+    try {
+      // Existing files are kept...
+      expect(toLocations("read", { filePath: file })).toEqual([{ path: file }])
+      expect(toLocations("grep", { path: file })).toEqual([{ path: file }])
+      // ...directories are dropped, including search roots and shell workdirs.
+      expect(toLocations("grep", { path: dir })).toEqual([])
+      expect(toLocations("glob", { path: dir })).toEqual([])
+      expect(toLocations("external_directory", { directories: [dir] })).toEqual([])
+      expect(toLocations("bash", { command: "pwd" })).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 
   test("builds completed content with text, edit diffs, and image attachments", () => {
