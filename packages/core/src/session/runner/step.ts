@@ -11,11 +11,13 @@ import {
 } from "@opencode/ai"
 import type { Agent } from "@opencode/schema/agent"
 import { Cause, Clock, Data, Effect, Exit, Fiber, Option, Stream } from "effect"
+import { isReadonlyArrayNonEmpty } from "effect/Array"
 import { SessionError } from "@opencode/schema/session-error"
 import { Bus } from "../../bus.js"
 import { Permission } from "../../permission.js"
 import { Snapshot } from "../../snapshot.js"
 import { Tool } from "../../tool.js"
+import { normalizeContent } from "../../tool/runtime.js"
 import { ToolOutput } from "../../tool-output.js"
 import { QuestionTool } from "../../tool/plugin/question.js"
 import { StepFailedError } from "../error.js"
@@ -94,6 +96,26 @@ export const make = Effect.gen(function* () {
         messageID: input.assistantMessageID,
         call,
         progress: (update) => publisher.progress(call.id, update),
+        checkpoint: (update) => {
+          const checkpointObj: Tool.Checkpoint =
+            typeof update === "object" && update !== null && !Array.isArray(update)
+              ? (update as Tool.Checkpoint)
+              : { content: update }
+          const normalized =
+            checkpointObj.content !== undefined ? normalizeContent(checkpointObj.content) : undefined
+          const content = normalized && isReadonlyArrayNonEmpty(normalized) ? normalized : undefined
+          if (content === undefined) {
+            return publisher.checkpoint(call.id, { metadata: checkpointObj.metadata })
+          }
+          return toolOutput.truncate({ content, metadata: checkpointObj.metadata }).pipe(
+            Effect.flatMap((truncated) =>
+              publisher.checkpoint(call.id, {
+                content: truncated.content,
+                metadata: truncated.metadata,
+              }),
+            ),
+          )
+        },
       })
     }
 

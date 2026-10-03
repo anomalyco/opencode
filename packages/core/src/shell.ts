@@ -49,6 +49,7 @@ type Active = {
   done: Deferred.Deferred<Info, NotFoundError>
   timeoutFiber?: Fiber.Fiber<void>
   timeout?: (duration: number) => Effect.Effect<void>
+  kill?: () => Effect.Effect<void>
 }
 
 /**
@@ -74,6 +75,7 @@ export interface Interface {
   readonly result: (started: Shell.Info) => Effect.Effect<ShellResult.Result>
   // Replaces the running command's timeout from now; zero clears it.
   readonly timeout: (id: Shell.ID, duration: number) => Effect.Effect<Shell.Info, NotFoundError>
+  readonly kill: (id: Shell.ID) => Effect.Effect<Shell.Info, NotFoundError>
   readonly output: (id: Shell.ID, input?: Shell.OutputInput) => Effect.Effect<Shell.Output, NotFoundError>
   readonly remove: (id: Shell.ID) => Effect.Effect<void, NotFoundError>
 }
@@ -192,6 +194,14 @@ const layer = () =>
         const command = yield* require(id)
         if (command.info.status !== "running" || !command.timeout) return command.info
         yield* command.timeout(duration)
+        return command.info
+      })
+
+      const kill = Effect.fn("Shell.kill")(function* (id: Shell.ID) {
+        const command = yield* require(id)
+        if (command.info.status === "running" && command.kill) {
+          yield* command.kill()
+        }
         return command.info
       })
 
@@ -384,6 +394,7 @@ const layer = () =>
                   const timeoutFiber = command.timeoutFiber
                   command.timeout = undefined
                   command.timeoutFiber = undefined
+                  command.kill = undefined
                   if (timeoutFiber) yield* Fiber.interrupt(timeoutFiber)
                 })
 
@@ -402,6 +413,16 @@ const layer = () =>
                         ),
                       ),
                     ),
+                  )
+                })
+
+              command.kill = () =>
+                Effect.gen(function* () {
+                  if (command.info.status !== "running") return
+                  yield* finish(
+                    "killed",
+                    undefined,
+                    handle.kill({ forceKillAfter: Duration.seconds(3) }).pipe(Effect.catch(() => Effect.void)),
                   )
                 })
 
@@ -434,7 +455,7 @@ const layer = () =>
         return command.info
       })
 
-      return Service.of({ create, list, get, wait, result, timeout, output, remove })
+      return Service.of({ create, list, get, wait, result, timeout, kill, output, remove })
     }),
   )
 

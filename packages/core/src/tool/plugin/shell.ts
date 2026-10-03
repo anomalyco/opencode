@@ -231,7 +231,7 @@ export const Plugin = {
               }).pipe(
                 Effect.tap((output) => Deferred.succeed(settled, output)),
                 Effect.map((output) => resultMessages(output).join("\n\n")),
-                Effect.onInterrupt(() => shell.remove(info.id).pipe(Effect.ignore)),
+                Effect.onInterrupt(() => shell.kill(info.id).pipe(Effect.ignore)),
               )
               const job = yield* jobs.start({
                 // CodeMode children share a tool-call ID, but each shell must own its job.
@@ -254,19 +254,39 @@ export const Plugin = {
                 return backgroundResult(info.id, info.file)
               }
 
-              const result = yield* jobs
-                .block({ id: job.id, sessionID: context.sessionID })
-                .pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
-              if (result?.type === "backgrounded") {
-                yield* shell.timeout(info.id, 0)
-                yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
-                return backgroundResult(info.id, info.file)
-              }
-              if (result?.info.status === "error")
-                return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
-              if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
+              const checkpointInterrupted = Effect.gen(function* () {
+                yield* shell.kill(info.id).pipe(Effect.ignore)
+                const res = yield* shell.result(info).pipe(Effect.orElseSucceed(() => undefined))
+                if (res?.capture) {
+                  const output = ShellResult.output(res)
+                  const resWithID = { ...output, shellID: info.id }
+                  const tr = toolResult(resWithID)
+                  yield* context.checkpoint({
+                    content: tr.content,
+                    metadata: tr.metadata,
+                  })
+                }
+              })
 
-              return yield* Deferred.await(settled)
+              const runForeground = Effect.gen(function* () {
+                const result = yield* jobs
+                  .block({ id: job.id, sessionID: context.sessionID })
+                  .pipe(Effect.onInterrupt(() => jobs.cancel(job.id).pipe(Effect.ignore)))
+                if (result?.type === "backgrounded") {
+                  yield* shell.timeout(info.id, 0)
+                  yield* notifyWhenDone(context.sessionID, job.id, info.id, info.command, settled)
+                  return backgroundResult(info.id, info.file)
+                }
+                if (result?.info.status === "error")
+                  return yield* Effect.fail(new Error(result.info.error ?? "Command failed"))
+                if (result?.info.status === "cancelled") return yield* Effect.fail(new Error("Command cancelled"))
+
+                return yield* Deferred.await(settled)
+              }).pipe(
+                Effect.onInterrupt(() => checkpointInterrupted),
+              )
+
+              return yield* runForeground
             }).pipe(
               Effect.map(toolResult),
               Effect.mapError(

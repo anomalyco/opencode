@@ -1,6 +1,6 @@
 export * as Tool from "./tool.js"
 export { CallID, Content, Error, FileContent, TextContent } from "@opencode/schema/tool"
-export type { Context, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
+export type { Checkpoint, Context, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai"
 import { Tool } from "@opencode/schema/tool"
@@ -57,6 +57,7 @@ export interface Snapshot {
     readonly messageID: SessionMessage.ID
     readonly call: ToolCall
     readonly progress?: (update: Tool.Metadata) => Effect.Effect<void>
+    readonly checkpoint?: (checkpoint: Tool.Checkpoint | string | ReadonlyArray<Tool.Content>) => Effect.Effect<void>
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
@@ -267,6 +268,7 @@ const layer = Layer.effect(
                 messageID: input.messageID,
                 id: Tool.CallID.make(input.call.id),
                 progress: input.progress ?? (() => Effect.void),
+                checkpoint: input.checkpoint ?? (() => Effect.void),
               }
               const event = yield* beforeExecute(input.call.name, input.call.input, context)
               const requested = input.definitions?.get(event.tool)
