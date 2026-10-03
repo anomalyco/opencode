@@ -21,6 +21,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
 import { Snapshot } from "@opencode/core/snapshot"
 import { createLLMEventPublisher } from "@opencode/core/session/runner/publish-llm-event"
+import { SessionUsage } from "@opencode/core/session/usage"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { it, testEffect } from "./lib/effect"
 import { TestClock } from "effect/testing"
@@ -606,6 +607,7 @@ test("content-filter finish retains failure evidence until step closeout", async
           nonCachedInputTokens: 8,
           outputTokens: 3,
           reasoningTokens: 1,
+          cost: 1.25,
         },
       }),
     ),
@@ -619,13 +621,13 @@ test("content-filter finish retains failure evidence until step closeout", async
     providerState: {
       stopDetails: { type: "refusal", category: "safety", explanation: "Blocked" },
     },
-    tokens: { input: 8, output: 2, reasoning: 1 },
+    usage: { nonCachedInputTokens: 8, outputTokens: 3, reasoningTokens: 1, cost: 1.25 },
   })
   if (!settlement) throw new Error("Expected content-filter settlement")
   await Effect.runPromise(
     publisher.publishStepFailure({
       cost: Money.USD.make(1.25),
-      tokens: settlement.tokens,
+      tokens: SessionUsage.tokens(settlement.usage),
       snapshot: Snapshot.ID.make("tree-end"),
       files: [RelativePath.make("src/changed.ts")],
     }),

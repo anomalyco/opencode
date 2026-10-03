@@ -18,7 +18,9 @@ export const tokens = (usage: Usage | undefined): TokenUsage.Info => ({
   },
 })
 
-// TODO(#35765): Use Copilot's reported billed amount once billing has a dedicated typed runtime contract.
+// Catalog pricing is the fallback. Endpoints that report a billed amount carry it
+// on `Usage.cost` and bypass this (see `record`).
+// TODO(#35765): normalize GitHub Copilot's nano-AIU units into `Usage.cost`.
 export function calculateCost(costs: Model.Info["cost"], usage: TokenUsage.Info) {
   const context = usage.input + usage.cache.read + usage.cache.write
   const tier = costs
@@ -39,7 +41,18 @@ export type Recorded = { readonly tokens: TokenUsage.Info; readonly cost: Money.
 
 export const record = (usage: Usage | undefined, costs: Model.Info["cost"]): Recorded => {
   const normalized = tokens(usage)
-  return { tokens: normalized, cost: calculateCost(costs, normalized) }
+  const reported = usage?.cost
+  return {
+    tokens: normalized,
+    // A gateway that bills the request reports the actual USD cost, which local
+    // catalog rates cannot match: the endpoint that served it may differ from
+    // the one the catalog priced, and router models vary per request. Prefer it
+    // whenever it is usable; a reported zero is authoritative, not "missing".
+    cost:
+      reported !== undefined && Number.isFinite(reported) && reported >= 0
+        ? Money.USD.make(reported)
+        : calculateCost(costs, normalized),
+  }
 }
 
 export const add = (a: Recorded, b: Recorded): Recorded => ({
