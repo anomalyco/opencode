@@ -74,19 +74,6 @@ export const createThemeSource = (config: string): ThemeSource => ({
   },
 })
 
-export { discoverThemes } from "../theme/discovery"
-
-export {
-  DEFAULT_THEMES,
-  addTheme,
-  allThemes,
-  generateSyntax,
-  hasTheme,
-  selectedForeground,
-  upsertTheme,
-  type Theme,
-} from "../theme"
-
 const THEME_REFRESH_DELAYS = [250, 1000] as const
 
 type State = {
