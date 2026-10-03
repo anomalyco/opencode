@@ -22,7 +22,7 @@
         default = pkgs.mkShell {
           packages = with pkgs; [
             bun
-            nodejs_20
+            nodejs_22
             pkg-config
             openssl
             git
