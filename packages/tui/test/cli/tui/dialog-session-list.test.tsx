@@ -3,6 +3,7 @@ import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
 import { onMount } from "solid-js"
 import { DialogSessionList } from "../../../src/component/dialog-session-list"
+import { SESSION_TAB_GROUPS_EXPERIMENT_ID } from "../../../src/component/dialog-experiments"
 import { ConfigProvider } from "../../../src/config"
 import { ArgsProvider } from "../../../src/context/args"
 import { ClientProvider } from "../../../src/context/client"
@@ -122,6 +123,146 @@ test("scopes sessions to the active session location", async () => {
     const frame = await app.waitForFrame((value) => value.includes("Project B session"))
     expect(frame).not.toContain("Project A session")
     expect(requestedProjects.at(-1)).toBe("proj_b")
+  } finally {
+    app.renderer.destroy()
+    await storage.flush()
+    await temporary[Symbol.asyncDispose]()
+  }
+})
+
+function dialogListEntry(id: string, directory: string, updated: number, title: string) {
+  return {
+    id,
+    projectID: "proj",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated },
+    title,
+    location: { directory },
+  }
+}
+
+async function renderDialogList(
+  entries: ReturnType<typeof dialogListEntry>[],
+  experimental: Record<string, boolean> = {},
+) {
+  const events = createEventStream()
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/location") {
+      const directory = url.searchParams.get("location[directory]") ?? process.cwd()
+      return json({ directory, project: { id: "proj", directory, canonical: directory } })
+    }
+    if (url.pathname !== "/api/session") return undefined
+    const parentID = url.searchParams.get("parentID")
+    if (parentID && parentID !== "null") return json({ data: [], cursor: {} })
+    return json({ data: entries, cursor: {} })
+  }, events)
+  const temporary = await tmpdir()
+  let storage!: ReturnType<typeof useStorage>
+
+  function Probe() {
+    const data = useData()
+    const dialog = useDialog()
+    const route = useRoute()
+    storage = useStorage()
+    onMount(() => {
+      data.session.remember({
+        id: "ses_active",
+        projectID: "proj",
+        cost: 0,
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        time: { created: 1, updated: 3 },
+        title: "Active session",
+        location: { directory: "/tmp/active" },
+      })
+      route.navigate({ type: "session", sessionID: "ses_active" })
+      dialog.replace(() => <DialogSessionList />)
+    })
+    return null
+  }
+
+  const app = await testRender(
+    () => (
+      <TestTuiContexts paths={{ state: temporary.path }}>
+        <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
+          <StorageProvider>
+            <ArgsProvider>
+              <ConfigProvider config={createTuiResolvedConfig({ experimental })}>
+                <Keymap.Provider>
+                  <ToastProvider>
+                    <RouteProvider>
+                      <ClientProvider api={createApi(calls.fetch)}>
+                        <PermissionProvider>
+                          <DataProvider directory={process.cwd()}>
+                            <LocationProvider>
+                              <SessionTabsProvider>
+                                <ThemeProvider mode="dark" source={emptyThemeSource}>
+                                  <LocalProvider>
+                                    <DialogProvider>
+                                      <Probe />
+                                    </DialogProvider>
+                                  </LocalProvider>
+                                </ThemeProvider>
+                              </SessionTabsProvider>
+                            </LocationProvider>
+                          </DataProvider>
+                        </PermissionProvider>
+                      </ClientProvider>
+                    </RouteProvider>
+                  </ToastProvider>
+                </Keymap.Provider>
+              </ConfigProvider>
+            </ArgsProvider>
+          </StorageProvider>
+        </TuiAppProvider>
+      </TestTuiContexts>
+    ),
+    { width: 100, height: 30, kittyKeyboard: true },
+  )
+  app.renderer.start()
+  await app.waitForFrame(() => storage !== undefined)
+  return { app, storage, temporary }
+}
+
+test("groups sessions by folder when the experiment is on", async () => {
+  const { app, storage, temporary } = await renderDialogList(
+    [
+      dialogListEntry("s1", "/a/api", 2, "Alpha session"),
+      dialogListEntry("s2", "/b/api", 2, "Beta session"),
+      dialogListEntry("s3", "/c/api/", 2, "Gamma session"),
+      dialogListEntry("s4", "/c/api", 2, "Delta session"),
+    ],
+    { [SESSION_TAB_GROUPS_EXPERIMENT_ID]: true },
+  )
+
+  try {
+    const frame = await app.waitForFrame(
+      (value) => value.includes("/a/api") && value.includes("/b/api") && value.includes("/c/api"),
+    )
+    expect(frame).toContain("/a/api")
+    expect(frame).toContain("/b/api")
+    expect(frame).toContain("/c/api")
+    expect(frame).not.toContain("/c/api/")
+    expect(frame).not.toContain("Today")
+  } finally {
+    app.renderer.destroy()
+    await storage.flush()
+    await temporary[Symbol.asyncDispose]()
+  }
+})
+
+test("groups sessions by date when the experiment is off", async () => {
+  const oldDate = new Date(2).toDateString()
+  const { app, storage, temporary } = await renderDialogList([
+    dialogListEntry("s_today", "/a/api", Date.now(), "Alpha session"),
+    dialogListEntry("s_old", "/a/api", 2, "Beta session"),
+  ])
+
+  try {
+    const frame = await app.waitForFrame((value) => value.includes("Today") && value.includes(oldDate))
+    expect(frame).toContain("Today")
+    expect(frame).toContain(oldDate)
+    expect(frame).not.toContain("/a/api")
   } finally {
     app.renderer.destroy()
     await storage.flush()

@@ -16,13 +16,14 @@ import { useLocal } from "../context/local"
 import { createDebouncedSignal } from "../util/signal"
 import { useToast } from "../ui/toast"
 import { DialogSessionRename } from "./dialog-session-rename"
+import { SESSION_TAB_GROUPS_EXPERIMENT_ID } from "./dialog-experiments"
 import { Spinner } from "./spinner"
 import { errorMessage } from "../util/error"
 import { useSessionTabs } from "../context/session-tabs"
 import { useStorage } from "../context/storage"
 import { useConfig } from "../config"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
-import { projectName } from "../util/project"
+import { directoryKey, projectName } from "../util/project"
 import { useLocation } from "../context/location"
 
 export function DialogSessionList() {
@@ -36,6 +37,7 @@ export function DialogSessionList() {
   const config = useConfig().data
   const toast = useToast()
   const activeLocation = useLocation()
+  const grouped = () => config.experimental?.[SESSION_TAB_GROUPS_EXPERIMENT_ID] === true
   const [filter, setFilter] = createSignal("")
   const shortcuts = Keymap.useShortcuts()
   const [search, setSearch] = createDebouncedSignal("", 150)
@@ -183,6 +185,7 @@ export function DialogSessionList() {
     const remaining = sessions()
       .filter((session) => !session.parentID && !pinnedSet.has(session.id))
       .map((session) => {
+        if (grouped()) return option(session, directoryKey(session.location.directory))
         const date = new Date(session.time.updated).toDateString()
         return option(session, date === today ? "Today" : date)
       })

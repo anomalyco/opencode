@@ -3,6 +3,7 @@ import {
   adaptiveSessionTabLayout,
   closeSessionTab,
   cycleSessionTab,
+  groupSessionTabRows,
   moveSessionTab,
   moveSessionTabHistory,
   openSessionTab,
@@ -12,8 +13,10 @@ import {
   seedSessionTabMotion,
   sessionTabComplete,
   sessionTabDetail,
+  sessionTabDropTabIndex,
   sessionTabOverflowWidth,
   sessionTabNumberLabel,
+  sessionTabRowTabIndex,
 } from "../../src/context/session-tabs-model"
 
 describe("session tabs", () => {
@@ -329,5 +332,95 @@ describe("session tabs", () => {
     expect(crossed.start).toBeGreaterThan(0)
     expect(crossed.tabs.some((tab) => tab.sessionID === "7")).toBe(true)
     expect(crossed.widths.reduce((total, width) => total + width, 0)).toBe(crossed.total)
+  })
+})
+
+describe("grouped session tabs", () => {
+  test("groups tabs by folder with interleaved header rows", () => {
+    const tabs = [{ sessionID: "a" }, { sessionID: "b" }, { sessionID: "c" }]
+    const directoryOf = (sessionID: string) =>
+      sessionID === "b" ? "/repo/bar" : sessionID === "a" || sessionID === "c" ? "/repo/foo" : undefined
+    const rows = groupSessionTabRows(tabs, directoryOf)
+
+    expect(rows.filter((row) => row.kind === "header").map((row) => (row.kind === "header" ? row.key : ""))).toEqual([
+      "/repo/foo",
+      "/repo/bar",
+    ])
+    expect(rows).toEqual([
+      { kind: "header", key: "/repo/foo", label: "foo", collapsed: false, firstTabIndex: 0 },
+      { kind: "tab", key: "/repo/foo", tabIndex: 0 },
+      { kind: "tab", key: "/repo/foo", tabIndex: 2 },
+      { kind: "header", key: "/repo/bar", label: "bar", collapsed: false, firstTabIndex: 1 },
+      { kind: "tab", key: "/repo/bar", tabIndex: 1 },
+    ])
+  })
+
+  test("orders groups by first appearance, not alphabetically", () => {
+    const tabs = [{ sessionID: "b" }, { sessionID: "a" }]
+    const rows = groupSessionTabRows(tabs, (sessionID) => (sessionID === "b" ? "/zeta" : "/alpha"))
+
+    expect(rows.filter((row) => row.kind === "header").map((row) => (row.kind === "header" ? row.key : ""))).toEqual([
+      "/zeta",
+      "/alpha",
+    ])
+  })
+
+  test("merges trailing-slash variants into one group", () => {
+    const tabs = [{ sessionID: "a" }, { sessionID: "b" }]
+    const rows = groupSessionTabRows(tabs, (sessionID) => (sessionID === "a" ? "/repo/api/" : "/repo/api"))
+
+    expect(rows.filter((row) => row.kind === "header")).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ kind: "header", key: "/repo/api" })
+  })
+
+  test("keeps same-name folders in distinct groups", () => {
+    const tabs = [{ sessionID: "a" }, { sessionID: "b" }]
+    const rows = groupSessionTabRows(tabs, (sessionID) => (sessionID === "a" ? "/a/api" : "/b/api"))
+    const headers = rows.filter((row) => row.kind === "header")
+
+    expect(headers).toHaveLength(2)
+    expect(headers.map((row) => (row.kind === "header" ? row.key : ""))).toEqual(["/a/api", "/b/api"])
+  })
+
+  test("hides collapsed group tabs but keeps the header", () => {
+    const tabs = [{ sessionID: "a" }, { sessionID: "b" }, { sessionID: "c" }]
+    const directoryOf = (sessionID: string) => (sessionID === "b" ? "/repo/bar" : "/repo/foo")
+    const rows = groupSessionTabRows(tabs, directoryOf, { "/repo/foo": true })
+
+    expect(rows).toEqual([
+      { kind: "header", key: "/repo/foo", label: "foo", collapsed: true, firstTabIndex: 0 },
+      { kind: "header", key: "/repo/bar", label: "bar", collapsed: false, firstTabIndex: 1 },
+      { kind: "tab", key: "/repo/bar", tabIndex: 1 },
+    ])
+  })
+
+  test("maps display rows to tab indices, skipping headers", () => {
+    const tabs = [{ sessionID: "a" }, { sessionID: "b" }]
+    const rows = groupSessionTabRows(tabs, (sessionID) => (sessionID === "a" ? "/repo/foo" : "/repo/bar"))
+
+    expect(sessionTabRowTabIndex(rows, 0)).toBeUndefined()
+    expect(sessionTabRowTabIndex(rows, 1)).toBe(0)
+    expect(sessionTabRowTabIndex(rows, 2)).toBeUndefined()
+    expect(sessionTabRowTabIndex(rows, 3)).toBe(1)
+    expect(sessionTabRowTabIndex(rows, 99)).toBeUndefined()
+  })
+
+  test("maps a header drop to the first tab position of that group", () => {
+    const tabs = [{ sessionID: "a" }, { sessionID: "b" }, { sessionID: "c" }]
+    const directoryOf = (sessionID: string) => (sessionID === "b" ? "/repo/bar" : "/repo/foo")
+    const rows = groupSessionTabRows(tabs, directoryOf)
+
+    expect(sessionTabDropTabIndex(rows, 0)).toBe(0)
+    expect(sessionTabDropTabIndex(rows, 1)).toBe(0)
+    expect(sessionTabDropTabIndex(rows, 3)).toBe(1)
+    expect(sessionTabDropTabIndex(rows, 4)).toBe(1)
+  })
+
+  test("maps a collapsed header drop to its hidden first tab", () => {
+    const tabs = [{ sessionID: "a" }, { sessionID: "b" }]
+    const rows = groupSessionTabRows(tabs, () => "/repo/foo", { "/repo/foo": true })
+
+    expect(rows).toHaveLength(1)
+    expect(sessionTabDropTabIndex(rows, 0)).toBe(0)
   })
 })
