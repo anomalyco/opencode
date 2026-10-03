@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
-import type { TerminalColors } from "@opentui/core"
-import { DEFAULT_THEMES, addTheme, allThemes, hasTheme, resolveTheme, terminalMode } from "../src/theme"
+import { RGBA, type TerminalColors } from "@opentui/core"
+import { DEFAULT_THEMES, addTheme, allThemes, generateSystem, hasTheme, resolveTheme, terminalMode } from "../src/theme"
 import { discoverThemes } from "../src/context/theme"
 import { tmpdir } from "./fixture/fixture"
 
@@ -42,6 +42,43 @@ test("resolveTheme rejects circular color refs", () => {
   item.defs = { ...item.defs, one: "two", two: "one" }
   item.theme.primary = "one"
   expect(() => resolveTheme(item, "dark")).toThrow("Circular color reference")
+})
+
+test("resolveTheme transparency policy respects auto, on, and off", () => {
+  const base = resolveTheme(DEFAULT_THEMES.opencode, "dark", "auto")
+  const forced = resolveTheme(DEFAULT_THEMES.opencode, "dark", "on")
+
+  expect(base.background.a).toBe(1)
+  expect(forced.background.a).toBe(0)
+  expect(forced.background.r).toBe(base.background.r)
+  expect(forced.background.g).toBe(base.background.g)
+  expect(forced.background.b).toBe(base.background.b)
+  expect(forced.transparent).toBe(true)
+
+  const palette = Array.from({ length: 16 }, () => "#1a1b26")
+  palette[7] = "#c0caf5"
+
+  const system = generateSystem(terminalColors("#1a1b26", palette), "dark")
+  const automatic = resolveTheme(system, "dark", "auto")
+  const disabled = resolveTheme(system, "dark", "off")
+
+  expect(automatic.background.a).toBe(0)
+  expect(automatic.transparent).toBe(true)
+  expect(disabled.background.a).toBe(1)
+  expect(disabled.background.r).toBe(automatic.background.r)
+  expect(disabled.background.g).toBe(automatic.background.g)
+  expect(disabled.background.b).toBe(automatic.background.b)
+  expect(disabled.transparent).toBe(false)
+
+  const partial = structuredClone(DEFAULT_THEMES.opencode)
+  partial.theme.background = RGBA.fromValues(base.background.r, base.background.g, base.background.b, 0.5)
+  const automaticPartial = resolveTheme(partial, "dark", "auto")
+  const disabledPartial = resolveTheme(partial, "dark", "off")
+
+  expect(automaticPartial.background.a).toBeCloseTo(0.5)
+  expect(automaticPartial.transparent).toBe(true)
+  expect(disabledPartial.background.a).toBe(1)
+  expect(disabledPartial.transparent).toBe(false)
 })
 
 function terminalColors(defaultBackground: string | null, palette: Array<string | null> = []): TerminalColors {
