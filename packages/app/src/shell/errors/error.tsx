@@ -6,6 +6,7 @@ import { Component, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Updater } from "@opencode/gui-extensions/updater"
 import { usePlatform } from "@/runtime/platform/platform"
+import { formatProjectLocationError, projectLocationError } from "@/runtime/server/errors"
 import { useLanguage } from "@/runtime/i18n/language"
 import { createRemotes } from "@/runtime/extension/remote"
 import { Icon } from "@opencode/ui/icon"
@@ -226,6 +227,7 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const language = useLanguage()
   const formattedError = () => formatError(props.error, language.t)
   const status = () => errorStatus(props.error)
+  const projectLocation = () => projectLocationError(props.error)
   let recordedFatalError: Promise<void> | undefined
   const [store, setStore] = createStore({
     actionError: undefined as string | undefined,
@@ -301,9 +303,11 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
             {language.t(status() ? "error.page.title.status" : "error.page.title")}
           </h1>
           <p class="text-sm text-text-weak">
-            {status()
-              ? language.t("error.page.description.status", { status: status()! })
-              : language.t(errorDescriptionKey(props.error))}
+            {projectLocation()
+              ? formatProjectLocationError(projectLocation()!, language.t)
+              : status()
+                ? language.t("error.page.description.status", { status: status()! })
+                : language.t(errorDescriptionKey(props.error))}
           </p>
         </div>
         <TextField

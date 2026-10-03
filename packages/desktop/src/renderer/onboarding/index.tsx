@@ -1,4 +1,16 @@
-import { ServerConnection, useCurrentRoute, useGlobal, useServers, useTabs } from "@opencode/app/desktop"
+import {
+  formatProjectLocationError,
+  formatServerError,
+  projectLocationError,
+  ServerConnection,
+  useCurrentRoute,
+  useGlobal,
+  useLanguage,
+  usePlatform,
+  useServers,
+  useTabs,
+} from "@opencode/app/desktop"
+import { showToast } from "@opencode/ui/toast"
 import { createResource } from "solid-js"
 import type { ElectronAPI } from "../api-types"
 
@@ -13,6 +25,8 @@ export function DesktopFirstLaunchOnboarding(props: {
   const global = useGlobal()
   const tabs = useTabs()
   const route = useCurrentRoute()
+  const language = useLanguage()
+  const macos = usePlatform().os === "macos"
 
   const [completed] = createResource(async () => {
     await runFirstLaunchOnboarding()
@@ -40,18 +54,48 @@ export function DesktopFirstLaunchOnboarding(props: {
       })
 
       const directory = await props.api.finishFirstLaunchOnboarding(shouldTrigger)
+      if (directory && typeof directory !== "string") {
+        showToast({
+          variant: "error",
+          persistent: true,
+          title: language.t("toast.project.defaultUnavailable.title"),
+          description: formatProjectLocationError(
+            { type: "denied", directory: directory.permissionDenied },
+            language.t,
+            macos,
+          ),
+        })
+        return
+      }
       if (!shouldTrigger || !directory) return
 
       console.info("[desktop-onboarding] starting first launch draft", { directory })
-      const projects = server.projects.forServer(props.serverKey)
-      projects.open(directory)
-      projects.touch(directory)
       const connection = server.list.find((connection) => ServerConnection.key(connection) === props.serverKey)
       if (connection) {
-        const data = global.ensureServerCtx(connection).data
+        const context = global.ensureServerCtx(connection)
+        const failure = await context.sdk.api.location.get({ location: { directory } }).then(
+          () => undefined,
+          (error: unknown) => ({ error }),
+        )
+        if (failure) {
+          const unavailable = projectLocationError(failure.error)
+          showToast({
+            variant: "error",
+            persistent: true,
+            title: language.t("toast.project.defaultUnavailable.title"),
+            description: unavailable
+              ? formatProjectLocationError(unavailable, language.t, macos)
+              : formatServerError(failure.error, language.t, language.t("error.project.unavailable", { directory })),
+          })
+          return
+        }
+        const data = context.data
         // Load the initial provider/model state before the draft transition exposes the composer.
         await Promise.all([data.location.provider.sync({ directory }), data.location.model.sync({ directory })])
       }
+      const projects = server.projects.forServer(props.serverKey)
+      projects.open(directory)
+      projects.touch(directory)
       tabs.select(await tabs.newDraft({ server: props.serverKey, directory }))
     } finally {
       props.onReady()

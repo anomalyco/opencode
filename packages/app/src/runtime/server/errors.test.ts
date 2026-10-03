@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import type { FileNotFoundError, SessionNotFoundError } from "@opencode/client/promise"
+import type { FileNotFoundError, LocationNotFoundError, SessionNotFoundError } from "@opencode/client/promise"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./errors"
-import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./errors"
+import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError, projectLocationError } from "./errors"
 
 function fill(text: string, vars?: Record<string, string | number>) {
   if (!vars) return text
@@ -54,6 +54,20 @@ describe("parseReadableConfigInvalidError", () => {
 })
 
 describe("formatServerError", () => {
+  test("recognizes upstream location errors without treating other failures as missing folders", () => {
+    const body = {
+      _tag: "LocationNotFoundError",
+      location: { directory: "C:\\Users\\Test User\\Projects\\moved-project" },
+      message: "Location not found",
+    } satisfies LocationNotFoundError
+    for (const error of [body, new Error("Request failed", { cause: { body, status: 404 } })]) {
+      expect(projectLocationError(error)).toEqual({ type: "missing", directory: body.location.directory })
+      expect(formatServerError(error)).toContain(`${body.location.directory} was moved`)
+    }
+    expect(projectLocationError({ _tag: "FileNotFoundError", path: "file.txt", message: "File not found" })).toBeUndefined()
+    expect(projectLocationError(new Error("HTTP 500"))).toBeUndefined()
+  })
+
   test.each([
     {
       name: "trimmed config message without issues",
