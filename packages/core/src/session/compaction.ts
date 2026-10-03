@@ -92,16 +92,17 @@ export const serializeToolContent = (content: SessionMessage.ToolStateCompleted[
     )
     .join("\n")
 
-const serialize = (message: SessionMessage.Message) => {
+export const serialize = (message: SessionMessage.Message) => {
   if (message.type === "user") {
     const files = message.files?.map((file) => `[Attached ${file.mime}: ${file.name ?? file.uri}]`) ?? []
+    if (message.text.trim().length === 0) return files.join("\n")
     return [`[User]: ${message.text}`, ...files].join("\n")
   }
   if (message.type === "assistant") {
     return message.content
       .flatMap((part) => {
-        if (part.type === "text") return [`[Assistant]: ${part.text}`]
-        if (part.type === "reasoning") return part.text ? [`[Assistant reasoning]: ${part.text}`] : []
+        if (part.type === "text") return part.text.trim() ? [`[Assistant]: ${part.text}`] : []
+        if (part.type === "reasoning") return part.text.trim() ? [`[Assistant reasoning]: ${part.text}`] : []
         const input = typeof part.state.input === "string" ? part.state.input : JSON.stringify(part.state.input)
         if (part.state.status === "completed")
           return [
@@ -114,8 +115,8 @@ const serialize = (message: SessionMessage.Message) => {
       })
       .join("\n")
   }
-  if (message.type === "system") return `[System update]: ${message.text}`
-  if (message.type === "synthetic") return `[Synthetic context]: ${message.text}`
+  if (message.type === "system") return message.text.trim() ? `[System update]: ${message.text}` : ""
+  if (message.type === "synthetic") return message.text.trim() ? `[Synthetic context]: ${message.text}` : ""
   if (message.type === "shell") return `[Shell]: ${message.command}\n${truncate(message.output)}`
   return ""
 }

@@ -232,7 +232,7 @@ Recent work
       model,
     )
 
-    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"])
+    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool", "tool", "tool"])
     expect(messages[0]?.content).toEqual([
       { type: "text", text: "Checking" },
       { type: "reasoning", text: "Think", providerMetadata: { anthropic: { signature: "sig_1" } } },
@@ -281,6 +281,36 @@ Recent work
       },
     ])
     expect(messages[1]?.content).toEqual([
+      {
+        type: "tool-result",
+        id: "pending",
+        name: "read",
+        result: {
+          type: "error",
+          value: {
+            error: { type: "unknown", message: "Tool execution was interrupted" },
+            content: [],
+            structured: {},
+          },
+        },
+      },
+    ])
+    expect(messages[2]?.content).toEqual([
+      {
+        type: "tool-result",
+        id: "running",
+        name: "read",
+        result: {
+          type: "error",
+          value: {
+            error: { type: "unknown", message: "Tool execution was interrupted" },
+            content: [],
+            structured: {},
+          },
+        },
+      },
+    ])
+    expect(messages[3]?.content).toEqual([
       {
         type: "tool-result",
         id: "completed",
@@ -495,6 +525,88 @@ Recent work
         cache: undefined,
         metadata: undefined,
         providerMetadata: undefined,
+      },
+    ])
+  })
+
+  test("omits blank error assistant turns that would poison provider requests", () => {
+    const assistant = (value: string, content: SessionMessage.Assistant["content"]) =>
+      SessionMessage.Assistant.make({
+        id: id(value),
+        type: "assistant",
+        agent: "build",
+        model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+        content,
+        finish: "error",
+        error: { type: "unknown", message: "HTTP 400" },
+        time: { created, completed: created },
+      })
+    const messages = toLLMMessages(
+      [
+        SessionMessage.User.make({
+          id: id("user-1"),
+          type: "user",
+          text: "hello",
+          time: { created },
+        }),
+        assistant("blank-text", [SessionMessage.AssistantText.make({ type: "text", id: "blank", text: "   \n  " })]),
+        assistant("blank-reasoning", [
+          SessionMessage.AssistantReasoning.make({ type: "reasoning", id: "blank-reasoning", text: "  " }),
+        ]),
+        assistant("empty", []),
+      ],
+      model,
+    )
+
+    expect(messages.map((message) => message.id)).toEqual([id("user-1")])
+    for (const message of messages) {
+      if (message.role !== "assistant") continue
+      for (const part of message.content) {
+        if (part.type === "text") expect(part.text.trim().length).toBeGreaterThan(0)
+        if (part.type === "reasoning") expect(part.text.trim().length).toBeGreaterThan(0)
+      }
+    }
+  })
+
+  test("settles interrupted tools instead of emitting dangling tool-calls", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-interrupted"),
+          type: "assistant",
+          agent: "build",
+          model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+          content: [
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "interrupted",
+              name: "read",
+              state: SessionMessage.ToolStatePending.make({ status: "pending", input: '{"path":"README.md"}' }),
+              time: { created },
+            }),
+          ],
+          finish: "error",
+          error: { type: "unknown", message: "Provider turn interrupted" },
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages.map((message) => message.role)).toEqual(["assistant", "tool"])
+    expect(messages[1]?.content).toEqual([
+      {
+        type: "tool-result",
+        id: "interrupted",
+        name: "read",
+        result: {
+          type: "error",
+          value: {
+            error: { type: "unknown", message: "Tool execution was interrupted" },
+            content: [],
+            structured: {},
+          },
+        },
       },
     ])
   })

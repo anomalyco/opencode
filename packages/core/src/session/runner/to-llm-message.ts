@@ -65,26 +65,54 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
       providerMetadata,
     })
   }
+  // Interrupted pending/running calls never settled. Synthesize a terminal
+  // error result so history never contains a dangling tool-call without its
+  // tool-result, which providers reject with HTTP 400.
+  if (tool.state.status === "pending" || tool.state.status === "running") {
+    return ToolResultPart.make({
+      id: tool.id,
+      name: tool.name,
+      result: {
+        error: { type: "unknown", message: "Tool execution was interrupted" },
+        content: [],
+        structured: {},
+      },
+      resultType: "error",
+      providerExecuted: tool.provider?.executed,
+      providerMetadata,
+    })
+  }
 }
+
+const isBlank = (value: string) => value.trim().length === 0
 
 const assistant = (message: SessionMessage.Assistant, model: Model) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
   const content = message.content.flatMap((item): ContentPart[] => {
-    if (item.type === "text") return [{ type: "text", text: item.text }]
-    if (item.type === "reasoning")
-      return sameModel
-        ? [
-            {
-              type: "reasoning",
-              text: item.text,
-              providerMetadata: reuseProviderMetadata ? item.providerMetadata : undefined,
-            },
-          ]
-        : item.text.length > 0
-          ? [{ type: "text", text: item.text }]
-          : []
+    if (item.type === "text") {
+      if (isBlank(item.text)) return []
+      return [{ type: "text", text: item.text }]
+    }
+    if (item.type === "reasoning") {
+      if (sameModel) {
+        const hasMetadata =
+          reuseProviderMetadata &&
+          item.providerMetadata !== undefined &&
+          Object.keys(item.providerMetadata).length > 0
+        if (isBlank(item.text) && !hasMetadata) return []
+        return [
+          {
+            type: "reasoning",
+            text: item.text,
+            providerMetadata: reuseProviderMetadata ? item.providerMetadata : undefined,
+          },
+        ]
+      }
+      if (isBlank(item.text)) return []
+      return [{ type: "text", text: item.text }]
+    }
     const call = toolCall(item, reuseProviderMetadata ? item.provider?.metadata : undefined)
     if (item.provider?.executed !== true) return [call]
     const result = toolResult(
@@ -94,9 +122,11 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
     return result ? [call, result] : [call]
   })
   const meaningful = content.filter((part) => {
-    if (part.type === "text") return part.text !== ""
+    if (part.type === "text") return !isBlank(part.text)
     if (part.type !== "reasoning") return true
-    return part.text !== "" || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
+    return (
+      !isBlank(part.text) || (part.providerMetadata !== undefined && Object.keys(part.providerMetadata).length > 0)
+    )
   })
   const results = message.content
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
