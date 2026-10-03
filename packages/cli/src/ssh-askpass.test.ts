@@ -27,7 +27,7 @@ test("the executable askpass branch returns only the response, without CLI outpu
     expect(await new Response(child.stdout).text()).toBe('passphrase"with spaces\n')
     expect(await child.exited).toBe(0)
     expect(requests.map((request) => JSON.parse(request))).toEqual([
-      { token: "fixture", text: "Enter passphrase:", confirm: true },
+      { token: "fixture", text: "Enter passphrase:", pid: process.pid, confirm: true },
     ])
     expect(await new Response(child.stderr).text()).toBe("")
   } finally {

@@ -99,6 +99,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
     const authentication = yield* Deferred.make<void>()
     const askpass = yield* createAskpass({
       binary: helper,
+      reusePassword: process.platform === "win32",
       prompt: Effect.fnUntraced(function* (prompt) {
         if (connection.owner === undefined) {
           paused.add(config.id)
@@ -173,6 +174,7 @@ export const createSshController = Effect.fn("Ssh.controller")(function* (input:
         ),
         Effect.raceFirst(closed),
       )
+      yield* askpass.forget
       const saved = new Map(configs).set(config.id, config)
       yield* input.save([...saved.values()])
       configs.set(config.id, config)
