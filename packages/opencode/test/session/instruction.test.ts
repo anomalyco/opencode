@@ -248,6 +248,54 @@ describe("Instruction.system", () => {
   )
 })
 
+describe("Instruction.custom", () => {
+  const customLayer = (customInstructions?: string) =>
+    AppNodeBuilder.build(Instruction.node, [
+      [
+        Config.node,
+        Layer.succeed(
+          Config.Service,
+          TestConfig.make({
+            get: () => Effect.succeed(customInstructions === undefined ? {} : { customInstructions }),
+          }),
+        ),
+      ],
+      [Global.node, Global.layerWith({ home: "/tmp", config: "/tmp" })],
+      [RuntimeFlags.node, RuntimeFlags.layer({})],
+    ])
+  const runCustom = (customInstructions?: string) =>
+    Effect.gen(function* () {
+      const svc = yield* Instruction.Service
+      return yield* svc.custom()
+    }).pipe(Effect.provide(customLayer(customInstructions)))
+
+  it.live("returns a formatted block when customInstructions is set", () =>
+    Effect.gen(function* () {
+      const result = yield* runCustom("Use tabs for indentation.")
+      expect(result).toBe("<custom_instructions>\nUse tabs for indentation.\n</custom_instructions>")
+    }),
+  )
+
+  it.live("returns undefined when customInstructions is missing", () =>
+    Effect.gen(function* () {
+      expect(yield* runCustom(undefined)).toBeUndefined()
+    }),
+  )
+
+  it.live("returns undefined when customInstructions is blank", () =>
+    Effect.gen(function* () {
+      expect(yield* runCustom("   \n  ")).toBeUndefined()
+    }),
+  )
+
+  it.live("trims surrounding whitespace", () =>
+    Effect.gen(function* () {
+      const result = yield* runCustom("  padded rules  ")
+      expect(result).toBe("<custom_instructions>\npadded rules\n</custom_instructions>")
+    }),
+  )
+})
+
 describe("Instruction.systemPaths global config", () => {
   it.live("uses Global.Service config AGENTS.md", () =>
     Effect.gen(function* () {

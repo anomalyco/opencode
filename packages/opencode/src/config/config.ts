@@ -48,7 +48,16 @@ function mergeConfigConcatArrays(target: Info, source: Info): Info {
   if (target.instructions && source.instructions) {
     merged.instructions = Array.from(new Set([...target.instructions, ...source.instructions]))
   }
+  const customInstructions = mergeCustomInstructions(target.customInstructions, source.customInstructions)
+  if (customInstructions !== undefined) merged.customInstructions = customInstructions
+  if (customInstructions === undefined) delete merged.customInstructions
   return merged
+}
+
+function mergeCustomInstructions(target?: string, source?: string) {
+  const parts = [target, source].map((part) => part?.trim()).filter((part): part is string => Boolean(part))
+  if (parts.length === 0) return undefined
+  return parts.join("\n\n")
 }
 
 function normalizeLoadedConfig(data: unknown) {

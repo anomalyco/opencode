@@ -4,6 +4,7 @@ import fs from "fs/promises"
 import path from "path"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Config } from "@opencode-ai/core/config"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Global } from "@opencode-ai/core/global"
 import { InstructionContext } from "@opencode-ai/core/instruction-context"
@@ -319,5 +320,129 @@ describe("InstructionContext", () => {
 
       expect(scanned).toBe(false)
     }),
+  )
+
+  it.live("loads custom instructions from config entries in global-first order", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const directory = path.join(tmp.path, "project")
+          yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+          const config = Config.Service.of({
+            entries: () =>
+              Effect.succeed([
+                new Config.Document({
+                  type: "document",
+                  info: new Config.Info({ customInstructions: "global rules" }),
+                }),
+                new Config.Document({
+                  type: "document",
+                  info: new Config.Info({ customInstructions: "project rules" }),
+                }),
+              ]),
+          })
+          const load = SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
+                ),
+              }),
+            ),
+            Effect.provideService(Config.Service, config),
+          )
+          const initialized = yield* SystemContext.initialize(yield* load)
+          expect(initialized.baseline).toBe("<custom_instructions>\nglobal rules\n\nproject rules\n</custom_instructions>")
+        }),
+      ),
+    ),
+  )
+
+  it.live("places custom instructions before AGENTS.md content", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          const agentsFile = path.join(project, "AGENTS.md")
+          yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
+          yield* Effect.promise(() => fs.writeFile(agentsFile, "project file"))
+          const config = Config.Service.of({
+            entries: () =>
+              Effect.succeed([
+                new Config.Document({
+                  type: "document",
+                  info: new Config.Info({ customInstructions: "custom rules" }),
+                }),
+              ]),
+          })
+          const load = SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location(
+                      { directory: AbsolutePath.make(project) },
+                      { projectDirectory: AbsolutePath.make(project) },
+                    ),
+                  ),
+                ),
+              }),
+            ),
+            Effect.provideService(Config.Service, config),
+          )
+          const baseline = (yield* SystemContext.initialize(yield* load)).baseline
+          expect(baseline).toContain("<custom_instructions>\ncustom rules\n</custom_instructions>")
+          expect(baseline).toContain(`Instructions from: ${agentsFile}\nproject file`)
+          expect(baseline.indexOf("<custom_instructions>")).toBeLessThan(baseline.indexOf("Instructions from:"))
+        }),
+      ),
+    ),
+  )
+
+  it.live("omits the custom block when custom instructions are blank", () =>
+    Effect.acquireRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const directory = path.join(tmp.path, "project")
+          yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+          const config = Config.Service.of({
+            entries: () =>
+              Effect.succeed([
+                new Config.Document({ type: "document", info: new Config.Info({ customInstructions: "   " }) }),
+              ]),
+          })
+          const load = SystemContextRegistry.Service.pipe(
+            Effect.flatMap((service) => service.load()),
+            Effect.provide(
+              instructionLayer({
+                config: path.join(tmp.path, "global"),
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
+                ),
+              }),
+            ),
+            Effect.provideService(Config.Service, config),
+          )
+          const initialized = yield* SystemContext.initialize(yield* load)
+          expect(initialized.baseline).not.toContain("<custom_instructions>")
+        }),
+      ),
+    ),
   )
 })

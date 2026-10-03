@@ -96,6 +96,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   instructions: Schema.String.pipe(Schema.Array, Schema.optional).annotate({
     description: "Additional paths or URLs supplying ambient instructions",
   }),
+  customInstructions: Schema.String.pipe(Schema.optional).annotate({
+    description: "Free-form custom instructions included in the system prompt",
+  }),
   references: ConfigReference.Info.pipe(Schema.optional).annotate({
     description: "Named local directories or Git repositories available as external context",
   }),
