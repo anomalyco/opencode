@@ -130,14 +130,7 @@ function makeRoutes<AuthError, AuthServices>(
     ),
     InstructionDiscovery.node.replace(InstructionDiscovery.configured({ project: options.config?.project })),
     ShellSelect.node.replace(ShellSelect.configured({ gitbash: options.windows?.gitbash })),
-    Mcp.node.replace(
-      Mcp.configured({
-        clientInfo: {
-          name: options.app?.name ?? "opencode",
-          version: options.app?.version ?? "unknown",
-        },
-      }),
-    ),
+    Mcp.node.replace(Mcp.configured({ clientInfo: mcpClientInfo(options.app) })),
   ]
   const build = (overrides: LayerNode.Replacements) => {
     const replacements: LayerNode.Replacements = [
@@ -188,4 +181,17 @@ function makeRoutes<AuthError, AuthServices>(
       return Layer.merge(api, V1Migration.layer.pipe(Layer.provide(services)))
     }),
   )
+}
+
+/**
+ * MCP servers identify the client by `clientInfo.name`. Always report "opencode" so
+ * servers can recognize it regardless of artifact (cli, desktop, acp, sdk). `app.name`
+ * carries that artifact for telemetry and must not leak into the MCP handshake.
+ * `OPENCODE_CLIENT` remains an explicit override for anyone who needs a different name.
+ */
+export function mcpClientInfo(app: ServerOptions["app"]) {
+  return {
+    name: process.env.OPENCODE_CLIENT ?? "opencode",
+    version: app?.version ?? "unknown",
+  }
 }
