@@ -11,7 +11,7 @@ import { RetainedImage } from "./retained-image"
 import { action, parseReleaseVersion, type Policy } from "./updater-action"
 import { errorMessage } from "../util/error"
 
-export const methods = ["curl", "npm", "pnpm", "bun", "yarn", "vp", "brew"] as const
+export const methods = ["curl", "npm", "pnpm", "bun", "yarn", "vp", "brew", "scoop"] as const
 
 export type Method = (typeof methods)[number]
 export type RunResult = { readonly type: "available" | "installed"; readonly version: string }
@@ -53,6 +53,7 @@ const installNames: Record<Method, string> = {
   yarn: "Yarn",
   vp: "Vite+",
   brew: "Homebrew",
+  scoop: "Scoop",
 }
 
 function conciseDetail(input: string) {
@@ -146,6 +147,12 @@ const make = Effect.gen(function* () {
   const installedFormula = ["opencode", "opencode-beta", "opencode-v2"].find((name) =>
     executable.includes(`${path.sep}Cellar${path.sep}${name}${path.sep}`),
   )
+  const scoopApp = RetainedImage.scoopApp(executable)
+  const installedScoop = scoopApp
+    ? (yield* fs
+        .realPath(path.join(scoopApp, "current", "opencode.exe"))
+        .pipe(Effect.orElseSucceed(() => undefined)))?.toLowerCase() === executable.toLowerCase()
+    : false
 
   const readPolicy = Effect.fnUntraced(function* () {
     const values = yield* Effect.forEach(["config.json", "opencode.json", "opencode.jsonc"], (name) =>
@@ -183,6 +190,7 @@ const make = Effect.gen(function* () {
   const method = Effect.fnUntraced(function* () {
     if (path.resolve(process.execPath) === curlBinary) return "curl"
     if (installedFormula) return "brew"
+    if (installedScoop) return "scoop"
     if (!installedPackage) return
 
     const checks: ReadonlyArray<{ method: Method; command: string[] }> = [
@@ -211,7 +219,24 @@ const make = Effect.gen(function* () {
   })
 
   const removal = (method: Method) => {
-    if (method === "curl" || method === "brew" || !installedPackage) return undefined
+    if (method === "curl" || method === "brew") return undefined
+    if (method === "scoop") {
+      if (!installedScoop) return undefined
+      const command = ["scoop", "uninstall", "opencode2"]
+      return {
+        command,
+        run: retaining(
+          method,
+          exec(command, "5 minutes").pipe(
+            Effect.flatMap((result) =>
+              result.code === 0 ? Effect.void : Effect.fail(new Error(resultDetail(result))),
+            ),
+          ),
+          global.tmp,
+        ),
+      }
+    }
+    if (!installedPackage) return undefined
     const commands = {
       npm: ["npm", "uninstall", "--global", installedPackage],
       pnpm: ["pnpm", "remove", "--global", installedPackage],
@@ -234,14 +259,17 @@ const make = Effect.gen(function* () {
 
   const release = Effect.fnUntraced(function* (method?: Method) {
     const distribution = method === "brew" ? "homebrew" : "npm"
+    const scoop = method === "scoop"
     // Homebrew Core builds its formula on its own schedule, so the tap release does not describe it.
     const core = method === "brew" && installedFormula === "opencode"
     const response = yield* Effect.tryPromise({
       try: (signal) =>
         fetch(
-          core
-            ? "https://formulae.brew.sh/api/formula/opencode.json"
-            : `https://opencode.ai/update/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/${distribution}?current=${encodeURIComponent(OPENCODE_VERSION)}`,
+          scoop
+            ? "https://raw.githubusercontent.com/ScoopInstaller/Versions/master/bucket/opencode2.json"
+            : core
+              ? "https://formulae.brew.sh/api/formula/opencode.json"
+              : `https://opencode.ai/update/api/${encodeURIComponent(channel)}/${encodeURIComponent(OPENCODE_ARTIFACT)}/${distribution}?current=${encodeURIComponent(OPENCODE_VERSION)}`,
           {
             signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]),
           },
@@ -278,7 +306,7 @@ const make = Effect.gen(function* () {
           ),
       })
     const version = core ? data.versions?.stable : data.version
-    const packageName = core ? "opencode" : data.metadata?.package
+    const packageName = scoop ? "opencode2" : core ? "opencode" : data.metadata?.package
     if (!version || !packageName)
       return yield* Effect.fail(
         new UpgradeError({
@@ -307,7 +335,12 @@ const make = Effect.gen(function* () {
   const retaining = <A, E, R>(method: Method, effect: Effect.Effect<A, E, R>, directory = global.cache) => {
     if (process.platform !== "win32" || method === "brew") return effect
     // Only the installed binary is at stake; source checkouts run inside bun or node.
-    const owned = method === "curl" ? path.resolve(process.execPath) === curlBinary : installedPackage !== undefined
+    const owned =
+      method === "curl"
+        ? path.resolve(process.execPath) === curlBinary
+        : method === "scoop"
+          ? installedScoop
+          : installedPackage !== undefined
     if (!owned) return effect
     return Effect.scoped(RetainedImage.retain(directory, "upgrade").pipe(Effect.andThen(effect))).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
@@ -351,13 +384,17 @@ const make = Effect.gen(function* () {
   const upgrade = Effect.fnUntraced(function* (method: Method, input: string) {
     if (!parseReleaseVersion(input)) return yield* Effect.fail(new Error(`Invalid version: ${input}`))
     const version = input.trim().replace(/^v/, "")
-    const packageName =
-      method === "brew" && installedFormula === "opencode" ? "opencode" : (yield* release(method)).package
+    if (method === "scoop" && (!installedScoop || !scoopApp))
+      return yield* Effect.fail(new Error("Scoop opencode2 installation not found"))
+    const published = method === "brew" && installedFormula === "opencode" ? undefined : yield* release(method)
+    const packageName = published?.package ?? "opencode"
+    if (method === "scoop" && version !== published?.version)
+      return yield* Effect.fail(new Error(`Scoop opencode2 only offers ${published?.version}, not ${version}.`))
     const target = `${packageName}@${version}`
     if (installedPackage && packageName !== installedPackage && (method === "pnpm" || method === "yarn")) {
       return yield* Effect.fail(new Error(`Reinstall ${target} with ${method} to migrate from ${installedPackage}.`))
     }
-    const commands: Record<Exclude<Method, "bun" | "curl" | "brew">, string[]> = {
+    const commands: Record<Exclude<Method, "bun" | "curl" | "brew" | "scoop">, string[]> = {
       // Keep the old package: uninstalling it can unlink the replacement command.
       npm: [
         "npm",
@@ -416,6 +453,24 @@ const make = Effect.gen(function* () {
           )
         }
         if (method === "brew") return yield* runUpgrade({ method, command: ["brew", "upgrade", packageName] })
+        if (method === "scoop") {
+          if (!scoopApp) return yield* Effect.fail(new Error("Scoop opencode2 installation not found"))
+          yield* retaining(method, runUpgrade({ method, command: ["scoop", "update", "opencode2"] }))
+          const installed = yield* fs.readFileString(path.join(scoopApp, "current", "manifest.json")).pipe(
+            Effect.map(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ version: Schema.String })))),
+            Effect.orElseSucceed(() => Option.none()),
+          )
+          if (!Option.exists(installed, (manifest) => manifest.version === version))
+            return yield* Effect.fail(
+              new UpgradeError({
+                title: "Scoop did not install the requested OpenCode version",
+                detail: `Expected ${version}; installed ${Option.getOrUndefined(installed)?.version ?? "version unknown"}. Refresh the Scoop buckets and retry.`,
+                command: "scoop update opencode2",
+                retry: "Run scoop update, then try again.",
+              }),
+            )
+          return
+        }
         return yield* retaining(method, runUpgrade({ method, command: commands[method] }))
       }),
     ).pipe(

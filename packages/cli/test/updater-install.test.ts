@@ -23,6 +23,8 @@ function fixture(
   failCleanup = false,
   releasePackage = name,
   formula?: string,
+  scoopVersion?: string,
+  scoopCurrent = true,
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -30,12 +32,14 @@ function fixture(
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-updater-" })
     const execPath = process.execPath
     const modules = path.join(root, "node_modules")
-    const executable = formula
-      ? path.join(root, "Cellar", formula, "2.0.20", "bin", "opencode")
-      : path.join(modules, "@opencode", "cli", "bin", "opencode")
+    const executable = scoopVersion
+      ? path.join(root, "scoop", "apps", "opencode2", "2.0.20", "opencode.exe")
+      : formula
+        ? path.join(root, "Cellar", formula, "2.0.20", "bin", "opencode")
+        : path.join(modules, "@opencode", "cli", "bin", "opencode")
     yield* fs.makeDirectory(path.dirname(executable), { recursive: true })
     yield* fs.writeFileString(executable, "binary")
-    if (!formula)
+    if (!formula && !scoopVersion)
       yield* fs.writeFileString(
         path.join(modules, "@opencode", "cli", "package.json"),
         JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
@@ -50,6 +54,7 @@ function fixture(
               const url = input instanceof Request ? input.url : input.toString()
               requests.push(url)
               if (new URL(url).hostname === "formulae.brew.sh") return Response.json({ versions: { stable: "2.0.21" } })
+              if (url.includes("ScoopInstaller/Versions/")) return Response.json({ version: "2.3.4" })
               return Response.json({ version: "2.3.4", metadata: { package: releasePackage } })
             },
             { preconnect: fetch.preconnect },
@@ -91,7 +96,17 @@ function fixture(
                 }),
               )
             : fs.remove(target, options),
-        realPath: (input) => (input === execPath ? Effect.succeed(executable) : fs.realPath(input)),
+        realPath: (input) =>
+          input === execPath ||
+          (scoopVersion &&
+            scoopCurrent &&
+            input === path.join(path.dirname(path.dirname(executable)), "current", "opencode.exe"))
+            ? Effect.succeed(executable)
+            : fs.realPath(input),
+        readFileString: (input) =>
+          scoopVersion && input === path.join(path.dirname(path.dirname(executable)), "current", "manifest.json")
+            ? Effect.succeed(JSON.stringify({ version: scoopVersion }))
+            : fs.readFileString(input),
       }),
       Effect.provideService(
         AppProcess.Service,
@@ -323,6 +338,60 @@ it.live("Homebrew Core installs check and upgrade the Core formula", () =>
   )
 })
 
+it.live("Scoop detects the installed opencode2 binary and upgrades its manifest version", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "@opencode/cli", undefined, "2.3.4")
+    expect(yield* test.updater.method()).toBe("scoop")
+    expect(yield* test.updater.latest()).toBe("2.3.4")
+    yield* test.updater.upgrade("scoop", "2.3.4")
+    expect(test.commands).toEqual([["scoop", "update", "opencode2"]])
+    expect(test.requests).toEqual([
+      "https://raw.githubusercontent.com/ScoopInstaller/Versions/master/bucket/opencode2.json",
+      "https://raw.githubusercontent.com/ScoopInstaller/Versions/master/bucket/opencode2.json",
+    ])
+  }),
+)
+
+it.live("Scoop refuses a target not published in its manifest", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "@opencode/cli", undefined, "2.3.4")
+    const error = yield* test.updater.upgrade("scoop", "2.3.5").pipe(Effect.flip)
+    expect(error.message).toContain("2.3.5")
+    expect(test.commands).toEqual([])
+  }),
+)
+
+it.live("a binary from an old Scoop version is not treated as the active installation", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "@opencode/cli", undefined, "2.3.4", false)
+    expect(yield* test.updater.method()).toBeUndefined()
+    expect(test.updater.removal("scoop")).toBeUndefined()
+    const error = yield* test.updater.upgrade("scoop", "2.3.4").pipe(Effect.flip)
+    expect(error.message).toContain("installation not found")
+    expect(test.commands).toEqual([])
+  }),
+)
+
+it.live("Scoop removal uninstalls opencode2 rather than the V1 package", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "@opencode/cli", undefined, "2.3.4")
+    const removal = test.updater.removal("scoop")
+    if (!removal) return yield* Effect.die("Expected Scoop removal")
+    expect(removal.command).toEqual(["scoop", "uninstall", "opencode2"])
+    yield* removal.run
+    expect(test.commands).toEqual([["scoop", "uninstall", "opencode2"]])
+  }),
+)
+
+it.live("Scoop does not report success when the local manifest stayed behind", () =>
+  Effect.gen(function* () {
+    const test = yield* fixture(() => ({}), "@opencode/cli", false, "@opencode/cli", undefined, "2.0.20")
+    const error = yield* test.updater.upgrade("scoop", "2.3.4").pipe(Effect.flip)
+    expect(error.message).toContain("2.0.20")
+    expect(test.commands).toEqual([["scoop", "update", "opencode2"]])
+  }),
+)
+
 // Links are named opencode-upgrade-<pid>-<random>.exe; read them from inside the installer run.
 const links = (directory: string) =>
   existsSync(directory) ? readdirSync(directory).filter((name) => name.startsWith("opencode-")) : []
@@ -350,6 +419,27 @@ windows("windows keeps a second link to the running binary in the cache while th
     // The installed path never disappears; the extra link is released and only dead ones are swept.
     expect(yield* test.fs.readFileString(test.executable)).toBe("binary")
     expect(links(test.global.cache)).toEqual(["opencode-service-4-aa.exe"])
+  }),
+)
+
+windows("Scoop update retains the running opencode2 image until the package manager exits", () =>
+  Effect.gen(function* () {
+    const cache = { path: "" }
+    const test = yield* fixture(
+      (command) => {
+        if (command.command === "scoop") expect(upgradeLinks(cache.path)).toHaveLength(1)
+        return {}
+      },
+      "@opencode/cli",
+      false,
+      "@opencode/cli",
+      undefined,
+      "2.3.4",
+    )
+    cache.path = test.global.cache
+    yield* test.updater.upgrade("scoop", "2.3.4")
+    expect(test.commands).toEqual([["scoop", "update", "opencode2"]])
+    expect(upgradeLinks(cache.path)).toEqual([])
   }),
 )
 

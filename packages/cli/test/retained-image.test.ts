@@ -10,6 +10,17 @@ const it = testEffect(NodeServices.layer)
 // Hard links to a running image are a Windows concern, and /tmp is often another filesystem elsewhere.
 const windows = process.platform === "win32" ? it.live : it.live.skip
 
+it.live("recognizes only an opencode2 binary in Scoop's apps directory", () =>
+  Effect.sync(() => {
+    const apps = path.join("scoop", "apps")
+    expect(RetainedImage.scoopApp(path.join(apps, "opencode2", "2.0.20", "opencode.exe"))).toBe(
+      path.join(apps, "opencode2"),
+    )
+    expect(RetainedImage.scoopApp(path.join(apps, "opencode", "2.0.20", "opencode.exe"))).toBeUndefined()
+    expect(RetainedImage.scoopApp(path.join(apps, "opencode2", "2.0.20", "other.exe"))).toBeUndefined()
+  }),
+)
+
 windows("retain hard-links the running image for the scope and sweeps only links of exited processes", () =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -68,6 +79,8 @@ windows("installed accepts package-manager and curl binaries only", () =>
     const cases = [
       [path.join(home, ".bun", "install", "global", "node_modules", "@opencode", "cli", "bin", "opencode.exe"), true],
       [path.join(home, ".opencode", "bin", "opencode.exe"), true],
+      [path.join(home, "scoop", "apps", "opencode2", "2.0.20", "opencode.exe"), true],
+      [path.join(home, "scoop", "apps", "opencode", "1.18.34", "opencode.exe"), false],
       [path.join(home, "AppData", "Local", "Programs", "OpenCode", "resources", "opencode-cli.exe"), false],
       [path.join(home, "node_modules", "bun", "bin", "bun.exe"), false],
     ] as const

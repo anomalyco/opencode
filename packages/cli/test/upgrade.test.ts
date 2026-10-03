@@ -47,6 +47,12 @@ describe("upgrade command", () => {
     expect(result.events).toEqual([{ method: "vp", version: "2.0.0" }])
   })
 
+  test("accepts scoop as an explicit installation method", async () => {
+    const result = await cli(["2.0.22", "--method", "scoop"])
+    expect(result.exitCode).toBe(0)
+    expect(result.events).toEqual([{ method: "scoop", version: "2.0.22" }])
+  })
+
   test("skips the already installed version", async () => {
     const result = await cli(["v0.0.0-beta-old"])
     expect(result.exitCode).toBe(0)

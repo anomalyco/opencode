@@ -50,6 +50,18 @@ export const relocate = Effect.fnUntraced(function* (directory: string, destinat
   )
 })
 
+/** Locate the Scoop V2 app from the executable, not from an unrelated installed V1 package. */
+export function scoopApp(executable: string) {
+  const app = path.dirname(path.dirname(executable))
+  if (
+    path.basename(executable).toLowerCase() !== "opencode.exe" ||
+    path.basename(app).toLowerCase() !== "opencode2" ||
+    path.basename(path.dirname(app)).toLowerCase() !== "apps"
+  )
+    return
+  return app
+}
+
 /**
  * Whether the running binary was installed by a package manager or the curl installer, the installs
  * bun can hang on. The updater decides the same question from the package manifest it already reads.
@@ -60,7 +72,8 @@ export function installed(home: string) {
   const executable = path.resolve(process.execPath)
   return (
     executable.split(path.sep).includes("node_modules") ||
-    executable === path.resolve(home, ".opencode", "bin", "opencode.exe")
+    executable === path.resolve(home, ".opencode", "bin", "opencode.exe") ||
+    scoopApp(executable) !== undefined
   )
 }
 
