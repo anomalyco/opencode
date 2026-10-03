@@ -2,6 +2,7 @@ import { useData } from "../../context/data"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { useConfig } from "../../config"
+import { useLocal } from "../../context/local"
 import { Slot } from "../../plugin/render"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { TextAttributes } from "@opentui/core"
@@ -12,6 +13,7 @@ import { SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 
 export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
   const data = useData()
+  const local = useLocal()
   const theme = useTheme()
   const config = useConfig().data
   const session = createMemo(() => data.session.get(props.sessionID))
@@ -67,12 +69,12 @@ export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
           }}
         >
           <box flexShrink={0} gap={1} paddingRight={1}>
-            <Slot path="sidebar.content" input={{ sessionID: props.sessionID }} />
+            <Slot path="sidebar.content" input={{ sessionID: props.sessionID, model: local.model.current() }} />
           </box>
         </scrollbox>
 
         <box flexShrink={0} gap={1} paddingTop={1}>
-          <Slot path="sidebar.footer" input={{ sessionID: props.sessionID }} />
+          <Slot path="sidebar.footer" input={{ sessionID: props.sessionID, model: local.model.current() }} />
         </box>
       </box>
     </Show>
