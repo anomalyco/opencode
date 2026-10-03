@@ -32,14 +32,14 @@ import { Heap } from "./cli/heap"
 
 const args = hideBin(process.argv)
 
-function show(out: string) {
+function show(out: string, stream: NodeJS.WriteStream) {
   const text = out.trimStart()
   if (!text.startsWith("opencode ")) {
-    process.stderr.write(UI.logo() + EOL + EOL)
-    process.stderr.write(text + EOL)
+    stream.write(UI.logo() + EOL + EOL)
+    stream.write(text + EOL)
     return
   }
-  process.stderr.write(out)
+  stream.write(out)
 }
 
 const cli = yargs(args)
@@ -108,7 +108,7 @@ const cli = yargs(args)
       msg?.startsWith("Invalid values:")
     ) {
       if (err) throw err
-      cli.showHelp(show)
+      cli.showHelp((message) => show(message, process.stderr))
     }
     if (err) throw err
     process.exit(1)
@@ -120,7 +120,7 @@ try {
     await cli.parse(args, (err: Error | undefined, _argv: unknown, out: string) => {
       if (err) throw err
       if (!out) return
-      show(out)
+      show(out, process.stdout)
     })
   } else {
     await cli.parse()
