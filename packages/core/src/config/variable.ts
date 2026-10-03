@@ -23,7 +23,12 @@ type SubstituteInput = ParseSource & {
   env?: Record<string, string>
 }
 
-/** Apply {env:VAR} and {file:path} substitutions to config text. */
+/**
+ * Apply {env:VAR} and {file:path} substitutions to config text.
+ *
+ * `text` is raw JSON(C) source: `{file:...}` bodies are JSON string fragments,
+ * so their escapes are decoded before filesystem access.
+ */
 export const substitute = Effect.fn("ConfigVariable.substitute")(function* (input: SubstituteInput) {
   const text = input.text.replace(
     /\{env:([^}]+)\}/g,
@@ -53,7 +58,14 @@ const substituteFiles = Effect.fnUntraced(function* (input: SubstituteInput, tex
       continue
     }
 
-    const filePath = token.slice("{file:".length, -1)
+    let filePath = token.slice("{file:".length, -1)
+    try {
+      // Bodies sit inside JSON(C) string values, so encoded escapes (e.g. the
+      // doubled backslashes of Windows paths) must be decoded first.
+      filePath = JSON.parse(`"${filePath}"`)
+    } catch {
+      // Not valid JSON string content; keep the raw path.
+    }
     const expandedPath = filePath.startsWith("~/") ? path.join(os.homedir(), filePath.slice(2)) : filePath
     const resolvedPath = path.isAbsolute(expandedPath) ? expandedPath : path.resolve(configDir, expandedPath)
     const fileContent = yield* fs.readFileString(resolvedPath).pipe(
