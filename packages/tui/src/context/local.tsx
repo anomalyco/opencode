@@ -9,6 +9,8 @@ import { useArgs } from "./args"
 import { useSDK } from "./sdk"
 import { RGBA } from "@opentui/core"
 import { readJson, writeJsonAtomic } from "../util/persistence"
+import { Flock } from "@opencode-ai/core/util/flock"
+import { Global } from "@opencode-ai/core/global"
 import { useTheme } from "./theme"
 import { useToast } from "../ui/toast"
 import { useRoute } from "./route"
@@ -46,6 +48,34 @@ export function recentModels(
     })
     .slice(0, 10)
     .map((item) => ({ providerID: item.providerID, modelID: item.modelID }))
+}
+
+export function parsePinned(value: unknown) {
+  if (!value || typeof value !== "object") return []
+  const pinned = (value as Record<string, unknown>).pinned
+  if (!Array.isArray(pinned)) return []
+  return pinned.filter((item): item is string => typeof item === "string")
+}
+
+export function setPinned(pinned: string[], sessionID: string, pin: boolean) {
+  if (!pin) return pinned.filter((x) => x !== sessionID)
+  return pinned.includes(sessionID) ? pinned : [...pinned, sessionID]
+}
+
+// Every TUI instance writes this same file, so a change has to be applied to the file's
+// current contents under a lock. Writing the caller's snapshot instead would drop pins
+// made by another instance since that snapshot was loaded.
+export function persistPinned(filePath: string, sessionID: string, pin: boolean, options?: Flock.Options) {
+  return Flock.withLock(
+    `tui-session:${filePath}`,
+    async () => {
+      const current = await readJson<unknown>(filePath).catch(() => undefined)
+      const next = setPinned(parsePinned(current), sessionID, pin)
+      await writeJsonAtomic(filePath, { pinned: next })
+      return next
+    },
+    options,
+  )
 }
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
@@ -417,37 +447,33 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         pinned: [],
       })
 
+      // Touching Global here guarantees Flock's lock root is configured, same as the KV store.
+      void Global.Path.state
       const filePath = path.join(paths.state, "session.json")
-      const state = {
-        pending: false,
-      }
 
-      function save() {
-        if (!sessionStore.ready) {
-          state.pending = true
-          return
-        }
-        state.pending = false
-        void writeJsonAtomic(filePath, {
-          pinned: sessionStore.pinned,
-        })
-      }
-
-      readJson<unknown>(filePath)
+      // Writes chain off the initial read so they can never run before it completes.
+      let write = Flock.withLock(`tui-session:${filePath}`, () => readJson<unknown>(filePath))
         .then((x) => {
-          if (!x || typeof x !== "object") return
-          const pinned = (x as Record<string, unknown>).pinned
-          if (Array.isArray(pinned))
-            setSessionStore(
-              "pinned",
-              pinned.filter((item): item is string => typeof item === "string"),
-            )
+          setSessionStore("pinned", parsePinned(x))
         })
         .catch(() => {})
         .finally(() => {
           setSessionStore("ready", true)
-          if (state.pending) save()
         })
+
+      function update(sessionID: string, pin: boolean) {
+        // Reflect the change locally right away, then reconcile with whatever the merged
+        // file actually ends up containing.
+        setSessionStore("pinned", setPinned(sessionStore.pinned, sessionID, pin))
+        write = write
+          .then(() => persistPinned(filePath, sessionID, pin))
+          .then((next) => {
+            setSessionStore("pinned", next)
+          })
+          .catch((error) => {
+            console.error("Failed to write session state", { error })
+          })
+      }
 
       const slots = createMemo(() => {
         const existing = new Set(sync.data.session.filter((x) => x.parentID === undefined).map((x) => x.id))
@@ -455,15 +481,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       function prune(sessionID: string) {
-        batch(() => {
-          if (sessionStore.pinned.includes(sessionID)) {
-            setSessionStore(
-              "pinned",
-              sessionStore.pinned.filter((x) => x !== sessionID),
-            )
-          }
-          save()
-        })
+        if (!sessionStore.pinned.includes(sessionID)) return
+        update(sessionID, false)
       }
 
       event.on("session.deleted", (evt) => {
@@ -482,14 +501,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return sessionStore.pinned.includes(sessionID)
         },
         togglePin(sessionID: string) {
-          batch(() => {
-            const exists = sessionStore.pinned.includes(sessionID)
-            const next = exists
-              ? sessionStore.pinned.filter((x) => x !== sessionID)
-              : [...sessionStore.pinned, sessionID]
-            setSessionStore("pinned", next)
-            save()
-          })
+          update(sessionID, !sessionStore.pinned.includes(sessionID))
         },
         quickSwitch(slot: number) {
           const target = slots()[slot - 1]
