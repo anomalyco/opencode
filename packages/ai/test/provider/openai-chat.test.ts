@@ -913,6 +913,47 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("lowers OpenAI file references to file parts", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [Message.user({ type: "media", media: Media.ref("openai", "file-pdf", "application/pdf") })],
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "file", file: { file_id: "file-pdf" } }] },
+      ])
+    }),
+  )
+
+  it.effect("rejects image file references", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [Message.user({ type: "media", media: Media.ref("openai", "file-image", "image/png") })],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("OpenAI Chat does not accept image file references")
+    }),
+  )
+
+  it.effect("rejects file references issued by another provider", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model: XAI.configure({ apiKey: "test", baseURL: "https://api.x.ai/v1" }).chat("grok-4.5"),
+          messages: [Message.user({ type: "media", media: Media.ref("openai", "file-pdf", "application/pdf") })],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("OpenAI Chat requires inline media")
+    }),
+  )
+
   it.effect("prepares raw and data URL image media as vision input", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

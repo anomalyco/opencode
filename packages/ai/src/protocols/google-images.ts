@@ -105,7 +105,7 @@ const fromRequest = Effect.fn("GoogleImages.fromRequest")(function* (request: Re
       `${route.name} generates one image per request; call it once per image instead of n=${request.n}`,
     )
   const parts = yield* Effect.forEach(request.images ?? [], (image) =>
-    GeminiGenerateContent.mediaPart(route.name, image),
+    GeminiGenerateContent.mediaPart(route.name, image, route.provider),
   )
   return MediaProtocol.json(
     mergeJsonRecords(

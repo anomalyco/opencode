@@ -12,6 +12,7 @@ import {
   type FinishReason,
   type LLMRequest,
   type MediaPart,
+  type ProviderID,
   type ProviderMetadata,
   type ProviderOptions,
   type TextPart,
@@ -283,9 +284,12 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ functionCallingConfig: { mode: "ANY" as const, allowedFunctionNames: [name] } }),
   })
 
-const lowerContentPart = Effect.fn("Gemini.lowerContentPart")(function* (part: TextPart | MediaPart) {
+const lowerContentPart = Effect.fn("Gemini.lowerContentPart")(function* (
+  part: TextPart | MediaPart,
+  provider: ProviderID,
+) {
   if (part.type === "text") return { text: part.text }
-  return yield* GeminiGenerateContent.mediaPart("Gemini", part.media)
+  return yield* GeminiGenerateContent.mediaPart("Gemini", part.media, provider)
 })
 
 const providerMetadata = (key: string, metadata: Record<string, unknown>): ProviderMetadata => ({ [key]: metadata })
@@ -332,7 +336,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
       for (const part of message.content) {
         if (!ProviderShared.supportsContent(part, ["text", "media"]))
           return yield* ProviderShared.unsupportedContent("Gemini", "user", ["text", "media"])
-        parts.push(yield* lowerContentPart(part))
+        parts.push(yield* lowerContentPart(part, request.model.provider))
       }
       contents.push({ role: "user", parts })
       continue
@@ -356,7 +360,7 @@ const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMR
         }
         // Generated images replay as model-role inline data so multi-turn image editing keeps the prior output.
         if (part.type === "media") {
-          const lowered = yield* lowerContentPart(part)
+          const lowered = yield* lowerContentPart(part, request.model.provider)
           parts.push({ ...lowered, thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey) })
           continue
         }

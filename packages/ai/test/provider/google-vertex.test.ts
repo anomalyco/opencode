@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LanguageModel, LLM, Message, ToolCallPart } from "../../src/index.js"
+import { LanguageModel, LLM, Media, Message, ToolCallPart } from "../../src/index.js"
 import { GoogleVertex, GoogleVertexChat, GoogleVertexMessages, GoogleVertexResponses } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
@@ -51,6 +51,55 @@ describe("Google Vertex providers", () => {
       )
 
       expect(response.text).toBe("Hello.")
+    }),
+  )
+
+  it.effect("lowers Vertex Cloud Storage references to Gemini fileData", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: GoogleVertex.configure({ accessToken: "vertex-token", project: "vertex-project" }).model(
+            "gemini-3.5-flash",
+          ),
+          messages: [
+            Message.user({
+              type: "media",
+              media: Media.ref("google-vertex", "gs://bucket/report.pdf", "application/pdf"),
+            }),
+          ],
+        }),
+      )
+
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "user",
+          parts: [{ fileData: { mimeType: "application/pdf", fileUri: "gs://bucket/report.pdf" } }],
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects Gemini API file references on Vertex Gemini", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model: GoogleVertex.configure({ accessToken: "vertex-token", project: "vertex-project" }).model(
+            "gemini-3.5-flash",
+          ),
+          messages: [
+            Message.user({
+              type: "media",
+              media: Media.ref(
+                "google",
+                "https://generativelanguage.googleapis.com/v1beta/files/abc",
+                "application/pdf",
+              ),
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("Gemini requires inline media")
     }),
   )
 
