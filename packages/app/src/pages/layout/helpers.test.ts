@@ -19,6 +19,7 @@ import {
   homeProjectDirectories,
   homeSessionServerStatus,
   latestRootSession,
+  projectForSession,
   sortedRootSessions,
   toggleHomeProjectSelection,
 } from "./helpers"
@@ -343,5 +344,50 @@ describe("layout workspace helpers", () => {
     expect(errorMessage({ data: { message: "boom" } }, "fallback")).toBe("boom")
     expect(errorMessage(new Error("broken"), "fallback")).toBe("broken")
     expect(errorMessage("unknown", "fallback")).toBe("fallback")
+  })
+
+  test("prefers session directory over shared project id", () => {
+    const projects = [
+      { id: "shared", worktree: "c:/foo" },
+      { id: "shared", worktree: "d:/foo" },
+    ]
+    const result = projectForSession(session({ id: "s1", directory: "c:\\foo", projectID: "shared" }), projects)
+    expect(result?.worktree).toBe("c:/foo")
+  })
+
+  test("matches session directory across windows slash variants", () => {
+    const projects = [{ id: "a", worktree: "c:\\foo" }]
+    const result = projectForSession(session({ id: "s1", directory: "c:/foo", projectID: "missing" }), projects)
+    expect(result?.worktree).toBe("c:\\foo")
+  })
+
+  test("falls back to project ID when session directory has no matching worktree", () => {
+    const projects = [
+      { id: "exact", worktree: "c:/exact-match" },
+      { id: "other", worktree: "d:/other" },
+    ]
+    const result = projectForSession(session({ id: "s1", directory: "no-match", projectID: "exact" }), projects)
+    expect(result?.worktree).toBe("c:/exact-match")
+  })
+
+  test("prioritizes sandbox match over project ID", () => {
+    const projects = [
+      { id: "id", worktree: "c:/root" },
+      { id: "sandbox-owner", worktree: "d:/other", sandboxes: ["c:/foo/sub"] },
+    ]
+    const result = projectForSession(session({ id: "s1", directory: "c:\\foo\\sub", projectID: "id" }), projects)
+    expect(result?.worktree).toBe("d:/other")
+  })
+
+  test("returns undefined when no match exists", () => {
+    const projects: Session["directory"][] = []
+    const result = projectForSession(session({ id: "s1", directory: "nowhere", projectID: "no-such-id" }), [])
+    expect(result).toBeUndefined()
+  })
+
+  test("handles undefined session projectID", () => {
+    const projects = [{ id: undefined, worktree: "c:/foo" }]
+    const result = projectForSession(session({ id: "s1", directory: "c:/foo" }), projects)
+    expect(result?.worktree).toBe("c:/foo")
   })
 })

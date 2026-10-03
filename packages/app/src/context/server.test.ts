@@ -197,6 +197,142 @@ describe("createServerProjects", () => {
       dispose()
     })
   })
+
+  test("dedupes windows slash variants by normalized path", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("c:\\foo")
+      projects.open("c:/foo")
+      expect(projects.list()).toHaveLength(1)
+      expect(projects.list()[0]?.worktree).toBe("c:\\foo")
+      dispose()
+    })
+  })
+
+  test("dedupes drive-root variants (C:/ vs C:/foo)", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("c:\\")
+      projects.open("c:/")
+      expect(projects.list()).toHaveLength(1)
+      projects.close("c:/foo")
+      expect(projects.list()).toHaveLength(1)
+      expect(projects.list()[0]?.worktree).toBe("c:\\")
+      dispose()
+    })
+  })
+
+  test("removes windows projects via normalized path", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("c:\\foo")
+      projects.remove("c:/foo")
+      expect(projects.list()).toEqual([])
+      dispose()
+    })
+  })
+
+  test("keeps same-basename projects on different drives", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("c:\\foo")
+      projects.open("d:\\foo")
+      expect(projects.list()).toHaveLength(2)
+
+      projects.close("c:\\foo")
+      expect(projects.list().map((p) => p.worktree)).toEqual(["d:\\foo"])
+      expect(projects.recentlyClosed()).toEqual(["c:\\foo"])
+
+      projects.open("d:\\foo")
+      expect(projects.list().map((p) => p.worktree)).toEqual(["d:\\foo"])
+      dispose()
+    })
+  })
+
+  test("reopens slash variants without duplicating recently closed", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("c:\\foo")
+      projects.close("c:/foo")
+      expect(projects.recentlyClosed()).toEqual(["c:/foo"])
+
+      projects.open("c:/foo")
+      expect(projects.list()).toHaveLength(1)
+      expect(projects.recentlyClosed()).toEqual([])
+      dispose()
+    })
+  })
+
+  test("ignores remove for unknown directories", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("c:\\foo")
+      projects.remove("d:\\foo")
+      expect(projects.list()).toHaveLength(1)
+      expect(projects.recentlyClosed()).toEqual([])
+      dispose()
+    })
+  })
+
+  test("expands and collapses via normalized path", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("c:\\foo")
+      projects.collapse("c:/foo")
+      expect(projects.list()[0]?.expanded).toBe(false)
+
+      projects.expand("c:/foo")
+      expect(projects.list()[0]?.expanded).toBe(true)
+
+      projects.collapse("d:\\missing")
+      projects.expand("d:\\missing")
+      expect(projects.list()).toHaveLength(1)
+      dispose()
+    })
+  })
+
+  test("moves via normalized path and ignores bad moves", () => {
+    createRoot((dispose) => {
+      const [scope] = createSignal(ServerScope.local)
+      const [store, setStore] = createStore({ projects: {}, lastProject: {}, recentlyClosed: {} })
+      const projects = createServerProjects({ scope, store, setStore })
+
+      projects.open("c:\\a")
+      projects.open("d:\\b")
+      expect(projects.list().map((p) => p.worktree)).toEqual(["d:\\b", "c:\\a"])
+
+      projects.move("c:/a", 0)
+      expect(projects.list().map((p) => p.worktree)).toEqual(["c:\\a", "d:\\b"])
+
+      projects.move("c:\\a", 0)
+      expect(projects.list().map((p) => p.worktree)).toEqual(["c:\\a", "d:\\b"])
+
+      projects.move("c:\\missing", 0)
+      expect(projects.list().map((p) => p.worktree)).toEqual(["c:\\a", "d:\\b"])
+      dispose()
+    })
+  })
 })
 
 describe("migrateCanonicalLocalServerState", () => {
