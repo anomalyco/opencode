@@ -2,6 +2,28 @@ import type { SessionV1 } from "@opencode-ai/core/v1/session"
 
 export { parseGitHubRemote } from "@/util/repository"
 
+/** Formats a model-generated summary for repositories with conventional commit hooks. */
+export function commitSubject(summary: string) {
+  const line =
+    summary
+      .trim()
+      .split(/\r?\n/, 1)[0]
+      ?.trim()
+      .replace(/[.!?]+$/, "")
+      .trim() ?? ""
+  const match = line.match(
+    /^(build|chore|ci|docs|feat|fix|perf|refactor|revert|style|test)(\([a-z0-9-]+\))?(!)?:\s+(.+)$/i,
+  )
+  const scope = match?.[2]?.toLowerCase() ?? ""
+  const prefix = `${match?.[1]?.toLowerCase() ?? "chore"}${scope.length <= 30 ? scope : ""}${match?.[3] ?? ""}: `
+  const value = (match?.[4] ?? line) || "apply opencode changes"
+  const subject = `${value.charAt(0).toLowerCase()}${value.slice(1)}`
+  return `${prefix}${subject
+    .slice(0, 72 - prefix.length)
+    .trimEnd()
+    .replace(/[.!?]+$/, "")}`
+}
+
 /**
  * Extracts displayable text from assistant response parts.
  * Returns null for non-text responses (signals summary needed).

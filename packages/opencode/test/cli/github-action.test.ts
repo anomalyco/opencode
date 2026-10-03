@@ -1,8 +1,39 @@
 import { test, expect, describe } from "bun:test"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
-import { extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github"
+import { commitSubject, extractResponseText, formatPromptTooLargeError } from "../../src/cli/cmd/github.shared"
 import type { MessageV2 } from "../../src/session/message-v2"
 import { SessionID, MessageID, PartID } from "../../src/session/schema"
+
+describe("commitSubject", () => {
+  test("converts a rejected review summary to a conventional subject", () => {
+    expect(commitSubject("Approve: solid port, tests pin behavior")).toBe(
+      "chore: approve: solid port, tests pin behavior",
+    )
+  })
+
+  test("preserves a conventional type and scope", () => {
+    expect(commitSubject("Fix(GitHub): Handle rejected commits.")).toBe("fix(github): handle rejected commits")
+  })
+
+  test("preserves a breaking change marker", () => {
+    expect(commitSubject("Feat!: Add API.")).toBe("feat!: add API")
+  })
+
+  test("uses one line without terminal punctuation", () => {
+    expect(commitSubject("Solid PR, but retry was missed.\nAdditional details")).toBe(
+      "chore: solid PR, but retry was missed",
+    )
+  })
+
+  test("uses a fallback when the summary is empty", () => {
+    expect(commitSubject(" \n ")).toBe("chore: apply opencode changes")
+  })
+
+  test("keeps the conventional header within 72 characters", () => {
+    expect(commitSubject("A very long generated summary ".repeat(4)).length).toBeLessThanOrEqual(72)
+    expect(commitSubject(`fix(${"a".repeat(70)}): x`)).toBe("fix: x")
+  })
+})
 
 // Helper to create minimal valid parts
 function createTextPart(text: string): SessionV1.Part {
