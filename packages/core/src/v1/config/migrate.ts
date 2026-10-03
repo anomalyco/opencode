@@ -168,7 +168,20 @@ export function providerID(input: string) {
 }
 
 function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
-  const settings = info.options && ConfigProviderOptionsV1.model(info.options)
+  // V1 opted out of Anthropic thinking block binding with `blockBinding: false` in the model's provider options.
+  // V2 reads that decision from compatibility, so move it there instead of forwarding an option nothing consumes.
+  const optOut = ["thinking", "reasoningConfig"].filter((key) => info.options?.[key]?.blockBinding === false)
+  const options =
+    optOut.length && info.options
+      ? Object.fromEntries(
+          Object.entries(info.options).flatMap(([key, value]) => {
+            if (!optOut.includes(key)) return [[key, value]]
+            const { blockBinding, ...rest } = value
+            return Object.keys(rest).length ? [[key, rest]] : []
+          }),
+        )
+      : info.options
+  const settings = options && ConfigProviderOptionsV1.model(options)
   const costs = info.cost && [
     {
       input: info.cost.input,
@@ -199,7 +212,9 @@ function migrateModel(info: typeof ConfigProviderV1.Model.Type) {
     modelID: info.id,
     family: info.family,
     name: info.name,
-    compatibility: Model.compatibility(info.interleaved),
+    compatibility: optOut.length
+      ? { ...Model.compatibility(info.interleaved), supportsThinkingBlockBinding: false }
+      : Model.compatibility(info.interleaved),
     package: info.provider?.npm ? Provider.aisdk(info.provider.npm) : undefined,
     settings: info.provider?.api ? { ...settings, baseURL: info.provider.api } : settings,
     capabilities,
