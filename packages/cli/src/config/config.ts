@@ -43,8 +43,8 @@ export const layer = Layer.effect(
       )
       return existing[0] ?? path.join(global.config, defaultFilename)
     })
-    // Resolved once for display and the TUI watcher directory.
-    const file = yield* resolveFile()
+    // Initial resolution for the TUI watcher directory; refreshed whenever get or update re-resolves.
+    let file = yield* resolveFile()
 
     const readJson = Effect.fnUntraced(function* (target: string) {
       const text = yield* fs.readFileString(target).pipe(Effect.orElseSucceed(() => undefined))
@@ -82,6 +82,7 @@ export const layer = Layer.effect(
     const get = Effect.fn("cli.config.get")(() =>
       Effect.gen(function* () {
         const target = yield* resolveFile()
+        file = target
         return yield* withLock(
           target,
           Effect.gen(function* () {
@@ -101,6 +102,7 @@ export const layer = Layer.effect(
     const update = Effect.fn("cli.config.update")((update: (draft: Draft<Info>) => void) =>
       Effect.gen(function* () {
         const target = yield* resolveFile()
+        file = target
         return yield* withLock(
           target,
           Effect.gen(function* () {
@@ -131,7 +133,13 @@ export const layer = Layer.effect(
       }).pipe(Effect.mapError((cause) => new Error("Failed to update CLI config", { cause }))),
     )
 
-    return Service.of({ path: file, get, update })
+    return Service.of({
+      get path() {
+        return file
+      },
+      get,
+      update,
+    })
   }),
 )
 

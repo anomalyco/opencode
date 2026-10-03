@@ -117,6 +117,25 @@ test("prefers cli.jsonc over cli.json", async () => {
   expect(await Bun.file(json).json()).toEqual({ animations: true })
 })
 
+test("reflects a cli.jsonc created after initialization in the service path", async () => {
+  await using directory = await tmpdir()
+  await Bun.write(path.join(directory.path, "cli.json"), `{ "animations": true }`)
+
+  const result = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      const initial = service.path
+      yield* Effect.promise(() => Bun.write(path.join(directory.path, "cli.jsonc"), `{ "animations": false }`))
+      yield* service.get()
+      return { initial, updated: service.path }
+    }),
+  )
+
+  expect(result.initial).toBe(path.join(directory.path, "cli.json"))
+  expect(result.updated).toBe(path.join(directory.path, "cli.jsonc"))
+})
+
 test("creates cli.json when neither cli.json nor cli.jsonc exists", async () => {
   await using directory = await tmpdir()
 
