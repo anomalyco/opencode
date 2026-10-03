@@ -15,6 +15,7 @@ import {
   InvalidRequestError,
   RateLimitError,
   UnknownProviderError,
+  Usage,
 } from "@opencode/ai"
 import { OpenAIChat } from "@opencode/ai/protocols/openai-chat"
 import { AnthropicMessages, OpenAIResponses } from "@opencode/ai/protocols"
@@ -155,6 +156,30 @@ test("calculates step cost using the matching context tier", () => {
       { input: 80, output: 10, reasoning: 2, cache: { read: 20, write: 1 } },
     ),
   ).toBeCloseTo(0.0002926)
+})
+
+test("prefers reported billing, including zero, while preserving token accounting", () => {
+  const costs = [
+    {
+      input: Money.USDPerMillionTokens.make(100_000),
+      output: Money.USDPerMillionTokens.zero,
+      cache: { read: Money.USDPerMillionTokens.zero, write: Money.USDPerMillionTokens.zero },
+    },
+  ]
+  for (const billedCost of [undefined, 0, 0.25]) {
+    expect(
+      SessionUsage.record(
+        Usage.from({
+          billedCost: billedCost === undefined ? undefined : Money.USD.make(billedCost),
+          nonCachedInputTokens: 10,
+        }),
+        costs,
+      ),
+    ).toEqual({
+      cost: Money.USD.make(billedCost ?? 1),
+      tokens: { input: 10, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    })
+  }
 })
 
 test("ignores malformed model cost fields", () => {
@@ -969,6 +994,32 @@ const watchRename = Effect.fnUntraced(function* (sessionID: Session.ID) {
 })
 
 describe("SessionRunnerLLM", () => {
+  for (const finish of ["stop", "content-filter"] as const) {
+    for (const billedCost of [0, 0.25]) {
+      scenario(`records reported cost ${billedCost} for a ${finish} step`, function* (s) {
+        yield* s.llm.push(
+          TestLLM.complete(
+            {
+              reason: { normalized: finish },
+              usage: { billedCost: Money.USD.make(billedCost), nonCachedInputTokens: 8, outputTokens: 3 },
+            },
+            LLMEvent.textStart({ id: "billed-text" }),
+            LLMEvent.textDelta({ id: "billed-text", text: "Answer" }),
+            LLMEvent.textEnd({ id: "billed-text" }),
+          ),
+        )
+        const exit = yield* s.runPrompt("Bill the response").pipe(Effect.exit)
+
+        expect(Exit.isFailure(exit)).toBe(finish === "content-filter")
+        expect(yield* s.context).toMatchObject([
+          { type: "user" },
+          { type: "assistant", cost: billedCost, tokens: { input: 8, output: 3 } },
+        ])
+        expect(yield* s.session.get(sessionID)).toMatchObject({ cost: billedCost, tokens: { input: 8, output: 3 } })
+      })
+    }
+  }
+
   scenario("generates the title while the first model step is still running", function* (s) {
     yield* prepareTitleGeneration
 

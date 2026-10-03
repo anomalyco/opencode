@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import { LLM } from "@opencode/schema/llm"
+import { Money } from "@opencode/schema/money"
 import { ContentBlockID, ToolCallID } from "./ids.js"
 import {
   Message,
@@ -63,6 +64,8 @@ export type FinishReason = Schema.Schema.Type<typeof FinishReason>
  * Matches the same escape-hatch field on `LLMEvent`.
  */
 export class Usage extends Schema.Class<Usage>("AI.Usage")({
+  /** Provider-reported charge in USD, preferred to a token-based price estimate when present. */
+  billedCost: Schema.optional(Money.USD.check(Schema.isGreaterThanOrEqualTo(0))),
   /** Effective input size of the final message iteration, when reported; not billed totals. */
   contextTokens: Schema.optional(Schema.Number),
   inputTokens: Schema.optional(Schema.Number),

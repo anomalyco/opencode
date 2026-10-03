@@ -32,6 +32,7 @@ import {
 } from "@opencode/ai"
 import { Auth, Endpoint, RequestExecutor, type AnyRoute, type HttpMiddleware } from "@opencode/ai/route"
 import { ProviderShared } from "@opencode/ai/protocols/shared"
+import { Money } from "@opencode/schema/money"
 import { Cause, Context, Effect, Layer, Option, Schema, Scope, Stream } from "effect"
 import { makeParser } from "effect/unstable/encoding/Sse"
 import { HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
@@ -46,6 +47,13 @@ type AssistantContent = Extract<LanguageModelV3Message, { role: "assistant" }>["
 type ToolResultContent = Extract<AssistantContent[number], { type: "tool-result" }>
 
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
+const CopilotUsage = Schema.Struct({ total_nano_aiu: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)) })
+const decodeCopilotUsage = Schema.decodeUnknownOption(
+  Schema.Union([
+    Schema.Struct({ copilot_usage: CopilotUsage }),
+    Schema.Struct({ response: Schema.Struct({ copilot_usage: CopilotUsage }) }),
+  ]),
+)
 
 export interface SDKEvent {
   readonly model: RuntimeInfo
@@ -410,7 +418,7 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
       LanguageModel.make({ ...input, provider: "provider" in input ? input.provider : providerID, route }),
     prepareTransport: (body) => Effect.succeed(body),
     streamPrepared: (prepared, _request, _runtime, options) =>
-      streamLanguage(language, prepared as LanguageModelV3CallOptions, options?.http),
+      streamLanguage(language, prepared as LanguageModelV3CallOptions, packageName, options?.http),
   }
   return LanguageModel.make({
     id: info.modelID ?? info.id,
@@ -719,8 +727,14 @@ function metadataProviderOptions(input: ProviderMetadata | undefined): SharedV3P
   return Object.fromEntries(Object.entries(input).map(([key, value]) => [key, jsonObject(value)]))
 }
 
-function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallOptions, http?: HttpMiddleware) {
-  const state: StreamState = { step: 0, toolNames: {}, open: {} }
+function streamLanguage(
+  language: LanguageModelV3,
+  options: LanguageModelV3CallOptions,
+  packageName: string,
+  http?: HttpMiddleware,
+) {
+  const state: StreamState = { step: 0, toolNames: {}, open: {}, copilot: packageName === "@ai-sdk/github-copilot" }
+  const prepared = state.copilot ? { ...options, includeRawChunks: true } : options
   return Stream.concat(
     Stream.make(LLMEvent.stepStart({ index: state.step })),
     Stream.unwrap(
@@ -728,7 +742,9 @@ function streamLanguage(language: LanguageModelV3, options: LanguageModelV3CallO
         const context = yield* Effect.context<never>()
         return yield* Effect.tryPromise({
           try: () =>
-            http ? httpMiddleware.run({ http, context }, () => language.doStream(options)) : language.doStream(options),
+            http
+              ? httpMiddleware.run({ http, context }, () => language.doStream(prepared))
+              : language.doStream(prepared),
           catch: (error) => llmError(error, "request"),
         })
       }).pipe(
@@ -752,6 +768,8 @@ type StreamState = {
   step: number
   toolNames: Record<string, string>
   open: Partial<Record<Fragment, string>>
+  copilot: boolean
+  billedCost?: Money.USD
 }
 
 function streamPartEvents(
@@ -761,11 +779,19 @@ function streamPartEvents(
   switch (event.type) {
     case "stream-start":
     case "response-metadata":
-    case "raw":
     case "file":
     case "source":
     case "tool-approval-request":
       return Effect.succeed([])
+    case "raw": {
+      if (!state.copilot) return Effect.succeed([])
+      const value = Option.getOrUndefined(decodeCopilotUsage(event.rawValue))
+      if (!value) return Effect.succeed([])
+      const usage = "copilot_usage" in value ? value.copilot_usage : value.response.copilot_usage
+      // Copilot reports nano AIU; the existing Copilot billing conversion is 100 billion per USD.
+      state.billedCost = Money.USD.make(usage.total_nano_aiu / 100_000_000_000)
+      return Effect.succeed([])
+    }
     case "text-start":
       return Effect.succeed(openFragment(state, "text", event.id, providerMetadata(event.providerMetadata)))
     case "text-delta":
@@ -849,20 +875,22 @@ function streamPartEvents(
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
-    case "finish":
+    case "finish": {
+      const normalized = usage(event.usage, state.billedCost)
       return Effect.succeed([
         LLMEvent.stepFinish({
           index: state.step++,
           reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
+          usage: normalized,
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
         LLMEvent.finish({
           reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
-          usage: usage(event.usage),
+          usage: normalized,
           providerMetadata: providerMetadata(event.providerMetadata),
         }),
       ])
+    }
     case "error":
       return Effect.fail(llmError(event.error, "read"))
   }
@@ -891,8 +919,12 @@ function fragmentEnd(kind: Fragment, id: string, providerMetadata?: ProviderMeta
   return kind === "text" ? LLMEvent.textEnd({ id, providerMetadata }) : LLMEvent.reasoningEnd({ id, providerMetadata })
 }
 
-function usage(input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["usage"]): UsageInput | undefined {
+function usage(
+  input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["usage"],
+  billedCost?: Money.USD,
+): UsageInput | undefined {
   const output = {
+    billedCost,
     inputTokens: input.inputTokens.total,
     nonCachedInputTokens: input.inputTokens.noCache,
     cacheReadInputTokens: input.inputTokens.cacheRead,
