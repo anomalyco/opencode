@@ -256,7 +256,7 @@ export function toOpenaiRequest(body: CommonRequest) {
     if ((m as any).role === "assistant") {
       const c = (m as any).content
       if (typeof c === "string" && c.length > 0) {
-        input.push({ role: "assistant", content: [{ type: "output_text", text: c }] })
+        input.push({ role: "assistant", status: "completed", content: [{ type: "output_text", text: c }] })
       }
       if (Array.isArray((m as any).tool_calls)) {
         for (const tc of (m as any).tool_calls) {
