@@ -12,8 +12,10 @@ import path from "path"
 import { CliRenderEvents, createCliRenderer, type CliRenderer, type ScrollbackWriter } from "@opentui/core"
 import { createDefaultOpenTuiKeymap } from "@opentui/keymap/opentui"
 import { Global } from "@opencode-ai/core/global"
+import { Flag } from "@opencode-ai/core/flag/flag"
 import { openEditor } from "@opencode-ai/tui/editor"
 import { registerOpencodeKeymap } from "@opencode-ai/tui/keymap"
+import { kittyKeyboardOptions } from "@opencode-ai/tui/util/system"
 import { Session as SessionApi } from "@/session/session"
 import * as Locale from "@/util/locale"
 import { resolveInteractiveStdin } from "./runtime.stdin"
@@ -186,7 +188,10 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
       autoFocus: false,
       openConsoleOnError: false,
       exitOnCtrlC: false,
-      useKittyKeyboard: { events: process.platform === "win32" },
+      useKittyKeyboard: kittyKeyboardOptions({
+        disabled: Flag.OPENCODE_DISABLE_KITTY_KEYBOARD,
+        events: process.platform === "win32",
+      }),
       screenMode: "split-footer",
       footerHeight: FOOTER_HEIGHT,
       externalOutputMode: "capture-stdout",
