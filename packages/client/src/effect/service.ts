@@ -1,7 +1,5 @@
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
-import { homedir } from "node:os"
-import { join } from "node:path"
-import type { DiscoverOptions, Endpoint, EnsureOptions, StopOptions } from "../service.js"
+import type { DiscoverOptions, EnsureOptions, StopOptions } from "../service.js"
 import {
   contenderFailure,
   contenderFinished,
@@ -11,8 +9,10 @@ import {
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
+import { fallback, headers, type LocalService, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
+export { headers }
 /** Contents of the local service registration file. */
 export type Info = import("../service.js").Info
 
@@ -177,17 +177,6 @@ export const stop = Effect.fn("service.stop")(function* (options: StopOptions = 
   if (info !== undefined) yield* terminate(info, options, ensureTiming(options))
 })
 
-function fallback() {
-  const state = process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state")
-  return join(state, "opencode", "service.json")
-}
-
-/** Create HTTP authentication headers for a service endpoint. */
-export function headers(endpoint: Endpoint) {
-  if (endpoint.auth === undefined) return undefined
-  return { authorization: "Basic " + btoa(endpoint.auth.username + ":" + endpoint.auth.password) }
-}
-
 /** Schema for the local service registration file. */
 export const Info = Schema.Struct({
   id: Schema.optional(Schema.String),
@@ -198,13 +187,6 @@ export const Info = Schema.Struct({
 })
 
 const decode = Schema.decodeUnknownEffect(Schema.fromJsonString(Info))
-const decodeInfo = Schema.decodeUnknownOption(
-  Schema.Struct({
-    version: Schema.String,
-    pid: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
-  }),
-)
-
 // A missing or corrupt file means no valid info; callers treat both
 // the same (the registering server self-evicts, clients rediscover).
 const read = Effect.fnUntraced(function* (file?: string) {
@@ -214,77 +196,14 @@ const read = Effect.fnUntraced(function* (file?: string) {
   return yield* decode(text.value).pipe(Effect.option, Effect.map(Option.getOrUndefined))
 })
 
-type LocalService = {
-  readonly info: Info
-  readonly endpoint: Endpoint
-  readonly version?: string
-  readonly state: "ready" | "waiting" | "failed"
-  readonly compatible: boolean
-}
-
 const probe = Effect.fnUntraced(function* (info: Info) {
-  return (yield* probeResult(info)).service
-})
-
-const probeResult = Effect.fnUntraced(function* (info: Info, timeout = defaultEnsureTiming.requestTimeout) {
-  const endpoint = {
-    url: info.url,
-    auth:
-      info.password === undefined
-        ? undefined
-        : { type: "basic" as const, username: "opencode", password: info.password },
-  } satisfies Endpoint
-  const signal = AbortSignal.timeout(timeout)
-  const result = yield* Effect.promise(() =>
-    fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
-      .then(async (response) => ({
-        response,
-        body: response.status === 404 ? undefined : ((await response.json()) as unknown),
-      }))
-      .then(
-        (value) => ({ value }),
-        (cause: unknown) => ({ cause }),
-      ),
-  )
-  if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
-  const response = result.value.response
-  // A missing health endpoint identifies protocol incompatibility, not an older
-  // version. Only an unmet version requirement lets ensure replace this owner.
-  if (response.status === 404)
-    return {
-      service: {
-        info,
-        endpoint,
-        version: info.version,
-        state: "ready" as const,
-        compatible: false,
-      } satisfies LocalService,
-      timedOut: false,
-    }
-  const body = result.value.body
-  const serverInfo = decodeInfo(body)
-  if (Option.isSome(serverInfo)) {
-    if (serverInfo.value.pid !== info.pid) return { service: undefined, timedOut: false }
-    if (info.version !== undefined && serverInfo.value.version !== info.version)
-      return { service: undefined, timedOut: false }
-    return {
-      service: {
-        info,
-        endpoint,
-        version: serverInfo.value.version,
-        state: response.ok ? "ready" : response.status === 500 ? "failed" : "waiting",
-        compatible: true,
-      } satisfies LocalService,
-      timedOut: false,
-    }
-  }
-  return { service: undefined, timedOut: false }
+  return (yield* Effect.promise(() => probeResult(info))).service
 })
 
 const registered = Effect.fnUntraced(function* (file?: string, timeout?: number) {
   const info = yield* read(file)
   if (info === undefined) return { info: undefined, service: undefined, timedOut: false }
-  return { info, ...(yield* probeResult(info, timeout)) }
+  return { info, ...(yield* Effect.promise(() => probeResult(info, timeout))) }
 })
 
 // 50ms cadence bounded at ~5s, shared by stop escalation and each ensure
@@ -302,10 +221,6 @@ const stopped = Effect.fnUntraced(function* (pid: number) {
   if (!running) return true
   return yield* Effect.fail(new Error(`Server process ${pid} is still running`))
 })
-
-function same(left: Info, right: Info) {
-  return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
-}
 
 const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = yield* read(options.file)

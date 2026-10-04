@@ -1,6 +1,4 @@
 import { readFile, rm } from "node:fs/promises"
-import { homedir } from "node:os"
-import { join } from "node:path"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
 import {
   contenderFailure,
@@ -11,8 +9,10 @@ import {
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
+import { fallback, headers, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
+export { headers }
 
 // Find, start, and stop the local opencode background service.
 //
@@ -148,18 +148,6 @@ export async function stop(options: StopOptions = {}) {
   if (info !== undefined) await terminate(info, options, ensureTiming(options))
 }
 
-function fallback() {
-  return join(process.env["XDG_STATE_HOME"] ?? join(homedir(), ".local", "state"), "opencode", "service.json")
-}
-
-/** Create HTTP authentication headers for a service endpoint. */
-export function headers(endpoint: Endpoint) {
-  if (endpoint.auth === undefined) return undefined
-  return {
-    authorization: "Basic " + Buffer.from(endpoint.auth.username + ":" + endpoint.auth.password).toString("base64"),
-  }
-}
-
 async function read(file?: string) {
   const text = await readFile(file ?? fallback(), "utf8").catch(() => undefined)
   if (text === undefined) return undefined
@@ -168,73 +156,6 @@ async function read(file?: string) {
   } catch {
     return undefined
   }
-}
-
-type LocalService = {
-  readonly info: Info
-  readonly endpoint: Endpoint
-  readonly version?: string
-  readonly state: "ready" | "waiting" | "failed"
-  readonly compatible: boolean
-}
-
-async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
-  const endpoint = {
-    url: info.url,
-    auth:
-      info.password === undefined
-        ? undefined
-        : { type: "basic" as const, username: "opencode", password: info.password },
-  } satisfies Endpoint
-  const signal = AbortSignal.timeout(timeout)
-  const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
-    .then(async (response) => ({
-      response,
-      body: response.status === 404 ? undefined : ((await response.json()) as unknown),
-    }))
-    .then(
-      (value) => ({ value }),
-      (cause: unknown) => ({ cause }),
-    )
-  if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
-  const response = result.value.response
-  // A missing health endpoint identifies protocol incompatibility, not an older
-  // version. Only an unmet version requirement lets ensure replace this owner.
-  if (response.status === 404)
-    return {
-      service: {
-        info,
-        endpoint,
-        version: info.version,
-        state: "ready" as const,
-        compatible: false,
-      } satisfies LocalService,
-      timedOut: false,
-    }
-  const serverInfo = decodeInfo(result.value.body)
-  if (serverInfo !== undefined) {
-    if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false }
-    if (info.version !== undefined && serverInfo.version !== info.version)
-      return { service: undefined, timedOut: false }
-    return {
-      service: {
-        info,
-        endpoint,
-        version: serverInfo.version,
-        state: response.ok ? "ready" : response.status === 500 ? "failed" : "waiting",
-        compatible: true,
-      } satisfies LocalService,
-      timedOut: false,
-    }
-  }
-  return { service: undefined, timedOut: false }
-}
-
-function decodeInfo(input: unknown) {
-  if (typeof input !== "object" || input === null) return
-  if (!("version" in input) || typeof input.version !== "string") return
-  if (!("pid" in input) || typeof input.pid !== "number" || !Number.isInteger(input.pid) || input.pid < 0) return
-  return { version: input.version, pid: input.pid }
 }
 
 async function registered(file?: string, timeout?: number) {
@@ -264,10 +185,6 @@ async function waitUntilStopped(pid: number, timing: EnsureTiming) {
     if (attempt < timing.stopPollAttempts) await delay(timing.stopPollInterval)
   }
   return false
-}
-
-function same(left: Info, right: Info) {
-  return left.id === right.id && left.version === right.version && left.url === right.url && left.pid === right.pid
 }
 
 async function terminate(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
