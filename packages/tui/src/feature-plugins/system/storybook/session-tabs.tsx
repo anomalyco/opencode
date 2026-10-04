@@ -12,6 +12,7 @@ import {
   type TabUnreadMarker,
 } from "../../../component/session-tabs"
 import { closeSessionTab, cycleSessionTab, moveSessionTab } from "../../../context/session-tabs-model"
+import { directoryKey } from "../../../util/project"
 import { StoryFooter } from "./footer"
 import { DialogPrompt } from "../../../ui/dialog-prompt"
 import { useDialog } from "../../../ui/dialog"
@@ -149,7 +150,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
   }
 
   const toggleAllGroups = () => {
-    const keys = [...new Set(tabs().map((tab) => directoryOf(tab.sessionID) ?? tab.sessionID))]
+    const keys = [...new Set(tabs().map((tab) => directoryKey(directoryOf(tab.sessionID) ?? tab.sessionID)))]
     const anyExpanded = keys.some((key) => !collapsed()[key])
     setCollapsed(Object.fromEntries(keys.map((key) => [key, anyExpanded])))
     setLastEvent(anyExpanded ? "all folder groups collapsed" : "all folder groups expanded")

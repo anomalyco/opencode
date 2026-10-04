@@ -660,14 +660,16 @@ function VerticalSessionTabs(props: {
   // Add button (1 row) plus container gap above the rows.
   const topPadCells = 2
   const topPad = () => (tabs.add || newTab() ? topPadCells : 0)
-  const offsets = createMemo(
-    () =>
-      rows().reduce<{ tops: number[]; cursor: number }>(
-        (acc, row) => ({ tops: [...acc.tops, acc.cursor], cursor: acc.cursor + rowHeight(row) + 1 }),
-        { tops: [], cursor: topPad() },
-      ).tops,
-  )
-  const rowAt = (y: number) => offsets().reduce((found, top, index) => (top <= y ? index : found), -1)
+  const offsets = createMemo(() => {
+    const tops: number[] = []
+    let cursor = topPad()
+    rows().forEach((row) => {
+      tops.push(cursor)
+      cursor += rowHeight(row) + 1
+    })
+    return tops
+  })
+  const rowAt = (y: number) => offsets().findLastIndex((top) => top <= y)
   const rowBottom = (index: number) => {
     const row = rows()[index]
     if (!row) return 0
