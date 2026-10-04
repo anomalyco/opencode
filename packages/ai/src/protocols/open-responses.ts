@@ -592,22 +592,22 @@ const lowerMessages = <Hosted extends HostedToolReplayItem = never>(
   adapter: ProviderAdapter<Hosted>,
 ) =>
   Effect.gen(function* () {
-    const input: Array<OpenResponsesInputItem | Hosted> = []
-    const providerMetadataKey = metadataKey(request.model)
+  const input: Array<OpenResponsesInputItem | Hosted> = []
+  const providerMetadataKey = metadataKey(request.model)
 
-    for (const message of request.messages) {
-      const metadata = yield* ProviderShared.validateWith(
-        Schema.decodeUnknownEffect(Schema.UndefinedOr(MessageMetadata)),
-      )(message.providerMetadata?.[providerMetadataKey])
-      if (message.role === "system") {
-        const update = effortUpdate(message)
-        if (update) {
-          // Consecutive updates are rejected, so a newer one replaces its predecessor.
-          const last = input.at(-1)
-          if (last !== undefined && "type" in last && last.type === "configuration_update") input.pop()
-          input.push({ type: "configuration_update", reasoning: { effort: update.effort ?? DEFAULT_EFFORT } })
-          continue
-        }
+  for (const message of request.messages) {
+    const metadata = yield* ProviderShared.validateWith(
+      Schema.decodeUnknownEffect(Schema.UndefinedOr(MessageMetadata)),
+    )(message.providerMetadata?.[providerMetadataKey])
+    if (message.role === "system") {
+      const update = effortUpdate(message)
+      if (update) {
+        // Consecutive updates are rejected, so a newer one replaces its predecessor.
+        const last = input.at(-1)
+        if (last !== undefined && "type" in last && last.type === "configuration_update") input.pop()
+        input.push({ type: "configuration_update", reasoning: { effort: update.effort ?? DEFAULT_EFFORT } })
+        continue
+      }
       input.push({
         type: "message",
         role: "developer",
