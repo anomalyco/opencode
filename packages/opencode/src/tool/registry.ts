@@ -8,6 +8,9 @@ import { ShellTool } from "./shell"
 import { EditTool } from "./edit"
 import { GlobTool } from "./glob"
 import { GrepTool } from "./grep"
+import { SemanticSearchTool } from "./semantic-search"
+import { SemanticEmbedder } from "@opencode-ai/core/semantic/embedder"
+import { SemanticCache } from "@opencode-ai/core/semantic/cache"
 import { ReadTool } from "./read"
 import { TaskTool } from "./task"
 import { Database } from "@opencode-ai/core/database/database"
@@ -112,6 +115,7 @@ const layer = Layer.effect(
     const writetool = yield* WriteTool
     const edit = yield* EditTool
     const greptool = yield* GrepTool
+    const semanticSearch = yield* SemanticSearchTool
     const patchtool = yield* ApplyPatchTool
     const skilltool = yield* SkillTool
     const agent = yield* Agent.Service
@@ -212,6 +216,7 @@ const layer = Layer.effect(
           read: Tool.init(read),
           glob: Tool.init(globtool),
           grep: Tool.init(greptool),
+          semantic_search: Tool.init(semanticSearch),
           edit: Tool.init(edit),
           write: Tool.init(writetool),
           task: Tool.init(task),
@@ -235,6 +240,7 @@ const layer = Layer.effect(
             tool.read,
             tool.glob,
             tool.grep,
+            tool.semantic_search,
             tool.edit,
             tool.write,
             tool.task,
@@ -449,6 +455,8 @@ export const node = LayerNode.make({
     MCP.node,
     Database.node,
     Ripgrep.node,
+    SemanticEmbedder.node,
+    SemanticCache.node,
   ],
 })
 

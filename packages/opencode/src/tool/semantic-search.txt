@@ -1,0 +1,7 @@
+- Semantic code search tool powered by local hardware embeddings ($0 remote tokens, <15ms in RAM)
+- Searches codebase by conceptual meaning, intent and topic rather than exact literal text or regex
+- Ideal when you don't know the exact function, variable, or class name (e.g. "where is context compaction handled", "how are token limits enforced", "database connection pool")
+- Use `semantic_search` for high-level conceptual discovery and intent-based code location
+- Use `grep` instead when you already know the exact literal string, symbol name, or precise regex pattern
+- Automatically falls back to keyword matching if the local embedding engine is unavailable
+- Filter files by pattern with the include parameter (e.g. "*.ts", "*.py")

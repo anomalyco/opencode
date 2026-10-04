@@ -22,6 +22,7 @@ const AVAILABLE_PERMISSIONS = [
   "edit",
   "glob",
   "grep",
+  "semantic_search",
   "webfetch",
   "task",
   "todowrite",
