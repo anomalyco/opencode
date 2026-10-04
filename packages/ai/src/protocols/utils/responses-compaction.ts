@@ -80,8 +80,8 @@ const Response = Schema.Struct({
   usage: Schema.optional(Schema.StructWithRest(OpenResponses.OpenResponsesUsage, [JsonObject])),
 })
 
-export const make = <Hosted extends OpenResponses.HostedToolReplayItem = never, NativeTool = never>(
-  adapter: OpenResponses.ProviderAdapter<Hosted, NativeTool>,
+export const make = (
+  adapter: OpenResponses.ProviderAdapter,
   lowerTools: (request: LLMRequest) => Effect.Effect<ReadonlyArray<Record<string, unknown>>, AIError>,
 ): CompactOperation =>
   Effect.fn("ResponsesCompaction.execute")(function* (request, executor, options) {

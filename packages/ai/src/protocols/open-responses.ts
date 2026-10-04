@@ -384,7 +384,10 @@ export const decodeChannelEvent = (frame: string) =>
     ),
   )
 
-export interface ProviderAdapter<Hosted extends HostedToolReplayItem = never, NativeTool = never> {
+export interface ProviderAdapter<
+  out Hosted extends HostedToolReplayItem = HostedToolReplayItem,
+  out NativeTool extends { readonly type: string } = { readonly type: string },
+> {
   readonly id: string
   readonly name: string
   readonly nativeTool?: (native: NonNullable<ToolDefinition["native"]>) => Effect.Effect<NativeTool, AIError>
@@ -396,9 +399,7 @@ export interface ProviderAdapter<Hosted extends HostedToolReplayItem = never, Na
   readonly restoreHostedToolItem?: (item: unknown) => Hosted | undefined
 }
 
-type MediaAdapter = Pick<ProviderAdapter, "name" | "lowerMedia">
-
-const BASE_ADAPTER: ProviderAdapter = { id: ADAPTER, name: NAME }
+const BASE_ADAPTER: ProviderAdapter<never, never> = { id: ADAPTER, name: NAME }
 
 export interface ParserState {
   readonly provider: LLMRequest["model"]["provider"]
@@ -444,7 +445,10 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (protoco
   }
 })
 
-export const lowerTools = <Hosted extends HostedToolReplayItem = never, NativeTool = never>(
+export const lowerTools = <
+  Hosted extends HostedToolReplayItem = never,
+  NativeTool extends { readonly type: string } = never,
+>(
   tools: ReadonlyArray<ToolDefinition>,
   adapter: ProviderAdapter<Hosted, NativeTool>,
 ) =>
@@ -502,7 +506,7 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
 const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   part: MediaPart,
   request: LLMRequest,
-  adapter: MediaAdapter,
+  adapter: ProviderAdapter,
   target: "message" | "tool-result",
 ) {
   const media = part.media.inline()
@@ -534,18 +538,14 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
 const lowerUserContent = Effect.fnUntraced(function* (
   part: LLMRequest["messages"][number]["content"][number],
   request: LLMRequest,
-  adapter: MediaAdapter,
+  adapter: ProviderAdapter,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
   if (part.type === "media") return yield* lowerMessageMedia(part, request, adapter)
   return yield* ProviderShared.unsupportedContent(adapter.name, "user", ["text", "media"])
 })
 
-const lowerMessageMedia = Effect.fnUntraced(function* (
-  part: MediaPart,
-  request: LLMRequest,
-  adapter: MediaAdapter,
-) {
+const lowerMessageMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMRequest, adapter: ProviderAdapter) {
   const lowered = yield* lowerMedia(part, request, adapter, "message")
   if (lowered.type === "input_video")
     return yield* ProviderShared.invalidRequest(`${adapter.name} user messages do not support input_video`)
@@ -557,7 +557,7 @@ const lowerMessageMedia = Effect.fnUntraced(function* (
 const lowerToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
-  adapter: MediaAdapter,
+  adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
   return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter, "tool-result")
@@ -566,7 +566,7 @@ const lowerToolResultContentItem = Effect.fnUntraced(function* (
 const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
-  adapter: MediaAdapter,
+  adapter: ProviderAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
   return yield* lowerMessageMedia(ProviderShared.toolFileMedia(item), request, adapter)
@@ -575,7 +575,7 @@ const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
 const lowerToolResultOutput = Effect.fnUntraced(function* (
   part: ToolResultPart,
   request: LLMRequest,
-  adapter: MediaAdapter,
+  adapter: ProviderAdapter,
 ) {
   // Text/json/error results are encoded as a plain string for backward
   // compatibility with existing cassettes and provider expectations.
@@ -587,9 +587,9 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = <Hosted extends HostedToolReplayItem = never, NativeTool = never>(
+const lowerMessages = <Hosted extends HostedToolReplayItem = never>(
   request: LLMRequest,
-  adapter: ProviderAdapter<Hosted, NativeTool>,
+  adapter: ProviderAdapter<Hosted>,
 ) =>
   Effect.gen(function* () {
     const input: Array<OpenResponsesInputItem | Hosted> = []
@@ -752,9 +752,9 @@ const lowerMessages = <Hosted extends HostedToolReplayItem = never, NativeTool =
   return input
 })
 
-export const lowerConversation = <Hosted extends HostedToolReplayItem = never, NativeTool = never>(
+export const lowerConversation = <Hosted extends HostedToolReplayItem = never>(
   request: LLMRequest,
-  adapter: ProviderAdapter<Hosted, NativeTool>,
+  adapter: ProviderAdapter<Hosted>,
 ) =>
   Effect.gen(function* () {
     const instructions = ProviderShared.joinText(request.system)
@@ -813,7 +813,10 @@ export const allowedToolChoice = (request: LLMRequest) => {
   }
 }
 
-export const fromRequestWithAdapter = <Hosted extends HostedToolReplayItem = never, NativeTool = never>(
+export const fromRequestWithAdapter = <
+  Hosted extends HostedToolReplayItem = never,
+  NativeTool extends { readonly type: string } = never,
+>(
   request: LLMRequest,
   adapter: ProviderAdapter<Hosted, NativeTool>,
 ) =>
@@ -1465,10 +1468,7 @@ export const step = (state: ParserState, event: NormalizedEvent) => {
  * The provider-neutral Open Responses protocol. Provider-specific Responses
  * implementations compose this baseline with their own tools and event variants.
  */
-export const initial = (
-  request: LLMRequest,
-  adapter: Pick<ProviderAdapter, "id" | "name"> = BASE_ADAPTER,
-): ParserState => ({
+export const initial = (request: LLMRequest, adapter: ProviderAdapter = BASE_ADAPTER): ParserState => ({
   provider: request.model.provider,
   completedCompactions: new Set<string>(),
   id: adapter.id,
