@@ -360,7 +360,7 @@ const lowerToolCall = (
   extra_content: decodeExtraContent(part.providerMetadata?.[options.providerMetadataKey]?.extraContent),
 })
 
-const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
+const lowerMedia = Effect.fnUntraced(function* (part: MediaPart) {
   // Chat Completions accepts PDFs, and no other documents, as inline `file` parts; file URLs are not supported.
   if (part.media.mediaType.toLowerCase() === "application/pdf")
     return {
@@ -406,7 +406,7 @@ const lowerReasoningDetail = (detail: ReasoningDetail) => {
 
 const isKimiDetail = (detail: { readonly type: string }) => detail.type === "summary" || detail.type === "encrypted"
 
-const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (
+const lowerUserMessage = Effect.fnUntraced(function* (
   message: OpenAIChatRequestMessage,
   options: LoweringOptions,
 ) {
@@ -430,7 +430,7 @@ const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (
   return { role: "user" as const, content }
 })
 
-const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(function* (
+const lowerAssistantMessage = Effect.fnUntraced(function* (
   message: OpenAIChatRequestMessage,
   configuredField: string | undefined,
   requireReasoning: boolean,
@@ -495,7 +495,7 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
   return { ...result, [field]: reasoningText }
 })
 
-const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
+const lowerToolMessages = Effect.fnUntraced(function* (
   message: OpenAIChatRequestMessage,
   options: LoweringOptions,
 ) {
@@ -532,7 +532,7 @@ const toolMessage = (toolCallID: string, text: string, cacheControl: OpenAIChatC
   content: cacheControl === undefined ? text : [{ type: "text" as const, text, cache_control: cacheControl }],
 })
 
-const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
+const lowerMessage = Effect.fnUntraced(function* (
   message: OpenAIChatRequestMessage,
   reasoningField: string | undefined,
   requireReasoning: boolean,
@@ -544,7 +544,7 @@ const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
   return (yield* lowerToolMessages(message, options)).messages
 })
 
-const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest, options: LoweringOptions) {
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, options: LoweringOptions) {
   const system: OpenAIChatMessage[] =
     request.system.length === 0
       ? []

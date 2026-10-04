@@ -182,7 +182,7 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 // =============================================================================
 // Request Body Construction
 // =============================================================================
-const mediaContent = Effect.fn("GoogleInteractions.mediaContent")(function* (asset: Media.Asset) {
+const mediaContent = Effect.fnUntraced(function* (asset: Media.Asset) {
   if (
     asset.kind !== "image" &&
     asset.kind !== "audio" &&
@@ -208,7 +208,7 @@ const signature = (metadata: ProviderMetadata | undefined, key: string) => {
     : undefined
 }
 
-const lowerMessages = Effect.fn("GoogleInteractions.lowerMessages")(function* (request: LLMRequest) {
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const steps: InputStep[] = []
   const key = request.model.route.providerMetadataKey ?? String(request.model.provider)
   for (const message of request.messages) {
@@ -275,7 +275,7 @@ const lowerMessages = Effect.fn("GoogleInteractions.lowerMessages")(function* (r
   return steps
 })
 
-const lowerToolResult = Effect.fn("GoogleInteractions.lowerToolResult")(function* (part: ToolResultPart) {
+const lowerToolResult = Effect.fnUntraced(function* (part: ToolResultPart) {
   if (part.result.type === "json" && ProviderShared.isRecord(part.result.value)) return part.result.value
   if (part.result.type !== "content") return ProviderShared.toolResultText(part)
 
