@@ -66,6 +66,7 @@ test("grouped rail follows session status without toggling collapse", async () =
 })
 
 test("places the new-session entry above folder groups", async () => {
+
   const [active, setActive] = createSignal("first")
   const [items] = createSignal<SessionTab[]>([{ sessionID: "first", title: "First session" }])
   const controller = {
@@ -176,6 +177,52 @@ test("collapses and expands a folder group from its header", async () => {
     await app.mockMouse.click(1, headerRow())
     await app.waitForFrame((frame) => frame.includes("First session") && frame.includes("▾ alpha"))
     expect(app.captureCharFrame()).toContain("Third session")
+  } finally {
+    app.renderer.stop()
+  }
+})
+
+test("hides detail duplicated by the folder header, keeps branch detail", async () => {
+  const [active, setActive] = createSignal("first")
+  const [items] = createSignal<SessionTab[]>([
+    { sessionID: "first", title: "First session" },
+    { sessionID: "second", title: "Second session" },
+  ])
+  const controller = {
+    tabs: items,
+    current: active,
+    add() {},
+    select: setActive,
+    close() {},
+    move() {},
+    directory: (sessionID: string) => (sessionID === "first" ? "/repo/alpha" : "/repo/beta"),
+    detail: (sessionID: string) => (sessionID === "first" ? "alpha" : "beta ⎇ feat"),
+    status: () => EMPTY_SESSION_TAB_STATUS,
+  } satisfies SessionTabsController
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={createTuiResolvedConfig({ tabs: { indicators: "status" } })}>
+          <Keymap.Provider>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
+              <box width="100%" height="100%" flexDirection="row">
+                <SessionTabs controller={controller} orientation="vertical" animations={false} width={SESSION_SIDEBAR_WIDTH} />
+                <text>transcript</text>
+              </box>
+            </ThemeProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 80, height: 24 },
+  )
+
+  try {
+    app.renderer.start()
+    await app.waitForFrame((frame) => frame.includes("⎇"))
+    const frame = app.captureCharFrame()
+    expect(frame).toContain("⎇")
+    expect(frame.split("alpha").length - 1).toBe(1)
   } finally {
     app.renderer.stop()
   }

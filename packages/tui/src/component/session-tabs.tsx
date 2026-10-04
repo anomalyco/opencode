@@ -654,9 +654,19 @@ function VerticalSessionTabs(props: {
     // swaps titles and glow live without moving any boxes.
     return groupSessionTabRows(tabs.tabs(), directoryOf, collapsedMap(), labelOf)
   })
-  // Headers are 1 row tall; tab rows keep their 2-row height (1 row when compact).
+  // Headers are 1 row tall; tab rows keep their detail row only when it adds
+  // info beyond the group header (e.g. a worktree branch), else title-only.
   // Every row is followed by the container's 1-row gap, so offsets accumulate per row.
-  const rowHeight = (row: SessionTabRow) => (row.kind === "header" || compact() ? 1 : 2)
+  const rowShowsDetail = (row: SessionTabRow) => {
+    if (row.kind !== "tab" || compact()) return false
+    const tab = ordered()[row.tabIndex]
+    if (!tab) return false
+    const text = detail(tab.sessionID)
+    if (!text) return false
+    const header = rows()?.find((candidate) => candidate.kind === "header" && candidate.key === row.key)
+    return text !== (header && header.kind === "header" ? header.label : "")
+  }
+  const rowHeight = (row: SessionTabRow) => (row.kind === "header" || compact() ? 1 : rowShowsDetail(row) ? 2 : 1)
   // Add button (1 row) plus container gap above the rows.
   const topPadCells = 2
   const topPad = () => (tabs.add || newTab() ? topPadCells : 0)
@@ -1206,7 +1216,7 @@ function VerticalSessionTabs(props: {
                     />
                     <Show when={tabIndex === items().length - 1}>
                       <TabPulse
-                        top={2}
+                        top={rowShowsDetail(row) ? 2 : 1}
                         edge="below"
                         enabled={animations()}
                         active={runs()}
@@ -1316,6 +1326,7 @@ function VerticalSessionTabs(props: {
                         </text>
                       </box>
                     </box>
+                    <Show when={rowShowsDetail(row)}>
                     <box height={1} width="100%" position="relative" flexDirection="row">
                       <TabPulse
                         enabled={animations()}
@@ -1342,6 +1353,7 @@ function VerticalSessionTabs(props: {
                         </text>
                       </box>
                     </box>
+                    </Show>
                   </Show>
                 </box>
               )
