@@ -65,6 +65,21 @@ export function currentToolHasLoadedFiles(tool: SessionMessageAssistantTool) {
   return Array.isArray(loaded) && loaded.some((path) => typeof path === "string")
 }
 
+export function readImagePath(input: Record<string, unknown>) {
+  if (typeof input.path !== "string" || !/\.(png|jpe?g|gif|webp|svg|avif|bmp|ico)$/i.test(input.path)) return
+  return input.path.replaceAll("\\", "/")
+}
+
+// Plain file reads render as one comma-separated row; images and loaded instructions keep their own rows.
+export function currentToolGroupedRead(tool: SessionMessageAssistantTool) {
+  return (
+    tool.name === "read" &&
+    tool.state.status !== "error" &&
+    !readImagePath(currentToolInput(tool)) &&
+    !currentToolHasLoadedFiles(tool)
+  )
+}
+
 export function currentContentDefaultOpen(
   content: SessionMessageAssistant["content"][number],
   shellExpanded: boolean,

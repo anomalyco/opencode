@@ -8,6 +8,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { Project } from "./project.js"
 import { Model } from "@opencode/schema/model"
 import { Location } from "./location.js"
+import type { FileSystem } from "./filesystem.js"
 import { SessionMessage } from "./session/message.js"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { Bus } from "./bus.js"
@@ -145,7 +146,10 @@ export interface Interface {
     readonly from?: SessionMessage.ID
     readonly to?: SessionMessage.ID
     readonly context?: number
-  }) => Effect.Effect<readonly FileDiff.Info[], NotFoundError | MessageNotFoundError | TurnRangeError | Snapshot.Error>
+  }) => Effect.Effect<
+    readonly FileDiff.Info[],
+    NotFoundError | MessageNotFoundError | TurnRangeError | Snapshot.Error | FileSystem.DirectoryNotFoundError
+  >
   /**
    * Durable admitted session work not yet visible in projected history,
    * ordered by admission. Includes unpromoted user and synthetic inputs and
@@ -170,6 +174,10 @@ export interface Interface {
   readonly switchAgent: (input: { sessionID: SessionSchema.ID; agent: Agent.ID }) => Effect.Effect<void, NotFoundError>
   readonly switchModel: (input: { sessionID: SessionSchema.ID; model: Model.Ref }) => Effect.Effect<void, NotFoundError>
   readonly rename: (input: { sessionID: SessionSchema.ID; title: string }) => Effect.Effect<void, NotFoundError>
+  readonly setMetadata: (input: {
+    sessionID: SessionSchema.ID
+    metadata: SessionSchema.Metadata
+  }) => Effect.Effect<void, NotFoundError>
   readonly setPermissions: (input: {
     sessionID: SessionSchema.ID
     permissions: Permission.Ruleset
@@ -191,7 +199,10 @@ export interface Interface {
     agents?: PromptInput.Prompt["agents"]
     skills?: PromptInput.Prompt["skills"]
     delivery?: SessionInbox.Delivery
-  }) => Effect.Effect<void, NotFoundError | Command.NotFoundError | Command.ExecutionError>
+  }) => Effect.Effect<
+    void,
+    NotFoundError | Command.NotFoundError | Command.ExecutionError | FileSystem.DirectoryNotFoundError
+  >
   readonly shell: (
     input: Parameters<Session.Handle["shell"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["shell"]>
@@ -214,8 +225,13 @@ export interface Interface {
       sessionID: SessionSchema.ID
       messageID: SessionMessage.ID
       files?: boolean
-    }) => Effect.Effect<SessionSchema.Revert, NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error>
-    readonly clear: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError | Snapshot.Error>
+    }) => Effect.Effect<
+      SessionSchema.Revert,
+      NotFoundError | MessageNotFoundError | BusyError | Snapshot.Error | FileSystem.DirectoryNotFoundError
+    >
+    readonly clear: (
+      sessionID: SessionSchema.ID,
+    ) => Effect.Effect<void, NotFoundError | BusyError | Snapshot.Error | FileSystem.DirectoryNotFoundError>
     readonly commit: (sessionID: SessionSchema.ID) => Effect.Effect<void, NotFoundError | BusyError>
   }
 }
@@ -417,6 +433,7 @@ const layer = Layer.effect(
       switchAgent: (input) => sessions.forSession(input.sessionID).switchAgent(input),
       switchModel: (input) => sessions.forSession(input.sessionID).switchModel(input),
       rename: (input) => sessions.forSession(input.sessionID).rename(input),
+      setMetadata: (input) => sessions.forSession(input.sessionID).setMetadata(input),
       setPermissions: (input) => sessions.forSession(input.sessionID).setPermissions(input),
       move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),

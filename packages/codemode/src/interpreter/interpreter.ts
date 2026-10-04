@@ -1,4 +1,5 @@
 import type {
+  AnyNode,
   ArrayExpression,
   ArrayPattern,
   AssignmentPattern,
@@ -32,6 +33,8 @@ import type {
   Statement,
   Super,
   SwitchStatement,
+  TaggedTemplateExpression,
+  Literal,
   TemplateLiteral,
   ThrowStatement,
   TryStatement,
@@ -68,35 +71,61 @@ import {
   assign,
   Callable,
   define,
+  frozen,
   get,
+  hostCursor,
+  IteratorObj,
+  type Cursor,
   has,
+  hidden,
   hasPrototype,
   keys,
   Native,
   parseArrayIndex,
+  Arguments,
   Arr,
-  Bytes,
-  DateObj,
   Fn,
   GeneratorObj,
-  IteratorObj,
-  MapObj,
   Obj,
   PromiseObj,
-  SetObj,
-  URLSearchParamsObj,
-  HeadersObj,
   record,
   remove,
   set,
+  coerceToNumber,
+  coerceToString,
+  type Value,
 } from "./objects.js"
-import { preserveConsumerError } from "./callback.js"
+import { type Hint, preserveConsumerError, toPrimitive } from "./callback.js"
 import { Pending, resolvePromise, resolvePromiseValue } from "./promises.js"
-import { containsOpaqueReference, describeValue, rejectCircularInsertion, typeofValue } from "./references.js"
+import { describeValue, isOpaque, rejectCircularInsertion, typeofValue } from "./references.js"
 import { ScopeStack } from "./scope.js"
 import { constructRegExp } from "../stdlib/regexp.js"
 import { enumerableSource } from "../stdlib/object.js"
-import { coerceToNumber, coerceToString, compoundOperators } from "../stdlib/value.js"
+import { compoundOperators } from "../stdlib/value.js"
+
+/** The binary operators that convert object operands through ToPrimitive before acting on primitives. */
+const primitiveOperators = new Set([
+  "+",
+  "-",
+  "*",
+  "/",
+  "%",
+  "**",
+  "<",
+  "<=",
+  ">",
+  ">=",
+  "&",
+  "|",
+  "^",
+  "<<",
+  ">>",
+  ">>>",
+])
+
+/** ToPropertyKey on a primitive (or an opaque value, which keeps its built-in string form). */
+const propertyKey = (value: Value): PropertyKey =>
+  typeof value === "string" || typeof value === "number" || typeof value === "symbol" ? value : coerceToString(value)
 
 // What a loop does with its body's result: exit with a StatementResult, or undefined to keep iterating.
 // Unlabelled break ends this loop; a label the loop does not carry propagates outward.
@@ -132,7 +161,14 @@ const calleeDescription = (node: Expression | Super | undefined): string | undef
 }
 
 // OrdinaryHasInstance: walk the left operand's chain looking for the constructor's `prototype`.
-const instanceofValue = (lhs: unknown, rhs: unknown, node: AstNode): boolean => {
+// acorn types every literal as possibly a BigInt or RegExp; regex literals become RegExp objects before this is asked.
+const literal = (node: Literal): Value => {
+  if (typeof node.value === "bigint") throw typeError("BigInt literals are not supported.", node)
+  if (node.value instanceof RegExp) throw unsupportedSyntax("RegExpLiteral", node)
+  return node.value
+}
+
+const instanceofValue = (lhs: Value, rhs: Value, node: AstNode): boolean => {
   if (!(rhs instanceof Callable)) {
     throw typeError("The right-hand side of 'instanceof' is not callable.", node)
   }
@@ -166,6 +202,24 @@ const collectPatternNames = (pattern: Pattern, out: Array<string> = []): Array<s
       break
   }
   return out
+}
+
+// Whether a function body (or a parameter default) reads `arguments`, looking through arrows but not nested
+// functions, which own theirs. Memoized so the object is only built for calls that can observe it.
+const argumentsUse = new WeakMap<Fn["body"], boolean>()
+const usesArguments = (fn: Fn): boolean => {
+  const cached = argumentsUse.get(fn.body)
+  if (cached !== undefined) return cached
+  const found = [...fn.parameters, fn.body].some(function visit(node: AnyNode | null): boolean {
+    if (node === null || typeof node !== "object") return false
+    if (node.type === "Identifier") return node.name === "arguments"
+    if (node.type === "FunctionDeclaration" || node.type === "FunctionExpression") return false
+    return Object.values(node).some((child) =>
+      Array.isArray(child) ? child.some((item) => visit(item)) : visit(child as AnyNode | null),
+    )
+  })
+  argumentsUse.set(fn.body, found)
+  return found
 }
 
 // `var` names declared anywhere in a function body except inside nested functions, which own theirs.
@@ -229,7 +283,7 @@ const loopDeclaration = (left: VariableDeclaration | Pattern, statement: "for...
 
 type CustomIterator = {
   iterator: Obj
-  next: unknown
+  next: Value
   asynchronous: boolean
 }
 
@@ -237,13 +291,13 @@ type CustomIterator = {
 type MemberReference = {
   target: Obj
   key: PropertyKey
-  receiver: unknown
+  receiver: Value
 }
 
 type GeneratorRequest = {
   kind: GeneratorRequestKind
-  value: unknown
-  response: Deferred.Deferred<unknown, unknown>
+  value: Value
+  response: Deferred.Deferred<Value, unknown>
 }
 
 type GeneratorState = {
@@ -262,6 +316,8 @@ export class Interpreter<R> {
   readonly pending: Pending<R>
   readonly builtins: Builtins
   readonly logs: Array<string>
+  /** Template objects by site: a tag sees the same `strings` array every time its literal is evaluated, as in JS. */
+  readonly templates = new WeakMap<TaggedTemplateExpression, Arr>()
   private readonly root: Frame<R>
 
   constructor(options: {
@@ -269,13 +325,14 @@ export class Interpreter<R> {
     readonly pending: Pending<R>
     readonly builtins: Builtins
     readonly logs?: Array<string>
-    readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, unknown]>
+    readonly globals?: (ctx: Interpreter<R>) => ReadonlyArray<readonly [string, Value]>
   }) {
     this.tools = options.tools
     this.pending = options.pending
     this.builtins = options.builtins
     this.logs = options.logs ?? []
-    const globalScope = new Map<string, Binding>()
+    // Program code has no receiver: top-level `this` is undefined, as in a module.
+    const globalScope = new Map<string, Binding>([["this", { mutable: false, value: undefined }]])
     // Calling back into the program never reads frame state, so any frame serves; the root is always alive.
     this.root = new Frame(this, new ScopeStack([globalScope]))
     for (const [name, value] of [...globals(this), ...(options.globals?.(this) ?? [])]) {
@@ -283,27 +340,31 @@ export class Interpreter<R> {
     }
   }
 
-  run(program: Program): Effect.Effect<unknown, unknown, R> {
+  run(program: Program): Effect.Effect<Value, unknown, R> {
     return this.root.run(program)
   }
 
-  call(callable: unknown, thisValue: unknown, args: Array<unknown>): Effect.Effect<unknown, unknown, R> {
+  call(callable: Value, thisValue: Value, args: Array<Value>): Effect.Effect<Value, unknown, R> {
     return this.root.call(callable, thisValue, args)
   }
 
-  await(promise: PromiseObj): Effect.Effect<unknown, unknown, never> {
+  await(promise: PromiseObj): Effect.Effect<Value, unknown, never> {
     return this.root.await(promise)
   }
 
-  iterate(value: unknown) {
+  iterate(value: Value) {
     return this.root.iterate(value)
+  }
+
+  iterateDirect(value: Value) {
+    return this.root.iterateDirect(value)
   }
 
   /** Runs one host tool: arguments cross as JSON and the result comes back as program values. */
   tool(
     run: (args: Array<Json | undefined>) => Effect.Effect<Json | undefined, unknown, R>,
-    args: Array<unknown>,
-  ): Effect.Effect<unknown, unknown, R> {
+    args: Array<Value>,
+  ): Effect.Effect<Value, unknown, R> {
     const ctx = this
     return Effect.gen(function* () {
       const json = yield* Effect.forEach(args, (arg) => toBoundary(ctx, arg))
@@ -326,7 +387,7 @@ class Frame<R> {
     private depth = 0,
   ) {}
 
-  run(program: Program): Effect.Effect<unknown, unknown, R> {
+  run(program: Program): Effect.Effect<Value, unknown, R> {
     const self = this
     // Keep top-level declarations separate so they can shadow builtins.
     this.scopes.push()
@@ -334,7 +395,7 @@ class Frame<R> {
       self.predeclareLexical(program.body)
       self.hoistFunctions(program.body)
       self.hoistVars(program.body)
-      let value: unknown = undefined
+      let value: Value = undefined
       for (const [index, statement] of program.body.entries()) {
         if (index === program.body.length - 1 && statement.type === "ExpressionStatement") {
           value = yield* self.evaluateExpression(statement.expression)
@@ -359,15 +420,12 @@ class Frame<R> {
   }
 
   // Fork at the call site so admission and hooks occur when the call is made.
-  private createToolCallPromise(
-    path: ReadonlyArray<string>,
-    args: Array<unknown>,
-  ): Effect.Effect<PromiseObj, never, R> {
+  private createToolCallPromise(path: ReadonlyArray<string>, args: Array<Value>): Effect.Effect<PromiseObj, never, R> {
     return this.ctx.pending.create(this.ctx.tool((json) => this.ctx.tools.execute(path, json), args))
   }
 
   // Fiber exits make settlement idempotent; yielding prevents inline continuation.
-  await(promise: PromiseObj): Effect.Effect<unknown, unknown, never> {
+  await(promise: PromiseObj): Effect.Effect<Value, unknown, never> {
     const pending = this.ctx.pending
     return Effect.suspend(() => {
       pending.markObserved(promise)
@@ -446,29 +504,40 @@ class Frame<R> {
     node: FunctionDeclaration | FunctionExpression | ArrowFunctionExpression,
     name = node.type === "ArrowFunctionExpression" ? "" : (node.id?.name ?? ""),
   ): Fn {
-    return new Fn(
-      this.ctx.builtins.Function,
+    const builtins = this.ctx.builtins
+    const fn = new Fn(
+      builtins.Function,
       name,
       node.params,
       node.body,
       this.scopes.capture(),
       node.async,
       node.generator,
+      node.type === "ArrowFunctionExpression",
     )
+    // Each generator function gets its own prototype, so `g() instanceof g` holds as in JS.
+    if (node.generator)
+      define(fn, "prototype", new Obj(node.async ? builtins.AsyncGenerator : builtins.Generator), hidden)
+    // The body of a named function expression sees its own name, read-only.
+    if (node.type === "FunctionExpression" && node.id) {
+      fn.capturedScopes.push(new Map([[node.id.name, { mutable: false, value: fn, initialized: true }]]))
+    }
+    return fn
   }
 
   // NamedEvaluation: an anonymous function definition takes the name of what it is assigned to.
-  private evaluateNamed(node: Expression, name: string): Effect.Effect<unknown, unknown, R> {
+  private evaluateNamed(node: Expression, name: string): Effect.Effect<Value, unknown, R> {
     if (node.type === "ArrowFunctionExpression" || (node.type === "FunctionExpression" && !node.id)) {
       return Effect.sync(() => this.createFunction(node, name))
     }
     return this.evaluateExpression(node)
   }
 
+  // Repeated `function` declarations and `var` clashes are legal: the last declaration wins.
   private hoistFunctions(statements: ReadonlyArray<Statement | ModuleDeclaration>): void {
     for (const node of statements) {
       if (node.type !== "FunctionDeclaration") continue
-      this.scopes.declare(node.id.name, this.createFunction(node), true, node)
+      this.scopes.current().set(node.id.name, { mutable: true, value: this.createFunction(node), initialized: true })
     }
   }
 
@@ -517,9 +586,6 @@ class Frame<R> {
     const self = this
     return Effect.gen(function* () {
       const discriminant = yield* self.evaluateExpression(node.discriminant)
-      if (containsOpaqueReference(discriminant)) {
-        throw invalidData("Switch discriminants must be data values.", node)
-      }
       self.scopes.push()
       return yield* Effect.gen(function* () {
         const cases = node.cases
@@ -534,11 +600,7 @@ class Frame<R> {
             defaultIndex = index
             continue
           }
-          const candidate = yield* self.evaluateExpression(test)
-          if (containsOpaqueReference(candidate)) {
-            throw invalidData("Switch case values must be data values.", test)
-          }
-          if (candidate === discriminant) {
+          if ((yield* self.evaluateExpression(test)) === discriminant) {
             selected = index
             break
           }
@@ -656,11 +718,11 @@ class Frame<R> {
       if (declared?.lexical) self.predeclarePattern(declared.pattern, declared.mutable, left)
       const right = yield* self.evaluateExpression(node.right)
 
-      const cursor = self.hostCursor(right)
+      const cursor = self.builtinCursor(right)
       const iterator = cursor === undefined ? yield* self.customIterator(right, node, awaiting) : undefined
       if (iterator === undefined && cursor === undefined) {
         throw invalidData(
-          `${awaiting ? "for await...of" : "for...of"} requires an array, string, Map, Set, URLSearchParams, or Headers, or custom iterator value.`,
+          `${awaiting ? "for await...of" : "for...of"} requires an iterable value, received ${describeValue(right)}.`,
           node,
         )
       }
@@ -676,7 +738,7 @@ class Frame<R> {
       }
       const assignment = left.type === "VariableDeclaration" ? undefined : left
 
-      const evaluateBody = (value: unknown) =>
+      const evaluateBody = (value: Value) =>
         Effect.gen(function* () {
           if (declared?.lexical) {
             self.scopes.push()
@@ -705,10 +767,8 @@ class Frame<R> {
         const bodyExit = yield* Effect.exit(evaluateBody(step.value))
         if (!Exit.isSuccess(bodyExit)) {
           // Process interruption must remain prompt; user cleanup cannot extend a timeout.
-          if (!Cause.hasInterruptsOnly(bodyExit.cause)) {
-            yield* Effect.exit(close())
-          }
-          return yield* Effect.failCause(bodyExit.cause)
+          if (Cause.hasInterruptsOnly(bodyExit.cause)) return yield* Effect.failCause(bodyExit.cause)
+          return yield* preserveConsumerError(close(), Effect.failCause(bodyExit.cause))
         }
         const exit = loopExit(bodyExit.value, labels)
         if (exit !== undefined) {
@@ -725,7 +785,7 @@ class Frame<R> {
     )
   }
 
-  private awaitValue(value: unknown): Effect.Effect<unknown, unknown, R> {
+  private awaitValue(value: Value): Effect.Effect<Value, unknown, R> {
     return Effect.flatMap(resolvePromise(this.ctx, value), (promise) =>
       Effect.ensuring(
         this.await(promise),
@@ -736,10 +796,10 @@ class Frame<R> {
 
   private awaitAsyncFromSyncValue(
     iterator: CustomIterator,
-    value: unknown,
+    value: Value,
     node: AstNode | undefined,
     closeOnRejection: boolean,
-  ): Effect.Effect<unknown, unknown, R> {
+  ): Effect.Effect<Value, unknown, R> {
     const self = this
     return Effect.gen(function* () {
       const settled = yield* Effect.exit(self.awaitValue(value))
@@ -751,54 +811,50 @@ class Frame<R> {
     })
   }
 
-  iterate(value: unknown, node?: AstNode) {
-    const cursor = this.hostCursor(value)
+  iterate(value: Value, node?: AstNode): Effect.Effect<Cursor<R> | undefined, unknown, R> {
+    const cursor = this.builtinCursor(value)
     if (cursor !== undefined) return Effect.succeed(cursor)
-    const self = this
     return Effect.map(this.customIterator(value, node, false), (iterator) =>
-      iterator === undefined
-        ? undefined
-        : {
-            next: self.nextIteratorResult(iterator, node, false),
-            close: Effect.suspend(() => self.closeIterator(iterator, node, false)),
-          },
+      iterator === undefined ? undefined : this.customCursor(iterator, node),
     )
   }
 
-  private hostCursor(value: unknown) {
-    const iterator =
-      value instanceof Arr
-        ? value.items[Symbol.iterator]()
-        : typeof value === "string"
-          ? value[Symbol.iterator]()
-          : value instanceof MapObj
-            ? value.map.entries()
-            : value instanceof SetObj
-              ? value.set.values()
-              : value instanceof URLSearchParamsObj
-                ? value.params.entries()
-                : value instanceof HeadersObj
-                  ? value.headers.entries()
-                  : value instanceof Bytes
-                    ? value.bytes.values()
-                    : value instanceof IteratorObj
-                      ? value.iterator
-                      : undefined
-    if (iterator === undefined) return undefined
-    const proto = this.ctx.builtins.Array
+  /** GetIteratorDirect: drive an iterator by its own `next`, without asking for `[Symbol.iterator]`. */
+  iterateDirect(value: Value, node?: AstNode): Cursor<R> {
+    if (value instanceof IteratorObj) return value.cursor as Cursor<R>
+    if (!(value instanceof Obj)) {
+      throw typeError(`An iterator must be an object, received ${describeValue(value)}.`, node)
+    }
+    return this.customCursor(
+      {
+        iterator: value,
+        next: this.requireIteratorMethod(get(value, "next"), "Iterator next", node),
+        asynchronous: false,
+      },
+      node,
+    )
+  }
+
+  private customCursor(iterator: CustomIterator, node: AstNode | undefined): Cursor<R> {
     return {
-      next: Effect.sync(() => {
-        const step = iterator.next()
-        return {
-          done: Boolean(step.done),
-          value: Array.isArray(step.value) ? new Arr(proto, step.value) : step.value,
-        }
-      }),
-      close: Effect.void,
+      next: this.nextIteratorResult(iterator, node, false),
+      close: Effect.suspend(() => this.closeIterator(iterator, node, false)),
     }
   }
 
-  private customIterator(value: unknown, node: AstNode | undefined, allowAsync = true) {
+  private builtinCursor(value: Value): Cursor<R> | undefined {
+    // Natives build their cursors without knowing R, like `lift` in native.ts.
+    if (value instanceof IteratorObj) return value.cursor as Cursor<R>
+    const iterator =
+      typeof value === "string"
+        ? value[Symbol.iterator]()
+        : value instanceof Obj
+          ? value.iterator(this.ctx.builtins)
+          : undefined
+    return iterator === undefined ? undefined : hostCursor(iterator)
+  }
+
+  private customIterator(value: Value, node: AstNode | undefined, allowAsync = true) {
     if (!(value instanceof Obj)) return Effect.undefined
     const asyncMethod = allowAsync ? get(value, AsyncIteratorSymbol) : undefined
     const method = asyncMethod ?? get(value, IteratorSymbol)
@@ -888,18 +944,18 @@ class Frame<R> {
     })
   }
 
-  private requireIteratorObject(value: unknown, context: string, node?: AstNode): Obj {
+  private requireIteratorObject(value: Value, context: string, node?: AstNode): Obj {
     if (value instanceof Obj) return value
     throw typeError(`${context} must be an object.`, node)
   }
 
-  private requireIteratorMethod(value: unknown, context: string, node?: AstNode): unknown {
+  private requireIteratorMethod(value: Value, context: string, node?: AstNode): Value {
     if (typeofValue(value) === "function") return value
     throw typeError(`${context} must be a function.`, node)
   }
 
   // for...in over null/undefined iterates nothing, like JS.
-  private enumerableKeys(value: unknown, node: AstNode): Array<string> {
+  private enumerableKeys(value: Value, node: AstNode): Array<string> {
     if (value instanceof ToolReference) return [...this.ctx.tools.keys(value.path)]
     if (value === null || value === undefined) return []
     return keys(enumerableSource(this.ctx, "for...in", value, node))
@@ -920,10 +976,10 @@ class Frame<R> {
 
       const keys = self.enumerableKeys(right, node.right)
 
-      if (left.type !== "Identifier" && left.type !== "VariableDeclaration") {
+      if (left.type === "RestElement" || left.type === "AssignmentPattern") {
         throw typeError("Unsupported for...in binding.", left)
       }
-      const assignmentName = left.type === "Identifier" ? left.name : undefined
+      const assignment = left.type === "VariableDeclaration" ? undefined : left
 
       for (const key of keys) {
         const result = yield* Effect.gen(function* () {
@@ -933,8 +989,8 @@ class Frame<R> {
             yield* self.declarePattern(declared.pattern, key, declared.mutable, left, true)
           } else if (declared) {
             yield* self.assignPattern(declared.pattern, key, left)
-          } else if (assignmentName) {
-            self.scopes.set(assignmentName, key, left)
+          } else if (assignment) {
+            yield* self.assignPattern(assignment, key, left)
           }
           return yield* self.evaluateStatement(node.body)
         }).pipe(
@@ -1063,7 +1119,7 @@ class Frame<R> {
 
   private declarePattern(
     pattern: Pattern,
-    value: unknown,
+    value: Value,
     mutable: boolean,
     node: AstNode,
     initialize = false,
@@ -1084,18 +1140,15 @@ class Frame<R> {
       }
 
       if (pattern.type === "ObjectPattern") {
-        if (!(value instanceof Obj)) {
-          throw typeError(
-            `Object destructuring requires a data object or array value, received ${describeValue(value)}.`,
-            pattern,
-          )
+        if (value === null || value === undefined) {
+          throw typeError(`Cannot destructure ${describeValue(value)} as it is ${value}.`, pattern)
         }
 
         const consumed = new Set<PropertyKey>()
         for (const property of pattern.properties) {
           if (property.type === "RestElement") {
             const rest = new Obj(self.ctx.builtins.Object)
-            assign(rest, value, consumed)
+            assign(rest, enumerableSource(self.ctx, "Object destructuring", value, pattern), consumed)
             yield* self.declarePattern(property.argument, rest, mutable, property, initialize)
             continue
           }
@@ -1104,7 +1157,7 @@ class Frame<R> {
           consumed.add(typeof key === "symbol" ? key : String(key))
           yield* self.declarePattern(
             property.value,
-            self.readProperty(value, key, property),
+            self.destructuredProperty(value, key, property),
             mutable,
             property,
             initialize,
@@ -1123,7 +1176,7 @@ class Frame<R> {
     })
   }
 
-  private assignPattern(pattern: Pattern, value: unknown, node: AstNode): Effect.Effect<void, unknown, R> {
+  private assignPattern(pattern: Pattern, value: Value, node: AstNode): Effect.Effect<void, unknown, R> {
     const self = this
     return Effect.gen(function* () {
       if (pattern.type === "Identifier") {
@@ -1143,24 +1196,21 @@ class Frame<R> {
       }
 
       if (pattern.type === "ObjectPattern") {
-        if (!(value instanceof Obj)) {
-          throw invalidData(
-            `Object destructuring requires a data object or array value, received ${describeValue(value)}.`,
-            pattern,
-          )
+        if (value === null || value === undefined) {
+          throw typeError(`Cannot destructure ${describeValue(value)} as it is ${value}.`, pattern)
         }
 
         const consumed = new Set<PropertyKey>()
         for (const property of pattern.properties) {
           if (property.type === "RestElement") {
             const rest = new Obj(self.ctx.builtins.Object)
-            assign(rest, value, consumed)
+            assign(rest, enumerableSource(self.ctx, "Object destructuring", value, pattern), consumed)
             yield* self.assignPattern(property.argument, rest, property)
             continue
           }
           const key = yield* self.destructuringPropertyKey(property)
           consumed.add(typeof key === "symbol" ? key : String(key))
-          yield* self.assignPattern(property.value, self.readProperty(value, key, property), property)
+          yield* self.assignPattern(property.value, self.destructuredProperty(value, key, property), property)
         }
         return
       }
@@ -1175,7 +1225,7 @@ class Frame<R> {
     })
   }
 
-  private evaluateDefault(pattern: AssignmentPattern): Effect.Effect<unknown, unknown, R> {
+  private evaluateDefault(pattern: AssignmentPattern): Effect.Effect<Value, unknown, R> {
     return pattern.left.type === "Identifier"
       ? this.evaluateNamed(pattern.right, pattern.left.name)
       : this.evaluateExpression(pattern.right)
@@ -1183,8 +1233,8 @@ class Frame<R> {
 
   private destructureArrayPattern(
     pattern: ArrayPattern,
-    value: unknown,
-    consume: (target: Pattern, value: unknown, context: AstNode) => Effect.Effect<void, unknown, R>,
+    value: Value,
+    consume: (target: Pattern, value: Value, context: AstNode) => Effect.Effect<void, unknown, R>,
   ): Effect.Effect<void, unknown, R> {
     const self = this
     return Effect.gen(function* () {
@@ -1208,7 +1258,7 @@ class Frame<R> {
         done = step.done
         if (element === null) continue
         if (element.type === "RestElement") {
-          const rest: Array<unknown> = []
+          const rest: Array<Value> = []
           if (!step.done) rest.push(step.value)
           while (!done) {
             const next = yield* cursor.next
@@ -1219,7 +1269,7 @@ class Frame<R> {
           return
         }
         const consumed = consume(element, step.done ? undefined : step.value, pattern)
-        yield* step.done ? consumed : preserveConsumerError(cursor, consumed)
+        yield* step.done ? consumed : preserveConsumerError(cursor.close, consumed)
       }
       if (!done) yield* cursor.close
     })
@@ -1231,23 +1281,24 @@ class Frame<R> {
     }
     const keyNode = property.key
     if (property.computed) {
-      return Effect.map(this.evaluateExpression(keyNode), (value) => this.toPropertyKey(value, keyNode))
+      return Effect.flatMap(this.evaluateExpression(keyNode), (value) => this.toPropertyKey(value, keyNode))
     }
     if (keyNode.type === "Identifier") return Effect.succeed(keyNode.name)
     if (keyNode.type === "Literal") return Effect.succeed(String(keyNode.value))
     throw unsupportedSyntax(keyNode.type, keyNode)
   }
 
-  private evaluateExpression(node: Expression): Effect.Effect<unknown, unknown, R> {
+  private evaluateExpression(node: Expression): Effect.Effect<Value, unknown, R> {
     switch (node.type) {
       case "Literal": {
         const regex = node.regex
         if (regex) return Effect.sync(() => constructRegExp(this.ctx.builtins, [regex.pattern, regex.flags]))
-        if (typeof node.value === "bigint") throw typeError("BigInt literals are not supported.", node)
-        return Effect.succeed(node.value)
+        return Effect.succeed(literal(node))
       }
       case "Identifier":
         return Effect.sync(() => this.scopes.get(node.name, node))
+      case "ThisExpression":
+        return Effect.sync(() => this.scopes.get("this", node))
       case "BinaryExpression":
         return this.evaluateBinaryExpression(node)
       case "LogicalExpression":
@@ -1259,7 +1310,7 @@ class Frame<R> {
       case "SequenceExpression": {
         const self = this
         return Effect.gen(function* () {
-          let result: unknown
+          let result: Value
           for (const expression of node.expressions) {
             result = yield* self.evaluateExpression(expression)
           }
@@ -1283,6 +1334,8 @@ class Frame<R> {
         return this.evaluateArrayExpression(node)
       case "TemplateLiteral":
         return this.evaluateTemplateLiteral(node)
+      case "TaggedTemplateExpression":
+        return this.evaluateTaggedTemplate(node)
       case "ConditionalExpression":
         return this.evaluateConditionalExpression(node)
       case "UpdateExpression":
@@ -1300,7 +1353,7 @@ class Frame<R> {
     }
   }
 
-  private evaluateNewExpression(node: NewExpression): Effect.Effect<unknown, unknown, R> {
+  private evaluateNewExpression(node: NewExpression): Effect.Effect<Value, unknown, R> {
     const self = this
     return Effect.gen(function* () {
       const callee = yield* self.evaluateExpression(node.callee)
@@ -1324,7 +1377,7 @@ class Frame<R> {
     })
   }
 
-  private evaluateBinaryExpression(node: BinaryExpression): Effect.Effect<unknown, unknown, R> {
+  private evaluateBinaryExpression(node: BinaryExpression): Effect.Effect<Value, unknown, R> {
     const operator = node.operator
     const left = node.left
     if (left.type === "PrivateIdentifier") throw unsupportedSyntax(left.type, left)
@@ -1333,81 +1386,108 @@ class Frame<R> {
       const lhs = yield* self.evaluateExpression(left)
       const rhs = yield* self.evaluateExpression(node.right)
       if (operator === "instanceof") return instanceofValue(lhs, rhs, node)
+      if (lhs instanceof Obj || rhs instanceof Obj) return yield* self.applyOperator(operator, lhs, rhs, node)
       return self.applyBinaryOperator(operator, lhs, rhs, node)
     })
   }
 
-  private applyBinaryOperator(operator: string, lhs: unknown, rhs: unknown, node: AstNode): unknown {
+  /** ToPrimitive for an operand: data objects run their own methods; opaque values stay for the data gates below. */
+  private toPrimitive(value: Value, hint: Hint, node: AstNode) {
+    return this.native(() => toPrimitive(this.ctx, value, hint), node)
+  }
+
+  // Arithmetic, relational, and bitwise operators convert both operands first, left then right, so a `valueOf`
+  // runs (and throws) in spec order; `+` asks for the default hint and the rest for a number.
+  private applyOperator(operator: string, lhs: Value, rhs: Value, node: AstNode): Effect.Effect<Value, unknown, R> {
+    if (!(lhs instanceof Obj || rhs instanceof Obj))
+      return Effect.succeed(this.applyBinaryOperator(operator, lhs, rhs, node))
+    // IsLooselyEqual converts only an object facing a non-nullish primitive; two objects (including tool
+    // references, which are not Obj) compare by identity.
+    const equality = operator === "==" || operator === "!="
+    // `in` checks the right operand before ToPropertyKey on the left, so a bad right side wins over a bad key.
+    if (operator === "in" && lhs instanceof Obj && !isOpaque(lhs) && rhs instanceof Obj) {
+      return Effect.map(this.toPropertyKey(lhs, node), (key) => has(rhs, key))
+    }
+    const other = lhs instanceof Obj ? rhs : lhs
+    const converts =
+      primitiveOperators.has(operator) ||
+      (equality && other !== null && other !== undefined && typeof other !== "object")
+    if (!converts) return Effect.succeed(this.applyBinaryOperator(operator, lhs, rhs, node))
+    const hint = operator === "+" || equality ? "default" : "number"
+    const self = this
+    return Effect.gen(function* () {
+      const l = yield* self.toPrimitive(lhs, hint, node)
+      const r = yield* self.toPrimitive(rhs, hint, node)
+      return self.applyBinaryOperator(operator, l, r, node)
+    })
+  }
+
+  private applyBinaryOperator(operator: string, lhs: Value, rhs: Value, node: AstNode): Value {
     if (operator === "===") return lhs === rhs
     if (operator === "!==") return lhs !== rhs
-    if (operator === "in" && rhs instanceof Obj && !containsOpaqueReference(lhs)) {
-      return has(rhs, lhs !== null && typeof lhs === "object" ? coerceToString(lhs) : (lhs as PropertyKey))
-    }
-    if (containsOpaqueReference(lhs) || containsOpaqueReference(rhs)) {
+    if (operator === "==") return this.looselyEqual(lhs, rhs, node)
+    if (operator === "!=") return !this.looselyEqual(lhs, rhs, node)
+    if (operator === "in" && rhs instanceof Obj && !isOpaque(lhs)) return has(rhs, propertyKey(lhs))
+    if (isOpaque(lhs) || isOpaque(rhs)) {
       throw invalidData("Binary operators require data values.", node)
     }
-    // Null-prototype data needs explicit primitive coercion; identity and `in` retain raw objects.
-    // Dates use their default string hint for addition and loose equality, and epoch time elsewhere.
-    const coerceOperand = (operand: unknown): unknown => {
-      if (operand instanceof DateObj) {
-        return operator === "+" || operator === "==" || operator === "!=" ? coerceToString(operand) : operand.time
-      }
-      return operand !== null && typeof operand === "object" ? coerceToString(operand) : operand
-    }
-    const bothObjects = lhs !== null && typeof lhs === "object" && rhs !== null && typeof rhs === "object"
-    const l = coerceOperand(lhs)
-    const r = coerceOperand(rhs)
+    // Object operands were already converted by applyOperator; only primitives reach the arithmetic below.
     switch (operator) {
       case "+": {
-        const sum = (l as string) + (r as string)
+        const sum = (lhs as string) + (rhs as string)
         if (typeof sum === "string") checkStringLength(sum.length)
         return sum
       }
       case "-":
-        return (l as number) - (r as number)
+        return (lhs as number) - (rhs as number)
       case "*":
-        return (l as number) * (r as number)
+        return (lhs as number) * (rhs as number)
       case "/":
-        return (l as number) / (r as number)
+        return (lhs as number) / (rhs as number)
       case "%":
-        return (l as number) % (r as number)
+        return (lhs as number) % (rhs as number)
       case "**":
-        return (l as number) ** (r as number)
-      case "==":
-        return bothObjects ? lhs === rhs : l == r
-      case "!=":
-        return bothObjects ? lhs !== rhs : l != r
+        return (lhs as number) ** (rhs as number)
       case "<":
-        return (l as string) < (r as string)
+        return (lhs as string) < (rhs as string)
       case "<=":
-        return (l as string) <= (r as string)
+        return (lhs as string) <= (rhs as string)
       case ">":
-        return (l as string) > (r as string)
+        return (lhs as string) > (rhs as string)
       case ">=":
-        return (l as string) >= (r as string)
+        return (lhs as string) >= (rhs as string)
       case "&":
-        return (l as number) & (r as number)
+        return (lhs as number) & (rhs as number)
       case "|":
-        return (l as number) | (r as number)
+        return (lhs as number) | (rhs as number)
       case "^":
-        return (l as number) ^ (r as number)
+        return (lhs as number) ^ (rhs as number)
       case "<<":
-        return (l as number) << (r as number)
+        return (lhs as number) << (rhs as number)
       case ">>":
-        return (l as number) >> (r as number)
+        return (lhs as number) >> (rhs as number)
       case ">>>":
-        return (l as number) >>> (r as number)
+        return (lhs as number) >>> (rhs as number)
       case "in":
-        if (!(rhs instanceof Obj)) {
-          throw typeError("The 'in' operator requires a data object on the right-hand side.", node)
-        }
-        return has(rhs, coerceOperand(lhs) as PropertyKey)
+        throw typeError("The 'in' operator requires a data object on the right-hand side.", node)
       default:
         throw typeError(`Unsupported binary operator '${operator}'.`, node)
     }
   }
 
-  private evaluateLogicalExpression(node: LogicalExpression): Effect.Effect<unknown, unknown, R> {
+  // IsLooselyEqual: objects (including functions and tool references) compare by identity, and a nullish
+  // primitive never equals an object.
+  private looselyEqual(lhs: Value, rhs: Value, node: AstNode): boolean {
+    const lhsObject = lhs !== null && typeof lhs === "object"
+    const rhsObject = rhs !== null && typeof rhs === "object"
+    if (lhsObject === rhsObject) return lhsObject ? lhs === rhs : lhs == rhs
+    const primitive = lhsObject ? rhs : lhs
+    if (primitive === null || primitive === undefined) return false
+    // Data objects were converted by applyOperator, so only an opaque reference facing a primitive gets here.
+    throw invalidData("Binary operators require data values.", node)
+  }
+
+  private evaluateLogicalExpression(node: LogicalExpression): Effect.Effect<Value, unknown, R> {
     const operator = node.operator
     return Effect.flatMap(this.evaluateExpression(node.left), (left) => {
       if (operator === "&&") return left ? this.evaluateExpression(node.right) : Effect.succeed(left)
@@ -1418,7 +1498,7 @@ class Frame<R> {
     })
   }
 
-  private evaluateUnaryExpression(node: UnaryExpression): Effect.Effect<unknown, unknown, R> {
+  private evaluateUnaryExpression(node: UnaryExpression): Effect.Effect<Value, unknown, R> {
     const operator = node.operator
     const argument = node.argument
     if (operator === "delete") return this.evaluateDeleteExpression(argument)
@@ -1426,20 +1506,17 @@ class Frame<R> {
     if (operator === "typeof" && argument.type === "Identifier" && !this.scopes.resolve(argument.name)) {
       return Effect.succeed("undefined")
     }
-    return Effect.map(this.evaluateExpression(argument), (value) => {
+    const self = this
+    return Effect.gen(function* () {
+      const value = yield* self.evaluateExpression(argument)
       if (operator === "typeof") return typeofValue(value)
       if (operator === "!") return !value
       if (operator === "void") return undefined
-      if (containsOpaqueReference(value)) {
+      const operand = yield* self.toPrimitive(value, "number", node)
+      if (isOpaque(operand)) {
         throw invalidData("Unary operators require data values.", node)
       }
-      const operand =
-        value instanceof DateObj
-          ? value.time
-          : value !== null && typeof value === "object"
-            ? coerceToString(value)
-            : value
-      let result: unknown
+      let result: Value
       switch (operator) {
         case "+":
           result = +(operand as number)
@@ -1457,13 +1534,18 @@ class Frame<R> {
     })
   }
 
-  private evaluateAssignmentExpression(node: AssignmentExpression): Effect.Effect<unknown, unknown, R> {
+  private evaluateAssignmentExpression(node: AssignmentExpression): Effect.Effect<Value, unknown, R> {
     const left = node.left
     const operator = node.operator
+    // The binary operator a compound assignment applies: `+=` is `+`.
+    const binary = operator.slice(0, -1)
     const self = this
     return Effect.gen(function* () {
       if (operator === "??=" || operator === "||=" || operator === "&&=") {
         return yield* self.evaluateLogicalAssignment(node, left, operator)
+      }
+      if (operator !== "=" && !compoundOperators.has(operator)) {
+        throw typeError(`Unsupported assignment operator '${operator}'.`, node)
       }
       if (operator === "=" && (left.type === "ObjectPattern" || left.type === "ArrayPattern")) {
         const rightValue = yield* self.evaluateExpression(node.right)
@@ -1475,17 +1557,24 @@ class Frame<R> {
         if (operator !== "=") {
           const current = self.scopes.get(name, left)
           const rightValue = yield* self.evaluateExpression(node.right)
-          return self.scopes.set(name, self.applyCompoundAssignment(operator, current, rightValue, node), left)
+          const next =
+            current instanceof Obj || rightValue instanceof Obj
+              ? yield* self.applyOperator(binary, current, rightValue, node)
+              : self.applyBinaryOperator(binary, current, rightValue, node)
+          return self.scopes.set(name, next, left)
         }
         const rightValue = yield* self.evaluateNamed(node.right, name)
         return self.scopes.set(name, rightValue, left)
       }
       if (left.type === "MemberExpression") {
         return yield* self.modifyMember(left, (current) =>
-          Effect.map(self.evaluateExpression(node.right), (rightValue) => {
-            if (operator === "=") return { write: true, next: rightValue, result: rightValue }
-            const next = self.applyCompoundAssignment(operator, current, rightValue, node)
-            return { write: true, next, result: next }
+          Effect.flatMap(self.evaluateExpression(node.right), (rightValue) => {
+            if (operator === "=") return Effect.succeed({ write: true, next: rightValue, result: rightValue })
+            return Effect.map(self.applyOperator(binary, current, rightValue, node), (next) => ({
+              write: true,
+              next,
+              result: next,
+            }))
           }),
         )
       }
@@ -1497,9 +1586,9 @@ class Frame<R> {
     node: AssignmentExpression,
     left: Pattern,
     operator: string,
-  ): Effect.Effect<unknown, unknown, R> {
+  ): Effect.Effect<Value, unknown, R> {
     const self = this
-    const shouldAssign = (current: unknown): boolean =>
+    const shouldAssign = (current: Value): boolean =>
       operator === "??=" ? current === null || current === undefined : operator === "||=" ? !current : Boolean(current)
     if (left.type === "Identifier") {
       const name = left.name
@@ -1524,7 +1613,7 @@ class Frame<R> {
     throw typeError("Assignment target must be an Identifier or MemberExpression.", left)
   }
 
-  private evaluateUpdateExpression(node: UpdateExpression): Effect.Effect<unknown, unknown, R> {
+  private evaluateUpdateExpression(node: UpdateExpression): Effect.Effect<Value, unknown, R> {
     const operator = node.operator
     const argument = node.argument
     const prefix = node.prefix
@@ -1535,38 +1624,42 @@ class Frame<R> {
       throw typeError(`Unsupported update operator '${operator}'.`, node)
     }
 
-    // CodeMode numeric coercion, not host Number(): null-prototype data objects would make
-    // the host throw during ToPrimitive, and opaque runtime references must reject clearly.
-    const operand = (current: unknown): number => {
-      if (containsOpaqueReference(current)) {
+    // CodeMode numeric coercion, not host Number(), so opaque runtime references reject clearly.
+    const operand = (current: Value): number => {
+      if (isOpaque(current)) {
         throw invalidData(`'${operator}' requires a data value.`, argument)
       }
       return coerceToNumber(current)
     }
 
     if (argument.type === "Identifier") {
-      return Effect.sync(() => {
-        const name = argument.name
-        const current = operand(this.scopes.get(name, argument))
-        const next = current + increment
+      const name = argument.name
+      const current = this.scopes.get(name, argument)
+      const update = (value: Value) => {
+        const before = operand(value)
+        const next = before + increment
         this.scopes.set(name, next, argument)
-        return prefix ? next : current
-      })
+        return prefix ? next : before
+      }
+      if (!(current instanceof Obj)) return Effect.sync(() => update(current))
+      return Effect.map(this.toPrimitive(current, "number", argument), update)
     }
 
     if (argument.type === "MemberExpression") {
-      return this.modifyMember(argument, (current) => {
-        const value = operand(current)
-        const next = value + increment
-        return Effect.succeed({ write: true, next, result: prefix ? next : value })
-      })
+      return this.modifyMember(argument, (current) =>
+        Effect.map(this.toPrimitive(current, "number", argument), (primitive) => {
+          const value = operand(primitive)
+          const next = value + increment
+          return { write: true, next, result: prefix ? next : value }
+        }),
+      )
     }
 
     throw typeError("Update target must be an Identifier or MemberExpression.", argument)
   }
 
   // EvaluateCall: a member callee supplies its base object as `this`; anything else calls with undefined.
-  private evaluateCallExpression(node: CallExpression): Effect.Effect<unknown, unknown, R> {
+  private evaluateCallExpression(node: CallExpression): Effect.Effect<Value, unknown, R> {
     const callee = node.callee
 
     const self = this
@@ -1584,7 +1677,7 @@ class Frame<R> {
     })
   }
 
-  private readMethod(node: MemberExpression): Effect.Effect<{ callable: unknown; thisValue: unknown }, unknown, R> {
+  private readMethod(node: MemberExpression): Effect.Effect<{ callable: Value; thisValue: Value }, unknown, R> {
     return Effect.map(this.getMemberReference(node), (reference) => {
       if (reference === OptionalShortCircuit) return { callable: OptionalShortCircuit, thisValue: undefined }
       if (reference instanceof ToolReference) return { callable: reference, thisValue: undefined }
@@ -1595,12 +1688,12 @@ class Frame<R> {
 
   // The single dispatch for every invocation: call expressions and callbacks share it.
   call(
-    callable: unknown,
-    thisValue: unknown,
-    args: Array<unknown>,
+    callable: Value,
+    thisValue: Value,
+    args: Array<Value>,
     node?: AstNode,
     callee?: Expression,
-  ): Effect.Effect<unknown, unknown, R> {
+  ): Effect.Effect<Value, unknown, R> {
     const self = this
     return Effect.gen(function* () {
       if (callable instanceof ToolReference) {
@@ -1609,7 +1702,7 @@ class Frame<R> {
         }
         return yield* self.createToolCallPromise(callable.path, args)
       }
-      if (callable instanceof Fn) return yield* self.invokeFunction(callable, args, node)
+      if (callable instanceof Fn) return yield* self.invokeFunction(callable, thisValue, args, node)
       if (callable instanceof Native) {
         return yield* self.native(() => (callable as Native<R>).call(thisValue, args), node)
       }
@@ -1618,7 +1711,7 @@ class Frame<R> {
   }
 
   // Built-ins throw without a location, synchronously or inside their Effect; the call site supplies it.
-  private native(body: () => Effect.Effect<unknown, unknown, R>, node?: AstNode): Effect.Effect<unknown, unknown, R> {
+  private native(body: () => Effect.Effect<Value, unknown, R>, node?: AstNode): Effect.Effect<Value, unknown, R> {
     return Effect.provideService(
       Effect.catchDefect(Effect.suspend(body), (defect) => Effect.die(locate(defect, node))),
       CallSite,
@@ -1628,10 +1721,10 @@ class Frame<R> {
 
   private evaluateCallArguments(
     argNodes: ReadonlyArray<Expression | SpreadElement>,
-  ): Effect.Effect<Array<unknown>, unknown, R> {
+  ): Effect.Effect<Array<Value>, unknown, R> {
     const self = this
     return Effect.gen(function* () {
-      const args: Array<unknown> = []
+      const args: Array<Value> = []
       for (const argNode of argNodes) {
         if (argNode.type === "SpreadElement") {
           const spread = yield* self.evaluateExpression(argNode.argument)
@@ -1651,20 +1744,33 @@ class Frame<R> {
   }
 
   // A callback invoked by a built-in runs below the call that invoked the built-in, so the deeper of the two counts.
-  invokeFunction(fn: Fn, args: Array<unknown>, node?: AstNode): Effect.Effect<unknown, unknown, R> {
+  invokeFunction(fn: Fn, thisValue: Value, args: Array<Value>, node?: AstNode): Effect.Effect<Value, unknown, R> {
     const self = this
     return Effect.flatMap(CallSite, (site) => {
       const depth = Math.max(self.depth, site.depth) + 1
       if (depth > MAX_CALL_DEPTH) throw rangeError("Maximum call stack size exceeded", node)
       const invocation = new Frame(this.ctx, new ScopeStack([...fn.capturedScopes, new Map()]), depth)
-      const run = Effect.gen(function* () {
-        // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
-        const paramScope = invocation.scopes.current()
-        for (const parameter of fn.parameters) {
-          for (const name of collectPatternNames(parameter)) {
-            paramScope.set(name, { mutable: true, value: undefined, initialized: false })
-          }
+      const paramScope = invocation.scopes.current()
+      // `this` and `arguments` are scope bindings so arrows resolve them lexically; a parameter named
+      // `arguments` shadows the object, as in JS.
+      if (!fn.arrow) paramScope.set("this", { mutable: false, value: thisValue, initialized: true })
+      if (!fn.arrow && usesArguments(fn)) {
+        paramScope.set("arguments", {
+          mutable: true,
+          value: new Arguments(self.ctx.builtins.Object, args),
+          initialized: true,
+        })
+      }
+      // Seed all parameters first so defaults cannot fall through to same-named outer bindings.
+      for (const parameter of fn.parameters) {
+        for (const name of collectPatternNames(parameter)) {
+          paramScope.set(name, { mutable: true, value: undefined, initialized: false })
         }
+      }
+      const parameters = fn.parameters.map((parameter) =>
+        parameter.type === "Identifier" ? parameter.name : undefined,
+      )
+      const bind = Effect.gen(function* () {
         for (const [index, parameter] of fn.parameters.entries()) {
           if (parameter.type === "RestElement") {
             yield* invocation.declarePattern(
@@ -1676,9 +1782,12 @@ class Frame<R> {
             )
             break
           }
+          // A sloppy simple parameter list may repeat a name; the last occurrence wins, as in JS.
+          if (parameter.type === "Identifier" && parameters.lastIndexOf(parameter.name) !== index) continue
           yield* invocation.declarePattern(parameter, args[index], true, parameter, true)
         }
-
+      })
+      const body = Effect.gen(function* () {
         if (fn.body.type === "BlockStatement") {
           invocation.scopes.push()
           invocation.hoistVars(fn.body.body, paramScope)
@@ -1688,7 +1797,9 @@ class Frame<R> {
 
         return yield* invocation.evaluateExpression(fn.body)
       })
-      if (fn.generator) return Effect.succeed(this.createGenerator(invocation, run, fn.async))
+      // Generators bind parameters at the call and defer only the body to the first `next()`, as in JS.
+      if (fn.generator) return Effect.map(bind, () => this.createGenerator(invocation, body, fn))
+      const run = Effect.andThen(bind, body)
       if (!fn.async) return run
       return this.ctx.pending.createWithSelf((self) =>
         Effect.flatMap(run, (value) => resolvePromiseValue(invocation.ctx, value, self)),
@@ -1696,18 +1807,15 @@ class Frame<R> {
     })
   }
 
-  private createGenerator(
-    invocation: Frame<R>,
-    run: Effect.Effect<unknown, unknown, R>,
-    asynchronous: boolean,
-  ): GeneratorObj {
+  private createGenerator(invocation: Frame<R>, run: Effect.Effect<Value, unknown, R>, fn: Fn): GeneratorObj {
+    const asynchronous = fn.async
     const state: GeneratorState = { started: false, completed: false, draining: false, pending: [], pendingIndex: 0 }
     invocation.generatorState = state
     invocation.generatorAsync = asynchronous
     const builtins = this.ctx.builtins
-    const result = (value: unknown, done: boolean) => record(builtins.Object, { value, done })
-    const request = (kind: GeneratorRequestKind, value: unknown) => {
-      const request = { kind, value, response: Deferred.makeUnsafe<unknown, unknown>() }
+    const result = (value: Value, done: boolean) => record(builtins.Object, { value, done })
+    const request = (kind: GeneratorRequestKind, value: Value) => {
+      const request = { kind, value, response: Deferred.makeUnsafe<Value, unknown>() }
       if (!asynchronous && state.active) return Effect.die(typeError("Generator is already running."))
       if (asynchronous && (state.completed || (!state.started && kind !== "next"))) {
         state.started = true
@@ -1768,17 +1876,13 @@ class Frame<R> {
       }
       return Deferred.await(request.response)
     }
-    const generator = new GeneratorObj(
-      asynchronous ? builtins.AsyncGenerator : builtins.Generator,
-      asynchronous,
-      request,
-    )
-    return generator
+    const proto = get(fn, "prototype")
+    return new GeneratorObj(proto instanceof Obj ? proto : builtins.Generator, asynchronous, request)
   }
 
   private completeGeneratorRequests(state: GeneratorState, asynchronous: boolean): Effect.Effect<void, never, R> {
     const self = this
-    const result = (value: unknown, done: boolean) => record(self.ctx.builtins.Object, { value, done })
+    const result = (value: Value, done: boolean) => record(self.ctx.builtins.Object, { value, done })
     return Effect.gen(function* () {
       while (true) {
         const pending = self.dequeueGeneratorRequest(state)
@@ -1824,7 +1928,7 @@ class Frame<R> {
     return request
   }
 
-  private evaluateYieldExpression(node: YieldExpression): Effect.Effect<unknown, unknown, R> {
+  private evaluateYieldExpression(node: YieldExpression): Effect.Effect<Value, unknown, R> {
     const argument = node.argument
     const self = this
     return Effect.gen(function* () {
@@ -1839,7 +1943,7 @@ class Frame<R> {
     })
   }
 
-  private suspendGenerator(value: unknown, node: AstNode): Effect.Effect<unknown, unknown, R> {
+  private suspendGenerator(value: Value, node: AstNode): Effect.Effect<Value, unknown, R> {
     const state = this.generatorState
     if (!state?.active) throw typeError("Generator has no active request.", node)
     Deferred.doneUnsafe(state.active.response, Exit.succeed(record(this.ctx.builtins.Object, { value, done: false })))
@@ -1854,20 +1958,11 @@ class Frame<R> {
     })
   }
 
-  private delegateYield(value: unknown, node: AstNode): Effect.Effect<unknown, unknown, R> {
+  private delegateYield(value: Value, node: AstNode): Effect.Effect<Value, unknown, R> {
     const self = this
     return Effect.gen(function* () {
-      if (
-        value instanceof Arr ||
-        typeof value === "string" ||
-        value instanceof MapObj ||
-        value instanceof SetObj ||
-        value instanceof URLSearchParamsObj ||
-        value instanceof HeadersObj ||
-        value instanceof Bytes
-      ) {
-        const cursor = yield* self.iterate(value, node)
-        if (!cursor) throw typeError("Built-in iterator is unavailable.", node)
+      const cursor = self.builtinCursor(value)
+      if (cursor !== undefined) {
         while (true) {
           const step = yield* cursor.next
           if (step.done) return undefined
@@ -1891,7 +1986,7 @@ class Frame<R> {
       const iterator = yield* self.customIterator(value, node, self.generatorAsync)
       if (!iterator) throw typeError("yield* requires a compatible iterable value.", node)
       let kind: GeneratorRequestKind = "next"
-      let input: unknown = undefined
+      let input: Value = undefined
       while (true) {
         const method = kind === "next" ? iterator.next : get(iterator.iterator, kind)
         if (method === undefined || method === null) {
@@ -1911,7 +2006,7 @@ class Frame<R> {
           node,
         )
         const done = Boolean(get(result, "done"))
-        const resultValue: unknown =
+        const resultValue: Value =
           self.generatorAsync && !iterator.asynchronous
             ? yield* self.awaitAsyncFromSyncValue(iterator, get(result, "value"), node, kind !== "return" && !done)
             : get(result, "value")
@@ -1920,7 +2015,7 @@ class Frame<R> {
           return resultValue
         }
 
-        const resumed: Exit.Exit<unknown, unknown> = yield* Effect.exit(self.suspendGenerator(resultValue, node))
+        const resumed: Exit.Exit<Value, unknown> = yield* Effect.exit(self.suspendGenerator(resultValue, node))
         if (Exit.isSuccess(resumed)) {
           kind = "next"
           input = resumed.value
@@ -1957,11 +2052,11 @@ class Frame<R> {
         let key: PropertyKey
 
         if (property.computed) {
-          key = self.toPropertyKey(yield* self.evaluateExpression(keyNode), keyNode)
+          key = yield* self.toPropertyKey(yield* self.evaluateExpression(keyNode), keyNode)
         } else if (keyNode.type === "Identifier") {
           key = keyNode.name
         } else if (keyNode.type === "Literal") {
-          key = self.toPropertyKey(keyNode.value, keyNode)
+          key = propertyKey(literal(keyNode))
         } else {
           throw typeError("Unsupported object property key shape.", keyNode)
         }
@@ -1980,7 +2075,7 @@ class Frame<R> {
   }
 
   private evaluateArrayExpression(node: ArrayExpression): Effect.Effect<Arr, unknown, R> {
-    const values: Array<unknown> = []
+    const values: Array<Value> = []
 
     const self = this
     return Effect.gen(function* () {
@@ -2017,7 +2112,7 @@ class Frame<R> {
     return Effect.gen(function* () {
       for (let index = 0; index < quasis.length; index += 1) {
         const quasi = quasis[index]!
-        // acorn only omits `cooked` for invalid escapes in tagged templates, which are unsupported.
+        // acorn only omits `cooked` for invalid escapes, which are a parse error outside a tagged template.
         if (typeof quasi.value.cooked !== "string") {
           throw typeError("Invalid template literal quasi.", quasi)
         }
@@ -2026,7 +2121,7 @@ class Frame<R> {
 
         if (index < expressions.length) {
           const raw = yield* self.evaluateExpression(expressions[index])
-          output += coerceToString(raw)
+          output += coerceToString(yield* self.toPrimitive(raw, "string", expressions[index]))
           checkStringLength(output.length)
         }
       }
@@ -2035,22 +2130,50 @@ class Frame<R> {
     })
   }
 
-  private evaluateConditionalExpression(node: ConditionalExpression): Effect.Effect<unknown, unknown, R> {
+  // `tag\`a${x}b\`` is `tag(strings, x)`: the tag is read like a callee (a member keeps its receiver), the
+  // substitutions are evaluated in order, and `strings` carries the escaped source as `strings.raw`.
+  private evaluateTaggedTemplate(node: TaggedTemplateExpression): Effect.Effect<Value, unknown, R> {
+    const self = this
+    return Effect.gen(function* () {
+      const { callable, thisValue } =
+        node.tag.type === "MemberExpression"
+          ? yield* self.readMethod(node.tag)
+          : { callable: yield* self.evaluateExpression(node.tag), thisValue: undefined }
+      const strings = self.ctx.templates.get(node) ?? self.createTemplateObject(node)
+      const values = yield* Effect.forEach(node.quasi.expressions, (expression) => self.evaluateExpression(expression))
+      return yield* self.call(callable, thisValue, [strings, ...values], node, node.tag)
+    })
+  }
+
+  private createTemplateObject(node: TaggedTemplateExpression): Arr {
+    const array = this.ctx.builtins.Array
+    // An invalid escape such as `\unicode` cooks to `undefined` and survives only in `raw`.
+    const strings = new Arr(
+      array,
+      node.quasi.quasis.map((quasi) => quasi.value.cooked ?? undefined),
+    )
+    define(
+      strings,
+      "raw",
+      new Arr(
+        array,
+        node.quasi.quasis.map((quasi) => quasi.value.raw),
+      ),
+      frozen,
+    )
+    this.ctx.templates.set(node, strings)
+    return strings
+  }
+
+  private evaluateConditionalExpression(node: ConditionalExpression): Effect.Effect<Value, unknown, R> {
     return Effect.flatMap(this.evaluateExpression(node.test), (test) =>
       this.evaluateExpression(test ? node.consequent : node.alternate),
     )
   }
 
-  private applyCompoundAssignment(operator: string, current: unknown, incoming: unknown, node: AstNode): unknown {
-    if (!compoundOperators.has(operator)) {
-      throw typeError(`Unsupported assignment operator '${operator}'.`, node)
-    }
-    return this.applyBinaryOperator(operator.slice(0, -1), current, incoming, node)
-  }
-
   private getMemberReference(
     node: MemberExpression,
-  ): Effect.Effect<MemberReference | ToolReference | { value: unknown } | typeof OptionalShortCircuit, unknown, R> {
+  ): Effect.Effect<MemberReference | ToolReference | { value: Value } | typeof OptionalShortCircuit, unknown, R> {
     const objectNode = node.object
     const propertyNode = node.property
     if (objectNode.type === "Super") throw unsupportedSyntax(objectNode.type, objectNode)
@@ -2061,38 +2184,59 @@ class Frame<R> {
       if (objectValue === OptionalShortCircuit) return OptionalShortCircuit
       if ((objectValue === null || objectValue === undefined) && node.optional) return OptionalShortCircuit
 
-      const key = node.computed
-        ? self.toPropertyKey(yield* self.evaluateExpression(propertyNode), propertyNode)
-        : propertyNode.type === "Identifier"
+      const keyValue =
+        !node.computed && propertyNode.type === "Identifier"
           ? propertyNode.name
-          : self.toPropertyKey(yield* self.evaluateExpression(propertyNode), propertyNode)
-
-      if (objectValue instanceof ToolReference) {
-        if (typeof key !== "string") {
-          throw typeError("Tool paths must use string property names.", propertyNode)
-        }
-        return new ToolReference([...objectValue.path, key])
-      }
-
-      if (objectValue instanceof Obj) return { target: objectValue, key, receiver: objectValue }
-
-      // Strings own length and indexes; every other primitive property reads through the wrapper prototype.
-      if (typeof objectValue === "string") {
-        if (key === "length") return { value: objectValue.length }
-        const index = typeof key === "symbol" ? undefined : parseArrayIndex(key)
-        if (index !== undefined) return { value: objectValue[index] }
-      }
-      const proto = primitivePrototype(self.ctx.builtins, objectValue)
-      if (proto !== undefined) return { target: proto, key, receiver: objectValue }
-
+          : yield* self.evaluateExpression(propertyNode)
+      // GetValue applies ToObject to the base before ToPropertyKey, so a nullish base throws before the key's own
+      // toString runs.
       if (objectValue === null || objectValue === undefined) {
-        throw typeError(`Cannot read properties of ${objectValue} (reading '${String(key)}').`, objectNode)
+        throw typeError(`Cannot read properties of ${objectValue} (reading '${coerceToString(keyValue)}').`, objectNode)
       }
-      throw typeError("Cannot access a property on a non-object value.", objectNode)
+      const key = yield* self.toPropertyKey(keyValue, propertyNode)
+      return self.resolveProperty(objectValue, key, objectNode, propertyNode)
     })
   }
 
-  private readReference(reference: MemberReference, node: MemberExpression): unknown {
+  private resolveProperty(
+    objectValue: Value,
+    key: PropertyKey,
+    objectNode: AstNode,
+    propertyNode: AstNode,
+  ): MemberReference | ToolReference | { value: Value } {
+    if (objectValue instanceof ToolReference) {
+      if (typeof key !== "string") {
+        throw typeError("Tool paths must use string property names.", propertyNode)
+      }
+      return new ToolReference([...objectValue.path, key])
+    }
+
+    if (objectValue instanceof Obj) return { target: objectValue, key, receiver: objectValue }
+
+    // Strings own length and indexes; every other primitive property reads through the wrapper prototype.
+    if (typeof objectValue === "string") {
+      if (key === "length") return { value: objectValue.length }
+      const index = typeof key === "symbol" ? undefined : parseArrayIndex(key)
+      if (index !== undefined) return { value: objectValue[index] }
+    }
+    const proto = primitivePrototype(this.ctx.builtins, objectValue)
+    if (proto !== undefined) return { target: proto, key, receiver: objectValue }
+
+    if (objectValue === null || objectValue === undefined) {
+      throw typeError(`Cannot read properties of ${objectValue} (reading '${String(key)}').`, objectNode)
+    }
+    throw typeError("Cannot access a property on a non-object value.", objectNode)
+  }
+
+  // One destructured property, read the way a member expression would read it (primitives use their prototype).
+  private destructuredProperty(source: Value, key: PropertyKey, node: AstNode): Value {
+    const reference = this.resolveProperty(source, key, node, node)
+    if (reference instanceof ToolReference) return reference
+    if ("value" in reference) return reference.value
+    return this.readProperty(reference.target, reference.key, node, reference.receiver)
+  }
+
+  private readReference(reference: MemberReference, node: MemberExpression): Value {
     // Reject unknown promise properties so a missing await cannot hide.
     if (reference.target instanceof PromiseObj && !has(reference.target, reference.key)) {
       throw invalidData(
@@ -2104,7 +2248,7 @@ class Frame<R> {
   }
 
   // Accessors throw without a location; the member or pattern that read them supplies it.
-  private readProperty(target: Obj, key: PropertyKey, node: AstNode, receiver: unknown = target): unknown {
+  private readProperty(target: Obj, key: PropertyKey, node: AstNode, receiver: Value = target): Value {
     try {
       return get(target, key, receiver)
     } catch (error) {
@@ -2112,7 +2256,7 @@ class Frame<R> {
     }
   }
 
-  private readMember(node: MemberExpression): Effect.Effect<unknown, unknown, R> {
+  private readMember(node: MemberExpression): Effect.Effect<Value, unknown, R> {
     return Effect.map(this.getMemberReference(node), (reference) => {
       if (reference === OptionalShortCircuit) return OptionalShortCircuit
       if (reference instanceof ToolReference) return reference
@@ -2121,15 +2265,15 @@ class Frame<R> {
     })
   }
 
-  private writeMember(node: MemberExpression, value: unknown): Effect.Effect<unknown, unknown, R> {
+  private writeMember(node: MemberExpression, value: Value): Effect.Effect<Value, unknown, R> {
     return this.modifyMember(node, () => Effect.succeed({ write: true, next: value, result: value }))
   }
 
   private evaluateDeleteExpression(argument: Expression): Effect.Effect<boolean, unknown, R> {
     const target = argument.type === "ChainExpression" ? argument.expression : argument
-    if (target.type !== "MemberExpression") {
-      throw typeError("Only data fields may be deleted.", argument)
-    }
+    if (target.type === "Identifier") throw typeError("Only data fields may be deleted.", argument)
+    // `delete <non-reference>` evaluates the operand and is true, as in JS.
+    if (target.type !== "MemberExpression") return Effect.map(this.evaluateExpression(target), () => true)
     return Effect.map(this.getMemberReference(target), (reference) => {
       if (reference === OptionalShortCircuit) return true
       if (reference instanceof ToolReference || "value" in reference || reference.receiver !== reference.target) {
@@ -2143,8 +2287,8 @@ class Frame<R> {
   // Resolve side-effecting object and key expressions exactly once.
   private modifyMember(
     node: MemberExpression,
-    compute: (current: unknown) => Effect.Effect<{ write: boolean; next: unknown; result: unknown }, unknown, R>,
-  ): Effect.Effect<unknown, unknown, R> {
+    compute: (current: Value) => Effect.Effect<{ write: boolean; next: Value; result: Value }, unknown, R>,
+  ): Effect.Effect<Value, unknown, R> {
     const self = this
     return Effect.gen(function* () {
       const reference = yield* self.getMemberReference(node)
@@ -2164,7 +2308,7 @@ class Frame<R> {
     })
   }
 
-  private assignToReference(target: Obj, key: PropertyKey, next: unknown, node: AstNode): void {
+  private assignToReference(target: Obj, key: PropertyKey, next: Value, node: AstNode): void {
     const written = (() => {
       try {
         rejectCircularInsertion(
@@ -2178,16 +2322,13 @@ class Frame<R> {
       }
     })()
     if (written) return
-    if (target instanceof Arr && key === "length") throw rangeError("Invalid array length", node)
     throw typeError(`Cannot assign to read only property '${String(key)}'.`, node)
   }
 
-  private toPropertyKey(value: unknown, node: AstNode): PropertyKey {
-    if (typeof value === "string" || typeof value === "number") {
-      return value
-    }
-    if (value === AsyncIteratorSymbol || value === IteratorSymbol) return value
-
-    throw typeError("Property key must be a string or number, or Symbol.asyncIterator/Symbol.iterator.", node)
+  // ToPropertyKey: a data object converts through its own `toString`/`valueOf` first; anything else becomes its
+  // string form synchronously, so `counts[row.category]` works when the field is null.
+  private toPropertyKey(value: Value, node: AstNode): Effect.Effect<PropertyKey, unknown, R> {
+    if (!(value instanceof Obj)) return Effect.succeed(propertyKey(value))
+    return Effect.map(this.toPrimitive(value, "string", node), propertyKey)
   }
 }

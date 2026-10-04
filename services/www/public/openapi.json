@@ -48,6 +48,106 @@
         "summary": "Get server info"
       }
     },
+    "/api/pair": {
+      "post": {
+        "tags": ["server"],
+        "operationId": "server.pair",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "PairingCode",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingCode"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Create a short-lived, single-use code for a /auth/connect/:code pairing link.",
+        "summary": "Create pairing code"
+      }
+    },
+    "/auth/connect/{code}": {
+      "get": {
+        "tags": ["server"],
+        "operationId": "server.connect",
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "schema": {
+              "type": "string"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "PairingSession",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PairingSession"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "description": "Redeem a pairing code. Browsers receive a session cookie and a redirect to the web app; requests that accept JSON receive a session token to use as the password.",
+        "summary": "Redeem pairing code"
+      }
+    },
     "/api/location": {
       "get": {
         "tags": ["location"],
@@ -886,9 +986,19 @@
                 }
               }
             }
+          },
+          "404": {
+            "description": "SessionNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionNotFoundErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Create a session at the requested location.",
+        "description": "Create a session at the requested location. A parentID creates a linked child session at its parent's location.",
         "summary": "Create session",
         "requestBody": {
           "content": {
@@ -897,6 +1007,17 @@
                 "type": "object",
                 "properties": {
                   "id": {
+                    "anyOf": [
+                      {
+                        "type": "string",
+                        "pattern": "^ses"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "parentID": {
                     "anyOf": [
                       {
                         "type": "string",
@@ -1550,6 +1671,16 @@
                     "anyOf": [
                       {
                         "type": "string"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "metadata": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Session.Metadata"
                       },
                       {
                         "type": "null"
@@ -4498,6 +4629,21 @@
               "pattern": "^frm_"
             },
             "required": true
+          },
+          {
+            "name": "message",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
           }
         ],
         "security": [],
@@ -4556,7 +4702,7 @@
             }
           }
         },
-        "description": "Cancel a pending form.",
+        "description": "Cancel a pending form, optionally telling the asker why it was not answered.",
         "summary": "Cancel form"
       }
     },
@@ -7170,6 +7316,125 @@
         },
         "description": "Retrieve resources and resource templates from connected MCP servers.",
         "summary": "List MCP resources"
+      }
+    },
+    "/api/credential": {
+      "get": {
+        "tags": ["credential"],
+        "operationId": "credential.list",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Credential.Entry"
+                      }
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List every stored integration credential, including its secret value.",
+        "summary": "List credentials"
+      },
+      "post": {
+        "tags": ["credential"],
+        "operationId": "credential.create",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Credential.Entry"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Store an integration credential. It becomes the integration's active credential unless activate is false and the integration already has one. Fails with a conflict when the requested ID already exists.",
+        "summary": "Create credential",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Credential.CreateInput"
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/credential/{credentialID}": {
@@ -11426,6 +11691,124 @@
         }
       }
     },
+    "/api/vcs/init": {
+      "post": {
+        "tags": ["vcs"],
+        "operationId": "vcs.init",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "directory": {
+                      "anyOf": [
+                        {
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true
+          },
+          {
+            "name": "provider",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "required": false
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "ConflictError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ConflictErrorEncoded"
+                }
+              }
+            }
+          },
+          "501": {
+            "description": "VcsInitNotSupportedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VcsInitNotSupportedErrorEncoded"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "ServiceUnavailableError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ServiceUnavailableErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Initialize a repository using the selected VCS provider in a markerless project's directory and refresh its location services. Omitting provider defaults to git; built-in git and hg providers support initialization. An unknown provider returns 400; a registered provider without init returns 501.",
+        "summary": "Initialize VCS repository"
+      }
+    },
     "/api/vcs": {
       "get": {
         "tags": ["vcs"],
@@ -13212,6 +13595,27 @@
         "required": ["command"],
         "additionalProperties": false
       },
+      "Config.Model.Capabilities": {
+        "type": "object",
+        "properties": {
+          "tools": {
+            "type": "boolean"
+          },
+          "input": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "output": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      },
       "Config.Model.CostEncoded": {
         "type": "object",
         "properties": {
@@ -13303,7 +13707,7 @@
             "type": "object"
           },
           "capabilities": {
-            "$ref": "#/components/schemas/Model.Capabilities"
+            "$ref": "#/components/schemas/Config.Model.Capabilities"
           },
           "variants": {
             "type": "array",
@@ -13408,8 +13812,27 @@
               }
             ]
           },
+          "headerTimeout": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean",
+                "enum": [false]
+              }
+            ]
+          },
           "chunkTimeout": {
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean",
+                "enum": [false]
+              }
+            ]
           },
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
@@ -13602,9 +14025,16 @@
           },
           "label": {
             "type": "string"
+          },
+          "method": {
+            "type": "string",
+            "enum": ["key", "oauth"]
+          },
+          "status": {
+            "$ref": "#/components/schemas/Connection.Status"
           }
         },
-        "required": ["type", "id", "label"],
+        "required": ["type", "id", "label", "method"],
         "additionalProperties": false
       },
       "Connection.EnvInfo": {
@@ -13616,6 +14046,9 @@
           },
           "name": {
             "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/Connection.Status"
           }
         },
         "required": ["type", "name"],
@@ -13628,6 +14061,128 @@
           },
           {
             "$ref": "#/components/schemas/Connection.EnvInfo"
+          }
+        ]
+      },
+      "Connection.Status": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": ["needs_auth"]
+              }
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": ["status", "message"],
+        "additionalProperties": false
+      },
+      "Credential.CreateInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "integrationID": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Credential.Value"
+          },
+          "activate": {
+            "type": "boolean"
+          }
+        },
+        "required": ["integrationID", "value"],
+        "additionalProperties": false
+      },
+      "Credential.Entry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "integrationID": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "active": {
+            "type": "boolean"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Credential.Value"
+          }
+        },
+        "required": ["id", "integrationID", "label", "active", "value"],
+        "additionalProperties": false
+      },
+      "Credential.Key": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["key"]
+          },
+          "key": {
+            "type": "string"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "configuration": {
+            "$ref": "#/components/schemas/Form.Answer_1"
+          }
+        },
+        "required": ["type", "key"],
+        "additionalProperties": false
+      },
+      "Credential.OAuth": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["oauth"]
+          },
+          "methodID": {
+            "type": "string"
+          },
+          "refresh": {
+            "type": "string"
+          },
+          "access": {
+            "type": "string"
+          },
+          "expires": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "metadata": {
+            "type": "object"
+          }
+        },
+        "required": ["type", "methodID", "refresh", "access", "expires"],
+        "additionalProperties": false
+      },
+      "Credential.Value": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Credential.OAuth"
+          },
+          {
+            "$ref": "#/components/schemas/Credential.Key"
           }
         ]
       },
@@ -13712,6 +14267,12 @@
         "additionalProperties": false
       },
       "Form.Answer": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/Form.Value"
+        }
+      },
+      "Form.Answer_1": {
         "type": "object",
         "additionalProperties": {
           "$ref": "#/components/schemas/Form.Value"
@@ -14156,6 +14717,9 @@
               "status": {
                 "type": "string",
                 "enum": ["cancelled"]
+              },
+              "message": {
+                "type": "string"
               }
             },
             "required": ["status"],
@@ -15677,6 +16241,29 @@
       "Money.USDPerMillionTokens": {
         "type": "number"
       },
+      "PairingCode": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "integer"
+          }
+        },
+        "required": ["code", "expires_in"],
+        "additionalProperties": false
+      },
+      "PairingSession": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": ["token"],
+        "additionalProperties": false
+      },
       "Permission.Effect": {
         "type": "string",
         "enum": ["allow", "deny", "ask"]
@@ -16304,9 +16891,13 @@
           "updated": {
             "type": "integer",
             "minimum": 0
+          },
+          "active": {
+            "type": "integer",
+            "minimum": 0
           }
         },
-        "required": ["created", "updated"],
+        "required": ["created", "updated", "active"],
         "additionalProperties": false
       },
       "Project.Vcs": {
@@ -16565,8 +17156,27 @@
               }
             ]
           },
+          "headerTimeout": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean",
+                "enum": [false]
+              }
+            ]
+          },
           "chunkTimeout": {
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean",
+                "enum": [false]
+              }
+            ]
           },
           "compaction": {
             "$ref": "#/components/schemas/Provider.Compaction"
@@ -16825,6 +17435,29 @@
             },
             "required": ["tmp"],
             "additionalProperties": false
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "persistentPty": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["version", "pid", "urls", "paths"],
@@ -18198,6 +18831,16 @@
             "type": "integer",
             "minimum": 100,
             "maximum": 599
+          },
+          "response": {
+            "type": "object",
+            "properties": {
+              "body": {
+                "type": "string"
+              }
+            },
+            "required": ["body"],
+            "additionalProperties": false
           }
         },
         "required": ["type", "message"],
@@ -18617,6 +19260,9 @@
           "exit": {
             "type": "number"
           },
+          "signal": {
+            "type": "string"
+          },
           "metadata": {
             "type": "object"
           },
@@ -18893,6 +19539,23 @@
         "type": "string",
         "enum": ["working", "branch", "committed"]
       },
+      "VcsInitNotSupportedErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["VcsInitNotSupportedError"]
+          },
+          "providerID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "providerID", "message"],
+        "additionalProperties": false
+      },
       "WebSearch.Provider": {
         "type": "object",
         "properties": {
@@ -19017,6 +19680,10 @@
       "WorktreeErrorEncoded": {
         "type": "object",
         "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["WorktreeError"]
+          },
           "name": {
             "type": "string",
             "enum": ["WorktreeError"]
@@ -19042,7 +19709,7 @@
             "additionalProperties": false
           }
         },
-        "required": ["name", "data"],
+        "required": ["_tag", "name", "data"],
         "additionalProperties": false
       }
     },

@@ -24,7 +24,6 @@ type Cost = {
   readonly cache_read?: Money.USDPerMillionTokens
   readonly cache_write?: Money.USDPerMillionTokens
   readonly tiers?: readonly (Cost & { readonly tier: { readonly type: "context"; readonly size: number } })[]
-  readonly context_over_200k?: Omit<Cost, "tiers" | "context_over_200k">
 }
 
 type Modality = "text" | "audio" | "image" | "video" | "pdf"
@@ -147,19 +146,6 @@ function cost(input: SourceModel["cost"]): Model.Info["cost"] {
         write: item.cache_write ?? Money.USDPerMillionTokens.zero,
       },
     })) ?? []),
-    ...(input?.context_over_200k
-      ? [
-          {
-            tier: { type: "context" as const, size: 200_000 },
-            input: input.context_over_200k.input,
-            output: input.context_over_200k.output,
-            cache: {
-              read: input.context_over_200k.cache_read ?? Money.USDPerMillionTokens.zero,
-              write: input.context_over_200k.cache_write ?? Money.USDPerMillionTokens.zero,
-            },
-          },
-        ]
-      : []),
   ]
 }
 

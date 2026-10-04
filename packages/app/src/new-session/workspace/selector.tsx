@@ -4,9 +4,8 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
-import { getFilename } from "@opencode/util/path"
+import { getFilename, sameDirectory } from "@opencode/util/path"
 import { useLanguage } from "@/runtime/i18n/language"
-import { sameDirectory } from "@/workspaces/paths"
 
 export function PromptWorkspaceSelector(props: {
   value: string
@@ -194,9 +193,7 @@ export function PromptWorkspaceSelector(props: {
                     }}
                   >
                     <Icon name="outline-worktree" />
-                    <span class="min-w-0 flex-1 truncate">
-                      {language.t("session.new.workspace.existing").replace(/(…|\.{3})$/, "")}
-                    </span>
+                    <span class="min-w-0 flex-1 truncate">{language.t("session.new.workspace.existingLabel")}</span>
                   </Menu.SubTrigger>
                   <Menu.Portal>
                     <Menu.SubContent class="max-h-[66.667dvh] w-[200px] overflow-y-auto !pb-0 [&>[data-component=menu-v2-item]:last-child]:mb-0.5 [@media(max-height:600px)]:max-h-[calc(100dvh-48px)]">

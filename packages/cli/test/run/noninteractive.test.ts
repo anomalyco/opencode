@@ -309,6 +309,7 @@ async function capture(input: Parameters<typeof run>[0]) {
 
 afterEach(() => {
   mock.restore()
+  process.exitCode = 0
 })
 
 describe("runNonInteractivePrompt", () => {
@@ -433,6 +434,7 @@ describe("runNonInteractivePrompt", () => {
     expect(sdk.form.list).toHaveBeenCalledWith({
       location: { directory: "/work tree" },
     })
+    expect(process.exitCode).toBe(1)
   })
 
   test("attach mode cancels only session-owned forms", async () => {
@@ -448,6 +450,7 @@ describe("runNonInteractivePrompt", () => {
       { sessionID: "global", formID: "frm_pending_global" },
       expect.anything(),
     )
+    expect(process.exitCode).toBe(1)
   })
 
   test("V1 JSON output flushes step_start before an unrelated step failure", async () => {

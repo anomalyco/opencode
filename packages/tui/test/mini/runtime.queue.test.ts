@@ -61,7 +61,7 @@ describe("run runtime queue", () => {
     await task
   })
 
-  test("treats /exit as a close command", async () => {
+  test.each(["/exit", "/quit", "/q", ":q"])("treats %s as a close command", async (text) => {
     const ui = createFooterApiFixture()
     let calls = 0
 
@@ -72,7 +72,7 @@ describe("run runtime queue", () => {
       },
     })
 
-    ui.submit("/exit")
+    ui.submit(text)
     await task
 
     expect(calls).toBe(0)

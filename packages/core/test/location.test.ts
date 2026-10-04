@@ -14,6 +14,7 @@ const projectLayer = Layer.succeed(
   Project.Service.of({
     list: () => Effect.succeed([]),
     update: () => Effect.die("not implemented"),
+    activate: () => Effect.void,
     resolve: () =>
       Effect.succeed({
         id: Project.ID.make("project"),

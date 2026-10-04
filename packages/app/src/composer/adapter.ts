@@ -19,18 +19,6 @@ export type ComposerControls = {
     paid: boolean
     loading: boolean
   }
-  session: {
-    tabs: {
-      active: () => string | undefined
-      all: () => string[]
-      open: (tab: string) => void | Promise<void>
-      setActive: (tab: string) => void
-    }
-    reviewPanel: {
-      opened: () => boolean
-      open: () => void
-    }
-  }
 }
 
 export type ComposerSelection = {
@@ -47,6 +35,7 @@ export type ComposerDelivery = "steer" | "queue"
 // is loaded in the editor.
 export type ComposerQueue = {
   count: Accessor<number>
+  undoing: Accessor<boolean>
   // Delivery a plain submit uses right now.
   delivery: Accessor<ComposerDelivery>
   // Delivery offered on Mod+Enter and the toolbar hint button; undefined hides the hint.

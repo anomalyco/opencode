@@ -57,6 +57,7 @@ const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/anthropic": "@opencode/ai/providers/anthropic",
   "@ai-sdk/azure": "@opencode/ai/providers/azure/responses",
   "@ai-sdk/cerebras": "@opencode/ai/providers/cerebras",
+  "@ai-sdk/cohere": "@opencode/ai/providers/cohere",
   "@ai-sdk/deepinfra": "@opencode/ai/providers/deepinfra",
   "@ai-sdk/google": "@opencode/ai/providers/google",
   "@ai-sdk/google-vertex": "@opencode/ai/providers/google-vertex",
@@ -91,8 +92,10 @@ const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     "@ai-sdk/openai-compatible": "@opencode/ai/providers/cloudflare-ai-gateway",
     "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
   },
+  cohere: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/cohere/chat" },
   "cloudflare-workers-ai": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/cloudflare-workers-ai" },
   deepseek: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/deepseek" },
+  digitalocean: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/digitalocean" },
   "fireworks-ai": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/fireworks" },
   "google-vertex": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/google-vertex/chat" },
   "kimi-for-coding": protocols("moonshot"),
@@ -151,8 +154,12 @@ type Overlay = {
 function options(replacement: string, modelID: string | undefined, settings: Legacy): Overlay {
   const converse = replacement === "@opencode/ai/providers/amazon-bedrock" && modelID !== undefined
   const kept = Struct.omit(settings, ["headers", "extraBody", "useCompletionUrls", ...OPENROUTER_KEYS])
+  const thinking = converse ? bedrockThinking(modelID, settings) : undefined
   return {
-    settings: replacement.startsWith("@opencode/ai/providers/amazon-bedrock") ? bedrockSettings(kept, converse) : kept,
+    settings: {
+      ...(replacement.startsWith("@opencode/ai/providers/amazon-bedrock") ? bedrockSettings(kept, converse) : kept),
+      ...(thinking === undefined ? {} : { thinking }),
+    },
     ...(settings.headers === undefined ? {} : { headers: settings.headers }),
     ...(settings.extraBody === undefined ? {} : { body: settings.extraBody }),
     ...(converse ? bedrockRequest(modelID, settings) : {}),
@@ -196,6 +203,13 @@ function bedrockSettings(settings: Legacy, converse: boolean) {
   }
 }
 
+// Claude's enabled budget is a typed setting so the protocol can fit it under the output limit.
+function bedrockThinking(modelID: string | undefined, settings: Legacy) {
+  const reasoning = settings.reasoningConfig
+  if (!modelID?.includes("anthropic") || reasoning?.type !== "enabled" || reasoning.budgetTokens === undefined) return
+  return { type: "enabled", budgetTokens: reasoning.budgetTokens }
+}
+
 function bedrockRequest(modelID: string | undefined, settings: Legacy): Pick<Overlay, "body"> {
   const additional = settings.additionalModelRequestFields ?? {}
   const reasoning = settings.reasoningConfig
@@ -210,9 +224,6 @@ function bedrockRequest(modelID: string | undefined, settings: Legacy): Pick<Ove
   const betas = settings.anthropicBeta ?? []
   const fields = Provider.mergeOverlay(additional, {
     ...(betas.length > 0 ? { anthropic_beta: [...(additional.anthropic_beta ?? []), ...betas] } : {}),
-    ...(anthropic && type === "enabled" && budget !== undefined
-      ? { thinking: { type: "enabled", budget_tokens: budget } }
-      : {}),
     ...(anthropic && type === "adaptive"
       ? { thinking: { type: "adaptive", ...(display === undefined ? {} : { display }) } }
       : {}),

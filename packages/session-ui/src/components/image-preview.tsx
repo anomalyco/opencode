@@ -16,7 +16,7 @@ export function createImagePreview() {
   }
 
   return (root: HTMLElement) => {
-    root.querySelectorAll<HTMLImageElement>("img").forEach((image) => {
+    root.querySelectorAll<HTMLImageElement>("img:not([data-markdown-favicon])").forEach((image) => {
       image.setAttribute("role", "button")
       image.setAttribute("aria-haspopup", "dialog")
       image.setAttribute("aria-label", image.alt || i18n.t("ui.imagePreview.alt"))

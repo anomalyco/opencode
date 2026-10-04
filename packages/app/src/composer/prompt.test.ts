@@ -3,39 +3,7 @@ import type { SessionMessageUser } from "@opencode/client/promise"
 import { extractPromptComments, extractPromptFromMessage } from "./prompt"
 
 describe("extractPromptFromMessage", () => {
-  test("restores multiple uploaded attachments", () => {
-    const message = {
-      id: "msg_1",
-      type: "user",
-      text: "check these",
-      files: [
-        { data: "AAA", mime: "image/png", source: { type: "inline" }, name: "a.png" },
-        { data: "BBB", mime: "application/pdf", source: { type: "inline" }, name: "b.pdf" },
-      ],
-      time: { created: 1 },
-    } satisfies SessionMessageUser
-
-    const result = extractPromptFromMessage(message)
-
-    expect(result).toHaveLength(3)
-    expect(result[0]).toMatchObject({ type: "text", content: "check these" })
-    expect(result.slice(1)).toMatchObject([
-      {
-        type: "image",
-        filename: "a.png",
-        mime: "image/png",
-        blob: expect.objectContaining({ id: expect.any(String) }),
-      },
-      {
-        type: "image",
-        filename: "b.pdf",
-        mime: "application/pdf",
-        blob: expect.objectContaining({ id: expect.any(String) }),
-      },
-    ])
-  })
-
-  test("restores optimistic data URLs and review comments", () => {
+  test("restores uploaded attachments in order, optimistic data URLs, and review comments", () => {
     const message = {
       id: "msg_1",
       type: "user",
@@ -52,19 +20,26 @@ describe("extractPromptFromMessage", () => {
         ],
       },
       files: [
-        {
-          data: "",
-          mime: "image/png",
-          source: { type: "uri", uri: "data:image/png;base64,AAA" },
-          name: "a.png",
-        },
+        { data: "AAA", mime: "image/png", source: { type: "inline" }, name: "a.png" },
+        { data: "BBB", mime: "application/pdf", source: { type: "inline" }, name: "b.pdf" },
+        { data: "", mime: "image/png", source: { type: "uri", uri: "data:image/png;base64,CCC" }, name: "c.png" },
       ],
       time: { created: 1 },
     } satisfies SessionMessageUser
 
-    expect(extractPromptFromMessage(message)).toMatchObject([
-      { type: "text", content: "visible text" },
-      { type: "image", filename: "a.png", mime: "image/png" },
+    expect(extractPromptFromMessage(message)).toEqual([
+      { type: "text", content: "visible text", start: 0, end: 12 },
+      ...[
+        ["a.png", "image/png", "data:image/png;base64,AAA"],
+        ["b.pdf", "application/pdf", "data:application/pdf;base64,BBB"],
+        ["c.png", "image/png", "data:image/png;base64,CCC"],
+      ].map(([filename, mime, url], index) => ({
+        type: "image" as const,
+        id: `msg_1:file:${index}`,
+        filename,
+        mime,
+        blob: { id: url, url },
+      })),
     ])
     expect(extractPromptComments(message)).toMatchObject([
       { path: "src/app.ts", comment: "check this", origin: "review" },

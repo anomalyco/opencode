@@ -12,6 +12,7 @@ import { SessionMessage } from "@opencode/schema/session-message"
 import type { LocationRef } from "@opencode/client/promise"
 import type { Config } from "../config"
 import { newSessionLocation } from "../config/new-session-location"
+import { errorMessage } from "../util/error"
 import { loadRunAgents, loadRunCommands, loadRunReferences } from "./catalog.shared"
 import {
   resolveMiniSettings,
@@ -57,7 +58,6 @@ type RunRuntimeInput = {
   reconnect?: Reconnect
   files: RunInput["files"]
   initialInput?: string
-  thinking?: boolean
   replay?: boolean
   replayLimit?: number
   demo?: RunInput["demo"]
@@ -77,7 +77,6 @@ export type RunDeferredInput = {
   variant: RunInput["variant"]
   files: RunInput["files"]
   initialInput?: string
-  thinking?: boolean
   replay?: boolean
   replayLimit?: number
   demo?: RunInput["demo"]
@@ -413,7 +412,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     },
   })
   await tuiConfigTask
-  const thinking = () => input.thinking ?? configState.current.thinking === "show"
+  const thinking = () => configState.current.thinking === "show"
   const footer = shell.footer
   const firstPaint = footer.idle().catch(() => {})
   const offRuntimeClose = footer.onClose(() => {
@@ -863,7 +862,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     if (signal?.aborted || footer.isClosed) return
     const text =
       (await state.stream?.then((item) => item.mod).catch(() => undefined))?.formatUnknownError(error) ??
-      (error instanceof Error ? error.message : String(error))
+      errorMessage(error)
     const commit = {
       kind: "error",
       text,
@@ -1007,7 +1006,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
               })
               const commit = {
                 kind: "error",
-                text: error instanceof Error ? error.message : String(error),
+                text: errorMessage(error),
                 phase: "start",
                 source: "system",
                 messageID: SessionMessage.ID.create(),
@@ -1103,7 +1102,6 @@ export async function runInteractiveDeferredMode(input: RunDeferredInput, deps?:
       directory: input.directory,
       files: input.files,
       initialInput: input.initialInput,
-      thinking: input.thinking,
       replay: input.replay,
       replayLimit: input.replayLimit,
       demo: input.demo,

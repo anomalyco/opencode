@@ -8,9 +8,10 @@ import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginModule } from "@opencode/core/plugin/module"
+import { Session } from "@opencode/core/session"
+import { SessionSchema } from "@opencode/core/session/schema"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { fromPromise } from "@opencode/plugin/promise/adapter"
-import { Session } from "@opencode/schema/session"
 import { testEffect } from "./lib/effect"
 import { PluginTestLayer } from "./plugin/fixture"
 
@@ -471,6 +472,34 @@ it.effect("normalizes Promise plugin API inputs through JSON", () =>
   }),
 )
 
+it.effect("creates child sessions from a plugin at the parent's location", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const sessions = yield* Session.Service
+    const created = yield* Deferred.make<{ parentID: SessionSchema.ID; childID: SessionSchema.ID }>()
+    yield* plugins.activate([
+      {
+        id: "child-session",
+        revision: "1",
+        effect: (ctx) =>
+          Effect.gen(function* () {
+            const parent = yield* ctx.session
+              .create({ title: "Parent", metadata: { source: "parent" } })
+              .pipe(Effect.orDie)
+            const child = yield* ctx.session.create({ parentID: parent.id, title: "Child" }).pipe(Effect.orDie)
+            yield* Deferred.succeed(created, { parentID: parent.id, childID: child.id })
+          }),
+      },
+    ])
+    yield* plugins.awaitActivation
+    const ids = yield* Deferred.await(created)
+    const parent = yield* sessions.get(ids.parentID)
+    const child = yield* sessions.get(ids.childID)
+
+    expect(child).toMatchObject({ parentID: parent.id, location: parent.location, metadata: parent.metadata })
+  }),
+)
+
 it.effect("reloading a plugin replaces its command implementation", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
@@ -497,7 +526,7 @@ it.effect("reloading a plugin replaces its command implementation", () =>
       ])
     const request = {
       name: "greet",
-      invocation: { sessionID: Session.ID.make("ses_plugin"), prompt: { text: "" }, delivery: "steer" as const },
+      invocation: { sessionID: SessionSchema.ID.make("ses_plugin"), prompt: { text: "" }, delivery: "steer" as const },
     }
 
     yield* load("1", "before")
@@ -568,9 +597,14 @@ it.effect("refreshes expired OAuth credentials through the context during activa
     expect(yield* plugins.list()).toMatchObject([{ id: "oauth-refresh", state: { status: "active" } }])
     expect(resolved).toEqual([refreshed])
     expect((yield* credentials.get(stored.id))?.value).toEqual(refreshed)
-    expect(yield* integrations.connection.resolve({ type: "credential", id: stored.id, label: stored.label })).toEqual(
-      refreshed,
-    )
+    expect(
+      yield* integrations.connection.resolve({
+        type: "credential",
+        method: "oauth",
+        id: stored.id,
+        label: stored.label,
+      }),
+    ).toEqual(refreshed)
     expect(refreshes).toEqual([expired])
   }),
 )

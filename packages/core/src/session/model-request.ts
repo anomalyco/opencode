@@ -7,6 +7,7 @@ import {
   LanguageModel,
   LLM,
   LLMRequest,
+  type Media,
   Message,
   SystemPart,
 } from "@opencode/ai"
@@ -30,6 +31,7 @@ import { Permission } from "../permission.js"
 import { PluginHooks } from "../plugin/hooks.js"
 import { QuestionTool } from "../tool/plugin/question.js"
 import { Tool } from "../tool.js"
+import { SessionAffinity } from "./affinity.js"
 import { SessionModelTransport } from "./model-transport.js"
 import { SessionProviderContext } from "./provider-context.js"
 import { SessionRunnerModel } from "./runner/model.js"
@@ -43,6 +45,16 @@ const IMAGE_BYTES_TARGET = 15 * 1024 * 1024 // 15 MiB
 const IMAGE_REMOVED =
   "[This image was removed to reduce the request size and is no longer visible. Do not make claims about its contents from memory. If needed, retrieve it again with an available tool or ask the user to attach it again.]"
 const GENERATION_KEYS = new Set(Object.keys(GenerationOptions.fields))
+// Used when the catalog has no output limit for the model.
+const OUTPUT_TOKEN_FALLBACK = 32_000
+// No reply needs more, however much the model allows.
+const OUTPUT_TOKEN_MAX = 256_000
+// A summary never needs more, and a request asking for more cannot be shrunk to fit a window the catalog overstates.
+const SUMMARY_OUTPUT_MAX = 32_000
+// Prompt text is estimated at about 4 characters per token, which can run low on dense text such as code.
+const ESTIMATE_ERROR = 0.15
+// Never ask for less; only reachable with automatic compaction off, since it keeps the window from filling this far.
+const OUTPUT_TOKEN_MIN = 1_024
 
 /** Tool errors, plus the user declining a permission or dismissing a question. */
 export type ExecuteError = Tool.Error | Permission.DeclinedError | QuestionTool.CancelledError
@@ -68,6 +80,21 @@ export interface Input {
   readonly toolChoice?: LLM.RequestInput["toolChoice"]
   /** Only the durable runner may use a stateful WebSocket. */
   readonly webSocket?: "session"
+  /** Prompt size, measured by the provider or estimated. The default output limit leaves room for it. */
+  readonly inputTokens?: { readonly measured: number; readonly estimated: number }
+}
+
+/** The default output limit: the catalog limit, fitted to the room the prompt leaves in the context window. */
+const outputLimit = (
+  limit: Model.Info["limit"],
+  kind: "primary" | "compaction",
+  inputTokens?: Input["inputTokens"],
+) => {
+  const model = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, OUTPUT_TOKEN_MAX)
+  const requested = kind === "compaction" ? Math.min(model, SUMMARY_OUTPUT_MAX) : model
+  if (inputTokens === undefined || limit.context <= 0) return requested
+  const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
+  return Math.min(requested, Math.max(OUTPUT_TOKEN_MIN, room))
 }
 
 export const baseTranscript = (input: {
@@ -102,44 +129,53 @@ const mimeToModality = (mime: string) => {
 const unsupportedMedia = (mime: string, name: string | undefined, capabilities: Model.Capabilities) => {
   const modality = mimeToModality(mime)
   if (!modality || capabilities.input.some((item) => item.startsWith(modality))) return
-  return {
-    type: "text" as const,
-    text: `ERROR: Cannot read ${name ? `"${name}"` : modality} (this model does not support ${modality} input). Inform the user.`,
-  }
+  return `ERROR: Cannot read ${name ? `"${name}"` : modality} (this model does not support ${modality} input). Inform the user.`
 }
 
+// Remote and provider-referenced media carry no local payload and never count toward the inline budget.
+const mediaBytes = (media: Media.Asset) => {
+  if (media.source.type === "base64") return Buffer.byteLength(media.source.data)
+  if (media.source.type === "bytes") return Math.ceil(media.source.data.byteLength / 3) * 4
+  return 0
+}
+
+/** Replaces media with the returned text; messages without replacements are returned unchanged. */
+const replaceMedia = (
+  messages: LLMRequest["messages"],
+  replace: (media: { mime: string; name: string | undefined; bytes: () => number }) => string | undefined,
+) =>
+  messages.map((message) => {
+    const content = message.content.map((part) => {
+      if (part.type === "media") {
+        const text = replace({ mime: part.media.mediaType, name: part.filename, bytes: () => mediaBytes(part.media) })
+        return text === undefined ? part : Message.text(text)
+      }
+      if (part.type !== "tool-result" || part.result.type !== "content") return part
+      const result = part.result
+      const value = result.value.map((item): Content => {
+        if (item.type !== "file") return item
+        const text = replace({ mime: item.mime, name: item.name, bytes: () => Buffer.byteLength(item.uri) })
+        return text === undefined ? item : { type: "text", text }
+      })
+      return value.every((item, index) => item === result.value[index])
+        ? part
+        : { ...part, result: { ...result, value } }
+    })
+    return content.every((part, index) => part === message.content[index])
+      ? message
+      : new Message({ ...message, content })
+  })
+
 export const unsupportedParts = (messages: LLMRequest["messages"], capabilities: Model.Capabilities) =>
-  messages.map((message) =>
-    Message.make({
-      ...message,
-      content: message.content.map((part) => {
-        if (part.type === "media") {
-          return unsupportedMedia(part.mediaType, part.filename, capabilities) ?? part
-        }
-        if (part.type !== "tool-result" || part.result.type !== "content") return part
-        return {
-          ...part,
-          result: {
-            ...part.result,
-            value: part.result.value.map((item: Content) => {
-              if (item.type !== "file") return item
-              return unsupportedMedia(item.mime, item.name, capabilities) ?? item
-            }),
-          },
-        }
-      }),
-    }),
-  )
+  replaceMedia(messages, (media) => unsupportedMedia(media.mime, media.name, capabilities))
 
 export const boundImages = (messages: LLMRequest["messages"]) => {
   const isImage = (mime: string) => mime.toLowerCase().startsWith("image/")
-  const size = (data: string | Uint8Array) =>
-    typeof data === "string" ? Buffer.byteLength(data) : Math.ceil(data.byteLength / 3) * 4
   const imageBytes = messages.reduce(
     (total, message) =>
       total +
       message.content.reduce((sum, part) => {
-        if (part.type === "media" && isImage(part.mediaType)) return sum + size(part.data)
+        if (part.type === "media" && isImage(part.media.mediaType)) return sum + mediaBytes(part.media)
         if (part.type !== "tool-result" || part.result.type !== "content") return sum
         return (
           sum +
@@ -155,29 +191,11 @@ export const boundImages = (messages: LLMRequest["messages"]) => {
   if (imageBytes <= IMAGE_BYTES_TRIGGER) return messages
 
   let removed = 0
-  return messages.map((message) =>
-    Message.make({
-      ...message,
-      content: message.content.map((part) => {
-        if (part.type === "media" && isImage(part.mediaType) && imageBytes - removed > IMAGE_BYTES_TARGET) {
-          removed += size(part.data)
-          return Message.text(IMAGE_REMOVED)
-        }
-        if (part.type !== "tool-result" || part.result.type !== "content") return part
-        return {
-          ...part,
-          result: {
-            ...part.result,
-            value: part.result.value.map((item: Content) => {
-              if (item.type !== "file" || !isImage(item.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET) return item
-              removed += Buffer.byteLength(item.uri)
-              return { type: "text" as const, text: IMAGE_REMOVED }
-            }),
-          },
-        }
-      }),
-    }),
-  )
+  return replaceMedia(messages, (media) => {
+    if (!isImage(media.mime) || imageBytes - removed <= IMAGE_BYTES_TARGET) return
+    removed += media.bytes()
+    return IMAGE_REMOVED
+  })
 }
 
 type Definitions = PluginHooks.Domains["session"]["context"]["tools"]
@@ -213,8 +231,19 @@ export const layer = Layer.effect(
       const given = new Map(
         tools.definitions.map((t) => [{ description: t.description, input: { ...t.inputSchema } }, t] as const),
       )
+      // Hooks see the default output limit and may change or remove it. Titles and generate keep the provider default,
+      // because their reasoning is hard to budget.
       const shaped = yield* shape(
-        { sessionID: session.id, model: model.ref, system: input.system, messages: input.messages, options: {} },
+        {
+          sessionID: session.id,
+          model: model.ref,
+          system: input.system,
+          messages: input.messages,
+          options:
+            kind === "primary" || kind === "compaction"
+              ? { maxTokens: outputLimit(model.limit, kind, input.inputTokens) }
+              : {},
+        },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
       )
       // Match by identity first, then by key. Entries matching neither were invented by a
@@ -229,22 +258,24 @@ export const layer = Layer.effect(
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
-      const root = session.fork?.sessionID ?? session.id
+      const affinity = SessionAffinity.get(session)
       const base = LLM.request({
         model: model.model,
         http: {
           headers: {
-            "x-session-affinity": session.id,
-            "X-Session-Id": session.id,
+            "x-opencode-session-id": session.id,
+            ...(session.parentID ? { "x-opencode-parent-session-id": session.parentID } : {}),
+            "x-session-affinity": affinity,
+            "X-Session-Id": affinity,
             ...(session.parentID ? { "x-parent-session-id": session.parentID } : {}),
             "User-Agent": App.useragent(app),
             "x-opencode-project": session.projectID,
-            "x-opencode-session": session.id,
+            "x-opencode-session": affinity,
             "x-opencode-client": app.name,
           },
         },
         // TODO: Persist cache lineage so nested forks reuse the root session's cache key.
-        promptCacheKey: /^ses_[0-9a-f]{64}$/.test(root) ? root.slice(4) : root,
+        promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         system: shaped.system,
         messages: boundImages(unsupportedParts(shaped.messages, model.capabilities)),
         tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
@@ -266,9 +297,8 @@ export const layer = Layer.effect(
       const request = LLMRequest.update(base, {
         model: route === base.model.route ? base.model : LanguageModel.update(base.model, { route }),
         http: new HttpOptions({
-          body: base.http?.body,
+          ...base.http,
           headers: Object.keys(modelHook.headers).length === 0 ? undefined : modelHook.headers,
-          query: base.http?.query,
         }),
       })
       // History selects native windows against the catalog route before hooks run. A newly installed
@@ -320,24 +350,28 @@ export const layer = Layer.effect(
       // which transport actually carries the request, so both hook families are always offered.
       const webSocket =
         input.webSocket === "session" && model.transport === "websocket"
-          ? transport.bind(session.id, {
-              handshake: (connect) =>
-                hooks
-                  .trigger("session", "experimental.ws.handshake", {
-                    ...scope,
-                    url: connect.url,
-                    headers: connect.headers,
-                  })
-                  .pipe(Effect.map((event) => ({ url: event.url, headers: event.headers }))),
-              send: (frame) =>
-                hooks
-                  .trigger("session", "experimental.ws.send", { ...scope, frame })
-                  .pipe(Effect.map((event) => event.frame)),
-              receive: (frame) =>
-                hooks
-                  .trigger("session", "experimental.ws.receive", { ...scope, frame })
-                  .pipe(Effect.map((event) => event.frame)),
-            })
+          ? transport.bind(
+              session.id,
+              {
+                handshake: (connect) =>
+                  hooks
+                    .trigger("session", "experimental.ws.handshake", {
+                      ...scope,
+                      url: connect.url,
+                      headers: connect.headers,
+                    })
+                    .pipe(Effect.map((event) => ({ url: event.url, headers: event.headers }))),
+                send: (frame) =>
+                  hooks
+                    .trigger("session", "experimental.ws.send", { ...scope, frame })
+                    .pipe(Effect.map((event) => event.frame)),
+                receive: (frame) =>
+                  hooks
+                    .trigger("session", "experimental.ws.receive", { ...scope, frame })
+                    .pipe(Effect.map((event) => event.frame)),
+              },
+              model.chunkTimeout,
+            )
           : undefined
 
       return {

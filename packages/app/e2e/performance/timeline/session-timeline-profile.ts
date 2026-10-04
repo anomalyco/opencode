@@ -1,4 +1,4 @@
-import type { CDPSession, Page } from "@playwright/test"
+import type { Page } from "@playwright/test"
 import path from "node:path"
 import { mkdir, writeFile } from "node:fs/promises"
 

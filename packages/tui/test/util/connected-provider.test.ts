@@ -8,7 +8,9 @@ describe("hasConnectedProvider", () => {
   })
 
   test("is true after any provider integration is connected", () => {
-    expect(hasConnectedProvider([{ connections: [{ type: "credential", id: "cred_1", label: "Work" }] }])).toBe(true)
+    expect(
+      hasConnectedProvider([{ connections: [{ type: "credential", method: "key", id: "cred_1", label: "Work" }] }]),
+    ).toBe(true)
     expect(hasConnectedProvider([{ connections: [{ type: "env", name: "OPENAI_API_KEY" }] }])).toBe(true)
   })
 })

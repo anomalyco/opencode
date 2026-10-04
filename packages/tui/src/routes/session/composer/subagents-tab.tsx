@@ -8,7 +8,7 @@ import { useClient } from "../../../context/client"
 import { useTheme } from "../../../context/theme"
 import { Locale } from "../../../util/locale"
 import { Keymap } from "../../../context/keymap"
-import { useComposerTab } from "./index"
+import { useComposerTab } from "./context"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { sessionFamily } from "../../../util/session"
 

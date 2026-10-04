@@ -94,12 +94,6 @@ jobs:
           git config --global user.email "bot@opencode.ai"
           git config --global user.name "opencode"
 
-      - name: Install ffmpeg
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes ffmpeg
-
       - name: Cache Turbo
         uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
@@ -112,11 +106,12 @@ jobs:
       - name: Run unit tests
         timeout-minutes: 20
         run: |
+          # The runners have four vCPUs, and each Bun test process performs its own concurrent work.
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            GITHUB_ACTIONS=false bun turbo test
+            GITHUB_ACTIONS=false bun turbo test --concurrency=3
             exit 0
           fi
-          GITHUB_ACTIONS=false bun turbo test --affected
+          GITHUB_ACTIONS=false bun turbo test --affected --concurrency=3
         env:
           OPENCODE_EXPERIMENTAL_DISABLE_FILEWATCHER: ${{ runner.os == 'Windows' && 'true' || 'false' }}
           TURBO_SCM_BASE: ${{ github.event_name == 'pull_request' && format('{0}^1', github.sha) || github.event.before }}
@@ -250,6 +245,20 @@ jobs:
         run: bunx playwright test --config e2e/service-worker/playwright.config.ts
         timeout-minutes: 5
 
+      - name: Run session UI component tests
+        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' }}
+        run: bun --cwd packages/session-ui test:components
+        env:
+          CI: true
+        timeout-minutes: 15
+
+      - name: Run app component tests
+        if: ${{ !cancelled() && env.E2E_ENABLED == 'true' }}
+        run: bun --cwd packages/app test:components
+        env:
+          CI: true
+        timeout-minutes: 15
+
       - name: Upload Playwright artifacts
         if: always() && env.E2E_ENABLED == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -260,3 +269,7 @@ jobs:
           path: |
             packages/app/e2e/test-results
             packages/app/e2e/playwright-report
+            packages/session-ui/component-tests/test-results
+            packages/session-ui/component-tests/playwright-report
+            packages/app/component-tests/test-results
+            packages/app/component-tests/playwright-report

@@ -40,6 +40,7 @@ import { createMarkdownRenderer } from "./markdown-solid"
 import { useMarkdown, type OpenMarkdownLocalFile, type ReadMarkdownImage } from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
+import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
 
 type RenderedBlock =
   | (MarkdownCacheEntry & { key: string; mode: Exclude<Block["mode"], "code"> })
@@ -287,6 +288,50 @@ function markCodeLinks(root: HTMLDivElement) {
     code.parentNode?.replaceChild(link, code)
     link.appendChild(code)
   }
+}
+
+const publicFaviconHost = /^(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/
+const privateFaviconSuffix = /\.(?:alt|example|internal|invalid|local|localhost|onion|test|ts\.net)$/
+
+function markExternalLinkFavicons(root: HTMLDivElement) {
+  root.querySelectorAll<HTMLAnchorElement>("a.external-link[href]").forEach((link) => {
+    if (!link.textContent?.trim() || link.querySelector("img")) return
+    if (!URL.canParse(link.href)) return
+    const url = new URL(link.href)
+    if (url.protocol !== "http:" && url.protocol !== "https:") return
+    if (url.hostname.toLowerCase() === "github.com") return
+
+    const favicon = document.createElement("span")
+    favicon.className = "markdown-link-favicon"
+    favicon.setAttribute("aria-hidden", "true")
+    const host = url.hostname.toLowerCase()
+    if (
+      publicFaviconHost.test(host) &&
+      !privateFaviconSuffix.test(host) &&
+      host !== "home.arpa" &&
+      !host.endsWith(".home.arpa")
+    ) {
+      const image = document.createElement("img")
+      image.src = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(url.host)}&sz=32`
+      image.alt = ""
+      image.setAttribute("data-markdown-favicon", "")
+      image.width = 14
+      image.height = 14
+      image.decoding = "async"
+      favicon.appendChild(image)
+    }
+    link.insertBefore(favicon, link.firstChild)
+  })
+}
+
+function setupExternalLinkFavicons(root: HTMLDivElement) {
+  const loaded = (event: Event) => {
+    const image = event.target
+    if (!(image instanceof HTMLImageElement) || !image.hasAttribute("data-markdown-favicon")) return
+    if (image.naturalWidth > 0) image.dataset.loaded = ""
+  }
+  root.addEventListener("load", loaded, true)
+  return () => root.removeEventListener("load", loaded, true)
 }
 
 function markInlineCode(root: HTMLDivElement) {
@@ -554,6 +599,8 @@ export function Markdown(
 
   let copyCleanup: (() => void) | undefined
   let linkCleanup: (() => void) | undefined
+  let faviconCleanup: (() => void) | undefined
+  let sessionLinkCleanup: (() => void) | undefined
   let readImage: ReadMarkdownImage | undefined
   let images: ReturnType<typeof createMarkdownImages> | undefined
 
@@ -589,7 +636,7 @@ export function Markdown(
     })
     activeCodeKeys.clear()
     nextCodeKeys.forEach((key) => activeCodeKeys.add(key))
-    content.forEach((block, index) => updateBlock(container, index, block, labels))
+    content.forEach((block, index) => updateBlock(container, index, block, labels, !!markdown?.openSession))
     while (container.children.length > content.length) {
       const child = container.lastElementChild
       if (!child) break
@@ -599,6 +646,9 @@ export function Markdown(
     }
     images?.update(container)
     previewImages(container)
+    container.querySelectorAll<HTMLImageElement>("img[data-markdown-favicon]").forEach((image) => {
+      if (image.complete && image.naturalWidth > 0) image.dataset.loaded = ""
+    })
     container
       .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
       .forEach((button) => setCopyState(button, labels, button.dataset.copied === "true"))
@@ -608,6 +658,8 @@ export function Markdown(
         copied: i18n.t("ui.message.copied"),
       }))
     if (!linkCleanup) linkCleanup = setupLocalLinks(container, () => markdown?.openLocalFile)
+    if (!sessionLinkCleanup) sessionLinkCleanup = setupSessionLinks(container, () => markdown?.openSession)
+    if (!faviconCleanup) faviconCleanup = setupExternalLinkFavicons(container)
     container.toggleAttribute("data-local-links", !!markdown?.openLocalFile)
     if (result?.ready && result.text === local.text) container.dataset.markdownReady = ""
   })
@@ -617,6 +669,8 @@ export function Markdown(
     images?.dispose()
     if (copyCleanup) copyCleanup()
     if (linkCleanup) linkCleanup()
+    if (sessionLinkCleanup) sessionLinkCleanup()
+    if (faviconCleanup) faviconCleanup()
     const container = root()
     if (container) disposeRenderedMarkdown(container)
     if (streamed) disposeMarkdownProjection(owner)
@@ -673,7 +727,13 @@ function disposeCode(key: string) {
   disposeStreamingCode(key)
 }
 
-function updateBlock(container: HTMLDivElement, index: number, block: RenderedBlock, labels: CopyLabels) {
+function updateBlock(
+  container: HTMLDivElement,
+  index: number,
+  block: RenderedBlock,
+  labels: CopyLabels,
+  sessionLinks: boolean,
+) {
   const current = container.children[index]
   if (block.mode === "code") {
     updateCodeBlock(container, current, block, labels)
@@ -697,6 +757,8 @@ function updateBlock(container: HTMLDivElement, index: number, block: RenderedBl
   source.innerHTML = block.html
   markInlineCode(source)
   markCodeLinks(source)
+  if (sessionLinks) markSessionLinks(source)
+  markExternalLinkFavicons(source)
 
   if (rendered) {
     rendered.renderer.update(source.innerHTML, block.mode === "live", rendered.raw !== block.raw)

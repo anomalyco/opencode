@@ -107,7 +107,7 @@ describe("withWorktreeInventory", () => {
     id: "project",
     canonical: "/repo",
     name: "Before",
-    time: { created: 1, updated: 1 },
+    time: { created: 1, updated: 1, active: 1 },
     sandboxes: [],
   }
 
@@ -128,7 +128,11 @@ describe("withWorktreeInventory", () => {
     const project = normalizeProjectInfo(metadata)
     expect(withWorktreeInventory(project, undefined)).toBe(project)
     const cached = [{ directory: "/repo" }, { directory: "/repo/feature", strategy: "git" }]
-    const updated = updateProjectInfo(withWorktreeInventory(project, cached), { ...metadata, name: "After" })
+    const updated = updateProjectInfo(
+      { ...withWorktreeInventory(project, cached), worktree: "/old-repo" },
+      { ...metadata, name: "After" },
+    )
+    expect(updated).toMatchObject({ worktree: "/repo", worktrees: cached })
     expect(withWorktreeInventory(updated, cached)).toMatchObject({ name: "After", sandboxes: ["/repo/feature"] })
   })
 })

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, onCleanup, Show, useContext, createContext } from "solid-js"
+import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes } from "@opentui/core"
 import { useTheme } from "../../../context/theme"
@@ -7,46 +7,22 @@ import { Keymap } from "../../../context/keymap"
 import { SubagentsTab } from "./subagents-tab"
 import { ShellTab } from "./shell-tab"
 import { TerminalsTab } from "./terminals-tab"
-import { useConfig } from "../../../config"
-
-export interface ComposerHint {
-  label: string
-  shortcut: string
-}
-
-interface Tab {
-  id: string
-  label: string
-  hints?: () => ComposerHint[]
-  onClose?: () => void
-}
-
-const ComposerContext = createContext<{
-  register: (tab: Tab) => () => void
-  active: (id: string) => boolean
-  close: () => void
-}>()
-
-export function useComposerTab() {
-  const ctx = useContext(ComposerContext)
-  if (!ctx) throw new Error("useComposerTab must be used within a Composer")
-  return ctx
-}
+import { ComposerContext, type ComposerTab } from "./context"
 
 export type ComposerProps = {
   sessionID: string
   open: boolean
   defaultTab?: string
   onClose?: () => void
+  terminals?: boolean
   visibleTerminalID?: string
 }
 
 export function Composer(props: ComposerProps) {
   const theme = useTheme()
-  const config = useConfig().data
 
   const [store, setStore] = createStore({
-    tabs: {} as Record<string, Tab>,
+    tabs: {} as Record<string, ComposerTab>,
     active: "",
   })
 
@@ -64,13 +40,11 @@ export function Composer(props: ComposerProps) {
   })
 
   function close() {
-    const tab = activeTab()
-    tab?.onClose?.()
     props.onClose?.()
   }
 
   const ctx = {
-    register(tab: Tab) {
+    register(tab: ComposerTab) {
       setStore("tabs", tab.id, tab)
       if (!store.active) setStore("active", tab.id)
       return () => setStore("tabs", tab.id, undefined!)
@@ -152,7 +126,7 @@ export function Composer(props: ComposerProps) {
             </box>
             <SubagentsTab sessionID={props.sessionID} />
             <ShellTab sessionID={props.sessionID} />
-            <Show when={config.session.terminal}>
+            <Show when={props.terminals}>
               <TerminalsTab sessionID={props.sessionID} visibleTerminalID={props.visibleTerminalID} />
             </Show>
             <box flexDirection="row" gap={2} paddingLeft={1} flexShrink={0}>

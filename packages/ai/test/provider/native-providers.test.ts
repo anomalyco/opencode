@@ -48,7 +48,7 @@ describe("native OpenAI-compatible providers", () => {
       [GoogleVertex.configure(vertex).model("model"), "vertex"],
       [GoogleVertexChat.configure(vertex).model("model"), "vertex"],
       [GoogleVertexResponses.configure(vertex).model("model"), "vertex"],
-      [GoogleVertexMessages.configure(vertex).model("model"), "anthropic"],
+      [GoogleVertexMessages.configure(vertex).model("model"), "vertex"],
       [Anthropic.configure({ apiKey: "test" }).model("model"), "anthropic"],
       [
         AnthropicCompatible.configure({ baseURL: "https://example.test/v1", provider: "minimax" }).model("model"),
@@ -64,6 +64,7 @@ describe("native OpenAI-compatible providers", () => {
       [DeepSeek.configure({ apiKey: "test" }).model("model"), "deepseek"],
       [Fireworks.configure({ apiKey: "test" }).model("model"), "fireworks"],
       [DeepInfra.configure({ apiKey: "test" }).model("model"), "deepinfra"],
+      [Groq.configure({ apiKey: "test" }).model("model"), "groq"],
       [TogetherAI.configure({ apiKey: "test" }).model("model"), "togetherai"],
       [CloudflareAIGateway.configure({ accountId: "account" }).model("model"), "cloudflare-ai-gateway"],
       [CloudflareWorkersAI.configure({ accountId: "account" }).model("model"), "cloudflare-workers-ai"],

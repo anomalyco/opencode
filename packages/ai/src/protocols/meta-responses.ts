@@ -1,12 +1,10 @@
 import { Effect, Encoding, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
-import { HttpTransport } from "../route/transport/index.js"
 import { LLMEvent, LLMRequest, Message, ToolResultPart } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
 import { ResponsesHostedTools } from "./utils/responses-hosted-tools.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
-import { MetaImage } from "./utils/meta-image.js"
+import { detectMediaType } from "../utils/media-type.js"
 
 const ADAPTER = "meta-responses"
 const NAME = "Meta Responses"
@@ -45,13 +43,6 @@ const ImageItem = Schema.Struct({
   error: Schema.optional(Schema.Unknown),
 })
 
-const Body = Schema.Struct({
-  ...OpenResponses.coreFields,
-  input: Schema.Array(Schema.Union([OpenResponses.InputItem, ImageItem])),
-  tools: optionalArray(Schema.Union([OpenResponses.Tool, NativeTool])),
-  stream: Schema.Literal(true),
-})
-
 const MessageAnnotations = Schema.Struct({
   content: Schema.Array(Schema.Struct({ annotations: optionalArray(JsonObject) })),
 })
@@ -63,12 +54,13 @@ interface ParserState extends OpenResponses.ParserState {
 const adapter = {
   id: ADAPTER,
   name: NAME,
+  nativeTool: (native) => ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(native.meta),
   restoreHostedToolItem: (item: unknown) => (Schema.is(ImageItem)(item) ? item : undefined),
 } satisfies OpenResponses.ProviderAdapter
 
 const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: LLMRequest) {
   const key = request.model.route.providerMetadataKey ?? String(request.model.provider)
-  const projected = ProviderShared.flattenToolRequest(
+  return yield* OpenResponses.fromRequestWithAdapter(
     LLMRequest.update(request, {
       messages: request.messages.map((message) =>
         Message.make({
@@ -94,28 +86,8 @@ const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: L
         }),
       ),
     }),
+    adapter,
   )
-  return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Body))({
-    ...(yield* OpenResponses.lowerConversation(projected.request, adapter)),
-    ...OpenResponses.lowerGeneration(request),
-    tools:
-      projected.tools.length === 0
-        ? undefined
-        : yield* Effect.forEach(projected.tools, (tool) =>
-            Effect.gen(function* () {
-              if (tool.native === undefined)
-                return yield* OpenResponses.lowerTool(
-                  NAME,
-                  tool,
-                  ToolSchemaProjection.modelCompatibility(tool.inputSchema, request.model.compatibility?.toolSchema),
-                )
-              return yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(tool.native.meta)
-            }),
-          ),
-    tool_choice:
-      OpenResponses.allowedToolChoice(request) ??
-      (request.toolChoice ? yield* OpenResponses.lowerToolChoice(NAME, request.toolChoice) : undefined),
-  })
 })
 
 const HOSTED_TOOLS = {
@@ -151,7 +123,11 @@ const HOSTED_TOOLS = {
           ),
         ),
       )
-      const mime = MetaImage.mediaType(data, item.output_format)
+      // Responses image items can omit output_format, including when PNG/JPEG was requested.
+      const mime =
+        item.output_format === undefined
+          ? (detectMediaType(data) ?? "application/octet-stream")
+          : `image/${item.output_format}`
       return {
         type: "content" as const,
         value: [{ type: "file" as const, uri: `data:${mime};base64,${item.result}`, mime }],
@@ -224,7 +200,7 @@ const step = Effect.fn("MetaResponses.step")(function* (state: ParserState, inpu
 
 export const protocol = Protocol.make({
   id: ADAPTER,
-  body: { schema: Body, from: fromRequest },
+  body: { schema: OpenResponses.OpenResponsesBody, from: fromRequest },
   stream: {
     event: OpenResponses.protocol.stream.event,
     initial: (request): ParserState => ({ ...OpenResponses.initial(request, adapter), completedItems: new Set() }),
@@ -233,6 +209,6 @@ export const protocol = Protocol.make({
   },
 })
 
-export const httpTransport = HttpTransport.sseJson.with<Schema.Schema.Type<typeof Body>>()
+export const httpTransport = OpenResponses.httpTransport
 
 export * as MetaResponses from "./meta-responses.js"

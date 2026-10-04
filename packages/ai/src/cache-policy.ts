@@ -38,11 +38,32 @@ const resolve = (policy: CachePolicy | undefined): CachePolicyObject => {
 // prefix caching, Gemini's implicit + out-of-band CachedContent). Skip the
 // whole policy pass for these — emitting hints would be harmless but pointless.
 const RESPECTS_INLINE_HINTS = new Set([
+  "alibaba-chat",
+  "alibaba-messages",
   "anthropic-messages",
+  "anthropic-compatible-messages",
+  "cloudflare-ai-gateway-messages",
   "google-vertex-messages",
+  "meta-messages",
+  "minimax-messages",
+  "moonshot-messages",
+  "zai-coding-messages",
   "bedrock-converse",
   "openrouter",
+  "digitalocean",
 ])
+
+// OpenRouter upstreams other than Anthropic and Alibaba Qwen cache without breakpoints. Gemini uses only the last
+// breakpoint, so a conversation-tail breakpoint writes a new cache every step and costs more than none. Qwen ignores
+// breakpoints on tool definitions and caches tools with the system prompt.
+const QWEN: CachePolicyObject = { system: true, messages: { tail: 1 } }
+const openRouterPolicy = (modelID: string): CachePolicyObject => {
+  // `~anthropic/claude-sonnet-latest` style IDs are OpenRouter aliases for the latest model in a family.
+  const id = modelID.replace(/^~/, "")
+  if (id.startsWith("anthropic/")) return AUTO
+  if (id.startsWith("qwen/")) return QWEN
+  return NONE
+}
 
 const makeHint = (ttlSeconds: number | undefined): CacheHint =>
   ttlSeconds !== undefined ? new CacheHint({ type: "ephemeral", ttlSeconds }) : new CacheHint({ type: "ephemeral" })
@@ -149,9 +170,14 @@ const countHints = (request: LLMRequest) =>
 
 export const applyCachePolicy = (request: LLMRequest): LLMRequest => {
   if (!RESPECTS_INLINE_HINTS.has(request.model.route.id)) return request
-  if (request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto"))
-    return request
-  const policy = resolve(request.cache)
+  const policy =
+    request.model.route.id === "openrouter" && (request.cache === undefined || request.cache === "auto")
+      ? openRouterPolicy(request.model.id)
+      : request.model.route.id === "alibaba-chat" && (request.cache === undefined || request.cache === "auto")
+        ? request.model.id.toLowerCase().startsWith("qwen")
+          ? QWEN
+          : NONE
+        : resolve(request.cache)
   if (!policy.tools && !policy.system && !policy.messages) return request
 
   const hint = makeHint(policy.ttlSeconds)

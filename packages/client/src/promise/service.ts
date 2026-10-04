@@ -118,9 +118,12 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
   const info = await read(options.file)
-  if (options.pty === "handoff" && info !== undefined)
-    await PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
-  else await PtyHandoff.clear(options.file ?? fallback())
+  // Terminal handoff is best-effort; it must never keep the old service running.
+  await (
+    options.pty === "handoff" && info !== undefined
+      ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
+      : PtyHandoff.clear(options.file ?? fallback())
+  ).catch((cause: unknown) => console.warn("Failed to prepare persistent terminals for replacement", cause))
   if (info !== undefined) await terminate(info, options, defaultEnsureTiming)
 }
 

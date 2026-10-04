@@ -1,18 +1,18 @@
 import { Effect } from "effect"
 import type { Builtins } from "./intrinsics.js"
 import { typeError } from "./model.js"
-import { type Callable, define, frozen, hidden, Native, type NativeOptions, Obj } from "./objects.js"
+import { type Callable, define, frozen, hidden, Native, type NativeOptions, Obj, type Value } from "./objects.js"
 import { describeValue } from "./references.js"
 
-/** A native function body: a plain value, a thrown `PendingThrow`, or an Effect. */
-export type Impl = (thisValue: unknown, args: Array<unknown>) => unknown
+/** A native function body: a value, a thrown `PendingThrow`, or an Effect of a value. */
+export type Impl = (thisValue: Value, args: Array<Value>) => Value | Effect.Effect<Value, unknown, unknown>
 
 // The dispatch in `Frame.call` suspends every native call, so a synchronous throw here is a defect.
 const lift =
   <R>(impl: Impl) =>
-  (thisValue: unknown, args: Array<unknown>): Effect.Effect<unknown, unknown, R> => {
+  (thisValue: Value, args: Array<Value>): Effect.Effect<Value, unknown, R> => {
     const result = impl(thisValue, args)
-    return Effect.isEffect(result) ? (result as Effect.Effect<unknown, unknown, R>) : Effect.succeed(result)
+    return Effect.isEffect(result) ? (result as Effect.Effect<Value, unknown, R>) : Effect.succeed(result)
   }
 
 export const native = <R>(builtins: Builtins, options: NativeOptions<R>): Native<R> =>
@@ -27,7 +27,7 @@ export const methods = (builtins: Builtins, target: Obj, table: ReadonlyArray<Me
   for (const [name, length, impl] of table) define(target, name, fn(builtins, name, length, impl), hidden)
 }
 
-export const constants = (target: Obj, table: Record<string, unknown>): void => {
+export const constants = (target: Obj, table: Record<string, Value>): void => {
   for (const [name, value] of Object.entries(table)) define(target, name, value, frozen)
 }
 
@@ -54,7 +54,7 @@ export const prototypeFrom = (newTarget: Callable, fallback: Obj): Obj => {
 /** Narrows a method receiver to the built-in it belongs to, or throws the TypeError JS would. */
 export const receiver = <T extends Obj>(
   cls: abstract new (...args: never) => T,
-  thisValue: unknown,
+  thisValue: Value,
   method: string,
 ): T => {
   if (thisValue instanceof cls) return thisValue

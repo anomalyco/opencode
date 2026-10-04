@@ -1,5 +1,8 @@
 import type {
   ServerInfoOutput,
+  ServerPairOutput,
+  ServerConnectInput,
+  ServerConnectOutput,
   LocationGetInput,
   LocationGetOutput,
   LocationReloadOutput,
@@ -144,6 +147,9 @@ import type {
   McpDisconnectOutput,
   McpResourceCatalogInput,
   McpResourceCatalogOutput,
+  CredentialListOutput,
+  CredentialCreateInput,
+  CredentialCreateOutput,
   CredentialUpdateInput,
   CredentialUpdateOutput,
   CredentialActivateInput,
@@ -234,6 +240,8 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  VcsInitInput,
+  VcsInitOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsBaseInput,
@@ -292,7 +300,10 @@ export function make(options: ClientOptions) {
   const fetch = options.fetch ?? globalThis.fetch
 
   const prepare = (descriptor: RequestDescriptor, requestOptions?: RequestOptions) => {
-    const url = new URL(descriptor.path, options.baseUrl)
+    // A leading slash would replace any path prefix on baseUrl, so join relative to it.
+    const baseUrl = new URL(options.baseUrl)
+    if (!baseUrl.pathname.endsWith("/")) baseUrl.pathname += "/"
+    const url = new URL(descriptor.path.slice(1), baseUrl)
     for (const [key, value] of Object.entries(descriptor.query ?? {})) appendQuery(url.searchParams, key, value)
     const headers = new Headers(options.headers)
     for (const [key, value] of Object.entries(descriptor.headers ?? {})) {
@@ -327,11 +338,12 @@ export function make(options: ClientOptions) {
   }
 
   const responseError = async (response: Response, descriptor: RequestDescriptor): Promise<never> => {
-    if (descriptor.declaredStatuses.includes(response.status)) throw await json(response)
+    if (descriptor.declaredStatuses.includes(response.status))
+      throw declared((await json(response)) as DeclaredErrorBody)
     try {
       await response.body?.cancel()
     } catch {}
-    throw new ClientError("UnexpectedStatus", { cause: { status: response.status } })
+    throw new ClientError("UnexpectedStatus", { cause: { status: response.status }, detail: String(response.status) })
   }
 
   const request = async <A>(descriptor: RequestDescriptor, requestOptions?: RequestOptions): Promise<A> => {
@@ -355,7 +367,7 @@ export function make(options: ClientOptions) {
         try {
           await response.body?.cancel()
         } catch {}
-        throw new ClientError("UnsupportedContentType")
+        throw new ClientError("UnsupportedContentType", { detail: response.headers.get("content-type") })
       }
       if (response.body === null) throw new ClientError("MalformedResponse")
       const reader = response.body.getReader()
@@ -412,6 +424,22 @@ export function make(options: ClientOptions) {
           { method: "GET", path: `/api/info`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
           requestOptions,
         ),
+      pair: (requestOptions?: RequestOptions) =>
+        request<ServerPairOutput>(
+          { method: "POST", path: `/api/pair`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ),
+      connect: (input: ServerConnectInput, requestOptions?: RequestOptions) =>
+        request<ServerConnectOutput>(
+          {
+            method: "GET",
+            path: `/auth/connect/${encodeURIComponent(input.code)}`,
+            successStatus: 200,
+            declaredStatuses: [400, 401],
+            empty: false,
+          },
+          requestOptions,
+        ),
     },
     location: {
       get: (input?: LocationGetInput, requestOptions?: RequestOptions) =>
@@ -421,7 +449,7 @@ export function make(options: ClientOptions) {
             path: `/api/location`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -446,7 +474,7 @@ export function make(options: ClientOptions) {
             path: `/api/agent`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -472,7 +500,7 @@ export function make(options: ClientOptions) {
             path: `/api/plugin`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -485,7 +513,7 @@ export function make(options: ClientOptions) {
             query: { location: input?.["location"] },
             body: { target: input?.["target"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -498,7 +526,7 @@ export function make(options: ClientOptions) {
             query: { location: input["location"] },
             body: { targets: input["targets"] },
             successStatus: 204,
-            declaredStatuses: [400, 401, 503],
+            declaredStatuses: [400, 401, 404, 503],
             empty: true,
           },
           requestOptions,
@@ -551,6 +579,7 @@ export function make(options: ClientOptions) {
             path: `/api/session`,
             body: {
               id: input?.["id"],
+              parentID: input?.["parentID"],
               title: input?.["title"],
               agent: input?.["agent"],
               model: input?.["model"],
@@ -559,7 +588,7 @@ export function make(options: ClientOptions) {
               permissions: input?.["permissions"],
             },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -662,7 +691,7 @@ export function make(options: ClientOptions) {
           {
             method: "PATCH",
             path: `/api/session/${encodeURIComponent(input.sessionID)}`,
-            body: { title: input["title"], permissions: input["permissions"] },
+            body: { title: input["title"], metadata: input["metadata"], permissions: input["permissions"] },
             successStatus: 204,
             declaredStatuses: [400, 401, 404],
             empty: true,
@@ -1032,6 +1061,7 @@ export function make(options: ClientOptions) {
             {
               method: "DELETE",
               path: `/api/session/${encodeURIComponent(input.sessionID)}/form/${encodeURIComponent(input.formID)}`,
+              query: { message: input["message"] },
               successStatus: 204,
               declaredStatuses: [400, 401, 404, 409],
               empty: true,
@@ -1086,7 +1116,7 @@ export function make(options: ClientOptions) {
             path: `/api/model`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 503],
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,
@@ -1098,7 +1128,7 @@ export function make(options: ClientOptions) {
             path: `/api/model/default`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 503],
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,
@@ -1112,7 +1142,7 @@ export function make(options: ClientOptions) {
             path: `/api/experimental/generate`,
             body: { prompt: input["prompt"], model: input["model"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 503],
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,
@@ -1126,7 +1156,7 @@ export function make(options: ClientOptions) {
             path: `/api/provider`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 503],
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,
@@ -1152,7 +1182,7 @@ export function make(options: ClientOptions) {
             path: `/api/integration`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1178,7 +1208,7 @@ export function make(options: ClientOptions) {
               query: { location: input["location"] },
               body: { url: input["url"] },
               successStatus: 204,
-              declaredStatuses: [400, 401],
+              declaredStatuses: [400, 401, 404],
               empty: true,
             },
             requestOptions,
@@ -1208,7 +1238,7 @@ export function make(options: ClientOptions) {
               query: { location: input["location"] },
               body: { methodID: input["methodID"], answer: input["answer"], label: input["label"] },
               successStatus: 200,
-              declaredStatuses: [400, 401],
+              declaredStatuses: [400, 401, 404],
               empty: false,
             },
             requestOptions,
@@ -1245,7 +1275,7 @@ export function make(options: ClientOptions) {
               path: `/api/integration/${encodeURIComponent(input.integrationID)}/connect/oauth/${encodeURIComponent(input.attemptID)}`,
               query: { location: input["location"] },
               successStatus: 204,
-              declaredStatuses: [400, 401],
+              declaredStatuses: [400, 401, 404],
               empty: true,
             },
             requestOptions,
@@ -1284,7 +1314,7 @@ export function make(options: ClientOptions) {
               path: `/api/integration/${encodeURIComponent(input.integrationID)}/connect/command/${encodeURIComponent(input.attemptID)}`,
               query: { location: input["location"] },
               successStatus: 204,
-              declaredStatuses: [400, 401],
+              declaredStatuses: [400, 401, 404],
               empty: true,
             },
             requestOptions,
@@ -1299,7 +1329,7 @@ export function make(options: ClientOptions) {
             path: `/api/mcp`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1312,7 +1342,7 @@ export function make(options: ClientOptions) {
             query: { location: input["location"] },
             body: { config: input["config"] },
             successStatus: 204,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: true,
           },
           requestOptions,
@@ -1361,7 +1391,7 @@ export function make(options: ClientOptions) {
               path: `/api/mcp/resource`,
               query: { location: input?.["location"] },
               successStatus: 200,
-              declaredStatuses: [400, 401],
+              declaredStatuses: [400, 401, 404],
               empty: false,
             },
             requestOptions,
@@ -1369,6 +1399,29 @@ export function make(options: ClientOptions) {
       },
     },
     credential: {
+      list: (requestOptions?: RequestOptions) =>
+        request<{ readonly data: CredentialListOutput }>(
+          { method: "GET", path: `/api/credential`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          requestOptions,
+        ).then((value) => value.data),
+      create: (input: CredentialCreateInput, requestOptions?: RequestOptions) =>
+        request<{ readonly data: CredentialCreateOutput }>(
+          {
+            method: "POST",
+            path: `/api/credential`,
+            body: {
+              id: input["id"],
+              integrationID: input["integrationID"],
+              label: input["label"],
+              value: input["value"],
+              activate: input["activate"],
+            },
+            successStatus: 200,
+            declaredStatuses: [400, 401, 409],
+            empty: false,
+          },
+          requestOptions,
+        ).then((value) => value.data),
       update: (input: CredentialUpdateInput, requestOptions?: RequestOptions) =>
         request<CredentialUpdateOutput>(
           {
@@ -1407,7 +1460,7 @@ export function make(options: ClientOptions) {
     project: {
       list: (requestOptions?: RequestOptions) =>
         request<ProjectListOutput>(
-          { method: "GET", path: `/api/project`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          { method: "GET", path: `/api/project`, successStatus: 200, declaredStatuses: [400, 401, 404], empty: false },
           requestOptions,
         ),
       update: (input: ProjectUpdateInput, requestOptions?: RequestOptions) =>
@@ -1436,7 +1489,7 @@ export function make(options: ClientOptions) {
             path: `/api/form`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1451,7 +1504,7 @@ export function make(options: ClientOptions) {
               path: `/api/permission/request`,
               query: { location: input?.["location"] },
               successStatus: 200,
-              declaredStatuses: [400, 401],
+              declaredStatuses: [400, 401, 404],
               empty: false,
             },
             requestOptions,
@@ -1465,7 +1518,7 @@ export function make(options: ClientOptions) {
               path: `/api/permission/saved`,
               query: { projectID: input?.["projectID"] },
               successStatus: 200,
-              declaredStatuses: [400, 401],
+              declaredStatuses: [400, 401, 404],
               empty: false,
             },
             requestOptions,
@@ -1476,7 +1529,7 @@ export function make(options: ClientOptions) {
               method: "DELETE",
               path: `/api/permission/saved/${encodeURIComponent(input.id)}`,
               successStatus: 204,
-              declaredStatuses: [400, 401],
+              declaredStatuses: [400, 401, 404],
               empty: true,
             },
             requestOptions,
@@ -1558,7 +1611,7 @@ export function make(options: ClientOptions) {
             path: `/api/fs/list`,
             query: { location: input?.["location"], path: input?.["path"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1570,7 +1623,7 @@ export function make(options: ClientOptions) {
             path: `/api/fs/find`,
             query: { location: input["location"], query: input["query"], type: input["type"], limit: input["limit"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1583,7 +1636,7 @@ export function make(options: ClientOptions) {
             query: { location: input["location"], path: input["path"] },
             body: input["payload"],
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
             binaryBody: true,
           },
@@ -1598,7 +1651,7 @@ export function make(options: ClientOptions) {
             path: `/api/command`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1612,7 +1665,7 @@ export function make(options: ClientOptions) {
             path: `/api/skill`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1627,7 +1680,7 @@ export function make(options: ClientOptions) {
             query: { location: input["location"] },
             body: { input: input["input"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 500],
+            declaredStatuses: [400, 401, 404, 500],
             empty: false,
           },
           requestOptions,
@@ -1648,7 +1701,7 @@ export function make(options: ClientOptions) {
             path: `/api/pty`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1667,7 +1720,7 @@ export function make(options: ClientOptions) {
               env: input?.["env"],
             },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1858,7 +1911,7 @@ export function make(options: ClientOptions) {
             path: `/api/shell`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1876,7 +1929,7 @@ export function make(options: ClientOptions) {
               metadata: input["metadata"],
             },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1912,7 +1965,7 @@ export function make(options: ClientOptions) {
             path: `/api/shell/${encodeURIComponent(input.id)}`,
             query: { location: input["location"] },
             successStatus: 204,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: true,
           },
           requestOptions,
@@ -1926,7 +1979,7 @@ export function make(options: ClientOptions) {
             path: `/api/reference`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -1989,6 +2042,18 @@ export function make(options: ClientOptions) {
         ),
     },
     vcs: {
+      init: (input?: VcsInitInput, requestOptions?: RequestOptions) =>
+        request<VcsInitOutput>(
+          {
+            method: "POST",
+            path: `/api/vcs/init`,
+            query: { location: input?.["location"], provider: input?.["provider"] },
+            successStatus: 204,
+            declaredStatuses: [400, 401, 404, 409, 501, 503],
+            empty: true,
+          },
+          requestOptions,
+        ),
       get: (input?: VcsGetInput, requestOptions?: RequestOptions) =>
         request<VcsGetOutput>(
           {
@@ -1996,7 +2061,7 @@ export function make(options: ClientOptions) {
             path: `/api/vcs`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -2008,7 +2073,7 @@ export function make(options: ClientOptions) {
             path: `/api/vcs/base`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 503],
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,
@@ -2020,7 +2085,7 @@ export function make(options: ClientOptions) {
             path: `/api/vcs/status`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
@@ -2033,7 +2098,7 @@ export function make(options: ClientOptions) {
               path: `/api/vcs/branch`,
               query: { location: input?.["location"], search: input?.["search"], limit: input?.["limit"] },
               successStatus: 200,
-              declaredStatuses: [400, 401],
+              declaredStatuses: [400, 401, 404],
               empty: false,
             },
             requestOptions,
@@ -2046,7 +2111,7 @@ export function make(options: ClientOptions) {
             path: `/api/vcs/diff`,
             query: { location: input["location"], mode: input["mode"], base: input["base"], context: input["context"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 503],
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,
@@ -2102,7 +2167,7 @@ export function make(options: ClientOptions) {
             path: `/api/websearch/provider`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 503],
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,
@@ -2115,7 +2180,7 @@ export function make(options: ClientOptions) {
             query: { location: input["location"] },
             body: { query: input["query"], providerID: input["providerID"] },
             successStatus: 200,
-            declaredStatuses: [400, 401, 503],
+            declaredStatuses: [400, 401, 404, 503],
             empty: false,
           },
           requestOptions,
@@ -2129,14 +2194,20 @@ export function make(options: ClientOptions) {
             path: `/api/config`,
             query: { location: input?.["location"] },
             successStatus: 200,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: false,
           },
           requestOptions,
         ),
       shells: (requestOptions?: RequestOptions) =>
         request<ConfigShellsOutput>(
-          { method: "GET", path: `/api/config/shell`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
+          {
+            method: "GET",
+            path: `/api/config/shell`,
+            successStatus: 200,
+            declaredStatuses: [400, 401, 404],
+            empty: false,
+          },
           requestOptions,
         ),
       update: (input: ConfigUpdateInput, requestOptions?: RequestOptions) =>
@@ -2146,7 +2217,7 @@ export function make(options: ClientOptions) {
             path: `/api/experimental/config`,
             body: { shell: input["shell"] },
             successStatus: 204,
-            declaredStatuses: [400, 401],
+            declaredStatuses: [400, 401, 404],
             empty: true,
           },
           requestOptions,
@@ -2181,7 +2252,7 @@ async function json(response: Response): Promise<unknown> {
     try {
       await response.body?.cancel()
     } catch {}
-    throw new ClientError("UnsupportedContentType")
+    throw new ClientError("UnsupportedContentType", { detail: response.headers.get("content-type") })
   }
   let text: string
   try {
@@ -2195,6 +2266,19 @@ async function json(response: Response): Promise<unknown> {
   } catch (cause) {
     throw new ClientError("MalformedResponse", { cause })
   }
+}
+
+type DeclaredErrorBody = {
+  readonly _tag?: string
+  readonly message?: string
+  readonly data?: { readonly message?: string }
+}
+
+/** Throw declared error bodies as Errors. The body's fields stay on the error, so narrowing on `_tag` or `name` still works. */
+function declared(body: DeclaredErrorBody) {
+  const error = Object.assign(new Error(body.message ?? body.data?.message), body)
+  if (body._tag) error.name = body._tag
+  return error
 }
 
 function isContentType(response: Response, expected: string) {

@@ -32,6 +32,10 @@ export function formatKeybind(config: string) {
   return config === "none" ? "" : config
 }
 
+export function formatKeybindParts(config: string) {
+  return !config || config === "none" ? [] : config.split(",")[0].split("+")
+}
+
 export function useCommand() {
   return {
     options: [],

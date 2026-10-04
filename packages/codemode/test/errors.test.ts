@@ -68,9 +68,9 @@ describe("error identity", () => {
 
 describe("rethrown interpreter failures", () => {
   test("keep their diagnostic kind and source location", async () => {
-    const failure = await error(`try { switch (Symbol) {} } catch (e) { throw e }`)
+    const failure = await error(`try { Symbol + 1 } catch (e) { throw e }`)
     expect(failure.kind).toBe("InvalidDataValue")
-    expect(failure.message).toStartWith("TypeError: Switch discriminants must be data values. (line ")
+    expect(failure.message).toStartWith("TypeError: Binary operators require data values. (line ")
     expect(failure.location).toBeDefined()
   })
 
@@ -156,7 +156,7 @@ describe("host errors escaping built-ins", () => {
   test("an un-awaited rejection born inside promise machinery keeps its location in the warning", async () => {
     const result = await run(`Promise.all(1); return 1`)
     expect(result.ok && result.warnings?.[0]?.message).toEndWith(
-      "TypeError: Promise.all expects an array or other synchronous iterable. (line 1, col 1)",
+      "TypeError: Promise.all expects a synchronous iterable, received a number. (line 1, col 1)",
     )
   })
 

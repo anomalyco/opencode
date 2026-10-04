@@ -18,6 +18,7 @@ import { Context, Effect, Encoding, Result, Schema, SchemaGetter, Struct } from 
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/unstable/httpapi"
 import {
   ConflictError,
+  LocationNotFoundError,
   CommandExecutionError,
   CommandNotFoundError,
   FormAlreadySettledError,
@@ -170,12 +171,10 @@ export const SessionsQuery = Schema.Struct({
   cursor: SessionsQueryCursor.pipe(Schema.optional),
 }).annotate({ identifier: "SessionsQuery" })
 
-export const makeSessionGroup = <
-  I extends HttpApiMiddleware.AnyId,
-  S,
-  FormI extends HttpApiMiddleware.AnyId,
-  FormS,
->(sessionLocationMiddleware: Context.Key<I, S>, formLocationMiddleware: Context.Key<FormI, FormS>) =>
+export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI extends HttpApiMiddleware.AnyId, FormS>(
+  sessionLocationMiddleware: Context.Key<I, S>,
+  formLocationMiddleware: Context.Key<FormI, FormS>,
+) =>
   HttpApiGroup.make("server.session")
     .add(
       HttpApiEndpoint.get("session.list", "/api/session", {
@@ -220,6 +219,7 @@ export const makeSessionGroup = <
       HttpApiEndpoint.post("session.create", "/api/session", {
         payload: Schema.Struct({
           id: Session.ID.pipe(Schema.optional),
+          parentID: Session.ID.pipe(Schema.optional),
           title: Schema.String.pipe(Schema.optional),
           agent: Agent.ID.pipe(Schema.optional),
           model: Model.Ref.pipe(Schema.optional),
@@ -228,11 +228,13 @@ export const makeSessionGroup = <
           permissions: Permission.Ruleset.pipe(Schema.optional),
         }),
         success: Schema.Struct({ data: PublicSessionInfo }),
+        error: SessionNotFoundError,
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.create",
           summary: "Create session",
-          description: "Create a session at the requested location.",
+          description:
+            "Create a session at the requested location. A parentID creates a linked child session at its parent's location.",
         }),
       ),
     )
@@ -359,6 +361,7 @@ export const makeSessionGroup = <
         params: { sessionID: Session.ID },
         payload: Schema.Struct({
           title: Schema.String.pipe(Schema.optional),
+          metadata: Session.Metadata.pipe(Schema.optional),
           permissions: Permission.Ruleset.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
@@ -558,9 +561,7 @@ export const makeSessionGroup = <
         error: [SessionNotFoundError, SessionBusyError],
       })
         .middleware(sessionLocationMiddleware)
-        .annotateMerge(
-          OpenApi.annotations({ identifier: "session.revert.commit", summary: "Commit staged revert" }),
-        ),
+        .annotateMerge(OpenApi.annotations({ identifier: "session.revert.commit", summary: "Commit staged revert" })),
     )
     .add(
       HttpApiEndpoint.get("session.context", "/api/session/:sessionID/context", {
@@ -590,7 +591,7 @@ export const makeSessionGroup = <
           }),
         }),
         success: Schema.Struct({ data: Schema.Array(FileDiff.Info) }),
-        error: [InvalidRequestError, MessageNotFoundError, SessionNotFoundError, UnknownError],
+        error: [InvalidRequestError, MessageNotFoundError, SessionNotFoundError, UnknownError, LocationNotFoundError],
       }).annotateMerge(
         OpenApi.annotations({
           identifier: "session.diff",
@@ -854,6 +855,7 @@ export const makeSessionGroup = <
     .add(
       HttpApiEndpoint.delete("session.form.cancel", "/api/session/:sessionID/form/:formID", {
         params: { sessionID: Schema.String, formID: Form.ID },
+        query: Schema.Struct({ message: Schema.optional(Schema.String) }),
         success: HttpApiSchema.NoContent,
         error: [SessionNotFoundError, FormAlreadySettledError, FormNotFoundError],
       })
@@ -862,7 +864,7 @@ export const makeSessionGroup = <
           OpenApi.annotations({
             identifier: "session.form.cancel",
             summary: "Cancel form",
-            description: "Cancel a pending form.",
+            description: "Cancel a pending form, optionally telling the asker why it was not answered.",
           }),
         ),
     )

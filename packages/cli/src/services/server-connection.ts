@@ -18,7 +18,7 @@ export type Resolved = {
   readonly service?: ReturnType<typeof managedService>
 }
 
-export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args) {
+export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args = {}) {
   if (args.server !== undefined && args.standalone)
     return yield* Effect.fail(new Error("--server and --standalone cannot be combined"))
   if (args.server !== undefined) {
@@ -38,7 +38,7 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
       )
     return { endpoint } satisfies Resolved
   }
-  if (args.standalone) {
+  if (args.standalone || (yield* ServiceConfig.read()).disabled === true) {
     return { endpoint: yield* Standalone.start() } satisfies Resolved
   }
 

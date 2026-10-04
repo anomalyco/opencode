@@ -8,7 +8,12 @@ import type {
 } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
 import { createMemo, mapArray, type Accessor } from "solid-js"
-import { currentContentDefaultOpen, currentToolFailed, currentToolHasLoadedFiles } from "../message/current-tool-state"
+import {
+  currentContentDefaultOpen,
+  currentToolFailed,
+  currentToolGroupedRead,
+  currentToolHasLoadedFiles,
+} from "../message/current-tool-state"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineCategory, timelineNoticeRequired, type TimelineDetail } from "./detail"
 
@@ -271,7 +276,12 @@ export namespace Timeline {
             detail,
             new Set(
               messages
-                .filter((message) => message.type === "compaction" || message.type === "model-switched")
+                .filter(
+                  (message) =>
+                    message.type === "compaction" ||
+                    message.type === "model-switched" ||
+                    message.type === "location-switched",
+                )
                 .map((message) => message.id),
             ),
           )
@@ -298,15 +308,25 @@ export namespace Timeline {
     const previousUserMessage = index > 0
     const compaction = entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
     const lastContent = lastAssistant?.content.at(-1)
-    const thinking =
-      (detail ? detail.thinking.placement === "separate" : showReasoning) &&
+    const working =
       isActive &&
       status.type === "busy" &&
       lastAssistant?.time.completed === undefined &&
       !lastAssistant?.error &&
-      !lastAssistant?.retry &&
+      !lastAssistant?.retry
+    const thinking =
+      working &&
+      (detail ? detail.thinking.placement === "separate" : showReasoning) &&
       lastContent?.type === "reasoning" &&
       lastContent.time?.completed === undefined
+    const thoughtOnly =
+      working &&
+      detail?.thinking.placement === "grouped" &&
+      assistantMessages.every((message) =>
+        message.content.every(
+          (content) => content.type === "reasoning" || !isRenderable(content, showReasoning, detail),
+        ),
+      )
 
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: turnID }))
     if (userMessage) rows.push(new TimelineRow.UserMessage({ userMessageID: turnID }))
@@ -316,6 +336,7 @@ export namespace Timeline {
     // An assistant message can produce several rows because its content parts are
     // rendered separately. Notices end a segment so none of those rows cross it.
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
+      if (thoughtOnly) return
       const refs = messages.flatMap((message, messageIndex) =>
         contentEntries(message)
           .filter(
@@ -597,7 +618,7 @@ function groupContent(
   detail?: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "file"; refs: PartRef[]; tools: boolean } | undefined
+  let adjacent: { type: "context" | "file" | "read"; refs: PartRef[]; tools: boolean } | undefined
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
@@ -610,7 +631,7 @@ function groupContent(
       return
     }
     groups.push({
-      type: current.type === "context" ? "context" : "file",
+      type: current.type,
       key:
         current.type !== "context"
           ? `part:${first.messageID}:${first.partID}`
@@ -664,6 +685,7 @@ function toolGroupType(
     if (content.name === "question" && !currentToolFailed(content)) return undefined
     const category = timelineCategory(content)!
     if (detail[category].placement === "grouped") return "context"
+    if (currentToolGroupedRead(content)) return "read"
     if (currentToolFailed(content)) return undefined
     if (content.name === "patch" || content.name === "edit" || content.name === "write") return "file"
     return undefined

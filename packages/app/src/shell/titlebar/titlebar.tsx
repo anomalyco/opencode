@@ -23,37 +23,33 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import type { ComposerState } from "@/composer/persistence"
 import "./titlebar.css"
-import { newTabTooltipKeybind } from "@/shell/commands/tooltip-keybind"
 import { TitlebarRightMount } from "@/shell/titlebar/right-slot"
 import { MobileDrawer, MobileDrawerContent, MobileDrawerLabel, MobileDrawerTrigger } from "@/shell/mobile-drawer"
 import { sessionTabTitle } from "./tab-title"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
-import { projectForSession } from "@/shell/layout/helpers"
 import { useSettingsDialog } from "@/settings/command"
-import { updaterAction } from "@/shell/updates/action"
-import type { UpdaterState } from "@/shell/updates/types"
+import { rootSession } from "@/shell/routes/session"
+import { TitlebarItem } from "@opencode/gui-extensions/sdk"
+import { useExtensionHost } from "@/runtime/extension/host"
+import { TitlebarItems, useTitlebarItems } from "@/runtime/extension/titlebar-items"
 import devIcon from "../../../../desktop/icons/dev/64x64.png"
 import betaIcon from "../../../../desktop/icons/beta/64x64.png"
 
 const titlebarHeight = 36
+
 const windowsTitlebarHeight = 44 // Includes the content inset; matches the native Windows overlay.
+
 const minTitlebarZoom = 0.25
+
 const windowsControlsBaseWidth = 138 // 3 native Windows caption buttons at 46px each.
+
 // Native controls: 14px left inset, two 20px button pitches, and a 14px button.
 const macTrafficLightsBaseWidth = 68
+
 const macTrafficLightsTopClearance = 28
 
-export type TitlebarUpdate = {
-  state: UpdaterState | undefined
-  install: () => void
-}
-
-export function Titlebar(props: {
-  update?: TitlebarUpdate
-  debugTools?: { visible: boolean; toggle: () => void }
-  verticalTabs?: { mount?: HTMLElement }
-}) {
+export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const platform = usePlatform()
   const command = useCommand()
   const language = useLanguage()
@@ -71,17 +67,25 @@ export function Titlebar(props: {
   const macVerticalTabs = createMemo(() => mac() && !!props.verticalTabs)
   const zoom = () => platform.webviewZoom?.() ?? 1
   const titlebarZoom = () => (windows() ? Math.max(zoom(), minTitlebarZoom) : zoom())
+
   const minHeight = () => {
     if (mac()) return `${titlebarHeight / zoom()}px`
+
     if (windows()) return `env(titlebar-area-height, ${windowsTitlebarHeight / Math.min(titlebarZoom(), 1)}px)`
+
     return undefined
   }
+
   const windowsControlsWidth = () => `${windowsControlsBaseWidth / Math.max(titlebarZoom(), 1)}px`
 
-  const [history, setHistory] = createStore({
-    stack: [] as HistoryLocation[],
+  const [history, setHistory] = createStore<{
+    stack: HistoryLocation[]
+    index: number
+    action: "back" | "forward" | undefined
+  }>({
+    stack: [],
     index: 0,
-    action: undefined as "back" | "forward" | undefined,
+    action: undefined,
   })
 
   const path = () => `${location.pathname}${location.search}${location.hash}`
@@ -91,31 +95,18 @@ export function Titlebar(props: {
 
     untrack(() => {
       const next = applyPath(history, current)
+
       if (next === history) return
       setHistory(next)
     })
   })
 
-  const updateState = createMemo<TitlebarUpdatePillState>(() => {
-    const state = props.update?.state
-    const installing = state?.status === "installing"
-    const version = state?.status === "ready" || state?.status === "download-required" ? state.version : undefined
-    return {
-      visible: version !== undefined || installing,
-      installing,
-      label: language.t("titlebar.update"),
-      ariaLabel: language.t(updaterAction(state).label),
-      title: version ? language.t("titlebar.updateVersion", { version }) : undefined,
-      onInstall: () => props.update?.install(),
-    }
-  })
-  const rightState = createMemo<TitlebarRightState>(() => ({
-    update: updateState(),
-  }))
+  const titlebarItems = useTitlebarItems()
   const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
 
   const back = () => {
     const next = backPath(history)
+
     if (!next) return
     setHistory(next.state)
     navigate(next.to.url, { state: unwrap(next.to.state) })
@@ -123,6 +114,7 @@ export function Titlebar(props: {
 
   const forward = () => {
     const next = forwardPath(history)
+
     if (!next) return
     setHistory(next.state)
     navigate(next.to.url, { state: unwrap(next.to.state) })
@@ -181,36 +173,70 @@ export function Titlebar(props: {
             const tabs = useTabs()
             const tabsStore = tabs.store
             const tabsStoreActions = tabs
+
             const preparing = createMemo(() => {
               const route = layout.route()
+
               return route.type === "session" && !!tabs.pendingSession(route.server, route.sessionId)
             })
-            const [loadedSession] = createResource(
+
+            const [resolvedSession] = createResource(
               () => {
                 const route = layout.route()
+
                 if (route.type !== "session") return undefined
+
                 if (preparing()) return undefined
                 const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
+
                 return conn ? { route, ctx: global.ensureServerCtx(conn) } : undefined
               },
-              ({ route, ctx }) => ctx.sdk.api.session.get({ sessionID: route.sessionId }).catch(() => {}),
+              async ({ route, ctx }) => {
+                const info = await ctx.sdk.api.session
+                  .get({ sessionID: route.sessionId })
+                  .catch(() => ctx.data.session.get(route.sessionId))
+
+                if (!info) return
+                ctx.data.session.remember(info)
+
+                const rootID = await rootSession(info, async (id) => {
+                  const cached = ctx.data.session.get(id)
+
+                  if (cached) return cached
+                  const ancestor = await ctx.sdk.api.session.get({ sessionID: id })
+                  ctx.data.session.remember(ancestor)
+
+                  return ancestor
+                })
+                  .then((root) => root.id)
+                  .catch(() => ctx.data.session.root(info.id))
+
+                return { info, rootID }
+              },
             )
+
             const session = createMemo(() => {
               const route = layout.route()
+
               if (route.type !== "session") return
+
               if (preparing()) return
               const conn = global.servers.list().find((item) => ServerConnection.key(item) === route.server)
               const cached = conn ? global.ensureServerCtx(conn).data.session.get(route.sessionId) : undefined
+
               if (cached) return cached
-              const loaded = loadedSession()
-              return loaded?.id === route.sessionId ? loaded : undefined
+              const resolved = resolvedSession()
+
+              return resolved?.info.id === route.sessionId ? resolved.info : undefined
             })
 
             const matchRoute = (route: LayoutRoute) => {
               if (route.type === "home") return
+
               if (route.type === "draft") {
                 return tabsStore.find((item) => item.type === "draft" && item.draftID === route.draftID)
               }
+
               if (route.type === "session") {
                 const main = tabsStore.find(
                   (item) =>
@@ -218,13 +244,18 @@ export function Titlebar(props: {
                     item.server === route.server &&
                     (item.sessionId === route.sessionId || item.routeSessionId === route.sessionId),
                 )
+
                 if (main) return main
                 const s = session()
+
                 if (s?.parentID) {
-                  const parentID = s.parentID
+                  const resolved = resolvedSession()
+                  const parentID = resolved?.info.id === s.id ? resolved.rootID : s.parentID
+
                   const parent = tabsStore.find(
                     (item) => item.type === "session" && item.server === route.server && item.sessionId === parentID,
                   )
+
                   if (parent) return parent
                 }
               }
@@ -234,10 +265,13 @@ export function Titlebar(props: {
 
             createEffect(() => {
               const route = layout.route()
+
               if (!tabs.ready()) return
               const tab = currentTab()
+
               if (tab) {
                 const current = session()
+
                 if (
                   route.type === "session" &&
                   tab.type === "session" &&
@@ -245,18 +279,26 @@ export function Titlebar(props: {
                 ) {
                   tabs.rememberSessionRoute(tab, route.sessionId, current?.parentID)
                 }
+
                 tabs.remember(tab)
+
                 return
               }
 
               if (route.type === "session") {
                 if (tabs.pendingSession(route.server, route.sessionId)) {
                   tabsStoreActions.addSessionTab({ server: route.server, sessionId: route.sessionId })
+
                   return
                 }
+
                 const s = session()
+
                 if (!s) return
-                const sessionId = s.parentID ?? s.id
+                const resolved = resolvedSession()
+
+                if (s.parentID && resolved?.info.id !== s.id) return
+                const sessionId = resolved?.info.id === s.id ? resolved.rootID : s.id
                 const next = { server: route.server, sessionId }
                 tabsStoreActions.addSessionTab(next)
               }
@@ -264,21 +306,27 @@ export function Titlebar(props: {
 
             makeEventListener(window, SESSION_TABS_REMOVED_EVENT, (event) => {
               const detail = readSessionTabsRemovedDetail(event)
+
               if (!detail) return
               tabsStoreActions.removeSessions(detail)
             })
 
             const openNewTab = () => {
               const route = layout.route()
+
               switch (route.type) {
                 case "session": {
                   const pending = tabs.pendingSession(route.server, route.sessionId)
+
                   if (pending) {
                     const model = tabs.stateValue<ComposerState>(pending.draft, "prompt")?.model.current()
                     void tabs.newDraft({ server: route.server, directory: pending.draft.directory }, "", model)
+
                     return
                   }
+
                   const activeSession = session()
+
                   if (!activeSession) return
 
                   const sessionTab = {
@@ -286,41 +334,55 @@ export function Titlebar(props: {
                     server: route.server,
                     sessionId: activeSession.id,
                   }
+
                   const model = tabs.stateValue<ComposerState>(sessionTab, "prompt")?.model.current()
                   void tabs.newDraft(
                     { server: sessionTab.server, directory: activeSession.location.directory },
                     "",
                     model,
                   )
+
                   return
                 }
+
                 case "draft": {
                   const activeTab = currentTab()
+
                   if (activeTab?.type !== "draft") return
 
                   const model = tabs.stateValue<ComposerState>(activeTab, "prompt")?.model.current()
                   void tabs.newDraft({ server: activeTab.server, directory: activeTab.directory }, "", model)
+
                   return
                 }
+
                 case "settings":
+                case "connect":
                 case "home": {
                   const selection = layout.home.selection()
+
                   const conn =
                     global.servers.list().find((item) => ServerConnection.key(item) === selection.server) ??
                     global.servers.list()[0]
+
                   const projects = conn ? global.ensureServerCtx(conn).projects : undefined
+
                   const project =
                     projects?.list().find((item) => item.worktree === selection.directory) ??
                     projects?.list().find((item) => item.worktree === projects.last()) ??
                     projects?.list()[0]
+
                   if (conn && project) {
                     void tabs.newDraft({ server: ServerConnection.key(conn), directory: project.worktree }, "")
+
                     return
                   }
                 }
               }
             }
+
             const toggleHome = () => tabs.toggleHome({ home: layout.route().type === "home", current: currentTab() })
+
             const homeButton = (vertical = false) => (
               <Show
                 when={vertical}
@@ -415,23 +477,31 @@ export function Titlebar(props: {
             })
 
             const [mobileTabs, setMobileTabs] = createStore({ open: false, settings: false })
+
             const currentProject = createMemo(() => {
               const tab = currentTab()
               const value = session()
+
               if (!tab || !value) return
               const conn = global.servers.list().find((item) => ServerConnection.key(item) === tab.server)
-              return projectForSession(value, conn ? global.ensureServerCtx(conn).projects.list() : [])
+
+              return conn ? global.ensureServerCtx(conn).projects.forSession(value) : undefined
             })
+
             const currentTitle = () => {
               const tab = currentTab()
+
               if (!tab) return language.t("home.title")
+
               if (tab.type === "draft") return language.t("session.tab.session")
               const value = session()
+
               return sessionTabTitle(
                 value ? value.title : tabs.info[tabKey(tab)]?.title,
                 language.t("session.tab.session"),
               )
             }
+
             createEffect(() => {
               path()
               mobile()
@@ -450,7 +520,7 @@ export function Titlebar(props: {
                 }}
               >
                 <Show when={!mobile() && (!props.verticalTabs || windows())}>
-                  <ChannelIndicator horizontal debugTools={props.debugTools} />
+                  <ChannelIndicator horizontal />
                 </Show>
                 <Show when={windows() || linux()}>
                   <WindowsAppMenu command={command} platform={platform} />
@@ -531,6 +601,7 @@ export function Titlebar(props: {
                               }}
                               onClose={(tab) => {
                                 const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+
                                 if (index !== -1) tabsStoreActions.closeTab(index)
                               }}
                               onReorder={(keys) => tabsStoreActions.reorder(keys)}
@@ -605,6 +676,7 @@ export function Titlebar(props: {
                           }}
                           onClose={(tab) => {
                             const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+
                             if (index !== -1) tabsStoreActions.closeTab(index)
                           }}
                           onReorder={(keys) => tabsStoreActions.reorder(keys)}
@@ -614,7 +686,7 @@ export function Titlebar(props: {
                           value={
                             <>
                               {language.t("command.session.new")}
-                              <Keybind keys={newTabTooltipKeybind(command)} variant="neutral" />
+                              <Keybind keys={command.keybindParts("tab.new")} variant="neutral" />
                             </>
                           }
                         >
@@ -646,7 +718,7 @@ export function Titlebar(props: {
                               />
                             </Show>
                             <Show when={!windows()}>
-                              <ChannelIndicator sidebar debugTools={props.debugTools} />
+                              <ChannelIndicator sidebar />
                             </Show>
                             {homeButton(true)}
                             <button
@@ -678,14 +750,15 @@ export function Titlebar(props: {
                                 }}
                                 onClose={(tab) => {
                                   const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
+
                                   if (index !== -1) tabsStoreActions.closeTab(index)
                                 }}
                                 onReorder={(keys) => tabsStoreActions.reorder(keys)}
                               />
                             </div>
-                            <Show when={updateState().visible}>
+                            <Show when={titlebarItems.ids().length > 0}>
                               <div data-slot="vertical-tabs-footer" class="mt-2 flex w-full shrink-0 flex-col">
-                                <TitlebarUpdateIconButton state={updateState()} vertical />
+                                <TitlebarItems items={titlebarItems} vertical />
                               </div>
                             </Show>
                           </Portal>
@@ -698,7 +771,10 @@ export function Titlebar(props: {
                   <div class="flex-1" />
                 </Show>
                 <Show when={!props.verticalTabs}>
-                  <TitlebarRight state={rightState()} />
+                  <div class="relative z-20 flex shrink-0 items-center justify-end gap-0 overflow-visible">
+                    <TitlebarItems items={titlebarItems} />
+                    <TitlebarRightMount />
+                  </div>
                 </Show>
               </div>
             )
@@ -709,92 +785,22 @@ export function Titlebar(props: {
   )
 }
 
-type TitlebarUpdatePillState = {
-  visible: boolean
-  installing: boolean
-  label: string
-  ariaLabel: string
-  title?: string
-  onInstall: () => void
-}
-
-type TitlebarRightState = {
-  update: TitlebarUpdatePillState
-}
-
-function TitlebarRight(props: { state: TitlebarRightState }) {
-  return (
-    <div class="relative z-20 flex shrink-0 items-center justify-end gap-0 overflow-visible">
-      <Show when={props.state.update.visible}>
-        <TitlebarUpdateIconButton state={props.state.update} />
-      </Show>
-      <TitlebarRightMount />
-    </div>
-  )
-}
-
-function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState; vertical?: boolean }) {
-  const label = () => (
-    <span
-      class="shrink-0 text-[11px] leading-4 text-v2-text-text-accent [font-weight:530] opacity-0 motion-safe:transition-all duration-150 ease-out group-hover:opacity-100 group-hover:translate-x-0 group-focus-within:opacity-100 group-focus-within:translate-x-0 motion-reduce:translate-x-0"
-      classList={{
-        "ms-px me-4 -translate-x-2 rtl:translate-x-2": props.vertical,
-        "ms-2 me-px translate-x-2 rtl:-translate-x-2": !props.vertical,
-      }}
-    >
-      {props.state.label}
-    </span>
-  )
-  return (
-    <div
-      data-slot="titlebar-update"
-      class="group relative shrink-0 rounded-full bg-v2-background-bg-deep transition-[width] duration-150 ease-out hover:z-30 focus-within:z-30 motion-reduce:transition-none"
-      classList={{
-        "h-7 w-7 self-start hover:w-[84px] focus-within:w-[84px]": props.vertical,
-        "me-3 h-5 w-5 hover:w-[68px] focus-within:w-[68px]": !props.vertical,
-      }}
-    >
-      <button
-        type="button"
-        class="absolute top-0 z-10 flex h-full w-full items-center overflow-hidden rounded-full bg-v2-icon-icon-accent/20 text-v2-icon-icon-accent transition-[background-color] duration-150 ease-out group-hover:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] group-focus-within:bg-[color-mix(in_srgb,var(--v2-icon-icon-accent)_20%,var(--v2-background-bg-deep))] focus-visible:outline-none disabled:opacity-60 motion-reduce:transition-none [app-region:no-drag]"
-        classList={{ "start-0 justify-start": props.vertical, "end-0 justify-end": !props.vertical }}
-        onClick={props.state.onInstall}
-        disabled={props.state.installing}
-        aria-busy={props.state.installing}
-        aria-label={props.state.ariaLabel}
-      >
-        <Show when={!props.vertical}>{label()}</Show>
-        <span
-          class="flex shrink-0 items-center justify-center"
-          classList={{ "size-7": props.vertical, "size-5": !props.vertical }}
-        >
-          <Show
-            when={!props.state.installing}
-            fallback={<span data-slot="titlebar-update-loader" aria-hidden="true" />}
-          >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M7 11V3M3.5 7.63128L7 11L10.5 7.63128" stroke="currentColor" />
-            </svg>
-          </Show>
-        </span>
-        <Show when={props.vertical}>{label()}</Show>
-      </button>
-    </div>
-  )
-}
-
-function ChannelIndicator(props: {
-  horizontal?: boolean
-  sidebar?: boolean
-  debugTools?: { visible: boolean; toggle: () => void }
-}) {
+function ChannelIndicator(props: { horizontal?: boolean; sidebar?: boolean }) {
   const language = useLanguage()
   const platform = usePlatform()
+  const host = useExtensionHost()
   const channel = import.meta.env.VITE_OPENCODE_CHANNEL
+
   if (!channel || channel === "prod") return null
 
   const label = () => language.t(`titlebar.channel.${channel}`)
-  const debug = () => (channel === "dev" || channel === "local" ? props.debugTools : undefined)
+
+  // An extension may turn the dev badge into a toggle (the debug bar does).
+  const debug = () =>
+    channel === "dev" || channel === "local"
+      ? host.list(TitlebarItem).find((item) => item.placement === "channel")
+      : undefined
+
   return (
     <Tooltip
       placement={props.sidebar ? "right" : "bottom"}
@@ -812,9 +818,9 @@ function ChannelIndicator(props: {
           "cursor-pointer hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02":
             !!debug(),
         }}
-        onClick={() => debug()?.toggle()}
-        aria-label={debug() ? language.t("titlebar.toggleDebugTools") : undefined}
-        aria-pressed={debug()?.visible}
+        onClick={() => debug()?.run?.()}
+        aria-label={debug()?.label}
+        aria-pressed={debug()?.pressed}
       >
         <img
           src={channel === "beta" ? betaIcon : devIcon}

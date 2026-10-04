@@ -21,7 +21,7 @@ import { EmptyBorder } from "../../ui/border"
 import { FilePath } from "../../ui/file-path"
 import { getScrollAcceleration } from "../../util/scroll"
 import { createDebouncedSignal } from "../../util/signal"
-import { useConfig } from "../../config"
+import { type DiffSource, useConfig } from "../../config"
 import { locationKey } from "../../context/data"
 import { useThemes } from "../../context/theme"
 import { PatchDiff, type PatchDiffRef } from "../../component/patch-diff"
@@ -44,7 +44,7 @@ const FILE_TREE_MIN_WIDTH = 30
 const FILE_TREE_MAX_WIDTH = 40
 const FILE_HEADER_HEIGHT = 2
 const VCS_DIFF_CONTEXT_LINES = 12
-type DiffMode = Vcs.Mode
+type DiffMode = DiffSource
 type DiffView = "split" | "unified"
 type SelectedHunk = { readonly fileIndex: number; readonly hunkIndex: number; readonly scrollTop: number }
 type FileMenuState = { readonly fileIndex: number; readonly x: number; readonly y: number }
@@ -70,11 +70,16 @@ function storedView(value: unknown): DiffView | undefined {
   if (value === "split" || value === "unified") return value
 }
 
-function diffSourceLabel(mode: DiffMode) {
-  if (mode === "branch") return "All"
-  if (mode === "committed") return "Committed"
-  return "Uncommitted"
-}
+const DIFF_SOURCES = {
+  branch: { label: "All", description: "Branch + local changes" },
+  committed: { label: "Committed", description: "Branch commits only" },
+  working: { label: "Uncommitted", description: "Local changes only" },
+  turn: { label: "Last turn", description: "Latest session turn" },
+} satisfies Record<DiffMode, { label: string; description: string }>
+
+const VCS_SOURCES = ["branch", "committed", "working"] as const
+
+const needsBase = (mode: DiffMode) => mode === "branch" || mode === "committed"
 
 function DiffViewer(props: { context: Plugin.Context }) {
   const dimensions = useTerminalDimensions()
@@ -93,12 +98,15 @@ function DiffViewer(props: { context: Plugin.Context }) {
         }
       | undefined
   }
-  const [mode, setMode] = createSignal(params()?.mode ?? memory.source ?? config.data.diffs?.source ?? "branch")
+  const sessionID = () => params()?.sessionID
+  const sources = (): readonly DiffMode[] => (sessionID() ? [...VCS_SOURCES, "turn"] : VCS_SOURCES)
+  const initialMode = params()?.mode ?? memory.source ?? config.data.diffs?.source ?? "branch"
+  const [mode, setMode] = createSignal(sources().includes(initialMode) ? initialMode : "branch")
   const location = createMemo(
     () => {
-      const sessionID = params()?.sessionID
-      return sessionID
-        ? (props.context.data.session.get(sessionID)?.location ?? props.context.data.location.default())
+      const id = sessionID()
+      return id
+        ? (props.context.data.session.get(id)?.location ?? props.context.data.location.default())
         : props.context.data.location.default()
     },
     undefined,
@@ -121,19 +129,32 @@ function DiffViewer(props: { context: Plugin.Context }) {
     bases.set(key, pending)
     return pending
   }
-  const diffInput = createMemo(() => ({
-    mode: mode(),
-    location: location(),
-    key: baseKey(),
-    selected: mode() === "working" ? undefined : selectedBase(),
-  }))
-  const [diff] = createResource(diffInput, async (input) => {
-    const base =
-      input.mode === "working"
-        ? undefined
-        : input.selected
-          ? { name: input.selected, ref: input.selected }
-          : (await loadBase(input.location, input.key)).data
+  const diffInput = createMemo(() => {
+    const current = mode()
+    const id = sessionID()
+    if (current === "turn" && id) return { mode: current, sessionID: id }
+    const vcs = current === "turn" ? "branch" : current
+    return {
+      mode: vcs,
+      location: location(),
+      key: baseKey(),
+      selected: needsBase(vcs) ? selectedBase() : undefined,
+    }
+  })
+  const [diff, { refetch }] = createResource(diffInput, async (input) => {
+    if (input.mode === "turn") {
+      return {
+        base: null,
+        files: normalizeDiffs(
+          await props.context.client.session.diff({ sessionID: input.sessionID, context: VCS_DIFF_CONTEXT_LINES }),
+        ),
+      }
+    }
+    const base = !needsBase(input.mode)
+      ? undefined
+      : input.selected
+        ? { name: input.selected, ref: input.selected }
+        : (await loadBase(input.location, input.key)).data
     if (input !== diffInput() || (input.mode === "committed" && !base)) {
       return { base: null, files: [] }
     }
@@ -145,12 +166,21 @@ function DiffViewer(props: { context: Plugin.Context }) {
     })
     return { base, files: normalizeDiffs(result.data ?? []) }
   })
+  // Each completed turn replaces the last one.
+  createEffect((previous) => {
+    if (mode() !== "turn") return undefined
+    const id = sessionID()
+    const status = id ? props.context.data.session.status(id) : undefined
+    if (previous === "running" && status === "idle") void refetch()
+    return status
+  })
   const sourceBase = () => {
     const ref = selectedBase()
     return ref ? { name: ref, ref } : reportedBases().get(baseKey())
   }
   const result = () => (diff.error || diff.loading ? undefined : diff())
   const sourceDetail = () => {
+    if (mode() === "turn") return diff.error ? "Diff unavailable" : undefined
     if (mode() === "working") return "vs HEAD"
     if (diff.error) return "Base or diff unavailable"
     if (!result()) return "Resolving diff…"
@@ -167,6 +197,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
         loading={diff.loading}
         error={diff.error}
         mode={mode()}
+        sources={sources()}
         sourceDetail={sourceDetail()}
         sourceBase={sourceBase()}
         unavailable={mode() === "committed" && !!result() && !result()?.base}
@@ -261,10 +292,10 @@ export function DiffViewerContent(props: {
   loading?: boolean
   error?: unknown
   mode: DiffMode
+  sources: readonly DiffMode[]
   sourceDetail?: string
   sourceBase?: Pick<Vcs.Base, "name" | "ref"> | null
   unavailable?: boolean
-  navigation?: "tree" | "list"
   loadImage?: (file: string, signal: AbortSignal) => Promise<Uint8Array>
   preferences?: DiffPreferences
   onPreferencesChange?: (value: DiffPreferences) => void
@@ -702,20 +733,6 @@ export function DiffViewerContent(props: {
   ]
 
   const openSwitchDiffDialog = () => {
-    const options = [
-      {
-        value: "branch" as const,
-        description: "Branch + local changes",
-      },
-      {
-        value: "committed" as const,
-        description: "Branch commits only",
-      },
-      {
-        value: "working" as const,
-        description: "Local changes only",
-      },
-    ]
     dialog.show(() => (
       <DialogSelect<DiffMode | "base">
         title="Diff source"
@@ -723,13 +740,14 @@ export function DiffViewerContent(props: {
         renderFilter={false}
         current={mode()}
         options={[
-          ...options.map((option) => ({
-            ...option,
-            title: diffSourceLabel(option.value),
-            titleView: diffSourceLabel(option.value).padEnd(11),
+          ...props.sources.map((source) => ({
+            value: source,
+            title: DIFF_SOURCES[source].label,
+            titleView: DIFF_SOURCES[source].label.padEnd(11),
+            description: DIFF_SOURCES[source].description,
             onSelect() {
               dialog.clear()
-              props.onSwitchSource(option.value)
+              props.onSwitchSource(source)
             },
           })),
           ...(props.onChooseBase
@@ -811,7 +829,7 @@ export function DiffViewerContent(props: {
               flexShrink={0}
               wrapMode="none"
             >
-              {diffSourceLabel(mode())}
+              {DIFF_SOURCES[mode()].label}
             </text>
             <Show when={props.sourceDetail}>
               <text fg={theme.text.muted} selectable={false} flexGrow={1} minWidth={0} wrapMode="none" truncate>
@@ -834,7 +852,7 @@ export function DiffViewerContent(props: {
           <Match when={!props.loading && props.error}>
             <box flexGrow={1} padding={2}>
               <text fg={theme.text.feedback.error.base}>
-                {!props.sourceBase && mode() !== "working"
+                {!props.sourceBase && needsBase(mode())
                   ? "Could not load diff. Choose a base branch from Diff source, or select Uncommitted."
                   : "Could not load diff. Reopen the diff viewer to try again."}
               </text>
@@ -859,7 +877,6 @@ export function DiffViewerContent(props: {
                   files={files()}
                   loading={props.loading ?? false}
                   error={props.error}
-                  layout={props.navigation}
                   width={fileTreeWidth()}
                   selectedFileIndex={
                     selectedFileIndex() ?? (singlePatch() ? visiblePatchFiles()[0]?.fileIndex : undefined)
@@ -868,7 +885,7 @@ export function DiffViewerContent(props: {
                   expandedNodes={expandedFileNodes()}
                   onRowClick={clickFileTreeRow}
                   onFileContextMenu={openFileMenu}
-                  source={diffSourceLabel(mode())}
+                  source={DIFF_SOURCES[mode()].label}
                   sourceDetail={props.sourceDetail}
                   onSwitchSource={openSwitchDiffDialog}
                   footer={<HelpShortcut />}
@@ -1024,6 +1041,7 @@ export function DiffViewerContent(props: {
                                         onCleanup(() => patchDiffByFileIndex.delete(entry.fileIndex))
                                       }}
                                       diff={patch()}
+                                      scroll={() => scroll}
                                       hunkFg={theme.diff.text.hunkHeader}
                                       view={entry.file.status === "modified" ? view() : "unified"}
                                       filetype={filetype(entry.file.file)}

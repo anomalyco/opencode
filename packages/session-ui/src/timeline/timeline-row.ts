@@ -18,7 +18,7 @@ export type PartGroup =
     }
   | {
       key: string
-      type: "file"
+      type: "file" | "read"
       refs: PartRef[]
     }
 

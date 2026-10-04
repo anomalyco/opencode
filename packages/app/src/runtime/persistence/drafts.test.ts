@@ -58,6 +58,8 @@ describe("draft store text externalization", () => {
       stored.prompt[0].content.blob.ids.map((id: string) => memory.blobs.get(id)!.text()),
     )
     expect(chunks.join("")).toBe(paste)
+    await store.setItem("serialized", JSON.stringify({ prompt: [{ type: "text", content: large }] }))
+    expect(JSON.parse(memory.documents.get("serialized")!).prompt[0].content.blob.ids).toHaveLength(1)
   })
 
   test("appending to a large string re-uploads only the final chunk", async () => {
@@ -221,13 +223,6 @@ describe("draft store text externalization", () => {
     await store.setDocument("doc", { prompt: [{ type: "text", content: `${paste}!` }] })
     const fresh = createDraftStore(memory.driver)
     expect(JSON.parse((await fresh.getItem("doc"))!).prompt[0].content).toBe(`${paste}!`)
-  })
-
-  test("setItem still accepts a serialized document", async () => {
-    const memory = memoryDriver()
-    const store = createDraftStore(memory.driver)
-    await store.setItem("doc", JSON.stringify({ prompt: [{ type: "text", content: large }] }))
-    expect(JSON.parse(memory.documents.get("doc")!).prompt[0].content.blob.ids).toHaveLength(1)
   })
 })
 

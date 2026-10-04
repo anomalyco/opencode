@@ -85,6 +85,14 @@ export const settings: Setting[] = [
     keywords: ["transcript", "messages", "reads", "searches"],
   },
   {
+    title: "Verbosity",
+    category: "Session",
+    path: ["session", "verbosity"],
+    default: "medium",
+    values: ["low", "medium", "high"],
+    keywords: ["detail", "activity", "summary", "transcript"],
+  },
+  {
     title: "Transcript images",
     category: "Session",
     path: ["session", "image_preview"],
@@ -121,12 +129,11 @@ export const settings: Setting[] = [
     keywords: ["approve", "accept", "permission requests"],
   },
   {
-    title: "Enabled",
+    title: "Mode",
     category: "Tabs",
-    path: ["tabs", "enabled"],
-    default: true,
-    values: [false, true],
-    labels: ["off", "on"],
+    path: ["tabs", "mode"],
+    default: "auto",
+    values: ["off", "on", "auto"],
   },
   {
     title: "Scope",

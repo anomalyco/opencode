@@ -1,11 +1,17 @@
 import { usePlatform } from "@/runtime/platform/platform"
 import { ServerConnection } from "@/runtime/server/registry"
 import { authTokenFromCredentials } from "./api"
-import { ClientError, OpenCode } from "@opencode/client"
+import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client"
 import { Accessor, createEffect, onCleanup } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 
-export type ServerHealth = { healthy: boolean; version?: string; incompatible?: boolean; checking?: boolean }
+export type ServerHealth = {
+  healthy: boolean
+  version?: string
+  incompatible?: boolean
+  checking?: boolean
+  unauthorized?: boolean
+}
 
 interface CheckServerHealthOptions {
   timeoutMs?: number
@@ -100,7 +106,7 @@ export async function checkServerHealth(
       .catch((error) => ({ error }))
     if ("data" in current) return current.data
     if (signal?.aborted) return { healthy: false }
-
+    if (isUnauthorizedError(current.error)) return { healthy: false, unauthorized: true }
     return next(count, current.error)
   }
   return attempt(0).finally(() => timeout?.clear?.())
@@ -150,9 +156,9 @@ export function createServerHealth(
     // invalidates both the old result and any probe still using the old endpoint.
     const list = servers().map((conn) => ({
       key: ServerConnection.key(conn),
-      type: conn.type,
+      managed: conn.type === "extension" && conn.managed,
       http: conn.http,
-      stage: conn.type === "ssh" ? conn.stage : undefined,
+      stage: conn.type === "extension" ? conn.state : undefined,
     }))
     for (const conn of list) {
       if (conn.stage && conn.stage !== "ready") {
@@ -170,7 +176,7 @@ export function createServerHealth(
         continue
       }
       const endpoint = cacheKey(conn.http)
-      if (conn.type === "ssh" && endpoints.get(conn.key) !== endpoint) {
+      if (conn.managed && endpoints.get(conn.key) !== endpoint) {
         setStatus(conn.key, reconcile({ healthy: false, checking: true }))
       }
       endpoints.set(conn.key, endpoint)

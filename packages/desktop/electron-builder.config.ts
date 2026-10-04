@@ -27,11 +27,11 @@ async function signWindows(configuration: { path: string }) {
   await execFileAsync(
     "pwsh",
     ["-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", signScript, configuration.path],
-    { cwd: rootDir },
+    { cwd: rootDir, windowsHide: true },
   )
 }
 
-export function macSignOptions(options: CustomMacSignOptions): CustomMacSignOptions {
+function macSignOptions(options: CustomMacSignOptions): CustomMacSignOptions {
   return {
     ...options,
     optionsForFile: (file) => {
@@ -122,9 +122,6 @@ const getBase = (appId: string): Configuration => ({
     },
     notarize: true,
     target: ["dmg", "zip"],
-  },
-  dmg: {
-    sign: true,
   },
   protocols: {
     name: "OpenCode",

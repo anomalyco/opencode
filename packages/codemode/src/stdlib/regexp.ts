@@ -2,9 +2,18 @@ import { Effect } from "effect"
 import type { Builtins } from "../interpreter/intrinsics.js"
 import { constructor, type Method, methods, prototypeFrom, receiver } from "../interpreter/native.js"
 import { syntaxError, typeError } from "../interpreter/model.js"
-import { define, defineAccessor, Arr, Obj, RegExpObj, record } from "../interpreter/objects.js"
+import {
+  define,
+  defineAccessor,
+  Arr,
+  Obj,
+  RegExpObj,
+  record,
+  coerceToNumber,
+  coerceToString,
+  type Value,
+} from "../interpreter/objects.js"
 import type { Interpreter } from "../interpreter/interpreter.js"
-import { coerceToNumber, coerceToString } from "./value.js"
 
 const flagProperties = [
   "hasIndices",
@@ -23,22 +32,17 @@ const regexFailureReason = (error: unknown): string =>
 const escapeRegexHint =
   'To match special characters like ( ) [ ] { } + * ? . literally, escape them with a backslash (e.g. "\\\\(") or test for them with String.includes instead.'
 
-export const toHostRegex = (arg: unknown, method: string, extraFlags = ""): RegExp => {
-  // Native parity: an undefined pattern behaves as an empty pattern.
-  if (arg === undefined) return new RegExp("", extraFlags)
+export const toHostRegex = (arg: Value, method: string, extraFlags = ""): RegExp => {
   if (arg instanceof RegExpObj) return arg.regex
-  if (typeof arg === "string") {
-    try {
-      return new RegExp(arg, extraFlags)
-    } catch (error) {
-      throw syntaxError(
-        `String.${method} received the string ${JSON.stringify(arg)}, which is not a valid regular expression pattern (${regexFailureReason(error)}). ${escapeRegexHint}`,
-      )
-    }
+  // Anything else is a pattern string, as `new RegExp(arg)` would read it: undefined is the empty pattern.
+  const source = arg === undefined ? "" : coerceToString(arg)
+  try {
+    return new RegExp(source, extraFlags)
+  } catch (error) {
+    throw syntaxError(
+      `String.${method} received the string ${JSON.stringify(source)}, which is not a valid regular expression pattern (${regexFailureReason(error)}). ${escapeRegexHint}`,
+    )
   }
-  throw typeError(
-    `String.${method} expects a regular expression (a /pattern/flags literal or new RegExp(...)) or a string pattern, not ${arg === null ? "null" : typeof arg}.`,
-  )
 }
 
 export const matchToValue = (builtins: Builtins, match: RegExpMatchArray): Arr => {
@@ -53,7 +57,7 @@ export const matchToValue = (builtins: Builtins, match: RegExpMatchArray): Arr =
   return result
 }
 
-export const constructRegExp = (builtins: Builtins, args: Array<unknown>, proto: Obj = builtins.RegExp): RegExpObj => {
+export const constructRegExp = (builtins: Builtins, args: Array<Value>, proto: Obj = builtins.RegExp): RegExpObj => {
   const first = args[0]
   const pattern = first instanceof RegExpObj ? first.regex.source : first === undefined ? "" : coerceToString(first)
   const flagsArg = args[1]
@@ -96,7 +100,7 @@ export const regexpGlobal = <R>(ctx: Interpreter<R>) => {
     ],
   ])
 
-  const self = (thisValue: unknown, name: string) => receiver(RegExpObj, thisValue, `RegExp.prototype.${name}`)
+  const self = (thisValue: Value, name: string) => receiver(RegExpObj, thisValue, `RegExp.prototype.${name}`)
   defineAccessor(proto, "source", (thisValue) => self(thisValue, "source").regex.source)
   defineAccessor(proto, "flags", (thisValue) => self(thisValue, "flags").regex.flags)
   // The host regex holds the only lastIndex, so exec/test and the String methods share one counter.

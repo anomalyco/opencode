@@ -1,7 +1,7 @@
 import { expect, story } from "../../storybook/playwright/story"
 
 for (const mode of ["hidden", "compact", "full"] as const) {
-  for (const reasoning of ["none", "blank", "heading"] as const) {
+  for (const reasoning of ["blank", "heading"] as const) {
     story(`projects ${mode} mode with ${reasoning} active reasoning`, async ({ mount }) => {
       const timeline = await mount("current-session-timeline-rows--conversation", {
         args: { scenario: "reasoning", mode, reasoning },
@@ -9,7 +9,7 @@ for (const mode of ["hidden", "compact", "full"] as const) {
       await expect(timeline.locator('[data-timeline-row="UserMessage"]')).toContainText(
         "Find why the Session header shifts after the first streamed response.",
       )
-      const active = mode !== "hidden" && reasoning !== "none"
+      const active = mode !== "hidden"
       const part = timeline.locator('[data-timeline-part-id="msg_projection_assistant:reasoning:0"]')
       await expect(timeline.locator('[data-timeline-row="Thinking"]')).toHaveCount(active ? 1 : 0)
       await expect(part).toHaveCount(active ? 1 : 0)
@@ -52,9 +52,10 @@ for (const mode of ["hidden", "compact", "full"] as const) {
         const trigger = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
         await expect(trigger).toHaveText(/^Used\s*1\s*Skill$/)
         await expect(trigger).toHaveAttribute("aria-expanded", "false")
-        await expect(
-          group.locator('[data-component="context-tool-group-trigger"] [data-slot="basic-tool-tool-title"]'),
-        ).toHaveText("Skill")
+        await expect(group.locator('[data-component="context-tool-group-trigger"]')).toHaveAttribute(
+          "aria-label",
+          "Used 1 Skill",
+        )
         await expect(timeline.getByText("Inspecting stability", { exact: true })).toBeHidden()
         await trigger.click()
         await expect(trigger).toHaveAttribute("aria-expanded", "true")

@@ -1,19 +1,21 @@
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { useDialog } from "@opencode/ui/context/dialog"
 import type { ReferenceInfo } from "@opencode/client/promise"
+import type { Links, MountedSession } from "@opencode/gui-extensions/sdk"
 import { createComponent, createEffect, createMemo, on } from "solid-js"
+import { Predicate } from "effect"
 import type { ComposerSuggestion } from "./types"
 import { createComposerEditor, createComposerEditorState, type ComposerEditorModel } from "./editor/interaction"
 import { selectionFromLines, type SelectedLineRange, useFile } from "@/workspaces/files/model"
 import { useComments } from "@/composer/comments"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useLayout } from "@/shell/state/layout"
+import { useExtensionHost } from "@/runtime/extension/host"
+import { useExtensionAttachment } from "@/runtime/extension/host-apis"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { useData, useServer } from "@/runtime/server/current"
-import { createSessionTabs } from "@/session/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import { formatServerError } from "@/runtime/server/errors"
 import { Skill } from "@opencode/schema/skill"
@@ -21,21 +23,31 @@ import type { ComposerAdapter, ComposerControls, ComposerQueue } from "./adapter
 import { isAttachment } from "./prompt-parts"
 import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
-import { composerPlaceholder } from "./placeholder"
 import { createComposerSubmit } from "./submit"
 import { useAttachmentDestination } from "./attachments/destination"
+import { parseClientSlashCommand } from "./client-slash-command"
 
 export type ComposerModel = ComposerEditorModel & {
   readonly model: ComposerControls["model"]
 }
 
+const sendFailedTitle = {
+  shell: "prompt.toast.shellSendFailed.title",
+  command: "prompt.toast.commandSendFailed.title",
+  prompt: "prompt.toast.promptSendFailed.title",
+} as const
+
 export function createComposerModel(adapter: ComposerAdapter, options?: { queue?: ComposerQueue }): ComposerModel {
   const sdk = useWorkspaceLocation()
   const data = useData()
   const server = useServer()
-  const available = () => server.conn.type !== "ssh" || server.ctx.sdk.connection.status() === "connected"
+
+  const available = () =>
+    server.conn.type !== "extension" || !server.conn.managed || server.ctx.sdk.connection.status() === "connected"
+
   const files = useFile()
-  const layout = useLayout()
+  const links = useExtensionHost().links
+  const extensions = useExtensionAttachment()
   const comments = useComments()
   const dialog = useDialog()
   const command = useCommand()
@@ -57,56 +69,59 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   )
   const mode = () => interaction[0].mode
   const history = createComposerHistory()
-  const tabs = () => adapter.controls().session.tabs
-  const activeFileTab = createSessionTabs({
-    tabs,
-    pathFromTab: files.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? files.tab(tab) : tab),
-  }).activeFileTab
+
   const recent = createMemo(() => {
-    const all = tabs().all()
-    const active = activeFileTab()
-    const order = active ? [active, ...all.filter((tab) => tab !== active)] : all
-    return order.reduce<string[]>((result, tab) => {
-      const path = files.pathFromTab(tab)
-      if (!path || result.includes(path)) return result
-      return [...result, path]
-    }, [])
+    const all = extensions.files.opened()
+    const active = extensions.files.active()
+
+    return active ? [active, ...all.filter((path) => path !== active)] : all
   })
-  const attachments = createMemo(() =>
-    prompt.current().filter(isAttachment),
-  )
+
+  const attachments = createMemo(() => prompt.current().filter(isAttachment))
+
   const commentCount = createMemo(() => {
     if (mode() === "shell") return 0
+
     return prompt.context.items().filter((item) => !!item.comment?.trim()).length
   })
+
   const blank = createMemo(() => {
     const text = prompt
       .current()
       .map((part) => ("content" in part ? part.content : ""))
       .join("")
+
     return text.trim().length === 0 && attachments().length === 0 && commentCount() === 0
   })
+
   const stopping = createMemo(() => adapter.working() && blank())
-  const placeholder = () =>
-    composerPlaceholder(
-      mode(),
-      (key, params) => language.t(key as Parameters<typeof language.t>[0], params as never),
-      adapter.working() || (options?.queue?.count() ?? 0) > 0,
-    )
+
+  const placeholder = () => {
+    if (mode() === "shell") return language.t("prompt.placeholder.shell", { example: "git status" })
+
+    if (adapter.working() || (options?.queue?.count() ?? 0) > 0)
+      return language.t("ui.promptInput.placeholder.followUp", { slash: "/", at: "@" })
+
+    return language.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" })
+  }
 
   const historyComments = () => {
     const byID = new Map(comments.all().map((item) => [`${item.file}\n${item.id}`, item] as const))
+
     return prompt.context.items().flatMap((item) => {
       const comment = item.comment?.trim()
-      if (!comment) return []
+
+      if (!comment || item.type !== "file") return []
       const selection = item.commentID ? byID.get(`${item.path}\n${item.commentID}`)?.selection : undefined
+
       const nextSelection =
         selection ??
         (item.selection
           ? ({ start: item.selection.startLine, end: item.selection.endLine } satisfies SelectedLineRange)
           : undefined)
+
       if (!nextSelection) return []
+
       return [
         {
           id: item.commentID ?? item.key,
@@ -120,6 +135,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       ]
     })
   }
+
   const restoreHistoryComments = (items: PromptHistoryComment[]) => {
     comments.replace(
       items.map((item) => ({
@@ -130,9 +146,11 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         time: item.time,
       })),
     )
-    prompt.context.replaceComments(
-      items.map((item) => ({
-        type: "file",
+    // History records file comments only; notes stay with the draft while it is browsed.
+    prompt.context.replaceComments([
+      ...prompt.context.items().filter((item) => item.type === "note"),
+      ...items.map((item) => ({
+        type: "file" as const,
         path: item.path,
         selection: selectionFromLines(item.selection),
         comment: item.comment,
@@ -140,11 +158,12 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         commentOrigin: item.origin,
         preview: item.preview,
       })),
-    )
+    ])
   }
 
   const referenceDescription = (reference: ReferenceInfo) =>
     reference.source.type === "git" ? reference.source.repository : reference.source.path
+
   const references = createMemo(() =>
     (data.location.reference.list({ directory: sdk().directory }) ?? [])
       .filter((reference) => !reference.hidden)
@@ -165,33 +184,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         },
       })),
   )
-  const resources = createMemo(() =>
-    (data.location.mcp.resource.list({ directory: sdk().directory }) ?? []).map((resource) => ({
-      id: `resource:${resource.server}:${resource.uri}`,
-      kind: "resource" as const,
-      label: `@${resource.name}`,
-      path: resource.uri,
-      description: resource.description,
-      mention: {
-        type: "file" as const,
-        path: resource.uri,
-        content: `@${resource.name}`,
-        start: 0,
-        end: 0,
-        mime: resource.mimeType ?? "text/plain",
-        filename: resource.name,
-        url: resource.uri,
-        source: {
-          type: "resource" as const,
-          text: { value: `@${resource.name}`, start: 0, end: resource.name.length + 1 },
-          clientName: resource.server,
-          uri: resource.uri,
-        },
-      },
-      resource,
-    })),
-  )
+
   const skills = createMemo(() => data.location.skill.list({ directory: sdk().directory }) ?? [])
+
   const context = createMemo<ComposerSuggestion[]>(() => [
     ...references(),
     ...skills().map((skill) => ({
@@ -217,7 +212,6 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         label: `@${agent.name}`,
         mention: { type: "agent" as const, name: agent.name, content: `@${agent.name}`, start: 0, end: 0 },
       })),
-    ...resources(),
     ...recent().map((path) => ({
       id: `file:${path}`,
       kind: "file" as const,
@@ -227,6 +221,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       mention: { type: "file" as const, path, content: `@${path}`, start: 0, end: 0 },
     })),
   ])
+
   const slashCommands = createMemo(() => [
     ...(data.location.command.list({ directory: sdk().directory }) ?? []).map((item) => ({
       id: `custom.${item.name}`,
@@ -242,9 +237,11 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         trigger: item.slash!,
         title: item.title,
         description: item.description,
+        arguments: item.slashArguments,
         type: "builtin" as const,
       })),
   ])
+
   const commands = createMemo<ComposerSuggestion[]>(() => [
     ...slashCommands().map((item) => ({
       id: item.id,
@@ -256,7 +253,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       keybind: command.keybindParts(item.id),
     })),
   ])
+
   const variants = createMemo(() => ["default", ...adapter.controls().model.selection.variant.list()])
+
   const submission = createComposerSubmit({
     adapter,
     mode,
@@ -270,7 +269,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     closePopover: () => controller.dispatch({ type: "popover.close" }),
     delivery: (alternate) => {
       const queue = options?.queue
+
       if (!queue) return "steer"
+
       return (alternate ? queue.alternate() : queue.delivery()) ?? "steer"
     },
     notify: {
@@ -281,13 +282,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         }),
       failed: (kind, error) =>
         showToast({
-          title: language.t(
-            kind === "shell"
-              ? "prompt.toast.shellSendFailed.title"
-              : kind === "command"
-                ? "prompt.toast.commandSendFailed.title"
-                : "prompt.toast.promptSendFailed.title",
-          ),
+          title: language.t(sendFailedTitle[kind]),
           description:
             kind === "command"
               ? formatServerError(error, language.t, language.t("common.requestFailed"))
@@ -299,7 +294,15 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       clear: comments.clear,
       restore: restoreHistoryComments,
     },
+    clientCommand: (text) => {
+      const selected = parseClientSlashCommand(slashCommands(), text)
+
+      if (!selected) return
+
+      return () => command.trigger(selected.id, "slash", selected.input)
+    },
   })
+
   const controller = createComposerEditor({
     store: prompt.store,
     state: interaction,
@@ -307,6 +310,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       entries: (mode) => history.entries(mode).map((entry) => ({ prompt: entry.prompt, metadata: entry.comments })),
       add: (value, mode) => history.add(value, mode, mode === "shell" ? [] : historyComments()),
       capture: historyComments,
+      // SAFETY: `entries` stores each entry's comments as its metadata, and the editor restores only metadata it read there.
       restore: (metadata) => restoreHistoryComments(metadata as PromptHistoryComment[]),
     },
     commands,
@@ -320,7 +324,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         mention: { type: "file", path, content: `@${path}`, start: 0, end: 0 },
       })),
     onContextRemove(item) {
-      if (item?.commentID) comments.remove(item.path, item.commentID)
+      if (item.type === "file" && item.commentID) comments.remove(item.path, item.commentID)
     },
     openAttachment: (attachment) => {
       if (attachment.type !== "image") return
@@ -330,16 +334,32 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     },
     openContext(key) {
       const item = controller.contextItem(key)
-      if (item) openComment(item, adapter.controls(), layout, files, comments)
+
+      if (item?.type === "note") {
+        // The extension that attached the note reveals its subject.
+        const href = item.live?.href ?? item.href
+
+        if (href) links.open({ href, origin: item.origin, session: extensions.current() })
+
+        return
+      }
+
+      if (item) openComment(item, links, extensions.current(), files, comments)
     },
     onEditor(element) {
+      // SAFETY: the editor's only `setEditor` call passes its editable root, a `<div>` (`editor/editor.tsx`).
       editor = element as HTMLDivElement
+
       if (adapter.kind === "active-session") adapter.setEditor(editor)
     },
     onSuggestionSelect(item) {
       if (item.kind !== "command") return
       const selected = slashCommands().find((entry) => entry.id === item.id)
+
       if (!selected || selected.type === "custom") return
+
+      if (selected.arguments) return
+
       return () => command.trigger(selected.id, "slash")
     },
     attachments: {
@@ -369,6 +389,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       placeholder,
       get agent() {
         const agents = adapter.controls().agents
+
         return agents.visible && agents.options.length > 0
           ? {
               options: () => adapter.controls().agents.options.map((name) => ({ id: name, label: name })),
@@ -392,19 +413,25 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         onSubmit: (submitOptions) => {
           if (!available()) return
           const queue = options?.queue
+
+          if (queue?.undoing()) return
+
           // Confirming an edit re-admits the queued prompt instead of sending
           // the composer value as a new prompt. Enter keeps it queued in
           // place; the alternate action sends it as a steer.
           if (queue?.editing()) {
             queue.confirmEdit(submitOptions?.alternate ? "steer" : "queue")
+
             return
           }
+
           void submission.submit(new Event("submit"), submitOptions)
         },
         onStop: () => void submission.stop(),
       },
     },
   })
+
   Object.defineProperty(controller, "model", { get: () => adapter.controls().model })
 
   command.register("composer-editor", () => [
@@ -413,6 +440,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       title: language.t("prompt.action.attachFile"),
       category: language.t("command.category.file"),
       keybind: "mod+u",
+      editable: true,
       disabled: controller.state.mode !== "normal",
       onSelect: () => controller.attach(),
     },
@@ -422,7 +450,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       category: language.t("command.category.session"),
       keybind: "mod+shift+x",
       disabled: controller.state.mode === "shell",
-      onSelect: () => controller.dispatch({ type: "mode.shell" }),
+      onSelect: () => void controller.dispatch({ type: "mode.shell" }),
     },
     {
       id: "prompt.mode.normal",
@@ -430,55 +458,55 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       category: language.t("command.category.session"),
       keybind: "mod+shift+e",
       disabled: controller.state.mode === "normal",
-      onSelect: () => controller.dispatch({ type: "mode.normal" }),
+      onSelect: () => void controller.dispatch({ type: "mode.normal" }),
     },
   ])
 
+  // SAFETY: the `model` getter defined on the controller above completes `ComposerModel`.
   return controller as ComposerModel
 }
 
-function composerErrorMessage(language: ReturnType<typeof useLanguage>, error: unknown) {
-  if (error && typeof error === "object" && "message" in error && typeof error.message === "string") {
-    return error.message
-  }
-  if (error && typeof error === "object" && "data" in error) {
-    const data = (error as { data?: { message?: string } }).data
-    if (data?.message) return data.message
-  }
+function composerErrorMessage(language: ReturnType<typeof useLanguage>, cause: unknown) {
+  if (Predicate.hasProperty(cause, "message") && Predicate.isString(cause.message)) return cause.message
+
+  if (
+    Predicate.hasProperty(cause, "data") &&
+    Predicate.hasProperty(cause.data, "message") &&
+    Predicate.isString(cause.data.message) &&
+    cause.data.message
+  )
+    return cause.data.message
+
   return language.t("common.requestFailed")
 }
 
 function openComment(
   item: { path: string; commentID?: string; commentOrigin?: "review" | "file" },
-  controls: ComposerControls,
-  layout: ReturnType<typeof useLayout>,
+  links: Links,
+  session: MountedSession | undefined,
   files: ReturnType<typeof useFile>,
   comments: ReturnType<typeof useComments>,
 ) {
   if (!item.commentID) return
   const focus = { file: item.path, id: item.commentID }
   comments.setActive(focus)
+
   const queueFocus = (attempts = 6) => {
     requestAnimationFrame(() => {
       comments.setFocus({ ...focus })
+
       if (attempts <= 0) return
       requestAnimationFrame(() => {
         const current = comments.focus()
+
         if (current?.file === focus.file && current.id === focus.id) queueFocus(attempts - 1)
       })
     })
   }
-  const review = item.commentOrigin === "review"
-  if (!controls.session.reviewPanel.opened()) controls.session.reviewPanel.open()
-  if (review) {
-    layout.fileTree.setTab("changes")
-    controls.session.tabs.setActive("review")
-    queueFocus()
-    return
-  }
-  layout.fileTree.setTab("all")
-  const tab = files.tab(item.path)
-  void controls.session.tabs.open(tab)
-  controls.session.tabs.setActive(tab)
+
+  // The extension that owns the comment's origin reveals it (the review diff or a file tab), keeping the conversation.
+  links.open({ href: item.path, origin: item.commentOrigin, exact: true, background: true, session })
+
+  if (item.commentOrigin === "review") return queueFocus()
   void Promise.resolve(files.load(item.path)).finally(() => queueFocus())
 }

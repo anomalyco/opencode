@@ -1,6 +1,7 @@
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import type { Accessor } from "solid-js"
+import type { PromptComment } from "./comment-note"
 import type { PromptHistoryComment } from "./history/entry"
 import type { ImageAttachmentPart, Prompt } from "./state"
 import { clonePrompt, promptLength } from "./prompt-parts"
@@ -11,6 +12,7 @@ import { setCursorPosition } from "./editor/dom"
 import { blobDataUrl, resolveBlobUrl } from "@/runtime/persistence/drafts"
 import { isAttachment } from "./prompt-parts"
 import type { ModelSelection } from "@/providers/models/selection"
+import { parseSlashCommand } from "./client-slash-command"
 
 const submitting = new WeakSet<object>()
 
@@ -37,6 +39,7 @@ type ComposerSubmitInput = {
   setMode: (mode: "normal" | "shell") => void
   closePopover: () => void
   delivery?: (alternate: boolean) => ComposerDelivery
+  clientCommand?: (text: string) => (() => void | Promise<void>) | undefined
   notify: {
     missingSelection: () => void
     failed: (kind: "shell" | "command" | "prompt", error: unknown) => void
@@ -52,15 +55,34 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
   const submit = async (event: globalThis.Event, options?: { alternate?: boolean }) => {
     event.preventDefault()
 
+    const prompt = clonePrompt(input.adapter.state.current())
+    const text = submissionText(prompt)
+    const clientCommand = input.mode() === "normal" ? input.clientCommand?.(text) : undefined
+    if (clientCommand) {
+      if (submitting.has(input.adapter.state)) return
+      submitting.add(input.adapter.state)
+      try {
+        clearClientCommand(input, prompt)
+        await clientCommand()
+      } catch (error) {
+        input.notify.failed("command", error)
+      } finally {
+        submitting.delete(input.adapter.state)
+      }
+      return
+    }
     const submission = createComposerSubmission({
       target: input.adapter.state,
-      prompt: clonePrompt(input.adapter.state.current()),
-      context: input.adapter.state.context.items().map((item) => ({
-        ...item,
-        selection: item.selection ? { ...item.selection } : undefined,
-      })),
+      prompt,
+      context: input.adapter.state.context
+        .items()
+        .map((item) =>
+          item.type === "note"
+            ? { ...item, live: item.live ? { ...item.live } : undefined }
+            : { ...item, selection: item.selection ? { ...item.selection } : undefined },
+        ),
     })
-    const read = readSubmission(input, submission.prompt, submission.context, options?.alternate ?? false)
+    const read = readSubmission(input, submission.prompt, submission.context, text, options?.alternate ?? false)
     if (!read) {
       if (input.adapter.working() && input.adapter.kind === "active-session") void input.adapter.interrupt()
       return
@@ -150,6 +172,17 @@ export function createComposerSubmit(input: ComposerSubmitInput) {
   }
 }
 
+function clearClientCommand(input: ComposerSubmitInput, prompt: Prompt) {
+  input.adapter.state.set([{ type: "text", content: "", start: 0, end: 0 }, ...prompt.filter(isAttachment)], 0)
+  input.adapter.state.mode.set("normal")
+  input.setMode("normal")
+  input.closePopover()
+}
+
+function submissionText(prompt: Prompt) {
+  return prompt.map((part) => ("content" in part ? part.content : "")).join("")
+}
+
 function handoffMessage(value: ComposerSubmission): SessionMessageUser {
   return {
     id: value.id,
@@ -166,19 +199,32 @@ function handoffMessage(value: ComposerSubmission): SessionMessageUser {
       attachments: value.prompt.flatMap((part) =>
         part.type === "path" ? [{ name: part.filename, mime: part.mime, path: part.path }] : [],
       ),
-      comments: value.context.flatMap((item) =>
-        item.comment?.trim()
-          ? [
-              {
-                path: item.path,
-                comment: item.comment.trim(),
-                ...(item.selection ? { selection: { ...item.selection } } : {}),
-                ...(item.preview !== undefined ? { preview: item.preview } : {}),
-                ...(item.commentOrigin ? { origin: item.commentOrigin } : {}),
-              },
-            ]
-          : [],
-      ),
+      comments: value.context.flatMap((item): PromptComment[] => {
+        const comment = item.comment?.trim()
+        if (!comment) return []
+        if (item.type === "note")
+          return [
+            {
+              type: "note",
+              origin: item.origin,
+              label: item.label,
+              icon: item.icon,
+              subject: item.subject,
+              ...(item.href ? { href: item.href } : {}),
+              ...(item.live ? { live: { ...item.live } } : {}),
+              comment,
+            },
+          ]
+        return [
+          {
+            path: item.path,
+            comment,
+            ...(item.selection ? { selection: { ...item.selection } } : {}),
+            ...(item.preview !== undefined ? { preview: item.preview } : {}),
+            ...(item.commentOrigin ? { origin: item.commentOrigin } : {}),
+          },
+        ]
+      }),
       agent: value.selection.agent,
       model: {
         ...value.selection.model,
@@ -193,9 +239,9 @@ function readSubmission(
   input: ComposerSubmitInput,
   prompt: Prompt,
   context: ComposerSubmission["context"],
+  text: string,
   alternate: boolean,
 ): ComposerSubmission | undefined {
-  const text = prompt.map((part) => ("content" in part ? part.content : "")).join("")
   const mode = input.mode()
   if (mode === "shell" && !text.trim()) return
   const images = prompt.filter((part): part is ImageAttachmentPart => part.type === "image")
@@ -258,15 +304,29 @@ function restoreSubmission(
   restored.target.context.replaceComments(
     restored.context
       .filter((item) => !!item.comment?.trim())
-      .map((item) => ({
-        type: "file",
-        path: item.path,
-        selection: item.selection,
-        comment: item.comment,
-        commentID: item.commentID,
-        commentOrigin: item.commentOrigin,
-        preview: item.preview,
-      })),
+      .map((item) =>
+        item.type === "note"
+          ? {
+              type: "note",
+              origin: item.origin,
+              label: item.label,
+              icon: item.icon,
+              subject: item.subject,
+              href: item.href,
+              live: item.live,
+              comment: item.comment,
+              commentID: item.commentID,
+            }
+          : {
+              type: "file",
+              path: item.path,
+              selection: item.selection,
+              comment: item.comment,
+              commentID: item.commentID,
+              commentOrigin: item.commentOrigin,
+              preview: item.preview,
+            },
+      ),
   )
   // A recovered follow-up changes the payload, so it must use a new admission ID.
   if (value.mode === "normal" && restored.prompt === submission.prompt) {
@@ -298,13 +358,10 @@ async function sendShell(session: ComposerSession, value: ComposerSubmission) {
 }
 
 function findCommand(commands: ReturnType<ComposerSubmitInput["commands"]>, text: string) {
-  if (!text.startsWith("/")) return
-  const [name, ...arguments_] = text.split(" ")
-  const command = name.slice(1)
-  if (!commands?.some((item) => item.name === command)) return
-  return { command, arguments: arguments_.join(" ") }
+  const parsed = parseSlashCommand(text)
+  if (!parsed || !commands?.some((item) => item.name === parsed.name)) return
+  return { command: parsed.name, arguments: parsed.input }
 }
-
 
 async function sendCommand(
   session: ComposerSession,
@@ -390,7 +447,10 @@ async function sendPrompt(
 
 async function buildSubmissionRequest(session: ComposerSession, value: ComposerSubmission) {
   const images = await Promise.all(
-    value.images.map(async (attachment) => ({ ...attachment, dataUrl: await blobDataUrl(attachment.blob, attachment.mime) })),
+    value.images.map(async (attachment) => ({
+      ...attachment,
+      dataUrl: await blobDataUrl(attachment.blob, attachment.mime),
+    })),
   )
   return buildPromptRequest({
     prompt: value.prompt,

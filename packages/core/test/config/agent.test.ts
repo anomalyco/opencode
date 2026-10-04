@@ -15,7 +15,7 @@ import { Global } from "@opencode/util/global"
 import { Permission } from "@opencode/core/permission"
 import { AgentPlugin } from "@opencode/core/plugin/agent"
 import { AbsolutePath } from "@opencode/core/schema"
-import { ConfigMigrateV1 } from "@opencode/core/v1/config/migrate"
+import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { ConfigAgentV1 } from "@opencode/core/v1/config/agent"
 import { advance, drain } from "../lib/clock"
 import { tmpdir, tmpdirScoped } from "../fixture/tmpdir"
@@ -24,6 +24,12 @@ import { agentHost, host } from "../plugin/host"
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Agent.node, Bus.node, FSUtil.node, Global.node])))
 const decode = Schema.decodeUnknownSync(Info)
+
+function migrateV1(input: unknown) {
+  const result = ConfigNormalize.normalize(input)
+  if (result.type !== "normalized") throw new Error("expected normalized config")
+  return result.encoded
+}
 const defaultPermissions = (global: Global.Interface): Permission.Ruleset => [
   ...Agent.Info.default(Agent.ID.make("test")).permissions,
   { action: "external_directory", resource: path.join(global.data, "shell", "*", "*"), effect: "allow" },
@@ -171,7 +177,7 @@ permissions:
         new Document({
           type: "document",
           info: decode(
-            ConfigMigrateV1.migrate({
+            migrateV1({
               permission: {
                 bash: "ask",
                 edit: "ask",
@@ -752,7 +758,7 @@ function loadHomePermissions(home: string) {
       new Document({
         type: "document",
         info: decode(
-          ConfigMigrateV1.migrate({
+          migrateV1({
             permission: {
               external_directory: {
                 "~/p/**": "allow",

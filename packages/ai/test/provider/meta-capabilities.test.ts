@@ -1,7 +1,7 @@
 import { expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { Image, ImageClient, ImageInput, LLM, LLMEvent, LLMRequest, Message, ToolDefinition } from "../../src/index.js"
+import { Image, ImageClient, LLM, LLMEvent, LLMRequest, Media, Message, ToolDefinition } from "../../src/index.js"
 import { Meta } from "../../src/providers/meta.js"
 import { MetaMessages } from "../../src/protocols/meta-messages.js"
 import { AnthropicMessages } from "../../src/protocols/anthropic-messages.js"
@@ -33,7 +33,12 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
       output_config: { effort: "low" },
       tools: [
         { type: "web_search", name: "web_search", user_location: { type: "approximate", country: "US" } },
-        { name: "lookup", description: "Lookup", input_schema: { type: "object" } },
+        {
+          name: "lookup",
+          description: "Lookup",
+          input_schema: { type: "object" },
+          cache_control: { type: "ephemeral" },
+        },
       ],
     })
     const entrypoint = yield* Effect.promise(() => import("@opencode/ai/providers/meta/messages"))
@@ -73,9 +78,9 @@ it.effect("Meta Images preserves request overlays, bearer auth, JSON edit inputs
         headers: { "x-client": "test" },
       }).image("muse-image-1.0"),
       prompt: "Edit",
-      images: [ImageInput.bytes(Uint8Array.from([1, 2, 3]), "image/png")],
-      options: {
-        outputFormat: "webp",
+      images: [Media.bytes(Uint8Array.from([1, 2, 3]), "image/png")],
+      format: "webp",
+      providerOptions: {
         responseFormat: "url",
         reasoningStrength: "low",
         toolEnablement: { enable_web_search: false },
@@ -83,8 +88,12 @@ it.effect("Meta Images preserves request overlays, bearer auth, JSON edit inputs
       },
       http: { body: { output_format: "jpeg", future_option: true }, query: { trace: "1" } },
     })
-    expect(response.image?.mediaType).toBe("image/jpeg")
-    expect(response.image?.data).toBe("https://images.example/result.jpg")
+    expect(response.image.mediaType).toBe("image/jpeg")
+    expect(response.image.source).toEqual({
+      type: "url",
+      url: "https://images.example/result.jpg",
+      mediaType: "image/jpeg",
+    })
   }).pipe(
     Effect.provide(
       ImageClient.layer.pipe(
@@ -121,7 +130,7 @@ it.effect("Meta Images validates the final output format before sending the requ
     const error = yield* Image.generate({
       model: Meta.configure({ apiKey: "fixture" }).image("muse-image-1.0"),
       prompt: "Draw",
-      options: { outputFormat: "png" },
+      format: "png",
       http: { body: { output_format: 42 } },
     }).pipe(Effect.flip)
     expect(error.reason._tag).toBe("InvalidRequest")

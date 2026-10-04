@@ -6,10 +6,22 @@ import { type AstNode, formatLocation, PendingThrow, Throw, sourceLocation, type
 import { containsRuntimeReference } from "./references.js"
 import { createErrorValue, type ErrorType, isErrorType } from "./intrinsics.js"
 import { constructor, methods, prototypeFrom, receiver } from "./native.js"
-import { type Callable, define, get, has, hidden, type Native, Arr, ErrorObj, Obj } from "./objects.js"
+import {
+  type Callable,
+  define,
+  get,
+  has,
+  hidden,
+  type Native,
+  Arr,
+  ErrorObj,
+  Obj,
+  coerceToString,
+  type Value,
+} from "./objects.js"
 import type { Interpreter } from "./interpreter.js"
+import { toPrimitiveString } from "./callback.js"
 import { formatValue } from "../stdlib/console.js"
-import { coerceToString } from "../stdlib/value.js"
 
 export const normalizeError = (error: unknown): Diagnostic => {
   if (error instanceof PendingThrow) {
@@ -86,7 +98,7 @@ export const locate = (error: unknown, node?: AstNode): unknown => {
 }
 
 /** The program value a handler receives for a failure; one failure always yields the same value. */
-export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown): unknown => {
+export const materialize = <R>(ctx: Interpreter<R>, thrown: unknown): Value => {
   if (thrown instanceof Throw) return thrown.value
   const builtins = ctx.builtins
   if (thrown instanceof PendingThrow) {
@@ -113,7 +125,7 @@ const errorToString = (self: Obj): string => {
 
 export const createAggregateErrorValue = <R>(
   ctx: Interpreter<R>,
-  errors: Array<unknown>,
+  errors: Array<Value>,
   message: string,
   proto: Obj = ctx.builtins.AggregateError,
 ) => {
@@ -124,18 +136,17 @@ export const createAggregateErrorValue = <R>(
 
 const constructAggregateErrorValue = <R>(
   ctx: Interpreter<R>,
-  args: Array<unknown>,
+  args: Array<Value>,
   proto: Obj,
 ): Effect.Effect<ErrorObj, unknown, R> =>
   Effect.gen(function* () {
+    const message = args[1] === undefined ? "" : yield* toPrimitiveString(ctx, args[1])
     const cursor = yield* ctx.iterate(args[0])
     if (cursor === undefined) throw typeError("new AggregateError(...) expects a synchronous iterable of errors.")
-    const errors: Array<unknown> = []
+    const errors: Array<Value> = []
     while (true) {
       const step = yield* cursor.next
-      if (step.done) {
-        return createAggregateErrorValue(ctx, errors, args[1] === undefined ? "" : coerceToString(args[1]), proto)
-      }
+      if (step.done) return createAggregateErrorValue(ctx, errors, message, proto)
       errors.push(step.value)
     }
   })
@@ -144,12 +155,14 @@ const constructAggregateErrorValue = <R>(
 export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
   const builtins = ctx.builtins
   const prototype = builtins[type]
-  const construct = (args: Array<unknown>, newTarget: Callable) => {
+  const construct = (args: Array<Value>, newTarget: Callable) => {
     const proto = prototypeFrom(newTarget, prototype)
     const created =
       type === "AggregateError"
         ? constructAggregateErrorValue(ctx, args, proto)
-        : Effect.sync(() => createErrorValue(proto, args[0] === undefined ? undefined : coerceToString(args[0])))
+        : Effect.map(args[0] === undefined ? Effect.undefined : toPrimitiveString(ctx, args[0]), (message) =>
+            createErrorValue(proto, message),
+          )
     // ES2022 `new Error(message, { cause })`: installed only when the options object has the property at all.
     const options = args[type === "AggregateError" ? 2 : 1]
     if (!(options instanceof Obj) || !has(options, "cause")) return created
@@ -169,6 +182,9 @@ export const errorGlobal = <R>(type: ErrorType, ctx: Interpreter<R>) => {
       ["toString", 0, (thisValue) => errorToString(receiver(Obj, thisValue, "Error.prototype.toString"))],
     ])
     methods(builtins, ctor, [["isError", 1, (_, args) => args[0] instanceof ErrorObj]])
+    return ctor
   }
+  // Derived constructors extend Error itself, so its statics are inherited. The globals table creates Error first.
+  ctor.proto = get(builtins.Error, "constructor") as Obj
   return ctor
 }

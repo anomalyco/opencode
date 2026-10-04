@@ -3,14 +3,13 @@ import type { AsyncStorage, SyncStorage } from "@solid-primitives/storage"
 import type { Accessor } from "solid-js"
 import type { DesktopMenuAction } from "@/shell/commands/desktop-menu"
 import { ServerConnection } from "@/runtime/server/registry"
-import type { WslServersPlatform } from "@/servers/wsl/types"
-import type { SshPlatform } from "@/servers/ssh/types"
-import type { UpdaterPlatform } from "@/shell/updates/types"
 import type { DraftStore } from "@/runtime/persistence/drafts"
-import type { BrowserPanePlatform } from "./browser-pane"
+import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
 
 type PickerPaths = string | string[] | null
+
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
+
 type OpenAttachmentPickerOptions = {
   title?: string
   multiple?: boolean
@@ -18,8 +17,11 @@ type OpenAttachmentPickerOptions = {
   extensions?: string[]
   defaultPath?: string
 }
+
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
+
 type PlatformName = "web" | "desktop"
+
 type DesktopOS = "macos" | "windows" | "linux"
 
 export type FatalRendererErrorLog = {
@@ -37,6 +39,9 @@ type PlatformBase = {
   /** Open a web or mail URL in the default system application */
   openExternal(url: string): void
 
+  /** Open an authentication page, reporting whether the browser could be launched. */
+  openBrowser?(url: string): Promise<boolean>
+
   /** Open a local path in a local app (desktop only) */
   openPath?(path: string, app?: string): Promise<void>
 
@@ -53,9 +58,9 @@ type PlatformBase = {
   notify(title: string, description?: string, onClick?: () => void): Promise<void>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
-  openAttachmentPickerDialog?(
+  openAttachmentPickerDialog?<Value>(
     opts: OpenAttachmentPickerOptions,
-    onFile: (file: File) => Promise<unknown>,
+    onFile: (file: File) => Promise<Value>,
   ): Promise<void>
 
   /** Resolve the native source path for a desktop File. */
@@ -73,9 +78,6 @@ type PlatformBase = {
   /** Prompt drafts, history, and their blobs. */
   draftStore?: DraftStore
 
-  /** Application-global desktop updater */
-  updater?: UpdaterPlatform
-
   /** Fetch override */
   fetch?: typeof fetch
 
@@ -84,10 +86,6 @@ type PlatformBase = {
 
   /** Set the default server URL to use on app startup (platform-specific) */
   setDefaultServer?(url: ServerConnection.Key | null): Promise<void> | void
-
-  /** Manage WSL sidecar servers (Electron on Windows only) */
-  wslServers?: WslServersPlatform
-  sshServers?: SshPlatform
 
   /** Webview zoom level (desktop only) */
   webviewZoom?: Accessor<number>
@@ -122,8 +120,8 @@ type PlatformBase = {
   /** Record a fatal renderer error in platform logs (desktop only) */
   recordFatalRendererError?(error: FatalRendererErrorLog): Promise<void>
 
-  /** Native browser pane hosted by the platform (desktop only). */
-  browserPane?: BrowserPanePlatform
+  /** GUI extension bridge to the main-process extension host (desktop only). */
+  extensions?: Bridge
 }
 
 export type Platform = PlatformBase &

@@ -7,18 +7,22 @@ import { AutoScroller, Feedback, PointerActivationConstraints } from "@dnd-kit/d
 import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers"
 import { RestrictToElement } from "@dnd-kit/dom/modifiers"
 import { ScrollView } from "@opencode/ui/scroll-view"
-import { ProjectAvatar } from "@opencode/ui/project-avatar"
+import {
+  displayName,
+  getProjectAvatarSource,
+  getProjectAvatarVariant,
+  ProjectAvatar,
+} from "@opencode/ui/project-avatar"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Button } from "@opencode/ui/button"
 import { Spinner } from "@opencode/ui/spinner"
 import { Menu } from "@opencode/ui/menu"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { getProjectAvatarVariant, type HomeProjectSelection, type LocalProject } from "@/shell/state/layout"
+import type { HomeProjectSelection, LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
-import { displayName, getProjectAvatarSource } from "@/shell/layout/helpers"
 import { ServerRowMenuView, serverMenuLabels } from "@/servers/registry/row-menu"
 import { ServerHealthIndicator } from "@/servers/registry/row"
 import { type ServerHealth } from "@/runtime/server/health"
@@ -207,7 +211,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
           when={
             props.servers.length > 1 ||
             props.servers.some(
-              (server) => server.type === "ssh" && (server.authenticationRequired || server.connecting),
+              (server) => server.type === "extension" && (server.authenticationRequired || server.connecting),
             )
           }
           fallback={
@@ -244,8 +248,8 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                 const healthy = () => !!props.serverHealth(item)?.healthy
                 const hasProjects = () => projects().length > 0
                 const collapsed = () => props.collapsed(item)
-                const authentication = () => item.type === "ssh" && item.authenticationRequired
-                const connecting = () => item.type === "ssh" && item.connecting
+                const authentication = () => item.type === "extension" && item.authenticationRequired
+                const connecting = () => item.type === "extension" && item.connecting
                 return (
                   <div class="flex min-w-0 flex-col gap-1">
                     <HomeServerRow
@@ -271,7 +275,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
                           <Show when={connecting()}>
                             <Spinner class="size-3.5" />
                           </Show>
-                          {props.language.t(connecting() ? "ssh.stage.connecting" : "ssh.action.authenticate")}
+                          {props.language.t(connecting() ? "server.status.connecting" : "server.action.authenticate")}
                         </Button>
                       </div>
                     </Show>
@@ -348,7 +352,7 @@ function HomeServerRow(props: {
   health: ServerHealth | undefined
 }) {
   const healthy = () => !!props.health?.healthy
-  const authentication = () => props.server.type === "ssh" && props.server.authenticationRequired
+  const authentication = () => props.server.type === "extension" && props.server.authenticationRequired
   const incompatible = () => !!props.health?.incompatible
   const canToggle = () => healthy() && props.projectsForServer(props.server).length > 0
   const contextMenuID = () => serverContextMenuID(props.server)
@@ -364,7 +368,7 @@ function HomeServerRow(props: {
       inactive={!incompatible() && !authentication()}
       value={
         authentication()
-          ? props.language.t("ssh.stage.authentication")
+          ? props.language.t("server.status.authentication")
           : props.language.t("server.row.incompatible", { version: props.health?.version ?? "1" })
       }
     >
@@ -413,7 +417,7 @@ function HomeServerRow(props: {
           <div class="flex size-4 shrink-0 items-center justify-center -mr-0.5">
             <ServerHealthIndicator
               health={props.health}
-              connecting={props.server.type === "ssh" && props.server.connecting}
+              connecting={props.server.type === "extension" && props.server.connecting}
               authenticationRequired={authentication()}
             />
           </div>

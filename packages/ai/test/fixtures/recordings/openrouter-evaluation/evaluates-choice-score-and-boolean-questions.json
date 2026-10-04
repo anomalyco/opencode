@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "typesafe/jev-1.13",
+    "tags": [
+      "prefix:openrouter-evaluation",
+      "provider:openrouter",
+      "protocol:system-one"
+    ],
+    "name": "openrouter-evaluation/evaluates-choice-score-and-boolean-questions",
+    "recordedAt": "2026-09-22T14:54:46.656Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://openrouter.ai/api/v1/systemone",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"typesafe/jev-1.13\",\"state\":\"I was charged twice for the same invoice. Please refund the duplicate payment today.\",\"questions\":{\"department\":{\"type\":\"choice\",\"instructions\":\"Which team should handle this support request?\",\"criteria\":{\"billing\":\"Payments, invoices, refunds, or failed charges\",\"technical\":\"Bugs, outages, or integrations\",\"sales\":\"Pricing, upgrades, or new accounts\"}},\"urgency\":{\"type\":\"score\",\"instructions\":\"How urgent is this support request?\",\"criteria\":[\"Can wait for normal support\",\"Needs prompt attention\",\"Actively blocking revenue\"]},\"refund\":{\"type\":\"noul\",\"instructions\":\"Is the customer asking for a refund?\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"typesafe/jev-1.13-20260917\",\"answers\":{\"department\":{\"type\":\"choice\",\"choice\":\"billing\",\"probabilities\":{\"billing\":1,\"sales\":0,\"technical\":0},\"confidence\":1},\"urgency\":{\"type\":\"score\",\"score\":1.02,\"legend\":{\"0\":\"Can wait for normal support\",\"1\":\"Needs prompt attention\",\"2\":\"Actively blocking revenue\"},\"probabilities\":{\"0\":0.01,\"1\":0.96,\"2\":0.03},\"confidence\":0.95},\"refund\":{\"type\":\"noul\",\"noul\":0.99}},\"usage\":{\"input_tokens\":422,\"output_tokens\":69,\"cost\":0.000017724},\"id\":\"gen-dec-1790088886-JRlffOLUwQdx4Lltu2se\",\"provider\":\"TypeSafe\"}"
+      }
+    }
+  ]
+}

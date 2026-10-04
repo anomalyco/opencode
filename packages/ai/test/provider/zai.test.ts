@@ -54,16 +54,28 @@ it.effect("ZAI Chat retains native thinking fields and scopes tool streaming to 
         baseURL: "https://gateway.example/custom",
         auth: Auth.header("x-test-key", "fixture"),
       })
-      for (const modelID of [
-        "glm-4.5",
-        "glm-4.5-air",
-        "glm-4.5-x",
-        "glm-4.6",
-        "glm-4.7-flash",
-        "glm-5.3",
-        "glm-5.3-flash",
-        "future-model",
-      ]) {
+      for (const [modelID, supported] of [
+        ["glm-3.9", false],
+        ["glm-4", false],
+        ["glm-4.5", false],
+        ["glm-4.5-air", false],
+        ["glm-4.5-x", false],
+        ["glm-4.6", true],
+        ["glm-4.7-flash", true],
+        ["glm-4.8", true],
+        ["glm-4.10", true],
+        ["glm-5", true],
+        ["glm-5.3", true],
+        ["glm-5.3-flash", true],
+        ["glm-6", true],
+        ["glm-10.1-new-family", true],
+        ["zai/glm-6.1", true],
+        ["GLM-4.6", true],
+        ["not-glm-6", false],
+        ["glm-4.60foo", false],
+        ["glm-6.x", false],
+        ["future-model", false],
+      ] as const) {
         const result = yield* compileRequest(
           LLM.request({
             model: provider.chat(modelID),
@@ -78,9 +90,7 @@ it.effect("ZAI Chat retains native thinking fields and scopes tool streaming to 
           max_tokens: 123,
           thinking: { type: "enabled", clear_thinking: false },
         })
-        expect(result.body.tool_stream).toBe(
-          ["glm-4.6", "glm-4.7-flash", "glm-5.3", "glm-5.3-flash"].includes(modelID) ? true : undefined,
-        )
+        expect(result.body.tool_stream).toBe(supported ? true : undefined)
         expect(result.body.max_completion_tokens).toBeUndefined()
         expect(result.body.store).toBeUndefined()
         expect(result.body.tools).toEqual([
@@ -115,6 +125,30 @@ it.effect("ZAI Chat retains native thinking fields and scopes tool streaming to 
           request_id: "request-1",
           user_id: "user-1",
         })
+      }
+    }
+  }),
+)
+
+it.effect("ZAI tool streaming defaults require tools and preserve explicit overrides", () =>
+  Effect.gen(function* () {
+    for (const configure of [ZAI.configure, ZAICodingPlan.configure]) {
+      const provider = configure({ apiKey: "fixture" })
+      for (const item of [
+        { id: "glm-6.1", tools: [], toolStream: undefined, expected: undefined },
+        { id: "glm-4.5", tools: [tool], toolStream: true, expected: true },
+        { id: "glm-6.1", tools: [tool], toolStream: false, expected: false },
+        { id: "future-model", tools: [tool], toolStream: true, expected: true },
+      ]) {
+        const result = yield* compileRequest(
+          LLM.request({
+            model: provider.chat(item.id),
+            prompt: "Hello",
+            tools: item.tools,
+            providerOptions: { toolStream: item.toolStream },
+          }),
+        )
+        expect(result.body.tool_stream).toBe(item.expected)
       }
     }
   }),
@@ -155,6 +189,38 @@ it.effect("ZAI lowers effort using the selected native API without inventing thi
       )
       expect(result.body.thinking).toEqual({ type })
     }
+  }),
+)
+
+it.effect("ZAI Coding Chat sends PDFs from tool results as file parts", () =>
+  Effect.gen(function* () {
+    const prepared = yield* compileRequest(
+      LLM.request({
+        model: ZAICodingPlan.configure({ apiKey: "fixture" }).chat("glm-5.3-flash"),
+        messages: [
+          Message.user("Read the report."),
+          Message.assistant({ type: "tool-call", id: "call_pdf", name: "read", input: {} }),
+          Message.tool({
+            id: "call_pdf",
+            name: "read",
+            resultType: "content",
+            result: [
+              {
+                type: "file",
+                mime: "application/pdf",
+                uri: "data:application/pdf;base64,JVBERi0=",
+                name: "report.pdf",
+              },
+            ],
+          }),
+        ],
+      }),
+    )
+
+    expect(prepared.body.messages.at(-1)).toEqual({
+      role: "user",
+      content: [{ type: "file", file: { filename: "report.pdf", file_data: "data:application/pdf;base64,JVBERi0=" } }],
+    })
   }),
 )
 
