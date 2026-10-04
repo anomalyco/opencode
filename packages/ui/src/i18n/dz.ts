@@ -190,6 +190,7 @@ export const dict: Record<string, string> = {
   "ui.message.copied": "འདྲ་བཤུས་འབད་ཡོདཔ།",
   "ui.message.duration.seconds": "{{count}}ས །",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}ས །",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "བར་ཆད་ཅན།",
   "ui.sessionTimeline.notice.model": "དཔེ་ཚད།",
   "ui.sessionTimeline.notice.movedTo": "ལུ་སྤོ་ཡོདཔ།",

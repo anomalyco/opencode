@@ -199,6 +199,7 @@ export const dict = {
   "ui.message.revertMessage": "Bu noktaya sıfırla",
   "ui.message.copyResponse": "Yanıtı kopyala",
   "ui.message.copied": "Kopyalandı",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "Kesildi",
   "ui.sessionTimeline.notice.model": "Model",
   "ui.sessionTimeline.notice.movedTo": "Şuraya taşındı",

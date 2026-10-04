@@ -201,6 +201,7 @@ export const dict = {
   "ui.message.revertMessage": "التراجع عن الرسالة",
   "ui.message.copyResponse": "نسخ الرد",
   "ui.message.copied": "تم النسخ!",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "تمت المقاطعة",
   "ui.message.queued": "في قائمة الانتظار",
   "ui.message.attachment.alt": "مرفق",

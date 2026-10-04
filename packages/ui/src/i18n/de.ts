@@ -208,6 +208,7 @@ export const dict = {
   "ui.message.revertMessage": "Auf diesen Punkt zurücksetzen",
   "ui.message.copyResponse": "Antwort kopieren",
   "ui.message.copied": "Kopiert!",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "Unterbrochen",
   "ui.message.queued": "In der Warteschlange",
   "ui.message.attachment.alt": "Anhang",

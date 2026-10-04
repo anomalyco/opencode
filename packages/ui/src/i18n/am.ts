@@ -178,6 +178,7 @@ export const dict: Record<string, string> = {
   "ui.message.copied": "የተገለበጠ",
   "ui.message.duration.seconds": "{{count}} ሰ",
   "ui.message.duration.minutesSeconds": "{{minutes}} ደ {{seconds}} ሰ",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "የተቋረጠ",
   "ui.message.queued": "ወረፋ ላይ",
   "ui.message.attachment.alt": "አባሪ",

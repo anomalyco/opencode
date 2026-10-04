@@ -104,6 +104,22 @@ export function createSessionTimelineRowRenderer(input: {
     if (completed === undefined || completed < user.time.created) return undefined
     return completed - user.time.created
   }
+  const tokensPerSecond = (messageID: string) => {
+    const assistants = input.projection.assistantMessagesByParent().get(messageID) ?? emptyAssistantMessages
+    if (assistants.length === 0) return undefined
+    const streamed = assistants.flatMap((message) =>
+      message.time.streamed === undefined ? [] : [Math.max(0, message.time.streamed - message.time.created)],
+    )
+    // A step without a streamed timestamp breaks the rate for the whole turn.
+    if (streamed.length !== assistants.length) return undefined
+    const tokens = assistants.reduce(
+      (total, message) => total + (message.tokens?.output ?? 0) + (message.tokens?.reasoning ?? 0),
+      0,
+    )
+    const ms = streamed.reduce((total, value) => total + value, 0)
+    if (tokens <= 0 || ms <= 0) return undefined
+    return tokens / (ms / 1000)
+  }
   const copyContentID = (messageID: string) => {
     if (workingTurn(messageID)) return null
     const message = input.projection
@@ -296,6 +312,7 @@ export function createSessionTimelineRowRenderer(input: {
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
                 turnDurationMs={duration(row().userMessageID)}
+                turnTokensPerSecond={tokensPerSecond(row().userMessageID)}
                 defaultOpen={defaultOpen()}
                 toolOpen={input.disclosure.value(disclosureKey()) ?? defaultOpen()}
                 onToolOpenChange={(open) => input.disclosure.set(disclosureKey(), open)}

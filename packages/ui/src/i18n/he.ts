@@ -179,6 +179,7 @@ export const dict = {
   "ui.message.copied": "הועתק",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "נקטע",
   "ui.message.queued": "בתור",
   "ui.message.attachment.alt": "קובץ מצורף",

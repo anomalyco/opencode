@@ -185,6 +185,7 @@ export const dict = {
   "ui.message.copied": "ကူးယူထားသည်။",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "ပြတ်တောက်သွားသည်။",
   "ui.message.queued": "တန်းစီထားသည်။",
   "ui.message.attachment.alt": "တွယ်တာမှု",

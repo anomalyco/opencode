@@ -179,6 +179,7 @@ export const dict: Record<string, string> = {
   "ui.message.copied": "კოპირებულია",
   "ui.message.duration.seconds": "{{count}} წმ",
   "ui.message.duration.minutesSeconds": "{{minutes}} წთ {{seconds}}წმ",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "შეწყვეტილია",
   "ui.message.queued": "რიგში",
   "ui.message.attachment.alt": "დანართი",

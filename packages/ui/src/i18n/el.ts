@@ -182,6 +182,7 @@ export const dict: Record<string, string> = {
   "ui.message.copied": "Αντιγράφηκε",
   "ui.message.duration.seconds": "{{count}}δ",
   "ui.message.duration.minutesSeconds": "{{minutes}}λ {{seconds}}δ",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "Διακοπή",
   "ui.message.queued": "Σε αναμονή",
   "ui.message.attachment.alt": "συνημμένο",

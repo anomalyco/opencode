@@ -194,6 +194,7 @@ export const dict = {
   "ui.message.copied": "Копирано",
   "ui.message.duration.seconds": "{{count}}с",
   "ui.message.duration.minutesSeconds": "{{minutes}}м {{seconds}}с",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "прекинут",
   "ui.message.queued": "У реду чекања",
   "ui.message.attachment.alt": "прилог",

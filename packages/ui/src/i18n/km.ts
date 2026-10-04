@@ -185,6 +185,7 @@ export const dict = {
   "ui.message.copied": "ចម្លង",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "រំខាន",
   "ui.message.queued": "នៅក្នុងជួរ",
   "ui.message.attachment.alt": "ឯកសារភ្ជាប់",

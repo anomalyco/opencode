@@ -184,6 +184,7 @@ export const dict = {
   "ui.message.copied": "ສຳເນົາແລ້ວ",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "ຂັດຂວາງ",
   "ui.message.queued": "ຄິວ",
   "ui.message.attachment.alt": "ໄຟລ໌ແນບ",

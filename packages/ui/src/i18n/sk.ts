@@ -207,6 +207,7 @@ export const dict: Record<string, string> = {
   "ui.message.copied": "Skopírované",
   "ui.message.duration.seconds": "{{count}} s",
   "ui.message.duration.minutesSeconds": "{{minutes}} m {{seconds}} s",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "Prerušené",
   "ui.message.queued": "Zaradené do fronty",
   "ui.message.attachment.alt": "príloha",

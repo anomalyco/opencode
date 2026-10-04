@@ -481,6 +481,7 @@ export function AssistantTextContent(props: {
   message: SessionMessageAssistant
   showCopy: boolean
   turnDurationMs?: number | null
+  turnTokensPerSecond?: number
 }) {
   const data = useData()
   const i18n = useI18n()
@@ -511,12 +512,21 @@ export function AssistantTextContent(props: {
       seconds: numfmt().format(total % 60),
     })
   })
+  const rateFmt = createMemo(
+    () => new Intl.NumberFormat(i18n.locale(), { minimumFractionDigits: 1, maximumFractionDigits: 1 }),
+  )
+  const tokensPerSecond = createMemo(() => {
+    const rate = props.turnTokensPerSecond
+    if (typeof rate !== "number" || !(rate > 0)) return ""
+    return i18n.t("ui.message.tokensPerSecond", { count: rateFmt().format(rate) })
+  })
   const meta = createMemo(() => {
     const agent = props.message.agent
     return [
       agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
       model(),
       duration(),
+      tokensPerSecond(),
       interrupted() ? i18n.t("ui.message.interrupted") : "",
     ]
       .filter(Boolean)

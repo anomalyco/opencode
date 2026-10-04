@@ -179,6 +179,7 @@ export const dict = {
   "ui.message.copied": "Нусхабардорӣ",
   "ui.message.duration.seconds": "{{count}}с",
   "ui.message.duration.minutesSeconds": "{{minutes}}м {{seconds}}с",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "Қатъ карда шуд",
   "ui.message.queued": "Дар навбат",
   "ui.message.attachment.alt": "замима",

@@ -193,6 +193,7 @@ export const dict = {
   "ui.message.revertMessage": "Vrati na ovu poruku",
   "ui.message.copyResponse": "Kopiraj odgovor",
   "ui.message.copied": "Kopirano!",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "Prekinuto",
   "ui.message.queued": "Na čekanju",
   "ui.message.attachment.alt": "prilog",

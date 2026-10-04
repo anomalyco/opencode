@@ -182,6 +182,7 @@ export const dict: Record<string, string> = {
   "ui.message.copied": "Kopeeritud",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}} min {{seconds}} s",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "Katkestatud",
   "ui.message.queued": "Järjekorras",
   "ui.message.attachment.alt": "manus",

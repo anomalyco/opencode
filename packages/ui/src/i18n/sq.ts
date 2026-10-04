@@ -182,6 +182,7 @@ export const dict: Record<string, string> = {
   "ui.message.copied": "E kopjuar",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "E ndërprerë",
   "ui.message.queued": "Në radhë",
   "ui.message.attachment.alt": "bashkëngjitje",

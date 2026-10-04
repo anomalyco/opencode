@@ -180,6 +180,7 @@ export const dict: Record<string, string> = {
   "ui.message.copied": "ކޮޕީކޮށްފައި",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
+  "ui.message.tokensPerSecond": "{{count}} tok/s",
   "ui.message.interrupted": "މެދުކަނޑާލިއެވެ",
   "ui.message.queued": "ކިޔޫގައި ތިއްބެވެ",
   "ui.message.attachment.alt": "އެކުލެވުން",
