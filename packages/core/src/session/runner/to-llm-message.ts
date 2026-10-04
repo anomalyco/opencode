@@ -67,13 +67,20 @@ const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: Provid
   }
 }
 
-const assistant = (message: SessionMessage.Assistant, model: Model) => {
+const isDeepSeekModel = (model: Model) =>
+  String(model.provider).toLowerCase().includes("deepseek") ||
+  String(model.id).toLowerCase().includes("deepseek") ||
+  String(model.id).toLowerCase().includes("r1")
+
+const assistant = (message: SessionMessage.Assistant, model: Model, isLatestAssistant = true) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
+  const isDeepSeek = isDeepSeekModel(model)
   const content = message.content.flatMap((item): ContentPart[] => {
     if (item.type === "text") return [{ type: "text", text: item.text }]
-    if (item.type === "reasoning")
+    if (item.type === "reasoning") {
+      if (isDeepSeek || !isLatestAssistant) return []
       return sameModel
         ? [
             {
@@ -85,6 +92,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
         : item.text.length > 0
           ? [{ type: "text", text: item.text }]
           : []
+    }
     const call = toolCall(item, reuseProviderMetadata ? item.provider?.metadata : undefined)
     if (item.provider?.executed !== true) return [call]
     const result = toolResult(
@@ -112,7 +120,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model) => {
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] {
+function toLLMMessage(message: SessionMessage.Message, model: Model, isLatestAssistant = true): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -143,7 +151,7 @@ function toLLMMessage(message: SessionMessage.Message, model: Model): Message[] 
         }),
       ]
     case "assistant":
-      return assistant(message, model)
+      return assistant(message, model, isLatestAssistant)
     case "compaction":
       return [
         Message.make({
@@ -167,5 +175,7 @@ ${message.recent}
 }
 
 /** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
-export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: Model) =>
-  messages.flatMap((message) => toLLMMessage(message, model))
+export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: Model) => {
+  const lastAssistantIndex = messages.findLastIndex((message) => message.type === "assistant")
+  return messages.flatMap((message, index) => toLLMMessage(message, model, index === lastAssistantIndex))
+}

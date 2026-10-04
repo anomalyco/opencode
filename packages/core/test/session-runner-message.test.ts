@@ -498,4 +498,73 @@ Recent work
       },
     ])
   })
+
+  test("prunes reasoning from historical assistant turns while keeping latest assistant turn", () => {
+    const historicalAssistant = SessionMessage.Assistant.make({
+      id: id("assistant-historical"),
+      type: "assistant",
+      agent: "build",
+      model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+      content: [
+        SessionMessage.AssistantReasoning.make({
+          type: "reasoning",
+          id: "reasoning-old",
+          text: "Old reasoning trace with 4000 tokens",
+        }),
+        SessionMessage.AssistantText.make({ type: "text", id: "text-old", text: "Done step 1" }),
+      ],
+      time: { created, completed: created },
+    })
+
+    const latestAssistant = SessionMessage.Assistant.make({
+      id: id("assistant-latest"),
+      type: "assistant",
+      agent: "build",
+      model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+      content: [
+        SessionMessage.AssistantReasoning.make({
+          type: "reasoning",
+          id: "reasoning-latest",
+          text: "Active reasoning trace",
+        }),
+        SessionMessage.AssistantText.make({ type: "text", id: "text-latest", text: "Proceeding step 2" }),
+      ],
+      time: { created, completed: created },
+    })
+
+    const messages = toLLMMessages([historicalAssistant, latestAssistant], model)
+    expect(messages).toHaveLength(2)
+
+    // Historical assistant reasoning must be pruned to save input tokens
+    expect(messages[0]?.content).toEqual([{ type: "text", text: "Done step 1" }])
+
+    // Latest assistant reasoning must be preserved
+    expect(messages[1]?.content).toEqual([
+      { type: "reasoning", text: "Active reasoning trace", providerMetadata: undefined },
+      { type: "text", text: "Proceeding step 2" },
+    ])
+  })
+
+  test("drops reasoning from all turns when using DeepSeek models", () => {
+    const deepseekModel = Model.make({ id: "deepseek-chat", provider: "deepseek", route: OpenAIChat.route })
+    const assistantMsg = SessionMessage.Assistant.make({
+      id: id("assistant-deepseek"),
+      type: "assistant",
+      agent: "build",
+      model: { id: ModelV2.ID.make("deepseek-chat"), providerID: ProviderV2.ID.make("deepseek") },
+      content: [
+        SessionMessage.AssistantReasoning.make({
+          type: "reasoning",
+          id: "reasoning-deepseek",
+          text: "DeepSeek internal thought",
+        }),
+        SessionMessage.AssistantText.make({ type: "text", id: "text-deepseek", text: "Output for user" }),
+      ],
+      time: { created, completed: created },
+    })
+
+    const messages = toLLMMessages([assistantMsg], deepseekModel)
+    expect(messages).toHaveLength(1)
+    expect(messages[0]?.content).toEqual([{ type: "text", text: "Output for user" }])
+  })
 })
