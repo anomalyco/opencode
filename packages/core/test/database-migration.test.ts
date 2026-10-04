@@ -530,9 +530,7 @@ describe("DatabaseMigration", () => {
         expect(yield* db.all(sql`SELECT integration_id, label FROM credential`)).toEqual([
           { integration_id: "openai", label: "OAuth" },
         ])
-        expect(
-          yield* db.get(sql`SELECT id FROM migration WHERE id = ${legacyCredentialsMigration.id}`),
-        ).toBeTruthy()
+        expect(yield* db.get(sql`SELECT id FROM migration WHERE id = ${legacyCredentialsMigration.id}`)).toBeTruthy()
       }),
       Global.make({ data: tmp.path }),
     )
