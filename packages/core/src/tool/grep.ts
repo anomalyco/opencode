@@ -93,7 +93,13 @@ const layer = Layer.effectDiscard(
                 source: { type: "tool", messageID: context.assistantMessageID, callID: context.toolCallID },
               })
               const target = path.resolve(location.directory, input.path ?? ".")
-              const info = yield* fs.stat(target).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              const info = yield* fs
+                .stat(target)
+                .pipe(
+                  Effect.catchReason("PlatformError", "NotFound", () =>
+                    Effect.fail(new ToolFailure({ message: `Search path not found: ${input.path ?? "."}` })),
+                  ),
+                )
               return yield* ripgrep
                 .grep({
                   cwd: info?.type === "Directory" ? target : path.dirname(target),
@@ -123,7 +129,13 @@ const layer = Layer.effectDiscard(
                     ),
                   ),
                 )
-            }).pipe(Effect.mapError(() => new ToolFailure({ message: `Unable to grep for ${input.pattern}` }))),
+            }).pipe(
+              Effect.mapError((error) =>
+                error instanceof ToolFailure
+                  ? error
+                  : new ToolFailure({ message: `Unable to grep for ${input.pattern}` }),
+              ),
+            ),
         }),
       })
       .pipe(Effect.orDie)

@@ -4,7 +4,7 @@ import fs from "fs/promises"
 import os from "os"
 import path from "path"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Effect, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, PlatformError } from "effect"
 import { GrepTool } from "../../src/tool/grep"
 import { provideInstance, testInstanceStoreLayer, TestInstance, tmpdirScoped } from "../fixture/fixture"
 import { SessionID, MessageID } from "../../src/session/schema"
@@ -77,6 +77,131 @@ const git = Effect.fn("GrepToolTest.git")(function* (cwd: string, args: string[]
 })
 
 describe("tool.grep", () => {
+  it.instance("fails for a missing relative directory instead of searching its parent", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.write(path.join(test.directory, "sibling.txt"), "sibling-marker"))
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      const input = { pattern: "sibling-marker", path: "missing-dir" }
+      const result = yield* grep.execute(input, ctx).pipe(Effect.exit)
+      expect(Exit.isFailure(result)).toBe(true)
+      if (Exit.isFailure(result)) {
+        expect(Cause.pretty(result.cause)).toContain("missing-dir")
+        expect(Cause.pretty(result.cause)).toContain("not found")
+        expect(Cause.pretty(result.cause)).not.toContain("sibling.txt")
+      }
+    }),
+  )
+
+  for (const target of ["missing-file.txt", "missing/deeper/target.txt"]) {
+    it.instance(`fails for missing ${target} and includes the requested path`, () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* Effect.promise(() => Bun.write(path.join(test.directory, "sibling.txt"), "sibling-marker"))
+        const info = yield* GrepTool
+        const grep = yield* info.init()
+        const result = yield* grep.execute({ pattern: "sibling-marker", path: target }, ctx).pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        if (Exit.isFailure(result)) {
+          expect(Cause.pretty(result.cause)).toContain(`Search path not found: ${target}`)
+          expect(Cause.pretty(result.cause)).not.toContain("sibling.txt")
+        }
+      }),
+    )
+  }
+
+  it.instance("searches the default instance directory with include filtering", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.write(path.join(test.directory, "match.ts"), "needle"))
+      yield* Effect.promise(() => Bun.write(path.join(test.directory, "sibling.txt"), "needle"))
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      const result = yield* grep.execute({ pattern: "needle", include: "*.ts" }, ctx)
+      expect(result.metadata).toEqual({ matches: 1, truncated: false })
+      expect(result.output).toContain(path.join(test.directory, "match.ts"))
+      expect(result.output).not.toContain("sibling.txt")
+    }),
+  )
+
+  it.instance("denies grep before inspecting a missing path or searching siblings", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* Effect.promise(() => Bun.write(path.join(test.directory, "sibling.txt"), "sibling-marker"))
+      const info = yield* GrepTool
+      const grep = yield* info.init()
+      const result = yield* grep
+        .execute(
+          { pattern: "sibling-marker", path: "missing-dir" },
+          { ...ctx, ask: () => Effect.die(new Error("grep permission denied")) },
+        )
+        .pipe(Effect.exit)
+      expect(Exit.isFailure(result)).toBe(true)
+      if (Exit.isFailure(result)) {
+        expect(Cause.pretty(result.cause)).toContain("grep permission denied")
+        expect(Cause.pretty(result.cause)).not.toContain("Search path not found")
+        expect(Cause.pretty(result.cause)).not.toContain("sibling.txt")
+      }
+    }),
+  )
+
+  for (const failure of ["PermissionDenied", "interrupt", "defect", "resolved-NotFound"] as const) {
+    it.instance(`preserves a target stat ${failure} instead of searching its parent`, () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const target = path.join(test.directory, "target.txt")
+        yield* Effect.promise(() => Bun.write(target, "target-marker"))
+        yield* Effect.promise(() => Bun.write(path.join(test.directory, "sibling.txt"), "sibling-marker"))
+        const fs = yield* FSUtil.Service
+        const calls: string[] = []
+        // Inject only the target stat boundary to prove errors and a disappearance between the two stats.
+        const info = yield* GrepTool.pipe(
+          Effect.provideService(
+            FSUtil.Service,
+            FSUtil.Service.of({
+              ...fs,
+              stat: (file) => {
+                if (file !== target) return fs.stat(file)
+                calls.push(file)
+                if (failure === "resolved-NotFound" && calls.length === 1) return fs.stat(file)
+                if (failure === "interrupt") return Effect.interrupt
+                if (failure === "defect") return Effect.die(new Error("stat defect"))
+                return Effect.fail(
+                  PlatformError.systemError({
+                    _tag: failure === "resolved-NotFound" ? "NotFound" : "PermissionDenied",
+                    module: "FileSystem",
+                    method: "stat",
+                    pathOrDescriptor: file,
+                  }),
+                )
+              },
+            }),
+          ),
+        )
+        const grep = yield* info.init()
+        const result = yield* grep.execute({ pattern: "sibling-marker", path: "target.txt" }, ctx).pipe(Effect.exit)
+        expect(Exit.isFailure(result)).toBe(true)
+        expect(calls).toHaveLength(failure === "resolved-NotFound" ? 2 : 1)
+        if (Exit.isFailure(result)) {
+          if (failure === "interrupt") {
+            expect(Cause.hasInterruptsOnly(result.cause)).toBe(true)
+            return
+          }
+          expect(Cause.hasDies(result.cause)).toBe(true)
+          expect(Cause.pretty(result.cause)).toContain(
+            failure === "resolved-NotFound"
+              ? "Search path not found: target.txt"
+              : failure === "defect"
+                ? "stat defect"
+                : "PermissionDenied",
+          )
+          expect(Cause.pretty(result.cause)).not.toContain("sibling.txt")
+        }
+      }),
+    )
+  }
+
   rooted.live("basic search", () =>
     Effect.gen(function* () {
       const info = yield* GrepTool
