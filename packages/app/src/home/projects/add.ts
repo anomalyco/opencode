@@ -1,6 +1,10 @@
 import type { ServerCtx } from "@/runtime/server/runtime"
 
-export function addProjects(context: ServerCtx, directories: string[]) {
+export function addProjects(
+  context: ServerCtx,
+  directories: string[],
+  onError?: (directory: string, error: unknown) => void,
+) {
   const directory = directories[0]
   if (!directory) return
 
@@ -11,7 +15,7 @@ export function addProjects(context: ServerCtx, directories: string[]) {
       .list({ path: ".", location })
       .then(() => context.sdk.api.location.get({ location }))
       .then((value) => context.sync.child(item, { bootstrap: false })[1]("project", value.project.id))
-      .catch(() => undefined)
+      .catch((error: unknown) => onError?.(item, error))
     context.projects.open(item)
   })
   context.projects.touch(directory)

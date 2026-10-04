@@ -7,6 +7,7 @@ import {
   currentRoute,
   PlatformProvider,
   preloadRoute,
+  projectLocationError,
   ServerConnection,
   useCommand,
   useCurrentRoute,
@@ -26,7 +27,7 @@ import { bindDesktopMenu } from "./platform/menu"
 import { createSidecarResolver, initializationData, sidecarHttp } from "./startup/initialization"
 import { preloadStoredLocale } from "./startup/locale"
 import { LoadingSplash } from "./startup/splash"
-import { getLastActiveUrl } from "./window/route-storage"
+import { getLastActiveUrl, setLastActiveUrl } from "./window/route-storage"
 import { DesktopMemoryRouter } from "./window/router"
 
 const MigrationStatus = lazy(() => import("./migration-status").then((module) => ({ default: module.MigrationStatus })))
@@ -143,6 +144,10 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
   return (
     <PlatformProvider value={platform}>
       <AppBaseProviders
+        // A saved route into an unavailable folder would fail again on restart; send Restart home instead.
+        onError={(error) => {
+          if (projectLocationError(error)) setLastActiveUrl(windowState.id, "/")
+        }}
         locale={locale.latest}
         onNativeTranslations={(bundle) => void props.api.setNativeTranslations(bundle).catch(() => undefined)}
         onThemeApplied={(mode, scheme) => {

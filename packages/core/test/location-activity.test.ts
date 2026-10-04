@@ -66,7 +66,7 @@ const locations = Layer.effect(
           Layer.provideMerge(Form.layer),
           Layer.provide(Layer.succeed(Bus.Service, bus)),
           Layer.fresh,
-        ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
+        ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryError>,
       { idleTimeToLive: Duration.infinity },
     )
     return {

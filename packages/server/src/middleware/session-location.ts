@@ -3,14 +3,14 @@ import { Session } from "@opencode/core/session"
 import { Effect, Layer } from "effect"
 import { HttpRouter } from "effect/unstable/http"
 import { HttpApiMiddleware } from "effect/unstable/httpapi"
-import { LocationNotFoundError, InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
+import { LocationNotFoundError, LocationPermissionDeniedError, InvalidRequestError, SessionNotFoundError } from "@opencode/protocol/errors"
 import { locationErrors, sessionInfo, type LocationServices } from "../location"
 
 export class SessionLocationMiddleware extends HttpApiMiddleware.Service<
   SessionLocationMiddleware,
   { provides: LocationServices }
 >()("@opencode/HttpApiSessionLocation", {
-  error: [InvalidRequestError, SessionNotFoundError, LocationNotFoundError],
+  error: [InvalidRequestError, SessionNotFoundError, LocationNotFoundError, LocationPermissionDeniedError],
 }) {}
 
 export const sessionLocationLayer = Layer.effect(

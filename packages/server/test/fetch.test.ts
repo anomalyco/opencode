@@ -73,6 +73,56 @@ it.live("returns LocationNotFoundError for a missing folder and recovers once it
   }),
 )
 
+if (process.platform !== "win32")
+  it.live("returns LocationPermissionDeniedError for a denied folder and recovers once access returns", () =>
+    Effect.gen(function* () {
+      const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-directory-denied-")))
+      const parent = path.join(config.path, "protected")
+      const directory = path.join(parent, "project")
+      yield* Effect.promise(() => fs.mkdir(directory, { recursive: true }))
+      yield* Effect.acquireRelease(
+        Effect.promise(() => fs.chmod(parent, 0o000)),
+        () => Effect.promise(() => fs.chmod(parent, 0o700)),
+      )
+      const handler = yield* ServerFetch.make({ ...options, config: { directory: config.path } })
+      const request = () =>
+        handler(
+          new Request("http://opencode.local/api/model", {
+            headers: { "x-opencode-directory": encodeURIComponent(directory) },
+          }),
+        )
+      const denied = yield* Effect.promise(request)
+      expect(denied.status).toBe(403)
+      expect(yield* Effect.promise(() => denied.json())).toEqual({
+        _tag: "LocationPermissionDeniedError",
+        location: { directory },
+        message: `Location access denied: ${directory}`,
+      })
+      yield* Effect.promise(() => fs.chmod(parent, 0o700))
+      expect((yield* Effect.promise(request)).status).toBe(200)
+    }),
+  )
+
+it.live("location.get reports a folder removed after its Location booted", () =>
+  Effect.gen(function* () {
+    const config = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-directory-removed-")))
+    const directory = path.join(config.path, "project")
+    yield* Effect.promise(() => fs.mkdir(directory))
+    const handler = yield* ServerFetch.make({ ...options, config: { directory: config.path } })
+    const request = () =>
+      handler(
+        new Request("http://opencode.local/api/location", {
+          headers: { "x-opencode-directory": encodeURIComponent(directory) },
+        }),
+      )
+    expect((yield* Effect.promise(request)).status).toBe(200)
+    yield* Effect.promise(() => fs.rm(directory, { recursive: true }))
+    const removed = yield* Effect.promise(request)
+    expect(removed.status).toBe(404)
+    expect(yield* Effect.promise(() => removed.json())).toMatchObject({ _tag: "LocationNotFoundError" })
+  }),
+)
+
 type Handler = (request: Request) => Promise<Response>
 
 function occupy(port: number, cancel = false) {

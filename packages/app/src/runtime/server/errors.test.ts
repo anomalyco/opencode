@@ -1,7 +1,18 @@
 import { describe, expect, test } from "bun:test"
-import type { FileNotFoundError, SessionNotFoundError } from "@opencode/client/promise"
+import type {
+  FileNotFoundError,
+  LocationNotFoundError,
+  LocationPermissionDeniedError,
+  SessionNotFoundError,
+} from "@opencode/client/promise"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./errors"
-import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./errors"
+import {
+  formatProjectLocationError,
+  formatServerError,
+  isSessionNotFoundError,
+  parseReadableConfigInvalidError,
+  projectLocationError,
+} from "./errors"
 
 function fill(text: string, vars?: Record<string, string | number>) {
   if (!vars) return text
@@ -54,6 +65,32 @@ describe("parseReadableConfigInvalidError", () => {
 })
 
 describe("formatServerError", () => {
+  test("explains missing and denied project folders without misclassifying other failures", () => {
+    const missing = {
+      _tag: "LocationNotFoundError",
+      location: { directory: "C:\\Users\\Test User\\Projects\\moved-project" },
+      message: "Location not found",
+    } satisfies LocationNotFoundError
+    const denied = {
+      _tag: "LocationPermissionDeniedError",
+      location: { directory: "/Users/example/Documents/private-project" },
+      message: "Location access denied",
+    } satisfies LocationPermissionDeniedError
+    for (const error of [missing, new Error("Request failed", { cause: { body: missing, status: 404 } })]) {
+      expect(projectLocationError(error)).toEqual({ type: "missing", directory: missing.location.directory })
+      expect(formatServerError(error)).toContain(`${missing.location.directory} was moved`)
+    }
+    const info = projectLocationError(new Error("Request failed", { cause: { body: denied, status: 403 } }))
+    expect(info).toEqual({ type: "denied", directory: denied.location.directory })
+    expect(formatServerError(denied)).toContain(`permission to open ${denied.location.directory}`)
+    expect(formatServerError(denied)).not.toContain("Privacy & Security")
+    if (info) expect(formatProjectLocationError(info, undefined, true)).toContain("Privacy & Security")
+    expect(
+      projectLocationError({ _tag: "FileNotFoundError", path: "file.txt", message: "File not found" }),
+    ).toBeUndefined()
+    expect(projectLocationError(new Error("HTTP 500"))).toBeUndefined()
+  })
+
   test.each([
     {
       name: "trimmed config message without issues",

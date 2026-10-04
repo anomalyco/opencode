@@ -59,7 +59,7 @@ const itWithActiveExecution = testEffect(
                   replacements: [Project.node.replace(globalProjectNode), offlineModels],
                 }),
                 Layer.succeed(SessionRunner.Service, { drain: () => Effect.never }),
-              ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
+              ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryError>,
           ),
         ),
       ),
@@ -72,7 +72,7 @@ const unavailableLocations = Layer.effect(
     () =>
       Layer.effectDiscard(Effect.die(new Error("broken location"))) as unknown as Layer.Layer<
         LocationServices,
-        FileSystem.DirectoryNotFoundError
+        FileSystem.DirectoryError
       >,
   ),
 )

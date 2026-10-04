@@ -50,7 +50,7 @@ const locations = makeGlobalNode({
             list: () => Effect.succeed([info]),
           }),
           Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),
-        ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
+        ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryError>,
     ),
   ),
   deps: [],

@@ -6,7 +6,7 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { CommentsProvider } from "@/composer/comments"
 import { readPromptPresentation } from "@/composer/comment-note"
 import { FileProvider } from "@/workspaces/files/model"
-import { LocationProvider } from "@/workspaces/location"
+import { LocationProvider, useWorkspaceLocation } from "@/workspaces/location"
 import { ModelsProvider } from "@/providers/models/models"
 import { useProviders } from "@/providers/catalog/providers"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -25,6 +25,7 @@ import { IncompatibleServerPanel } from "./incompatible-server-panel"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
 import { SessionScreenView } from "./screen"
+import { LocationUnavailable } from "./location-unavailable"
 import { PreparingComposer } from "./preparing-composer"
 
 export function TargetSessionRouteContent() {
@@ -167,16 +168,40 @@ function SessionStatePanel(props: ParentProps) {
 }
 
 function TargetSessionPage() {
+  const params = useParams<{ id: string }>()
+  const server = useServer()
+  const data = useData()
+  const tabs = useTabs()
+  const language = useLanguage()
+  const location = useWorkspaceLocation()
   return (
-    // These providers select their scoped state reactively and retain bounded caches,
-    // so keep their owners alive while navigating between workspaces on this server.
-    <FileProvider>
-      <ComposerPersistenceProvider>
-        <CommentsProvider>
-          <SessionPage />
-        </CommentsProvider>
-      </ComposerPersistenceProvider>
-    </FileProvider>
+    <Show
+      when={location().error}
+      fallback={
+        // These providers select their scoped state reactively and retain bounded caches,
+        // so keep their owners alive while navigating between workspaces on this server.
+          <FileProvider>
+            <ComposerPersistenceProvider>
+              <CommentsProvider>
+                <SessionPage />
+              </CommentsProvider>
+            </ComposerPersistenceProvider>
+          </FileProvider>
+      }
+    >
+      <SessionStatePanel>
+        <LocationUnavailable
+          moveLabel={language.t("session.location.move")}
+          // The direct move does not need the old folder, so it works while that folder is unavailable.
+          onMove={(directory) =>
+            server.ctx.sdk.api.session
+              .move({ sessionID: params.id, directory })
+              .then(() => data.session.sync(params.id))
+          }
+          onCloseTab={() => tabs.removeSessionTab({ server: server.key, sessionId: params.id })}
+        />
+      </SessionStatePanel>
+    </Show>
   )
 }
 

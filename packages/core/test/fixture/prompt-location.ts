@@ -25,7 +25,7 @@ export const promptLocationNode = makeGlobalNode({
               Bus.node.replace(Layer.succeed(Bus.Service, bus)),
               Plugin.node.replace(Layer.mock(Plugin.Service, { awaitActivation: Effect.void })),
             ],
-          }) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
+          }) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryError>,
       )
     }),
   ),

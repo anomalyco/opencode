@@ -59,7 +59,7 @@ const locations = Layer.effect(
         Layer.provide(client),
         Layer.provide(config),
         Layer.provide(models),
-      ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryNotFoundError>,
+      ) as unknown as Layer.Layer<LocationServices, FileSystem.DirectoryError>,
   ),
 )
 const it = testEffect(

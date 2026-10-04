@@ -2,7 +2,7 @@ export * as FileSystem from "./filesystem.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Context, Effect, Layer, PlatformError, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Location } from "./location.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
@@ -50,6 +50,27 @@ export class DirectoryAccessDeniedError extends Schema.TaggedError<DirectoryAcce
   }
 }
 
+export type DirectoryError = DirectoryNotFoundError | DirectoryAccessDeniedError
+
+/** Only failures on the Location directory or its ancestors describe Location availability. */
+export function directoryError(cause: unknown, directory: AbsolutePath): DirectoryError | undefined {
+  if (cause instanceof DirectoryNotFoundError || cause instanceof DirectoryAccessDeniedError) return cause
+  if (!(cause instanceof PlatformError.PlatformError) || cause.reason._tag === "BadArgument") return
+  const target = cause.reason.pathOrDescriptor
+  if (typeof target !== "string") return
+  if (cause.reason._tag === "NotFound" && target === directory)
+    return new DirectoryNotFoundError({ directory, cause })
+  if (
+    FSUtil.contains(target, directory) &&
+    (cause.reason._tag === "PermissionDenied" ||
+      (cause.reason._tag === "Unknown" &&
+        cause.reason.cause instanceof Error &&
+        "code" in cause.reason.cause &&
+        cause.reason.cause.code === "EPERM"))
+  )
+    return new DirectoryAccessDeniedError({ directory, cause })
+}
+
 export const Content = Schema.Struct({
   uri: Schema.String,
   name: Schema.String.pipe(Schema.optional),
@@ -88,6 +109,7 @@ export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
 export const Event = FileSystem.Event
 
 export interface Interface {
+  readonly check: Effect.Effect<void, DirectoryError>
   readonly read: (
     input: ReadInput,
   ) => Effect.Effect<{ readonly content: Uint8Array; readonly mime: string }, NotFoundError>
@@ -111,24 +133,15 @@ const baseLayer = Layer.effect(
     // configured directory as canonical; local placements keep symlink
     // canonicalization. This skip is boot-only: resolve/read/list below still
     // access the host filesystem per operation (tracked in #44568).
-    const root = location.workspaceID
-      ? location.directory
-      : yield* fs.realPath(location.directory).pipe(
-          Effect.catch((cause): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> => {
-            if (cause.reason._tag === "NotFound")
-              return Effect.fail(new DirectoryNotFoundError({ directory: location.directory, cause }))
-            // macOS privacy denials arrive as Unknown with an EPERM cause.
-            if (
-              cause.reason._tag === "PermissionDenied" ||
-              (cause.reason._tag === "Unknown" &&
-                cause.reason.cause instanceof Error &&
-                "code" in cause.reason.cause &&
-                cause.reason.cause.code === "EPERM")
-            )
-              return Effect.fail(new DirectoryAccessDeniedError({ directory: location.directory, cause }))
-            return Effect.die(cause)
+    const canonical = location.workspaceID
+      ? Effect.succeed(location.directory)
+      : fs.realPath(location.directory).pipe(
+          Effect.catch((cause) => {
+            const error = directoryError(cause, location.directory)
+            return error ? Effect.fail(error) : Effect.die(cause)
           }),
         )
+    const root = yield* canonical
     const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
       const absolute = path.resolve(location.directory, input ?? ".")
       if (!FSUtil.contains(location.directory, absolute))
@@ -138,6 +151,7 @@ const baseLayer = Layer.effect(
       return { absolute, real, directory: location.directory }
     })
     return Service.of({
+      check: canonical.pipe(Effect.asVoid),
       find: search.find,
       read: Effect.fn("FileSystem.read")(function* (input) {
         const target = yield* resolve(input.path).pipe(

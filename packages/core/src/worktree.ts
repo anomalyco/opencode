@@ -68,7 +68,7 @@ export class StrategyUnavailableError extends Schema.TaggedError<StrategyUnavail
 ) {}
 
 export type Error =
-  | FileSystem.DirectoryNotFoundError
+  | FileSystem.DirectoryError
   | Project.NotFoundError
   | SourceDirectoryNotFoundError
   | DestinationExistsError

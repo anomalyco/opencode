@@ -16,6 +16,7 @@ import { Persistence } from "@/runtime/persistence/schema"
 import type { HomeController } from "../model"
 import { useGlobal } from "@/runtime/server/runtime"
 import { SessionTransfer } from "@opencode/schema/session-transfer"
+import { formatProjectLocationError, projectLocationError } from "@/runtime/server/errors"
 import { useRevealProject } from "./reveal"
 
 export const HomeServersSchema = Schema.Struct({
@@ -43,12 +44,48 @@ export function createHomeProjectsController(home: HomeController) {
     return [project.worktree, ...(project.sandboxes ?? [])]
   }
 
+  function closeProject(conn: ServerConnection.Any, directory: string) {
+    const next = closeHomeProject(
+      home.selection.value(),
+      ServerConnection.key(conn),
+      home.server.context(conn).projects,
+      directory,
+    )
+    if (next) home.selection.set(next)
+  }
+
+  // Only a typed folder error is actionable here; other failures keep the existing quiet behavior.
+  function showUnavailable(conn: ServerConnection.Any, directory: string, error: unknown) {
+    const location = projectLocationError(error)
+    if (!location) return
+    showToast({
+      variant: "error",
+      persistent: true,
+      title: language.t(
+        location.type === "missing" ? "home.project.missing.title" : "toast.project.permissionDenied.title",
+      ),
+      description: formatProjectLocationError(
+        location,
+        language.t,
+        ServerConnection.local(conn) && platform.platform === "desktop" && platform.os === "macos",
+      ),
+      actions:
+        location.type === "missing"
+          ? [{ label: language.t("toast.project.missing.remove"), onClick: () => closeProject(conn, directory) }]
+          : undefined,
+    })
+  }
+
+  function add(conn: ServerConnection.Any, directories: string[]) {
+    home.project.add(conn, directories, (directory, error) => showUnavailable(conn, directory, error))
+  }
+
   function choose(conn: ServerConnection.Any) {
     pickDirectory({
       server: conn,
       title: language.t("command.project.open"),
       multiple: true,
-      onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
+      onSelect: (result) => add(conn, homeProjectDirectories(result)),
     })
   }
 
@@ -95,7 +132,7 @@ export function createHomeProjectsController(home: HomeController) {
         if (authenticate(conn, () => home.project.select(conn, directory))) return
         home.project.select(conn, directory)
       },
-      add: home.project.add,
+      add,
       openNewSession: (conn: ServerConnection.Any, directory: string) => {
         if (authenticate(conn, () => home.project.openProjectNewSession(conn, directory))) return
         home.project.openProjectNewSession(conn, directory)
@@ -150,15 +187,7 @@ export function createHomeProjectsController(home: HomeController) {
         if (home.server.health(conn)?.healthy === false) return
         choose(conn)
       },
-      close: (conn: ServerConnection.Any, directory: string) => {
-        const next = closeHomeProject(
-          home.selection.value(),
-          ServerConnection.key(conn),
-          home.server.context(conn).projects,
-          directory,
-        )
-        if (next) home.selection.set(next)
-      },
+      close: closeProject,
       move: (conn: ServerConnection.Any, worktree: string, index: number) => {
         home.server.context(conn).projects.move(worktree, index)
       },

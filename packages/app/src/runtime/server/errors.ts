@@ -1,3 +1,6 @@
+import { isLocationNotFoundError, isLocationPermissionDeniedError } from "@opencode/client/promise"
+import { dict } from "../i18n/en"
+
 export type ConfigInvalidError = {
   name: "ConfigInvalidError"
   data: {
@@ -25,7 +28,31 @@ function tr(translator: Translator | undefined, key: string, text: string, vars?
   return out
 }
 
+export function projectLocationError(error: unknown) {
+  const unwrapped = unwrapNamedError(error)
+  if (isLocationNotFoundError(unwrapped)) return { type: "missing" as const, directory: unwrapped.location.directory }
+  if (isLocationPermissionDeniedError(unwrapped))
+    return { type: "denied" as const, directory: unwrapped.location.directory }
+}
+
+// Pass `macos` only when the server runs on this Mac; its privacy settings then explain the denial.
+export function formatProjectLocationError(
+  info: NonNullable<ReturnType<typeof projectLocationError>>,
+  translate?: Translator,
+  macos?: boolean,
+) {
+  const key =
+    info.type === "missing"
+      ? "error.project.missing"
+      : macos
+        ? "error.project.permissionDenied.macos"
+        : "error.project.permissionDenied"
+  return tr(translate, key, dict[key].replace("{{directory}}", info.directory), { directory: info.directory })
+}
+
 export function formatServerError(error: unknown, translate?: Translator, fallback?: string) {
+  const location = projectLocationError(error)
+  if (location) return formatProjectLocationError(location, translate)
   const unwrapped = unwrapNamedError(error)
   if (isConfigInvalidErrorLike(unwrapped)) return parseReadableConfigInvalidError(unwrapped, translate)
   if (isProviderModelNotFoundErrorLike(unwrapped)) return parseReadableProviderModelNotFoundError(unwrapped, translate)
