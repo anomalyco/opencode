@@ -209,6 +209,7 @@ describe("ACP service sessions", () => {
         }
       }>
       prompt?: (input: unknown) => Promise<{ data: { info: ReturnType<typeof assistantInfo> } }>
+      status?: Record<string, { type: string }>
       sessionUpdate?: (update: SessionNotification) => Promise<void>
     },
   ) => {
@@ -263,6 +264,7 @@ describe("ACP service sessions", () => {
             data: input.directory ? sessions.filter((session) => session.directory === input.directory) : sessions,
           }),
         messages: () => Promise.resolve({ data: messages }),
+        status: () => Promise.resolve({ data: options?.status ?? {} }),
         prompt: async (input: { sessionID: string }) => {
           const response = await (options?.prompt?.(input) ??
             Promise.resolve({
@@ -1417,6 +1419,34 @@ describe("ACP service sessions", () => {
     release.resolve(undefined)
     expect((await result).stopReason).toBe("end_turn")
     expect(order).toEqual(["update", "response"])
+  })
+
+  it("advertises steering support on initialize", async () => {
+    const { service } = makeService()
+    const result = await Effect.runPromise(service.initialize({ protocolVersion: 1 }))
+    expect(result._meta).toEqual({ steering: { supported: true } })
+  })
+
+  it("steering an idle session asks for a prompt and sends nothing", async () => {
+    const { service, prompts } = makeService()
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const result = await Effect.runPromise(
+      service.steer({ sessionId: session.sessionId, prompt: [{ type: "text", text: "redirect" }] }),
+    )
+    expect(result).toEqual({ outcome: "promptRequired", reason: "noRunningTurn" })
+    expect(prompts).toEqual([])
+  })
+
+  it("steering a busy session admits the message with noReply", async () => {
+    const fixture = makeService([], { status: { ses_new: { type: "busy" } } })
+    const session = await Effect.runPromise(fixture.service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const result = await Effect.runPromise(
+      fixture.service.steer({ sessionId: session.sessionId, prompt: [{ type: "text", text: "redirect" }] }),
+    )
+    expect(result).toEqual({ outcome: "injected" })
+    expect(fixture.prompts).toEqual([
+      expect.objectContaining({ parts: [{ type: "text", text: "redirect" }], noReply: true }),
+    ])
   })
 
   it("maps assistant prompt errors to request errors instead of end turn", async () => {

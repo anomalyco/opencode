@@ -49,6 +49,8 @@ import type { Command } from "@/command"
 export const AuthMethodID = "opencode-login"
 
 export type Error = ACPError.Error
+export type SteeringRequest = { sessionId: string; prompt: PromptRequest["prompt"] }
+export type SteeringResponse = { outcome: "injected" } | { outcome: "promptRequired"; reason: "noRunningTurn" }
 type ServiceConnection = Pick<AgentSideConnection, "sessionUpdate"> &
   Partial<Pick<AgentSideConnection, "requestPermission" | "writeTextFile">>
 
@@ -67,6 +69,7 @@ export type Interface = {
   readonly setSessionMode: (input: SetSessionModeRequest) => Effect.Effect<SetSessionModeResponse, Error>
   readonly setSessionModel: (input: SetSessionModelRequest) => Effect.Effect<SetSessionModelResponse, Error>
   readonly prompt: (input: PromptRequest) => Effect.Effect<PromptResponse, Error>
+  readonly steer: (input: SteeringRequest) => Effect.Effect<SteeringResponse, Error>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void, Error>
 }
 
@@ -129,6 +132,7 @@ export function make(input: {
         },
       },
       authMethods: [authMethod],
+      _meta: { steering: { supported: true } },
       agentInfo: {
         name: "OpenCode",
         version: InstallationVersion,
@@ -587,6 +591,35 @@ export function make(input: {
 
       yield* sendUsageUpdate(input.usage, input.sdk, input.connection, current.id, current.cwd)
       return yield* promptResponse(undefined, params.messageId)
+    }),
+    steer: Effect.fn("ACP.steer")(function* (params: SteeringRequest) {
+      const current = yield* session.get(params.sessionId)
+      const statuses = yield* request(
+        () => input.sdk.session.status({ directory: current.cwd }, { throwOnError: true }),
+        "session",
+      )
+      const status = (statuses as unknown as Record<string, { type: string } | undefined>)[current.id]
+      if (!status || status.type === "idle") {
+        return { outcome: "promptRequired", reason: "noRunningTurn" } as const
+      }
+      // noReply admits the message without starting a loop; the running loop reads it on its next step.
+      yield* request(
+        () =>
+          input.sdk.session.prompt(
+            {
+              sessionID: current.id,
+              ...(current.model ? { model: { providerID: current.model.providerID, modelID: current.model.modelID } } : {}),
+              ...(current.variant ? { variant: current.variant } : {}),
+              ...(current.modeId ? { agent: current.modeId } : {}),
+              parts: promptContentToParts(params.prompt),
+              noReply: true,
+              directory: current.cwd,
+            },
+            { throwOnError: true },
+          ),
+        "session",
+      )
+      return { outcome: "injected" } as const
     }),
     cancel,
   }

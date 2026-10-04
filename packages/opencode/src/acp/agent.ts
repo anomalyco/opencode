@@ -80,6 +80,11 @@ export class Agent implements ACPAgent {
     return run(this.service.prompt(params))
   }
 
+  async extMethod(method: string, params: Record<string, unknown>) {
+    if (method !== "_session/steering") throw RequestError.methodNotFound(method)
+    return run(this.service.steer(params as unknown as ACPService.SteeringRequest))
+  }
+
   cancel(params: CancelNotification) {
     return run(this.service.cancel(params))
   }
