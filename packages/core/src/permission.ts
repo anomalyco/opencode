@@ -158,14 +158,11 @@ const layer = Layer.effect(
       const all = [...rules, ...(yield* savedRules())]
       const effects = input.resources.map((resource) => evaluate(input.action, resource, all).effect)
       // an empty resources list must not resolve to allow, fail safe to ask like evaluate() does
-      const effect: Permission.Effect =
-        effects.length === 0
+      const effect: Permission.Effect = effects.includes("deny")
+        ? "deny"
+        : effects.length === 0 || effects.includes("ask")
           ? "ask"
-          : effects.includes("deny")
-            ? "deny"
-            : effects.includes("ask")
-              ? "ask"
-              : "allow"
+          : "allow"
       return { effect, rules: all }
     })
 
