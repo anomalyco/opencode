@@ -63,6 +63,7 @@ export namespace FSUtil {
         return yield* fs.readFileString(path).pipe(
           Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
           Effect.catchReason("PlatformError", "PermissionDenied", () => Effect.succeed(undefined)),
+          Effect.catchReason("PlatformError", "BadResource", () => Effect.succeed(undefined)),
         )
       })
 
