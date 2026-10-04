@@ -23,6 +23,7 @@ export interface Interface {
   readonly getBatch: (hashes: readonly string[], model: string) => Effect.Effect<Map<string, readonly number[]>, CacheError>
   readonly set: (hash: string, model: string, vector: readonly number[]) => Effect.Effect<void, CacheError>
   readonly setBatch: (entries: readonly CacheEntry[], model: string) => Effect.Effect<void, CacheError>
+  readonly count: (model?: string) => Effect.Effect<number, CacheError>
   readonly hashText: (text: string) => string
 }
 
@@ -127,7 +128,28 @@ export const makeService = (db: Database): Interface => {
       catch: (cause) => new CacheError({ message: "Failed to batch write embedding cache", cause }),
     })
 
+  const countStmt = db.prepare<{ count: number }, [string]>(
+    "SELECT COUNT(*) as count FROM embedding_cache WHERE model = ?",
+  )
+  const countAllStmt = db.prepare<{ count: number }, []>(
+    "SELECT COUNT(*) as count FROM embedding_cache",
+  )
+
+  const count = (model?: string) =>
+    Effect.try({
+      try: () => {
+        if (model) {
+          const row = countStmt.get(model)
+          return row?.count ?? 0
+        }
+        const row = countAllStmt.get()
+        return row?.count ?? 0
+      },
+      catch: (cause) => new CacheError({ message: "Failed to count embedding cache entries", cause }),
+    })
+
   return Service.of({
+    count,
     get,
     getBatch,
     set,

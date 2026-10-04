@@ -54,6 +54,9 @@ import { EventV2Bridge } from "@/event-v2-bridge"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { AppNodeBuilderV1 } from "./app-node-builder-v1"
 import { SessionProjector } from "@opencode-ai/core/session/projector"
+import { SemanticEmbedder } from "@opencode-ai/core/semantic/embedder"
+import { SemanticCache } from "@opencode-ai/core/semantic/cache"
+import { SemanticIndexer } from "@opencode-ai/core/semantic/indexer"
 
 export const AppLayer = AppNodeBuilderV1.build(
   LayerNode.group([
@@ -105,6 +108,9 @@ export const AppLayer = AppNodeBuilderV1.build(
     Installation.node,
     ShareNext.node,
     SessionShare.node,
+    SemanticEmbedder.node,
+    SemanticCache.node,
+    SemanticIndexer.node,
   ]),
 ).pipe(Layer.provideMerge(AppNodeBuilderV1.build(Ripgrep.node)), Layer.provideMerge(Observability.layer))
 
