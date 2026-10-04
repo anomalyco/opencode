@@ -4,7 +4,15 @@ import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
-import { AIError, LLMEvent, ProviderID, Usage, type LLMRequest, type ProviderMetadata } from "../schema/index.js"
+import {
+  AIError,
+  LLMEvent,
+  ProviderID,
+  Usage,
+  type LLMRequest,
+  type ProviderMetadata,
+  type ToolResultPart,
+} from "../schema/index.js"
 import { Media } from "../media.js"
 import { classifyProviderFailure, providerErrorMessage } from "../provider-error.js"
 import { encodeJson } from "../utils/json.js"
@@ -222,23 +230,11 @@ const lowerMessages = Effect.fn("GoogleInteractions.lowerMessages")(function* (r
       if (message.role === "tool") {
         if (part.type !== "tool-result")
           return yield* ProviderShared.unsupportedContent(ADAPTER, "tool", ["tool-result"])
-        const result =
-          part.result.type === "content"
-            ? yield* Effect.forEach(
-                part.result.value,
-                (item): Effect.Effect<typeof Content.Type, AIError> =>
-                  item.type === "text"
-                    ? Effect.succeed({ type: "text", text: item.text })
-                    : mediaContent(ProviderShared.toolFileMedia(item).media),
-              )
-            : part.result.type === "json" && ProviderShared.isRecord(part.result.value)
-              ? part.result.value
-              : ProviderShared.toolResultText(part)
         steps.push({
           type: "function_result",
           call_id: part.id,
           name: part.name,
-          result,
+          result: yield* lowerToolResult(part),
           is_error: part.result.type === "error" || undefined,
         })
         continue
@@ -277,6 +273,16 @@ const lowerMessages = Effect.fn("GoogleInteractions.lowerMessages")(function* (r
     }
   }
   return steps
+})
+
+const lowerToolResult = Effect.fn("GoogleInteractions.lowerToolResult")(function* (part: ToolResultPart) {
+  if (part.result.type === "json" && ProviderShared.isRecord(part.result.value)) return part.result.value
+  if (part.result.type !== "content") return ProviderShared.toolResultText(part)
+
+  return yield* Effect.forEach(part.result.value, (item): Effect.Effect<typeof Content.Type, AIError> => {
+    if (item.type === "text") return Effect.succeed({ type: "text", text: item.text })
+    return mediaContent(ProviderShared.toolFileMedia(item).media)
+  })
 })
 
 const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (request: LLMRequest) {
