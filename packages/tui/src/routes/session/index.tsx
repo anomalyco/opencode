@@ -3106,7 +3106,10 @@ function Subagent(props: ToolProps) {
   const model = createMemo(() => subagentModelLabel(stringValue(props.input.model), data.location.model.list()))
   const isRunning = createMemo(() => {
     const id = sessionID()
-    return props.part.state.status === "running" || Boolean(id && data.session.status(id) === "running")
+    if (props.part.state.status === "running") return true
+    if (!id) return false
+    const status = data.session.status(id)
+    return status === "running" || status === "waiting"
   })
 
   return (

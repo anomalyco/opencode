@@ -23,7 +23,7 @@ import { SessionMessage } from "@opencode/core/session/message"
 import { SessionRunner } from "@opencode/core/session/runner/index"
 import { SessionInboxTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, LayerMap, Scope } from "effect"
 import { eq } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
 
@@ -375,7 +375,7 @@ describe("SessionExecution lifecycle", () => {
     }),
   )
 
-  it.effect("reports waiting while a settled Session has outstanding background work", () =>
+  it.effect("reports waiting without a terminal while a settled Session has outstanding background work", () =>
     Effect.gen(function* () {
       const database = yield* Database.Service
       const bus = yield* Bus.Service
@@ -394,11 +394,29 @@ describe("SessionExecution lifecycle", () => {
       const marker = yield* jobs.background(shell.id)
       if (!marker?.notificationID) return yield* Effect.die("expected background marker")
 
-      const statuses = yield* bus.subscribe(SessionStatusEvent.Status).pipe(
-        Stream.filter((event) => event.data.sessionID === sessionID),
-        Stream.take(1),
-        Stream.runCollect,
-        Effect.forkScoped,
+      // Collect every terminal/status event for this Session. While background work
+      // is outstanding the Session must publish only `waiting`: clients reduce
+      // `succeeded` to idle unconditionally, which renders the tick. The terminal is
+      // withheld until the background work resumes and completes the turn.
+      // Record terminal/status events through a listener, which the bus invokes
+      // synchronously, so the assertion does not depend on PubSub delivery timing.
+      const observed: string[] = []
+      const waiting = yield* Deferred.make<void>()
+      const succeeded = yield* Deferred.make<void>()
+      yield* bus.listen((event) =>
+        Effect.suspend(() => {
+          const data = event.data as { sessionID?: string }
+          if (data.sessionID !== sessionID) return Effect.void
+          if (
+            event.type !== SessionEvent.Execution.Succeeded.type &&
+            event.type !== SessionStatusEvent.Status.type
+          )
+            return Effect.void
+          observed.push(event.type)
+          if (event.type === SessionStatusEvent.Status.type)
+            return Deferred.succeed(waiting, undefined).pipe(Effect.asVoid)
+          return Deferred.succeed(succeeded, undefined).pipe(Effect.asVoid)
+        }),
       )
 
       const scope = yield* Scope.make()
@@ -406,13 +424,25 @@ describe("SessionExecution lifecycle", () => {
       const context = yield* buildExecution(scope, () => Effect.void)
       const execution = Context.get(context, SessionExecution.Service)
       yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+      // Wait for the waiting status, then for settlement: the terminal (if any)
+      // is published before the execution settles, so this sees it.
+      yield* Deferred.await(waiting)
+      yield* execution.awaitIdle(sessionID)
 
-      const events = Array.from(yield* Fiber.join(statuses))
-      expect(events[0]?.data.status).toEqual({ type: "waiting" })
+      expect(observed).toEqual([SessionStatusEvent.Status.type])
+      // The claim is released while waiting so the Session is not swept as an
+      // orphaned in-flight turn; its recovery is owned by the durable Job record.
+      expect((yield* claims(database))[sessionID]).toBe(false)
 
       // Once the background notification is acknowledged, the Session is no longer waiting.
       yield* jobs.completeBackground(marker.notificationID)
       expect(yield* jobs.awaiting(sessionID)).toBe(false)
+
+      // Resuming with no outstanding work publishes the terminal, so the tick appears.
+      yield* execution.resume(sessionID).pipe(Effect.forkScoped)
+      yield* Deferred.await(succeeded)
+      yield* execution.awaitIdle(sessionID)
+      expect(observed).toEqual([SessionStatusEvent.Status.type, SessionEvent.Execution.Succeeded.type])
     }),
   )
 })

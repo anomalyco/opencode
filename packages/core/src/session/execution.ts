@@ -123,15 +123,26 @@ export const layer = Layer.effect(
           Effect.gen(function* () {
             const outcome = terminal(exit, reason)
             if (outcome.type === "succeeded") {
-              yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID))
               if (yield* jobs.awaiting(sessionID)) {
+                // The turn is not complete: background work will resume it. Withhold the
+                // terminal so clients keep the Session active (no tick) until that work
+                // finishes. Recovery of a waiting turn is owned by its durable background
+                // Job record, not the orphaned-claim sweep, so release the claim now
+                // instead of leaving it to look like a turn that died mid-flight.
                 yield* bus.publish(SessionStatusEvent.Status, { sessionID, status: { type: "waiting" } })
+                yield* store.release(sessionID)
+                return
               }
+              yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, releaseOnCommit(sessionID))
               return
             }
             if (outcome.type === "interrupted") {
               // Deliberate stops release the claim; shutdown keeps it for restart continuity.
-              if (outcome.reason !== "shutdown") yield* jobs.cancel(sessionID)
+              if (outcome.reason !== "shutdown") {
+                yield* jobs.cancel(sessionID)
+                const pending = yield* jobs.pendingFor(sessionID)
+                yield* Effect.forEach(pending, (job) => jobs.cancel(job.id), { discard: true })
+              }
               yield* bus.publish(
                 SessionEvent.Execution.Interrupted,
                 { sessionID, reason: outcome.reason },

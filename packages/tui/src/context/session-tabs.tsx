@@ -169,7 +169,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         // Parked synthetic context (user shells, plan reminders) stays pending without execution; only work counts as busy.
         busy: members.some(
           (id) =>
-            data.session.status(id) === "running" ||
+            data.session.status(id) !== "idle" ||
             data.session.pending.list(id).some((item) => item.type !== "synthetic"),
         ),
         renaming: data.session.title.pending(session),
