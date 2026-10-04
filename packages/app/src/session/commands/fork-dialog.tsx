@@ -9,6 +9,7 @@ import { showToast } from "@/shell/notifications/toast"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { base64Encode } from "@opencode/util/encode"
+import { commentContextItem } from "@/composer/comment-note"
 import { extractPromptComments, extractPromptFromMessage } from "@/composer/prompt"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServer } from "@/runtime/server/current"
@@ -75,16 +76,7 @@ export const DialogFork: Component = () => {
         dialog.close()
         const target = prompt.capture({ dir, id: forked.id })
         target.set(restored)
-        target.context.replaceComments(
-          extractPromptComments(message).map((comment) => ({
-            type: "file",
-            path: comment.path,
-            selection: comment.selection,
-            comment: comment.comment,
-            preview: comment.preview,
-            commentOrigin: comment.origin,
-          })),
-        )
+        target.context.replaceComments(extractPromptComments(message).map(commentContextItem))
         navigate(sessionHref(server.key, forked.id))
       })
       .catch((err: unknown) => {

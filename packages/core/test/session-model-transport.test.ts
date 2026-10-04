@@ -634,6 +634,36 @@ describe("SessionModelTransport", () => {
     )
   })
 
+  test("disables the idle timeout when chunkTimeout is false", async () => {
+    const started = Deferred.makeUnsafe<void>()
+    const messages = queue<string | Uint8Array, AIError>()
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.succeed({
+          sendText: () => Deferred.succeed(started, undefined),
+          messages: Stream.fromQueue(messages),
+          close: Queue.shutdown(messages),
+        }),
+    }
+
+    await runWithTestClock(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const running = yield* collect(transport.bind(session, undefined, false), exchange("patient")).pipe(
+          Effect.forkChild({ startImmediately: true }),
+        )
+        yield* Deferred.await(started)
+        yield* Effect.yieldNow
+
+        yield* TestClock.adjust("2 hours")
+        yield* Queue.offer(messages, "completed:patient")
+
+        expect(yield* Fiber.join(running)).toEqual(["completed:patient"])
+      }),
+    )
+  })
+
   test("closes a newly opened connection when request creation is interrupted", async () => {
     const opened = Deferred.makeUnsafe<void>()
     const messages = queue<string | Uint8Array, AIError>()

@@ -6,16 +6,14 @@ import { createMutation } from "@tanstack/solid-query"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
 import { Menu } from "@opencode/ui/menu"
-import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
+import { useServerCtx } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection, serverName, useServers } from "@/runtime/server/registry"
-import { displayName, projectForSession } from "@/shell/layout/helpers"
+import { displayName } from "@opencode/ui/project-avatar"
 import { SessionTabAvatar } from "@/shell/layout/session-tab-avatar"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { SessionInfo } from "@opencode/client/promise"
 import { sessionTabTitle } from "./tab-title"
-import { useSettings } from "@/settings/model"
-import { canOpenTabRename, forwardTabRef } from "./tab-gesture"
 import { TabPreviewPopover } from "./tab-popover"
 import "./tab-nav.css"
 
@@ -40,7 +38,6 @@ export function TabNavItem(props: {
   orientation?: "horizontal" | "vertical"
 }) {
   const language = useLanguage()
-  const settings = useSettings()
   const [menu, setMenu] = createStore({ open: false, rename: false })
   const [editing, setEditing] = createSignal(false)
   const [titleOverflowing, setTitleOverflowing] = createSignal(false)
@@ -59,7 +56,7 @@ export function TabNavItem(props: {
   const project = createMemo(() => {
     const session = props.session
     if (!session) return
-    return projectForSession(session, serverCtx()?.projects.list() ?? [])
+    return serverCtx()?.projects.forSession(session)
   })
   const title = createMemo(() => {
     const session = props.session
@@ -152,7 +149,7 @@ export function TabNavItem(props: {
   const openRename = (event?: MouseEvent) => {
     event?.preventDefault()
     event?.stopPropagation()
-    if (!canOpenTabRename(props.dragging, editing(), rename.isPending)) return
+    if (props.dragging || editing() || rename.isPending) return
     const session = props.session
     if (!session) return
     titleEl.textContent = session.title ?? ""
@@ -186,7 +183,7 @@ export function TabNavItem(props: {
     <div
       ref={(el) => {
         tabRoot = el
-        forwardTabRef(props.ref, el)
+        if (typeof props.ref === "function") props.ref(el)
       }}
       data-titlebar-tab
       data-slot="titlebar-tab-item"
@@ -300,13 +297,6 @@ export function TabNavItem(props: {
             event.preventDefault()
           }}
         />
-        <Show when={props.orientation === "vertical" && settings.appearance.showProjectName() && projectName()}>
-          {(name) => (
-            <span data-slot="tab-project" dir="auto">
-              {name()}
-            </span>
-          )}
-        </Show>
       </Menu.Context.Trigger>
 
       <div data-slot="tab-close">
@@ -389,7 +379,9 @@ export function DraftTabItem(props: {
   }
   return (
     <div
-      ref={(el) => forwardTabRef(props.ref, el)}
+      ref={(el) => {
+        if (typeof props.ref === "function") props.ref(el)
+      }}
       data-titlebar-tab
       data-slot="titlebar-tab-item"
       data-orientation={props.orientation ?? "horizontal"}

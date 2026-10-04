@@ -4,13 +4,11 @@ import { ImageModel, ImageResponse, type ImageRequestFor } from "../image.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
-const ADAPTER = "xai-images"
-const NAME = "xAI Images"
-const PROVIDER = ProviderID.make("xai")
+const route = MediaProtocol.identity({ id: "xai-images", name: "xAI Images", provider: "xai" })
 export const DEFAULT_BASE_URL = "https://api.x.ai/v1"
 export const PATH = "/images/generations"
 export const EDIT_PATH = "/images/edits"
@@ -19,13 +17,11 @@ export const EDIT_PATH = "/images/edits"
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-export type XAIImageString<Known extends string> = Known | (string & {})
-
 /** Provider-native options. Common fields (`n`, `aspectRatio`, `images`) live on the request. */
 export type XAIImageOptions = {
-  readonly resolution?: XAIImageString<"1k" | "2k">
-  readonly responseFormat?: XAIImageString<"url" | "b64_json">
-  readonly response_format?: XAIImageString<"url" | "b64_json">
+  readonly resolution?: OpenString<"1k" | "2k">
+  readonly responseFormat?: OpenString<"url" | "b64_json">
+  readonly response_format?: OpenString<"url" | "b64_json">
 } & Record<string, unknown>
 
 export type Request = ImageRequestFor<XAIImageOptions>
@@ -59,7 +55,7 @@ const nativeOptions = (options: XAIImageOptions | undefined) => {
 const isEdit = (request: Request) => (request.images?.length ?? 0) > 0
 
 const reference = (asset: Media.Asset) =>
-  ProviderShared.mediaReference(asset, PROVIDER, NAME).pipe(
+  ProviderShared.mediaReference(asset, route.provider, route.name).pipe(
     Effect.map((item) =>
       item.type === "ref" ? { file_id: item.value } : { url: item.value, type: "image_url" as const },
     ),
@@ -88,33 +84,25 @@ const fromRequest = Effect.fn("XAIImages.fromRequest")(function* (request: Reque
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
+const decodeDocument = route.decodeJson(XAIImageResponse)
+
 const decodeResponse = Effect.fn("XAIImages.decodeResponse")(function* (
   response: HttpClientResponse.HttpClientResponse,
 ) {
-  const output = yield* MediaProtocol.decodeJson(ADAPTER, NAME, XAIImageResponse)(response)
+  const output = yield* decodeDocument(response)
   const decoded = output.value
-  const images = yield* Effect.forEach(decoded.data, (item, index) => {
-    const providerMetadata =
-      item.revised_prompt === undefined || item.revised_prompt === null
-        ? undefined
-        : { xai: { revisedPrompt: item.revised_prompt } }
-    if (item.b64_json)
-      return MediaInput.decodedAsset(
-        output.invalid,
-        `${NAME} result ${index}`,
-        item.b64_json,
-        item.mime_type ?? undefined,
-        {
-          providerMetadata,
-        },
-      )
-    if (item.url)
-      return Effect.succeed(Media.url(item.url, { mediaType: item.mime_type ?? undefined, providerMetadata }))
-    return Effect.fail(output.invalid(`${NAME} result ${index} has neither image data nor a URL`))
-  })
-  if (images.length === 0) return yield* output.invalid(`${NAME} returned no images`)
+  const images = yield* Effect.forEach(decoded.data, (item, index) =>
+    MediaInput.imageOutput(output.invalid, `${route.name} result ${index}`, item, item.mime_type ?? undefined, {
+      providerMetadata:
+        item.revised_prompt === undefined || item.revised_prompt === null
+          ? undefined
+          : { xai: { revisedPrompt: item.revised_prompt } },
+    }),
+  )
+  if (images.length === 0) return yield* output.invalid(`${route.name} returned no images`)
   const usage = ProviderShared.isRecord(decoded.usage) ? decoded.usage : undefined
-  // xAI reports image counts rather than tokens, seconds, or credits; the raw record stays in provider metadata.
+  // xAI reports a USD cost (`cost_in_usd_ticks`) rather than tokens, seconds, or credits; the raw record stays in
+  // provider metadata.
   return new ImageResponse({
     images,
     providerMetadata: usage === undefined ? undefined : { xai: { usage } },
@@ -125,9 +113,7 @@ const decodeResponse = Effect.fn("XAIImages.decodeResponse")(function* (
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.inline<Request, ImageResponse>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.inline<Request, ImageResponse>(route, {
   unsupported: ["mask", "size", "seed", "format"],
   body: { from: fromRequest },
   response: { decode: decodeResponse },
@@ -135,13 +121,7 @@ export const protocol = MediaProtocol.inline<Request, ImageResponse>({
 
 export const model = (input: MediaRoute.ModelInput) =>
   ImageModel.fromRoute<XAIImageOptions>(
-    {
-      id: ADAPTER,
-      provider: PROVIDER,
-      protocol,
-      baseURL: DEFAULT_BASE_URL,
-      path: ({ request }) => (isEdit(request) ? EDIT_PATH : PATH),
-    },
+    { protocol, baseURL: DEFAULT_BASE_URL, path: ({ request }) => (isEdit(request) ? EDIT_PATH : PATH) },
     input,
   )
 

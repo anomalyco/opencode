@@ -57,6 +57,8 @@ function ComposerStory(props: {
   continueOnStop?: boolean
   longLabels?: boolean
   alternate?: "queue" | "steer"
+  manySuggestions?: boolean
+  suggestionBoundary?: () => HTMLElement | undefined
 }) {
   const [draft, setDraft] = createStore<ComposerPersistedState>({
     prompt: props.prompt ?? [{ type: "text", content: "", start: 0, end: 0 }],
@@ -93,6 +95,15 @@ function ComposerStory(props: {
   const commands: ComposerSuggestion[] = [
     { id: "command.test", kind: "command", label: "/test", trigger: "test", title: "Run tests" },
     { id: "command.review", kind: "command", label: "/review", trigger: "review", title: "Review changes" },
+    ...(props.manySuggestions
+      ? Array.from({ length: 12 }, (_, index) => ({
+          id: `command.example-${index}`,
+          kind: "command" as const,
+          label: `/example-${index}`,
+          trigger: `example-${index}`,
+          title: `Run example ${index}`,
+        }))
+      : []),
   ]
   const context: ComposerSuggestion[] = [
     {
@@ -157,6 +168,7 @@ function ComposerStory(props: {
               alternate: () => props.alternate,
               editing: () => undefined,
               confirmEdit() {},
+              undoing: () => false,
               cancelEdit() {},
               editFirst: () => false,
             }
@@ -206,7 +218,7 @@ function ComposerStory(props: {
       <output class="text-12-regular text-text-weak" aria-live="polite">
         {story.activity}
       </output>
-      <Composer model={model} borderUnderlay />
+      <Composer model={model} borderUnderlay suggestionBoundary={props.suggestionBoundary} />
     </div>
   )
 }
@@ -267,11 +279,58 @@ export const MixedAttachments = {
   ),
 }
 
+export const BrowserElementComment = {
+  render: () => (
+    <ComposerStory
+      prompt={text("Tidy up the settings page")}
+      comments={[
+        {
+          type: "note",
+          key: "note:story:c=save",
+          origin: "story",
+          label: "button.btn.primary",
+          icon: "select-element",
+          subject:
+            'the "button.btn.primary" element in browser tab tab_00000000-0000-4000-8000-000000000000 at http://localhost:5173/settings (role button; accessible name "Save changes"; selector "#settings > form > button.btn.primary")',
+          comment: "Match the secondary button height",
+          commentID: "save",
+        },
+        {
+          type: "file",
+          key: "comment:src/app.tsx",
+          path: "src/app.tsx",
+          selection: { startLine: 12, startChar: 0, endLine: 14, endChar: 0 },
+          comment: "Keep the normal flow flat",
+        },
+      ]}
+    />
+  ),
+}
+
 export const ModelAndVariant = { render: () => <ComposerStory prompt={text("Compare both variants")} /> }
 
 export const SlashSuggestions = { render: () => <ComposerStory suggestions="command" /> }
 
 export const ContextSuggestions = { render: () => <ComposerStory suggestions="context" /> }
+
+function ConstrainedCommandSuggestionsStory() {
+  let boundary: HTMLDivElement | undefined
+  return (
+    <div class="mx-auto w-full max-w-200">
+      <div ref={boundary} data-slot="composer-suggestion-boundary-story" class="h-60" />
+      <ComposerStory suggestions="command" manySuggestions suggestionBoundary={() => boundary} />
+    </div>
+  )
+}
+
+export const ConstrainedCommandSuggestions = { render: () => <ConstrainedCommandSuggestionsStory /> }
+
+export const DetachedCommandSuggestionBoundary = {
+  render: () => {
+    const detached = document.createElement("div")
+    return <ComposerStory suggestions="command" manySuggestions suggestionBoundary={() => detached} />
+  },
+}
 
 export const RunningAndStopping = { render: () => <ComposerStory working stopping label="Session is running" /> }
 

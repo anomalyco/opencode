@@ -1059,7 +1059,7 @@ describe("ModelsDevPlugin", () => {
       expect(grok?.variants).toEqual(
         ["low", "medium", "high"].map((id) => ({
           id: Model.VariantID.make(id),
-          settings: { reasoningEffort: id },
+          settings: { reasoningEffort: id, reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
         })),
       )
 

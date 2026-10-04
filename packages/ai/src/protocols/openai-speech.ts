@@ -2,13 +2,11 @@ import { Effect, Schema } from "effect"
 import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords, type MediaUsage } from "../schema/index.js"
+import { mergeJsonRecords, type MediaUsage } from "../schema/index.js"
 import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
-const ADAPTER = "openai-speech"
-const NAME = "OpenAI Speech"
-const PROVIDER = ProviderID.make("openai")
+const route = MediaProtocol.identity({ id: "openai-speech", name: "OpenAI Speech", provider: "openai" })
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/audio/speech"
 /** `pcm` is raw 24 kHz, 16-bit signed little-endian mono samples without a header. */
@@ -18,7 +16,11 @@ const PCM_SAMPLE_RATE = 24000
 // 1. Public model input
 // ---------------------------------------------------------------------------
 
-export type OpenAISpeechOptions = Record<string, unknown>
+/** `voice`, `instructions`, `speed`, and `format` are common request fields; other native body fields pass through. */
+export type OpenAISpeechOptions = {
+  /** Defaults to `"sse"` in `stream` mode on models that support it; the merged value selects the response framing. */
+  readonly stream_format?: "sse" | "audio"
+} & Record<string, unknown>
 
 export type Request = SpeechRequestFor<OpenAISpeechOptions>
 
@@ -40,7 +42,7 @@ const SpeechStreamEvent = Schema.Union([
   }),
 ])
 
-const decodeEvent = MediaProtocol.decodeFrame(ADAPTER, NAME, SpeechStreamEvent)
+const decodeEvent = route.decodeFrame(SpeechStreamEvent)
 
 // ---------------------------------------------------------------------------
 // 4. Parser state
@@ -58,7 +60,17 @@ interface State extends SpeechStream.Audio {
 // `sse` is not supported for `tts-1` or `tts-1-hd`; those models stream the raw audio body instead.
 const supportsSse = (model: string) => !/^tts-1(-hd)?(-|$)/.test(model)
 
+const FORMATS = new Set(["mp3", "opus", "aac", "flac", "wav", "pcm"])
+
 const fromRequest = Effect.fn("OpenAISpeech.fromRequest")(function* (request: MediaProtocol.Addressed<Request>) {
+  // Not in `unsupported`: that list would also reject `timestamps: false`, which asks for nothing.
+  if (request.timestamps === true)
+    return yield* route.unsupported("media.timestamps", `${route.name} does not return timestamps`)
+  if (request.format !== undefined && !FORMATS.has(request.format))
+    return yield* route.unsupported(
+      "media.format",
+      `${route.name} supports the mp3, opus, aac, flac, wav, and pcm formats, not "${request.format}"`,
+    )
   return MediaProtocol.json(
     mergeJsonRecords(
       {
@@ -106,9 +118,11 @@ const onEvent = Effect.fn("OpenAISpeech.onEvent")(function* (state: State, frame
 })
 
 const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) => {
-  if (isSse(context.body) && !state.done) return Effect.fail(MediaProtocol.incomplete(ADAPTER))
-  const format = context.request.format ?? "mp3"
-  return SpeechStream.finish(ADAPTER, state, {
+  if (isSse(context.body) && !state.done) return Effect.fail(route.incomplete())
+  // The sent body reflects `providerOptions` and `http.body` overrides of `format`.
+  const sent = context.body.type === "json" ? context.body.value.response_format : undefined
+  const format = typeof sent === "string" ? sent : "mp3"
+  return SpeechStream.finish(route, state, {
     ...(format === "pcm" ? SpeechStream.pcm("pcm_s16le", PCM_SAMPLE_RATE) : SpeechStream.container(format)),
     usage: state.usage,
   })
@@ -118,10 +132,8 @@ const finish = (state: State, context: MediaProtocol.ResponseContext<Request>) =
 // 7. Protocol and route
 // ---------------------------------------------------------------------------
 
-export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint8Array, State>({
-  id: ADAPTER,
-  name: NAME,
-  unsupported: ["language", "timestamps"],
+export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint8Array, State>(route, {
+  unsupported: ["language"],
   body: { from: fromRequest },
   frames: (bytes, context) => (isSse(context.body) ? Framing.sse.frame(bytes) : bytes),
   initial: () => ({ chunks: [], done: false }),
@@ -131,7 +143,7 @@ export const protocol = MediaProtocol.stream<Request, SpeechEvent, string | Uint
 
 export const model = (input: MediaRoute.ModelInput) =>
   SpeechModel.fromRoute<OpenAISpeechOptions, string | Uint8Array, State>(
-    { id: ADAPTER, provider: PROVIDER, protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
+    { protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
     input,
   )
 

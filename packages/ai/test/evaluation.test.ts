@@ -39,17 +39,18 @@ describe("experimental Evaluation", () => {
         type: "choice",
         choice: "billing",
         probabilities: { billing: 0.9, technical: 0.1 },
+        confidence: 0.8,
       })
       expect(response.answers.urgency).toEqual({
         type: "score",
         score: 1.2,
         probabilities: { "0": 0, "1": 0.8, "2": 0.2 },
+        confidence: 0.6,
       })
       expect(response.answers.refund).toEqual({ type: "boolean", probability: 0.97 })
       expect(response.usage?.totalTokens).toBe(36)
       expect(response.providerMetadata).toEqual({
         typesafe: {
-          confidence: { department: 0.8, urgency: 0.6 },
           legend: { urgency: { "0": "Can wait", "1": "Needs attention", "2": "Blocking" } },
         },
       })

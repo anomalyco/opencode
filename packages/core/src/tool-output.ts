@@ -6,14 +6,16 @@ import { Context, Duration, Effect, Layer, Schedule } from "effect"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
+import { Identifier } from "@opencode/schema/identifier"
 import { FileRetention } from "./file-retention.js"
-import { Identifier } from "./id/id.js"
 import { State } from "./state.js"
 
 export const MAX_LINES = 2_000
 export const MAX_BYTES = 50 * 1024 // 50 KiB
 export const RETENTION = Duration.days(7)
 export const DIRECTORY = "tool-output"
+
+export const fileName = (timestamp?: number) => "tool_" + Identifier.create(false, timestamp)
 
 type Result = Tool.NormalizedResult
 
@@ -75,23 +77,17 @@ const layer = Layer.effect(
 
       const kept: string[] = []
       let bytes = 0
-      let hitBytes = false
       for (const line of lines.slice(0, limits.maxLines)) {
         const size = Buffer.byteLength(line, "utf-8") + (kept.length > 0 ? 1 : 0)
-        if (bytes + size > limits.maxBytes) {
-          hitBytes = true
-          break
-        }
+        if (bytes + size > limits.maxBytes) break
         kept.push(line)
         bytes += size
       }
-      if (!hitBytes && kept.length === lines.length && totalBytes > bytes) hitBytes = true
-      const removed = hitBytes ? totalBytes - bytes : lines.length - kept.length
-      const unit = hitBytes ? (removed === 1 ? "byte" : "bytes") : removed === 1 ? "line" : "lines"
-      const file = path.join(directory, Identifier.ascending("tool"))
+      const file = path.join(directory, fileName())
       yield* fs.ensureDir(directory).pipe(Effect.orDie)
       yield* fs.writeFileString(file, text).pipe(Effect.orDie)
-      const marker = `... ${removed} ${unit} truncated; full content saved to ${file} ...`
+      const shown = kept.length > 0 ? `lines 1-${kept.length}` : "0 lines"
+      const marker = `[showing ${shown} of ${lines.length}; full output saved to ${file}]`
       const bounded: Tool.Content[] = []
       let remaining = kept.join("\n").length
       let seenText = false

@@ -1,7 +1,8 @@
 import fs from "fs/promises"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Effect, Exit, Layer } from "effect"
+import { Cause, Effect, Exit, Layer, PlatformError } from "effect"
+import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FileSystem } from "@opencode/core/filesystem"
 import { Location } from "@opencode/core/location"
@@ -79,9 +80,75 @@ describe("FileSystem", () => {
         // host realpath canonicalization stays load-bearing for local placements.
         const local = yield* FileSystem.Service.pipe(provide(missing), Effect.exit)
         expect(Exit.isFailure(local)).toBe(true)
+        if (Exit.isFailure(local)) {
+          const error = Cause.findErrorOption(local.cause)
+          expect(error).toMatchObject({
+            _tag: "Some",
+            value: {
+              _tag: "FileSystem.DirectoryNotFoundError",
+              directory: missing,
+              message: `Directory not found: ${missing}`,
+            },
+          })
+        }
       }),
     ),
   )
+
+  for (const input of [
+    { reason: "PermissionDenied", code: "EACCES", denied: true },
+    { reason: "Unknown", code: "EPERM", denied: true },
+    { reason: "Unknown", code: "EIO", denied: false },
+  ] as const) {
+    it.live(`classifies directory initialization failure ${input.code}`, () =>
+      withTmp((directory) =>
+        Effect.gen(function* () {
+          const filesystem = yield* FSUtil.Service
+          const cause = PlatformError.systemError({
+            _tag: input.reason,
+            module: "FileSystem",
+            method: "realPath",
+            pathOrDescriptor: directory,
+            cause: Object.assign(new Error(input.code), { code: input.code }),
+          })
+          const result = yield* FileSystem.Service.pipe(
+            Effect.provide(
+              LayerNode.compile(FileSystem.node, {
+                replacements: [
+                  Location.node.replace(
+                    Layer.succeed(Location.Service, location({ directory: AbsolutePath.make(directory) })),
+                  ),
+                  FSUtil.node.replace(
+                    Layer.succeed(FSUtil.Service, {
+                      ...filesystem,
+                      realPath: (target) => (target === directory ? Effect.fail(cause) : filesystem.realPath(target)),
+                    }),
+                  ),
+                ],
+              }),
+            ),
+            Effect.exit,
+          )
+          expect(Exit.isFailure(result)).toBe(true)
+          if (Exit.isFailure(result)) {
+            if (input.denied) {
+              expect(Cause.findErrorOption(result.cause)).toMatchObject({
+                _tag: "Some",
+                value: {
+                  _tag: "FileSystem.DirectoryAccessDeniedError",
+                  directory,
+                  cause,
+                  message: `Access denied to directory: ${directory}`,
+                },
+              })
+              return
+            }
+            expect(result.cause.reasons.filter(Cause.isDieReason)).toMatchObject([{ defect: cause }])
+          }
+        }).pipe(Effect.provide(LayerNode.compile(FSUtil.node))),
+      ),
+    )
+  }
 
   it.live("lists parents and siblings with paths relative to the current location", () =>
     withTmp((directory) =>

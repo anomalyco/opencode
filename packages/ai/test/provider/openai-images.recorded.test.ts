@@ -29,7 +29,11 @@ describe("OpenAI Images recorded", () => {
 
       expect(response.images).toHaveLength(1)
       expect(response.image.mediaType).toBe("image/jpeg")
+      expect(response.image.info).toEqual({ format: "jpeg", width: 1024, height: 1024 })
       expect((yield* response.image.bytes()).length).toBeGreaterThan(0)
+      expect(response.providerMetadata).toEqual({
+        openai: { outputFormat: "jpeg", size: "1024x1024", quality: "low", background: "opaque" },
+      })
     }),
   )
 
@@ -76,8 +80,13 @@ describe("OpenAI Images recorded", () => {
       expect(events.map((event) => event.type)).toEqual(["image-partial", "image", "finish"])
       const image = events.find(ImageEvent.is.image)
       expect(image?.image.mediaType).toBe("image/jpeg")
+      expect(image?.image.info).toEqual({ format: "jpeg", width: 1024, height: 1024 })
       expect(dimensions(yield* image!.image.bytes())).toEqual({ width: 1024, height: 1024 })
-      expect(events.find(ImageEvent.is.finish)?.usage).toMatchObject({ type: "tokens" })
+      const finish = events.find(ImageEvent.is.finish)
+      expect(finish?.usage).toMatchObject({ type: "tokens" })
+      expect(finish?.providerMetadata).toEqual({
+        openai: { outputFormat: "jpeg", size: "1024x1024", quality: "low", background: "opaque" },
+      })
     }),
   )
 })

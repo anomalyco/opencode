@@ -10,11 +10,12 @@ const tables = (db: ReturnType<typeof drizzle>) =>
   db
     .all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name`)
     .map((row) => row.name)
+const expected = ["blob", "document", "extension", "extension_file", "migration", "state"]
 
 describe("database", () => {
   test("bootstraps every table on a fresh database and is idempotent", () => {
     const database = openDatabase(":memory:")
-    expect(tables(database.db)).toEqual(["blob", "document", "migration", "state"])
+    expect(tables(database.db)).toEqual(expected)
     expect(migrate(database.db)).toEqual([])
     database.close()
   })
@@ -26,7 +27,7 @@ describe("database", () => {
     )
     const db = drizzle({ client: native })
     expect(migrate(db)).toEqual(migrations.map((migration) => migration.id))
-    expect(tables(db)).toEqual(["blob", "document", "migration", "state"])
+    expect(tables(db)).toEqual(expected)
     expect(db.all<{ value: string }>(sql`SELECT value FROM document`)).toEqual([{ value: "v" }])
     expect(migrate(db)).toEqual([])
   })

@@ -15,7 +15,7 @@ jobs:
   close-non-compliant:
     runs-on: ubuntu-latest
     steps:
-      - name: Close non-compliant issues and PRs after 2 hours
+      - name: Close non-compliant issues and PRs after 72 hours
         uses: actions/github-script@f28e40c7f34bde8b3046d885e986cb6290c5673b # v7.1.0
         with:
           script: |
@@ -33,7 +33,7 @@ jobs:
             }
 
             const now = Date.now();
-            const twoHours = 2 * 60 * 60 * 1000;
+            const seventyTwoHours = 72 * 60 * 60 * 1000;
             const orgMemberAssociations = new Set(['OWNER', 'MEMBER']);
             const agentLogin = 'opencode-agent[bot]';
             const { data: file } = await github.rest.repos.getContent({
@@ -87,14 +87,14 @@ jobs:
               if (!complianceComment) continue;
 
               const commentAge = now - new Date(complianceComment.created_at).getTime();
-              if (commentAge < twoHours) {
-                core.info(`${kind} #${item.number} still within 2-hour window (${Math.round(commentAge / 60000)}m elapsed)`);
+              if (commentAge < seventyTwoHours) {
+                core.info(`${kind} #${item.number} still within 72-hour window (${Math.round(commentAge / 60000)}m elapsed)`);
                 continue;
               }
 
               const closeMessage = isPR
-                ? 'This pull request has been automatically closed because it was not updated to meet our [contributing guidelines](../blob/dev/CONTRIBUTING.md) within the 2-hour window.\n\nFeel free to open a new pull request that follows our guidelines.'
-                : 'This issue has been automatically closed because it was not updated to meet our [contributing guidelines](../blob/dev/CONTRIBUTING.md) within the 2-hour window.\n\nFeel free to open a new issue that follows our issue templates.';
+                ? 'This pull request has been automatically closed because it was not updated to meet our [contributing guidelines](../blob/dev/CONTRIBUTING.md) within the 72-hour window.\n\nFeel free to open a new pull request that follows our guidelines.'
+                : 'This issue has been automatically closed because it was not updated to meet our [contributing guidelines](../blob/dev/CONTRIBUTING.md) within the 72-hour window.\n\nFeel free to open a new issue that follows our issue templates.';
 
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
@@ -129,5 +129,5 @@ jobs:
                 });
               }
 
-              core.info(`Closed non-compliant ${kind} #${item.number} after 2-hour window`);
+              core.info(`Closed non-compliant ${kind} #${item.number} after 72-hour window`);
             }

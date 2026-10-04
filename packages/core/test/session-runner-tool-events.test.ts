@@ -387,6 +387,46 @@ it.effect("batches text deltas and flushes pending text before the terminal even
   }),
 )
 
+it.effect("publishes batched deltas before the next block starts", () =>
+  Effect.gen(function* () {
+    const { published, publisher } = capture()
+    const types = () =>
+      published
+        .map((event) => event.type)
+        .filter((type) => type !== "session.step.started.1" && type !== "session.step.streamed")
+    yield* Effect.forEach(
+      [
+        LLMEvent.reasoningStart({ id: "reasoning" }),
+        LLMEvent.reasoningDelta({ id: "reasoning", text: "Plan the edits." }),
+        LLMEvent.textStart({ id: "text" }),
+        LLMEvent.textDelta({ id: "text", text: "Now the edits:" }),
+        LLMEvent.toolInputStart({ id: "call", name: "edit" }),
+      ],
+      publisher.publish,
+      { discard: true },
+    )
+    expect(types()).toEqual([
+      "session.reasoning.started.1",
+      "session.reasoning.delta",
+      "session.text.started.1",
+      "session.text.delta",
+      "session.tool.input.started.1",
+    ])
+
+    // Blocks stay open: later chunks still batch, and nothing is published twice.
+    yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: " more" }))
+    yield* TestClock.adjust("1 second")
+    yield* publisher.publish(LLMEvent.textEnd({ id: "text" }))
+    expect(published.filter((event) => event.type === "session.text.delta").map((event) => event.data)).toMatchObject([
+      { delta: "Now the edits:" },
+      { delta: " more" },
+    ])
+    expect(published.find((event) => event.type === "session.text.ended.1")?.data).toMatchObject({
+      text: "Now the edits: more",
+    })
+  }),
+)
+
 it.effect("retains new chunks and orders text-end behind an in-flight timer publication", () =>
   Effect.gen(function* () {
     const entered = yield* Deferred.make<void>()
@@ -625,5 +665,31 @@ test("content-filter finish preserves partial streamed text and never ends the s
   expect(published.find((event) => event.type === "session.text.ended.1")?.data).toMatchObject({ text: "Partial" })
   expect(published.find((event) => event.type === "session.step.failed.1")?.data).toMatchObject({
     error: { type: "provider.content-filter" },
+  })
+})
+
+test("content-filter failure explains the refusal when the provider gives a reason", async () => {
+  const { published, publisher } = capture()
+  await Effect.runPromise(publisher.publish(LLMEvent.stepStart({ index: 0 })))
+  await Effect.runPromise(
+    publisher.publish(
+      LLMEvent.stepFinish({
+        index: 0,
+        reason: {
+          normalized: "content-filter",
+          raw: "refusal",
+          category: "cyber",
+          explanation: "This request was declined because it could enable cyber harm.",
+        },
+      }),
+    ),
+  )
+  await Effect.runPromise(publisher.publishStepFailure())
+
+  expect(published.at(-1)?.data).toMatchObject({
+    error: {
+      type: "provider.content-filter",
+      message: "Provider blocked the response (cyber): This request was declined because it could enable cyber harm.",
+    },
   })
 })

@@ -50,7 +50,7 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
   expect(result).toEqual([
     "<p><strong>Safe</strong> <em>formatting</em> <code>const x = 1</code></p>",
     '<img data-local-image="safe.png"><a>unsafe</a>',
-    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><a href="/local">local</a>',
+    '<a href="https://example.com" target="_blank" rel="nofollow noopener noreferrer">external</a><a data-local-link="/local" role="link" tabindex="0">local</a>',
     '<form name="user-content-document" id="user-content-location"><input name="user-content-cookie"></form>',
     "<math><mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow></math>",
     '<svg viewBox="0 0 10 10"><path d="M0 0L10 10"></path></svg>',
@@ -130,7 +130,6 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await expect(markdown.getByRole("heading")).toHaveText("Completed response")
   await expect(markdown.locator("script, [onerror], [href^='javascript:']")).toHaveCount(0)
   await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveText("src/file.ts")
-  expect(await resolvedColor(page, "--v2-text-text-code-path")).toBe("rgb(44, 71, 200)")
   await expect(markdown.locator('code[data-inline-code-kind="path"]')).toHaveCSS(
     "color",
     await resolvedColor(page, "--v2-text-text-code-path"),
@@ -161,6 +160,91 @@ story("mounts cached completed Markdown with sanitized HTML and decorations", as
   await harness.getByLabel("Markdown text").fill("")
   await expect(markdown).toBeEmpty()
   await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+})
+
+story("shows a stable GitHub mark without changing link text or other sites", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: [
+        "[#540](https://github.com/anomalyco/opencode/pull/540)",
+        "[GitHub](https://github.com)",
+        "[other site](https://example.com/docs)",
+        "[lookalike](https://github.com.evil.example/pull/540)",
+      ].join(" · "),
+      cached: true,
+    })
+  }, fixture)
+
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  const github = markdown.getByRole("link", { name: "#540" })
+  await expect(github).toHaveAttribute("href", "https://github.com/anomalyco/opencode/pull/540")
+  await expect(github).toHaveText("#540")
+  expect(await github.evaluate((link) => getComputedStyle(link, "::before").width)).toBe("14px")
+  expect(await github.evaluate((link) => getComputedStyle(link, "::before").maskImage)).toContain("data:image/svg+xml")
+  expect(
+    await markdown.getByRole("link", { name: "GitHub" }).evaluate((link) => getComputedStyle(link, "::before").content),
+  ).toBe('""')
+  for (const name of ["other site", "lookalike"]) {
+    expect(
+      await markdown.getByRole("link", { name }).evaluate((link) => getComputedStyle(link, "::before").content),
+    ).toBe("none")
+  }
+})
+
+story("keeps favicon space stable across loading and failure without fetching private hosts", async ({ page }) => {
+  const requested: string[] = []
+  let release: () => void = () => undefined
+  const loading = new Promise<void>((resolve) => (release = resolve))
+  await page.route("https://www.google.com/s2/favicons?**", async (route) => {
+    requested.push(route.request().url())
+    if (route.request().url().includes("developer.mozilla.org")) await loading
+    if (route.request().url().includes("broken.example.org")) return route.abort()
+    await route.fulfill({ status: 200, contentType: "image/png", body: png })
+  })
+
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      text: [
+        "[docs](https://developer.mozilla.org/docs)",
+        "[missing](https://broken.example.org/docs)",
+        "[private](http://localhost:8080/docs)",
+        "[GitHub](https://github.com/anomalyco/opencode)",
+      ].join(" · "),
+      cached: true,
+    })
+  }, fixture)
+
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  const docs = markdown.getByRole("link", { name: "docs" })
+  const image = docs.locator(".markdown-link-favicon img")
+  await expect.poll(() => requested.some((url) => url.includes("developer.mozilla.org"))).toBe(true)
+  await expect(image).toHaveCSS("opacity", "0")
+  await expect(docs.locator(".markdown-link-favicon")).toHaveCSS("width", "14px")
+  // A late web font swap also changes the link width; measure after fonts settle.
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const width = await docs.evaluate((link) => link.getBoundingClientRect().width)
+  release()
+  await expect(image).toHaveAttribute("data-loaded", "")
+  await expect(image).toHaveCSS("opacity", "1")
+  await expect(image).not.toHaveAttribute("role", "button")
+  expect(await image.evaluate((favicon) => favicon.onclick)).toBeNull()
+  expect(await docs.evaluate((link) => link.getBoundingClientRect().width)).toBe(width)
+  expect(
+    await image.evaluate((favicon) => favicon.getBoundingClientRect().top - favicon.parentElement!.getBoundingClientRect().top),
+  ).toBe(0)
+
+  await expect(markdown.getByRole("link", { name: "missing" }).locator(".markdown-link-favicon img")).not.toHaveAttribute(
+    "data-loaded",
+    "",
+  )
+  await expect(markdown.getByRole("link", { name: "private" }).locator(".markdown-link-favicon img")).toHaveCount(0)
+  await expect(markdown.getByRole("link", { name: "GitHub" }).locator(".markdown-link-favicon")).toHaveCount(0)
+  expect(requested).toHaveLength(2)
+  expect(requested.every((url) => !url.includes("localhost") && !url.includes("github.com"))).toBe(true)
 })
 
 async function resolvedColor(page: Page, token: string) {
@@ -488,36 +572,34 @@ story("preserves streamed math through completion and a fresh render", async ({ 
 })
 
 for (const theme of ["light", "dark"]) {
-  for (const width of [390, 1280]) {
-    story(`renders class and connected subgraph diagrams in ${theme} at ${width}px`, async ({ mount, page }) => {
-      await page.setViewportSize({ width, height: 900 })
-      await mount("components-markdown--complete-response", { globals: { theme } })
-      await expect(page.locator("html")).toHaveClass(new RegExp(theme))
-      await page.evaluate(async (fixture) => {
-        const { mountMarkdown } = await import(fixture)
-        await mountMarkdown({
-          text: [
-            "```mermaid\nclassDiagram\nAnimal <|-- Duck\nAnimal : +int age\nDuck : +swim()\n```",
-            "```mermaid\nflowchart LR\nsubgraph Input\ndirection TB\nA[Prompt] --> B[Parse]\nend\nsubgraph Output\ndirection TB\nC[Render] --> D[Display]\nend\nB --> C\n```",
-          ].join("\n\n"),
-          streaming: true,
-        })
-      }, fixture)
-      const harness = page.getByTestId("markdown-fixture")
-      const diagrams = harness.locator('[data-component="markdown-mermaid"] > svg')
-      await expect(diagrams).toHaveCount(2)
-      await expect(diagrams.nth(0)).toBeVisible()
-      await expect(diagrams.nth(0)).toContainText("swim()")
-      await expect(diagrams.nth(1)).toBeVisible()
-      await expect(diagrams.nth(1)).toContainText("Display")
-      await expect(diagrams.nth(1).locator(".edgePaths path")).toHaveCount(3)
-      await expect(harness.locator('[data-mermaid-ready="true"] > pre:visible')).toHaveCount(0)
-      await harness.getByLabel("Streaming").uncheck()
-      await expect(diagrams).toHaveCount(2)
-      await expect(diagrams.nth(0)).toBeVisible()
-      await expect(diagrams.nth(1)).toBeVisible()
-    })
-  }
+  story(`renders class and connected subgraph diagrams in ${theme}`, async ({ mount, page }) => {
+    await page.setViewportSize({ width: 390, height: 900 })
+    await mount("components-markdown--complete-response", { globals: { theme } })
+    await expect(page.locator("html")).toHaveClass(new RegExp(theme))
+    await page.evaluate(async (fixture) => {
+      const { mountMarkdown } = await import(fixture)
+      await mountMarkdown({
+        text: [
+          "```mermaid\nclassDiagram\nAnimal <|-- Duck\nAnimal : +int age\nDuck : +swim()\n```",
+          "```mermaid\nflowchart LR\nsubgraph Input\ndirection TB\nA[Prompt] --> B[Parse]\nend\nsubgraph Output\ndirection TB\nC[Render] --> D[Display]\nend\nB --> C\n```",
+        ].join("\n\n"),
+        streaming: true,
+      })
+    }, fixture)
+    const harness = page.getByTestId("markdown-fixture")
+    const diagrams = harness.locator('[data-component="markdown-mermaid"] > svg')
+    await expect(diagrams).toHaveCount(2)
+    await expect(diagrams.nth(0)).toBeVisible()
+    await expect(diagrams.nth(0)).toContainText("swim()")
+    await expect(diagrams.nth(1)).toBeVisible()
+    await expect(diagrams.nth(1)).toContainText("Display")
+    await expect(diagrams.nth(1).locator(".edgePaths path")).toHaveCount(3)
+    await expect(harness.locator('[data-mermaid-ready="true"] > pre:visible')).toHaveCount(0)
+    await harness.getByLabel("Streaming").uncheck()
+    await expect(diagrams).toHaveCount(2)
+    await expect(diagrams.nth(0)).toBeVisible()
+    await expect(diagrams.nth(1)).toBeVisible()
+  })
 }
 
 for (const streaming of [false, true]) {

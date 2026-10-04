@@ -24,7 +24,6 @@ import {
   ProviderMetadata,
   TransportError,
   ToolResultValue,
-  UnknownProviderError,
   type ContentPart,
   type LLMRequest,
   type Media,
@@ -129,23 +128,29 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
   }
 
   const customFetch = options.fetch
-  const chunkTimeout = options.chunkTimeout
+  const timeouts = Provider.timeouts(options)
+  delete options.headerTimeout
   delete options.chunkTimeout
   delete options.compaction
   delete options.transport
   options.fetch = async (input: Parameters<typeof fetch>[0], init?: RequestInit) => {
     const opts = { ...(init ?? {}) }
-    const signals = [
-      opts.signal,
-      typeof chunkTimeout === "number" && chunkTimeout > 0 ? new AbortController() : undefined,
-      options.timeout !== undefined && options.timeout !== null && options.timeout !== false
-        ? AbortSignal.timeout(options.timeout)
-        : undefined,
-    ].filter((item): item is AbortSignal | AbortController => item !== undefined && item !== null)
-    const chunkAbortCtl = signals.find((item): item is AbortController => item instanceof AbortController)
-    const abortSignals = signals.map((item) => (item instanceof AbortController ? item.signal : item))
-    if (abortSignals.length === 1) opts.signal = abortSignals[0]
-    if (abortSignals.length > 1) opts.signal = AbortSignal.any(abortSignals)
+    // A plain AbortSignal.timeout would keep running into the body stream, so the header limit uses
+    // a timer that is cleared once headers arrive. The whole-request limit is meant to span the body.
+    const headers = new AbortController()
+    const headerTimer =
+      timeouts.headerTimeout === false
+        ? undefined
+        : setTimeout(() => headers.abort(new Error(HEADER_TIMEOUT_MESSAGE)), timeouts.headerTimeout)
+    const chunks = new AbortController()
+    opts.signal = AbortSignal.any(
+      [
+        opts.signal,
+        headers.signal,
+        chunks.signal,
+        timeouts.timeout ? AbortSignal.timeout(timeouts.timeout) : undefined,
+      ].filter((item): item is AbortSignal => item !== undefined && item !== null),
+    )
 
     if (typeof opts.body === "string" && model.body !== undefined) {
       const decoded = Option.getOrUndefined(decodeJson(opts.body))
@@ -156,11 +161,13 @@ function prepareOptions(model: RuntimeInfo, pkg: string) {
 
     const send: Fetch = typeof customFetch === "function" ? customFetch : fetch
     const middleware = httpMiddleware.getStore()
-    const res = middleware
-      ? await throughMiddleware(middleware, send, input, { ...opts, timeout: false })
-      : await send(input, { ...opts, timeout: false })
-    if (!chunkAbortCtl || typeof chunkTimeout !== "number") return res
-    return wrapSSE(res, chunkTimeout, chunkAbortCtl)
+    const res = await (
+      middleware
+        ? throughMiddleware(middleware, send, input, { ...opts, timeout: false })
+        : send(input, { ...opts, timeout: false })
+    ).finally(() => clearTimeout(headerTimer))
+    if (timeouts.chunkTimeout === false) return res
+    return wrapSSE(res, timeouts.chunkTimeout, chunks)
   }
 
   return options
@@ -215,6 +222,8 @@ function throughMiddleware(
     { signal: init.signal ?? undefined },
   )
 }
+
+const HEADER_TIMEOUT_MESSAGE = "Response headers timed out"
 
 export class InitError extends Schema.TaggedError<InitError>()("AISDK.InitError", {
   providerID: Provider.ID,
@@ -367,6 +376,8 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
     provider: ProviderID.make(providerID),
     providerMetadataKey: optionKey,
     protocol: "ai-sdk",
+    // AI SDK providers convert tool schemas themselves, so model-family sanitizers stay off here.
+    sanitizer: "none",
     endpoint: Endpoint.path("/", { baseURL: "https://ai-sdk.local" }),
     auth: Auth.none,
     transport: {
@@ -446,9 +457,17 @@ function requestSettings(settings: Readonly<Record<string, unknown>> | undefined
   const result = Object.fromEntries(
     Object.entries(settings).filter(
       ([key]) =>
-        !["apiKey", "authToken", "baseURL", "chunkTimeout", "compaction", "fetch", "timeout", "transport"].includes(
-          key,
-        ),
+        ![
+          "apiKey",
+          "authToken",
+          "baseURL",
+          "chunkTimeout",
+          "compaction",
+          "fetch",
+          "headerTimeout",
+          "timeout",
+          "transport",
+        ].includes(key),
     ),
   )
   return Object.keys(result).length === 0 ? undefined : result
@@ -572,10 +591,6 @@ function toolMessage(input: LLMRequest["messages"][number]) {
     messages: content.length ? ([{ role: "tool", content }] satisfies LanguageModelV3Message[]) : [],
     media,
   }
-}
-
-function text(part: ContentPart) {
-  return part.type === "text" ? [part.text] : []
 }
 
 function userPart(part: ContentPart): UserContent {
@@ -936,18 +951,21 @@ function llmError(error: unknown, operation: "request" | "read") {
         code: network.code,
       }),
     })
-  return new AIError({
-    reason: new UnknownProviderError({
-      message: unknownErrorMessage(error),
-      body: errorBody(error),
-      cause: error,
-    }),
+  return RequestExecutor.httpFailure({
+    message: unknownErrorMessage(error),
+    data: errorValue(error) ?? error,
+    responseBody: errorBody(error),
+    cause: error,
   })
 }
 
+// AI SDK stream errors can arrive as plain objects. A gateway's type validation error keeps the provider's error
+// response in `value`, which carries the message and codes.
+const errorValue = (error: unknown) => (ProviderShared.isRecord(error) ? error.value : undefined)
+
 // Runtime-generated network failure shapes. The codes mirror the AI SDK's own
 // Bun network error list in handleFetchError; the messages are undici's fetch
-// TypeError and stream termination strings plus our SSE chunk timeout error.
+// TypeError and stream termination strings plus our header and chunk timeout errors.
 // Unrecognized shapes still retry via the UnknownProvider default; this match
 // only adds transport semantics (continuation eligibility, display).
 const NETWORK_ERROR_CODES = new Set([
@@ -965,6 +983,7 @@ const NETWORK_ERROR_MESSAGES = new Set([
   "terminated",
   "other side closed",
   "sse read timed out",
+  HEADER_TIMEOUT_MESSAGE.toLowerCase(),
 ])
 
 const NativeErrorShape = Schema.Struct({
@@ -1032,7 +1051,15 @@ const decodeProviderError = Schema.decodeUnknownOption(
 )
 
 function unknownErrorMessage(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error)
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof error === "string"
+        ? error
+        : ([error, errorValue(error)]
+            .map((value) => Option.getOrUndefined(decodeProviderError(value)))
+            .flatMap((decoded) => [decoded?.error?.message, decoded?.message])
+            .find((value) => value?.trim()) ?? "")
   return message.trim() === "" ? "Provider request failed" : message
 }
 

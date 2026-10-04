@@ -1,11 +1,19 @@
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import type { Route, RouteDefaultsInput, CompactionOperations } from "../route/client.js"
+import { MediaRoute } from "../route/media.js"
 import type { ProviderPackage } from "../provider-package.js"
-import { HttpOptions, ProviderID, ToolDefinition, mergeHttpOptions, type ModelID } from "../schema/index.js"
+import {
+  HttpOptions,
+  ProviderID,
+  ToolDefinition,
+  mergeHttpOptions,
+  type ModelID,
+  type OpenString,
+} from "../schema/index.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
-import { OpenAIImages, type OpenAIImageString } from "../protocols/openai-images.js"
+import { OpenAIImages } from "../protocols/openai-images.js"
 import { OpenAISpeech } from "../protocols/openai-speech.js"
 import { OpenAITranscription } from "../protocols/openai-transcription.js"
 
@@ -29,14 +37,14 @@ export type Config = RouteDefaultsInput &
   }
 
 export interface ImageGenerationOptions {
-  readonly action?: OpenAIImageString<"auto" | "generate" | "edit">
-  readonly background?: OpenAIImageString<"auto" | "opaque" | "transparent">
-  readonly inputFidelity?: OpenAIImageString<"low" | "high">
+  readonly action?: OpenString<"auto" | "generate" | "edit">
+  readonly background?: OpenString<"auto" | "opaque" | "transparent">
+  readonly inputFidelity?: OpenString<"low" | "high">
   readonly outputCompression?: number
-  readonly outputFormat?: OpenAIImageString<"png" | "jpeg" | "webp">
+  readonly outputFormat?: OpenString<"png" | "jpeg" | "webp">
   readonly partialImages?: number
-  readonly quality?: OpenAIImageString<"auto" | "low" | "medium" | "high" | "standard" | "hd">
-  readonly size?: OpenAIImageString<
+  readonly quality?: OpenString<"auto" | "low" | "medium" | "high" | "standard" | "hd">
+  readonly size?: OpenString<
     "auto" | "256x256" | "512x512" | "1024x1024" | "1536x1024" | "1024x1536" | "1792x1024" | "1024x1792"
   >
 }
@@ -92,26 +100,24 @@ export const configure = (input: Config = {}) => {
   const modelDefaults = defaults(input)
   const responses = (id: string | ModelID) =>
     responsesRoute
-      .with(withOpenAIOptions(id, modelDefaults, { textVerbosity: true }))
+      .with(withOpenAIOptions(id, modelDefaults))
       .model<OpenAIProviderOptionsInput>({ id })
   const chat = (id: string | ModelID) =>
     chatRoute.with(withOpenAIOptions(id, modelDefaults)).model<OpenAIProviderOptionsInput>({
       id,
       compatibility: { supportsPromptCacheKey: true },
     })
-  const media = (modelID: string | ModelID) => ({
-    id: modelID,
-    auth: auth(input),
-    baseURL: input.baseURL,
-    headers: input.headers,
+  const deployment = MediaRoute.deployment(input, auth(input))
+  const media = {
+    ...deployment,
     http: mergeHttpOptions(
-      input.http === undefined ? undefined : HttpOptions.make(input.http),
+      deployment.http,
       input.queryParams === undefined ? undefined : new HttpOptions({ query: input.queryParams }),
     ),
-  })
-  const image = (modelID: string | ModelID) => OpenAIImages.model(media(modelID))
-  const speech = (modelID: string | ModelID) => OpenAISpeech.model(media(modelID))
-  const transcription = (modelID: string | ModelID) => OpenAITranscription.model(media(modelID))
+  }
+  const image = (modelID: string | ModelID) => OpenAIImages.model({ ...media, id: modelID })
+  const speech = (modelID: string | ModelID) => OpenAISpeech.model({ ...media, id: modelID })
+  const transcription = (modelID: string | ModelID) => OpenAITranscription.model({ ...media, id: modelID })
 
   return {
     id,

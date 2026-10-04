@@ -121,6 +121,25 @@ describe("provider package entrypoints", () => {
     })
   })
 
+  test("maps Cohere entrypoints onto native and compatibility routes", async () => {
+    const modules = await Promise.all([
+      import("@opencode/ai/providers/cohere"),
+      import("@opencode/ai/providers/cohere/chat"),
+    ])
+    const settings = { apiKey: "fixture", headers: { "x-test": "fixture" }, body: { future_option: true } }
+    const routes = [
+      ["cohere-chat", "https://api.cohere.com/v2"],
+      ["cohere-chat-completions", "https://api.cohere.ai/compatibility/v1"],
+    ]
+    modules.forEach((module, index) => {
+      const selected = module.model("command-a-03-2025", settings)
+      expect(selected.provider).toBe("cohere")
+      expect([selected.route.id, selected.route.endpoint.baseURL]).toEqual(routes[index])
+      expect(selected.route.defaults.headers).toEqual(settings.headers)
+      expect(selected.route.defaults.http?.body).toEqual(settings.body)
+    })
+  })
+
   test("maps MiniMax API entrypoints onto provider-owned routes", async () => {
     const modules = await Promise.all([
       import("@opencode/ai/providers/minimax"),
@@ -214,7 +233,7 @@ describe("provider package entrypoints", () => {
       })
       expect(selected.provider).toBe(provider.id)
       expect(selected.route.endpoint.baseURL).toBe(provider.baseURL({ accountId: "account" }))
-      expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
+      expect(selected.route.defaults.headers).toMatchObject({ "x-application": "opencode" })
       expect(selected.route.defaults.http?.body).toEqual({ custom: true })
       expect(selected.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
     }
@@ -300,7 +319,9 @@ describe("provider package entrypoints", () => {
     })
 
     expect(String(selected.provider)).toBe("example")
-    expect(selected.route.id).toBe("anthropic-messages")
+    expect(selected.route.id).toBe("anthropic-compatible-messages")
+    expect(selected.route.protocol).toBe("anthropic-messages")
+    expect(selected.route.providerMetadataKey).toBe("example")
     expect(selected.route.endpoint).toMatchObject({
       baseURL: "https://messages.example.test/v1",
     })
@@ -319,6 +340,7 @@ describe("provider package entrypoints", () => {
       thinking: { type: "adaptive" },
     })
 
+    expect(selected.route.id).toBe("anthropic-messages")
     expect(selected.route.defaults.providerOptions).toEqual({ thinking: { type: "adaptive" } })
   })
 

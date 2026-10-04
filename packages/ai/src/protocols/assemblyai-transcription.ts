@@ -4,14 +4,12 @@ import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
-import { ProviderID, mergeJsonRecords } from "../schema/index.js"
+import { mergeJsonRecords, type OpenString } from "../schema/index.js"
 import { TranscriptionModel, TranscriptionResponse, type TranscriptionRequestFor } from "../transcription.js"
 import { ProviderShared, optionalNull } from "./shared.js"
 import { MediaInput } from "./utils/media-input.js"
 
-const ADAPTER = "assemblyai-transcription"
-const NAME = "AssemblyAI"
-const PROVIDER = ProviderID.make("assemblyai")
+const route = MediaProtocol.identity({ id: "assemblyai-transcription", name: "AssemblyAI", provider: "assemblyai" })
 export const DEFAULT_BASE_URL = "https://api.assemblyai.com"
 export const PATH = "/v2/transcript"
 export const UPLOAD_PATH = "/v2/upload"
@@ -33,7 +31,7 @@ export type AssemblyAITranscriptionOptions = {
     readonly fallback_language?: string
     readonly code_switching?: boolean
   }
-  readonly speech_models?: ReadonlyArray<"universal-3-5-pro" | "universal-2" | (string & {})>
+  readonly speech_models?: ReadonlyArray<OpenString<"universal-3-5-pro" | "universal-2">>
 } & Record<string, unknown>
 
 export type Request = TranscriptionRequestFor<AssemblyAITranscriptionOptions>
@@ -90,12 +88,12 @@ const STATUS = {
 // 5. Request body construction
 // ---------------------------------------------------------------------------
 
-const decodeUpload = MediaProtocol.decodeJson(ADAPTER, NAME, Upload)
+const decodeUpload = route.decodeJson(Upload)
 
 /** `/v2/transcript` only takes a URL, so inline audio is uploaded to `/v2/upload` first. */
 const prepare = Effect.fn("AssemblyAITranscription.prepare")(function* (request: Request, send: MediaProtocol.Send) {
   if (request.audio.source.type !== "bytes" && request.audio.source.type !== "base64") return request
-  const audio = yield* MediaInput.inlineBytes(ADAPTER, request.audio)
+  const audio = yield* MediaInput.inlineBytes(route.id, request.audio)
   const uploaded = yield* send(UPLOAD_PATH, MediaProtocol.binary(audio, "application/octet-stream")).pipe(
     Effect.flatMap(decodeUpload),
   )
@@ -103,7 +101,7 @@ const prepare = Effect.fn("AssemblyAITranscription.prepare")(function* (request:
 })
 
 const fromRequest = Effect.fn("AssemblyAITranscription.fromRequest")(function* (request: Request) {
-  const audio = yield* ProviderShared.mediaReference(request.audio, PROVIDER, NAME)
+  const audio = yield* ProviderShared.mediaReference(request.audio, route.provider, route.name)
   return MediaProtocol.json(
     mergeJsonRecords(
       {
@@ -112,8 +110,11 @@ const fromRequest = Effect.fn("AssemblyAITranscription.fromRequest")(function* (
         language_code: request.language,
         language_detection: request.language === undefined ? true : undefined,
         prompt: request.prompt,
-        // Turn-level `utterances`, the only segments AssemblyAI returns, require speaker labels.
-        speaker_labels: request.diarize === true || request.timestamps === "segment" ? true : undefined,
+        // Turn-level `utterances`, the only segments AssemblyAI returns, and `speakers_expected` require speaker labels.
+        speaker_labels:
+          request.diarize === true || request.timestamps === "segment" || request.speakers !== undefined
+            ? true
+            : undefined,
         speakers_expected: request.speakers,
       },
       request.providerOptions,
@@ -126,7 +127,7 @@ const fromRequest = Effect.fn("AssemblyAITranscription.fromRequest")(function* (
 // 6. Response decoding
 // ---------------------------------------------------------------------------
 
-const decodeTranscript = MediaProtocol.decodeJson(ADAPTER, NAME, Transcript)
+const decodeTranscript = route.decodeJson(Transcript)
 
 const decodeStart = Effect.fn("AssemblyAITranscription.decodeStart")(function* (
   response: HttpClientResponse.HttpClientResponse,
@@ -156,9 +157,8 @@ const decodeResult = Effect.fn("AssemblyAITranscription.decodeResult")(function*
   const status = yield* MediaProtocol.status(STATUS, transcript.status, output)
   const error = transcript.error ?? undefined
   if (status === "failed")
-    return yield* output.ended("failed", `${NAME} transcription failed${error === undefined ? "" : `: ${error}`}`)
-  if (status !== "completed")
-    return yield* output.invalid(`${NAME} transcript ${context.token.transcriptID} has not finished`)
+    return yield* output.ended("failed", `${route.name} transcription failed${error === undefined ? "" : `: ${error}`}`)
+  if (status !== "completed") return yield* output.pending(context.token.transcriptID)
   const duration = transcript.audio_duration ?? undefined
   return new TranscriptionResponse({
     text: transcript.text ?? "",
@@ -190,9 +190,7 @@ const decodeResult = Effect.fn("AssemblyAITranscription.decodeResult")(function*
 
 const transcriptPath = (token: Token) => `${PATH}/${token.transcriptID}`
 
-export const protocol = MediaProtocol.queued<Request, TranscriptionResponse, Token>({
-  id: ADAPTER,
-  name: NAME,
+export const protocol = MediaProtocol.queued<Request, TranscriptionResponse, Token>(route, {
   token: Token,
   start: { prepare, body: { from: fromRequest }, decode: decodeStart },
   status: { path: transcriptPath, decode: decodeStatus },
@@ -201,7 +199,7 @@ export const protocol = MediaProtocol.queued<Request, TranscriptionResponse, Tok
 
 export const model = (input: MediaRoute.ModelInput) =>
   TranscriptionModel.fromRoute<AssemblyAITranscriptionOptions, Token>(
-    { id: ADAPTER, provider: PROVIDER, protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
+    { protocol, baseURL: DEFAULT_BASE_URL, path: PATH },
     input,
   )
 

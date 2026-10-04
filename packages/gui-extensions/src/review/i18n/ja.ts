@@ -1,0 +1,13 @@
+export default {
+  "tab.title": "レビュー",
+  "tab.count.one": "{{count}} ファイルが変更されました",
+  "tab.count.other": "{{count}} 個のファイルが変更されました",
+  "mobile.title.one": "変更",
+  "mobile.title.other": "変更",
+  "empty.git": "コミットされていない変更はまだありません",
+  "empty.branch": "ブランチの変更はまだありません",
+  "git.title": "Git リポジトリを作成",
+  "git.description": "このプロジェクトの変更を追跡、レビュー、元に戻す",
+  loadingChanges: "変更を読み込み中…",
+  noChanges: "変更なし",
+}

@@ -147,6 +147,19 @@ test("evicts an unresponsive registered service before starting its replacement"
   expect(endpoint.url).toBe(replacement.url)
 })
 
+test("stops the registered service even when terminal handoff fails", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  fixture.spawn("handoff-broken")
+  await fixture.waitForFile()
+
+  await Service.stop({ file: registration, pty: "handoff" })
+
+  expect(await Bun.file(registration + ".signal").text()).toBe("SIGTERM")
+  expect(await Bun.file(registration).exists()).toBe(false)
+  expect((await Bun.file(registration + ".pty-handoff").json()).handoff).toBeNull()
+})
+
 test("signals the registered service process", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration

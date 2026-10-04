@@ -3,7 +3,6 @@ import type { DesktopMenuAction } from "@opencode/app/desktop-menu"
 import { setZoomFactor } from "../windows"
 
 export type DesktopMenuActionHandlers = Partial<{
-  checkForUpdates: () => void
   installCli: () => void
   createWindow: () => void
   relaunch: () => void
@@ -15,9 +14,6 @@ export function runDesktopMenuAction(
   handlers: DesktopMenuActionHandlers = {},
 ) {
   switch (action) {
-    case "app.checkForUpdates":
-      handlers.checkForUpdates?.()
-      return
     case "app.installCli":
       handlers.installCli?.()
       return

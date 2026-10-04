@@ -18,7 +18,6 @@ import {
   type CacheHint,
   type FinishReasonDetails,
   type FinishReason,
-  type JsonSchema,
   type MediaPart,
   type ProviderMetadata,
   type ProviderOptions,
@@ -30,14 +29,15 @@ import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared } 
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import * as Cache from "./utils/cache.js"
+import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
-import { ToolSchemaProjection } from "./utils/tool-schema.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "anthropic-messages"
 export const DEFAULT_BASE_URL = "https://api.anthropic.com/v1"
 export const PATH = "/messages"
 export const DEFAULT_MAX_TOKENS = 32_000
+const MIN_THINKING_BUDGET = 1_024
 const DEFAULT_EFFORT = "high"
 
 const SSE_EVENTS = new Set([
@@ -451,6 +451,9 @@ const AnthropicStreamDelta = Schema.Struct({
   signature: Schema.optional(Schema.String),
   stop_reason: optionalNull(Schema.String),
   stop_sequence: optionalNull(Schema.String),
+  stop_details: optionalNull(
+    Schema.Struct({ category: optionalNull(Schema.String), explanation: optionalNull(Schema.String) }),
+  ),
 })
 type AnthropicStreamDelta = Schema.Schema.Type<typeof AnthropicStreamDelta>
 const decodeAnthropicStreamDelta = Schema.decodeUnknownOption(AnthropicStreamDelta)
@@ -524,10 +527,10 @@ const redactedDataFromMetadata = (metadata: ProviderMetadata | undefined, key: s
   return typeof provider.redactedData === "string" ? provider.redactedData : undefined
 }
 
-const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition, inputSchema: JsonSchema): AnthropicTool => ({
+const lowerTool = (breakpoints: Cache.Breakpoints, tool: ToolDefinition): AnthropicTool => ({
   name: tool.name,
   description: tool.description,
-  input_schema: inputSchema,
+  input_schema: tool.inputSchema,
   cache_control: cacheControl(breakpoints, tool.cache),
 })
 
@@ -804,15 +807,12 @@ const requireThinkingSignature = (request: LLMRequest) => {
 // Mid-conversation system messages became available with Opus 4.8 and version
 // 5 of the other supported Claude families. Treat later family versions as
 // compatible without assuming that every Anthropic Messages model is Claude.
+// Opus 4.8 and every Claude 5 model accept mid-conversation system messages; later versions inherit support.
 const supportsNativeSystemUpdates = (request: LLMRequest) => {
-  const match = /(?:^|[./])claude-(fable|haiku|mythos|opus|sonnet)-(\d+)(?:[.-](\d+))?/.exec(
-    String(request.model.id).toLowerCase(),
-  )
-  if (!match) return false
-  const major = Number(match[2])
-  if (match[1] !== "opus") return major >= 5
-  if (major !== 4) return major >= 5
-  return match[3] !== undefined && match[3].length <= 2 && Number(match[3]) >= 8
+  const version = claudeVersion(String(request.model.id))
+  if (version === undefined) return false
+  if (version.family === "opus" && version.major === 4) return version.minor >= 8
+  return version.major >= 5
 }
 
 const endsInServerToolUse = (message: LLMRequest["messages"][number]) => {
@@ -989,29 +989,13 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   return messages
 })
 
-// Accept gateway namespaces and Vertex suffixes without treating a snapshot date as a minor version.
-const claudeVersion = (id: string) => {
-  const match = /(?:^|[./])claude-(?<family>[a-z]+)-(?<major>\d+)(?:[.-](?<minor>\d{1,2}))?(?:$|[-:@])/.exec(
-    id.toLowerCase(),
-  )?.groups
-  if (!match) return undefined
-  return { family: match.family, major: Number(match.major), minor: Number(match.minor ?? 0) }
-}
-
-const supportsThinkingBlockBinding = (model: LLMRequest["model"]) => {
-  const override = model.compatibility?.supportsThinkingBlockBinding
-  if (override !== undefined) return override
-  const version = claudeVersion(model.id)
-  return version !== undefined && (version.major > 5 || (version.major === 5 && version.minor >= 1))
-}
-
+// Per-turn effort started with Claude Opus 5 and every Claude 5.1 model; later versions of any family inherit it.
 const supportsEffortUpdates = (model: LLMRequest["model"]) => {
   const override = model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
   const version = claudeVersion(model.id)
   if (version === undefined) return false
-  if (version.family === "opus") return version.major >= 5
-  if (version.family !== "fable" && version.family !== "mythos") return false
+  if (version.family === "opus" && version.major >= 5) return true
   return version.major > 5 || (version.major === 5 && version.minor >= 1)
 }
 
@@ -1027,6 +1011,15 @@ const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: Anthr
   }
 }
 
+// Anthropic also requires an explicit thinking budget below `max_tokens` and at or above its minimum.
+const fitThinking = (thinking: AnthropicThinking | undefined, maxTokens: number) =>
+  thinking?.type === "enabled"
+    ? {
+        ...thinking,
+        budget_tokens: ProviderShared.fitThinkingBudget(thinking.budget_tokens, maxTokens, MIN_THINKING_BUDGET),
+      }
+    : thinking
+
 const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (request: LLMRequest) {
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const management = options.contextManagement
@@ -1034,22 +1027,12 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const format = outputConfig?.format ?? undefined
   const updates = resolveEffortUpdates(request, options.effort ?? outputConfig?.effort ?? undefined)
   const generation = request.generation
-  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
   const flattened = ProviderShared.flattenToolRequest(updates.request)
-  const tools =
-    flattened.tools.length === 0
-      ? undefined
-      : flattened.tools.map((tool) =>
-          lowerTool(
-            breakpoints,
-            tool,
-            ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility),
-          ),
-        )
+  const tools = flattened.tools.length === 0 ? undefined : flattened.tools.map((tool) => lowerTool(breakpoints, tool))
   // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
   const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
   const systemParts = request.system.filter((part) => part.text.length > 0)
@@ -1069,6 +1052,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   }
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
+  const maxTokens = generation?.maxTokens ?? DEFAULT_MAX_TOKENS
   const body = {
     model: request.model.id,
     system,
@@ -1076,12 +1060,12 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     tools,
     tool_choice: toolChoice,
     stream: true as const,
-    max_tokens: generation?.maxTokens ?? DEFAULT_MAX_TOKENS,
+    max_tokens: maxTokens,
     temperature: generation?.temperature,
     top_p: generation?.topP,
     top_k: generation?.topK,
     stop_sequences: generation?.stop,
-    thinking: applyThinkingBindingDefault(request.model, options.thinking),
+    thinking: applyThinkingBindingDefault(request.model, fitThinking(options.thinking, maxTokens)),
     output_config,
     // top-level passthrough per SDK MessageCreateParamsBase:4638,4643,4649,4654,4670
     cache_control: options.cache_control ?? options.cacheControl,
@@ -1433,10 +1417,14 @@ const onMessageDelta = (
       stopSequence === null || stopSequence === undefined
         ? state.pendingFinish?.providerMetadata
         : providerMetadata(state.providerMetadataKey, { stopSequence })
+    const category = event.delta?.stop_details?.category
+    const explanation = event.delta?.stop_details?.explanation
     return {
       reason: {
         normalized: mapFinishReason(stopReason),
         raw: stopReason,
+        ...(category ? { category } : {}),
+        ...(explanation ? { explanation } : {}),
       },
       providerMetadata: finishMetadata,
     }
@@ -1653,8 +1641,7 @@ function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "con
     betas.push("mid-conversation-output-config-2026-07-01")
 
   const thinking = body.thinking
-  if (thinking && thinking.type !== "disabled" && thinking.block_binding)
-    betas.push("thinking-binding-controls-2026-08-01")
+  if (thinking && thinking.type !== "disabled" && thinking.block_binding) betas.push(THINKING_BINDING_BETA)
   return betas
 }
 

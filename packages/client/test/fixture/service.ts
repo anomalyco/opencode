@@ -52,6 +52,8 @@ const server = Bun.serve({
       await writeFile(registration + ".prepared", JSON.stringify(handoff))
       return Response.json({ handoff })
     }
+    if (pathname === "/api/experimental/persistent-pty/handoff" && mode === "handoff-broken")
+      return new Response(null, { status: 500 })
     if (pathname !== "/api/info") return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".status-request", "")

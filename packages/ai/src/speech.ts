@@ -1,60 +1,46 @@
 import { Effect, Schema, Stream } from "effect"
+import { ProgressEvent, QueuedEvent } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import type { MediaProtocol } from "./route/media-protocol.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata } from "./schema/index.js"
+import { AIError, HttpOptions, MediaUsage, ProviderMetadata, type OpenString } from "./schema/index.js"
 import { SpeechClient, Service } from "./speech-client.js"
 
 // ---------------------------------------------------------------------------
 // Model
 // ---------------------------------------------------------------------------
 
-export type SpeechOptions = Record<string, unknown>
+export type SpeechOptions = MediaModel.Options
 
-export type SpeechRoute<Options extends SpeechOptions = SpeechOptions> = MediaRoute.StreamRoute<
-  SpeechRequestFor<Options>,
-  SpeechEvent,
-  SpeechResponse
->
+export type SpeechRoute = MediaRoute.AnyRoute<SpeechRequestFor, SpeechEvent, SpeechResponse>
 
-export class SpeechModel<Options extends SpeechOptions = SpeechOptions> extends MediaModel<
-  SpeechRoute<Options>,
-  Options
-> {
+export class SpeechModel<Options extends SpeechOptions = SpeechOptions> extends MediaModel<SpeechRoute, Options> {
   declare protected readonly _SpeechModel: void
 
-  static make<Options extends SpeechOptions = SpeechOptions>(input: MediaModel.Input<SpeechRoute<Options>>) {
-    return new SpeechModel<Options>(input)
-  }
-
-  /** Compose a streaming speech protocol with its canonical path into a model for one deployment. */
-  static fromRoute<Options extends SpeechOptions = SpeechOptions, Frame = unknown, State = unknown>(
-    route: SpeechModel.RouteInput<Options, Frame, State>,
+  /** The number of type arguments selects the kind: `<Options>`, `<Options, Frame, State>`, or `<Options, Token>`. */
+  static fromRoute<Options extends SpeechOptions>(
+    route: MediaModel.InlineRouteInput<SpeechRequestFor<Options>, SpeechResponse>,
+    input: MediaRoute.ModelInput,
+  ): SpeechModel<Options>
+  static fromRoute<Options extends SpeechOptions, Frame, State>(
+    route: MediaModel.StreamRouteInput<SpeechRequestFor<Options>, SpeechEvent, Frame, State>,
+    input: MediaRoute.ModelInput,
+  ): SpeechModel<Options>
+  static fromRoute<Options extends SpeechOptions, Token>(
+    route: MediaModel.QueuedRouteInput<SpeechRequestFor<Options>, SpeechResponse, Token>,
+    input: MediaRoute.ModelInput,
+  ): SpeechModel<Options>
+  static fromRoute<Options extends SpeechOptions, Frame, State, Token>(
+    route: MediaModel.AnyRouteInput<SpeechRequestFor<Options>, SpeechEvent, SpeechResponse, Frame, State, Token>,
     input: MediaRoute.ModelInput,
   ) {
     return new SpeechModel<Options>({
       id: input.id,
-      provider: route.provider,
+      provider: route.protocol.provider,
       http: input.http,
-      route: composeRoute(
-        (composition) => MediaRoute.stream({ ...composition, collect: collectResponse }),
-        route,
-        input,
-      ),
+      route: composeRoute(route, input, collectResponse) as SpeechRoute,
     })
   }
-}
-
-export namespace SpeechModel {
-  export type RouteInput<
-    Options extends SpeechOptions = SpeechOptions,
-    Frame = unknown,
-    State = unknown,
-  > = MediaModel.RouteInput<
-    MediaProtocol.Addressed<SpeechRequestFor<Options>>,
-    MediaProtocol.Streamed<SpeechRequestFor<Options>, SpeechEvent, Frame, State>
-  >
 }
 
 export const SpeechModelSchema = Schema.declare((value): value is SpeechModel => value instanceof SpeechModel, {
@@ -71,7 +57,7 @@ export const SpeechVoice = Schema.Union([Schema.String, Schema.Struct({ id: Sche
 })
 export type SpeechVoice = Schema.Schema.Type<typeof SpeechVoice>
 
-export type SpeechFormat = "mp3" | "wav" | "pcm" | "opus" | "aac" | "flac" | (string & {})
+export type SpeechFormat = OpenString<"mp3" | "wav" | "pcm" | "opus" | "aac" | "flac">
 
 /** Granularity is provider-native: characters on ElevenLabs, words on Cartesia. */
 export const SpeechTimestamp = Schema.Struct({
@@ -148,11 +134,17 @@ export const SpeechFinishEvent = Schema.Struct({
   providerMetadata: Schema.optional(ProviderMetadata),
 }).annotate({ identifier: "Speech.Event.Finish" })
 
-const speechEventTagged = Schema.Union([SpeechAudioDeltaEvent, SpeechTimestampsEvent, SpeechFinishEvent]).pipe(
-  Schema.toTaggedUnion("type"),
-)
+const speechEventTagged = Schema.Union([
+  QueuedEvent,
+  ProgressEvent,
+  SpeechAudioDeltaEvent,
+  SpeechTimestampsEvent,
+  SpeechFinishEvent,
+]).pipe(Schema.toTaggedUnion("type"))
 export const SpeechEvent = Object.assign(speechEventTagged, {
   is: {
+    generationQueued: speechEventTagged.guards["generation-queued"],
+    generationProgress: speechEventTagged.guards["generation-progress"],
     audioDelta: speechEventTagged.guards["audio-delta"],
     timestamps: speechEventTagged.guards.timestamps,
     finish: speechEventTagged.guards.finish,
@@ -188,24 +180,22 @@ export function request(input: SpeechRequest | SpeechRequestInput) {
   if (input instanceof SpeechRequest) return input
   return new SpeechRequest({
     ...input,
-    http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+    http: HttpOptions.make(input.http),
   })
 }
 
 const requestEffect = (input: SpeechRequest | SpeechRequestInput) => tryRequest(() => request(input))
 
 export function generate<const Model extends SpeechModel>(
-  input: SpeechRequestInput<Model>,
+  input: SpeechRequest | SpeechRequestInput<Model>,
 ): Effect.Effect<SpeechResponse, AIError, Service>
-export function generate(input: SpeechRequest): Effect.Effect<SpeechResponse, AIError, Service>
 export function generate(input: SpeechRequest | SpeechRequestInput) {
   return requestEffect(input).pipe(Effect.flatMap((request) => SpeechClient.generate(request)))
 }
 
 export function stream<const Model extends SpeechModel>(
-  input: SpeechRequestInput<Model>,
+  input: SpeechRequest | SpeechRequestInput<Model>,
 ): Stream.Stream<SpeechEvent, AIError, Service>
-export function stream(input: SpeechRequest): Stream.Stream<SpeechEvent, AIError, Service>
 export function stream(input: SpeechRequest | SpeechRequestInput) {
   return Stream.unwrap(requestEffect(input).pipe(Effect.map((request) => SpeechClient.stream(request))))
 }

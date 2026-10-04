@@ -20,7 +20,7 @@ export default Runtime.handler(
         )
 
       log.info(`Using method: ${method}`)
-      const target = Option.getOrUndefined(input.target) ?? (yield* updater.latest())
+      const target = Option.getOrUndefined(input.target) ?? (yield* updater.latest(method))
       const version = target.trim().replace(/^v/, "")
       if (version === OPENCODE_VERSION) {
         log.warn(`OpenCode upgrade skipped: ${version} is already installed`)

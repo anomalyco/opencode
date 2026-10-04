@@ -1,12 +1,12 @@
 import { Auth } from "../route/auth.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
-import { AssemblyAITranscription, DEFAULT_BASE_URL } from "../protocols/assemblyai-transcription.js"
+import { MediaRoute } from "../route/media.js"
+import { type HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
+import { AssemblyAITranscription } from "../protocols/assemblyai-transcription.js"
 
 export type { AssemblyAITranscriptionOptions } from "../protocols/assemblyai-transcription.js"
 
 export const id = ProviderID.make("assemblyai")
-const baseURL = DEFAULT_BASE_URL
 
 export type Config = ProviderAuthOption<"optional"> & {
   /** `https://api.eu.assemblyai.com` for the EU region. */
@@ -24,14 +24,8 @@ const auth = (options: ProviderAuthOption<"optional">) => {
 }
 
 export const configure = (input: Config = {}) => {
-  const transcription = (modelID: string | ModelID) =>
-    AssemblyAITranscription.model({
-      id: modelID,
-      auth: auth(input),
-      baseURL: input.baseURL ?? baseURL,
-      headers: input.headers,
-      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
-    })
+  const media = MediaRoute.deployment(input, auth(input))
+  const transcription = (modelID: string | ModelID) => AssemblyAITranscription.model({ ...media, id: modelID })
   return {
     id,
     transcription,

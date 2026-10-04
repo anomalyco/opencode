@@ -41,25 +41,24 @@ const STATUS = {
 export const mediaUrl = (asset: Media.Asset, name: string) =>
   ProviderShared.mediaReference(asset, undefined, name).pipe(Effect.map((reference) => reference.value))
 
-export const protocol = <Request, Response>(input: {
-  readonly id: string
-  readonly name: string
-  readonly unsupported?: ReadonlyArray<keyof Request & string>
-  readonly from: (request: Request) => Effect.Effect<MediaProtocol.Body, AIError>
-  readonly decodeResult: (
-    response: HttpClientResponse.HttpClientResponse,
-    context: MediaProtocol.PollContext<Token>,
-  ) => Effect.Effect<Response, AIError>
-}) => {
-  const decodeQueueStatus = MediaProtocol.decodeJson(input.id, input.name, QueueStatus)
-  return MediaProtocol.queued<Request, Response, Token>({
-    id: input.id,
-    name: input.name,
+export const protocol = <Request, Response>(
+  route: MediaProtocol.Identity,
+  input: {
+    readonly unsupported?: ReadonlyArray<keyof Request & string>
+    readonly from: (request: Request) => Effect.Effect<MediaProtocol.Body, AIError>
+    readonly decodeResult: (
+      response: HttpClientResponse.HttpClientResponse,
+      context: MediaProtocol.PollContext<Token>,
+    ) => Effect.Effect<Response, AIError>
+  },
+) => {
+  const decodeQueueStatus = route.decodeJson(QueueStatus)
+  return MediaProtocol.queued<Request, Response, Token>(route, {
     token: Token,
     unsupported: input.unsupported,
     start: {
       body: { from: input.from },
-      decode: MediaProtocol.decodeStarted(input.id, input.name, StartResponse, (value) => ({
+      decode: route.decodeStarted(StartResponse, (value) => ({
         token: {
           requestID: value.request_id,
           statusURL: value.status_url,

@@ -9,13 +9,13 @@ import type { GroupKind, SessionNode, SessionRow } from "./grouping/session"
  */
 export function rowWeight(
   row: SessionRow,
-  input: { expanded: (groupID: string) => boolean; grouped: (kind: GroupKind) => boolean },
+  input: { expanded: (groupID: string, kind: GroupKind) => boolean; grouped: (kind: GroupKind) => boolean },
 ) {
   if (row.type !== "group") return 1
   const visit = (node: Extract<SessionNode, { type: "group" }>, level: number): number => {
     if (!input.grouped(node.kind)) return node.size
     const id = groupID(node, level)
-    if (!id || !input.expanded(id)) return 1
+    if (!id || !input.expanded(id, node.kind)) return 1
     return node.children.reduce((total, child) => total + (child.type === "group" ? visit(child, level + 1) : 1), 1)
   }
   return visit(row, 0)
