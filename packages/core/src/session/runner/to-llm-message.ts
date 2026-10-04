@@ -36,14 +36,54 @@ const toolCall = (tool: SessionMessage.AssistantTool, providerMetadata: Provider
     providerMetadata,
   })
 
-const toolResult = (tool: SessionMessage.AssistantTool, providerMetadata: ProviderMetadata | undefined) => {
+const COMPACTABLE_TOOLS = new Set(["read", "grep", "glob", "semantic_search"])
+const HISTORICAL_MAX_LINES = 20
+const HISTORICAL_MAX_CHARS = 1000
+
+function compactHistoricalText(text: string, toolName: string): string {
+  const lines = text.split("\n")
+  if (lines.length <= HISTORICAL_MAX_LINES && text.length <= HISTORICAL_MAX_CHARS) {
+    return text
+  }
+  if (lines.length > HISTORICAL_MAX_LINES) {
+    const head = lines.slice(0, 8).join("\n")
+    const tail = lines.slice(-4).join("\n")
+    const omitted = lines.length - 12
+    return `${head}\n\n[... ${omitted} lines of historical ${toolName} output compacted ...]\n\n${tail}`
+  }
+  const head = text.slice(0, 400)
+  const tail = text.slice(-200)
+  const omitted = text.length - 600
+  return `${head}\n\n[... ${omitted} chars of historical ${toolName} output compacted ...]\n\n${tail}`
+}
+
+const toolResult = (
+  tool: SessionMessage.AssistantTool,
+  providerMetadata: ProviderMetadata | undefined,
+  isHistorical = false,
+) => {
+  const shouldCompact = isHistorical && COMPACTABLE_TOOLS.has(tool.name)
+
   if (tool.state.status === "completed") {
     // TODO: Materialize remote and managed URIs before provider-history lowering.
     // ToolOutput.toResultValue rejects unresolved URIs rather than treating them as media bytes.
-    const result =
+    let content = tool.state.content
+    if (shouldCompact) {
+      content = content.map((part) => {
+        if (part.type === "text") {
+          return { ...part, text: compactHistoricalText(part.text, tool.name) }
+        }
+        return part
+      })
+    }
+    const rawResult =
       tool.provider?.executed === true && tool.state.result !== undefined
         ? tool.state.result
-        : ToolOutput.toResultValue({ structured: tool.state.structured, content: tool.state.content })
+        : ToolOutput.toResultValue({ structured: tool.state.structured, content })
+    const result =
+      shouldCompact && typeof rawResult === "string"
+        ? compactHistoricalText(rawResult, tool.name)
+        : rawResult
     return ToolResultPart.make({
       id: tool.id,
       name: tool.name,
@@ -72,7 +112,12 @@ const isDeepSeekModel = (model: Model) =>
   String(model.id).toLowerCase().includes("deepseek") ||
   String(model.id).toLowerCase().includes("r1")
 
-const assistant = (message: SessionMessage.Assistant, model: Model, isLatestAssistant = true) => {
+const assistant = (
+  message: SessionMessage.Assistant,
+  model: Model,
+  isLatestAssistant = true,
+  isHistorical = false,
+) => {
   const sameModel =
     String(message.model.providerID) === String(model.provider) && String(message.model.id) === String(model.id)
   const reuseProviderMetadata = sameModel && message.error === undefined
@@ -98,6 +143,7 @@ const assistant = (message: SessionMessage.Assistant, model: Model, isLatestAssi
     const result = toolResult(
       item,
       reuseProviderMetadata ? (item.provider.resultMetadata ?? item.provider.metadata) : undefined,
+      isHistorical,
     )
     return result ? [call, result] : [call]
   })
@@ -109,7 +155,11 @@ const assistant = (message: SessionMessage.Assistant, model: Model, isLatestAssi
   const results = message.content
     .filter((item): item is SessionMessage.AssistantTool => item.type === "tool" && item.provider?.executed !== true)
     .map((item) =>
-      toolResult(item, reuseProviderMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined),
+      toolResult(
+        item,
+        reuseProviderMetadata ? (item.provider?.resultMetadata ?? item.provider?.metadata) : undefined,
+        isHistorical,
+      ),
     )
     .filter((message) => message !== undefined)
     .map(Message.tool)
@@ -120,7 +170,12 @@ const assistant = (message: SessionMessage.Assistant, model: Model, isLatestAssi
   ]
 }
 
-function toLLMMessage(message: SessionMessage.Message, model: Model, isLatestAssistant = true): Message[] {
+function toLLMMessage(
+  message: SessionMessage.Message,
+  model: Model,
+  isLatestAssistant = true,
+  isHistorical = false,
+): Message[] {
   switch (message.type) {
     case "agent-switched":
     case "model-switched":
@@ -151,7 +206,7 @@ function toLLMMessage(message: SessionMessage.Message, model: Model, isLatestAss
         }),
       ]
     case "assistant":
-      return assistant(message, model, isLatestAssistant)
+      return assistant(message, model, isLatestAssistant, isHistorical)
     case "compaction":
       return [
         Message.make({
@@ -176,6 +231,17 @@ ${message.recent}
 
 /** Translate projected V2 Session history into canonical @opencode-ai/llm context. */
 export const toLLMMessages = (messages: readonly SessionMessage.Message[], model: Model) => {
-  const lastAssistantIndex = messages.findLastIndex((message) => message.type === "assistant")
-  return messages.flatMap((message, index) => toLLMMessage(message, model, index === lastAssistantIndex))
+  const assistantIndices = messages.reduce<number[]>((acc, message, index) => {
+    if (message.type === "assistant") acc.push(index)
+    return acc
+  }, [])
+  const lastAssistantIndex = assistantIndices[assistantIndices.length - 1] ?? -1
+  const historicalCutoffIndex =
+    assistantIndices.length > 2 ? assistantIndices[assistantIndices.length - 2]! : -1
+
+  return messages.flatMap((message, index) => {
+    const isLatest = index === lastAssistantIndex
+    const isHistorical = message.type === "assistant" && historicalCutoffIndex !== -1 && index < historicalCutoffIndex
+    return toLLMMessage(message, model, isLatest, isHistorical)
+  })
 }

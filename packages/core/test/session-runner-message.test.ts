@@ -567,4 +567,91 @@ Recent work
     expect(messages).toHaveLength(1)
     expect(messages[0]?.content).toEqual([{ type: "text", text: "Output for user" }])
   })
+
+  test("compacts exploratory tool outputs in historical assistant turns older than the recency window", () => {
+    const makeAssistantWithTool = (assistantId: string, toolId: string, toolName: string, text: string) =>
+      SessionMessage.Assistant.make({
+        id: id(assistantId),
+        type: "assistant",
+        agent: "build",
+        model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+        content: [
+          SessionMessage.AssistantTool.make({
+            type: "tool",
+            id: toolId,
+            name: toolName,
+            state: SessionMessage.ToolStateCompleted.make({
+              status: "completed",
+              input: { path: "large.ts" },
+              content: [{ type: "text", text }],
+              structured: {},
+            }),
+            time: { created, completed: created },
+          }),
+        ],
+        time: { created, completed: created },
+      })
+
+    const largeFileLines = Array.from({ length: 50 }, (_, i) => `const line_${i} = ${i};`).join("\n")
+    const turn1 = makeAssistantWithTool("turn-1", "tool-1", "read", largeFileLines)
+    const turn2 = makeAssistantWithTool("turn-2", "tool-2", "grep", largeFileLines)
+    const turn3 = makeAssistantWithTool("turn-3", "tool-3", "read", "short content")
+
+    const messages = toLLMMessages([turn1, turn2, turn3], model)
+    expect(messages).toHaveLength(6)
+
+    // turn 1 tool result (historical) must be compacted
+    const turn1ToolMsg = messages[1]!
+    expect(turn1ToolMsg.role).toBe("tool")
+    const turn1Result = (turn1ToolMsg.content as any)[0]?.result
+    expect(turn1Result.type).toBe("text")
+    expect(turn1Result.value).toContain("[... 38 lines of historical read output compacted ...]")
+    expect(turn1Result.value).toContain("const line_0 = 0;")
+    expect(turn1Result.value).toContain("const line_49 = 49;")
+
+    // turn 2 tool result (recent, within last 2 turns) must NOT be compacted
+    const turn2ToolMsg = messages[3]!
+    expect(turn2ToolMsg.role).toBe("tool")
+    const turn2Result = (turn2ToolMsg.content as any)[0]?.result
+    expect(turn2Result.type).toBe("text")
+    expect(turn2Result.value).not.toContain("compacted")
+    expect(turn2Result.value).toBe(largeFileLines)
+  })
+
+  test("preserves mutating tool outputs (edit, write) even in historical assistant turns", () => {
+    const makeAssistantWithTool = (assistantId: string, toolId: string, toolName: string, text: string) =>
+      SessionMessage.Assistant.make({
+        id: id(assistantId),
+        type: "assistant",
+        agent: "build",
+        model: { id: ModelV2.ID.make("model"), providerID: ProviderV2.ID.make("provider") },
+        content: [
+          SessionMessage.AssistantTool.make({
+            type: "tool",
+            id: toolId,
+            name: toolName,
+            state: SessionMessage.ToolStateCompleted.make({
+              status: "completed",
+              input: { path: "src/index.ts" },
+              content: [{ type: "text", text }],
+              structured: {},
+            }),
+            time: { created, completed: created },
+          }),
+        ],
+        time: { created, completed: created },
+      })
+
+    const largeDiff = Array.from({ length: 60 }, (_, i) => `+ updated_line_${i} = ${i};`).join("\n")
+    const turn1 = makeAssistantWithTool("turn-1", "tool-edit", "edit", largeDiff)
+    const turn2 = makeAssistantWithTool("turn-2", "tool-write", "write", largeDiff)
+    const turn3 = makeAssistantWithTool("turn-3", "tool-read", "read", "done")
+
+    const messages = toLLMMessages([turn1, turn2, turn3], model)
+    const turn1ToolMsg = messages[1]!
+    const turn1Result = (turn1ToolMsg.content as any)[0]?.result
+    expect(turn1Result.type).toBe("text")
+    expect(turn1Result.value).toBe(largeDiff)
+    expect(turn1Result.value).not.toContain("compacted")
+  })
 })
