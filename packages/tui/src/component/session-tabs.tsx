@@ -1096,7 +1096,7 @@ function VerticalSessionTabs(props: {
               }
               return (
                 <box
-                  height={compact() ? 1 : 2}
+                  height={compact() || !rowShowsDetail(row) ? 1 : 2}
                   width="100%"
                   position="relative"
                   flexDirection="column"
