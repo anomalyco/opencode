@@ -89,10 +89,15 @@ const identity = {
   agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.make("msg_nearby"),
 }
-const readCall = (sessionID: Session.ID, id: string, readPath: string): Parameters<Tool.Snapshot["execute"]>[0] => ({
+const readCall = (
+  sessionID: Session.ID,
+  id: string,
+  readPath: string,
+  page: ReadToolFileSystem.PageInput = {},
+): Parameters<Tool.Snapshot["execute"]>[0] => ({
   sessionID,
   ...identity,
-  call: { type: "tool-call", id, name: "read", input: { path: readPath } },
+  call: { type: "tool-call", id, name: "read", input: { path: readPath, ...page } },
 })
 
 const writeAgents = (file: string, content: string) => Effect.promise(() => fs.writeFile(file, content))
@@ -131,7 +136,7 @@ describe("SessionInstructions", () => {
       yield* writeAgents(rootPath, "root-instructions")
       yield* writeAgents(subPath, "sub-instructions")
       yield* writeAgents(deepPath, "deep-instructions")
-      yield* writeAgents(otherPath, "other-instructions")
+      yield* writeAgents(otherPath, "other-instructions\nmore rules")
       yield* Effect.promise(() => fs.writeFile(path.resolve(dir, "sub", "deep", "file.txt"), "file content"))
       yield* Effect.promise(() => fs.writeFile(path.resolve(dir, "sub", "other", "file2.txt"), "file content 2"))
 
@@ -155,13 +160,23 @@ describe("SessionInstructions", () => {
       expect(firstInjected[0]!.metadata).toEqual({ instruction: { paths: [deepPath, subPath] } })
       expect(firstInjected[0]!.text).not.toContain("root-instructions")
 
+      // Neither a full nor a partial read adds an automatic copy of the file itself.
+      const read = yield* executeTool(registry, readCall(sessionID, "call-direct", "sub/other/AGENTS.md"))
+      expect(read.content?.[0]).toMatchObject({ type: "text", text: expect.stringContaining("more rules") })
+      const partial = yield* executeTool(
+        registry,
+        readCall(sessionID, "call-partial", "sub/other/AGENTS.md", { limit: 1 }),
+      )
+      expect(partial.metadata).toEqual({ truncated: true })
+      expect(yield* synthetics(sessionID)).toHaveLength(1)
+
       // A sibling read under sub/other discovers only the new AGENTS.md; sub is already
       // injected for this session so it is not re-emitted, and the root is still excluded.
       yield* executeTool(registry, readCall(sessionID, "call-other", "sub/other/file2.txt"))
 
       const secondInjected = yield* synthetics(sessionID)
       expect(secondInjected).toHaveLength(2)
-      expect(secondInjected[1]!.text).toBe(`Instructions from: ${otherPath}\nother-instructions`)
+      expect(secondInjected[1]!.text).toBe(`Instructions from: ${otherPath}\nother-instructions\nmore rules`)
       expect(secondInjected[1]!.description).toBe(`Loaded ${path.relative(dir, otherPath)}`)
       expect(secondInjected[1]!.metadata).toEqual({ instruction: { paths: [otherPath] } })
       expect(secondInjected.some((message) => message.text.includes("root-instructions"))).toBe(false)

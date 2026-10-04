@@ -518,10 +518,12 @@ export function fromPromise(plugin: Plugin) {
                 host.vcs.transform((editor) => {
                   callback({
                     add: (definition) => {
+                      const init = definition.init?.bind(definition)
                       const base = definition.base?.bind(definition)
                       editor.add({
                         id: definition.id,
                         name: definition.name,
+                        init: init ? (input) => attempt((signal) => init(input, { signal })) : undefined,
                         info: (input) => attempt((signal) => definition.info(input, { signal })),
                         base: base ? (input) => attempt((signal) => base(input, { signal })) : undefined,
                         branches: (input) => attempt((signal) => definition.branches(input, { signal })),

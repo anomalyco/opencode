@@ -3,7 +3,7 @@ title: "Commands"
 description: "Reference for the opencode command line."
 ---
 
-Every command accepts `--help` for its full flag list, for example `opencode run --help`. Commands that talk to a server also accept `--standalone` to run a private server and `--server <url>` to target a specific one.
+Every command accepts `--help` for its full flag list, for example `opencode run --help`. Some server-backed commands accept `--standalone` to run a private server or `--server <url>` to target a specific one; check the command's help for its supported flags.
 
 ## run
 
@@ -540,7 +540,7 @@ $ opencode upgrade
 Upgrade to a specific version with a specific package manager.
 
 ```bash
-$ opencode upgrade 1.18.15 --method bun
+$ opencode upgrade 2.0.21 --method bun
 ```
 
 View all subcommands and flags.

@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "አዘምን ዝግጁ",
   "dialog.restart": "ዳግም አስጀምር",
   "dialog.later": "በኋላ",
+  "releaseNotes.action.getStarted": "ጀምር",
+  "releaseNotes.action.next": "ቀጣይ",
+  "releaseNotes.action.hideFuture": "እነዚህን ወደፊት አታሳይ",
+  "releaseNotes.media.alt": "የልቀት ቅድመ እይታ",
 }

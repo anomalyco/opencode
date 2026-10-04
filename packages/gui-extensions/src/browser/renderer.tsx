@@ -1,19 +1,22 @@
-import { createEffect, createSignal, getOwner, lazy, runWithOwner, Show, Suspense } from "solid-js"
+import { createMemo, createSignal, getOwner, lazy, onCleanup, runWithOwner, Show, Suspense } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
-import { App, Command, Link, Menu, onIdle, Panel, Sessions, Style, type PanelTab, type Setup } from "../sdk"
+import { Command, createKeyed, LinkHandler, MenuItem, onIdle, Panel, Style, type PanelTab, type Setup } from "../sdk"
 import { Browser } from "./contract"
+import type definition from "./index"
 import type { Model } from "./model"
 import commentStyles from "./comment.css?inline"
 import tabStyles from "./tabs.css?inline"
 
-const setup: Setup = (ctx) => {
-  const sessions = ctx.use(Sessions)
+const setup: Setup<typeof definition> = (ctx) => {
+  const sessions = ctx.sessions
   const [model, setModel] = createSignal<Model>()
   // Settings > Shortcuts lists the command on every platform; it stays disabled until the pane can open.
   ctx.add(Command, (): Command | undefined => {
     const view = sessions.current()
+
     if (!view) return undefined
     const value = model()
+
     return {
       id: "open",
       title: ctx.t("command.open"),
@@ -23,18 +26,17 @@ const setup: Setup = (ctx) => {
       run: () => value?.open(view),
     }
   })
+
   // The native pane is a desktop feature.
-  if (ctx.use(App).platform !== "desktop") return
+  if (ctx.build.platform !== "desktop") return
   // Tab trigger styles render with the strip, before the pane chunk loads.
   ctx.add(Style, tabStyles)
   ctx.add(Style, commentStyles)
-  const owner = getOwner()
-  const status = { requested: false }
   // Everything here serves a mounted session, so the attachment model and the pane's protocol
   // schemas load when the first session opens instead of at startup.
-  createEffect(() => {
-    if (status.requested || !sessions.current()) return
-    status.requested = true
+  const opened = createMemo((seen: boolean) => seen || !!sessions.current(), false)
+  createKeyed(opened, () => {
+    const owner = getOwner()
     void import("./model").then((module) => {
       if (ctx.signal.aborted) return
       const created = runWithOwner(owner, () => module.createModel(ctx))
@@ -51,7 +53,9 @@ const setup: Setup = (ctx) => {
 
   ctx.add(Command, (): Command | undefined => {
     const pane = model()?.pane()
+
     if (!pane) return undefined
+
     return {
       id: "reload",
       title: ctx.t("command.reload"),
@@ -66,7 +70,9 @@ const setup: Setup = (ctx) => {
   // Ctrl+Shift+C copies in the terminal, so only the focused page claims it, as in Chromium.
   ctx.add(Command, (): Command | undefined => {
     const pane = model()?.pane()
+
     if (!pane) return undefined
+
     return {
       id: "inspect",
       title: ctx.t("command.inspect"),
@@ -76,10 +82,12 @@ const setup: Setup = (ctx) => {
     }
   })
 
-  ctx.add(Menu, (): Menu | undefined => {
+  ctx.add(MenuItem, (): MenuItem | undefined => {
     const view = sessions.current()
     const value = model()
+
     if (!view || !value?.available(view)) return undefined
+
     return {
       menu: "session.panel",
       id: "open",
@@ -91,13 +99,13 @@ const setup: Setup = (ctx) => {
     }
   })
 
-  ctx.add(Link, {
+  ctx.add(LinkHandler, {
     priority: 10,
     match: (link) => !!model()?.match(link),
     open: (link) => model()?.openLink(link),
   })
   // A composer chip for a comment on a picked element.
-  ctx.add(Link, {
+  ctx.add(LinkHandler, {
     priority: 10,
     match: (link) => link.origin === ctx.id && !!link.session,
     open(link) {
@@ -107,11 +115,14 @@ const setup: Setup = (ctx) => {
 
   // Stable tab objects with live labels, so title and URL changes never remount a trigger.
   const tabs = new Map<string, Map<string, PanelTab>>()
+
   const create = (session: string, id: string): PanelTab => {
     const text = () => {
       const tab = model()?.tab({ key: session }, id)
+
       return !tab?.url || tab.url === "about:blank" ? ctx.t("tab.title") : tab.title || tab.url
     }
+
     return {
       id,
       get title() {
@@ -123,37 +134,50 @@ const setup: Setup = (ctx) => {
           <span class="max-w-40 truncate">{text()}</span>
         </div>
       ),
+      // Listed only to hold the restored selection until the desktop's first inventory names the tab.
+      get hidden() {
+        return !model()?.tab({ key: session }, id)
+      },
       group: "browser",
       dom: { tab: `session-side-panel-browser-tab-${id}`, panel: "session-side-panel-browser-tabpanel" },
     }
   }
+
   const SessionBrowserPane = lazy(() => import("./panel"))
-  ctx.cleanup(onIdle(() => void SessionBrowserPane.preload()))
+  onCleanup(onIdle(() => void SessionBrowserPane.preload()))
   ctx.add(Panel, {
     id: "main",
     region: "side",
-    list(session, open) {
-      const ids = model()?.tabs(session, open) ?? []
+    list(input) {
+      // While the model loads, the stored tabs hold the strip and its selection, as before the first inventory.
+      const ids = model()?.tabs(input.session, input.open) ?? input.open
+
       if (ids.length === 0) {
-        tabs.delete(session.key)
+        tabs.delete(input.session.key)
+
         return []
       }
-      const previous = tabs.get(session.key)
-      const next = new Map(ids.map((id) => [id, previous?.get(id) ?? create(session.key, id)]))
-      tabs.set(session.key, next)
+
+      const previous = tabs.get(input.session.key)
+      const next = new Map(ids.map((id) => [id, previous?.get(id) ?? create(input.session.key, id)]))
+      tabs.set(input.session.key, next)
+
       return [...next.values()]
     },
-    render: (tab, session) => (
+    // The pane shows nothing until the desktop's first inventory names its tabs.
+    render: (props) => (
       <Show when={model()}>
         {(value) => (
-          <Suspense>
-            <SessionBrowserPane tab={tab} session={session} model={value()} />
-          </Suspense>
+          <Show when={!value().pending(props.session)}>
+            <Suspense>
+              <SessionBrowserPane tab={() => props.tab} session={props.session} screen={props.screen} model={value()} />
+            </Suspense>
+          </Show>
         )}
       </Show>
     ),
-    close: (tab, session) => model()?.closeTab(session, tab.id),
-    focus: (tab, session) => model()?.focusTab(session, tab.id),
+    close: (input) => model()?.closeTab(input.session, input.tab.id),
+    focus: (input) => model()?.focusTab(input.session, input.tab.id),
   })
 }
 

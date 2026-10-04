@@ -3,7 +3,7 @@ import { showToast } from "@opencode/ui/toast"
 import { createContext, createEffect, createSignal, For, onCleanup, Show, untrack, useContext } from "solid-js"
 import type { ParentProps } from "solid-js"
 import { HomeProjectsView, type HomeProjectsViewProps } from "@/home/projects/view"
-import { ExtensionHostProvider, useExtensionHost } from "@/runtime/extension/host"
+import { ExtensionHostProvider, useExtensionHost, type HostApiFactories } from "@/runtime/extension/host"
 import { Contribution, ExtensionStyles } from "@/runtime/extension/render"
 import { ExtensionServersProvider, useExtensionServers, useServerAddItems } from "@/runtime/extension/servers"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -12,17 +12,17 @@ import { ServerConnection } from "@/runtime/server/registry"
 import type { ServerCollectionController } from "@/servers/registry/controller"
 import { ExtensionServerRow } from "@/servers/registry/extension-row"
 import { builtins } from "../../../../gui-extensions/src/renderer"
-import { App, Layout, type RemoteClient } from "../../../../gui-extensions/src/sdk"
+import type { IpcClient, Layout } from "../../../../gui-extensions/src/sdk"
 import type { Ssh, SshConfig, SshHttp, SshItem, SshStart } from "../../../../gui-extensions/src/ssh/contract"
 import { DialogSsh } from "../../../../gui-extensions/src/ssh/dialog"
 import { createSshController } from "../../../../gui-extensions/src/ssh/state"
-import { createStoryApp } from "../../extension"
+import { createStoryHostApis } from "../../extension"
 // Settings rows render inside the app's settings page, which brings these styles.
 import "@/settings/settings.css"
 
 // The app API the SSH dialog stories were written against, before SSH moved into its GUI extension. The SSH
-// extension's renderer runs in the app's extension host; only its main process and the host's app and layout
-// services are stood in for. Every piece below renders the renderer's contributions as the app does.
+// extension's renderer runs in the app's extension host; only its main process and the HostApis it reads are
+// stood in for. Every piece below renders the renderer's contributions as the app does.
 
 export { useLanguage }
 export type { SshItem }
@@ -39,12 +39,12 @@ export type SshPlatform = {
   forget(id: string): Promise<void>
   openConfig(): Promise<void>
 }
-type SshRemote = RemoteClient<(typeof Ssh)["spec"]>
+type SshIpc = IpcClient<(typeof Ssh)["spec"]>
 
 const extension = builtins.find((definition) => definition.id === "ssh")!
 const none = new Set<string>()
 const SshPlatformContext = createContext<SshPlatform>()
-const SshRemoteContext = createContext<SshRemote>()
+const SshIpcContext = createContext<SshIpc>()
 
 function StoryPlatformProvider(props: ParentProps<{ value: Platform & { sshServers?: SshPlatform } }>) {
   return (
@@ -54,8 +54,8 @@ function StoryPlatformProvider(props: ParentProps<{ value: Platform & { sshServe
   )
 }
 
-// Stands in for the SSH extension's main entry: the story's platform fixture answers the remote.
-function createSshMain(platform: SshPlatform): SshRemote {
+// Stands in for the SSH extension's main entry: the story's platform fixture answers the Ipc.
+function createSshMain(platform: SshPlatform): SshIpc {
   const [state, setState] = createSignal<{ servers: readonly SshItem[]; revision: number }>()
   const publish = (next: SshState) =>
     setState((current) => ({ servers: next.servers, revision: (current?.revision ?? 0) + 1 }))
@@ -83,8 +83,8 @@ function createSshMain(platform: SshPlatform): SshRemote {
 
 export function SshProvider(props: ParentProps) {
   const platform = useContext(SshPlatformContext)
-  const remote = platform && createSshMain(platform)
-  const app = createStoryApp(usePlatform().platform)
+  const ipc = platform && createSshMain(platform)
+  const apis = createStoryHostApis(usePlatform().platform)
   const layout = new Proxy({} as Layout, {
     get: () => () => {
       throw new Error("The host layout is unavailable in SSH stories")
@@ -94,15 +94,18 @@ export function SshProvider(props: ParentProps) {
     <ExtensionHostProvider
       definitions={[extension]}
       disabled={() => none}
-      services={[
-        { token: App, create: () => app },
-        { token: Layout, create: () => layout },
-      ]}
-      remote={(token) => (token.id === extension.id ? remote : undefined)}
+      // The SSH extension's renderer reads no other HostApi in these stories.
+      apis={{ ...apis, layout: () => layout } as HostApiFactories}
+      // The stories have no app interface to wait for: a dialog shows at once.
+      whenMounted={(run) => {
+        run()
+        return () => {}
+      }}
+      ipc={(token) => (token.id === extension.id ? ipc : undefined)}
     >
-      <SshRemoteContext.Provider value={remote}>
+      <SshIpcContext.Provider value={ipc}>
         <SshHost>{props.children}</SshHost>
-      </SshRemoteContext.Provider>
+      </SshIpcContext.Provider>
     </ExtensionHostProvider>
   )
 }
@@ -119,12 +122,12 @@ function SshHost(props: ParentProps) {
 }
 
 export function useSsh() {
-  const remote = useContext(SshRemoteContext)
+  const ipc = useContext(SshIpcContext)
   const servers = useExtensionServers()
   const entry = (id: string) => servers.entry(`ssh:${id}`)?.entry
   return {
     get servers() {
-      return remote?.state()?.servers ?? []
+      return ipc?.state()?.servers ?? []
     },
     pending: (id: string) => entry(id)?.state === "starting",
     connect: (config: SshConfig) => void entry(config.id)?.connect?.(),
@@ -160,11 +163,11 @@ function AddDialogSsh() {
 // No production entry point opens the dialog with a preset host, so these stories render it with a controller of
 // their own over the same main process.
 function PresetDialogSsh(props: { config: SshConfig; connect?: boolean }) {
-  const remote = useContext(SshRemoteContext)
+  const ipc = useContext(SshIpcContext)
   const language = useLanguage()
   const ssh = createSshController({
-    items: () => remote?.state()?.servers ?? [],
-    api: () => remote,
+    items: () => ipc?.state()?.servers ?? [],
+    api: () => ipc,
     // The stand-in main publishes an attempt's state before `start` resolves.
     refresh: () => Promise.resolve(),
     error: () => showToast({ variant: "error", title: language.t("common.requestFailed") }),

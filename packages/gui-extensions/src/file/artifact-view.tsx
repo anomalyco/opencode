@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Match, on, onCleanup, Show, Switch, type JSX } from "solid-js"
+import { createMemo, createSignal, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Button } from "@opencode/ui/button"
@@ -9,15 +9,19 @@ import { Markdown } from "@opencode/session-ui/markdown"
 import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/markdown"
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
-import { App, Links, useExtension, type FileContent, type SessionView } from "../sdk"
+import { createKeyed, useExtension, type FileContent, type MountedSession } from "../sdk"
 import { blobUrlFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
-import { useShared } from "./context"
+import { current, useShared } from "./context"
 import { workspaceFileUrl } from "./path"
 
 type ArtifactMode = "preview" | "source"
 
 /** Facts a viewer learns from the decoded media, shown in the toolbar. */
 type ArtifactInfo = { width?: number; height?: number; duration?: number; rows?: number; columns?: number }
+
+type ViewerState = { readonly mode: ArtifactMode; readonly info: ArtifactInfo; readonly undecodable: boolean }
+
+type ImageZoom = { readonly url: string; readonly zoom: "fit" | "actual"; readonly overflow: boolean }
 
 type MediaProps = {
   path: string
@@ -35,49 +39,62 @@ const previewableKinds: readonly ArtifactKind[] = ["svg", "html", "markdown", "m
  * previewable text kinds can switch to `source`, which the host supplies (its code view).
  */
 export default function ArtifactView(props: {
-  session: SessionView
+  session: MountedSession
   path: string
   content: FileContent
   cacheKey?: string
   source: JSX.Element
 }) {
   const ctx = useExtension()
-  const app = ctx.use(App)
-  const [state, setState] = createStore({
-    mode: "preview" as ArtifactMode,
-    info: {} as ArtifactInfo,
-    // Media the browser could not decode falls back to the binary placeholder.
-    undecodable: false,
-  })
-  createEffect(
-    on(
-      () => props.content,
-      () => setState({ mode: "preview", info: {}, undecodable: false }),
-      { defer: true },
-    ),
-  )
+  const locale = ctx.locale
+  // Media the browser could not decode falls back to the binary placeholder.
+  const initial: ViewerState = { mode: "preview", info: {}, undecodable: false }
+  // The viewer state belongs to one loaded content: a reloaded file starts from the preview again.
+  const [saved, setSaved] = createSignal({ ...initial, content: props.content })
+
+  const state = () => {
+    const value = saved()
+
+    return value.content === props.content ? value : initial
+  }
+
+  const change = (next: Partial<ViewerState>) => setSaved({ ...state(), ...next, content: props.content })
 
   const kind = createMemo<ArtifactKind | "binary">(() => {
     if (props.content.type === "binary" && !props.content.mimeType) return "binary"
-    if (state.undecodable) return "binary"
+
+    if (state().undecodable) return "binary"
+
     return artifactKind(props.path)
   })
+
   const previewable = createMemo(() => {
     const value = kind()
+
     return value !== "binary" && previewableKinds.includes(value)
   })
+
+  const table = createMemo(() =>
+    kind() === "table"
+      ? parseDelimited(props.content.content, props.path.toLowerCase().endsWith(".tsv") ? "\t" : ",")
+      : undefined,
+  )
+
   const meta = createMemo(() => {
-    const info = state.info
+    const parsed = table()
+    const info: ArtifactInfo = parsed ? { rows: parsed.total, columns: parsed.columns } : state().info
+
     return [
       info.width && info.height ? `${info.width} × ${info.height}` : undefined,
       info.duration ? formatDuration(info.duration) : undefined,
       info.rows !== undefined ? ctx.plural("view.table.rows", Math.max(0, info.rows - 1)) : undefined,
       info.columns !== undefined ? ctx.plural("view.table.columns", info.columns) : undefined,
-      formatBytes(app.locale(), contentBytes(props.content)),
+      formatBytes(locale.locale(), contentBytes(props.content)),
     ].filter((item): item is string => !!item)
   })
 
-  const media = { onInfo: (info: ArtifactInfo) => setState("info", info), onError: () => setState("undecodable", true) }
+  const media = { onInfo: (info: ArtifactInfo) => change({ info }), onError: () => change({ undecodable: true }) }
+
   const rendered = () => (
     <ScrollView class="min-h-0 flex-1">
       <Show
@@ -97,8 +114,8 @@ export default function ArtifactView(props: {
   return (
     <>
       <ArtifactToolbar
-        mode={state.mode}
-        onModeChange={previewable() ? (mode) => setState("mode", mode) : undefined}
+        mode={state().mode}
+        onModeChange={previewable() ? (mode) => change({ mode }) : undefined}
         meta={meta()}
         actions={
           <Show when={kind() === "html"}>
@@ -106,7 +123,7 @@ export default function ArtifactView(props: {
           </Show>
         }
       />
-      <Show when={!previewable() || state.mode === "preview"} fallback={props.source}>
+      <Show when={!previewable() || state().mode === "preview"} fallback={props.source}>
         <Switch>
           <Match when={kind() === "image" || kind() === "svg"}>
             <ArtifactImage path={props.path} content={props.content} {...media} />
@@ -123,12 +140,10 @@ export default function ArtifactView(props: {
           <Match when={kind() === "font"}>
             <ArtifactFont path={props.path} content={props.content} />
           </Match>
-          <Match when={kind() === "table"}>
-            <ArtifactTable path={props.path} text={props.content.content} onInfo={media.onInfo} />
-          </Match>
+          <Match when={table()}>{(parsed) => <ArtifactTable parsed={parsed()} />}</Match>
           <Match when={kind() === "markdown" || kind() === "mermaid"}>{rendered()}</Match>
           <Match when={kind() === "binary"}>
-            <ArtifactBinary path={props.path} size={formatBytes(app.locale(), contentBytes(props.content))} />
+            <ArtifactBinary path={props.path} size={formatBytes(locale.locale(), contentBytes(props.content))} />
           </Match>
         </Switch>
       </Show>
@@ -140,6 +155,7 @@ function formatBytes(locale: string, bytes: number) {
   const units = ["byte", "kilobyte", "megabyte", "gigabyte"] as const
   const index = Math.min(units.length - 1, bytes > 0 ? Math.floor(Math.log10(bytes) / 3) : 0)
   const value = bytes / 1000 ** index
+
   return new Intl.NumberFormat(locale, {
     style: "unit",
     unit: units[index],
@@ -152,6 +168,7 @@ function formatBytes(locale: string, bytes: number) {
 function formatDuration(seconds: number) {
   const total = Math.round(seconds)
   const minutes = Math.floor(total / 60)
+
   return `${minutes}:${String(total % 60).padStart(2, "0")}`
 }
 
@@ -162,6 +179,7 @@ function ArtifactToolbar(props: {
   actions?: JSX.Element
 }) {
   const ctx = useExtension()
+
   return (
     <div data-slot="artifact-toolbar" class="flex h-10 shrink-0 items-center gap-3 px-4">
       <Show when={props.onModeChange}>
@@ -196,19 +214,34 @@ function ArtifactToolbar(props: {
   )
 }
 
-function OpenInBrowserButton(props: { session: SessionView; path: string }) {
+/** Shows only while the browser pane is active and can load the file. */
+function OpenInBrowserButton(props: { session: MountedSession; path: string }) {
   const ctx = useExtension()
   const shared = useShared()
+
+  const pane = () => {
+    const browser = current(shared.browser())
+
+    return browser?.canOpen(props.session, props.path) ? browser : undefined
+  }
+
   return (
-    <Show when={shared.browser()?.canOpen(props.session, props.path)}>
-      <Button
-        size="small"
-        variant="ghost"
-        icon="globe"
-        onClick={() => shared.browser()?.open(props.session, workspaceFileUrl(props.session.file.root, props.path))}
-      >
-        {ctx.t("view.openInBrowser")}
-      </Button>
+    <Show when={pane()}>
+      {(browser) => (
+        <Button
+          size="small"
+          variant="ghost"
+          icon="globe"
+          onClick={() => {
+            // The screen's workspace root, read when the user acts.
+            const root = ctx.screen.current()?.file.root
+
+            if (root !== undefined) browser().open(props.session, workspaceFileUrl(root, props.path))
+          }}
+        >
+          {ctx.t("view.openInBrowser")}
+        </Button>
+      )}
     </Show>
   )
 }
@@ -217,6 +250,7 @@ function createBlobUrl(content: () => FileContent) {
   return createMemo(() => {
     const value = blobUrlFromContent(content())
     onCleanup(() => URL.revokeObjectURL(value))
+
     return value
   })
 }
@@ -224,33 +258,43 @@ function createBlobUrl(content: () => FileContent) {
 /** Images and SVG previews: fit the pane, click to inspect at 1:1 when the image is larger. */
 function ArtifactImage(props: MediaProps) {
   const url = createBlobUrl(() => props.content)
-  const [state, setState] = createStore({ zoom: "fit" as "fit" | "actual", overflow: false, width: 0, height: 0 })
+  const [size, setSize] = createStore({ width: 0, height: 0 })
+  // Zoom belongs to one image: a new one starts fitted.
+  const fitted = (): ImageZoom => ({ url: url(), zoom: "fit", overflow: false })
+  const [saved, setSaved] = createSignal(fitted())
+
+  const state = () => {
+    const value = saved()
+
+    return value.url === url() ? value : fitted()
+  }
+
   let stage: HTMLDivElement | undefined
+
   const measure = () => {
     if (!stage) return
-    setState("overflow", state.width > stage.clientWidth - 48 || state.height > stage.clientHeight - 48)
+
+    setSaved({ ...state(), overflow: size.width > stage.clientWidth - 48 || size.height > stage.clientHeight - 48 })
   }
+
   createResizeObserver(
     () => stage,
     () => measure(),
   )
-  createEffect(() => {
-    url()
-    setState({ zoom: "fit", overflow: false })
-  })
+
   return (
     <div
       ref={stage}
       data-slot="artifact-stage"
       data-checker
-      data-zoom={state.zoom}
-      data-overflow={state.overflow || undefined}
+      data-zoom={state().zoom}
+      data-overflow={state().overflow || undefined}
       class="relative min-h-0 flex-1 overflow-auto"
     >
       <div
         classList={{
-          "absolute inset-0 flex items-center justify-center p-6": state.zoom === "fit",
-          "flex min-h-full min-w-full w-max items-center justify-center p-6": state.zoom === "actual",
+          "absolute inset-0 flex items-center justify-center p-6": state().zoom === "fit",
+          "flex min-h-full min-w-full w-max items-center justify-center p-6": state().zoom === "actual",
         }}
       >
         <img
@@ -261,13 +305,17 @@ function ArtifactImage(props: MediaProps) {
           onError={() => props.onError()}
           onLoad={(event) => {
             const image = event.currentTarget
-            setState({ width: image.naturalWidth, height: image.naturalHeight })
+
+            setSize({ width: image.naturalWidth, height: image.naturalHeight })
             props.onInfo({ width: image.naturalWidth, height: image.naturalHeight })
             measure()
           }}
           onClick={() => {
-            if (!state.overflow && state.zoom === "fit") return
-            setState("zoom", state.zoom === "fit" ? "actual" : "fit")
+            const value = state()
+
+            if (!value.overflow && value.zoom === "fit") return
+
+            setSaved({ ...value, zoom: value.zoom === "fit" ? "actual" : "fit" })
           }}
         />
       </div>
@@ -277,6 +325,7 @@ function ArtifactImage(props: MediaProps) {
 
 function ArtifactVideo(props: MediaProps) {
   const url = createBlobUrl(() => props.content)
+
   return (
     <div data-slot="artifact-stage" data-zoom="fit" class="relative min-h-0 flex-1 overflow-hidden">
       <div class="absolute inset-0 flex items-center justify-center p-6">
@@ -300,6 +349,7 @@ function ArtifactVideo(props: MediaProps) {
 
 function ArtifactAudio(props: MediaProps) {
   const url = createBlobUrl(() => props.content)
+
   return (
     <div data-slot="artifact-stage" class="relative min-h-0 flex-1 overflow-auto">
       <div class="absolute inset-0 flex items-center justify-center p-6">
@@ -326,6 +376,7 @@ function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" 
   const url = createBlobUrl(() => props.content)
   // PDF Open Parameters: start with the thumbnail pane closed and the page fitted to the pane width.
   const src = () => (props.kind === "pdf" ? `${url()}#navpanes=0&view=FitH` : url())
+
   return (
     <iframe
       class="block h-full w-full flex-1 border-0 bg-white"
@@ -339,14 +390,15 @@ function ArtifactFrame(props: { path: string; content: FileContent; kind: "pdf" 
   )
 }
 
-function ArtifactMarkdown(props: { session: SessionView; path: string; text: string; cacheKey?: string }) {
+function ArtifactMarkdown(props: { session: MountedSession; path: string; text: string; cacheKey?: string }) {
   const ctx = useExtension()
-  const links = ctx.use(Links)
+  const links = ctx.links
   const parent = useMarkdown()
   // getDirectory yields "/" for a root-level file, which would make relative links absolute.
   const dir = createMemo(() => (props.path.includes("/") || props.path.includes("\\") ? getDirectory(props.path) : ""))
   // Absolute references bypass the file's directory; relative ones resolve against it.
   const resolve = (href: string) => (/^([a-z]:)?\//i.test(href) ? href : (resolveArtifactPath(dir(), href) ?? href))
+
   return (
     <MarkdownProvider
       readImage={(src, signal) => parent?.readImage?.(resolve(src), signal) ?? Promise.resolve(undefined)}
@@ -368,13 +420,13 @@ function ArtifactMermaid(props: { text: string; cacheKey?: string }) {
   )
 }
 
-function ArtifactTable(props: { path: string; text: string; onInfo: (info: ArtifactInfo) => void }) {
+function ArtifactTable(props: { parsed: ReturnType<typeof parseDelimited> }) {
   const ctx = useExtension()
-  const parsed = createMemo(() => parseDelimited(props.text, props.path.toLowerCase().endsWith(".tsv") ? "\t" : ","))
-  createEffect(() => props.onInfo({ rows: parsed().total, columns: parsed().columns }))
+  const parsed = () => props.parsed
   // Pad the header to the widest row so no data column is dropped.
   const header = () => Array.from({ length: parsed().columns }, (_, index) => parsed().rows[0]?.[index] ?? "")
   const body = () => parsed().rows.slice(1)
+
   return (
     <div class="min-h-0 flex-1 overflow-auto">
       <table data-slot="artifact-table" class="min-w-full text-13-regular text-text-base">
@@ -410,12 +462,16 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
   const ctx = useExtension()
   const url = createBlobUrl(() => props.content)
   const family = createMemo(() => `artifact-${Math.random().toString(36).slice(2)}`)
-  createEffect(() => {
-    const face = new FontFace(family(), `url(${url()})`)
+
+  // The document's font set holds the face while it shows.
+  createKeyed(url, (source) => {
+    const face = new FontFace(family(), `url(${source})`)
+
     document.fonts.add(face)
     void face.load().catch(() => undefined)
     onCleanup(() => document.fonts.delete(face))
   })
+
   return (
     <div class="min-h-0 flex-1 overflow-auto">
       <div class="mx-auto flex w-full max-w-3xl flex-col gap-6 px-8 py-8" style={{ "font-family": `"${family()}"` }}>
@@ -453,6 +509,7 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
 
 function ArtifactBinary(props: { path: string; size: string }) {
   const ctx = useExtension()
+
   return (
     <div data-slot="artifact-stage" class="relative min-h-0 flex-1">
       <div class="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">

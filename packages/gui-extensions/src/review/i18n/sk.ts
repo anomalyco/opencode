@@ -14,4 +14,6 @@ export default {
   "git.description": "Sledujte, kontrolujte a vracajte zmeny v tomto projekte",
   loadingChanges: "Načítavam zmeny…",
   noChanges: "Žiadne zmeny",
+  "settings.wrapLines.title": "Zalamovať riadky",
+  "settings.wrapLines.description": "Zabaľte dlhé riadky do mobilných rozdielov namiesto vodorovného posúvania",
 }

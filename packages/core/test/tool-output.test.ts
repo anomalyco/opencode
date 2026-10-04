@@ -7,7 +7,6 @@ import { ToolOutput } from "@opencode/core/tool-output"
 import type { Tool } from "@opencode/core/tool"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
-import { Identifier } from "@opencode/core/id/id"
 import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 
@@ -141,8 +140,8 @@ describe("ToolOutput", () => {
     withStore((output, fs, root) =>
       Effect.gen(function* () {
         const directory = path.join(root, ToolOutput.DIRECTORY)
-        const old = path.join(directory, Identifier.create("tool", "ascending", 2 ** 36 - 1))
-        const recent = path.join(directory, Identifier.create("tool", "ascending", 2 ** 36 + 1))
+        const old = path.join(directory, ToolOutput.fileName(2 ** 36 - 1))
+        const recent = path.join(directory, ToolOutput.fileName(2 ** 36 + 1))
         yield* fs.ensureDir(directory)
         yield* fs.writeFileString(old, "old")
         yield* fs.writeFileString(recent, "recent")

@@ -10,7 +10,8 @@ for (const custom of [false, true]) {
   test(`summary toggle ${custom ? "custom" : "default"} shortcut follows the active session`, async ({ page }) => {
     await mockStressTimeline(page)
     await installStressSessionTabs(page)
-    // The legacy command ID; the keybind migration renames it to `summary.toggle`.
+
+    // The legacy command ID; the keybind migration renames it to `details.toggle`.
     if (custom) await seed(page, { settings: { keybinds: { "session.summary.toggle": "f8" } } })
     await page.goto(sessionHref(fixture.sourceID))
     const trigger = page.getByRole("button", { name: "Session details", exact: true })
@@ -25,7 +26,8 @@ for (const custom of [false, true]) {
     await expect(tooltip.locator('[data-slot="keybind-v2-label"]')).toHaveText(
       custom ? ["F8"] : mac ? ["⇧", "⌘", "Y"] : ["Ctrl", "Shift", "Y"],
     )
-    for (const id of [fixture.targetID, fixture.sourceID]) {
+
+    for (const id of [fixture.sourceID, fixture.targetID, fixture.sourceID]) {
       await page.locator(`[data-titlebar-tab-link][href="${sessionHref(id)}"]`).click()
       const messages = id === fixture.sourceID ? fixture.expected.sourceMessageIDs : fixture.expected.targetMessageIDs
       await expect(
@@ -41,6 +43,18 @@ for (const custom of [false, true]) {
       await expect(summary).toBeHidden()
       await expect(trigger).toBeFocused()
     }
+
+    if (!custom) return
+
+    // The override moved, so storage keeps only its new id and Shortcuts lists no row titled with the old one.
+    const keybinds = () => page.evaluate(() => JSON.parse(localStorage.getItem("settings.v3") ?? "null")?.keybinds)
+    await expect.poll(keybinds).toEqual({ "details.toggle": "f8" })
+    await page.goto("/settings")
+    const settings = page.getByTestId("settings-screen")
+    await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
+    await expect(settings.getByText("Toggle summary", { exact: true })).toBeVisible()
+    await expect(settings.getByText("session.summary.toggle", { exact: true })).toHaveCount(0)
+    expect(await keybinds()).toEqual({ "details.toggle": "f8" })
   })
 }
 
@@ -74,7 +88,7 @@ test("summary disclosures import legacy settings and persist in extension storag
   await expect(trigger).toBeFocused()
   await expect
     .poll(() =>
-      page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:extension.summary.prefs") ?? "null")),
+      page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:extension.details.prefs") ?? "null")),
     )
     .toEqual({ projectExpanded: true, serverExpanded: false })
 
@@ -120,6 +134,49 @@ test("a session in a worktree subfolder names its worktree and lists cached work
   list.release()
 })
 
+test("the details follow the routed session when it moves to another worktree", async ({ page }) => {
+  const root = "C:/OpenCode/SmokeWorktrees"
+
+  const sessions = fixture.sessions.map((item) =>
+    item.id === fixture.targetID ? { ...item, directory: `${root}/feature` } : { ...item },
+  )
+
+  const mock = await mockStressTimeline(page, {
+    sessions,
+    worktrees: [
+      { directory: fixture.directory },
+      { directory: `${root}/feature`, strategy: "git" },
+      { directory: `${root}/other`, strategy: "git" },
+    ],
+  })
+
+  await page.goto(sessionHref(fixture.targetID))
+  const trigger = page.getByRole("button", { name: "Session details", exact: true })
+  const summary = page.getByRole("dialog", { name: "Session details", exact: true })
+  const location = (name: string) => summary.getByRole("button", { name, exact: true })
+  await trigger.click()
+  await expect(location("feature")).toBeVisible()
+  await page.keyboard.press("Escape")
+  await expect(summary).toBeHidden()
+
+  // The server moves the session; the screen stays mounted while its extensions read the new worktree.
+  const moved = sessions.find((item) => item.id === fixture.targetID)
+
+  if (moved) moved.directory = `${root}/other`
+  await mock.push([
+    {
+      id: "evt_details_session_moved",
+      type: "session.moved",
+      created: 2,
+      durable: { aggregateID: fixture.targetID, seq: 1, version: 1 },
+      data: { sessionID: fixture.targetID, location: { directory: `${root}/other` }, projectID: fixture.project.id },
+    },
+  ])
+  await trigger.click()
+  await expect(location("other")).toBeVisible()
+  await expect(location("feature")).toHaveCount(0)
+})
+
 for (const direction of ["ltr", "rtl"] as const) {
   test(`summary overlays the view and submenus follow ${direction}`, async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -131,9 +188,11 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(page.locator("html")).toHaveAttribute("dir", direction)
     await expect(page.locator("html")).toHaveAttribute("lang", "en")
     const warnings = ownerWarnings(page)
+
     const row = page.locator(
       `[data-timeline-row="UserMessage"][data-message-id="${fixture.expected.targetMessageIDs.at(-1)}"]`,
     )
+
     const composer = page.locator('[data-component="session-composer-dock"] > div')
     const summary = page.getByRole("dialog", { name: "Session details", exact: true })
     await expect(row).toBeInViewport()
@@ -145,6 +204,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       .poll(async () => {
         const message = (await row.boundingBox())!
         const input = (await composer.boundingBox())!
+
         return Math.max(Math.abs(message.x - before.row.x), Math.abs(input.x - before.composer.x))
       })
       .toBeLessThan(1)
@@ -152,6 +212,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       .poll(async () => {
         const message = (await row.boundingBox())!
         const details = (await summary.boundingBox())!
+
         return Math.min(message.x + message.width, details.x + details.width) - Math.max(message.x, details.x)
       })
       .toBeGreaterThan(0)
@@ -160,10 +221,12 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect.poll(() => text.evaluate((element) => element.scrollWidth > element.clientWidth)).toBe(true)
     // Labels, including the truncated branch, stop 12px before the trailing indicator column.
     const workspace = summary.getByRole("button", { name: "Local repository", exact: true })
+
     for (const [label, indicator] of [
       [text, workspace.locator(".session-summary-menu-indicator")],
       ...["Local repository", "MCP", "Plugins", "Skills", "LSP"].map((name) => {
         const item = summary.getByRole("button", { name, exact: true })
+
         return [item.locator(".session-summary-label"), item.locator(".session-summary-menu-indicator")]
       }),
     ]) {
@@ -171,10 +234,12 @@ for (const direction of ["ltr", "rtl"] as const) {
         .poll(async () => {
           const start = (await label!.boundingBox())!
           const end = (await indicator!.boundingBox())!
+
           return direction === "ltr" ? end.x - start.x - start.width : start.x - end.x - end.width
         })
         .toBeGreaterThanOrEqual(12)
     }
+
     await expectAlignedWithHeader(page, direction)
 
     const mcp = summary.getByRole("button", { name: "MCP", exact: true })
@@ -188,6 +253,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       .poll(async () => {
         const item = (await mcp.boundingBox())!
         const menu = (await submenu.boundingBox())!
+
         return direction === "ltr" ? menu.x + menu.width <= item.x : menu.x >= item.x + item.width
       })
       .toBe(true)
@@ -209,6 +275,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       await expect(page.getByRole("dialog", { name, exact: true }).getByText(empty, { exact: true })).toBeVisible()
       await expect(submenu).toBeHidden()
     }
+
     await summary.getByRole("button", { name: "Extensions", exact: true }).click()
     await expect(page.getByRole("dialog", { name: "LSP", exact: true })).toBeHidden()
     await page.keyboard.press("Escape")
@@ -224,6 +291,7 @@ for (const direction of ["ltr", "rtl"] as const) {
 test("summary catalogs load, refresh while cached, and tell errors from empty", async ({ page }) => {
   const state = { fail: true, extra: false, empty: false }
   const pluginDirectories: string[] = []
+
   const lsp = [
     {
       type: "document",
@@ -236,6 +304,7 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
     },
     { type: "document", info: { lsp: { rust: { disabled: true } } } },
   ]
+
   await mockStressTimeline(page, {
     mcp: () => (state.empty ? [] : [{ name: "summary-mcp", status: { status: "connected" } }]),
     plugins: () =>
@@ -280,7 +349,9 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
     (route) => {
       if (route.request().method() === "OPTIONS") return route.fallback()
       pluginDirectories.push(new URL(route.request().url()).searchParams.get("location[directory]") ?? "")
+
       if (state.fail) return route.fulfill({ status: 500, headers: cors, json: { message: "Unavailable" } })
+
       return route.fallback()
     },
   )
@@ -337,6 +408,7 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
 
   state.empty = true
   lsp.length = 0
+
   for (const service of [
     { name: "MCP", path: "/api/mcp", empty: "No MCP servers configured" },
     { name: "Plugins", path: "/api/plugin", empty: "No plugins configured" },
@@ -347,6 +419,7 @@ test("summary catalogs load, refresh while cached, and tell errors from empty", 
     await expect(menu(service.name).getByText(service.empty, { exact: true })).toBeVisible()
     await expectRefreshKeeps(page, service.name, service.path, service.empty)
   }
+
   expect(warnings).toEqual([])
 })
 
@@ -363,6 +436,7 @@ test("every MCP row hit area toggles exactly once and keeps the submenu open", a
   const writes: { path: string; directory: string | null }[] = []
   page.on("request", (request) => {
     const url = new URL(request.url())
+
     if (request.method() !== "POST" || !url.pathname.startsWith("/api/experimental/mcp/")) return
     writes.push({ path: url.pathname, directory: url.searchParams.get("location[directory]") })
   })
@@ -371,9 +445,11 @@ test("every MCP row hit area toggles exactly once and keeps the submenu open", a
   await page.getByRole("button", { name: "MCP", exact: true }).click()
   const submenu = page.getByRole("dialog", { name: "MCP", exact: true })
   const toggle = submenu.getByRole("switch", { name: "figma", exact: true })
+
   const row = submenu
     .locator('[data-component="switch"]')
     .filter({ has: page.getByRole("switch", { name: "figma", exact: true }) })
+
   await expect(toggle).toBeChecked()
   await expect(submenu.getByRole("switch", { name: "playwright", exact: true })).toBeChecked()
   await expect(submenu.getByRole("switch", { name: "playwright", exact: true })).toHaveAccessibleDescription("Failed")
@@ -386,14 +462,20 @@ test("every MCP row hit area toggles exactly once and keeps the submenu open", a
   for (const [index, target] of ["label", "dot", "padding", "control", "keyboard"].entries()) {
     const enabled = index % 2 !== 0
     await expect(toggle).toBeEnabled()
+
     if (target === "label") await row.getByText("figma", { exact: true }).click()
+
     if (target === "dot") await row.locator(".session-service-dot").click()
+
     if (target === "padding") await row.click({ position: { x: 3, y: 3 } })
+
     if (target === "control") await row.locator('[data-slot="switch-control"]').click()
+
     if (target === "keyboard") await toggle.press("Space")
     await expect(toggle).toBeChecked({ checked: enabled })
     await expect(toggle).toBeEnabled()
     await expect(submenu).toBeVisible()
+
     if (target === "keyboard") await expect(toggle).toBeFocused()
     expect(writes).toHaveLength(index + 1)
     expect(writes[index]).toEqual({
@@ -411,6 +493,7 @@ test("MCP authentication starts before a slow resource catalog finishes", async 
     mcp: [{ name: "linear", integrationID: "linear-oauth", status: { status: "disabled" } }],
     onMcpAction: () => {
       state.connected = true
+
       return { status: "needs_auth" }
     },
     integrations: [{ id: "linear-oauth", name: "Linear", methods: [{ id: "oauth", type: "oauth" }], connections: [] }],
@@ -420,16 +503,19 @@ test("MCP authentication starts before a slow resource catalog finishes", async 
     if (request.method() === "POST" && new URL(request.url()).pathname.startsWith("/api/integration/"))
       attempts.push(request.url())
   })
+
   // Only the resource catalog refresh after connecting is slow.
   const resources = await holdRoute(page, (url) => state.connected && url.pathname === "/api/mcp/resource", {
     method: "GET",
   })
+
   await page.goto(sessionHref(fixture.targetID))
   await page.getByRole("button", { name: "Session details", exact: true }).click()
   await page.getByRole("button", { name: "MCP", exact: true }).click()
   const submenu = page.getByRole("dialog", { name: "MCP", exact: true })
   const toggle = submenu.getByRole("switch", { name: "linear", exact: true })
   await expect(toggle).toBeEnabled()
+
   try {
     const popup = page.waitForEvent("popup")
     await submenu.getByText("linear", { exact: true }).click()
@@ -440,6 +526,7 @@ test("MCP authentication starts before a slow resource catalog finishes", async 
   } finally {
     resources.release()
   }
+
   await expect(toggle).toBeEnabled()
   expect(attempts).toHaveLength(1)
   expect(new URL(attempts[0]).searchParams.get("location[directory]")).toBe(fixture.directory)
@@ -475,6 +562,7 @@ test.describe("remote configuration", () => {
   test("remote servers copy each service's configuration path", async ({ page }) => {
     const remote = "http://summary-remote.test:4096"
     const home = "/home/remote/.config/opencode"
+
     const entries = [
       { type: "document", path: `${home}/mcp.jsonc`, info: { mcp: { servers: {} } } },
       { type: "document", path: `${home}/plugins.json`, info: { plugins: [] } },
@@ -483,6 +571,7 @@ test.describe("remote configuration", () => {
       { type: "document", path: `${fixture.directory}/opencode.json`, info: {} },
       { type: "document", path: `${fixture.directory}/.opencode/agents/review.md`, info: {} },
     ]
+
     await mockOpenCodeServer(page, {
       server: remote,
       sessions: fixture.sessions,
@@ -512,15 +601,18 @@ test.describe("remote configuration", () => {
       await expect(tooltip).toHaveCount(0)
       await copy.hover()
       await expect(tooltip).toHaveText("Copy")
+
       if (index === 0) {
         await expect
           .poll(async () => {
             const icon = (await copy.locator("svg").boundingBox())!
             const tip = (await tooltip.boundingBox())!
+
             return Math.abs(tip.x + tip.width / 2 - icon.x - icon.width / 2)
           })
           .toBeLessThanOrEqual(1)
       }
+
       await copy.click()
       await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(service.path)
       await expect(tooltip).toHaveText("Copied")
@@ -533,9 +625,11 @@ test.describe("remote configuration", () => {
     await page.evaluate(() => navigator.clipboard.writeText("original clipboard"))
     await trigger.click()
     await summary.getByRole("button", { name: "Skills", exact: true }).click()
+
     const copy = page
       .getByRole("dialog", { name: "Skills", exact: true })
       .getByRole("button", { name: "Copy configuration file path", exact: true })
+
     await copy.click()
     await expect(page.getByText("No configuration file found", { exact: true })).toBeVisible()
     await expect(copy).toBeEnabled()
@@ -562,6 +656,7 @@ test("long MCP lists stay in the viewport in a real RTL locale", async ({ page }
   await expect
     .poll(async () => {
       const bounds = (await menu.boundingBox())!
+
       return bounds.x >= 15 && bounds.y >= 15 && bounds.x + bounds.width <= 785 && bounds.y + bounds.height <= 585
     })
     .toBe(true)
@@ -579,6 +674,7 @@ function ownerWarnings(page: Page) {
   page.on("console", (event) => {
     if (event.text().includes("computations created outside")) warnings.push(event.text())
   })
+
   return warnings
 }
 
@@ -589,6 +685,7 @@ async function expectAlignedWithHeader(page: Page, direction: "ltr" | "rtl") {
     .poll(async () => {
       const header = (await page.locator("[data-session-title]").boundingBox())!
       const panel = (await summary.boundingBox())!
+
       return direction === "ltr"
         ? Math.abs(header.x + header.width - panel.x - panel.width - 12)
         : Math.abs(panel.x - header.x - 12)

@@ -24,7 +24,7 @@ export const LocationHandler = HttpApiBuilder.group(Api, "server.location", (han
           Effect.provideService(LocationServiceMap.Service, locations),
           Effect.catchCause((cause) =>
             Cause.hasInterruptsOnly(cause)
-              ? Effect.failCause(cause)
+              ? Effect.failCause(Cause.fromReasons<never>(cause.reasons.filter(Cause.isInterruptReason)))
               : Effect.fail(new ServiceUnavailableError({ message: Cause.pretty(cause), service: "location" })),
           ),
         ),

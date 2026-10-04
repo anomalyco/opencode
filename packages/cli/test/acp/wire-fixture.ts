@@ -8,38 +8,50 @@ import {
   type AgentRequestParamsByMethod,
   type AgentRequestResponsesByMethod,
   type AnyMessage,
+  type CompactionCapabilities,
   type ContentBlock,
+  type CreateElicitationRequest,
+  type CreateElicitationResponse,
   type McpServer,
   type RequestPermissionRequest,
   type RequestPermissionResponse,
   type SessionNotification,
-  type WriteTextFileRequest,
 } from "@agentclientprotocol/sdk"
-import {
-  OpenCode,
-  type AgentInfo,
-  type CommandInfo,
-  type LocationRef,
-  type ModelInfo,
-  type ModelRef,
-  type OpenCodeEvent,
-  type SessionInfo,
-  type SessionMessageInfo,
-  type TokenUsageInfo,
-} from "@opencode/client/promise"
+import { OpenCode } from "@opencode/client/effect"
+import type { OpenCodeEventEncoded } from "@opencode/protocol/groups/event"
+import type { Agent } from "@opencode/schema/agent"
+import type { Command } from "@opencode/schema/command"
+import { Form } from "@opencode/schema/form"
+import type { Location } from "@opencode/schema/location"
+import type { Model } from "@opencode/schema/model"
+import type { Session } from "@opencode/schema/session"
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { BunRequest } from "bun"
-import { Option, Schema } from "effect"
+import { Duration, Effect, Exit, Logger, Option, Schema, Scope } from "effect"
+import { FetchHttpClient } from "effect/unstable/http"
 import { ACP } from "../../src/acp/agent"
+import { ACPTurn } from "../../src/acp/turn"
 
+// The fake server sends and stores the wire form of each value.
+type OpenCodeEvent = OpenCodeEventEncoded
+type AgentInfo = typeof Agent.Info.Encoded
+type CommandInfo = typeof Command.Info.Encoded
+type LocationRef = typeof Location.PublicRef.Encoded
+type ModelInfo = typeof Model.Info.Encoded
+type ModelRef = typeof Model.Ref.Encoded
+type SessionInfo = typeof Session.Info.Encoded
+type SessionMessageInfo = typeof SessionMessage.Info.Encoded
+type TokenUsageInfo = typeof TokenUsage.Info.Encoded
 type DurableEvent = Extract<OpenCodeEvent, { durable: unknown }>
 type EphemeralEvent = Exclude<OpenCodeEvent, DurableEvent>
 type EventData<Type extends OpenCodeEvent["type"]> = Extract<OpenCodeEvent, { type: Type }>["data"]
 type AssistantMessage = Extract<SessionMessageInfo, { type: "assistant" }>
 
-export type Events = ReadonlyArray<OpenCodeEvent> | void
+type Events = ReadonlyArray<OpenCodeEvent> | void
 type Hook<Input> = (input: Input) => Events | Promise<Events>
 
-export type ServerRequest = {
+type ServerRequest = {
   readonly method: string
   readonly path: string
   readonly query: Record<string, string>
@@ -57,16 +69,26 @@ const SyntheticBody = Schema.Struct({
   delivery: Delivery,
   resume: Schema.optional(Schema.Boolean),
 })
-const CreateBody = Schema.Struct({ location: Schema.Struct({ directory: Schema.String }) })
+const Permissions = Schema.Array(
+  Schema.Struct({ action: Schema.String, resource: Schema.String, effect: Schema.Literals(["allow", "deny", "ask"]) }),
+)
+const Metadata = Schema.Record(Schema.String, Schema.MutableJson)
+const CreateBody = Schema.Struct({
+  location: Schema.Struct({ directory: Schema.String }),
+  permissions: Schema.optional(Permissions),
+  metadata: Schema.optional(Metadata),
+})
+const UpdateBody = Schema.Struct({ permissions: Schema.optional(Permissions), metadata: Schema.optional(Metadata) })
 const ModelBody = Schema.Struct({
   model: Schema.Struct({ providerID: Schema.String, id: Schema.String, variant: Schema.optional(Schema.String) }),
 })
 const AgentBody = Schema.Struct({ agent: Schema.String })
 const ReplyBody = Schema.Struct({ decision: Schema.Literals(["once", "always", "reject"]) })
+const FormReplyBody = Schema.Struct({ answer: Form.Answer })
 const McpBody = Schema.Struct({ config: Schema.Unknown })
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
 
-export type Submission =
+type Submission =
   | ({ readonly kind: "prompt"; readonly sessionID: string } & typeof PromptBody.Type)
   | ({ readonly kind: "command"; readonly sessionID: string } & typeof CommandBody.Type)
   | ({ readonly kind: "compact"; readonly sessionID: string } & typeof CompactBody.Type)
@@ -74,7 +96,7 @@ export type Submission =
 
 type PromptSubmission = Extract<Submission, { readonly kind: "prompt" }>
 
-export type Selection =
+type Selection =
   | { readonly sessionID: string; readonly model: typeof ModelBody.Type.model }
   | { readonly sessionID: string; readonly agent: string }
 
@@ -100,7 +122,6 @@ const ChildUpdate = Schema.Union([
     error: Schema.optional(Schema.Struct({ type: Schema.String, message: Schema.String })),
   }),
 ])
-export type ChildUpdate = typeof ChildUpdate.Type
 
 export type WireOptions = {
   readonly fetch?: (request: ServerRequest) => Response | undefined | Promise<Response | undefined>
@@ -111,35 +132,39 @@ export type WireOptions = {
     readonly signal: AbortSignal
   }>
   readonly onInterrupt?: Hook<{ readonly sessionID: string }>
-  readonly onPermissionReply?: Hook<{
-    readonly sessionID: string
-    readonly requestID: string
-    readonly decision: string
-  }>
   readonly onFormCancel?: Hook<{ readonly sessionID: string; readonly formID: string }>
+  readonly onFormReply?: Hook<FormReply>
   readonly permission?: (
     request: RequestPermissionRequest,
     signal: AbortSignal,
   ) => RequestPermissionResponse | Promise<RequestPermissionResponse>
+  readonly elicitation?: (
+    request: CreateElicitationRequest,
+    signal: AbortSignal,
+  ) => CreateElicitationResponse | Promise<CreateElicitationResponse>
+  readonly cancelDrainTimeout?: Duration.Input
 }
 
-type CatalogKind = "model" | "default" | "agent" | "command"
+type FormReply = {
+  readonly sessionID: string
+  readonly formID: string
+  readonly answer: typeof FormReplyBody.Type.answer
+}
 
-export type Catalog = {
+type Catalog = {
   models: ModelInfo[]
-  // Unset follows the first listed model.
-  defaultModel?: ModelInfo | null
   agents: AgentInfo[]
   commands: CommandInfo[]
 }
 
 export type InitializeOptions = {
-  readonly writeTextFile?: boolean
   readonly childSessionUpdates?: boolean
   readonly terminalAuth?: boolean
+  readonly elicitation?: boolean
+  readonly compaction?: CompactionCapabilities | null
 }
 
-export const testModel = {
+const testModel = {
   id: "test-model",
   modelID: "test-model",
   providerID: "test",
@@ -167,7 +192,7 @@ export const secondModel = {
   limit: { context: 200_000, output: 20_000 },
 } satisfies ModelInfo
 
-export const buildAgent = {
+const buildAgent = {
   id: "build",
   name: "Build",
   request: { settings: {}, headers: {}, body: {} },
@@ -176,7 +201,7 @@ export const buildAgent = {
   permissions: [],
 } satisfies AgentInfo
 
-export const planAgent = {
+const planAgent = {
   id: "plan",
   name: "Plan",
   description: "Plan first",
@@ -232,12 +257,16 @@ export function tokens(value = 1): TokenUsageInfo {
   return { input: value, output: value, reasoning: 0, cache: { read: 0, write: 0 } }
 }
 
-// The fake server stamps ids and sequence numbers when it sends an event.
-function durable<Version extends DurableEvent["durable"]["version"]>(version: Version) {
-  return <Type extends Extract<DurableEvent, { durable: { version: Version } }>["type"]>(
-    type: Type,
-    data: EventData<Type>,
-  ) => ({ id: "", created: 0, type, durable: { aggregateID: "test", seq: 0, version }, data })
+// The fake server stamps ids and sequence numbers when it sends an event. The wire form types every version as a
+// number, so the client's decode is what rejects an event sent under the wrong version.
+function durable(version: number) {
+  return <Type extends DurableEvent["type"]>(type: Type, data: EventData<Type>) => ({
+    id: "",
+    created: 0,
+    type,
+    durable: { aggregateID: "test", seq: 0, version },
+    data,
+  })
 }
 
 export const durableEvent = durable(1)
@@ -343,6 +372,7 @@ export function permissionAsked(
   id: string,
   input: {
     readonly action?: string
+    readonly resources?: EventData<"permission.asked">["resources"]
     readonly metadata?: EventData<"permission.asked">["metadata"]
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
   } = {},
@@ -351,10 +381,15 @@ export function permissionAsked(
     id,
     sessionID,
     action: input.action ?? "shell",
-    resources: ["*"],
+    resources: input.resources ?? ["*"],
     metadata: input.metadata ?? { command: "printf hello" },
     ...(input.source ? { source: input.source } : {}),
   })
+}
+
+/** The response to a submission the server admitted to the session inbox. */
+export function enqueued(sessionID: string, id: string, type: string, payload: object) {
+  return Response.json({ data: { id, sessionID, time: { created: 0 }, type, payload, delivery: "steer" } })
 }
 
 export async function startWire(options: WireOptions = {}) {
@@ -365,8 +400,8 @@ export async function startWire(options: WireOptions = {}) {
   const received: AnyMessage[] = []
   const updates: SessionNotification[] = []
   const permissions: RequestPermissionRequest[] = []
-  const writes: WriteTextFileRequest[] = []
-  const childUpdates: ChildUpdate[] = []
+  const childUpdates: Array<typeof ChildUpdate.Type> = []
+  const elicitations: CreateElicitationRequest[] = []
   // Client handlers record SDK-validated params; responses wait until they have seen every earlier agent message.
   const counts = { sent: 0, handled: 0 }
   const handled = <Value>(list: Value[], value: Value) => {
@@ -377,9 +412,19 @@ export async function startWire(options: WireOptions = {}) {
 
   const clientToAgent = new TransformStream<Uint8Array, Uint8Array>()
   const agentToClient = new TransformStream<Uint8Array, Uint8Array>()
-  const agentConnection = ACP.connect(
-    OpenCode.make({ baseUrl: server.url }),
-    ndJsonStream(agentToClient.writable, clientToAgent.readable),
+  const logs: Array<Pick<Logger.Options<unknown>, "message" | "cause">> = []
+  const agentScope = Scope.makeUnsafe()
+  const agentConnection = await Effect.runPromise(
+    OpenCode.make({ baseUrl: server.url }).pipe(
+      Effect.provide(FetchHttpClient.layer),
+      Effect.flatMap((client) => ACP.connect(client, ndJsonStream(agentToClient.writable, clientToAgent.readable))),
+      Scope.provide(agentScope),
+      (effect) =>
+        options.cancelDrainTimeout === undefined
+          ? effect
+          : Effect.provideService(effect, ACPTurn.CancelDrainTimeout, options.cancelDrainTimeout),
+      Effect.provide(Logger.layer([Logger.make((log) => logs.push({ message: log.message, cause: log.cause }))])),
+    ),
   )
   const clientStream = ndJsonStream(clientToAgent.writable, agentToClient.readable)
   const connection = client({ name: "test" })
@@ -391,9 +436,9 @@ export async function startWire(options: WireOptions = {}) {
       handled(permissions, ctx.params)
       return options.permission?.(ctx.params, ctx.signal) ?? { outcome: { outcome: "cancelled" } }
     })
-    .onRequest("fs/write_text_file", (ctx) => {
-      handled(writes, ctx.params)
-      return {}
+    .onRequest("elicitation/create", (ctx) => {
+      handled(elicitations, ctx.params)
+      return options.elicitation?.(ctx.params, ctx.signal) ?? { action: "cancel" }
     })
     .connect({
       writable: clientStream.writable,
@@ -445,7 +490,8 @@ export async function startWire(options: WireOptions = {}) {
     request("initialize", {
       protocolVersion: 1,
       clientCapabilities: {
-        ...(capabilities.writeTextFile ? { fs: { writeTextFile: true, readTextFile: false } } : {}),
+        ...(capabilities.elicitation ? { elicitation: { form: {} } } : {}),
+        ...(capabilities.compaction !== undefined ? { session: { compaction: capabilities.compaction } } : {}),
         _meta: {
           ...(capabilities.childSessionUpdates ? { "opencode/child-session-updates": true } : {}),
           ...(capabilities.terminalAuth ? { "terminal-auth": true } : {}),
@@ -459,8 +505,9 @@ export async function startWire(options: WireOptions = {}) {
     received,
     updates,
     permissions,
-    writes,
     childUpdates,
+    elicitations,
+    logs,
     request,
     until,
     initialize,
@@ -478,6 +525,7 @@ export async function startWire(options: WireOptions = {}) {
     async [Symbol.asyncDispose]() {
       connection.close()
       agentConnection.close()
+      await Effect.runPromise(Scope.close(agentScope, Exit.void))
       await server.stop()
     },
   }
@@ -489,7 +537,7 @@ export async function startSession(options: WireOptions & { readonly capabilitie
   const wire = await startWire(options)
   await wire.initialize(options.capabilities)
   const session = await wire.newSession()
-  return Object.assign(wire, { sessionId: session.sessionId, session })
+  return Object.assign(wire, { sessionId: session.sessionId })
 }
 
 export async function rpcError(promise: Promise<unknown>) {
@@ -512,18 +560,17 @@ function startServer(options: WireOptions, changed: () => void) {
     agents: [buildAgent, planAgent],
     commands: [reviewCommand],
   }
-  const catalogReads: Array<{ readonly kind: CatalogKind; readonly directory: string }> = []
   const requests: ServerRequest[] = []
   const submissions: Submission[] = []
   const selections: Selection[] = []
   const interrupts: string[] = []
   const replies: Array<{ readonly sessionID: string; readonly requestID: string; readonly decision: string }> = []
-  const cancelledForms: Array<{ readonly sessionID: string; readonly formID: string }> = []
+  const cancelledForms: Array<{ readonly sessionID: string; readonly formID: string; readonly message?: string }> = []
+  const repliedForms: FormReply[] = []
   const mcp: Array<{ readonly name: string; readonly directory?: string; readonly config: unknown }> = []
   const fake = {
     requests,
     catalog,
-    catalogReads,
     sessions: new Map<string, SessionInfo>(),
     messages: new Map<string, SessionMessageInfo[]>(),
     submissions,
@@ -534,6 +581,7 @@ function startServer(options: WireOptions, changed: () => void) {
     interrupts,
     replies,
     cancelledForms,
+    repliedForms,
     mcp,
     send(...events: ReadonlyArray<OpenCodeEvent>) {
       events.forEach((event) => {
@@ -593,7 +641,8 @@ function startServer(options: WireOptions, changed: () => void) {
     schema: Schema.Codec<A, unknown>,
     handle: (req: BunRequest<Path>, body: A, query: Record<string, string>) => Response | Promise<Response>,
   ) {
-    const decode = Schema.decodeUnknownOption(Schema.fromJsonString(schema))
+    // The JSON codec reads an explicit null as an absent optional field, as the server's does.
+    const decode = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.toCodecJson(schema)))
     return (req: BunRequest<Path>) =>
       record(req)
         .then((recorded) => {
@@ -604,17 +653,10 @@ function startServer(options: WireOptions, changed: () => void) {
         })
         .finally(changed)
   }
-  const catalogRoute = (kind: CatalogKind) =>
+  const catalogRoute = (data: () => unknown) =>
     route((_req, query) => {
       const directory = query["location[directory]"] ?? "/workspace"
-      fake.catalogReads.push({ kind, directory })
-      const data = {
-        model: catalog.models,
-        default: catalog.defaultModel === undefined ? (catalog.models[0] ?? null) : catalog.defaultModel,
-        agent: catalog.agents,
-        command: catalog.commands,
-      }[kind]
-      return Response.json({ location: { directory, project: { id: "global", directory } }, data })
+      return Response.json({ location: { directory, project: { id: "global", directory } }, data: data() })
     })
   const page = <Item>(items: readonly Item[], query: Record<string, string>, limit: number) => {
     const start = Number(query.cursor ?? 0)
@@ -651,10 +693,10 @@ function startServer(options: WireOptions, changed: () => void) {
           )
         }),
       },
-      "/api/model": { GET: catalogRoute("model") },
-      "/api/model/default": { GET: catalogRoute("default") },
-      "/api/agent": { GET: catalogRoute("agent") },
-      "/api/command": { GET: catalogRoute("command") },
+      "/api/model": { GET: catalogRoute(() => catalog.models) },
+      "/api/model/default": { GET: catalogRoute(() => catalog.models[0] ?? null) },
+      "/api/agent": { GET: catalogRoute(() => catalog.agents) },
+      "/api/command": { GET: catalogRoute(() => catalog.commands) },
       "/api/session": {
         GET: route((_req, query) => {
           const sessions = [...fake.sessions.values()]
@@ -663,7 +705,13 @@ function startServer(options: WireOptions, changed: () => void) {
           return Response.json(page(sessions, query, 100))
         }),
         POST: body(CreateBody, (_req, input) =>
-          Response.json({ data: createSession(makeSession("", { cwd: input.location.directory })) }),
+          Response.json({
+            data: createSession({
+              ...makeSession("", { cwd: input.location.directory }),
+              ...(input.permissions ? { permissions: [...input.permissions] } : {}),
+              ...(input.metadata ? { metadata: input.metadata } : {}),
+            }),
+          }),
         ),
       },
       "/api/session/:sessionID": {
@@ -671,9 +719,16 @@ function startServer(options: WireOptions, changed: () => void) {
           const session = fake.sessions.get(req.params.sessionID)
           return session ? Response.json({ data: session }) : notFound(req.params.sessionID)
         }),
-        DELETE: route((req) =>
-          fake.sessions.delete(req.params.sessionID) ? noContent() : notFound(req.params.sessionID),
-        ),
+        PATCH: body(UpdateBody, (req, input) => {
+          const session = fake.sessions.get(req.params.sessionID)
+          if (!session) return notFound(req.params.sessionID)
+          fake.sessions.set(session.id, {
+            ...session,
+            ...(input.permissions ? { permissions: input.permissions } : {}),
+            ...(input.metadata ? { metadata: input.metadata } : {}),
+          })
+          return noContent()
+        }),
       },
       "/api/session/:sessionID/fork": {
         POST: route((req) => {
@@ -699,19 +754,13 @@ function startServer(options: WireOptions, changed: () => void) {
       "/api/session/:sessionID/message": {
         GET: route((req, query) => Response.json(page(fake.messages.get(req.params.sessionID) ?? [], query, 200))),
       },
-      "/api/session/:sessionID/message/:messageID": {
-        GET: route((req) => {
-          const message = fake.messages.get(req.params.sessionID)?.find((item) => item.id === req.params.messageID)
-          return message ? Response.json({ data: message }) : new Response(null, { status: 404 })
-        }),
-      },
       "/api/session/:sessionID/prompt": {
         POST: body(PromptBody, async (req, input) => {
           const sessionID = req.params.sessionID
           fake.submissions.push({ kind: "prompt", sessionID, ...input })
           const hook = options.onPrompt ?? (() => turn(sessionID, input.id))
           await emit(hook({ sessionID, id: input.id, text: input.text, signal: req.signal }))
-          return Response.json({ data: { text: input.text } })
+          return enqueued(sessionID, input.id, "user", { text: input.text })
         }),
       },
       "/api/session/:sessionID/command": {
@@ -724,13 +773,13 @@ function startServer(options: WireOptions, changed: () => void) {
         POST: body(CompactBody, (req, input) => {
           fake.submissions.push({ kind: "compact", sessionID: req.params.sessionID, ...input })
           fake.send(...turn(req.params.sessionID, input.id))
-          return Response.json({ data: {} })
+          return enqueued(req.params.sessionID, input.id, "compaction", {})
         }),
       },
       "/api/session/:sessionID/synthetic": {
         POST: body(SyntheticBody, (req, input) => {
           fake.submissions.push({ kind: "synthetic", sessionID: req.params.sessionID, ...input })
-          return Response.json({ data: {} })
+          return enqueued(req.params.sessionID, "msg_synthetic", "synthetic", { text: input.text })
         }),
       },
       "/api/session/:sessionID/interrupt": {
@@ -742,18 +791,28 @@ function startServer(options: WireOptions, changed: () => void) {
         }),
       },
       "/api/session/:sessionID/permission/:requestID/reply": {
-        POST: body(ReplyBody, async (req, input) => {
-          const reply = { sessionID: req.params.sessionID, requestID: req.params.requestID, decision: input.decision }
-          fake.replies.push(reply)
-          await emit(options.onPermissionReply?.(reply))
+        POST: body(ReplyBody, (req, input) => {
+          fake.replies.push({
+            sessionID: req.params.sessionID,
+            requestID: req.params.requestID,
+            decision: input.decision,
+          })
           return noContent()
         }),
       },
       "/api/session/:sessionID/form/:formID": {
-        DELETE: route(async (req) => {
-          const form = { sessionID: req.params.sessionID, formID: req.params.formID }
+        DELETE: route(async (req, query) => {
+          const form = { sessionID: req.params.sessionID, formID: req.params.formID, message: query.message }
           fake.cancelledForms.push(form)
           await emit(options.onFormCancel?.(form))
+          return noContent()
+        }),
+      },
+      "/api/session/:sessionID/form/:formID/reply": {
+        POST: body(FormReplyBody, async (req, input) => {
+          const reply = { sessionID: req.params.sessionID, formID: req.params.formID, answer: input.answer }
+          fake.repliedForms.push(reply)
+          await emit(options.onFormReply?.(reply))
           return noContent()
         }),
       },
@@ -768,6 +827,16 @@ function startServer(options: WireOptions, changed: () => void) {
 
   return Object.assign(fake, {
     url: http.url.toString(),
+    /** Ends every open event stream while the server keeps answering requests. */
+    closeEvents() {
+      streams.forEach((stream) => stream.close())
+      streams.clear()
+    },
+    /** Drops the connection of every open event stream while the server keeps answering requests. */
+    dropEvents() {
+      streams.forEach((stream) => stream.error())
+      streams.clear()
+    },
     async stop() {
       streams.forEach((stream) => stream.close())
       streams.clear()

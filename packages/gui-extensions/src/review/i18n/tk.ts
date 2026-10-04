@@ -10,4 +10,6 @@ export default {
   "git.description": "Bu taslamadaky üýtgeşmeleri yzarlaň, gözden geçiriň we yzyna alyň",
   loadingChanges: "Üýtgeşmeler ýüklenýär …",
   noChanges: "Üýtgeşme ýok",
+  "settings.wrapLines.title": "Setirleri dola",
+  "settings.wrapLines.description": "Mobil diff-lerde uzyn setirleri kese süýşürmegiň ýerine dola",
 }

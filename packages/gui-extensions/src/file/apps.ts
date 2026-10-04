@@ -1,4 +1,4 @@
-import { Schema, Struct } from "effect"
+import { Schema } from "effect"
 
 const OPEN_APPS = [
   "vscode",
@@ -21,4 +21,4 @@ export type OpenApp = (typeof OPEN_APPS)[number]
 
 export const OpenAppPreferences = Schema.Struct({
   app: Schema.Literals(OPEN_APPS),
-}).mapFields(Struct.map(Schema.mutableKey))
+})

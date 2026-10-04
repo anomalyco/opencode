@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { Schema } from "effect"
 import {
   Agent,
   Config,
@@ -16,7 +15,6 @@ import {
 } from "../src/index.js"
 import { EventManifest } from "../src/event-manifest.js"
 import { FileSystemV1 } from "../src/filesystem-v1.js"
-import { IdeEvent } from "../src/ide-event.js"
 import { McpEvent } from "../src/mcp-event.js"
 import { SessionEvent } from "../src/session-event.js"
 import { SessionID } from "../src/session-id.js"
@@ -43,9 +41,6 @@ describe("public event manifest", () => {
     expect(EventManifest.Server.get("session.deleted")).toBe(SessionEvent.Deleted)
     expect(EventManifest.Server.get("project.updated")).toBe(Project.Event.Updated)
     expect(EventManifest.Server.has("mcp.tools.changed")).toBe(false)
-    expect(EventManifest.Server.has("question.asked")).toBe(false)
-    expect(EventManifest.Server.has("question.replied")).toBe(false)
-    expect(EventManifest.Server.has("question.rejected")).toBe(false)
     expect(Agent.Event.Updated.durable).toBeUndefined()
     expect(EventManifest.Durable.has("agent.updated")).toBe(false)
   })
@@ -71,8 +66,6 @@ describe("public event manifest", () => {
     expect(Reference.Event.Definitions).toEqual([Reference.Event.Updated])
     expect(McpEvent.Definitions).toEqual([McpEvent.ToolsChanged, McpEvent.ResourcesChanged, McpEvent.StatusChanged])
     expect(EventManifest.Latest.has("mcp.browser.open.failed")).toBe(false)
-    expect(EventManifest.Latest.has("ide.installed")).toBe(false)
-    expect(IdeEvent.Definitions).toEqual([IdeEvent.Installed])
     expect(EventManifest.Durable.get("session.step.ended.1")).toBe(SessionEvent.Step.Ended)
     expect(EventManifest.Durable.has("session.step.ended.2")).toBe(false)
   })

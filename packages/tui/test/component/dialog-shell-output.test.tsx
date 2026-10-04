@@ -66,7 +66,7 @@ async function setup(width: number, output = "") {
   const app = await testRender(
     () => (
       <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
-        <ConfigProvider config={createTuiResolvedConfig({}, { terminal: false })}>
+        <ConfigProvider config={createTuiResolvedConfig()}>
           <RouteProvider initialRoute={{ type: "session", sessionID: "ses_fixture" }}>
             <ClientProvider api={api}>
               <DataProvider directory={temporary.path}>

@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Pembaruan siap",
   "dialog.restart": "Mulai ulang",
   "dialog.later": "Nanti",
+  "releaseNotes.action.getStarted": "Mulai",
+  "releaseNotes.action.next": "Berikutnya",
+  "releaseNotes.action.hideFuture": "Jangan tampilkan ini di masa depan",
+  "releaseNotes.media.alt": "Pratinjau rilis",
 }

@@ -4,13 +4,22 @@ import { Tabs } from "@opencode/ui/tabs"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
-import { DrawerContext, Panel, type PanelSidebar, type PanelTab, type SessionView } from "@opencode/gui-extensions/sdk"
+import {
+  DrawerContext,
+  Panel,
+  type PanelSidebar,
+  type PanelTab,
+  type MountedSession,
+  type SessionScreen,
+} from "@opencode/gui-extensions/sdk"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useExtensionHost } from "./host"
-import { MobilePanel, panelKey, type Region, type RegionEntry } from "./panels"
+import { panelKey } from "./panel-keys"
+import { MobilePanel, type Region, type RegionEntry } from "./panels"
 
 const MobilePanelDrawer = lazy(async () => {
   const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
+
   return { default: MobilePanelDrawer }
 })
 
@@ -19,20 +28,25 @@ export type MobileEntry = RegionEntry & { readonly mobile: NonNullable<Panel["mo
 /** Panels that offer a narrow-screen view, keyed `${extension}:${panel id}`. */
 export function createMobileViews() {
   const host = useExtensionHost()
+
   const entries = createMemo(() =>
     host.items(Panel).flatMap((item): MobileEntry[] => {
       const mobile = item.value.mobile
+
       if (!mobile) return []
       const tab: PanelTab = { id: item.value.id, title: mobile.title }
+
       return [
         { key: panelKey(item.extension, item.value.id), extension: item.extension, tab, provider: item.value, mobile },
       ]
     }),
   )
+
   const sorted = (kinds: readonly string[]) =>
     entries()
       .filter((entry) => kinds.includes(entry.mobile.kind))
       .toSorted((a, b) => a.mobile.order - b.mobile.order)
+
   return {
     entries,
     tabs: createMemo(() => sorted(["tab"])),
@@ -48,21 +62,31 @@ export function MobileViewTabs(props: {
   views: MobileViews
   region: Region
   current: string
-  session: SessionView
+  session: MountedSession
+  screen: SessionScreen
   sidebar: PanelSidebar
   onSelect: (key: string) => void
 }): JSX.Element {
   const language = useLanguage()
-  const [store, setStore] = createStore({
+
+  const [store, setStore] = createStore<{
+    menu: boolean
+    drawer: string | undefined
+    last: string | undefined
+    loaded: boolean
+    pending: string | undefined
+  }>({
     menu: false,
-    drawer: undefined as string | undefined,
+    drawer: undefined,
     // Keeps the last drawer's content mounted while it animates closed.
-    last: undefined as string | undefined,
+    last: undefined,
     loaded: false,
-    pending: undefined as string | undefined,
+    pending: undefined,
   })
+
   const drawer = createMemo(() => (store.last ? props.views.find(store.last) : undefined))
   let trigger: HTMLButtonElement | undefined
+
   return (
     <div
       class="relative flex shrink-0 items-center before:pointer-events-none before:absolute before:inset-x-0 before:bottom-0 before:h-px before:bg-v2-border-border-base before:content-['']"
@@ -151,6 +175,7 @@ export function MobileViewTabs(props: {
                   <MobilePanel
                     entry={entry}
                     view={props.session}
+                    screen={props.screen}
                     sidebar={props.sidebar}
                     visible={store.drawer === entry.key}
                     open={() => props.region.openFor(entry.extension)}

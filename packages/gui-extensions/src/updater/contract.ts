@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { Remote } from "../sdk"
+import { Ipc } from "../sdk"
 
 export const UpdaterState = Schema.Union([
   Schema.Struct({ status: Schema.Literal("disabled") }),
@@ -12,10 +12,11 @@ export const UpdaterState = Schema.Union([
   Schema.Struct({ status: Schema.Literal("installing"), version: Schema.String }),
   Schema.Struct({ status: Schema.Literal("error"), message: Schema.String }),
 ])
+
 export type UpdaterState = typeof UpdaterState.Type
 
 /** The desktop app updater. Its state is app-wide; every window receives the same value. */
-export const Updater = Remote.define({
+export const Updater = Ipc.define({
   id: "updater",
   state: UpdaterState,
   methods: {

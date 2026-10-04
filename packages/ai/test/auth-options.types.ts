@@ -14,7 +14,6 @@ import * as GoogleVertexChat from "../src/providers/google-vertex-chat.js"
 import * as GoogleVertexMessages from "../src/providers/google-vertex-messages.js"
 import * as GoogleVertexResponses from "../src/providers/google-vertex-responses.js"
 import * as OpenAI from "../src/providers/openai.js"
-import * as OpenAICompatible from "../src/providers/openai-compatible.js"
 import * as OpenRouter from "../src/providers/openrouter.js"
 import * as XAI from "../src/providers/xai.js"
 

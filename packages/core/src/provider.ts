@@ -1,10 +1,10 @@
 export * as Provider from "./provider.js"
 
-import { Context, Effect, Layer, Schema, Stream, Struct } from "effect"
+import { Context, Effect, Layer, Option, Schema, Stream, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import type { ProviderPackageDefinition } from "@opencode/ai"
+import { HttpTimeout, type ProviderPackageDefinition } from "@opencode/ai"
 import { isRecord } from "@opencode/ai/utils/record"
 import { Npm } from "@opencode/util/npm"
 import type { DeepMutable } from "./schema.js"
@@ -67,10 +67,14 @@ const builtins = new Map<string, () => Promise<unknown>>([
   ["@opencode/ai/providers/cerebras", () => import("@opencode/ai/providers/cerebras")],
   ["@opencode/ai/providers/cloudflare-ai-gateway", () => import("@opencode/ai/providers/cloudflare-ai-gateway")],
   ["@opencode/ai/providers/cloudflare-workers-ai", () => import("@opencode/ai/providers/cloudflare-workers-ai")],
+  ["@opencode/ai/providers/cohere", () => import("@opencode/ai/providers/cohere")],
+  ["@opencode/ai/providers/cohere/chat", () => import("@opencode/ai/providers/cohere/chat")],
   ["@opencode/ai/providers/deepinfra", () => import("@opencode/ai/providers/deepinfra")],
   ["@opencode/ai/providers/deepseek", () => import("@opencode/ai/providers/deepseek")],
+  ["@opencode/ai/providers/digitalocean", () => import("@opencode/ai/providers/digitalocean")],
   ["@opencode/ai/providers/fireworks", () => import("@opencode/ai/providers/fireworks")],
   ["@opencode/ai/providers/google", () => import("@opencode/ai/providers/google")],
+  ["@opencode/ai/providers/google/interactions", () => import("@opencode/ai/providers/google/interactions")],
   ["@opencode/ai/providers/google-vertex", () => import("@opencode/ai/providers/google-vertex")],
   ["@opencode/ai/providers/google-vertex/gemini", () => import("@opencode/ai/providers/google-vertex/gemini")],
   ["@opencode/ai/providers/google-vertex/chat", () => import("@opencode/ai/providers/google-vertex/chat")],
@@ -133,8 +137,8 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
 })
 
 /** opencode settings consumed in Core; native packages never receive them. */
-const CORE_KEYS = ["chunkTimeout", "compaction", "fetch", "timeout", "transport"] as const
-const PROVIDER_ONLY_KEYS = ["chunkTimeout", "timeout", "transport"] as const
+const CORE_KEYS = ["chunkTimeout", "compaction", "fetch", "headerTimeout", "timeout", "transport"] as const
+const PROVIDER_ONLY_KEYS = ["chunkTimeout", "headerTimeout", "timeout", "transport"] as const
 
 export function nativeSettings(settings: Settings): Settings {
   return Struct.omit(settings, CORE_KEYS)
@@ -142,6 +146,25 @@ export function nativeSettings(settings: Settings): Settings {
 
 export function modelSettings(settings: Settings | undefined) {
   return settings && Struct.omit(settings, PROVIDER_ONLY_KEYS)
+}
+
+const decodeTimeout = Schema.decodeUnknownOption(HttpTimeout)
+
+/** Applied to `headerTimeout` and `chunkTimeout` when provider settings leave them unset or invalid. */
+export const DEFAULT_TIMEOUT_MS = 300_000
+
+/** One timeout setting without a default; invalid values are dropped. */
+export function timeout(value: unknown) {
+  return Option.getOrUndefined(decodeTimeout(value))
+}
+
+/** Request timeouts from provider settings, resolved for every route. `timeout` has no default. */
+export function timeouts(settings: Readonly<Record<string, unknown>>) {
+  return {
+    timeout: timeout(settings.timeout),
+    headerTimeout: timeout(settings.headerTimeout) ?? DEFAULT_TIMEOUT_MS,
+    chunkTimeout: timeout(settings.chunkTimeout) ?? DEFAULT_TIMEOUT_MS,
+  }
 }
 
 export function mergeOverlay(

@@ -1,22 +1,10 @@
-import {
-  createEffect,
-  createMemo,
-  For,
-  Match,
-  on,
-  Show,
-  splitProps,
-  Switch,
-  untrack,
-  type ComponentProps,
-  type ParentProps,
-} from "solid-js"
+import { createMemo, For, Match, Show, splitProps, Switch, type ComponentProps, type ParentProps } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { Collapsible } from "@opencode/ui/collapsible"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import type { ChangeKind } from "../review/contract"
-import type { FileNode, SessionView } from "../sdk"
+import { createKeyed, type FileNode, type MountedSession, type SessionScreen } from "../sdk"
 import { startFileDrag } from "./drag"
 
 const MAX_DEPTH = 128
@@ -28,39 +16,53 @@ type Filter = {
 
 function shouldListRoot(input: { level: number; dir?: { loaded?: boolean; loading?: boolean } }) {
   if (input.level !== 0) return false
+
   if (input.dir?.loaded) return false
+
   if (input.dir?.loading) return false
+
   return true
 }
 
 function dirsToExpand(input: { level: number; filter?: { dirs: Set<string> }; expanded: (dir: string) => boolean }) {
   if (input.level !== 0) return []
+
   if (!input.filter) return []
+
   return [...input.filter.dirs].filter((dir) => !input.expanded(dir))
 }
 
 const kindLabel = (kind: ChangeKind) => {
   if (kind === "add") return "A"
+
   if (kind === "del") return "D"
+
   return "M"
 }
 
 const kindTextColor = (kind: ChangeKind) => {
   if (kind === "add") return "color: var(--icon-diff-add-base)"
+
   if (kind === "del") return "color: var(--icon-diff-delete-base)"
+
   return "color: var(--icon-diff-modified-base)"
 }
 
 const kindDotColor = (kind: ChangeKind) => {
   if (kind === "add") return "background-color: var(--icon-diff-add-base)"
+
   if (kind === "del") return "background-color: var(--icon-diff-delete-base)"
+
   return "background-color: var(--icon-diff-modified-base)"
 }
 
 const visibleKind = (node: FileNode, kinds?: ReadonlyMap<string, ChangeKind>, marks?: Set<string>) => {
   const kind = kinds?.get(node.path)
+
   if (!kind) return
+
   if (!marks?.has(node.path)) return
+
   return kind
 }
 
@@ -91,11 +93,15 @@ const FileTreeNode = (
     "class",
     "classList",
   ])
+
   const kind = () => visibleKind(local.node, local.kinds, local.marks)
   const active = () => !!kind() && !local.node.ignored
+
   const color = () => {
     const value = kind()
+
     if (!value) return
+
     return kindTextColor(value)
   }
 
@@ -130,7 +136,9 @@ const FileTreeNode = (
       </span>
       {(() => {
         const value = kind()
+
         if (!value) return null
+
         if (local.node.type === "file") {
           return (
             <span class="shrink-0 w-4 text-center text-12-medium" style={kindTextColor(value)}>
@@ -138,6 +146,7 @@ const FileTreeNode = (
             </span>
           )
         }
+
         return <div class="shrink-0 size-1.5 mr-1.5 rounded-full" style={kindDotColor(value)} />
       })()}
     </Dynamic>
@@ -145,7 +154,8 @@ const FileTreeNode = (
 }
 
 export default function FileTree(props: {
-  session: SessionView
+  session: MountedSession
+  screen: SessionScreen
   path: string
   class?: string
   nodeClass?: string
@@ -164,7 +174,7 @@ export default function FileTree(props: {
   _kinds?: ReadonlyMap<string, ChangeKind>
   _chain?: readonly string[]
 }) {
-  const file = props.session.file
+  const file = props.screen.file
   const level = props.level ?? 0
   const draggable = () => props.draggable ?? true
 
@@ -173,12 +183,14 @@ export default function FileTree(props: {
       .resolve(p)
       .replace(/[\\/]+$/, "")
       .replaceAll("\\", "/")
+
   const chain = props._chain ? [...props._chain, key(props.path)] : [key(props.path)]
 
   const filter = createMemo(() => {
     if (props._filter) return props._filter
 
     const allowed = props.allowed
+
     if (!allowed) return
 
     const files = new Set(allowed)
@@ -187,8 +199,10 @@ export default function FileTree(props: {
     for (const item of allowed) {
       const parts = item.split("/")
       const parents = parts.slice(0, -1)
+
       for (const [idx] of parents.entries()) {
         const dir = parents.slice(0, idx + 1).join("/")
+
         if (dir) dirs.add(dir)
       }
     }
@@ -200,14 +214,19 @@ export default function FileTree(props: {
     if (props._marks) return props._marks
 
     const out = new Set<string>()
+
     for (const item of props.modified ?? []) out.add(item)
+
     for (const item of props.kinds?.keys() ?? []) out.add(item)
+
     if (out.size === 0) return
+
     return out
   })
 
   const kinds = createMemo(() => {
     if (props._kinds) return props._kinds
+
     return props.kinds
   })
 
@@ -217,6 +236,7 @@ export default function FileTree(props: {
     const out = new Map<string, number>()
 
     const root = props.path
+
     if (!(file.tree.state(root)?.expanded ?? false)) return out
 
     const seen = new Set<string>()
@@ -224,6 +244,7 @@ export default function FileTree(props: {
 
     const push = (dir: string, lvl: number) => {
       const id = key(dir)
+
       if (seen.has(id)) return
       seen.add(id)
 
@@ -251,6 +272,7 @@ export default function FileTree(props: {
       stack.pop()
 
       const parent = stack[stack.length - 1]
+
       if (!parent) continue
       parent.max = Math.max(parent.max, top.max)
     }
@@ -258,46 +280,45 @@ export default function FileTree(props: {
     return out
   })
 
-  createEffect(() => {
-    const current = filter()
-    const dirs = dirsToExpand({
-      level,
-      filter: current,
-      expanded: (dir) => untrack(() => file.tree.state(dir)?.expanded) ?? false,
-    })
-    for (const dir of dirs) file.tree.expand(dir)
-  })
-
-  createEffect(
-    on(
-      () => props.path,
-      (path) => {
-        const dir = untrack(() => file.tree.state(path))
-        if (!shouldListRoot({ level, dir })) return
-        void file.tree.sync(path)
-      },
-      { defer: false },
+  // A filter opens the directories of its files at the top level.
+  createKeyed(filter, (current) =>
+    dirsToExpand({ level, filter: current, expanded: (dir) => file.tree.state(dir)?.expanded ?? false }).forEach(
+      (dir) => file.tree.expand(dir),
     ),
+  )
+
+  createKeyed(
+    () => props.path,
+    (path) => {
+      if (!shouldListRoot({ level, dir: file.tree.state(path) })) return
+
+      void file.tree.sync(path)
+    },
   )
 
   const nodes = createMemo(() => {
     const nodes = file.tree.list(props.path)
     const current = filter()
+
     if (!current) return nodes
 
     const parent = (path: string) => {
       const idx = path.lastIndexOf("/")
+
       if (idx === -1) return ""
+
       return path.slice(0, idx)
     }
 
     const leaf = (path: string) => {
       const idx = path.lastIndexOf("/")
+
       return idx === -1 ? path : path.slice(idx + 1)
     }
 
     const out = nodes.filter((node) => {
       if (node.type === "file") return current.files.has(node.path)
+
       return current.dirs.has(node.path)
     })
 
@@ -305,6 +326,7 @@ export default function FileTree(props: {
 
     for (const dir of current.dirs) {
       if (parent(dir) !== props.path) continue
+
       if (seen.has(dir)) continue
       out.push({
         name: leaf(dir),
@@ -318,6 +340,7 @@ export default function FileTree(props: {
 
     for (const item of current.files) {
       if (parent(item) !== props.path) continue
+
       if (seen.has(item)) continue
       out.push({
         name: leaf(item),
@@ -333,6 +356,7 @@ export default function FileTree(props: {
       if (a.type !== b.type) {
         return a.type === "directory" ? -1 : 1
       }
+
       return a.name.localeCompare(b.name)
     })
 
@@ -389,6 +413,7 @@ export default function FileTree(props: {
                     >
                       <FileTree
                         session={props.session}
+                        screen={props.screen}
                         path={node.path}
                         level={level + 1}
                         allowed={props.allowed}

@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Actualizare pregătită",
   "dialog.restart": "Repornește",
   "dialog.later": "Mai târziu",
+  "releaseNotes.action.getStarted": "Începe",
+  "releaseNotes.action.next": "Următorul",
+  "releaseNotes.action.hideFuture": "Nu mai arăta acestea pe viitor",
+  "releaseNotes.media.alt": "Previzualizare lansare",
 }

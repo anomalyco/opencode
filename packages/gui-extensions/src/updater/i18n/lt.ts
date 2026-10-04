@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Naujinimas paruoštas",
   "dialog.restart": "Paleisti iš naujo",
   "dialog.later": "Vėliau",
+  "releaseNotes.action.getStarted": "Pradėkite",
+  "releaseNotes.action.next": "Kitas",
+  "releaseNotes.action.hideFuture": "Nerodykite šių dalykų ateityje",
+  "releaseNotes.media.alt": "Išleidimo peržiūra",
 }

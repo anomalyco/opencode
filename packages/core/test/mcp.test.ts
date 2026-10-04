@@ -1048,7 +1048,7 @@ for (const entry of [
   { name: "second 400", status: 400, query: "", codemode: undefined, attempts: 2 },
   { name: "401", status: 401, query: "", codemode: undefined, attempts: 1 },
   { name: "403", status: 403, query: "", codemode: undefined, attempts: 1 },
-  { name: "500", status: 500, query: "", codemode: undefined, attempts: 1 },
+  { name: "501", status: 501, query: "", codemode: undefined, attempts: 1 },
   { name: "user codemode=true", status: 404, query: "?codemode=true", codemode: undefined, attempts: 1 },
   { name: "user codemode=false", status: 404, query: "?codemode=false", codemode: undefined, attempts: 1 },
   { name: "empty user codemode", status: 404, query: "?codemode=", codemode: undefined, attempts: 1 },

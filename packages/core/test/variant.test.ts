@@ -134,16 +134,21 @@ test("spells xAI Responses variants with catalog effort levels", () => {
       settings: { reasoningEffort: effort, reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
     })),
   )
-  expect(resolve(model("@opencode/ai/providers/xai", "grok-4.3"), [{ type: "effort", values: ["none", "low"] }])).toEqual([
+  expect(
+    resolve(model("@opencode/ai/providers/xai", "grok-4.3"), [{ type: "effort", values: ["none", "low"] }]),
+  ).toEqual([
     {
       id: "none",
       settings: { reasoningEffort: "none", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
     },
-    { id: "low", settings: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] } },
+    {
+      id: "low",
+      settings: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    },
   ])
-  expect(resolve(model("@opencode/ai/providers/xai", "grok-4.6"), [{ type: "effort" }]).map((item) => item.id)).toEqual([
-    "low", "medium", "high",
-  ])
+  expect(resolve(model("@opencode/ai/providers/xai", "grok-4.6"), [{ type: "effort" }]).map((item) => item.id)).toEqual(
+    ["low", "medium", "high"],
+  )
 })
 
 test("spells Chat Completions variants for direct providers", () => {
@@ -295,7 +300,39 @@ test("spells Workers AI thinking controls through the chat template", () => {
   ])
 })
 
+test("spells Cohere native thinking and compatibility effort variants", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/cohere", "command-a-reasoning-08-2025", 32_000), [
+      { type: "toggle" },
+      { type: "budget_tokens", min: 1 },
+    ]),
+  ).toEqual([
+    { id: "none", settings: { thinking: { type: "disabled" } } },
+    { id: "high", settings: { thinking: { type: "enabled", tokenBudget: 16_000 } } },
+    { id: "max", settings: { thinking: { type: "enabled", tokenBudget: 31_999 } } },
+  ])
+  expect(
+    resolve(model("@opencode/ai/providers/cohere/chat", "north-mini-code-1-0"), [
+      { type: "effort", values: ["none", "high"] },
+    ]),
+  ).toEqual([
+    { id: "none", settings: { reasoningEffort: "none" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+})
+
 test("spells Chat Completions variants for hosting providers", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/digitalocean", "openai-gpt-5-nano", undefined, "digitalocean"), [
+      { type: "effort", values: ["minimal", "low", "medium", "high"] },
+    ]),
+  ).toEqual([
+    { id: "minimal", settings: { reasoningEffort: "minimal" } },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "medium", settings: { reasoningEffort: "medium" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+
   expect(
     resolve(model("@opencode/ai/providers/openai-compatible", "deepseek-ai/deepseek-v4-pro", undefined, "nvidia"), [
       { type: "effort", values: ["none", "high", "max"] },

@@ -3,6 +3,9 @@ import { chmod, lstat, mkdir, open, readFile, rename, rm } from "node:fs/promise
 import path from "node:path"
 import asset from "./pty-binding.js"
 
+// opencode-pty does not ship Windows binaries.
+export const available = process.platform !== "win32"
+
 export async function resolveBinary(bin: string) {
   if (process.env.OPENCODE_PTY_BIN) return process.env.OPENCODE_PTY_BIN
   if (!asset) return "opencode-pty"

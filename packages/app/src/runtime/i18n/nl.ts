@@ -129,7 +129,6 @@ export const dict = {
   "session.view.select": "Sessieweergave",
   "session.background.moveRunning": "Naar de achtergrond verplaatsen",
   "session.timeline.working": "Bezig",
-  "session.review.wrapLines": "Regels laten teruglopen",
   "session.websearch.title": "Webzoekopdracht van derden",
   "session.websearch.description": "Selecteer de zoekprovider die agents gebruiken om op het web te zoeken",
   "session.websearch.provider": "Zoekprovider",
@@ -190,8 +189,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Subagents",
   "settings.timeline.category.notices": "Meldingen",
   "settings.timeline.category.tools": "Andere hulpmiddelen",
-  "settings.general.row.mobileDiffWrap.description":
-    "Lange regels in mobiele diffs laten teruglopen in plaats van horizontaal scrollen",
   "toast.migration.progress.clearingOldEvents": "Oude gebeurtenissen worden gewist",
   "toast.migration.progress.migratingSessions": "Sessies worden gemigreerd",
   "session.new.workspace.existingLabel": "Worktree",
@@ -514,10 +511,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Kleur {{color}} selecteren",
   "dialog.project.edit.worktree.startup": "Opstartscript voor werkruimte",
   "dialog.project.edit.worktree.startup.placeholder": "bijv. bun install",
-  "dialog.releaseNotes.action.getStarted": "Ga aan de slag",
-  "dialog.releaseNotes.action.next": "Volgende",
-  "dialog.releaseNotes.action.hideFuture": "Laat deze in de toekomst niet zien",
-  "dialog.releaseNotes.media.alt": "Releasevoorbeeld",
   "dialog.usageExceeded.dontShowAgain": "Niet meer weergeven",
 
   "toast.permissions.autoaccept.on.title": "Machtigingen automatisch accepteren",

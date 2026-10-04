@@ -308,15 +308,25 @@ export namespace Timeline {
     const previousUserMessage = index > 0
     const compaction = entries.some((entry) => entry.type === "notice" && entry.message.type === "compaction")
     const lastContent = lastAssistant?.content.at(-1)
-    const thinking =
-      (detail ? detail.thinking.placement === "separate" : showReasoning) &&
+    const working =
       isActive &&
       status.type === "busy" &&
       lastAssistant?.time.completed === undefined &&
       !lastAssistant?.error &&
-      !lastAssistant?.retry &&
+      !lastAssistant?.retry
+    const thinking =
+      working &&
+      (detail ? detail.thinking.placement === "separate" : showReasoning) &&
       lastContent?.type === "reasoning" &&
       lastContent.time?.completed === undefined
+    const thoughtOnly =
+      working &&
+      detail?.thinking.placement === "grouped" &&
+      assistantMessages.every((message) =>
+        message.content.every(
+          (content) => content.type === "reasoning" || !isRenderable(content, showReasoning, detail),
+        ),
+      )
 
     if (previousUserMessage) rows.push(new TimelineRow.TurnGap({ userMessageID: turnID }))
     if (userMessage) rows.push(new TimelineRow.UserMessage({ userMessageID: turnID }))
@@ -326,6 +336,7 @@ export namespace Timeline {
     // An assistant message can produce several rows because its content parts are
     // rendered separately. Notices end a segment so none of those rows cross it.
     const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
+      if (thoughtOnly) return
       const refs = messages.flatMap((message, messageIndex) =>
         contentEntries(message)
           .filter(

@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Dagføring klár",
   "dialog.restart": "Endurbyrja",
   "dialog.later": "Seinni",
+  "releaseNotes.action.getStarted": "Kom í gongd",
+  "releaseNotes.action.next": "Næsta",
+  "releaseNotes.action.hideFuture": "Ikki vísa hesar í framtíðini",
+  "releaseNotes.media.alt": "Útgávu forskoðan",
 }

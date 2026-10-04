@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMRequest, Message, ToolCallPart } from "../src/index.js"
+import { LLM, Message, ToolCallPart } from "../src/index.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
 import { OpenAIResponses } from "../src/protocols/openai-responses.js"
 import { Gemini } from "../src/protocols/gemini.js"
 import { GoogleVertexMessages, OpenAI } from "../src/providers.js"
-import { applyCachePolicy } from "../src/cache-policy.js"
 import { applyEffortUpdates } from "../src/effort-updates.js"
 import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -197,9 +196,15 @@ describe("Anthropic Messages effort updates", () => {
     ["anthropic/claude-opus-5", true],
     ["claude-fable-5-1", true],
     ["claude-mythos-5-1", true],
+    ["claude-opus-5-5", true],
+    ["claude-sonnet-5-5", true],
+    ["anthropic/claude-sonnet-5-5", true],
+    ["claude-sonnet-6", true],
+    ["claude-haiku-6", true],
     ["claude-fable-5", false],
     ["claude-opus-4-8", false],
     ["claude-sonnet-5", false],
+    ["claude-sonnet-5-20260801", false],
     ["kimi-k2.5", false],
   ] as const) {
     it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>
