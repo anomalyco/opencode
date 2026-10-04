@@ -28,7 +28,13 @@ import {
   GoUsageLimitError,
   BlackUsageLimitError,
 } from "./error"
-import { buildCostChunk, createStreamPartConverter, createResponseConverter, UsageInfo } from "./provider/provider"
+import {
+  buildCostChunk,
+  createStreamPartConverter,
+  createResponseConverter,
+  omitImages,
+  UsageInfo,
+} from "./provider/provider"
 import { anthropicHelper } from "./provider/anthropic"
 import { googleHelper } from "./provider/google"
 import { openaiHelper } from "./provider/openai"
@@ -216,10 +222,12 @@ export async function handler(
       if (specialAnthropic) throw new Error("Anthropic provider body modifiers are incompatible with streaming")
       const prepared = requestBody
 
-      const reqBody = (() => {
+      const reqBody = await (async () => {
         if (opts.format === "google") return body
         if (!prepared) throw new Error("Missing prepared request body")
-        return prepared.stream(providerInfo.model, providerInfo.format === "oa-compat")
+        const stream = prepared.stream(providerInfo.model, providerInfo.format === "oa-compat")
+        if (!providerInfo.omitImages) return stream
+        return JSON.stringify(omitImages(await new Response(stream).json()))
       })()
       logger.debug("REQUEST URL: " + reqUrl)
       logger.debug("REQUEST: " + (requestBody?.preview ?? "") + "...")

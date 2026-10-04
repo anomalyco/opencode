@@ -166,6 +166,27 @@ export interface CommonChunk {
   }
 }
 
+const IMAGE_PARTS: Record<string, string> = { image: "text", image_url: "text", input_image: "input_text" }
+
+// Text-only upstreams reject the whole request when any message carries an image, so each image
+// part becomes a text note instead. Only message content is walked, never tool schemas or settings.
+export function omitImages(body: Record<string, unknown>) {
+  return {
+    ...body,
+    ...Object.fromEntries(
+      ["system", "messages", "input"].filter((key) => key in body).map((key) => [key, replaceImages(body[key])]),
+    ),
+  }
+}
+
+function replaceImages(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(replaceImages)
+  if (!value || typeof value !== "object") return value
+  const type = "type" in value && typeof value.type === "string" ? IMAGE_PARTS[value.type] : undefined
+  if (type) return { type, text: "[Image omitted: this model does not accept image input]" }
+  return Object.fromEntries(Object.entries(value).map(([key, item]) => [key, replaceImages(item)]))
+}
+
 export function buildCostChunk(format: ZenData.Format, cost: string): string {
   switch (format) {
     case "anthropic":
