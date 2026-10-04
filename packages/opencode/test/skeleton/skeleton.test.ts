@@ -11,6 +11,8 @@ describe("Skeleton.Service", () => {
         expect(service.supports("component.tsx")).toBe(true)
         expect(service.supports("script.js")).toBe(true)
         expect(service.supports("types.d.ts")).toBe(true)
+        expect(service.supports("main.py")).toBe(true)
+        expect(service.supports("stubs.pyi")).toBe(true)
         expect(service.supports("readme.md")).toBe(false)
         expect(service.supports("data.json")).toBe(false)
       }).pipe(Effect.provide(Skeleton.layer)),
@@ -100,6 +102,54 @@ export type ID = string
 
         expect(result.pruned).toBe(false)
         expect(result.content).toBe(code)
+      }).pipe(Effect.provide(Skeleton.layer)),
+    )
+  })
+
+  it("prunes Python function and method bodies while preserving classes, signatures and docstrings", () => {
+    const pythonCode = `import os
+from typing import List, Optional
+
+class UserRepository:
+    """Repository for user data."""
+    table_name: str = "users"
+
+    def __init__(self, db_url: str):
+        self.db_url = db_url
+        self.connected = True
+        print("Connected to DB")
+
+    async def get_by_id(self, user_id: str) -> Optional[dict]:
+        """Fetch a user by their unique ID."""
+        raw = await fetch_from_db(user_id)
+        if not raw:
+            return None
+        return transform(raw)
+
+def calculate_metric(values: List[float]) -> float:
+    total = sum(values)
+    avg = total / len(values)
+    return avg * 100.0
+`
+
+    Effect.runSync(
+      Effect.gen(function* () {
+        const service = yield* Skeleton.Service
+        const result = yield* service.prune("repo.py", pythonCode)
+
+        expect(result.pruned).toBe(true)
+        expect(result.content).toContain("class UserRepository:")
+        expect(result.content).toContain('"""Repository for user data."""')
+        expect(result.content).toContain('table_name: str = "users"')
+        expect(result.content).toContain("def __init__(self, db_url: str):")
+        expect(result.content).toContain("async def get_by_id(self, user_id: str) -> Optional[dict]:")
+        expect(result.content).toContain('"""Fetch a user by their unique ID."""')
+        expect(result.content).toContain("def calculate_metric(values: List[float]) -> float:")
+        // Verify implementation details are omitted
+        expect(result.content).not.toContain("self.connected = True")
+        expect(result.content).not.toContain("raw = await fetch_from_db")
+        expect(result.content).not.toContain("avg = total / len(values)")
+        expect(result.skeletonLines).toBeLessThan(result.originalLines)
       }).pipe(Effect.provide(Skeleton.layer)),
     )
   })

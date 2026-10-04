@@ -680,4 +680,23 @@ export class Service {
       expect(result.output).toContain('const message = "full content"')
     }),
   )
+
+  it.live("returns pruned skeleton for Python files when view is 'skeleton'", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const pyCode = `class Worker:
+    def execute(self) -> bool:
+        temp = 123
+        return temp > 0
+`
+      yield* put(path.join(dir, "worker.py"), pyCode)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "worker.py"), view: "skeleton" })
+      expect(result.output).toContain("<view>skeleton</view>")
+      expect(result.output).toContain("class Worker:")
+      expect(result.output).toContain("def execute(self) -> bool:")
+      expect(result.output).toContain("...")
+      expect(result.output).not.toContain("temp = 123")
+    }),
+  )
 })

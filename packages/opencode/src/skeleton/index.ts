@@ -3,6 +3,7 @@ import { Context, Effect, Layer } from "effect"
 import path from "path"
 import type { SkeletonResult, Strategy } from "./strategy"
 import { typeScriptStrategy } from "./strategies/typescript"
+import { pythonStrategy } from "./strategies/python"
 
 export type { SkeletonResult, Strategy } from "./strategy"
 
@@ -13,7 +14,7 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Skeleton") {}
 
-const strategies: readonly Strategy[] = [typeScriptStrategy]
+const strategies: readonly Strategy[] = [typeScriptStrategy, pythonStrategy]
 
 const findStrategy = (filepath: string): Strategy | undefined => {
   const ext = path.extname(filepath).toLowerCase()
