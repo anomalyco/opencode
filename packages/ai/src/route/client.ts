@@ -575,9 +575,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
   const resolved = prepareRequest(request)
   const route = resolved.model.route
 
-  const body = yield* route.body
-    .from(resolved)
-    .pipe(Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(route.body.schema))))
+  const body = yield* route.body.from(resolved)
   const prepared = yield* route.prepareTransport(body, resolved, options)
 
   return {
