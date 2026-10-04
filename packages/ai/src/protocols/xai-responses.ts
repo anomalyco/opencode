@@ -31,11 +31,6 @@ const XAIResponsesHostedToolItem = Schema.Union([
   ),
 ])
 
-const XAIResponsesBody = Schema.Struct({
-  ...OpenResponses.coreFields,
-  stream: Schema.Literal(true),
-})
-
 const adapter = {
   id: ADAPTER,
   name: NAME,
@@ -81,7 +76,7 @@ const step = (state: OpenResponses.ParserState, input: OpenResponses.Event) => {
 export const protocol = Protocol.make({
   id: ADAPTER,
   body: {
-    schema: XAIResponsesBody,
+    schema: OpenResponses.OpenResponsesBody,
     from: fromRequest,
   },
   stream: {
