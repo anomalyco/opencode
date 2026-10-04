@@ -21,7 +21,7 @@ const setup: Setup<typeof definition> = (ctx) => {
 
     if (live.status === "active") return void import("./actions").then((module) => module[name](ctx, live.value))
 
-    // Not loaded yet, or gone (disabled, failed, restarting): nothing can check or install.
+    // Not loaded yet, or gone (disabled, failed, blocked, restarting): nothing can check or install.
     showToast({ title: ctx.t("common.requestFailed") })
   }
 

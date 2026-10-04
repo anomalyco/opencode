@@ -44,7 +44,7 @@ const setup: MainSetup<typeof definition> = (ctx) => {
 
         return [{ id: Option.isSome(id) ? id.value.id : wslServerIdForDistro(distro), distro }]
       }),
-    writeServers: (servers) => saved.update(() => ({ servers })),
+    writeServers: (servers) => saved.set({ servers }),
     installCli: local
       ? async (distro) => {
           const { buildLocalWslCli } = await import("./local")

@@ -112,35 +112,35 @@ function ServiceMenu(props: ServiceMenuProps) {
 
 function LspMenu(props: ServiceMenuProps) {
   const ctx = useExtension()
-  const data = props.session.server.data
+  const data = () => props.session.server.data
 
   const [load, { refetch }] = createResource(
-    () => props.shown && props.directory,
-    (directory) => {
-      data.location.config.invalidate({ directory })
+    () => props.shown && data(),
+    (current) => {
+      const directory = props.directory
 
-      return data.location.config.sync({ directory })
+      current.location.config.invalidate({ directory })
+
+      return current.location.config.sync({ directory })
     },
   )
 
-  const names = createMemo(() => configuredLsps(data.location.config.list({ directory: props.directory }) ?? []))
+  const names = createMemo(() => configuredLsps(data().location.config.list({ directory: props.directory }) ?? []))
 
-  createKeyed(
-    () => props.directory,
-    (directory) =>
-      onCleanup(
-        data.on("config.updated", (event) => {
-          if (event.location?.directory !== directory) return
-          void refetch()
-        }),
-      ),
+  createKeyed(data, (current) =>
+    onCleanup(
+      current.on("config.updated", (event) => {
+        if (event.location?.directory !== props.directory) return
+        void refetch()
+      }),
+    ),
   )
 
   return (
     <ServicePopover
       {...props}
       loading={load.loading}
-      ready={data.location.config.list({ directory: props.directory }) !== undefined}
+      ready={data().location.config.list({ directory: props.directory }) !== undefined}
       empty={names().length === 0}
       error={load.error}
       retry={refetch}
@@ -172,11 +172,12 @@ function LspMenu(props: ServiceMenuProps) {
 function McpMenu(props: ServiceMenuProps) {
   const ctx = useExtension()
   const system = ctx.system
-  const data = props.session.server.data
+  const data = () => props.session.server.data
 
   const toggle = useMutation(() => ({
     mutationFn: async (input: { name: string; enabled: boolean }) => {
       const client = props.session.server.client
+      const source = data()
       const ref = { directory: props.directory }
       const server = (await client.mcp.list({ location: ref })).data.find((item) => item.name === input.name)
 
@@ -190,9 +191,9 @@ function McpMenu(props: ServiceMenuProps) {
         await client.mcp.connect({ server: input.name, location: ref })
       }
 
-      data.location.mcp.server.invalidate(ref)
-      await data.location.mcp.server.sync(ref)
-      const current = data.location.mcp.server.list(ref)?.find((item) => item.name === input.name)
+      source.location.mcp.server.invalidate(ref)
+      await source.location.mcp.server.sync(ref)
+      const current = source.location.mcp.server.list(ref)?.find((item) => item.name === input.name)
 
       if (input.enabled && current?.status.status === "needs_auth" && current.integrationID) {
         const integration = await client.integration.get({ integrationID: current.integrationID, location: ref })
@@ -209,8 +210,8 @@ function McpMenu(props: ServiceMenuProps) {
         system.openExternal(attempt.data.url)
       }
 
-      data.location.mcp.resource.invalidate(ref)
-      await data.location.mcp.resource.sync(ref)
+      source.location.mcp.resource.invalidate(ref)
+      await source.location.mcp.resource.sync(ref)
       // A successful HTTP response can still leave the MCP connection in a failed state.
       const status = current?.status
 
@@ -225,15 +226,17 @@ function McpMenu(props: ServiceMenuProps) {
   }))
 
   const [load, { refetch }] = createResource(
-    () => props.shown && props.directory,
-    async (directory) => {
-      data.location.mcp.server.invalidate({ directory })
-      await data.location.mcp.server.sync({ directory })
+    () => props.shown && data(),
+    async (current) => {
+      const directory = props.directory
+
+      current.location.mcp.server.invalidate({ directory })
+      await current.location.mcp.server.sync({ directory })
     },
   )
 
   const servers = createMemo(() =>
-    (data.location.mcp.server.list({ directory: props.directory }) ?? []).toSorted((a, b) =>
+    (data().location.mcp.server.list({ directory: props.directory }) ?? []).toSorted((a, b) =>
       a.name.localeCompare(b.name),
     ),
   )
@@ -242,7 +245,7 @@ function McpMenu(props: ServiceMenuProps) {
     <ServicePopover
       {...props}
       loading={load.loading}
-      ready={data.location.mcp.server.list({ directory: props.directory }) !== undefined}
+      ready={data().location.mcp.server.list({ directory: props.directory }) !== undefined}
       empty={servers().length === 0}
       error={load.error}
       retry={refetch}
@@ -334,11 +337,13 @@ function McpMenu(props: ServiceMenuProps) {
 
 function ServiceCatalog(props: ServiceMenuProps) {
   const ctx = useExtension()
-  const data = props.session.server.data
+  const data = () => props.session.server.data
 
   const [items, { refetch }] = createResource(
-    () => props.shown && props.directory,
-    async (directory) => {
+    () => props.shown && data(),
+    async (current) => {
+      const directory = props.directory
+
       if (props.service.type === "plugins") {
         const result = await props.session.server.client.plugin.list({ location: { directory } })
 
@@ -351,8 +356,8 @@ function ServiceCatalog(props: ServiceMenuProps) {
           }))
       }
 
-      data.location.skill.invalidate({ directory })
-      await data.location.skill.sync({ directory })
+      current.location.skill.invalidate({ directory })
+      await current.location.skill.sync({ directory })
 
       return undefined
     },
@@ -366,7 +371,7 @@ function ServiceCatalog(props: ServiceMenuProps) {
         ? loaded()
           ? (items.latest ?? [])
           : []
-        : (data.location.skill.list({ directory: props.directory }) ?? []).map((skill) => ({
+        : (data().location.skill.list({ directory: props.directory }) ?? []).map((skill) => ({
             name: skill.name,
             status: "active",
             error: undefined,
@@ -375,15 +380,13 @@ function ServiceCatalog(props: ServiceMenuProps) {
     return entries.toSorted((a, b) => a.name.localeCompare(b.name))
   })
 
-  createKeyed(
-    () => props.directory,
-    (directory) =>
-      onCleanup(
-        data.on(props.service.type === "plugins" ? "plugin.updated" : "skill.updated", (event) => {
-          if (event.location?.directory !== directory) return
-          void refetch()
-        }),
-      ),
+  createKeyed(data, (current) =>
+    onCleanup(
+      current.on(props.service.type === "plugins" ? "plugin.updated" : "skill.updated", (event) => {
+        if (event.location?.directory !== props.directory) return
+        void refetch()
+      }),
+    ),
   )
 
   return (
@@ -393,7 +396,7 @@ function ServiceCatalog(props: ServiceMenuProps) {
       ready={
         props.service.type === "plugins"
           ? loaded()
-          : data.location.skill.list({ directory: props.directory }) !== undefined
+          : data().location.skill.list({ directory: props.directory }) !== undefined
       }
       empty={list().length === 0}
       error={items.error}

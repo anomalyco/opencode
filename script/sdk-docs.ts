@@ -5,8 +5,8 @@
 //   a member of an exported object such as `Store.global` has no doc comment;
 // - a documented function or method leaves a parameter without `@param`, or names one it does not have.
 // It also fails when a code block of the guide (`packages/gui-extensions/README.md`) marked `<!-- source: path -->` (a
-// whole file of a shipping extension) or `<!-- source: path#name -->` (the first declaration, object property or call
-// statement named `name` in that file, with the comments directly above it) differs from that source, or when the
+// whole file of a shipping extension) or `<!-- source: path#name -->` (a top-level declaration or call named `name`,
+// else the first nested match, with the comments directly above it) differs from that source, or when the
 // guide or the package's AGENTS.md names a `ctx.<member>` no context declares.
 // Usage: bun script/sdk-docs.ts
 import path from "node:path"
@@ -256,8 +256,8 @@ async function read(file: string) {
 }
 
 /**
- * The file's lines, or, for a name, the lines of the first declaration, object property or call statement it names,
- * with the comment lines directly above it, dedented.
+ * The file's lines, or, for a name, the lines of its top-level match (else the first nested match), with the comment
+ * lines directly above it, dedented.
  */
 function excerpt(file: string, text: string, name: string | undefined) {
   const lines = text.replace(/\n$/, "").split("\n")
@@ -278,10 +278,22 @@ function excerpt(file: string, text: string, name: string | undefined) {
   return picked.map((line) => line.slice(indent))
 }
 
-/** The first node, in source order, that declares `name`, is an object property named `name`, or calls `name`. */
+/** Top-level matches win; otherwise find the first nested declaration, property or call in source order. */
 function named(node: ts.Node, name: string): ts.Node | undefined {
+  if (ts.isSourceFile(node)) {
+    const top = node.statements.find((statement) => matches(statement, name))
+
+    if (top) return top
+  }
+
+  if (matches(node, name)) return node
+
+  return ts.forEachChild(node, (child) => named(child, name))
+}
+
+function matches(node: ts.Node, name: string) {
   if (ts.isVariableStatement(node)) {
-    if (node.declarationList.declarations.some((declaration) => declaration.name.getText() === name)) return node
+    return node.declarationList.declarations.some((declaration) => declaration.name.getText() === name)
   }
 
   if (
@@ -293,16 +305,16 @@ function named(node: ts.Node, name: string): ts.Node | undefined {
       ts.isMethodDeclaration(node)) &&
     node.name?.getText() === name
   )
-    return node
+    return true
 
   if (
     ts.isExpressionStatement(node) &&
     ts.isCallExpression(node.expression) &&
     node.expression.expression.getText() === name
   )
-    return node
+    return true
 
-  return ts.forEachChild(node, (child) => named(child, name))
+  return false
 }
 
 function parse(file: string, text: string) {

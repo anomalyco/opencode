@@ -576,12 +576,6 @@ export interface MountedSession extends SessionRef {
  * views that render inside it; a `MountedSession` you keep never acts on another session.
  */
 export interface SessionScreen {
-  /**
-   * The routed session, the object `Sessions.current` returns, and undefined whenever that is: until the screen has
-   * mounted, and while the route leaves for Home or a draft. Reactive. Inside a render, read `props.session` or
-   * `input.session` instead.
-   */
-  readonly session: MountedSession | undefined
   /** The routed workspace's files. */
   readonly file: Files
   /** The line comments of the routed session's next prompt. */
@@ -590,12 +584,13 @@ export interface SessionScreen {
   readonly composer: Composer
 }
 
-/** The session screen, while one is mounted. */
+/** The session screen, while it routes the mounted session. */
 export interface Screen {
   /**
    * The mounted session screen: the same object for as long as it stays mounted, whichever session it routes. Defined
-   * from the screen's first render, so every panel, slot and tab of the screen can read it; undefined on Home, on a
-   * draft and before the app interface mounts. Reactive.
+   * exactly when `Sessions.current()` is, after the screen's first render; undefined on Home, on a draft,
+   * while the route has left the mounted screen, and before the app interface mounts. Panel callbacks and session
+   * slots receive a non-null screen directly. Reactive.
    */
   current(): SessionScreen | undefined
 }
@@ -606,7 +601,9 @@ export interface Sessions {
   list(): readonly SessionRef[]
   /**
    * The routed, mounted session: a new object each time a session is routed. Undefined on Home, on a draft, and
-   * before the app interface mounts. Reactive.
+   * before the app interface mounts and during the screen's first render. Defined exactly when `Screen.current()`
+   * is, after that first render. Panel and session-slot inputs are available during render directly.
+   * Reactive.
    */
   current(): MountedSession | undefined
 }

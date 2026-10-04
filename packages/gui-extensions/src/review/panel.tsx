@@ -192,6 +192,7 @@ function ReviewPanel(props: ReviewPanelProps) {
         // Always mounted: the sidebar header hosts the changes-mode dropdown,
         // which must stay reachable when the current mode has zero diffs.
         <ReviewPanelSidebar
+          screen={props.screen}
           session={props.session}
           title={props.title}
           state={props.state}
@@ -243,6 +244,7 @@ function ReviewPanel(props: ReviewPanelProps) {
 }
 
 function ReviewPanelSidebar(props: {
+  screen: SessionScreen
   session: MountedSession
   title?: JSX.Element
   state: ReviewPanelState
@@ -315,6 +317,7 @@ function ReviewPanelSidebar(props: {
               {(views) => (
                 <Dynamic
                   component={views().Tree}
+                  screen={props.screen}
                   session={props.session}
                   allowed={props.filteredFiles}
                   kinds={props.kinds}
@@ -333,6 +336,7 @@ function ReviewPanelSidebar(props: {
               {(views) => (
                 <Dynamic
                   component={views().List}
+                  screen={props.screen}
                   session={props.session}
                   files={props.filteredFiles}
                   kinds={props.kinds}

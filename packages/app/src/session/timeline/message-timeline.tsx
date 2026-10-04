@@ -10,7 +10,7 @@ import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import type { BackgroundTask, MountedSession } from "@opencode/gui-extensions/sdk"
+import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
 import { ExtensionSlot } from "@/runtime/extension/render"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
@@ -60,6 +60,7 @@ type MessageTimelineProps = {
   active?: boolean
   session: TimelineSessionSource
   view: MountedSession
+  screen: SessionScreen
   background: SessionBackground
   actions?: SessionUserActions
   scroll: { overflow: boolean; jump: boolean }
@@ -553,6 +554,9 @@ function MessageTimelineView(
                       input={{
                         get session() {
                           return props.view
+                        },
+                        get screen() {
+                          return props.screen
                         },
                         get active() {
                           return props.active !== false

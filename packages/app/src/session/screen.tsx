@@ -12,7 +12,7 @@ import {
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
-import { Slot, type BackgroundTask, type MountedSession } from "@opencode/gui-extensions/sdk"
+import { Slot, type BackgroundTask, type MountedSession, type SessionScreen } from "@opencode/gui-extensions/sdk"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { ComposerDropzone } from "@/composer/dropzone"
 import type { SessionModel } from "@/session/model"
@@ -37,13 +37,18 @@ import { SessionReviewToggle } from "./header/session-header-actions"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createTimelineCache } from "./timeline/cache"
 
-export function SessionScreen(props: { session: SessionModel }) {
+export function SessionScreenView(props: { session: SessionModel }) {
   // The timeline cache captures its owner when created, so link handling must be provided above it.
   const mounted = createMountedSession(props.session)
 
   return (
     <ExtensionLinks session={mounted.view()}>
-      <SessionScreenContent session={props.session} view={mounted.view} bindBackground={mounted.bindBackground} />
+      <SessionScreenContent
+        session={props.session}
+        screen={mounted.screen}
+        view={mounted.view}
+        bindBackground={mounted.bindBackground}
+      />
     </ExtensionLinks>
   )
 }
@@ -52,6 +57,7 @@ function SessionScreenContent(props: {
   session: SessionModel
   /** One object per routed session; renders receive each through a reactive prop instead of remounting. */
   view: Accessor<MountedSession>
+  screen: SessionScreen
   bindBackground: (tasks: () => readonly BackgroundTask[]) => void
 }) {
   const session = props.session
@@ -59,7 +65,14 @@ function SessionScreenContent(props: {
   const attachment = useExtensionAttachment()
   const isDesktop = session.isDesktop
   const sidebar = createPanelSidebar()
-  const region = createRegion({ region: "side", view: props.view, tabs: session.layout.tabs })
+
+  const region = createRegion({
+    region: "side",
+    view: props.view,
+    screen: props.screen,
+    tabs: session.layout.tabs,
+  })
+
   onCleanup(attachment.region(region))
   const mobile = createMobileViews()
 
@@ -229,6 +242,7 @@ function SessionScreenContent(props: {
           hideHeader={!isDesktop()}
           session={source}
           view={own()}
+          screen={props.screen}
           background={composer.requests.background}
           actions={composer.actions.timeline}
           scroll={timeline.scroll}
@@ -269,6 +283,7 @@ function SessionScreenContent(props: {
         <Show when={session.identity.sessionKey()} keyed>
           {(_key) => (
             <MobileViewTabs
+              screen={props.screen}
               views={mobile}
               region={region}
               current={mobileView()}
@@ -288,7 +303,15 @@ function SessionScreenContent(props: {
       <div class="relative flex-1 min-h-0 overflow-hidden">
         <Show when={!isDesktop() && store.mobileDockCached}>
           <div class="absolute inset-0" classList={{ invisible: mobileView() !== dockView()?.key }}>
-            <DockRegion view={props.view()} sidebar={sidebar} fill embedded present contentHeight="100%" />
+            <DockRegion
+              view={props.view()}
+              screen={props.screen}
+              sidebar={sidebar}
+              fill
+              embedded
+              present
+              contentHeight="100%"
+            />
           </div>
         </Show>
         <Switch>
@@ -298,6 +321,7 @@ function SessionScreenContent(props: {
           <Match when={!isDesktop() && session.identity.params.id ? mobileEntry() : undefined}>
             {(entry) => (
               <MobilePanel
+                screen={props.screen}
                 entry={entry()}
                 view={props.view()}
                 sidebar={sidebar}
@@ -428,6 +452,7 @@ function SessionScreenContent(props: {
                       }}
                     >
                       <SideRegion
+                        screen={props.screen}
                         view={props.view()}
                         region={region}
                         sidebar={sidebar}
@@ -484,6 +509,7 @@ function SessionScreenContent(props: {
                       >
                         <div data-slot="side-terminal-panel-clip" class="size-full overflow-clip rounded-[10px]">
                           <DockRegion
+                            screen={props.screen}
                             view={props.view()}
                             sidebar={sidebar}
                             fill
@@ -531,6 +557,7 @@ function SessionScreenContent(props: {
               </div>
             </Show>
             <DockRegion
+              screen={props.screen}
               view={props.view()}
               sidebar={sidebar}
               stacked={isDesktop()}

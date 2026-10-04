@@ -16,7 +16,16 @@ import {
   type StoreOptions,
   type Workspaces,
 } from "@opencode/gui-extensions/sdk"
-import { createMemo, createSignal, getOwner, onCleanup, runWithOwner, Show, type ParentProps } from "solid-js"
+import {
+  createComponent,
+  createMemo,
+  createSignal,
+  getOwner,
+  onCleanup,
+  runWithOwner,
+  Show,
+  type ParentProps,
+} from "solid-js"
 import { createStore, produce } from "solid-js/store"
 import { Schema } from "effect"
 import { render } from "solid-js/web"
@@ -25,12 +34,15 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerScope } from "@/runtime/server/scope"
 import { ExtensionHostProvider, useExtensionHost, type HostApiFactories } from "../src/runtime/extension/host"
 import { createHostApis } from "../src/runtime/extension/host-apis"
+import { createInstalled } from "../src/runtime/extension/installed"
+import { extensionEnabled } from "@opencode/gui-extensions/sdk/bridge"
 import { createRegion, RegionContent } from "../src/runtime/extension/panels"
 import { ExtensionSlot } from "../src/runtime/extension/render"
 import { persistedHandle } from "../src/runtime/extension/stores"
 import { LanguageProvider } from "../src/runtime/i18n/language"
+import { GuiExtensionsSettings } from "../src/runtime/extension/settings-page-dev"
 
-export { Contract, createKeyed, Panel, Slot, Store } from "@opencode/gui-extensions/sdk"
+export { bindExtension, useExtension, Contract, createKeyed, Panel, Slot, Store } from "@opencode/gui-extensions/sdk"
 
 export { Schema }
 
@@ -45,7 +57,7 @@ type Captured = { apis?: ReturnType<typeof createHostApis> }
 /** A value the fixture's storage holds as JSON. */
 type Json = string | number | boolean | null | readonly Json[] | { readonly [key: string]: Json }
 
-export { createMemo, createSignal, getOwner, onCleanup, runWithOwner }
+export { createComponent, createMemo, createSignal, getOwner, onCleanup, runWithOwner }
 
 const layout: Layout = {
   narrow: () => false,
@@ -189,7 +201,10 @@ export function mountExtensionHost() {
 export function mountExtensions(input: {
   definitions: readonly Definition[]
   disabled?: readonly string[]
+  bridge?: Parameters<typeof createInstalled>[0]
   stored?: Readonly<Record<string, Json>>
+  /** Shows the production developer settings page for status-label contracts. */
+  settings?: boolean
 }) {
   const held = Promise.withResolvers<void>()
   const [disabled, setDisabled] = createSignal<ReadonlySet<string>>(new Set(input.disabled ?? []))
@@ -230,10 +245,24 @@ export function mountExtensions(input: {
   })
 
   function MountedHost() {
+    const installed = input.bridge ? createInstalled(input.bridge) : undefined
+
+    const disabledState = createMemo(() => {
+      if (!installed) return disabled()
+
+      const state = installed.enableState()
+
+      if (!state) return undefined
+
+      return new Set(
+        input.definitions.flatMap((definition) => (extensionEnabled(definition, state) ? [] : [definition.id])),
+      )
+    })
+
     return (
       <ExtensionHostProvider
         definitions={input.definitions}
-        disabled={disabled}
+        disabled={disabledState}
         apis={fakeApis(storage)}
         whenMounted={mounted}
       >
@@ -248,6 +277,9 @@ export function mountExtensions(input: {
 
     return (
       <Show when={host.ready()}>
+        <Show when={input.settings}>
+          <GuiExtensionsSettings />
+        </Show>
         <ExtensionSlot at="window.bottom" input={{}} />
       </Show>
     )
@@ -362,15 +394,13 @@ export function mountSessionRegion(input: { definitions: readonly Definition[]; 
   }
 
   const [view, setView] = createSignal(object("a"))
+  const [routed, setRouted] = createSignal(true)
 
   const route = {
-    get session() {
-      return view()
-    },
     composer: { attach: () => void attached.push(view().id), update() {}, detach() {} },
   }
 
-  // SAFETY: the test's extension reads only `session` and `composer.attach` of the screen.
+  // SAFETY: the test's extension reads only `composer.attach` of the screen.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const screen = route as unknown as SessionScreen
 
@@ -385,6 +415,7 @@ export function mountSessionRegion(input: { definitions: readonly Definition[]; 
     const region = createRegion({
       region: "side",
       view,
+      screen,
       tabs: () => ({
         all,
         active: () => input.active,
@@ -403,11 +434,13 @@ export function mountSessionRegion(input: { definitions: readonly Definition[]; 
             get session() {
               return view()
             },
+            screen,
           }}
         />
         <RegionContent
           region={region}
           view={view()}
+          screen={screen}
           frame={{
             shown: () => true,
             present: () => true,
@@ -429,7 +462,7 @@ export function mountSessionRegion(input: { definitions: readonly Definition[]; 
             <RealHost
               definitions={input.definitions}
               captured={captured}
-              mounted={standIn({ current: view, screen: () => screen })}
+              mounted={standIn({ current: () => (routed() ? view() : undefined), screen: () => screen })}
             >
               <Region />
             </RealHost>
@@ -444,6 +477,8 @@ export function mountSessionRegion(input: { definitions: readonly Definition[]; 
     container,
     /** Routes a session: the screen creates a new session object for it. */
     route: (id: string) => setView(object(id)),
+    /** The route leaves while its old screen has not unmounted yet. */
+    leave: () => setRouted(false),
     /** The session each composer attachment reached, in order. */
     attached,
     status: (id: string) => hosts[0]?.state.status[id],

@@ -10,6 +10,7 @@ import {
   type PanelSidebar,
   type PanelTab,
   type MountedSession,
+  type SessionScreen,
 } from "@opencode/gui-extensions/sdk"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useExtensionHost } from "./host"
@@ -62,6 +63,7 @@ export function MobileViewTabs(props: {
   region: Region
   current: string
   session: MountedSession
+  screen: SessionScreen
   sidebar: PanelSidebar
   onSelect: (key: string) => void
 }): JSX.Element {
@@ -173,6 +175,7 @@ export function MobileViewTabs(props: {
                   <MobilePanel
                     entry={entry}
                     view={props.session}
+                    screen={props.screen}
                     sidebar={props.sidebar}
                     visible={store.drawer === entry.key}
                     open={() => props.region.openFor(entry.extension)}

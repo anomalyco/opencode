@@ -1,24 +1,20 @@
-import { Schema, Struct } from "effect"
+import { Schema } from "effect"
 import { FileTree } from "../file/contract"
 import { Extension, Store } from "../sdk"
 import { Changes } from "./contract"
 import en from "./i18n/en"
 
-const DiffState = Schema.Struct({ diffStyle: Schema.Literals(["unified", "split"]) }).mapFields(
-  Struct.map(Schema.mutableKey),
-)
+const DiffState = Schema.Struct({ diffStyle: Schema.Literals(["unified", "split"]) })
 
-const PanelState = Schema.Struct({ expandMode: Schema.Literals(["expand", "collapse"]) }).mapFields(
-  Struct.map(Schema.mutableKey),
-)
+const PanelState = Schema.Struct({ expandMode: Schema.Literals(["expand", "collapse"]) })
 
-const MobileDiff = Schema.Struct({ wrap: Schema.Boolean }).mapFields(Struct.map(Schema.mutableKey))
+const MobileDiff = Schema.Struct({ wrap: Schema.Boolean })
 
 const SessionState = Schema.Struct({
   mode: Schema.optional(Schema.Literals(["git", "branch", "turn"])),
   file: Schema.optional(Schema.String),
-  open: Schema.mutable(Schema.Array(Schema.String)),
-}).mapFields(Struct.map(Schema.mutableKey))
+  open: Schema.Array(Schema.String),
+})
 
 export default Extension.define({
   id: "review",

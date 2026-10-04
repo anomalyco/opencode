@@ -4,6 +4,32 @@
  * Payloads are structured-clone values already encoded with the Ipc's schemas. The `ipc` fields name an Ipc by id.
  */
 
+import type { Definition } from "./core"
+
+/** One explicit desktop enable-state row. An absent row means there is no setting under that id. */
+export interface EnableState {
+  /** The extension id the user saved a setting under, including ids from before a rename. */
+  readonly id: string
+  /** The saved setting: true enables the extension; false disables it. */
+  readonly enabled: boolean
+}
+
+/**
+ * Resolves desktop enable state without changing stored rows. The current id wins, then legacy ids newest first;
+ * no matching row means enabled. Both hosts use this rule, including a window's preload snapshot.
+ *
+ * @param definition - The current id and its optional earlier ids.
+ * @param state - Explicit saved rows, or the manager's resolved list.
+ * @returns Whether the extension is enabled.
+ */
+export function extensionEnabled(definition: Pick<Definition, "id" | "legacy">, state: readonly EnableState[]) {
+  const row = [definition.id, ...(definition.legacy ?? [])]
+    .map((id) => state.find((item) => item.id === id))
+    .find((item) => item !== undefined)
+
+  return row?.enabled ?? true
+}
+
 /** Where an embed sits in its window, as the renderer measured it. */
 export interface BridgeLayout {
   /** The embed should be on screen. */
@@ -186,6 +212,12 @@ export interface Bridge {
   ): void
   /** The extension manager. */
   readonly manager: {
+    /**
+     * Explicit enable-state rows from the existing preload startup reply, including earlier ids. Undefined (or an
+     * omitted promise) means unknown: activation waits for `list()` or a live list, never assumes all are enabled.
+     * An empty list is authoritative: no saved settings. A rejected promise also falls back to the manager list.
+     */
+    readonly initial?: Promise<readonly EnableState[] | undefined>
     /** The installed extensions, built-ins included. */
     list(): Promise<readonly Installed[]>
     /**

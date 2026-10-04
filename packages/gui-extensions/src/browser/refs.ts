@@ -13,7 +13,7 @@ export function createRefs(reserved: Persisted<number, number>) {
   return () => {
     if (state.next >= state.end) {
       state.end = state.next + block
-      reserved.update(() => state.end)
+      reserved.set(state.end)
     }
 
     return `e${++state.next}`

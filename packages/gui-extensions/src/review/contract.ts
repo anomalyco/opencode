@@ -1,5 +1,5 @@
 import type { FileDiffInfo } from "@opencode/client/promise"
-import { Contract, type SessionRef, type MountedSession } from "../sdk"
+import { Contract, type SessionRef, type SessionScreen } from "../sdk"
 
 export type ChangeKind = "add" | "del" | "mix"
 
@@ -26,8 +26,11 @@ export interface Changes {
    * Keeps the changes of the view the caller renders loaded while it shows them, across the view's session
    * switches. A `tree` is a persistent change list: opening the side region refreshes the changes it shows.
    * `details` loads `details(session)`.
+   *
+   * @param screen - The owning screen from the panel or session-slot input, available even before publication.
+   * @param source - The view's demand: a tree, file markers or session details.
    */
-  watch(session: MountedSession, source: "tree" | "files" | "details"): () => void
+  watch(screen: SessionScreen, source: "tree" | "files" | "details"): () => void
   /** Runs when review reveals a change (e.g. from a composer comment), so change lists can show theirs. */
   onReveal(listener: () => void): () => void
 }

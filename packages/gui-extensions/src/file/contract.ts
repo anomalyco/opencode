@@ -1,8 +1,10 @@
 import type { JSX } from "solid-js"
 import type { ChangeKind } from "../review/contract"
-import { Contract, type MountedSession } from "../sdk"
+import { Contract, type MountedSession, type SessionScreen } from "../sdk"
 
 export interface FileTreeProps {
+  /** The session screen that owns the rendered files. */
+  readonly screen: SessionScreen
   readonly session: MountedSession
   /** The files to show, as a tree of only these paths. */
   readonly allowed: readonly string[]
@@ -12,6 +14,8 @@ export interface FileTreeProps {
 }
 
 export interface FileListProps {
+  /** The session screen that owns the rendered files. */
+  readonly screen: SessionScreen
   readonly session: MountedSession
   readonly files: readonly string[]
   readonly kinds?: ReadonlyMap<string, ChangeKind>

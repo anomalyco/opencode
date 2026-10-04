@@ -49,7 +49,7 @@ const setup: Setup<typeof Btw> = (ctx) => {
     // Layouts saved before extensions store the tab as "btw"; as a panel key it leaves like any unlisted transient tab.
     legacy: { btw: "main" },
     // The answer lives only in this window's memory, so the tab lists while its session has one.
-    list: (session, open) => (open.includes("main") && btw.has(session) ? [tab] : []),
+    list: (input) => (input.open.includes("main") && btw.has(input.session) ? [tab] : []),
     render: (props) => (
       <Suspense>
         <SessionBtwPanel btw={btw} session={props.session} />

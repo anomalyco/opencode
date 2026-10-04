@@ -38,8 +38,8 @@ const setup: MainSetup<typeof definition> = async (ctx) => {
         }),
       persistence: {
         get: Effect.sync(() => ready.value ?? undefined),
-        set: (value) => Effect.sync(() => ready.update(() => value)),
-        clear: Effect.sync(() => ready.update(() => null)),
+        set: (value) => Effect.sync(() => ready.set(value)),
+        clear: Effect.sync(() => ready.set(null)),
       },
       changed: () => publish.changed(),
     }).pipe(Scope.provide(scope)),

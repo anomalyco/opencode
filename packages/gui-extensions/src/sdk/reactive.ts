@@ -141,7 +141,7 @@ export function createKeyed<S extends KeyedSource>(
  *
  * @example
  * ```ts
- * const info = createLatest(ctx.uses.pairing, (pairing, signal) => pairing.info(undefined, { signal }))
+ * const info = createLatest(ctx.uses.pairing, (pairing, signal) => pairing.info({ signal }))
  * const urls = () => info.latest?.urls ?? []
  * ```
  */

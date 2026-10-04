@@ -567,6 +567,29 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             setEphemeral("sessionTabPreview", session, next.preview)
           })
         },
+        /**
+         * Replaces `to`'s strip, selection, preview tab and scroll offsets with copies of `from`'s, keeping `from`; a key
+         * with nothing stored copies as empty. `to` counts as just used, then pruning runs as for any new key.
+         */
+        copy(from: string, to: string) {
+          const current = store.sessionTabs[from]
+          usage.used.set(to, Date.now())
+          batch(() => {
+            scroll.flush(from)
+            setStore("sessionTabs", to, { all: [...(current?.all ?? [])], active: current?.active })
+            setEphemeral("sessionTabPreview", to, ephemeral.sessionTabPreview[from])
+            scroll.drop([to])
+            setStore("sessionView", to, {
+              scroll: Object.fromEntries(
+                Object.entries(store.sessionView[from]?.scroll ?? {}).map(([key, value]) => [
+                  key,
+                  { x: value.x, y: value.y },
+                ]),
+              ),
+            })
+            prune(usage.active ?? to)
+          })
+        },
         scroll(session: string, tab: string) {
           return scroll.scroll(session, tab)
         },

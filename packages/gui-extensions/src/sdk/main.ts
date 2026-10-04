@@ -90,8 +90,7 @@ export interface Storage {
    * The window's `Persisted` shape, read and written synchronously: `value` is always defined and `ready()` always
    * true. Values are stored as the schema's canonical JSON; the schema must not need services. A stored value that
    * fails to decode reads as `initial`. Each write reaches the database before it returns. `update` changes a copy of
-   * the value; a mutation may also return the next value, which replaces it, so a number, `null` or a new list is
-   * written that way.
+   * the value through a deep-mutable draft; `set` replaces it, including a number, `null` or a new list.
    *
    * @param key - The store's key in your namespace.
    * @param options - The store's options.
@@ -99,7 +98,7 @@ export interface Storage {
    * @example
    * ```ts
    * const tabs = ctx.storage.store(`restore:${session}`, { schema: Tabs, initial: [] })
-   * tabs.update(() => next)
+   * tabs.set(next)
    * ```
    */
   store<S extends Schema.ConstraintCodec<unknown, unknown>>(
@@ -251,7 +250,7 @@ export interface MainContext<D = never> extends BaseContext {
    * @example
    * ```ts
    * const count = ctx.stores.count
-   * count.update((value) => value + 1)
+   * count.set(count.value + 1)
    * ```
    */
   readonly stores: MainStores<D>
@@ -362,7 +361,7 @@ export interface MainContext<D = never> extends BaseContext {
  * ```ts
  * const setup: MainSetup<typeof definition> = (ctx) => {
  *   const stored = ctx.stores.keepScreenActive // a declared main store, always loaded
- *   ctx.provide(Pairing, { info, code, screenActive, setScreenActive: (enabled) => stored.update(() => enabled) })
+ *   ctx.provide(Pairing, { info, code, screenActive, setScreenActive: (enabled) => stored.set(enabled) })
  * }
  * export default setup
  * ```

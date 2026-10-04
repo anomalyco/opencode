@@ -9,7 +9,7 @@ import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMemo, For, on, onCleanup, Show, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { createKeyed, useExtension, usePanel, type PanelTab, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, usePanel, type PanelTab, type MountedSession, type SessionScreen } from "../sdk"
 import { commentNote } from "./comment"
 import type { Model } from "./model"
 import type { PaneElement } from "./ipc"
@@ -24,10 +24,11 @@ type PaneState = {
   /** The movement count at a submit; the next reported movement ends the submitted navigation. */
   navigating: number | undefined
   /** The tab whose element picker is on. */
-  picking: Browser.TabID | undefined
+  picking: { sessionKey: string; tabID: Browser.TabID } | undefined
   /** A picked element awaiting its comment. The page stays frozen as a still until it closes. */
   comment:
     | {
+        sessionKey: string
         tabID: Browser.TabID
         url: string
         /** The tab's navigation count at the pick; the element's ref dies when it changes. */
@@ -40,7 +41,12 @@ type PaneState = {
   editorHeight: number
 }
 
-export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; session: MountedSession; model: Model }) {
+export default function SessionBrowserPane(props: {
+  tab: Accessor<PanelTab>
+  session: MountedSession
+  screen: SessionScreen
+  model: Model
+}) {
   const extension = useExtension()
   const keybinds = extension.keybinds
   const desktop = extension.desktop
@@ -108,7 +114,6 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     return tab ? props.model.embed(props.session, tab.id) : undefined
   }
 
-  let addressDisplay: HTMLDivElement | undefined
   let box: HTMLDivElement | undefined
   const scheme = () => field().match(/^https?:\/\//i)?.[0] ?? ""
 
@@ -123,20 +128,20 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
   }
 
   const inspectable = () => !!address() && !failed() && !suspended()
-  const picking = () => !!state() && store.picking === state()?.id
+  const picking = () => store.picking?.sessionKey === props.session.key && store.picking?.tabID === state()?.id
   // A comment on a picked element freezes the page so its editor can float above it.
-  const commenting = () => !!store.comment && store.comment.tabID === state()?.id
+  const commenting = () => store.comment?.sessionKey === props.session.key && store.comment?.tabID === state()?.id
 
-  const setPicking = (tabID: Browser.TabID, enabled: boolean) => {
-    props.model.inspect(props.session, tabID, enabled)
-    setStore("picking", enabled ? tabID : undefined)
+  const setPicking = (current: NonNullable<PaneState["picking"]>, enabled: boolean) => {
+    props.model.inspect({ key: current.sessionKey }, current.tabID, enabled)
+    setStore("picking", enabled ? current : undefined)
   }
 
   const closeComment = () => {
     const current = store.comment
 
     if (!current) return
-    props.model.highlight(props.session, current.tabID)
+    props.model.highlight({ key: current.sessionKey }, current.tabID)
     setStore("comment", undefined)
   }
 
@@ -146,7 +151,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
     if (!tab || !inspectable()) return
 
     if (store.comment) closeComment()
-    setPicking(tab.id, !picking())
+    setPicking({ sessionKey: props.session.key, tabID: tab.id }, !picking())
   }
 
   const submitComment = (value: string) => {
@@ -154,10 +159,13 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
 
     if (!current) return
     const tab = state()
+
     // The draft outlives a reload or agent navigation, but the ref no longer names anything.
-    const live = tab?.id === current.tabID && tab.generation === current.generation
-    // The screen's composer, read when the user submits: it serves the session the pane shows.
-    extension.screen.current()?.composer.attach(
+    const live =
+      props.session.key === current.sessionKey && tab?.id === current.tabID && tab.generation === current.generation
+
+    // The owning screen's composer serves the session the pane shows.
+    props.screen.composer.attach(
       commentNote({
         origin: extension.id,
         tabID: current.tabID,
@@ -231,12 +239,13 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
       onCleanup(
         props.model.onInspect(session, (event) => {
           if (event.active) {
-            setStore("picking", event.tabID)
+            setStore("picking", { sessionKey: session.key, tabID: event.tabID })
 
             return
           }
 
-          if (store.picking === event.tabID) setStore("picking", undefined)
+          if (store.picking?.sessionKey === session.key && store.picking.tabID === event.tabID)
+            setStore("picking", undefined)
 
           if (!event.element) return
           const tab = state()
@@ -248,6 +257,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
           }
 
           setStore("comment", {
+            sessionKey: session.key,
             tabID: tab.id,
             url: tab.url,
             generation: tab.generation,
@@ -261,20 +271,31 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
   // A picker or comment belongs to the page on screen: the page's picker stops when its tab is switched away or the
   // pane hides, and a comment closes with its tab.
   const endPicker = () => {
-    const tabID = store.picking
+    const current = store.picking
 
-    if (tabID && (tabID !== state()?.id || !visible())) setPicking(tabID, false)
+    if (current && (current.sessionKey !== props.session.key || current.tabID !== state()?.id || !visible()))
+      setPicking(current, false)
   }
+
+  onCleanup(() => {
+    if (store.picking) setPicking(store.picking, false)
+    closeComment()
+  })
 
   createKeyed(visible, endPicker, { otherwise: endPicker })
   createKeyed(
-    () => state()?.id,
-    (id) => {
+    () => {
+      const tab = state()
+
+      return tab ? { session: props.session.key, tabID: tab.id } : undefined
+    },
+    (current) => {
       endPicker()
 
-      if (store.comment?.tabID !== id) closeComment()
+      if (store.comment?.sessionKey !== current.session || store.comment.tabID !== current.tabID) closeComment()
     },
     {
+      equals: (previous, next) => previous.session === next.session && previous.tabID === next.tabID,
       otherwise: () => {
         endPicker()
         closeComment()
@@ -385,7 +406,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
             data-action="browser-inspect"
             disabled={!inspectable()}
             state={picking() ? "pressed" : undefined}
-            classList={{ "!text-v2-icon-icon-accent": picking() || !!store.comment }}
+            classList={{ "!text-v2-icon-icon-accent": picking() || commenting() }}
             aria-pressed={picking()}
             aria-label={extension.t("inspect")}
             onClick={toggleInspect}
@@ -411,7 +432,8 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
           }}
         >
           <input
-            class="w-full h-full px-2 rounded-md border border-transparent bg-transparent text-transparent caret-v2-text-text-base placeholder:text-v2-text-text-faint outline-none focus:border-v2-border-border-focus"
+            class="w-full h-full px-2 rounded-md border border-transparent bg-transparent placeholder:text-v2-text-text-faint outline-none focus:border-v2-border-border-focus"
+            classList={{ "text-v2-text-text-base": store.editing, "text-transparent": !store.editing }}
             spellcheck={false}
             autocomplete="off"
             value={field()}
@@ -422,7 +444,6 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
               setStore({ editing: true, address: field() })
               event.currentTarget.select()
             }}
-            onClick={(event) => event.currentTarget.select()}
             onBlur={() =>
               setStore({
                 editing: false,
@@ -431,20 +452,20 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
               })
             }
             onInput={(event) => setStore("address", event.currentTarget.value)}
-            onScroll={(event) => {
-              if (addressDisplay) addressDisplay.scrollLeft = event.currentTarget.scrollLeft
-            }}
           />
-          {/* Keep native input editing and selection while coloring the scheme, including during editing. */}
-          <div
-            aria-hidden="true"
-            class="absolute inset-0 flex items-center px-2 border border-transparent pointer-events-none"
-          >
-            <div ref={addressDisplay} class="w-full overflow-hidden whitespace-pre text-v2-text-text-base">
-              <span class="text-v2-text-text-muted">{scheme()}</span>
-              {field().slice(scheme().length)}
+          {/* At rest, draw the address with a muted scheme over the input's hidden text. While editing, the input
+              shows its own text so selection and the caret need no mirror. */}
+          <Show when={!store.editing}>
+            <div
+              aria-hidden="true"
+              class="absolute inset-0 flex items-center px-2 border border-transparent pointer-events-none"
+            >
+              <div class="w-full overflow-hidden whitespace-pre text-v2-text-text-base">
+                <span class="text-v2-text-text-muted">{scheme()}</span>
+                {field().slice(scheme().length)}
+              </div>
             </div>
-          </div>
+          </Show>
         </form>
       </div>
       <Show when={error() && !failed()}>
@@ -531,7 +552,7 @@ export default function SessionBrowserPane(props: { tab: Accessor<PanelTab>; ses
                       onSubmit={submitComment}
                       mention={{
                         items: (query) =>
-                          extension.screen.current()?.file.search(query, { kind: "any" }) ?? Promise.resolve([]),
+                          props.screen.file.search(query, { kind: "any" }),
                       }}
                       selection={
                         <span class="flex min-w-0 items-center gap-1" dir="ltr">

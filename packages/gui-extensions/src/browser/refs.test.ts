@@ -20,13 +20,8 @@ test("element refs stay unique when the pane's main entry reloads over the same 
         return read()
       },
       ready: () => true,
-      // Like the host's: a mutation that returns a value replaces the stored one.
-      update: (mutation: (draft: number) => number | void) => {
-        const current = read()
-        const next = mutation(current)
-
-        values.stored = Schema.encodeUnknownSync(declared.schema)(next === undefined ? current : next)
-      },
+      update: (mutate: (draft: number) => void) => mutate(read()),
+      set: (next: number) => void (values.stored = Schema.encodeUnknownSync(declared.schema)(next)),
     }
   }
 

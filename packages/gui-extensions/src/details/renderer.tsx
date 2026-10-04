@@ -38,7 +38,13 @@ const setup: Setup<typeof Details> = (ctx) => {
     at: "session.header",
     order: 20,
     render: (input) => (
-      <DetailsHeader session={input.session} active={input.active} panel={DetailsPanel} disclosure={disclosure} />
+      <DetailsHeader
+        session={input.session}
+        screen={input.screen}
+        active={input.active}
+        panel={DetailsPanel}
+        disclosure={disclosure}
+      />
     ),
   })
 
@@ -76,7 +82,7 @@ const setup: Setup<typeof Details> = (ctx) => {
 
       // The changes row loads the session directory's changes only while the drawer shows.
       createKeyed(changes, (service) =>
-        createKeyed(frame.visible, () => onCleanup(service.watch(props.session, "details"))),
+        createKeyed(frame.visible, () => onCleanup(service.watch(props.screen, "details"))),
       )
 
       return (

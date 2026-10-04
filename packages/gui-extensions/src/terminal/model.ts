@@ -1,6 +1,6 @@
 import { batch, createMemo, createRoot, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
-import { createKeyed, type Storage, type ServerRef, type MountedSession, type Sessions } from "../sdk"
+import { createKeyed, type Mutable, type Storage, type ServerRef, type MountedSession, type Sessions } from "../sdk"
 import { MAX_TERMINAL_SESSIONS, numberFromTitle, TerminalState, type LocalPTY } from "./state"
 import { defaultTitle } from "./title"
 
@@ -29,7 +29,7 @@ type Ghostty = { shared?: ReturnType<typeof importGhostty> }
 
 const workspaceKey = (server: string, directory: string) => `${server}\0${directory}`
 
-const trimTerminal = (pty: LocalPTY) => {
+const trimTerminal = (pty: Mutable<LocalPTY>) => {
   if (!pty.buffer && pty.cursor === undefined && pty.scrollY === undefined) return
 
   pty.buffer = undefined
@@ -307,10 +307,7 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
     all,
     active,
     clear() {
-      stored.update((draft) => {
-        draft.active = undefined
-        draft.all = []
-      })
+      stored.set({ active: undefined, all: [] })
     },
     new() {
       const nextNumber = pickNextTerminalNumber()
@@ -360,10 +357,14 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
 
       if (index === -1) return
 
-      stored.update((draft) => trimTerminal(draft.all[index]))
+      stored.update((draft) => {
+        trimTerminal(draft.all[index])
+      })
     },
     trimAll() {
-      stored.update((draft) => draft.all.forEach(trimTerminal))
+      stored.update((draft) => {
+        draft.all.forEach(trimTerminal)
+      })
     },
     clone,
     open(id: string) {

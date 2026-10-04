@@ -148,19 +148,19 @@ const setup: Setup<typeof definition> = (ctx) => {
   ctx.add(Panel, {
     id: "main",
     region: "side",
-    list(session, open) {
+    list(input) {
       // While the model loads, the stored tabs hold the strip and its selection, as before the first inventory.
-      const ids = model()?.tabs(session, open) ?? open
+      const ids = model()?.tabs(input.session, input.open) ?? input.open
 
       if (ids.length === 0) {
-        tabs.delete(session.key)
+        tabs.delete(input.session.key)
 
         return []
       }
 
-      const previous = tabs.get(session.key)
-      const next = new Map(ids.map((id) => [id, previous?.get(id) ?? create(session.key, id)]))
-      tabs.set(session.key, next)
+      const previous = tabs.get(input.session.key)
+      const next = new Map(ids.map((id) => [id, previous?.get(id) ?? create(input.session.key, id)]))
+      tabs.set(input.session.key, next)
 
       return [...next.values()]
     },
@@ -170,14 +170,14 @@ const setup: Setup<typeof definition> = (ctx) => {
         {(value) => (
           <Show when={!value().pending(props.session)}>
             <Suspense>
-              <SessionBrowserPane tab={() => props.tab} session={props.session} model={value()} />
+              <SessionBrowserPane tab={() => props.tab} session={props.session} screen={props.screen} model={value()} />
             </Suspense>
           </Show>
         )}
       </Show>
     ),
-    close: (tab, session) => model()?.closeTab(session, tab.id),
-    focus: (tab, session) => model()?.focusTab(session, tab.id),
+    close: (input) => model()?.closeTab(input.session, input.tab.id),
+    focus: (input) => model()?.focusTab(input.session, input.tab.id),
   })
 }
 

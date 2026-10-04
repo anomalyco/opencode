@@ -18,7 +18,7 @@ const setup: Setup<typeof definition> = (ctx) => {
     draggable: false,
     closable: "compact",
     first: true,
-    fallback: 2,
+    fallback: true,
     label: (state) => (
       <div class="flex items-center gap-2">
         <SessionContextUsage session={state.session} variant="indicator" />
@@ -41,7 +41,7 @@ const setup: Setup<typeof definition> = (ctx) => {
       // Stored before extensions as "context", then under the extension's earlier id `usage`.
       legacy: { context: "main", "usage:context": "main" },
       mobile: { title: ctx.t("mobile.title"), order: 10, kind: "menu" },
-      list: (_session, open) => (open.includes("main") ? [tab] : []),
+      list: (input) => (input.open.includes("main") ? [tab] : []),
       render: (props) => {
         const panel = usePanel()
 

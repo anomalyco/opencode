@@ -212,7 +212,7 @@ export default function FileBrowser(props: {
   // Change markers in the tree load while a file tab shows, as the side panel did.
   createKeyed(
     () => (panel.visible() && !placeholder() ? changes() : undefined),
-    (service) => onCleanup(service.watch(props.session, "files")),
+    (service) => onCleanup(service.watch(props.screen, "files")),
   )
 
   // Keep each file tab's last selection for the moment before a session's file view state loads. The handoff

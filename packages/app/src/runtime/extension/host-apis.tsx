@@ -1,5 +1,6 @@
 import {
   batch,
+  createComputed,
   createEffect,
   createMemo,
   createSignal,
@@ -282,7 +283,13 @@ export function createHostApis() {
       list: () => current()?.sessions() ?? [],
       current: () => current()?.current(),
     }),
-    screen: () => ({ current: () => current()?.screen() }),
+    screen: () => ({
+      current: () => {
+        const attached = current()
+
+        return attached?.current() ? attached.screen() : undefined
+      },
+    }),
     // Before the interface mounts, reads return what an empty layout holds and writes wait for it.
     layout: (extension) => ({
       narrow,
@@ -367,6 +374,7 @@ export function createExtensionAttachment(apis: HostApis) {
   const refs = new Map<string, SessionRef>()
 
   const connection = (id: string) => global.servers.list().find((item) => ServerConnection.key(item) === id)
+  const servers = useServers()
 
   // One ref per server id. A restarted server (e.g. an updated WSL server) gets a new controller under the same id,
   // so the ref follows the live controller instead of the one it was created with.
@@ -475,16 +483,54 @@ export function createExtensionAttachment(apis: HostApis) {
     return global.ensureServerCtx(conn).sdk.scope
   }
 
+  // The registry's scope is pure: an unlisted server's sessions (e.g. a stopped WSL server, whose tabs stay open) keep
+  // their key, and no server controller starts for it.
   const stateKey = (session: SessionRef) => {
     const location = session.location
 
     if (!location) return
 
     return SessionStateKey.from(
-      scope(session.server.id),
+      servers.scope(ServerConnection.Key.make(session.server.id)),
       SessionRouteKey.fromRoute(base64Encode(location.directory), session.id),
     )
   }
+
+  // Each session's layout key, kept while its location is unknown (e.g. after the server re-authenticates).
+  const stateKeys = createMemo<ReadonlyMap<string, string>>(
+    (previous) =>
+      new Map(
+        sessions().flatMap((session) => {
+          const value = stateKey(session) ?? previous.get(session.key)
+
+          return value ? [[session.key, value] as const] : []
+        }),
+      ),
+    new Map(),
+  )
+
+  // The strip is stored per directory, so a session that moves copies its strip to its new key: its tabs look the same
+  // before and after the move. Synchronous, so no region renders the new key before the copy lands. A layout write
+  // before desktop layout storage loads would stop it loading, so `lastKeys` keeps each session's first key until then.
+  const lastKeys = new Map<string, string>()
+  createComputed(() => {
+    const next = stateKeys()
+    Array.from(lastKeys.keys()).forEach((key) => {
+      if (!next.has(key)) lastKeys.delete(key)
+    })
+    next.forEach((to, key) => {
+      if (!lastKeys.has(key)) lastKeys.set(key, to)
+    })
+
+    if (!layout.ready()) return
+    next.forEach((to, key) => {
+      const from = lastKeys.get(key)
+
+      if (!from || from === to) return
+      layout.panel.copy(from, to)
+      lastKeys.set(key, to)
+    })
+  })
 
   const shellTab = (session: SessionRef) =>
     findSessionTab(tabs.store, ServerConnection.Key.make(session.server.id), session.id)
@@ -545,8 +591,9 @@ export function createExtensionAttachment(apis: HostApis) {
   // The side tabs a mounted session lists right now, plus `adding` as if it were stored; unmounted sessions have none.
   const listed = (session: SessionRef, value: string, adding?: string) => {
     const view = mountedSession(session)
+    const currentScreen = screen()
 
-    if (!view) return []
+    if (!view || !currentScreen) return []
     const all = layout.panel.state(value).all
     const stored = adding && !all.includes(adding) ? [...all, adding] : all
 
@@ -558,7 +605,15 @@ export function createExtensionAttachment(apis: HostApis) {
           const prefix = `${item.extension}:`
           const open = stored.flatMap((key) => (key.startsWith(prefix) ? [key.slice(prefix.length)] : []))
 
-          return item.value.list(view, open).map((tab) => ({ key: `${prefix}${tab.id}`, tab }))
+          return item.value
+            .list({
+              get session() {
+                return mountedSession(session) ?? view
+              },
+              screen: currentScreen,
+              open,
+            })
+            .map((tab) => ({ key: `${prefix}${tab.id}`, tab }))
         }),
     )
   }
@@ -620,8 +675,9 @@ export function createExtensionAttachment(apis: HostApis) {
     const tab = listed(session, value).find((entry) => entry.key === key)?.tab
     layout.panel.close(value, key)
     const view = mountedSession(session)
+    const currentScreen = screen()
 
-    if (view && tab) item?.value.close?.(tab, view)
+    if (view && tab && currentScreen) item?.value.close?.({ tab, session: view, screen: currentScreen })
   }
 
   // The routed session's side region, which knows the fallback selection the stored state lacks.
@@ -649,7 +705,6 @@ export function createExtensionAttachment(apis: HostApis) {
   }
 
   // Open-project requests wait until their server is listed (e.g. an SSH server that just connected).
-  const servers = useServers()
   const picker = useDirectoryPicker()
   const [projects, setProjects] = createSignal<readonly { server: string; title: string }[]>([])
   createEffect(() => {
@@ -803,7 +858,7 @@ export function createExtensionAttachment(apis: HostApis) {
         if (session) selectMobile(session, view)
       },
     },
-    /** A session screen started rendering: `Screen.current` returns it until it unmounts. */
+    /** A screen started rendering: `Screen.current` returns it only while its session matches the route. */
     screen(value: SessionScreen) {
       setScreen(() => value)
 

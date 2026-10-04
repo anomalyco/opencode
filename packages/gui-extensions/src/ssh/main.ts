@@ -28,7 +28,7 @@ const setup: MainSetup<typeof definition> = async (ctx) => {
       binary: cli.binary ?? cli.command[0] ?? "opencode",
       command: cli.command,
       configs: saved.value,
-      save: (configs) => Effect.try({ try: () => saved.update(() => configs), catch: SshFailure.from }),
+      save: (configs) => Effect.try({ try: () => saved.set(configs), catch: SshFailure.from }),
     }).pipe(Scope.provide(scope)),
   )
 

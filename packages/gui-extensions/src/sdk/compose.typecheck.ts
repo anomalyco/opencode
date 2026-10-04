@@ -4,6 +4,7 @@ import type { Accessor } from "solid-js"
 import { Schema } from "effect"
 import {
   Extension,
+  bindExtension,
   Ipc,
   Contract,
   Store,
@@ -12,12 +13,19 @@ import {
   type DefinitionCheck,
   type Desktop,
   type Duplicate,
+  type DuplicateExtension,
   type IpcClient,
   type Live,
   type Missing,
   type MissingMain,
   type IpcsProvided,
   type SessionScreen,
+  type MountedSession,
+  type Panel,
+  type PanelProps,
+  type PanelTab,
+  type SlotMap,
+  type IconName,
   type Setup,
 } from "./index"
 import type { MainSetup } from "./main"
@@ -57,6 +65,17 @@ Extension.compose(PaneProvider, Consumer)
 equal<Composition<[typeof PaneProvider, typeof Consumer]>, { readonly "missing provider": Missing<"fixture.tree"> }>(
   true,
 )
+
+// Extension identities must be unique even when the definitions provide nothing.
+const SameId = Extension.define({ id: "tree" })
+
+// @ts-expect-error two definitions share the extension id tree
+Extension.compose(TreeProvider, SameId)
+
+equal<
+  Composition<[typeof TreeProvider, typeof SameId]>,
+  { readonly "duplicate extension": DuplicateExtension<"tree"> }
+>(true)
 
 // Two providers of one token.
 const Second = Extension.define({ id: "second", provides: { tree: Tree } })
@@ -128,6 +147,89 @@ export const setup: Setup<typeof Consumer> = (ctx) => {
   // @ts-expect-error a session has no composer: read `ctx.screen.current()?.composer`
   void session?.composer
   equal<ReturnType<typeof ctx.screen.current>, SessionScreen | undefined>(true)
+  // @ts-expect-error the screen has no duplicate session accessor
+  void ctx.screen.current()?.session
+  ctx.stores.view.update((draft) => {
+    draft.open = true
+  })
+  ctx.stores.view.set({ open: false })
+  // @ts-expect-error update only mutates; replacement values go through set
+  ctx.stores.view.update(() => ({ open: true }))
+  // @ts-expect-error replacement values match the schema
+  ctx.stores.view.set({ open: "wrong" })
+}
+
+equal<ReturnType<Setup<typeof Consumer>>, undefined>(true)
+
+// @ts-expect-error an async window setup returns a Promise, not undefined
+export const asyncSetup: Setup<typeof Consumer> = async () => {}
+
+// @ts-expect-error a window setup cannot return an object either
+export const returningSetup: Setup<typeof Consumer> = () => ({ open: true })
+
+equal<ReturnType<MainSetup<typeof Consumer>>, void | Promise<void>>(true)
+
+equal<PanelProps["screen"], SessionScreen>(true)
+
+equal<Parameters<Panel["list"]>[0]["session"], MountedSession>(true)
+
+equal<Parameters<Panel["list"]>[0]["screen"], SessionScreen>(true)
+
+equal<Parameters<NonNullable<Panel["focus"]>>[0]["restored"], boolean>(true)
+
+equal<Parameters<NonNullable<Panel["normalize"]>>[0]["screen"], SessionScreen>(true)
+
+equal<Parameters<NonNullable<Panel["close"]>>[0], PanelProps>(true)
+
+equal<SlotMap["session.header"]["screen"], SessionScreen>(true)
+
+equal<SlotMap["session.panel.end"]["screen"], SessionScreen>(true)
+
+equal<SlotMap["session.panel.sidebar"]["screen"], SessionScreen>(true)
+
+equal<SlotMap["window.bottom"]["screen"], never>(true)
+
+equal<PanelTab["fallback"], boolean | undefined>(true)
+
+export const ineligible: PanelTab = { id: "details", title: "Details", fallback: false }
+
+equal<Extract<Live<never>, { status: "inactive" }>["reason"], "disabled" | "failed" | "blocked" | "restarting">(true)
+
+// @ts-expect-error only known artwork names belong to SDK icon fields
+export const unknownIcon: IconName = "not-an-icon"
+
+export const bound = bindExtension((props: { readonly label: string }) => props.label)
+
+// @ts-expect-error bound components preserve the original props
+bound({ wrong: "field" })
+
+const NoInput = Ipc.define({ id: "fixture.no-input", methods: { info: { output: Schema.String } } })
+
+export function noInput(client: IpcClient<typeof NoInput.spec>, signal: AbortSignal) {
+  void client.info()
+  void client.info({ signal })
+  // @ts-expect-error no input placeholder before call options
+  void client.info(undefined, { signal })
+  // @ts-expect-error strictly typed call options
+  void client.info({ signal: "wrong" })
+}
+
+const Nested = Extension.define({
+  id: "nested",
+  stores: {
+    prefs: Store.global(Schema.Struct({ items: Schema.Array(Schema.Struct({ shown: Schema.Boolean })) }), {
+      items: [],
+    }),
+  },
+})
+
+export const nested: Setup<typeof Nested> = (ctx) => {
+  ctx.stores.prefs.update((draft) => {
+    draft.items.push({ shown: true })
+    draft.items[0].shown = false
+  })
+  // @ts-expect-error stored values stay readonly outside update
+  ctx.stores.prefs.value.items.push({ shown: true })
 }
 
 export const provider: Setup<typeof TreeProvider> = (ctx) => {

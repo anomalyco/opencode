@@ -1,8 +1,7 @@
-import { fileURLToPath } from "node:url"
 import type { Definition } from "@opencode/gui-extensions/sdk"
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, sourceURL, story } from "../../storybook/playwright/story"
 
-const source = (path: string) => `/@fs/${fileURLToPath(new URL(path, import.meta.url)).replaceAll("\\", "/")}`
+const source = (path: string) => sourceURL(new URL(path, import.meta.url))
 
 const modules = {
   fixture: source("./extension-host.fixture.tsx"),

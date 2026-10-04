@@ -288,7 +288,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const command = (session: Session, action: Browser.Action) => {
     const id = session.key
-    setState("errors", id, undefined)
+    batch(() => {
+      setState("errors", id, undefined)
+
+      if (state.attachments[id]) setState("attachments", id, "error", undefined)
+    })
 
     // An unreachable pane is suspended, not a failed request.
     const failed = (cause: unknown) => {
