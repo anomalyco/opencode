@@ -119,6 +119,10 @@ function resourceServer(
           progressToken: unknown
         }>,
         initializations: 0,
+        // Legacy capabilities arrive in the initialize handshake; modern ones ride every request's
+        // `_meta.io.modelcontextprotocol/clientCapabilities`, so both are recorded to assert the wire shape.
+        capabilities: [] as unknown[],
+        metaCapabilities: [] as unknown[],
         urls: [] as string[],
         sessions: [] as string[],
       }
@@ -238,6 +242,18 @@ function resourceServer(
           const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
           if (typeof body === "object" && body !== null && "method" in body && body.method === "initialize") {
             state.initializations += 1
+          }
+          if (typeof body === "object" && body !== null && "params" in body) {
+            const params = body.params
+            if (typeof params === "object" && params !== null) {
+              if ("capabilities" in params) state.capabilities.push(params.capabilities)
+              const meta =
+                "_meta" in params && typeof params._meta === "object" && params._meta !== null
+                  ? (params._meta as Record<string, unknown>)
+                  : undefined
+              const capabilities = meta?.["io.modelcontextprotocol/clientCapabilities"]
+              if (capabilities !== undefined) state.metaCapabilities.push(capabilities)
+            }
           }
           return (await input.respond?.(request)) ?? modern?.fetch(request) ?? current.transport.handleRequest(request)
         },
@@ -1354,6 +1370,45 @@ test("settles modern MCP URL elicitations when the user confirms", async () => {
         )
 
         expect(result.structured).toEqual({ action: "accept" })
+      }),
+    ),
+  )
+})
+
+test("advertises the specification's MCP elicitation capability in both protocol eras", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const legacy = yield* resourceServer({ resources: false })
+        yield* Effect.gen(function* () {
+          yield* settled(yield* Mcp.Service)
+        }).pipe(Effect.provide(resourceMcpLayer(legacy.url)))
+
+        // `toEqual` catches extra members, so a vendor field such as the SDK's `applyDefaults`
+        // fails this. The capability is specified as `{ form: {}, url: {} }`.
+        const legacyCapabilities = legacy.state.capabilities.at(-1) as { elicitation?: unknown } | undefined
+        expect(legacyCapabilities?.elicitation).toEqual({ form: {}, url: {} })
+
+        const modern = yield* resourceServer({ modern: true, resources: false })
+        yield* Effect.gen(function* () {
+          yield* settled(yield* Mcp.Service)
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Remote({
+                type: "remote",
+                url: modern.url,
+                oauth: false,
+                protocol: "2026-07-28",
+              }),
+            ),
+          ),
+        )
+
+        // 2026-07-28 carries the same capability object in every request's `_meta` instead of the
+        // initialize handshake, so the wire shape is asserted there too.
+        const modernCapabilities = modern.state.metaCapabilities.at(-1) as { elicitation?: unknown } | undefined
+        expect(modernCapabilities?.elicitation).toEqual({ form: {}, url: {} })
       }),
     ),
   )
