@@ -1,3 +1,4 @@
+import net from "node:net"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
@@ -36,6 +37,17 @@ import { McpEvent } from "@opencode-ai/schema/mcp-event"
 import { McpBrowser } from "./browser"
 
 const DEFAULT_TIMEOUT = 30_000
+
+/**
+ * Node gives each address attempt in a multi-address connect 250ms before killing it
+ * (autoSelectFamilyAttemptTimeout). Endpoints whose TCP handshake needs more than that
+ * never connect, so remote MCP servers die at the connect stage with no useful error.
+ * 250ms is well under the round trip for a lot of the world, so raise it. This is a
+ * stagger interval rather than a wait, so fast connects are unaffected.
+ */
+const CONNECT_ATTEMPT_TIMEOUT = 1_000
+
+net.setDefaultAutoSelectFamilyAttemptTimeout(CONNECT_ATTEMPT_TIMEOUT)
 const CLIENT_OPTIONS = {
   capabilities: {
     // https://github.com/anomalyco/opencode/issues/11948
