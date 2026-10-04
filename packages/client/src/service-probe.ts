@@ -1,7 +1,8 @@
 import { homedir } from "node:os"
 import { join } from "node:path"
-import type { Endpoint, Info } from "./service.js"
+import type { DiscoverOptions, Endpoint, Info } from "./service.js"
 import { defaultEnsureTiming } from "./service-timing.js"
+import { matchesVersion } from "./service-version.js"
 
 // Shared by the Effect and Promise clients. Keep this module free of Effect so the
 // Promise client never loads the Effect runtime.
@@ -12,6 +13,27 @@ export type LocalService = {
   readonly version?: string
   readonly state: "ready" | "waiting" | "failed"
   readonly compatible: boolean
+}
+
+/**
+ * What `ensure()` does with a registered service that answered: return it, keep polling while
+ * it starts, replace it because its version does not meet the requirement, or fail.
+ */
+export function decide(service: LocalService, options: DiscoverOptions) {
+  const versionMatches = matchesVersion(service.version, options)
+  if (!service.compatible && versionMatches)
+    return fail(
+      "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
+    )
+  if (!versionMatches)
+    return { _tag: "replace" as const, pty: service.state === "ready" ? ("handoff" as const) : ("clear" as const) }
+  if (service.state === "ready") return { _tag: "reuse" as const }
+  if (service.state === "failed") return fail("Background service failed to start")
+  return { _tag: "wait" as const }
+}
+
+function fail(message: string) {
+  return { _tag: "fail" as const, error: new Error(message) }
 }
 
 /** The default registration file. */

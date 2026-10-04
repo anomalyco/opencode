@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { fallback, headers, type LocalService, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, type LocalService, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -89,28 +89,17 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     } else timeouts = undefined
     if (service !== undefined) {
       pool.serviceAnswered()
-      const versionMatches = matchesVersion(service.version, options)
-      const compatible = service.compatible && versionMatches
-      if (!service.compatible && versionMatches)
-        return yield* Effect.fail(
-          new Error(
-            "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
-          ),
-        )
-      if (compatible && service.state === "ready") {
+      const decision = decide(service, options)
+      if (decision._tag === "fail") return yield* Effect.fail(decision.error)
+      if (decision._tag === "reuse") {
         yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
         return Option.some(service)
       }
-      if (compatible && service.state === "failed")
-        return yield* Effect.fail(new Error("Background service failed to start"))
-      if (compatible) return Option.none<LocalService>()
+      if (decision._tag === "wait") return Option.none<LocalService>()
       yield* announce("version-mismatch", service.version)
       if (service.state !== "ready")
         yield* Effect.logWarning("Background service is not ready; replacement cannot preserve persistent terminals")
-      yield* stop({
-        file: options.file,
-        pty: service.state === "ready" ? "handoff" : "clear",
-      }).pipe(Effect.ignore)
+      yield* stop({ file: options.file, pty: decision.pty }).pipe(Effect.ignore)
       pool.evict(service.info.pid)
       return Option.none<LocalService>()
     }
