@@ -11,9 +11,9 @@ import {
   session,
   sessionHref,
 } from "../utils/app"
-import { mockServers } from "../utils/mock-server"
+import { currentSession, mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
-import { fileNode, mockWorkspace, openSession } from "../utils/workspace"
+import { fileNode, mockRemoteServer, mockWorkspace, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 
 const a = { id: "ses_tab_a", title: "Tab A session" }
@@ -23,6 +23,72 @@ const b = { id: "ses_tab_b", title: "Tab B session" }
 const c = { id: "ses_tab_c", title: "Tab C session" }
 
 test.use({ serviceWorkers: "block" })
+
+for (const server of [SERVER, REMOTE_SERVER]) {
+  test(`session metadata failure does not follow navigation to another tab on ${server}`, async ({ page }) => {
+    await mockWorkspace(page, {
+      name: "Tabs",
+      sessions: [b],
+      seed: { tabs: [a.id, { session: b.id, server }] },
+    })
+    if (server === REMOTE_SERVER) {
+      await mockRemoteServer(page, { sessions: [session({ ...b, directory: "/remote/project" })] })
+    }
+    await page.route(
+      (url) => url.origin === SERVER && url.pathname === `/api/session/${a.id}`,
+      (route) => route.fulfill({ status: 504, json: { message: "Fixture metadata timeout" } }),
+    )
+    await page.goto(sessionHref(a.id))
+    await expect(page.getByRole("heading", { name: "Server request failed" })).toBeVisible()
+    const document = await page.locator("html").elementHandle()
+
+    await page.locator(`a[data-titlebar-tab-link][href="${sessionHref(b.id, server)}"]`).click()
+
+    await expectPath(page, sessionHref(b.id, server))
+    await expectSessionTitle(page, b.title)
+    await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+    await expect(page.getByRole("heading", { name: "Server request failed" })).toHaveCount(0)
+    expect(await document?.evaluate((element) => element.isConnected)).toBe(true)
+  })
+}
+
+test("session metadata failure can be retried without reloading or looping", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const workspace = await mockWorkspace(page, { name: "Tabs", sessions: [b], seed: { tabs: [a.id, b.id] } })
+  const state = { fail: true, requests: 0 }
+  await page.route(
+    (url) => url.origin === SERVER && url.pathname === `/api/session/${a.id}`,
+    (route) => {
+      state.requests++
+      return route.fulfill(
+        state.fail
+          ? { status: 504, json: { message: "Fixture metadata timeout" } }
+          : { json: { data: currentSession(session({ ...a, directory: workspace.directory })) } },
+      )
+    },
+  )
+  await page.goto(sessionHref(a.id))
+  const retry = page.getByRole("button", { name: "Try again", exact: true })
+  await expect(retry).toBeVisible()
+  const document = await page.locator("html").elementHandle()
+  const before = state.requests
+  await retry.press("Enter")
+  await expect(retry).toBeVisible()
+  await expect.poll(() => state.requests).toBe(before + 1)
+  await expect(retry).toBeInViewport()
+  await page.screenshot({ path: testInfo.outputPath("retry-desktop.png") })
+  expect(state.requests).toBe(before + 1)
+  await page.setViewportSize({ width: 390, height: 720 })
+  await expect(retry).toBeInViewport()
+  await page.screenshot({ path: testInfo.outputPath("retry-narrow.png") })
+
+  state.fail = false
+  await retry.click()
+  await expectSessionTitle(page, a.title)
+  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
+  await expect(retry).toHaveCount(0)
+  expect(await document?.evaluate((element) => element.isConnected)).toBe(true)
+})
 
 test("tab strip keeps draft tabs as wide as session tabs and navigates on mouse down", async ({ page }) => {
   const workspace = await mockWorkspace(page, {

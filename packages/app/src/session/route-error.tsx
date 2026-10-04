@@ -8,7 +8,12 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { isLocalSessionNotFoundError, isSessionNotFoundError } from "@/runtime/server/errors"
 import { IncompatibleServerPanel } from "./incompatible-server-panel"
 
-export function SessionErrorFallback(props: { error: unknown; sessionID?: string; serverKey?: ServerConnection.Key }) {
+export function SessionErrorFallback(props: {
+  error: unknown
+  sessionID?: string
+  serverKey?: ServerConnection.Key
+  onRetry?: () => void
+}) {
   const language = useLanguage()
   const activeServer = useServer()
   const server = useServers()
@@ -32,7 +37,7 @@ export function SessionErrorFallback(props: { error: unknown; sessionID?: string
     >
       <Show
         when={isCurrentSessionNotFoundError(props.error, props.sessionID)}
-        fallback={<ErrorPage error={props.error} />}
+        fallback={<ErrorPage error={props.error} onRetry={props.onRetry} />}
       >
         <div class="flex-1 min-h-0 overflow-hidden">
           <div class="h-full px-6 pb-42 -mt-4 flex flex-col items-center justify-center text-center gap-4">

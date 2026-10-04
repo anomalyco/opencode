@@ -101,9 +101,9 @@ function TargetSessionSettingsCommand() {
 function SessionRouteErrorBoundary(props: ParentProps<{ sessionID?: string; serverKey?: ServerConnection.Key }>) {
   return (
     <ErrorBoundary
-      fallback={(error) => (
+      fallback={(error, reset) => (
         <SessionStatePanel>
-          <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} />
+          <SessionErrorFallback error={error} sessionID={props.sessionID} serverKey={props.serverKey} onRetry={reset} />
         </SessionStatePanel>
       )}
     >
