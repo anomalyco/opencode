@@ -41,7 +41,7 @@ const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(XAIResponsesHostedToolItem)(item) ? item : undefined),
-} satisfies OpenResponses.ProviderAdapter<Schema.Schema.Type<typeof XAIResponsesHostedToolItem>>
+}
 
 const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LLMRequest) {
   if (request.providerOptions?.contextManagement !== undefined)

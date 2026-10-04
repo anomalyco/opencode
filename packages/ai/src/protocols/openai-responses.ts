@@ -141,15 +141,7 @@ const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
-  lowerEffortUpdate: (effort: OpenResponsesOptions.ReasoningEffort) => ({
-    type: "configuration_update" as const,
-    reasoning: { effort },
-  }),
-} satisfies OpenResponses.ProviderAdapter<
-  Schema.Schema.Type<typeof OpenAIResponsesHostedToolItem>,
-  never,
-  OpenResponses.ConfigurationUpdate
->
+}
 
 // GPT-6 and later default to `configuration_update` support, except in `reasoning.mode: "pro"`
 // or alongside automatic `context_management` compaction.

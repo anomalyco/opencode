@@ -63,7 +63,7 @@ const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(ImageItem)(item) ? item : undefined),
-} satisfies OpenResponses.ProviderAdapter<Schema.Schema.Type<typeof ImageItem>>
+}
 
 const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: LLMRequest) {
   const key = request.model.route.providerMetadataKey ?? String(request.model.provider)

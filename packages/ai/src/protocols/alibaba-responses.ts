@@ -1,5 +1,6 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../route/protocol.js"
+import type { ToolDefinition } from "../schema/index.js"
 import { OpenResponses } from "./open-responses.js"
 import { JsonObject, optionalArray, ProviderShared } from "./shared.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
@@ -35,12 +36,10 @@ const Body = Schema.Struct({
 const adapter = {
   id: "alibaba-responses",
   name: "Alibaba Responses",
-  nativeTool: (native) => ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(native.alibaba),
+  nativeTool: (native: NonNullable<ToolDefinition["native"]>) =>
+    ProviderShared.validateWith(Schema.decodeUnknownEffect(NativeTool))(native.alibaba),
   restoreHostedToolItem: (item: unknown) => (Schema.is(WebExtractorItem)(item) ? item : undefined),
-} satisfies OpenResponses.ProviderAdapter<
-  Schema.Schema.Type<typeof WebExtractorItem>,
-  Schema.Schema.Type<typeof NativeTool>
->
+}
 
 const tools = {
   web_search_call: { name: "web_search", input: (item) => item.action ?? {} },

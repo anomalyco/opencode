@@ -172,6 +172,7 @@ export type ConfigurationUpdate = Schema.Schema.Type<typeof ConfigurationUpdate>
 
 export const InputItem = Schema.Union([
   CompactionItem,
+  ConfigurationUpdate,
   Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("developer"), content: Schema.String }),
   Schema.Struct({
@@ -383,26 +384,19 @@ export const decodeChannelEvent = (frame: string) =>
     ),
   )
 
-export interface ProviderAdapter<
-  out Hosted extends HostedToolReplayItem = never,
-  out NativeTool = never,
-  out Update = never,
-> {
+export interface ProviderAdapter<Hosted extends HostedToolReplayItem = never, NativeTool = never> {
   readonly id: string
   readonly name: string
-  readonly nativeTool?: (
-    native: NonNullable<ToolDefinition["native"]>,
-  ) => Effect.Effect<NativeTool, AIError>
+  readonly nativeTool?: (native: NonNullable<ToolDefinition["native"]>) => Effect.Effect<NativeTool, AIError>
   readonly lowerMedia?: (input: {
     readonly part: MediaPart
     readonly media: Media.Inline | undefined
     readonly request: LLMRequest
   }) => MediaInput | undefined
   readonly restoreHostedToolItem?: (item: unknown) => Hosted | undefined
-  readonly lowerEffortUpdate?: (effort: OpenResponsesOptions.ReasoningEffort) => Update
 }
 
-type AnyProviderAdapter = ProviderAdapter<HostedToolReplayItem, unknown, unknown>
+type MediaAdapter = Pick<ProviderAdapter, "name" | "lowerMedia">
 
 const BASE_ADAPTER: ProviderAdapter = { id: ADAPTER, name: NAME }
 
@@ -450,13 +444,9 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (protoco
   }
 })
 
-export const lowerTools = <
-  Hosted extends HostedToolReplayItem = never,
-  NativeTool = never,
-  Update = never,
->(
+export const lowerTools = <Hosted extends HostedToolReplayItem = never, NativeTool = never>(
   tools: ReadonlyArray<ToolDefinition>,
-  adapter: ProviderAdapter<Hosted, NativeTool, Update>,
+  adapter: ProviderAdapter<Hosted, NativeTool>,
 ) =>
   Effect.forEach(
     tools,
@@ -512,7 +502,7 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
 const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   part: MediaPart,
   request: LLMRequest,
-  adapter: AnyProviderAdapter,
+  adapter: MediaAdapter,
   target: "message" | "tool-result",
 ) {
   const media = part.media.inline()
@@ -544,7 +534,7 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
 const lowerUserContent = Effect.fnUntraced(function* (
   part: LLMRequest["messages"][number]["content"][number],
   request: LLMRequest,
-  adapter: AnyProviderAdapter,
+  adapter: MediaAdapter,
 ) {
   if (part.type === "text") return { type: "input_text" as const, text: part.text }
   if (part.type === "media") return yield* lowerMessageMedia(part, request, adapter)
@@ -554,7 +544,7 @@ const lowerUserContent = Effect.fnUntraced(function* (
 const lowerMessageMedia = Effect.fnUntraced(function* (
   part: MediaPart,
   request: LLMRequest,
-  adapter: AnyProviderAdapter,
+  adapter: MediaAdapter,
 ) {
   const lowered = yield* lowerMedia(part, request, adapter, "message")
   if (lowered.type === "input_video")
@@ -567,7 +557,7 @@ const lowerMessageMedia = Effect.fnUntraced(function* (
 const lowerToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
-  adapter: AnyProviderAdapter,
+  adapter: MediaAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
   return yield* lowerMedia(ProviderShared.toolFileMedia(item), request, adapter, "tool-result")
@@ -576,7 +566,7 @@ const lowerToolResultContentItem = Effect.fnUntraced(function* (
 const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
   item: Content,
   request: LLMRequest,
-  adapter: AnyProviderAdapter,
+  adapter: MediaAdapter,
 ) {
   if (item.type === "text") return { type: "input_text" as const, text: item.text }
   return yield* lowerMessageMedia(ProviderShared.toolFileMedia(item), request, adapter)
@@ -585,7 +575,7 @@ const lowerHostedToolResultContentItem = Effect.fnUntraced(function* (
 const lowerToolResultOutput = Effect.fnUntraced(function* (
   part: ToolResultPart,
   request: LLMRequest,
-  adapter: AnyProviderAdapter,
+  adapter: MediaAdapter,
 ) {
   // Text/json/error results are encoded as a plain string for backward
   // compatibility with existing cassettes and provider expectations.
@@ -597,16 +587,12 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = <
-  Hosted extends HostedToolReplayItem = never,
-  NativeTool = never,
-  Update = never,
->(
+const lowerMessages = <Hosted extends HostedToolReplayItem = never, NativeTool = never>(
   request: LLMRequest,
-  adapter: ProviderAdapter<Hosted, NativeTool, Update>,
+  adapter: ProviderAdapter<Hosted, NativeTool>,
 ) =>
   Effect.gen(function* () {
-    const input: Array<OpenResponsesInputItem | Hosted | Update> = []
+    const input: Array<OpenResponsesInputItem | Hosted> = []
     const providerMetadataKey = metadataKey(request.model)
 
     for (const message of request.messages) {
@@ -615,11 +601,11 @@ const lowerMessages = <
       )(message.providerMetadata?.[providerMetadataKey])
       if (message.role === "system") {
         const update = effortUpdate(message)
-        if (update && adapter.lowerEffortUpdate) {
+        if (update) {
           // Consecutive updates are rejected, so a newer one replaces its predecessor.
           const last = input.at(-1)
-          if (last !== undefined && ProviderShared.isRecord(last) && last.type === "configuration_update") input.pop()
-          input.push(adapter.lowerEffortUpdate(update.effort ?? DEFAULT_EFFORT))
+          if (last !== undefined && "type" in last && last.type === "configuration_update") input.pop()
+          input.push({ type: "configuration_update", reasoning: { effort: update.effort ?? DEFAULT_EFFORT } })
           continue
         }
       input.push({
@@ -766,13 +752,9 @@ const lowerMessages = <
   return input
 })
 
-export const lowerConversation = <
-  Hosted extends HostedToolReplayItem = never,
-  NativeTool = never,
-  Update = never,
->(
+export const lowerConversation = <Hosted extends HostedToolReplayItem = never, NativeTool = never>(
   request: LLMRequest,
-  adapter: ProviderAdapter<Hosted, NativeTool, Update>,
+  adapter: ProviderAdapter<Hosted, NativeTool>,
 ) =>
   Effect.gen(function* () {
     const instructions = ProviderShared.joinText(request.system)
@@ -831,13 +813,9 @@ export const allowedToolChoice = (request: LLMRequest) => {
   }
 }
 
-export const fromRequestWithAdapter = <
-  Hosted extends HostedToolReplayItem = never,
-  NativeTool = never,
-  Update = never,
->(
+export const fromRequestWithAdapter = <Hosted extends HostedToolReplayItem = never, NativeTool = never>(
   request: LLMRequest,
-  adapter: ProviderAdapter<Hosted, NativeTool, Update>,
+  adapter: ProviderAdapter<Hosted, NativeTool>,
 ) =>
   Effect.gen(function* () {
     const projected = ProviderShared.flattenToolRequest(request)
@@ -1487,7 +1465,10 @@ export const step = (state: ParserState, event: NormalizedEvent) => {
  * The provider-neutral Open Responses protocol. Provider-specific Responses
  * implementations compose this baseline with their own tools and event variants.
  */
-export const initial = (request: LLMRequest, adapter: AnyProviderAdapter = BASE_ADAPTER): ParserState => ({
+export const initial = (
+  request: LLMRequest,
+  adapter: Pick<ProviderAdapter, "id" | "name"> = BASE_ADAPTER,
+): ParserState => ({
   provider: request.model.provider,
   completedCompactions: new Set<string>(),
   id: adapter.id,
