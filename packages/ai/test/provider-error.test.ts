@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isContextOverflow } from "../src/index.js"
+import { AIError, InvalidRequestError, LLMEvent, isContextOverflow, isPayloadTooLargeFailure } from "../src/index.js"
 import { classifyProviderFailure, providerErrorMessage } from "../src/provider-error.js"
 
 describe("provider error classification", () => {
@@ -43,6 +43,30 @@ describe("provider error classification", () => {
         expect.objectContaining({ _tag: "InvalidRequest", classification: "payload-too-large" }),
       ),
     )
+  })
+
+  test("recognizes payload rejection errors and stream events without treating other failures as size errors", () => {
+    const reason = classifyProviderFailure({
+      message: "Gateway request body exceeds the configured limit.",
+      status: 413,
+      rawBody: '{"error":{"code":"proxy_error","status":413}}',
+    })
+    expect(isPayloadTooLargeFailure(new AIError({ reason }))).toBe(true)
+    expect(
+      isPayloadTooLargeFailure(
+        LLMEvent.providerError({
+          message: "Too large",
+          classification: "payload-too-large",
+        }),
+      ),
+    ).toBe(true)
+    expect(isPayloadTooLargeFailure(new AIError({ reason: new InvalidRequestError({ message: "Invalid" }) }))).toBe(
+      false,
+    )
+    expect(
+      isPayloadTooLargeFailure(LLMEvent.providerError({ message: "Too long", classification: "context-overflow" })),
+    ).toBe(false)
+    expect(isPayloadTooLargeFailure(undefined)).toBe(false)
   })
 
   test("does not classify rate limits as context overflow", () => {
