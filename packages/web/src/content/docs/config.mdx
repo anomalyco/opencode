@@ -108,7 +108,7 @@ Global config overrides remote organizational defaults.
 
 ### Per project
 
-Add `opencode.json` in your project root. Project config has the highest precedence among standard config files - it overrides both global and remote configs.
+Add `opencode.json` or `opencode.jsonc` in your project root. Project config has the highest precedence among standard config files - it overrides both global and remote configs.
 
 For project-specific TUI settings, add `tui.json` alongside it.
 
@@ -117,6 +117,8 @@ Place project specific config in the root of your project.
 :::
 
 When OpenCode starts up, it first looks for a config file in the current directory, then traverses up to the nearest Git directory.
+
+You can also place `opencode.json` or `opencode.jsonc` inside a `.opencode/` directory in your project.
 
 This is also safe to be checked into Git and uses the same schema as the global one.
 
