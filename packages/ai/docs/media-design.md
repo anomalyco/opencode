@@ -95,8 +95,10 @@ runtime path: `ai.file(path)` and `ai.write(asset, path)` read and write through
 use) with the same media-type sniffing and `InvalidRequest` failures, and `ai.bytes`, `ai.base64`, and
 `ai.materialize` run the asset methods in its runtime.
 
-A `ref` source is accepted as input only by routes whose provider issues file handles. No shipped route produces one
-yet, so `bytes()` and `materialize()` on a ref fail by design until a producer exists.
+A `ref` source is accepted as input only by routes whose provider issues file handles, and only when the ref's
+provider is the route's own; LLM routes lower it to the native handle field (Anthropic `file_id` sources, Open
+Responses `file_id`, OpenAI Chat `file.file_id`, Gemini `fileData.fileUri`). No shipped route mints one yet, so
+`bytes()` and `materialize()` on a ref fail by design until a producer exists.
 
 Raw-PCM outputs (Gemini TTS, Cartesia raw, Deepgram WS) carry `info.encoding/sampleRate/channels` because there is no container header.
 

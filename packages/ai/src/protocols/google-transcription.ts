@@ -89,7 +89,9 @@ const fromRequest = Effect.fn("GoogleTranscription.fromRequest")(function* (requ
   return MediaProtocol.json(
     mergeJsonRecords(
       {
-        contents: [{ role: "user", parts: [yield* GeminiGenerateContent.mediaPart(route.id, request.audio)] }],
+        contents: [
+          { role: "user", parts: [yield* GeminiGenerateContent.mediaPart(route.id, request.audio, route.provider)] },
+        ],
         generationConfig: mergeJsonRecords(
           {
             audioTranscriptionConfig: {

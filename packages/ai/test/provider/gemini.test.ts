@@ -457,6 +457,56 @@ describe("Gemini route", () => {
     }),
   )
 
+  it.effect("lowers Gemini file references to fileData", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user({
+              type: "media",
+              media: Media.ref(
+                "google",
+                "https://generativelanguage.googleapis.com/v1beta/files/abc",
+                "application/pdf",
+              ),
+            }),
+          ],
+        }),
+      )
+      expect(prepared.body.contents).toEqual([
+        {
+          role: "user",
+          parts: [
+            {
+              fileData: {
+                mimeType: "application/pdf",
+                fileUri: "https://generativelanguage.googleapis.com/v1beta/files/abc",
+              },
+            },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects file references issued by another provider", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user({
+              type: "media",
+              media: Media.ref("google-vertex", "gs://bucket/report.pdf", "application/pdf"),
+            }),
+          ],
+        }),
+      ).pipe(Effect.flip)
+      expect(error.message).toContain("Gemini requires inline media")
+    }),
+  )
+
   it.effect("strips matching data URLs to raw base64 inlineData", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

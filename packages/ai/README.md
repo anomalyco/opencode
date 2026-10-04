@@ -543,8 +543,11 @@ const composed = Effect.gen(function* () {
 ```
 
 `Media.ref(provider, id)` represents provider file handles such as OpenAI file IDs or Gemini Files URIs; routes
-only forward refs that belong to their own provider (OpenAI, xAI, and Gemini images accept them). No shipped route
-returns a ref yet, and `asset.bytes()` / `materialize()` on a ref fail by design. Raw strings are not accepted as
+only forward refs that belong to their own provider (OpenAI, xAI, and Gemini images accept them). In LLM messages,
+Anthropic Messages lowers them to Files API sources, Open Responses to `file_id` inputs, OpenAI Chat to `file` parts
+(non-image files only), and Gemini to `fileData` (Gemini Files URIs for `google`, `gs://` URIs for `google-vertex`).
+No shipped route mints a new ref yet (Responses compaction only replays refs it was sent), and `asset.bytes()` /
+`materialize()` on a ref fail by design. Raw strings are not accepted as
 image inputs, avoiding ambiguity between base64, URLs, and provider IDs. Empty or omitted `images` uses text-to-image generation; a
 non-empty array selects the provider's edit behavior (see the table above for routes that limit the count). OpenAI
 uses multipart for byte/data-URL edits and its JSON reference body for URL or file-ID edits. The common `mask`

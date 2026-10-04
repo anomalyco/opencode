@@ -66,9 +66,15 @@ const Response = Schema.Struct({
       Schema.Struct({
         ...MessageFields,
         role: Schema.Literal("user"),
-        content: Schema.Array(Schema.Union([Text, OpenResponses.OpenResponsesInputImage, File])).check(
-          Schema.isMinLength(1),
-        ),
+        content: Schema.Array(
+          Schema.Union([
+            Text,
+            OpenResponses.OpenResponsesInputImageFileID,
+            OpenResponses.OpenResponsesInputFileID,
+            OpenResponses.OpenResponsesInputImage,
+            File,
+          ]),
+        ).check(Schema.isMinLength(1)),
       }),
       Schema.Struct({
         ...MessageFields,
@@ -171,6 +177,13 @@ function toMessage(item: (typeof Response.Type.output)[number], model: LLMReques
     providerMetadata: { [key]: { itemId: item.id, type: item.type, status: item.status, phase: item.phase } },
     content: item.content.map((part): ContentPart => {
       if (part.type === "input_text" || part.type === "output_text") return { type: "text", text: part.text }
+      if ("file_id" in part)
+        return {
+          type: "media",
+          media: Media.ref(model.provider, part.file_id, part.type === "input_image" ? "image/*" : undefined),
+          filename: part.type === "input_file" ? part.filename : undefined,
+          providerMetadata: part.detail === undefined ? undefined : { [key]: { detail: part.detail } },
+        }
       if (part.type === "input_image")
         return {
           type: "media",

@@ -819,6 +819,53 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
+  it.effect("lowers Anthropic file references to Files API sources", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user([
+              { type: "media", media: Media.ref("anthropic", "file_image", "image/png") },
+              { type: "media", media: Media.ref("anthropic", "file_pdf", "application/pdf"), filename: "report.pdf" },
+              {
+                type: "media",
+                media: Media.base64("JVBERi0xLjQ=", "application/pdf"),
+                metadata: { anthropic: { file_id: "file_metadata" } },
+              },
+            ]),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        {
+          role: "user",
+          content: [
+            { type: "image", source: { type: "file", file_id: "file_image" } },
+            { type: "document", source: { type: "file", file_id: "file_pdf" }, title: "report.pdf" },
+            { type: "document", source: { type: "file", file_id: "file_metadata" } },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects file references issued by another provider", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [Message.user({ type: "media", media: Media.ref("openai", "file-abc", "application/pdf") })],
+          cache: "none",
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("Anthropic Messages requires inline media")
+    }),
+  )
+
   it.effect("prepares the composed native continuation request", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(

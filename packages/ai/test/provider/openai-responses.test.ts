@@ -4934,6 +4934,46 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
+  it.effect("lowers OpenAI file references to file ids", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.user([
+              { type: "media", media: Media.ref("openai", "file-image", "image/png") },
+              { type: "media", media: Media.ref("openai", "file-pdf", "application/pdf"), filename: "report.pdf" },
+            ]),
+          ],
+        }),
+      )
+
+      expect(prepared.body.input).toEqual([
+        {
+          type: "message",
+          role: "user",
+          content: [
+            { type: "input_image", file_id: "file-image" },
+            { type: "input_file", file_id: "file-pdf", filename: "report.pdf" },
+          ],
+        },
+      ])
+    }),
+  )
+
+  it.effect("rejects file references issued by another provider", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        LLM.request({
+          model: xaiModel,
+          messages: [Message.user({ type: "media", media: Media.ref("openai", "file-pdf", "application/pdf") })],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.message).toContain("requires inline media")
+    }),
+  )
+
   it.effect("fails with a typed rate limit for provider error frames", () =>
     Effect.gen(function* () {
       const error = yield* LLMClient.generate(request).pipe(

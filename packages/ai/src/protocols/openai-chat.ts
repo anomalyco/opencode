@@ -18,12 +18,14 @@ import {
   type CacheHint,
   type LLMRequest,
   type MediaPart,
+  type ProviderID,
   type ReasoningPart,
   type ToolCallPart,
   type ToolDefinition,
 } from "../schema/index.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
+import { MediaInput } from "./utils/media-input.js"
 import { OpenAIOptions } from "./utils/openai-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
@@ -129,7 +131,10 @@ const OpenAIChatUserContent = Schema.Union([
   }),
   Schema.Struct({
     type: Schema.Literal("file"),
-    file: Schema.Struct({ filename: Schema.String, file_data: Schema.String }),
+    file: Schema.Union([
+      Schema.Struct({ filename: Schema.String, file_data: Schema.String }),
+      Schema.Struct({ file_id: Schema.String }),
+    ]),
   }),
 ])
 type OpenAIChatUserContent = Schema.Schema.Type<typeof OpenAIChatUserContent>
@@ -360,7 +365,16 @@ const lowerToolCall = (
   extra_content: decodeExtraContent(part.providerMetadata?.[options.providerMetadataKey]?.extraContent),
 })
 
-const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
+const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart, provider: ProviderID) {
+  const fileID = MediaInput.refID(part.media, provider)
+  if (fileID !== undefined) {
+    // Chat Completions `image_url` parts take only URLs; uploaded file ids are accepted by `file` parts alone.
+    if (part.media.kind === "image")
+      return yield* ProviderShared.invalidRequest(
+        "OpenAI Chat does not accept image file references; send the image inline or by URL, or use OpenAI Responses",
+      )
+    return { type: "file" as const, file: { file_id: fileID } }
+  }
   // Chat Completions accepts PDFs, and no other documents, as inline `file` parts; file URLs are not supported.
   if (part.media.mediaType.toLowerCase() === "application/pdf")
     return {
@@ -408,7 +422,7 @@ const isKimiDetail = (detail: { readonly type: string }) => detail.type === "sum
 
 const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (
   message: OpenAIChatRequestMessage,
-  options: LoweringOptions,
+  options: LoweringOptions & { readonly provider: ProviderID },
 ) {
   const content: OpenAIChatUserContent[] = []
   for (const part of message.content) {
@@ -417,7 +431,7 @@ const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (
       continue
     }
     if (part.type === "media") {
-      content.push(yield* lowerMedia(part))
+      content.push(yield* lowerMedia(part, options.provider))
       continue
     }
     return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text", "media"])
@@ -497,7 +511,7 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
 
 const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
   message: OpenAIChatRequestMessage,
-  options: LoweringOptions,
+  options: LoweringOptions & { readonly provider: ProviderID },
 ) {
   const messages: OpenAIChatMessage[] = []
   const attachments: OpenAIChatUserContent[] = []
@@ -520,7 +534,9 @@ const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (
       toolMessage(options.toolCallID?.(part.id) ?? part.id, text.join("\n"), options.cacheControl?.(part.cache)),
     )
     const files = content.filter((item) => item.type === "file")
-    attachments.push(...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item)))))
+    attachments.push(
+      ...(yield* Effect.forEach(files, (item) => lowerMedia(ProviderShared.toolFileMedia(item), options.provider))),
+    )
   }
   return { messages, attachments }
 })
@@ -536,7 +552,7 @@ const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (
   message: OpenAIChatRequestMessage,
   reasoningField: string | undefined,
   requireReasoning: boolean,
-  options: LoweringOptions & { readonly providerMetadataKey: string },
+  options: LoweringOptions & { readonly providerMetadataKey: string; readonly provider: ProviderID },
 ) {
   if (message.role === "user") return [yield* lowerUserMessage(message, options)]
   if (message.role === "assistant")
@@ -572,6 +588,7 @@ const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: 
   const mistral = ["mistral", "devstral", "codestral", "pixtral", "mixtral"].some((family) => modelID.includes(family))
   const lowering = {
     ...options,
+    provider: request.model.provider,
     providerMetadataKey: request.model.route.providerMetadataKey ?? String(request.model.provider),
     toolCallID: (id: string) => {
       if (mistral)

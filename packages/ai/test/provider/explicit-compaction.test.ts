@@ -199,6 +199,8 @@ const retainedItems = [
       { type: "input_image", image_url: "https://example.com/image.png" },
       { type: "input_file", filename: "report.pdf", file_data: "data:application/pdf;base64,cGRm", detail: "high" },
       { type: "input_file", filename: "other.pdf", file_url: "https://example.com/report.pdf", detail: "low" },
+      { type: "input_image", file_id: "file-image", detail: "high" },
+      { type: "input_file", file_id: "file-pdf", filename: "uploaded.pdf" },
     ],
   },
   checkpoint,
@@ -249,7 +251,13 @@ for (const model of [
         { type: "text", text: "Second" },
       ])
       expect(compacted.replacement[2]?.content.map((part) => part.type)).toEqual(["reasoning", "reasoning"])
-      expect(compacted.replacement[4]?.content.map((part) => part.type)).toEqual(["media", "media", "media"])
+      expect(compacted.replacement[4]?.content.map((part) => part.type)).toEqual([
+        "media",
+        "media",
+        "media",
+        "media",
+        "media",
+      ])
       const codec = Schema.fromJsonString(Schema.Array(Message))
       const messages = Schema.decodeSync(codec)(Schema.encodeSync(codec)(compacted.replacement))
       yield* LLMClient.generate(LLMRequest.update(request, { messages }))

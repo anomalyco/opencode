@@ -2,11 +2,15 @@ import { Effect, Schema, type Stream } from "effect"
 import type { Media } from "../../media.js"
 import { Framing } from "../../route/framing.js"
 import type { MediaProtocol } from "../../route/media-protocol.js"
-import { AIError, ContentPolicyError, ProviderID, type MediaUsage, type ProviderMetadata } from "../../schema/index.js"
+import {
+  AIError,
+  ContentPolicyError,
+  type MediaUsage,
+  type ProviderID,
+  type ProviderMetadata,
+} from "../../schema/index.js"
 import { ProviderShared } from "../shared.js"
 import { MediaInput } from "./media-input.js"
-
-const PROVIDER = ProviderID.make("google")
 
 const UsageMetadata = Schema.Struct({
   promptTokenCount: Schema.optional(Schema.Number),
@@ -132,16 +136,18 @@ export const path = (model: string, mode: MediaProtocol.Mode) =>
 export const frames = (bytes: Stream.Stream<Uint8Array, AIError>, mode: MediaProtocol.Mode) =>
   mode === "stream" ? Framing.sse.frame(bytes) : Framing.document.frame(bytes)
 
-// Gemini does not fetch public URLs; inline payloads and Gemini Files references are the accepted inputs.
+// Gemini does not fetch public URLs; inline payloads and the calling route's own file references (Gemini Files URIs
+// for `google`, `gs://` URIs for `google-vertex`) are the accepted inputs.
 export const mediaPart = (
   route: string,
   asset: Media.Asset,
+  provider: ProviderID,
 ): Effect.Effect<
   | { readonly fileData: { readonly mimeType: string; readonly fileUri: string } }
   | { readonly inlineData: { readonly mimeType: string; readonly data: string } },
   AIError
 > => {
-  const fileUri = MediaInput.refID(asset, PROVIDER)
+  const fileUri = MediaInput.refID(asset, provider)
   if (fileUri !== undefined) return Effect.succeed({ fileData: { mimeType: asset.mediaType, fileUri } })
   return ProviderShared.requireInlineMedia(route, asset).pipe(
     Effect.map((media) => ({ inlineData: { mimeType: media.mime, data: media.base64 } })),

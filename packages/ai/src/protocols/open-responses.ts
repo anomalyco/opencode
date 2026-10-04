@@ -23,6 +23,7 @@ import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate } from "../effort-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
+import { MediaInput } from "./utils/media-input.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "open-responses"
@@ -48,13 +49,31 @@ export const OpenResponsesInputFile = Schema.Struct({
   file_data: Schema.optional(Schema.String),
   file_url: Schema.optional(Schema.String),
 })
+// A provider-issued `file_id` replaces the inline or URL payload.
+export const OpenResponsesInputImageFileID = Schema.Struct({
+  type: Schema.tag("input_image"),
+  file_id: Schema.String,
+  detail: Schema.optional(Schema.String),
+})
+export const OpenResponsesInputFileID = Schema.Struct({
+  type: Schema.tag("input_file"),
+  file_id: Schema.String,
+  filename: Schema.optional(Schema.String),
+  detail: Schema.optional(Schema.String),
+})
 const OpenResponsesInputVideo = Schema.Struct({
   type: Schema.tag("input_video"),
   video_url: Schema.String,
 })
-const MediaInput = Schema.Union([OpenResponsesInputImage, OpenResponsesInputFile])
-export type MediaInput = Schema.Schema.Type<typeof MediaInput>
-const OpenResponsesInputContent = Schema.Union([OpenResponsesInputText, MediaInput])
+// File-id members come first: decoding strips unknown keys, so the payload members would otherwise drop `file_id`.
+const InputMedia = Schema.Union([
+  OpenResponsesInputImageFileID,
+  OpenResponsesInputFileID,
+  OpenResponsesInputImage,
+  OpenResponsesInputFile,
+])
+export type InputMedia = Schema.Schema.Type<typeof InputMedia>
+const OpenResponsesInputContent = Schema.Union([OpenResponsesInputText, InputMedia])
 
 export const OpenResponsesOutputText = Schema.Struct({
   type: Schema.tag("output_text"),
@@ -147,6 +166,8 @@ export type HostedToolItem = Schema.Schema.Type<typeof HostedToolItem>
 // https://www.openresponses.org/reference
 const OpenResponsesFunctionCallOutputContent = Schema.Union([
   OpenResponsesInputText,
+  OpenResponsesInputImageFileID,
+  OpenResponsesInputFileID,
   OpenResponsesInputImage,
   OpenResponsesInputFile,
   OpenResponsesInputVideo,
@@ -405,7 +426,7 @@ export interface ProviderAdapter {
     readonly part: MediaPart
     readonly media: Media.Inline | undefined
     readonly request: LLMRequest
-  }) => MediaInput | undefined
+  }) => InputMedia | undefined
   readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
 }
 
@@ -519,6 +540,11 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   const detail = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))(
     part.providerMetadata?.[metadataKey(request.model)]?.detail,
   )
+  const fileID = MediaInput.refID(part.media, request.model.provider)
+  if (fileID !== undefined) {
+    if (part.media.kind === "image") return { type: "input_image" as const, file_id: fileID, detail }
+    return { type: "input_file" as const, file_id: fileID, filename: part.filename, detail }
+  }
   const mime = part.media.mediaType.toLowerCase()
   const url = ProviderShared.mediaUrl(part.media)
   const location = url ?? (yield* ProviderShared.requireInlineMedia(adapter.name, part.media)).dataUrl
