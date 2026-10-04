@@ -9,7 +9,6 @@ import {
 import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { batch, createEffect, createMemo, createResource, createSignal, on, onCleanup, Show } from "solid-js"
 import { useConfig } from "../config"
-import { useData } from "../context/data"
 import { Keymap } from "../context/keymap"
 import { InteractivityProvider } from "../context/interactivity"
 import { useSessionTerminals } from "../context/session-terminals"
@@ -30,7 +29,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   const sessions = useSessionTerminals()
   const prompt = usePromptRef()
   const config = useConfig()
-  const data = useData()
   const toast = useToast()
   const terminalError = () => toast.show({ variant: "error", message: "Unable to load terminal" })
   const renderer = useRenderer()
@@ -105,7 +103,6 @@ export function SessionFrame(props: { sessionID: string; verticalTabsWidth: numb
   )
   const wide = createMemo(() => dimensions().width - props.verticalTabsWidth > 120)
   const sidebarVisible = createMemo(() => {
-    if (data.session.get(props.sessionID)?.parentID) return false
     if (sidebarOpen()) return true
     return (config.data.session?.sidebar ?? "auto") === "auto" && wide()
   })
