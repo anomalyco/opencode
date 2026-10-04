@@ -49,7 +49,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
     inherited === undefined
       ? undefined
       : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(PersistentPty.Handoff))(inherited).pipe(
-          Effect.mapError(() => new Error("Invalid PTY restart handoff")),
+          Effect.catch(() =>
+            Effect.logWarning("Ignoring invalid PTY restart handoff; persistent terminals will start fresh").pipe(
+              Effect.as(undefined),
+            ),
+          ),
         )
   const global = yield* Global.Service
   if (options.mode === "service") yield* Effect.sync(() => process.chdir(global.home))

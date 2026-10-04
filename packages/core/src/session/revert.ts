@@ -13,8 +13,6 @@ import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionMessageTable } from "./sql.js"
 
-export { MessageNotFoundError }
-
 interface BoundaryInput {
   readonly sessionID: SessionSchema.ID
   readonly messageID: SessionMessage.ID

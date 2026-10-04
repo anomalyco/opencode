@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test"
-import { setupTimeline } from "../performance/timeline-stability/fixture"
+import { setupTimeline } from "../utils/timeline"
 
 for (const reducedMotion of [false, true]) {
   test(`suppresses the scrollbar from toggle press until timeline interaction (reduced motion: ${reducedMotion})`, async ({

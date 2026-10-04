@@ -15,12 +15,11 @@ import {
   partUpdated,
   renderedPartID,
   setupTimeline,
-  shell,
   status,
   textPart,
   toolPart,
   userMessage,
-} from "./fixture"
+} from "../../utils/timeline"
 
 test("streams text through growth, canonical replacement, and completion", async ({ page }, testInfo) => {
   const textID = "prt_text_reconcile"

@@ -18,7 +18,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { sessionHasOpenTab, useTabs } from "@/shell/tabs/tabs"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
-import { removedSessionIDs } from "@/session/session-domain"
+import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { pathKey } from "@/workspaces/path-key"
 import { fetchSessionExport, saveSessionExport, sessionExportFilename } from "@/session/commands/export"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -213,7 +213,7 @@ export function createHomeSessionsController(home: HomeController) {
     const conn = home.server.list().find((item) => ServerConnection.key(item) === server)
     const ctx = conn ? home.server.context(conn) : undefined
     if (!conn || !ctx) return false
-    const ids = [...removedSessionIDs(ctx.data.session.list(), session.id)]
+    const ids = sessionTreeIDs(ctx.data.session.list(), session.id)
     return ctx.data.session
       .remove(session.id)
       .then(() => {

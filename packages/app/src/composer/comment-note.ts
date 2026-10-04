@@ -1,12 +1,19 @@
+import { Option, Schema } from "effect"
 import type { FileSelection } from "@/workspaces/files/model"
+import { durableNote, LegacyBrowserNote, NoteComment, type ContextItem } from "./schema"
 
-export type PromptComment = {
+export type PromptFileComment = {
+  type?: "file"
   path: string
   selection?: FileSelection
   comment: string
   preview?: string
   origin?: "review" | "file"
 }
+export type PromptComment = PromptFileComment | NoteComment
+
+const decodeNoteComment = Schema.decodeUnknownOption(NoteComment)
+const decodeLegacyBrowserNote = Schema.decodeUnknownOption(LegacyBrowserNote)
 
 /** An attachment the model receives as a path on the server rather than inline bytes. */
 export type PromptAttachmentReference = {
@@ -30,7 +37,7 @@ function selection(selection: unknown) {
   } satisfies FileSelection
 }
 
-export function createCommentMetadata(input: PromptComment) {
+export function createCommentMetadata(input: PromptFileComment) {
   return {
     opencodeComment: {
       path: input.path,
@@ -78,6 +85,8 @@ export function readPromptPresentation(value: unknown) {
     }),
     comments: comments.flatMap((item): PromptComment[] => {
       if (!item || typeof item !== "object") return []
+      if ((item as { type?: unknown }).type === "note") return Option.toArray(decodeNoteComment(item))
+      if ((item as { type?: unknown }).type === "browser") return Option.toArray(decodeLegacyBrowserNote(item))
       const path = (item as { path?: unknown }).path
       const comment = (item as { comment?: unknown }).comment
       if (typeof path !== "string" || typeof comment !== "string") return []
@@ -98,6 +107,25 @@ export function readPromptPresentation(value: unknown) {
 
 export function formatAttachmentReference(input: PromptAttachmentReference) {
   return `Attached file: \`${input.path}\``
+}
+
+/** A note reads with its live subject while it stays in the app process that attached it. */
+export function formatNoteComment(input: NoteComment) {
+  return `The user made the following comment regarding ${input.live?.subject ?? input.subject}: ${input.comment}`
+}
+
+/** Restores a sent comment to the composer, for example after a revert or fork. */
+export function commentContextItem(comment: PromptComment): ContextItem {
+  // The message may predate this app process, so a note's live references can no longer be trusted.
+  if (comment.type === "note") return { ...durableNote(comment), commentID: crypto.randomUUID() }
+  return {
+    type: "file",
+    path: comment.path,
+    selection: comment.selection,
+    comment: comment.comment,
+    preview: comment.preview,
+    commentOrigin: comment.origin,
+  }
 }
 
 export function formatCommentNote(input: { path: string; selection?: FileSelection; comment: string }) {

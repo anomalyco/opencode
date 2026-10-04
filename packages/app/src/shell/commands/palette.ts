@@ -7,14 +7,14 @@ import { commandPaletteOptions, useCommand, type CommandOption } from "@/shell/c
 import { useFile } from "@/workspaces/files/model"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useLayout, type LocalProject } from "@/shell/state/layout"
+import type { LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
-import { displayName, resolveProjectForSession } from "@/shell/layout/helpers"
-import { createSessionTabs } from "@/session/helpers"
-import { useSessionLayout } from "@/session/session-layout"
-import { useServer } from "@/runtime/server/current"
+import { displayName } from "@opencode/ui/project-avatar"
+import { resolveProjectForSession } from "@/shell/layout/helpers"
+import { useExtensionHost } from "@/runtime/extension/host"
+import { useExtensionAttachment } from "@/runtime/extension/services"
 import { looksLikeSessionID } from "@/session/search"
 
 export type CommandPaletteEntry = {
@@ -35,14 +35,9 @@ export type CommandPaletteEntry = {
 }
 
 const ENTRY_LIMIT = 5
-const COMMON_COMMAND_IDS = [
-  "session.new",
-  "workspace.new",
-  "session.previous",
-  "session.next",
-  "terminal.toggle",
-  "review.toggle",
-] as const
+// The palette opens with these host commands. Featured extension commands list before the view toggles.
+const COMMON_COMMAND_IDS = ["session.new", "workspace.new", "session.previous", "session.next"] as const
+const COMMON_VIEW_COMMAND_IDS = ["review.toggle"] as const
 
 export function uniqueCommandPaletteEntries(items: CommandPaletteEntry[]) {
   const seen = new Set<string>()
@@ -64,18 +59,12 @@ export function createCommandPaletteFileEntry(path: string, category: string): C
 }
 
 export function createCommandPaletteFileOpener(onOpenFile?: (path: string) => void) {
-  const file = useFile()
-  const layout = useLayout()
-  const { tabs, view } = useSessionLayout()
+  const links = useExtensionHost().links
+  const extensions = useExtensionAttachment()
 
   return (path: string) => {
-    const value = file.tab(path)
-    void tabs().open(value)
-    void file.load(path)
-    if (!view().reviewPanel.opened()) view().reviewPanel.open()
-    layout.fileTree.setTab("all")
+    links.open({ href: path, exact: true, background: true, session: extensions.current() })
     onOpenFile?.(path)
-    tabs().setActive(value)
   }
 }
 
@@ -88,7 +77,7 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   const serverSDK = useServerSDK()
   const serverCtx = global.ensureServerCtx(serverSDK.server)
   const appTabs = useTabs()
-  const { tabs: sessionTabs } = useSessionLayout()
+  const extensions = useExtensionAttachment()
   const openFile = createCommandPaletteFileOpener(props.onOpenFile)
   const state = { cleanup: undefined as (() => void) | void, committed: false }
   const filesOnly = () => props.filesOnly?.() ?? false
@@ -103,7 +92,12 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
   })
   const preferredCommandEntries = createMemo(() => {
     const all = allowedCommands()
-    const order = new Map<string, number>(COMMON_COMMAND_IDS.map((id, index) => [id, index]))
+    const ids = [
+      ...COMMON_COMMAND_IDS,
+      ...all.flatMap((option) => (option.featured ? [option.id] : [])),
+      ...COMMON_VIEW_COMMAND_IDS,
+    ]
+    const order = new Map<string, number>(ids.map((id, index) => [id, index]))
     const picked = all.filter((option) => order.has(option.id))
     const base = picked.length ? picked : all.slice(0, ENTRY_LIMIT)
     const sorted = picked.length ? [...base].sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0)) : base
@@ -111,26 +105,12 @@ export function createCommandPaletteModel(props: { filesOnly?: () => boolean; on
     return sorted.map((option) => createCommandPaletteCommandEntry(option, category))
   })
 
-  const tabState = createSessionTabs({
-    tabs: sessionTabs,
-    pathFromTab: file.pathFromTab,
-    normalizeTab: (tab) => (tab.startsWith("file://") ? file.tab(tab) : tab),
-  })
   const recentFileEntries = createMemo(() => {
-    const all = tabState.openedTabs()
-    const active = tabState.activeFileTab()
-    const order = active ? [active, ...all.filter((item) => item !== active)] : all
-    const seen = new Set<string>()
+    const all = extensions.files.opened()
+    const active = extensions.files.active()
+    const order = active ? [active, ...all.filter((path) => path !== active)] : all
     const category = language.t("palette.group.files")
-    return order
-      .map((item) => file.pathFromTab(item))
-      .filter((path): path is string => {
-        if (!path || seen.has(path)) return false
-        seen.add(path)
-        return true
-      })
-      .slice(0, ENTRY_LIMIT)
-      .map((path) => createCommandPaletteFileEntry(path, category))
+    return order.slice(0, ENTRY_LIMIT).map((path) => createCommandPaletteFileEntry(path, category))
   })
   const rootFileEntries = createMemo(() => {
     const category = language.t("palette.group.files")

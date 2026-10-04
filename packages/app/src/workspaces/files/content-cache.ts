@@ -63,24 +63,12 @@ export function resetFileContentLru() {
   reset()
 }
 
-export function setFileContentBytes(path: string, bytes: number) {
-  setBytes(path, bytes)
-}
-
 export function removeFileContentBytes(path: string) {
   remove(path)
 }
 
 export function touchFileContent(path: string, bytes?: number) {
   touch(path, bytes)
-}
-
-export function getFileContentBytesTotal() {
-  return total
-}
-
-export function getFileContentEntryCount() {
-  return lru.size
 }
 
 export function hasFileContent(path: string) {

@@ -68,7 +68,10 @@ const MistralAssistantToolCall = Schema.Struct({
 type MistralAssistantToolCall = Schema.Schema.Type<typeof MistralAssistantToolCall>
 
 const MistralMessage = Schema.Union([
-  Schema.Struct({ role: Schema.Literal("system"), content: Schema.String }),
+  Schema.Struct({
+    role: Schema.Literal("system"),
+    content: Schema.Union([Schema.String, Schema.Array(MistralTextContent)]),
+  }),
   Schema.Struct({
     role: Schema.Literal("user"),
     content: Schema.Union([Schema.String, Schema.Array(MistralUserContent)]),
@@ -335,7 +338,17 @@ const lowerToolResults = Effect.fn("MistralChat.lowerToolResults")(function* (
 const lowerMessages = Effect.fn("MistralChat.lowerMessages")(function* (request: LLMRequest) {
   const normalizeID = MistralToolID.normalizer(request)
   const messages: MistralMessage[] =
-    request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
+    request.system.length === 0
+      ? []
+      : [
+          {
+            role: "system",
+            content:
+              request.system.length === 1
+                ? request.system[0].text
+                : request.system.map((part) => ({ type: "text", text: part.text })),
+          },
+        ]
   for (const message of request.messages) {
     if (message.role === "system") {
       const update = yield* ProviderShared.wrappedSystemUpdate("Mistral Chat", message)
@@ -426,6 +439,7 @@ interface ActiveContent {
   readonly type: "text" | "reasoning"
   readonly id: string
   readonly thinking?: MistralThinkingContent
+  readonly thinkingUnits?: MistralThinkingUnit[]
 }
 
 export interface ParserState {
@@ -502,8 +516,8 @@ const closeActive = (state: ParserState, events: LLMEvent[]) => {
           state.lifecycle,
           events,
           state.active.id,
-          thinkingMetadata(state.active.thinking ?? { type: "thinking", thinking: [] }),
-          thinkingText(state.active.thinking?.thinking ?? []),
+          thinkingMetadata({ ...state.active.thinking, type: "thinking", thinking: state.active.thinkingUnits ?? [] }),
+          thinkingText(state.active.thinkingUnits ?? []),
         )
   return { ...state, lifecycle, active: undefined }
 }
@@ -524,20 +538,23 @@ const appendThinking = (state: ParserState, events: LLMEvent[], part: MistralOut
   const current = state.active?.type === "reasoning" ? state : closeActive(state, events)
   const units = thinkingUnits(part.thinking)
   const active = current.active ?? { type: "reasoning" as const, id: `reasoning-${current.nextContent}` }
+  // Keep native units out of streamed events until the block is complete.
+  const accumulated = active.thinkingUnits ?? []
+  accumulated.push(...units)
   const thinking = {
     ...active.thinking,
     ...part,
     type: "thinking" as const,
-    thinking: [...(active.thinking?.thinking ?? []), ...units],
+    thinking: [],
   }
   const text = thinkingText(units)
   return {
     ...current,
     lifecycle:
       text.length > 0
-        ? Lifecycle.reasoningDelta(current.lifecycle, events, active.id, text, thinkingMetadata(thinking))
-        : Lifecycle.reasoningStart(current.lifecycle, events, active.id, thinkingMetadata(thinking)),
-    active: { ...active, thinking },
+        ? Lifecycle.reasoningDelta(current.lifecycle, events, active.id, text)
+        : Lifecycle.reasoningStart(current.lifecycle, events, active.id),
+    active: { ...active, thinking, thinkingUnits: accumulated },
     nextContent: current.active ? current.nextContent : current.nextContent + 1,
   }
 }

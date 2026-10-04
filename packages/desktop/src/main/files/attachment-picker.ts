@@ -6,14 +6,13 @@ export const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
 
 export function createPickedFileAuthorizations(
   read: (path: string, maxBytes: number) => Effect.Effect<ArrayBuffer, unknown>,
-  budget = MAX_ATTACHMENT_BYTES,
 ) {
   const selections = new Map<string, { sender: number; paths: Set<string>; remaining: number }>()
 
   return {
     add(sender: number, paths: string[]) {
       const token = randomUUID()
-      selections.set(token, { sender, paths: new Set(paths), remaining: budget })
+      selections.set(token, { sender, paths: new Set(paths), remaining: MAX_ATTACHMENT_BYTES })
       return token
     },
     read: Effect.fn("DesktopFiles.readPickedFile")(function* (sender: number, token: string, path: string) {

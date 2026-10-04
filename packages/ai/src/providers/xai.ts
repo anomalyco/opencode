@@ -35,13 +35,13 @@ const RESPONSES_WEBSOCKET_ROTATE_AFTER_MS = 24 * 60 * 1000
 
 const responsesRoute = Route.make({
   compact: { endpoint: XAIResponses.compact },
-  id: "openai-responses",
+  id: "xai-responses",
   provider: id,
   providerMetadataKey: "xai",
   protocol: XAIResponses.protocol,
   endpoint: Endpoint.path("/responses", { baseURL }),
   transport: OpenResponsesChannel.transport({
-    id: "openai-responses",
+    id: "xai-responses",
     name: "xAI Responses",
     rotateAfterMs: RESPONSES_WEBSOCKET_ROTATE_AFTER_MS,
     // xAI continues a chain only from stored responses: with `store: false` (the route default) `previous_response_id`
@@ -53,7 +53,7 @@ const responsesRoute = Route.make({
 })
 
 const chatRoute = Route.make({
-  id: "openai-compatible-chat",
+  id: "xai-chat",
   provider: id,
   providerMetadataKey: "xai",
   protocol: OpenAIChat.protocol,

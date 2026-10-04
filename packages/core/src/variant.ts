@@ -88,6 +88,11 @@ const responsesEffort = (effort: string): Overlay => ({
   settings: { reasoningEffort: effort, reasoningSummary: "auto", include: ENCRYPTED_REASONING },
 })
 
+const xaiResponses: Protocol = (_, support) => {
+  if (support.type !== "effort") return []
+  return efforts(support.values ?? EFFORTS, responsesEffort)
+}
+
 const cloudflareAIGateway: Protocol = (model, support) => {
   const id = modelID(model)
   if (id.startsWith("openai/")) return openaiResponses(model, support)
@@ -152,6 +157,25 @@ const nvidiaChat: Protocol = (model, support) => {
       return budgets(model, support, (tokens) => ({
         body: { chat_template_kwargs: { enable_thinking: true }, reasoning_budget: tokens },
       }))
+  }
+}
+
+// Workers AI ignores or rejects `reasoning_effort: "none"` on most models. Kimi's chat template reads
+// `thinking`; the others read `enable_thinking`, so both are sent.
+const workersAITemplate = (thinking: boolean): Overlay => ({
+  body: { chat_template_kwargs: { enable_thinking: thinking, thinking } },
+})
+
+const workersAIChat: Protocol = (_, support) => {
+  switch (support.type) {
+    case "effort":
+      return efforts(support.values ?? EFFORTS, (effort) =>
+        effort === "none" ? workersAITemplate(false) : { settings: { reasoningEffort: effort } },
+      )
+    case "toggle":
+      return toggle(workersAITemplate(false), workersAITemplate(true))
+    case "budget_tokens":
+      return []
   }
 }
 
@@ -547,9 +571,11 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/alibaba/chat": alibabaChat,
   "@opencode/ai/providers/baseten": basetenChat,
   "@opencode/ai/providers/cerebras": openaiChat,
-  "@opencode/ai/providers/cloudflare-workers-ai": openaiChat,
+  "@opencode/ai/providers/cloudflare-workers-ai": workersAIChat,
+  "@opencode/ai/providers/cohere/chat": openaiChat,
   "@opencode/ai/providers/deepinfra": deepinfraChat,
   "@opencode/ai/providers/deepseek": deepseekChat,
+  "@opencode/ai/providers/digitalocean": openaiChat,
   "@opencode/ai/providers/fireworks": openaiChat,
   "@opencode/ai/providers/groq": openaiChat,
   "@opencode/ai/providers/meta/chat": openaiChat,
@@ -557,7 +583,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/mistral": openaiChat,
   "@opencode/ai/providers/moonshot/chat": moonshotChat,
   "@opencode/ai/providers/togetherai": openaiChat,
-  "@opencode/ai/providers/xai": openaiChat,
+  "@opencode/ai/providers/xai": xaiResponses,
   "@opencode/ai/providers/zai/chat": zaiChat,
   "@opencode/ai/providers/zai-coding-plan/chat": zaiChat,
 
@@ -573,11 +599,11 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/google-vertex": gemini,
 
   "@opencode/ai/providers/amazon-bedrock": bedrockConverse,
+  "@opencode/ai/providers/cohere": cohere,
   "@opencode/ai/providers/openrouter": openrouter,
 
   [Provider.aisdk("venice-ai-sdk-provider")]: openaiChat,
   "@opencode/ai/providers/cloudflare-ai-gateway": cloudflareAIGateway,
   [Provider.aisdk("@ai-sdk/gateway")]: vercelGateway,
   [Provider.aisdk("@jerome-benoit/sap-ai-provider-v2")]: sapAICore,
-  [Provider.aisdk("@ai-sdk/cohere")]: cohere,
 }

@@ -183,8 +183,11 @@ function UserMessageComments(props: { comments: SessionUserComment[]; bounded: b
         {(comment) => (
           <CommentCard
             comment={comment.comment}
-            path={comment.path}
-            selection={comment.selection}
+            target={
+              comment.type === "note"
+                ? { type: "note", label: comment.label, icon: comment.icon }
+                : { type: "file", path: comment.path, selection: comment.selection }
+            }
             title={comment.comment}
             tooltip
             wide

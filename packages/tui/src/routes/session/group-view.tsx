@@ -63,7 +63,6 @@ function Group(props: GroupProps) {
 function GroupContent(props: GroupProps) {
   const ctx = use()
   const theme = useTheme()
-  const renderer = useRenderer()
   const disclosure = useDisclosure(props)
   const id = disclosure.id
   const expanded = disclosure.expanded
@@ -211,7 +210,7 @@ function ActivityGroup(props: GroupProps) {
     <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
       <Show when={summary().label}>
         <InlineToolRow
-          icon={summary().failed ? "✗" : disclosure.expanded() ? "−" : "+"}
+          icon={disclosure.expanded() ? "−" : "+"}
           color={hover() ? theme.text.base : theme.text.muted}
           complete={true}
           pending={summary().label}
@@ -260,9 +259,7 @@ function InstructionsGroup(props: GroupProps) {
         Instructions: {files()} {files() === 1 ? "file" : "files"}
       </InlineToolRow>
       <Show when={disclosure.expanded()}>
-        <box flexDirection="column" gap={1} marginTop={1}>
-          <Children {...props} nodes={props.node.children} mode="normal" />
-        </box>
+        <Children {...props} nodes={props.node.children} mode="normal" />
       </Show>
     </GroupAnchor>
   )

@@ -17,7 +17,7 @@ import {
   toolPart,
   userMessage,
   type TimelineMessage,
-} from "./fixture"
+} from "../../utils/timeline"
 
 test("follows an expanded patch that arrives as the user reaches the bottom", async ({ page }) => {
   const toolID = "prt_bottom_follow_patch"
@@ -242,7 +242,7 @@ test("keeps an older answer selected while scrolling within the interaction buff
 
 test("tracks keyboard scrolling from a focused timeline descendant", async ({ page }, testInfo) => {
   const shellID = "prt_descendant_keyboard_01_shell"
-  const timeline = await setupTimeline(page, {
+  await setupTimeline(page, {
     messages: [...history(12), userMessage(), assistantMessage([shell(shellID, "completed", lines(5))])],
     settings: { shellToolPartsExpanded: false },
     cpuRate: 4,

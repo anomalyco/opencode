@@ -1,7 +1,7 @@
-import { Duration, Effect, Equal, Schema, Semaphore, Stream } from "effect"
-import type { Scope } from "effect"
+import { Duration, Effect, Equal, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
+import type { SessionHttpResponse } from "@opencode/plugin/effect/session"
 import { FetchHttpClient, HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { App } from "../../app.js"
 import { Bus } from "../../bus.js"
@@ -9,6 +9,7 @@ import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { IntegrationConnection } from "../../integration/connection.js"
 import { ManagedPolicy } from "../../managed-policy.js"
+import { Model } from "../../model.js"
 import { Provider } from "../../provider.js"
 import { WebSearch } from "../../websearch.js"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
@@ -55,6 +56,34 @@ const TokenPending = Schema.Struct({ error: Schema.String })
 const DeviceToken = Schema.Union([Token, TokenPending])
 const User = Schema.Struct({ id: Schema.String, email: Schema.String })
 const Org = Schema.Struct({ id: Schema.String, name: Schema.String })
+// Console's 403 when the organization enforces SSO and the user's SSO proof is missing or expired.
+const SsoRequired = Schema.Struct({
+  _tag: Schema.Literal("SsoRequired"),
+  orgId: Schema.String,
+  connectionId: Schema.String,
+})
+const InvalidGrant = Schema.Struct({ error: Schema.Literal("invalid_grant") })
+// Console's 401 when the session behind the access token was revoked or expired.
+const Unauthorized = Schema.Struct({ _tag: Schema.Literal("Unauthorized") })
+const signedOutMessage = "Reconnect OpenCode Console to continue"
+const ssoMessage = (organization: string | undefined) =>
+  `Sign in with SSO again to use ${organization ?? "your OpenCode Console organization"}`
+
+class SsoRequiredError extends Schema.TaggedError<SsoRequiredError>()("OpencodeConsole.SsoRequired", {
+  organization: Schema.optional(Schema.String),
+  url: Schema.String,
+}) {
+  override get message() {
+    return `${ssoMessage(this.organization)}.`
+  }
+}
+
+// The Console session or refresh token was revoked or expired; only a new device login recovers.
+class SignedOutError extends Schema.TaggedError<SignedOutError>()("OpencodeConsole.SignedOut", {}) {
+  override get message() {
+    return `${signedOutMessage}.`
+  }
+}
 
 function oauth(http: HttpClient.HttpClient) {
   return {
@@ -100,11 +129,17 @@ function oauth(http: HttpClient.HttpClient) {
       }),
     refresh: (credential) =>
       Effect.gen(function* () {
-        const token = yield* post(
-          http,
-          `${serverUrl(credential)}/auth/device/token`,
-          { grant_type: "refresh_token", refresh_token: credential.refresh, client_id: clientID },
-          Token,
+        const response = yield* send(http, `${serverUrl(credential)}/auth/device/token`, {
+          grant_type: "refresh_token",
+          refresh_token: credential.refresh,
+          client_id: clientID,
+        })
+        if (response.status === 400) {
+          const body = yield* HttpClientResponse.schemaBodyJson(InvalidGrant)(response).pipe(Effect.option)
+          if (Option.isSome(body)) return yield* new SignedOutError()
+        }
+        const token = yield* HttpClientResponse.filterStatusOk(response).pipe(
+          Effect.flatMap(HttpClientResponse.schemaBodyJson(Token)),
         )
         // Persist rotated tokens without depending on discovery requests.
         return {
@@ -138,6 +173,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     // and whether it evaluates the policies it is being sent.
     const http = HttpClient.mapRequest(client, HttpClientRequest.setHeader("User-Agent", App.useragent(ctx.app)))
     const managed = yield* ManagedPolicy.Service
+    const scope = yield* Scope.Scope
     const loading = Semaphore.makeUnsafe(1)
     type ActiveConnection = Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
     let snapshot: {
@@ -149,10 +185,20 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
         | { servers: NonNullable<typeof RemoteResponse.Type.mcp>["servers"]; headers: Record<string, string> }
         | undefined
     } = { config: undefined, connection: undefined, organization: undefined, mcp: undefined }
+    // Status last reported for the active connection, so inference failures can name the fix.
+    let reported: IntegrationConnection.Status | undefined
+    let explainers: Effect.Success<ReturnType<typeof ctx.session.hook>>[] = []
 
     const load = Effect.fn("OpencodePlugin.load")(function* () {
       const connection = yield* ctx.integration.connection.active("opencode")
-      if (!connection) return { config: undefined, connection, organization: undefined, mcp: undefined }
+      if (!connection) {
+        reported = undefined
+        return { config: undefined, connection, organization: undefined, mcp: undefined }
+      }
+      const status = (status: IntegrationConnection.Status | undefined) => {
+        reported = status
+        return ctx.integration.connection.status({ integrationID: "opencode", connection, status })
+      }
       return yield* ctx.integration.connection.resolve(connection).pipe(
         Effect.flatMap((credential) => {
           if (!credential)
@@ -161,21 +207,24 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
             Effect.map((config) => ({
               config,
               connection,
-              organization: typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined,
+              organization: organizationName(credential),
               mcp: config?.mcp && { servers: config.mcp.servers, headers: credentialHeaders(credential) },
             })),
           )
         }),
+        Effect.tap(() => status(undefined)),
         Effect.catch((cause) =>
-          Effect.logWarning("failed to load OpenCode provider config", { cause }).pipe(
+          Effect.gen(function* () {
+            // Only well-formed Console errors change the connection status; anything else may be transient.
+            const next = connectionStatus(cause)
+            if (next) yield* status(next)
+            yield* Effect.logWarning("failed to load OpenCode provider config", { cause })
             // A load that fails for the connection already in place keeps its last config: dropping it
             // would lift organization policy while personal credentials keep working.
-            Effect.as(
-              IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
-                ? { config: snapshot.config, connection, organization: snapshot.organization, mcp: snapshot.mcp }
-                : { config: undefined, connection, organization: undefined, mcp: undefined },
-            ),
-          ),
+            return IntegrationConnection.key(connection) === IntegrationConnection.key(snapshot.connection)
+              ? { config: snapshot.config, connection, organization: snapshot.organization, mcp: snapshot.mcp }
+              : { config: undefined, connection, organization: undefined, mcp: undefined }
+          }),
         ),
       )
     })
@@ -223,11 +272,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
             model.package = config.package ?? (item.package !== undefined ? undefined : model.package)
             if (item.settings?.baseURL !== undefined && model.settings) delete model.settings.baseURL
             if (config.capabilities !== undefined)
-              model.capabilities = {
-                ...config.capabilities,
-                input: [...config.capabilities.input],
-                output: [...config.capabilities.output],
-              }
+              model.capabilities = Model.mergeCapabilities(config.capabilities, model.capabilities)
             model.settings = Provider.mergeOverlay(
               withoutCredentials(model.settings),
               withoutCredentials(config.settings),
@@ -367,12 +412,47 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     const apply = Effect.fn("OpencodePlugin.apply")(function* (next: typeof snapshot) {
       snapshot = next
       yield* publish(next)
+      yield* guard(next)
       yield* Effect.all([ctx.provider.reload(), ctx.websearch.reload(), ctx.mcp.reload()], {
         concurrency: 3,
         discard: true,
       })
     })
     const refresh = () => loading.withPermit(load().pipe(Effect.andThen(apply)))
+    // Annotated: `apply` re-registers the hooks that call `check`, which would otherwise make inference circular.
+    const check = (): Effect.Effect<void> =>
+      loading.withPermit(
+        load().pipe(Effect.flatMap((next) => (Equal.equals(snapshot, next) ? Effect.void : apply(next)))),
+      )
+
+    // Console inference rejects a missing SSO sign-in with a generic 401/403. Re-check the Console config, which
+    // reports the reason, and replace the response with instructions when the connection needs the user.
+    const explain = (event: SessionHttpResponse) =>
+      Effect.gen(function* () {
+        if (event.response.status !== 401 && event.response.status !== 403) return
+        yield* check()
+        const status = reported
+        if (!status) return
+        void event.response.body?.cancel()
+        event.response = Response.json(
+          {
+            error: {
+              type: "authentication_error",
+              message: `${status.message}.`,
+            },
+          },
+          { status: event.response.status },
+        )
+      })
+    // Hooks are scoped per provider so requests to unrelated providers skip the HTTP hook path.
+    const guard = Effect.fn("OpencodePlugin.guard")(function* (next: typeof snapshot) {
+      yield* Effect.forEach(explainers, (registration) => registration.dispose, { discard: true })
+      explainers = yield* Effect.forEach(
+        next.connection ? new Set([Provider.ID.opencode, ...Object.keys(next.config?.providers ?? {})]) : [],
+        (providerID) => ctx.session.hook("http.response", explain, { providerID }).pipe(Scope.provide(scope)),
+      )
+    })
+    yield* guard(snapshot)
     yield* bus.subscribe(Credential.Event.Switched).pipe(
       Stream.filter((event) => event.data.integrationID === Integration.ID.make("opencode")),
       Stream.runForEach(refresh),
@@ -382,11 +462,7 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
     // Console config can change independently of local credential activity, so re-fetch
     // periodically and only rebuild the catalog and search providers when the snapshot differs.
     yield* Effect.sleep(Duration.minutes(1)).pipe(
-      Effect.andThen(
-        loading.withPermit(
-          load().pipe(Effect.flatMap((next) => (Equal.equals(snapshot, next) ? Effect.void : apply(next)))),
-        ),
-      ),
+      Effect.andThen(check()),
       Effect.forever,
       Effect.forkScoped,
     )
@@ -402,13 +478,56 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Value) {
       ),
     )
     .pipe(
-      Effect.flatMap((response) => {
-        if (response.status === 404) return Effect.undefined
-        return HttpClientResponse.filterStatusOk(response).pipe(
-          Effect.flatMap(HttpClientResponse.schemaBodyJson(RemoteResponse)),
-        )
-      }),
+      Effect.flatMap((response) =>
+        Effect.gen(function* () {
+          if (response.status === 404) return undefined
+          if (response.status === 401) {
+            const body = yield* HttpClientResponse.schemaBodyJson(Unauthorized)(response).pipe(Effect.option)
+            if (Option.isSome(body)) return yield* new SignedOutError()
+          }
+          if (response.status === 403) {
+            const body = yield* HttpClientResponse.schemaBodyJson(SsoRequired)(response).pipe(Effect.option)
+            if (Option.isSome(body))
+              return yield* new SsoRequiredError({
+                organization: organizationName(value),
+                url: yield* ssoUrl(serverUrl(value), body.value.connectionId),
+              })
+          }
+          return yield* HttpClientResponse.filterStatusOk(response).pipe(
+            Effect.flatMap(HttpClientResponse.schemaBodyJson(RemoteResponse)),
+          )
+        }),
+      ),
     )
+}
+
+function ssoUrl(server: string, connectionID: string) {
+  return normalizeServer(server).pipe(
+    Effect.map((base) => {
+      // Console only redirects to paths under its own base path after SSO.
+      const redirectTo = `${new URL(base).pathname.replace(/\/+$/, "")}/`
+      return `${base}/auth/sso/${encodeURIComponent(connectionID)}/start?redirectTo=${encodeURIComponent(redirectTo)}`
+    }),
+  )
+}
+
+function connectionStatus(cause: unknown): IntegrationConnection.Status | undefined {
+  if (cause instanceof SsoRequiredError)
+    return {
+      status: "needs_auth",
+      message: ssoMessage(cause.organization),
+      url: cause.url,
+    }
+  if (
+    cause instanceof SignedOutError ||
+    (cause instanceof Integration.AuthorizationError && cause.cause instanceof SignedOutError)
+  )
+    return { status: "needs_auth", message: signedOutMessage }
+  return undefined
+}
+
+function organizationName(credential: Credential.Value) {
+  return typeof credential.metadata?.orgName === "string" ? credential.metadata.orgName : undefined
 }
 
 function credentialHeaders(value: Credential.Value): Record<string, string> {
@@ -514,11 +633,16 @@ function post<S extends Schema.Top>(
   schema: S,
   statusOk = true,
 ) {
+  return send(http, url, body).pipe(
+    Effect.flatMap((response) => (statusOk ? HttpClientResponse.filterStatusOk(response) : Effect.succeed(response))),
+    Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)),
+  )
+}
+
+function send(http: HttpClient.HttpClient, url: string, body: Record<string, string | boolean>) {
   return HttpClientRequest.post(url).pipe(
     HttpClientRequest.acceptJson,
     HttpClientRequest.schemaBodyJson(Schema.Record(Schema.String, Schema.Union([Schema.String, Schema.Boolean])))(body),
     Effect.flatMap((request) => http.execute(request)),
-    Effect.flatMap((response) => (statusOk ? HttpClientResponse.filterStatusOk(response) : Effect.succeed(response))),
-    Effect.flatMap(HttpClientResponse.schemaBodyJson(schema)),
   )
 }

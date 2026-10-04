@@ -9,6 +9,7 @@ import { Bus } from "../../bus.js"
 import { Integration } from "../../integration.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { Provider } from "../../provider.js"
+import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
 
 const clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
@@ -299,12 +300,16 @@ export const OpenAIPlugin = define({
     yield* ctx.session.hook(
       "model.request",
       (evt) =>
-        Effect.sync(() => {
+        Effect.gen(function* () {
           if (!chatgpt) return
           if (evt.baseURL && URL.canParse(evt.baseURL) && new URL(evt.baseURL).origin === "https://api.openai.com")
             evt.baseURL = codexBaseURL
+          const session = yield* ctx.session
+            .get({ sessionID: evt.sessionID })
+            .pipe(Effect.orElseSucceed(() => undefined))
           evt.headers.originator = "opencode"
-          evt.headers["session-id"] = evt.sessionID
+          // ChatGPT routes its prompt cache on this header, so children share the parent's.
+          evt.headers["session-id"] = session ? SessionAffinity.get(session) : evt.sessionID
         }),
       { providerID: Provider.ID.openai },
     )

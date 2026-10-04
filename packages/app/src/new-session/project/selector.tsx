@@ -11,10 +11,13 @@ import {
 import { createStore } from "solid-js/store"
 import { Menu } from "@opencode/ui/menu"
 import { Icon } from "@opencode/ui/icon"
-import { ProjectAvatar } from "@opencode/ui/project-avatar"
-import { getProjectAvatarVariant } from "@/shell/state/layout"
+import {
+  displayName,
+  getProjectAvatarSource,
+  getProjectAvatarVariant,
+  ProjectAvatar,
+} from "@opencode/ui/project-avatar"
 import { useLanguage } from "@/runtime/i18n/language"
-import { displayName, getProjectAvatarSource } from "@/shell/layout/helpers"
 import { pathKey } from "@/workspaces/path-key"
 import { handleDocumentSearchKeydown } from "@/shell/commands/search-keydown"
 import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
@@ -31,6 +34,7 @@ export type PromptProject = {
 export type PromptProjectControls = {
   available: PromptProject[]
   directory: string
+  projectID?: string
   server?: string
   select: (worktree: string, server?: string) => void
   add: (title: string, server?: string) => void
@@ -56,14 +60,15 @@ export function createPromptProjectController(input: {
   let searchRef: HTMLInputElement | undefined
 
   const current = () => {
-    const key = pathKey(input.controls().directory)
-    return input
-      .controls()
-      .available.find(
+    const controls = input.controls()
+    const key = pathKey(controls.directory)
+    const projects = controls.available.filter((project) => !project.server || project.server.key === controls.server)
+    return (
+      projects.find(
         (project) =>
-          (!project.server || project.server.key === input.controls().server) &&
-          (pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key)),
-      )
+          pathKey(project.worktree) === key || project.sandboxes?.some((sandbox) => pathKey(sandbox) === key),
+      ) ?? projects.find((project) => controls.projectID && project.id === controls.projectID)
+    )
   }
   const selected = () => current() ?? input.controls().available[0]
   const projects = () => {

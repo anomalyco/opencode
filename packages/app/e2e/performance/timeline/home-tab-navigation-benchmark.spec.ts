@@ -1,13 +1,13 @@
 import { benchmark, expect } from "../benchmark"
 import { expectSessionTitle } from "../../utils/waits"
 import { measureNavigationMilestones } from "./navigation-milestones"
-import { fixture } from "./session-timeline-stress.fixture"
 import {
+  fixture,
   installStressSessionTabs,
   installTimelineSettings,
   mockStressTimeline,
-  stressSessionHref,
-} from "./timeline-test-helpers"
+} from "../../utils/session-fixture"
+import { sessionHref } from "../../utils/app"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
 
 const homeRow = '[data-component="home-session-row"]'
@@ -19,7 +19,7 @@ benchmark.describe("performance: home and tab navigation", () => {
     await page.goto("/")
     const row = page.locator(homeRow).filter({ hasText: fixture.expected.targetTitle }).first()
     await expect(row).toBeVisible()
-    const href = stressSessionHref(fixture.targetID)
+    const href = sessionHref(fixture.targetID)
     const result = await measureNavigationMilestones(page, {
       triggerSelector: homeRow,
       milestones: {
@@ -80,7 +80,7 @@ benchmark.describe("performance: home and tab navigation", () => {
 
   benchmark("closes the only session tab and paints home", async ({ page, report }) => {
     await setup(page, [fixture.sourceID])
-    const href = stressSessionHref(fixture.sourceID)
+    const href = sessionHref(fixture.sourceID)
     await page.goto(href)
     await expectSessionTitle(page, fixture.expected.sourceTitle)
     await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)

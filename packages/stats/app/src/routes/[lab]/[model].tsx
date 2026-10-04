@@ -1424,11 +1424,6 @@ function capitalizeLabel(value: string) {
   return value.charAt(0).toUpperCase() + value.slice(1)
 }
 
-function formatRankMove(change: number) {
-  if (change > 0) return `+${change}`
-  return `${change}`
-}
-
 function formatHeroRank(rank: number | null) {
   if (rank === null) return "--"
   return String(rank).padStart(2, "0")
@@ -1461,14 +1456,6 @@ function sparklinePoints(values: number[]) {
 
 function formatSparklinePoint(value: number) {
   return Number(value.toFixed(2)).toString()
-}
-
-function formatModelRankMoveLabel(data: StatsModelPageData, i18n: ReturnType<typeof useI18n>) {
-  if (data.rank === null) return i18n.t("model.noUsageLastWeek")
-  if (data.previousRank === null) return i18n.t("model.newThisWeek")
-  const change = data.previousRank - data.rank
-  if (change === 0) return i18n.t("model.sameAsPreviousWeek")
-  return i18n.t("model.vsPreviousWeek", { change: formatRankMove(change) })
 }
 
 function formatTokens(value: number) {

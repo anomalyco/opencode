@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/cli",
-  "version": "2.0.18",
+  "version": "2.0.22",
   "type": "module",
   "license": "MIT",
   "bin": {
@@ -24,13 +24,13 @@
     "typecheck": "tsgo -b"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "1.2.1",
+    "@agentclientprotocol/sdk": "1.6.0",
     "@clack/core": "1.0.0-alpha.1",
     "@clack/prompts": "1.0.0-alpha.1",
     "@effect/platform-node": "catalog:",
     "@opencode/client": "workspace:*",
     "@opencode/plugin": "workspace:*",
-    "@opencode-ai/pty": "0.1.13",
+    "@opencode-ai/pty": "0.2.0",
     "@opencode/schema": "workspace:*",
     "@opencode/server": "workspace:*",
     "@opencode/tui": "workspace:*",
@@ -39,6 +39,7 @@
     "@opentui/solid": "catalog:",
     "@parcel/watcher": "2.5.1",
     "@silvia-odwyer/photon-node": "0.3.4",
+    "diff": "catalog:",
     "effect": "catalog:",
     "immer": "11.1.4",
     "jsonc-parser": "3.3.1",

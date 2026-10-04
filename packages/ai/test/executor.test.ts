@@ -1,11 +1,17 @@
 import { describe, expect } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Ref, Stream } from "effect"
-import { Headers, HttpClientError, HttpClientRequest } from "effect/unstable/http"
-import { LLM, AIError, HttpContext, InvalidProviderOutputError, TransportError } from "../src/index.js"
-import { LLMClient, RequestExecutor, WebSocketTransport, type WebSocketChannelExecutor } from "../src/route.js"
+import { Headers, HttpClientError, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { LLM, AIError, HttpContext, InvalidProviderOutputError, TransportError, isRetryable } from "../src/index.js"
+import {
+  LLMClient,
+  RequestExecutor,
+  WebSocketTransport,
+  type HttpMiddleware,
+  type WebSocketChannelExecutor,
+} from "../src/route.js"
 import { route } from "../src/protocols/openai-chat.js"
 import { configure } from "../src/providers/openai.js"
-import { dynamicResponse, fixedResponse, handlerLayer, systemError } from "./lib/http.js"
+import { dynamicResponse, fixedResponse, handlerLayer, systemError, truncatedStream } from "./lib/http.js"
 import { deltaChunk } from "./lib/openai-chunks.js"
 import { sseEvents, sseRaw } from "./lib/sse.js"
 import { it } from "./lib/effect.js"
@@ -17,6 +23,8 @@ const request = HttpClientRequest.post("https://provider.test/v1/chat?api_key=se
 const secretRequest = HttpClientRequest.post("https://provider.test/v1/chat?api_key=query-secret-123&debug=1").pipe(
   HttpClientRequest.setHeaders(Headers.fromInput({ authorization: "Bearer header-secret-456" })),
 )
+
+const sseRequest = HttpClientRequest.post("https://provider.test/v1/messages")
 
 const expectAIError = (error: unknown) => {
   expect(error).toBeInstanceOf(AIError)
@@ -93,7 +101,9 @@ describe("RequestExecutor", () => {
       const error = yield* RequestExecutor.stream(executor, secretRequest).pipe(Stream.runDrain, Effect.flip)
 
       expectAIError(error)
-      expect(error.message).toBe("ECONNRESET: disconnected query-secret-123 header-secret-456")
+      expect(error.message).toBe(
+        "Connection lost while reading the response: ECONNRESET: disconnected query-secret-123 header-secret-456",
+      )
       expect(error.reason.http).toMatchObject({ status: 200, url: secretRequest.url })
       expect(error.reason.cause).toMatchObject({ code: "ECONNRESET" })
       expect(error.reason).toMatchObject({
@@ -123,7 +133,7 @@ describe("RequestExecutor", () => {
       const error = yield* RequestExecutor.stream(executor, secretRequest).pipe(Stream.runDrain, Effect.flip)
 
       expectAIError(error)
-      expect(error.message).toBe("ECONNRESET: socket closed")
+      expect(error.message).toBe("Connection lost while reading the response: ECONNRESET: socket closed")
       expect(error.reason.cause).toBeInstanceOf(TypeError)
       expect(error.reason).toMatchObject({
         _tag: "Transport",
@@ -142,6 +152,54 @@ describe("RequestExecutor", () => {
         ),
       ),
     ),
+  )
+
+  it.effect("reports a connection lost mid-stream through middleware that re-wraps the body", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const chunks: Array<Uint8Array> = []
+      // Session HTTP hooks hand plugins a web Response, so the body is re-wrapped around the original stream.
+      const rewrap: HttpMiddleware = (input, handler) =>
+        Effect.gen(function* () {
+          const response = yield* handler(input)
+          const body = yield* Stream.toReadableStreamEffect(response.stream)
+          return HttpClientResponse.fromWeb(
+            input,
+            new Response(body, { status: response.status, headers: response.headers }),
+          )
+        })
+      const error = yield* RequestExecutor.stream(executor, sseRequest, rewrap).pipe(
+        Stream.runForEach((chunk) => Effect.sync(() => chunks.push(chunk))),
+        Effect.flip,
+      )
+
+      expectAIError(error)
+      expect(new TextDecoder().decode(chunks[0])).toBe('data: {"type":"ping"}\n\n')
+      expect(error.message).toBe("Connection lost while reading the response: ECONNRESET: other side closed")
+      expect(error.reason.cause).toBeInstanceOf(TypeError)
+      expect(error.reason.http).toMatchObject({ status: 200 })
+      expect(error.reason).toMatchObject({ _tag: "Transport", operation: "read", code: "ECONNRESET" })
+      expect(isRetryable(error)).toBeTrue()
+    }).pipe(
+      Effect.provide(
+        truncatedStream(
+          ['data: {"type":"ping"}\n\n'],
+          new TypeError("terminated", { cause: systemError("ECONNRESET", "other side closed") }),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("does not report a body read failure without a native cause as a decode error", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* RequestExecutor.stream(executor, sseRequest).pipe(Stream.runDrain, Effect.flip)
+
+      expectAIError(error)
+      expect(error.message).toBe("Connection lost while reading the response")
+      expect(error.reason).toMatchObject({ _tag: "Transport", operation: "read", code: undefined })
+      expect(isRetryable(error)).toBeTrue()
+    }).pipe(Effect.provide(truncatedStream(['data: {"type":"ping"}\n\n'], new DOMException("aborted", "AbortError")))),
   )
 
   it.effect("preserves middleware error messages", () =>
@@ -273,8 +331,54 @@ describe("RequestExecutor", () => {
       expectAIError(error)
       expect(error.reason).toMatchObject({ _tag: "InvalidRequest" })
       expect("classification" in error.reason ? error.reason.classification : undefined).toBeUndefined()
-      expect(error.message).toBe("Provider request failed with HTTP 400")
+      expect(error.message).toBe("Provider request failed with HTTP 400: invalid parameter")
     }).pipe(Effect.provide(fixedResponse("invalid parameter", { status: 400 }))),
+  )
+
+  it.effect("shows unrecognized provider error bodies", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error.message).toBe(
+        'Provider request failed with HTTP 422: {"object":"error","message":{"detail":[{"msg":"Input should be less than or equal to 1.5"}]}}',
+      )
+    }).pipe(
+      Effect.provide(
+        fixedResponse('{"object":"error","message":{"detail":[{"msg":"Input should be less than or equal to 1.5"}]}}', {
+          status: 422,
+        }),
+      ),
+    ),
+  )
+
+  it.effect("shows messages from common provider error layouts", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error.message).toBe("Invalid API Key")
+    }).pipe(Effect.provide(fixedResponse('{"detail":"Invalid API Key"}', { status: 401 }))),
+  )
+
+  it.effect("truncates long unrecognized provider error bodies", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error.message).toBe(`Provider request failed with HTTP 400: ${"x".repeat(2000)}…`)
+      expect(error.reason.body).toHaveLength(5000)
+    }).pipe(Effect.provide(fixedResponse("x".repeat(5000), { status: 400 }))),
+  )
+
+  it.effect("does not show HTML error pages", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error.message).toBe("Provider request failed with HTTP 502")
+      expect(error.reason.body).toContain("Bad Gateway")
+    }).pipe(Effect.provide(fixedResponse("<!DOCTYPE html><html><body>Bad Gateway</body></html>", { status: 502 }))),
   )
 
   it.effect("preserves structured provider messages from large error bodies", () =>
@@ -299,7 +403,7 @@ describe("RequestExecutor", () => {
     ),
   )
 
-  it.effect("falls back when structured provider messages are empty", () =>
+  it.effect("shows the body when structured provider messages are empty", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
@@ -308,7 +412,7 @@ describe("RequestExecutor", () => {
       expect(error.reason).toMatchObject({
         _tag: "InvalidRequest",
       })
-      expect(error.message).toBe("Provider request failed with HTTP 400")
+      expect(error.message).toBe('Provider request failed with HTTP 400: {"error":{"message":"  "}}')
     }).pipe(Effect.provide(fixedResponse('{"error":{"message":"  "}}', { status: 400 }))),
   )
 
