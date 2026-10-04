@@ -393,7 +393,7 @@ const Group = HttpApiGroup.make("mock")
   .add(
     HttpApiEndpoint.post("sessionInterrupt", "/api/session/:sessionID/interrupt", {
       params: SessionParams,
-      success: NoContent,
+      success: Json,
     }),
   )
   .add(

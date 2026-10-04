@@ -1250,7 +1250,8 @@ function mockHandlers(
             Effect.andThen(noContent),
           )
         },
-        sessionInterrupt: () => noContent,
+        // Like the server for an idle session: nothing was running to interrupt.
+        sessionInterrupt: () => Effect.succeed({ interrupted: false }),
         // The mock runs no agent loop, so every session is already idle.
         sessionWait: () => noContent,
         sessionRevertStage: (ctx) => {
