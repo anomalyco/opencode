@@ -265,6 +265,23 @@ context.keymap.layer(() => ({
 }))
 ```
 
+Call `layer` from `setup`, including after an `await`, or from a component. Each layer is removed at the first of these:
+
+- The plugin is disabled, reloaded, or fails setup.
+- The component or reactive computation that created it, such as a slot, route, or dialog, is disposed.
+
+The layer factory must be pure. OpenCode evaluates it once without dependency tracking to validate the initial command shape, then reactively. Initial command-shape errors, such as a palette command without an ID, throw from `layer()`. OpenTUI handles binding-parse errors. Errors from later reactive updates follow Solid's error handling.
+
+```ts
+async setup(context) {
+  const settings = await loadSettings()
+  context.keymap.layer(() => ({
+    mode: "global",
+    commands: [{ id: "acme.sync", title: "Sync Acme", palette: true, run: () => sync(settings) }],
+  }))
+}
+```
+
 A layer may target one OpenTUI renderable and can return `false` from a command to continue keyboard dispatch.
 
 ```ts

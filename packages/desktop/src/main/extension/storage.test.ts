@@ -56,14 +56,21 @@ type Seed = {
 describe("main extension storage", () => {
   // A crash right after saving keeps the value: another connection reads it without any flush.
   test.each([
-    { name: "update", write: (opened: ReturnType<typeof open>) => opened.store.update(() => ["a"]), expected: ["a"] },
+    {
+      name: "update",
+      write: (opened: ReturnType<typeof open>) =>
+        opened.store.update((draft) => {
+          draft.push("a")
+        }),
+      expected: ["a"],
+    },
     {
       // The open store holds what was stored, not the caller's list, which changes afterwards.
-      name: "a returned list",
+      name: "set copies a list",
       write: (opened: ReturnType<typeof open>) => {
         const list = ["a"]
 
-        opened.store.update(() => list)
+        opened.store.set(list)
         list.push("b")
       },
       expected: ["a"],
@@ -71,7 +78,7 @@ describe("main extension storage", () => {
     {
       name: "remove",
       write: (opened: ReturnType<typeof open>) => {
-        opened.store.update(() => ["a"])
+        opened.store.set(["a"])
         opened.storage.remove("servers")
       },
       expected: [],
@@ -81,9 +88,31 @@ describe("main extension storage", () => {
       name: "an update through another store on the key",
       write: (opened: ReturnType<typeof open>) => {
         expect(opened.store.value).toEqual([])
-        opened.storage.store("servers", { schema: Schema.Array(Schema.String), initial: [] }).update(() => ["a"])
+        opened.storage.store("servers", { schema: Schema.Array(Schema.String), initial: [] }).set(["a"])
       },
       expected: ["a"],
+    },
+    {
+      name: "update rejects a returned replacement",
+      write: (opened: ReturnType<typeof open>) =>
+        expect(() => {
+          // @ts-expect-error JavaScript extensions can still return a replacement at runtime
+          opened.store.update(() => ["wrong"])
+        }).toThrow("Use set"),
+      expected: [],
+    },
+    {
+      name: "set and update retain call order",
+      write: (opened: ReturnType<typeof open>) => {
+        opened.store.update((draft) => {
+          draft.push("before")
+        })
+        opened.store.set(["replaced"])
+        opened.store.update((draft) => {
+          draft.push("after")
+        })
+      },
+      expected: ["replaced", "after"],
     },
   ])("$name reaches the database before it returns, and the open store reads it", async (row) => {
     const root = await directory()
@@ -102,6 +131,21 @@ describe("main extension storage", () => {
       open: row.expected,
       ready: true,
     })
+    writer.close()
+    reader.close()
+  })
+
+  test.each([7, null])("set persists the primitive %p immediately", async (next) => {
+    const root = await directory()
+    const file = path.join(root, "state.sqlite")
+    const writer = openDatabase(file)
+    const reader = openDatabase(file)
+    const settings = settingsIn(root)
+    const options = { schema: Schema.NullOr(Schema.Finite), initial: 0 }
+    const store = createStorage(createStateStore(writer.db), settings, "example").store("value", options)
+    store.set(next)
+
+    expect(createStorage(createStateStore(reader.db), settings, "example").store("value", options).value).toBe(next)
     writer.close()
     reader.close()
   })

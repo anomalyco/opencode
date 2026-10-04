@@ -1,6 +1,7 @@
 import {
-  createEffect,
+  batch,
   createMemo,
+  createEffect,
   createRenderEffect,
   createRoot,
   createSignal,
@@ -207,16 +208,10 @@ export function createMountedSession(session: SessionModel) {
 
   // One object while this screen is mounted, whichever session it routes: its models follow the route.
   const screen: SessionScreen = Object.freeze({
-    get session() {
-      return attachment.current()
-    },
     file: files,
     comment,
     composer: composerRef,
   })
-
-  // Before the screen's regions render, so every contribution they show reads it.
-  onCleanup(attachment.screen(screen))
 
   const owner = getOwner()
   const root: ObjectRoot = {}
@@ -248,8 +243,18 @@ export function createMountedSession(session: SessionModel) {
 
   // The session's declared stores start loading now, before its regions read them.
   createRenderEffect(on(mounted, (view) => attachment.preload(view)))
-  // Registered once: `Sessions.current` follows the screen's object from here on.
-  createEffect(() => onCleanup(attachment.mount(mounted)))
+  // Publish both after render, with the original session-mount timing. Renders receive their own screen directly;
+  // only global observers need this attachment. One batch prevents exposing a view on another screen.
+  createEffect(() =>
+    batch(() => {
+      onCleanup(attachment.screen(screen))
+      onCleanup(attachment.mount(mounted))
+    }),
+  )
 
-  return { view: mounted, bindBackground: (tasks: Accessor<readonly BackgroundTask[]>) => setBackground(() => tasks) }
+  return {
+    screen,
+    view: mounted,
+    bindBackground: (tasks: Accessor<readonly BackgroundTask[]>) => setBackground(() => tasks),
+  }
 }

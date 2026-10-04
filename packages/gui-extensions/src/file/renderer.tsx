@@ -3,13 +3,12 @@ import { Icon } from "@opencode/ui/icon"
 import { encodeFilePath, getFilename } from "@opencode/util/path"
 import {
   createKeyed,
-  ExtensionContext,
+  bindExtension,
   LinkHandler,
   MenuItem,
   Panel,
   Slot,
   Style,
-  useExtension,
   usePanel,
   type Files,
   type LineRange,
@@ -46,8 +45,6 @@ const setup: Setup<typeof File> = (ctx) => {
   const layout = ctx.layout
   const storage = ctx.storage
   const desktop = ctx.desktop
-  // The extension's context as other extensions' views receive it.
-  const context = useExtension()
   const tree = ctx.stores.tree
   const [handoff, setHandoff] = storage.memory<Handoff>("handoff", { initial: { sessions: {} } })
   const preference = desktop ? ctx.stores.app : undefined
@@ -194,7 +191,7 @@ const setup: Setup<typeof File> = (ctx) => {
       },
       group: GROUP,
       // A gone selection falls back to the first file tab.
-      fallback: 3,
+      fallback: true,
       dom: { panel: TABPANEL },
     }
   }
@@ -205,11 +202,10 @@ const setup: Setup<typeof File> = (ctx) => {
     legacy: { "open-file": OPEN },
     // Older builds stored some files as absolute paths; one file is one tab once the workspace root is known.
     // Resolves the stored URL once and encodes the result, so an encoded name such as a%23b.txt stays one file.
-    normalize: (id) => {
-      const files = ctx.screen.current()?.file
-
-      return isFileTab(id) && files?.ready() ? `//${encodeFilePath(fileTabPath(files, id))}` : id
-    },
+    normalize: (input) =>
+      isFileTab(input.id) && input.screen.file.ready()
+        ? `//${encodeFilePath(fileTabPath(input.screen.file, input.id))}`
+        : input.id,
     mobile: {
       get title() {
         return ctx.t("mobile.title")
@@ -217,62 +213,51 @@ const setup: Setup<typeof File> = (ctx) => {
       order: 20,
       kind: "tab",
     },
-    // The host lists tabs while the session screen renders, which `ctx.screen` returns from its first render.
-    list(_session, stored) {
-      const screen = ctx.screen.current()
-
-      return stored.flatMap((id) => {
+    list(input) {
+      return input.open.flatMap((id) => {
         if (id === OPEN) return [launcher]
 
-        if (!isFileTab(id) || !screen) return []
+        if (!isFileTab(id)) return []
 
-        const cache = tabsOf(screen)
+        const cache = tabsOf(input.screen)
         const existing = cache.get(id)
 
         if (existing) return [existing]
 
-        const created = fileTab(screen.file, id)
+        const created = fileTab(input.screen.file, id)
 
         cache.set(id, created)
 
         return [created]
       })
     },
-    close(tab) {
-      const screen = ctx.screen.current()
-
-      if (screen) tabs.get(screen)?.delete(tab.id)
+    close(input) {
+      tabs.get(input.screen)?.delete(input.tab.id)
     },
     render: (props) => {
       const panel = usePanel()
 
       return (
-        <Show when={ctx.screen.current()}>
-          {(screen) => (
-            <FileProvider>
-              <Suspense>
-                <Show
-                  when={panel.placement() === "mobile"}
-                  fallback={<FileBrowser tab={() => props.tab} session={props.session} screen={screen()} />}
-                >
-                  <MobileFiles session={props.session} screen={screen()} />
-                </Show>
-              </Suspense>
-            </FileProvider>
-          )}
-        </Show>
+        <FileProvider>
+          <Suspense>
+            <Show
+              when={panel.placement() === "mobile"}
+              fallback={<FileBrowser tab={() => props.tab} session={props.session} screen={props.screen} />}
+            >
+              <MobileFiles session={props.session} screen={props.screen} />
+            </Show>
+          </Suspense>
+        </FileProvider>
       )
     },
-    focus(tab, _session, change) {
-      const screen = ctx.screen.current()
+    focus(input) {
+      if (!isFileTab(input.tab.id)) return
 
-      if (!isFileTab(tab.id) || !screen) return
-
-      focused.set(screen, tab.id)
-      void screen.file.sync(fileTabPath(screen.file, tab.id))
+      focused.set(input.screen, input.tab.id)
+      void input.screen.file.sync(fileTabPath(input.screen.file, input.tab.id))
 
       // A restored file tab keeps the tree tab the user left, e.g. Changes across a reload.
-      if (!change.restored && tree.value.tab === "changes") shared.tree.setTab("all")
+      if (!input.restored && tree.value.tab === "changes") shared.tree.setTab("all")
     },
   })
 
@@ -308,15 +293,11 @@ const setup: Setup<typeof File> = (ctx) => {
     ctx.add(Slot, {
       at: "session.panel.end",
       render: (input) => (
-        <Show when={ctx.screen.current()}>
-          {(screen) => (
-            <FileProvider>
-              <Suspense>
-                <OpenInAppButton session={input.session} screen={screen()} />
-              </Suspense>
-            </FileProvider>
-          )}
-        </Show>
+        <FileProvider>
+          <Suspense>
+            <OpenInAppButton session={input.session} screen={input.screen} />
+          </Suspense>
+        </FileProvider>
       ),
     })
   }
@@ -324,63 +305,47 @@ const setup: Setup<typeof File> = (ctx) => {
   ctx.add(Slot, {
     at: "session.panel.sidebar",
     render: (input) => (
-      <Show when={ctx.screen.current()}>
-        {(screen) => (
-          <FileProvider>
-            <Suspense>
-              <Sidebar session={input.session} screen={screen()} />
-            </Suspense>
-          </FileProvider>
-        )}
-      </Show>
+      <FileProvider>
+        <Suspense>
+          <Sidebar session={input.session} screen={input.screen} />
+        </Suspense>
+      </FileProvider>
     ),
   })
 
   // The review panel lists its changed files with the browser's tree; it renders under this extension, on the
   // session screen's file model.
   ctx.provide(FileTree, {
-    Tree: (props) => (
-      <ExtensionContext.Provider value={context}>
-        <Show when={ctx.screen.current()}>
-          {(screen) => (
-            <FileProvider>
-              <Suspense>
-                <Tree
-                  session={props.session}
-                  screen={screen()}
-                  allowed={props.allowed}
-                  kinds={props.kinds}
-                  draggable={false}
-                  active={props.active}
-                  onFileClick={(node) => props.onFileClick(node.path)}
-                />
-              </Suspense>
-            </FileProvider>
-          )}
-        </Show>
-      </ExtensionContext.Provider>
-    ),
-    List: (props) => (
-      <ExtensionContext.Provider value={context}>
-        <Show when={ctx.screen.current()}>
-          {(screen) => (
-            <FileProvider>
-              <Suspense>
-                <List
-                  session={props.session}
-                  screen={screen()}
-                  files={props.files}
-                  kinds={props.kinds}
-                  active={props.active}
-                  highlighted={props.highlighted}
-                  onFileClick={(path) => props.onFileClick(path)}
-                />
-              </Suspense>
-            </FileProvider>
-          )}
-        </Show>
-      </ExtensionContext.Provider>
-    ),
+    Tree: bindExtension((props) => (
+      <FileProvider>
+        <Suspense>
+          <Tree
+            session={props.session}
+            screen={props.screen}
+            allowed={props.allowed}
+            kinds={props.kinds}
+            draggable={false}
+            active={props.active}
+            onFileClick={(node) => props.onFileClick(node.path)}
+          />
+        </Suspense>
+      </FileProvider>
+    )),
+    List: bindExtension((props) => (
+      <FileProvider>
+        <Suspense>
+          <List
+            session={props.session}
+            screen={props.screen}
+            files={props.files}
+            kinds={props.kinds}
+            active={props.active}
+            highlighted={props.highlighted}
+            onFileClick={(path) => props.onFileClick(path)}
+          />
+        </Suspense>
+      </FileProvider>
+    )),
   })
 
   /**
@@ -461,9 +426,7 @@ const setup: Setup<typeof File> = (ctx) => {
   createKeyed(ctx.uses.changes, (changes) => onCleanup(changes.onReveal(() => shared.tree.setTab("changes"))))
 
   // A new workspace directory drops loaded files; reload the selected file tab.
-  const root = createMemo<string | undefined>(
-    (previous) => (sessions.current() ? ctx.screen.current()?.file.root : undefined) ?? previous,
-  )
+  const root = createMemo<string | undefined>((previous) => ctx.screen.current()?.file.root ?? previous)
 
   const moved = createMemo(on(root, () => ({}), { defer: true }))
 

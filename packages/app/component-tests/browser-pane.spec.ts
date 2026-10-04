@@ -92,6 +92,7 @@ story("comments on a picked element over a still of the page", async ({ page }) 
   await picker.click()
   await expect(picker).toHaveAttribute("aria-pressed", "true")
   await expect(root.getByText("Picker: on", { exact: true })).toBeVisible()
+  await expect(root.getByText("Session getter reads: 0", { exact: true })).toBeVisible()
   await expect(root.getByRole("status")).toHaveText(
     "Click an element in the page to comment on it. Press Escape to cancel.",
   )
@@ -100,6 +101,7 @@ story("comments on a picked element over a still of the page", async ({ page }) 
   await expect(picker).toHaveAttribute("aria-pressed", "false")
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
   await expect(editor).toBeFocused()
+  await expect(root.getByText("Session getter reads: 0", { exact: true })).toBeVisible()
   await expect(root.locator('[data-slot="browser-comment-editor"]')).toContainText("button.primary")
   // The spotlight frames the picked element in surface pixels.
   await expect(root.locator('[data-slot="browser-comment-spotlight"]')).toHaveCSS("left", "48px")
@@ -145,6 +147,44 @@ story("cancels the picker and a comment with Escape", async ({ page }) => {
   await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
   await expect(root.getByTestId("fixture-comments")).toHaveText("")
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
+
+story("cleans up the originating session's picker and comment after a session switch", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  await picker.click()
+  await expect(root.getByText("Picker Alpha: on", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByTestId("native-Beta")).toHaveAttribute("data-visible", "true")
+  await expect(root.getByText("Picker Alpha: off", { exact: true })).toBeVisible()
+  await expect(picker).toHaveAttribute("aria-pressed", "false")
+
+  await root.getByRole("button", { name: "Alpha", exact: true }).click()
+  await picker.click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(root.locator('[data-slot="browser-comment-editor"] textarea')).toBeFocused()
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
+  await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
+  await expect(root.getByText("Highlight owners: Alpha", { exact: true })).toBeVisible()
+})
+
+story("ends the native picker and highlight when the pane unmounts", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  await picker.click()
+  await expect(root.getByText("Picker: on", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Unmount pane", exact: true }).click()
+  await expect(root.locator("#browser-panel")).toHaveCount(0)
+  await expect(root.getByText("Picker: off", { exact: true })).toBeVisible()
+
+  await root.getByRole("button", { name: "Alpha", exact: true }).click()
+  await picker.click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(root.locator('[data-slot="browser-comment-editor"] textarea')).toBeFocused()
+  await root.getByRole("button", { name: "Unmount pane", exact: true }).click()
+  await expect(root.locator("#browser-panel")).toHaveCount(0)
+  await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
 })
 
 story("keeps a comment draft but drops its ref when the page navigates", async ({ page }) => {
@@ -231,17 +271,22 @@ story("keeps the submitted URL visible until the browser reports navigation", as
   await expect(address).toHaveValue("https://example.com/")
 })
 
-story("restores the current URL when a submitted navigation is blocked", async ({ page }) => {
+story("restores the current URL each time the same submitted navigation is blocked", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
   const address = root.getByRole("textbox", { name: "Browser address", exact: true })
-  await address.fill("https://blocked.example/")
-  await address.press("Enter")
-  await expect(address).toHaveValue("https://blocked.example/")
-  await root.getByRole("button", { name: "Block navigation", exact: true }).click()
-  await expect(root.getByText("ERR_BLOCKED_BY_CLIENT", { exact: true })).toBeVisible()
-  await expect(address).toHaveValue("https://alpha.example/")
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+
+  for (const submission of [1, 2]) {
+    await story.step(`blocked submission ${submission}`, async () => {
+      await address.fill("https://blocked.example/")
+      await address.press("Enter")
+      await expect(address).toHaveValue("https://blocked.example/")
+      await root.getByRole("button", { name: "Block navigation", exact: true }).click()
+      await expect(root.getByRole("alert")).toHaveText("Request failed")
+      await expect(address).toHaveValue("https://alpha.example/")
+      await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+    })
+  }
 })
 
 story("shows a themed failure state for only the failed tab and allows retry", async ({ page }) => {

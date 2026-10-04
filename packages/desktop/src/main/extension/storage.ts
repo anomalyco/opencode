@@ -1,4 +1,4 @@
-import type { MainStoreFrom, Storage } from "@opencode/gui-extensions/sdk/main"
+import type { MainStoreFrom, Mutable, Storage } from "@opencode/gui-extensions/sdk/main"
 import { Option, Schema } from "effect"
 import type { StateStore } from "../storage/state"
 import type { SettingsStore } from "../storage/store"
@@ -109,14 +109,19 @@ export function createStorage(state: StateStore, settings: SettingsFiles, id: st
           return current()
         },
         ready: () => true,
-        // The draft is a decoded copy, so a mutation never touches the cached value until it is written. A returned
-        // value replaces the draft.
-        update(mutation) {
+        // The draft is a decoded copy, so mutation cannot touch the cache before the write. Schema readonly fields
+        // are type-level only; the decoded JSON's objects and arrays are writable.
+        update(mutate) {
           const draft = Schema.decodeSync(codec)(Schema.encodeSync(codec)(current()))
-          const next = mutation(draft)
+          // SAFETY: the codec above creates a writable copy of the stored JSON, including its nested fields.
+          const returned = mutate(draft as Mutable<typeof options.initial>)
 
-          write(next === undefined ? draft : next)
+          if (returned !== undefined)
+            throw new Error("Persisted.update must not return a value. Use set(next) to replace the value.")
+
+          write(draft)
         },
+        set: write,
       }
     },
     remove: (key, options) => remove(key, options?.from),

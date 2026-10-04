@@ -1,4 +1,4 @@
-import { createContext, useContext, type Accessor } from "solid-js"
+import { createComponent, createContext, useContext, type Accessor, type Component } from "solid-js"
 import type { Context, SetupContext } from "./context"
 import type { Definition } from "./core"
 
@@ -16,7 +16,8 @@ export const LifetimeContext = createContext<{
 
 /**
  * The extension's context inside a contribution: the same object setup receives. Pass the definition for the typed
- * declarations. Throws outside an extension contribution.
+ * declarations. Throws outside an extension contribution. A component returned by a contract must be bound with
+ * `bindExtension` in the provider's setup; otherwise it reads the consuming extension's context.
  *
  * @example
  * ```ts
@@ -33,6 +34,31 @@ export function useExtension<D extends Definition = never>() {
 
   // SAFETY: the host's context for an extension also implements `SetupContext` of that extension's definition.
   return context as [D] extends [never] ? Context : SetupContext<D>
+}
+
+/**
+ * Binds one contract component to the providing extension's context. Call during setup, then provide the returned
+ * component: `useExtension` inside it reads the provider, not the extension that renders it. Props retain their
+ * reactive getters. Data methods need no wrapper. Throws outside an extension's owner.
+ *
+ * @param component - One component the contract exposes.
+ * @returns The component under the providing extension's context.
+ *
+ * @example
+ * ```ts
+ * ctx.provide(FileTree, { Tree: bindExtension((props) => <Tree {...props} />) })
+ * ```
+ */
+export function bindExtension<P extends object>(component: Component<P>): Component<P> {
+  const context = useExtension()
+
+  return (props) =>
+    createComponent(ExtensionContext.Provider, {
+      value: context,
+      get children() {
+        return createComponent(component, props)
+      },
+    })
 }
 
 /** The inner sidebar preference every side panel shares, as `PanelFrame.sidebar`. */

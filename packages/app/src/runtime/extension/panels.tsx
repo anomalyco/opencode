@@ -1,4 +1,15 @@
-import { createEffect, createMemo, For, on, onCleanup, onMount, Show, type Accessor, type JSX } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  For,
+  mergeProps,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  type Accessor,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { Schema } from "effect"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -16,6 +27,7 @@ import {
   type PanelSidebar,
   type PanelTab,
   type MountedSession,
+  type SessionScreen,
 } from "@opencode/gui-extensions/sdk"
 import { same } from "@/runtime/persistence/equality"
 import { Persist, persisted } from "@/runtime/persistence/storage"
@@ -83,7 +95,12 @@ export function createPanelSidebar(): PanelSidebar {
  * Every panel extensions offer in one region of the routed session, merged with the stored strip. `view` returns the
  * routed session's object, a new one per routed session.
  */
-export function createRegion(input: { region: Panel["region"]; view: Accessor<MountedSession>; tabs: Tabs }) {
+export function createRegion(input: {
+  region: Panel["region"]
+  view: Accessor<MountedSession>
+  screen: SessionScreen
+  tabs: Tabs
+}) {
   const host = useExtensionHost()
   const stored = () => input.tabs().all()
   const providers = createMemo(() => host.items(Panel).filter((item) => item.value.region === input.region))
@@ -93,7 +110,7 @@ export function createRegion(input: { region: Panel["region"]; view: Accessor<Mo
       const prefix = `${item.extension}:`
       const open = stored().flatMap((key) => (key.startsWith(prefix) ? [key.slice(prefix.length)] : []))
 
-      return item.value.list(input.view(), open).map(
+      return item.value.list(panelInput(input.view, input.screen, { open })).map(
         (tab): RegionEntry => ({
           key: panelKey(item.extension, tab.id),
           extension: item.extension,
@@ -123,7 +140,14 @@ export function createRegion(input: { region: Panel["region"]; view: Accessor<Mo
 
       if (!item?.value.normalize) return key
 
-      return panelKey(item.extension, item.value.normalize(key.slice(item.extension.length + 1), input.view()))
+      return panelKey(
+        item.extension,
+        item.value.normalize(
+          panelInput(input.view, input.screen, {
+            id: key.slice(item.extension.length + 1),
+          }),
+        ),
+      )
     }
 
     // remap reads the stored tabs and writes nothing once every key is canonical, so this settles in one rerun.
@@ -164,12 +188,13 @@ export function createRegion(input: { region: Panel["region"]; view: Accessor<Mo
 
     if (value && strip().some((entry) => entry.key === value && (desktop() || !entry.tab.transient))) return value
 
-    return strip()
-      .filter((entry) => entry.tab.fallback !== undefined)
-      .reduce<RegionEntry | undefined>(
-        (best, entry) => (!best || entry.tab.fallback! > best.tab.fallback! ? entry : best),
-        undefined,
-      )?.key
+    const eligible = strip().filter((entry) => entry.tab.fallback && (desktop() || !entry.tab.transient))
+
+    return [
+      ...eligible.filter((entry) => !entry.tab.pinned && !entry.tab.first),
+      ...eligible.filter((entry) => !entry.tab.pinned && entry.tab.first),
+      ...eligible.filter((entry) => entry.tab.pinned),
+    ][0]?.key
   })
 
   // The effect's own value marks its first run: the selection the region mounts with, stored or fallback.
@@ -177,7 +202,13 @@ export function createRegion(input: { region: Panel["region"]; view: Accessor<Mo
     on(active, (key, _, restored: boolean = true) => {
       const entry = key ? byKey().get(key) : undefined
 
-      if (entry) entry.provider.focus?.(entry.tab, input.view(), { restored })
+      if (entry)
+        entry.provider.focus?.(
+          panelInput(input.view, input.screen, {
+            tab: entry.tab,
+            restored,
+          }),
+        )
 
       return false
     }),
@@ -209,7 +240,12 @@ export function createRegion(input: { region: Panel["region"]; view: Accessor<Mo
       const entry = byKey().get(key)
       input.tabs().close(key)
 
-      if (entry) entry.provider.close?.(entry.tab, input.view())
+      if (entry)
+        entry.provider.close?.(
+          panelInput(input.view, input.screen, {
+            tab: entry.tab,
+          }),
+        )
     },
   }
 }
@@ -220,6 +256,7 @@ export type Region = ReturnType<typeof createRegion>
 export function RegionContent(props: {
   region: Region
   view: MountedSession
+  screen: SessionScreen
   frame: Omit<PanelFrame, "visible" | "open"> & { shown: Accessor<boolean> }
 }) {
   const groups = createMemo(() =>
@@ -273,14 +310,13 @@ export function RegionContent(props: {
                   >
                     <Contribution extension={extension}>
                       {() =>
-                        member()!.provider.render({
-                          get tab() {
-                            return member()!.tab
-                          },
-                          get session() {
-                            return props.view
-                          },
-                        })
+                        member()!.provider.render(
+                          panelInput(() => props.view, props.screen, {
+                            get tab() {
+                              return member()!.tab
+                            },
+                          }),
+                        )
                       }
                     </Contribution>
                   </PanelContext.Provider>
@@ -310,14 +346,13 @@ export function RegionContent(props: {
                   >
                     <Contribution extension={extension}>
                       {() =>
-                        entry()!.provider.render({
-                          get tab() {
-                            return entry()!.tab
-                          },
-                          get session() {
-                            return props.view
-                          },
-                        })
+                        entry()!.provider.render(
+                          panelInput(() => props.view, props.screen, {
+                            get tab() {
+                              return entry()!.tab
+                            },
+                          }),
+                        )
                       }
                     </Contribution>
                   </PanelContext.Provider>
@@ -335,9 +370,23 @@ function groupKey(entry: RegionEntry) {
   return `${entry.extension}/${entry.tab.group ?? entry.key}`
 }
 
+/** Keeps session and tab getters live while the owning screen stays constant. Spreading would snapshot getters. */
+function panelInput<T extends object>(view: Accessor<MountedSession>, screen: SessionScreen, fields: T) {
+  return mergeProps(
+    {
+      get session() {
+        return view()
+      },
+      screen,
+    },
+    fields,
+  )
+}
+
 /** The dock region: host frame, sizing, and resize around the dock panel an extension renders. */
 export function DockRegion(props: {
   view: MountedSession
+  screen: SessionScreen
   sidebar: PanelSidebar
   stacked?: boolean
   fill?: boolean
@@ -362,7 +411,7 @@ export function DockRegion(props: {
       .items(Panel)
       .filter((item) => item.value.region === "dock")
       .flatMap((item) =>
-        item.value.list(props.view, []).map(
+        item.value.list(panelInput(() => props.view, props.screen, { open: [] })).map(
           (tab): RegionEntry => ({
             key: panelKey(item.extension, tab.id),
             extension: item.extension,
@@ -475,14 +524,13 @@ export function DockRegion(props: {
             >
               <Contribution extension={extension}>
                 {() =>
-                  entry()!.provider.render({
-                    get tab() {
-                      return entry()!.tab
-                    },
-                    get session() {
-                      return props.view
-                    },
-                  })
+                  entry()!.provider.render(
+                    panelInput(() => props.view, props.screen, {
+                      get tab() {
+                        return entry()!.tab
+                      },
+                    }),
+                  )
                 }
               </Contribution>
             </PanelContext.Provider>
@@ -497,6 +545,7 @@ export function DockRegion(props: {
 export function MobilePanel(props: {
   entry: RegionEntry
   view: MountedSession
+  screen: SessionScreen
   sidebar: PanelSidebar
   visible: boolean
   open: Accessor<readonly string[]>
@@ -515,14 +564,13 @@ export function MobilePanel(props: {
     >
       <Contribution extension={props.entry.extension}>
         {() =>
-          props.entry.provider.render({
-            get tab() {
-              return props.entry.tab
-            },
-            get session() {
-              return props.view
-            },
-          })
+          props.entry.provider.render(
+            panelInput(() => props.view, props.screen, {
+              get tab() {
+                return props.entry.tab
+              },
+            }),
+          )
         }
       </Contribution>
     </PanelContext.Provider>

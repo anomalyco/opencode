@@ -4,7 +4,7 @@ import { showToast } from "@opencode/ui/toast"
 import { comparablePath, containsDirectory, getFilename, sameDirectory } from "@opencode/util/path"
 import { createStore } from "solid-js/store"
 import { For, onCleanup, Show, type ComponentProps, type JSX } from "solid-js"
-import { useExtension, type Project, type MountedSession } from "../sdk"
+import { createKeyed, useExtension, type Project, type MountedSession } from "../sdk"
 import { workspaceDirectories } from "./paths"
 
 export function SessionWorkspaceMenu(props: {
@@ -16,14 +16,14 @@ export function SessionWorkspaceMenu(props: {
   children: JSX.Element
 }) {
   const ctx = useExtension()
-  const data = props.session.server.data
+  const data = () => props.session.server.data
 
   const [store, setStore] = createStore<{ selected: string | undefined; directories: string[] }>({
     selected: undefined,
     directories: workspaceDirectories(props.project),
   })
 
-  const blocked = () => data.session.status(props.session.id) === "running"
+  const blocked = () => data().session.status(props.session.id) === "running"
   const currentWorkspace = () => store.directories.find((workspace) => containsDirectory(workspace, props.directory))
 
   const workspaces = () =>
@@ -37,14 +37,16 @@ export function SessionWorkspaceMenu(props: {
       items.flatMap((item) => (sameDirectory(props.project.worktree, item.directory) ? [] : [item.directory])),
     )
 
-  onCleanup(
-    data.on("worktree.updated", (event) => {
-      if (event.data.projectID !== props.project.id) return
-      void props.session.server.client.worktree
-        .list({ projectID: props.project.id })
-        .then(update)
-        .catch(() => undefined)
-    }),
+  createKeyed(data, (current) =>
+    onCleanup(
+      current.on("worktree.updated", (event) => {
+        if (event.data.projectID !== props.project.id) return
+        void props.session.server.client.worktree
+          .list({ projectID: props.project.id })
+          .then(update)
+          .catch(() => undefined)
+      }),
+    ),
   )
 
   const onOpenChange = (open: boolean) => {
@@ -59,11 +61,11 @@ export function SessionWorkspaceMenu(props: {
 
   const createWorktree = async (client: MountedSession["server"]["client"], directory: string) => {
     const project =
-      data.location.info({ directory })?.project ?? (await client.location.get({ location: { directory } })).project
+      data().location.info({ directory })?.project ?? (await client.location.get({ location: { directory } })).project
 
     const created = await client.worktree.create({ projectID: project.id, from: project.canonical })
     // Populate the client cache before the destination session mounts.
-    await data.location.syncInfo({ directory: created.directory })
+    await data().location.syncInfo({ directory: created.directory })
 
     return created.directory
   }

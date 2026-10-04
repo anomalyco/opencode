@@ -5,13 +5,14 @@ import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createMemo, onCleanup, Show, Suspense, type Component, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
-import { Command, createKeyed, createVisitState, useExtension, type MountedSession } from "../sdk"
+import { Command, createKeyed, createVisitState, useExtension, type MountedSession, type SessionScreen } from "../sdk"
 import type Details from "./index"
 import type { Disclosure, DetailsPanelProps } from "./panel"
 
 /** The session details button of one timeline header. Cached timelines each keep their own. */
 export function DetailsHeader(props: {
   session: MountedSession
+  screen: SessionScreen
   active: boolean
   panel: Component<DetailsPanelProps>
   disclosure: Disclosure
@@ -42,8 +43,8 @@ export function DetailsHeader(props: {
   // The changes row loads the session directory's changes only while the details show.
   createKeyed(changes, (service) =>
     createKeyed(
-      () => open() && props.session,
-      (session) => onCleanup(service.watch(session, "details")),
+      () => open() && props.screen,
+      (screen) => onCleanup(service.watch(screen, "details")),
     ),
   )
 

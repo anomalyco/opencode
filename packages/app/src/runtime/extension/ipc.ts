@@ -1,7 +1,7 @@
 import { batch } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { Schema } from "effect"
-import type { Ipc, IpcClient, IpcSpec } from "@opencode/gui-extensions/sdk"
+import type { Ipc, IpcCallOptions, IpcClient, IpcSpec } from "@opencode/gui-extensions/sdk"
 import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
 
 type Codec = NonNullable<IpcSpec["state"]>
@@ -112,15 +112,16 @@ export function createIpcClients(bridge: Bridge | undefined) {
 
   const create = (connected: Bridge, token: Ipc): IpcClient<IpcSpec> => {
     const methods = Object.fromEntries(
-      Object.entries(token.spec.methods).map(([name, method]) => [
-        name,
-        async (input: Decoded, options?: { signal?: AbortSignal }) => {
+      Object.entries(token.spec.methods).map(([name, method]) => {
+        const call = async (input: Decoded, options?: IpcCallOptions) => {
           const encoded = method.input ? Schema.encodeUnknownSync(method.input)(input) : null
           const output = await connected.call({ ipc: token.id, method: name, input: encoded }, options?.signal)
 
           return method.output ? Schema.decodeUnknownSync(method.output)(output) : undefined
-        },
-      ]),
+        }
+
+        return [name, method.input ? call : (options?: IpcCallOptions) => call(undefined, options)]
+      }),
     )
 
     const client = Object.assign(methods, {

@@ -63,6 +63,7 @@ export function createExtensionBridge(): Bridge {
     runMenubarItem: (id) => send("ExtensionMenubarItem", { id }),
     configure: (servers) => send("ExtensionConfigure", { servers }),
     manager: {
+      initial: window.electron.extensions,
       list: () => invoke("ExtensionList"),
       enable: (id) => manage(invoke("ExtensionEnable", { id })),
       disable: (id) => manage(invoke("ExtensionDisable", { id })),

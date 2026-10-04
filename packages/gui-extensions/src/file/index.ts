@@ -1,4 +1,4 @@
-import { Schema, Struct } from "effect"
+import { Schema } from "effect"
 import { Browser } from "../browser/contract"
 import { Changes } from "../review/contract"
 import { Extension, Store } from "../sdk"
@@ -6,7 +6,7 @@ import { OpenAppPreferences } from "./apps"
 import { FileTree } from "./contract"
 import en from "./i18n/en"
 
-const TreeState = Schema.Struct({ tab: Schema.Literals(["changes", "all"]) }).mapFields(Struct.map(Schema.mutableKey))
+const TreeState = Schema.Struct({ tab: Schema.Literals(["changes", "all"]) })
 
 export default Extension.define({
   id: "file",

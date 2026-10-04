@@ -18,6 +18,7 @@ import { SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-re
 import {
   MenuItem,
   type MountedSession,
+  type SessionScreen,
   type PanelSidebar,
   type SessionPanelMenuItem,
 } from "@opencode/gui-extensions/sdk"
@@ -37,6 +38,7 @@ const FILE_TREE_WIDTH_MIN = 240
 /** The side region: the tab strip with its "+" menu, the selected panel, and the inner sidebar. */
 export function SideRegion(props: {
   view: MountedSession
+  screen: SessionScreen
   region: Region
   sidebar: PanelSidebar
   fileTree: boolean
@@ -206,6 +208,9 @@ export function SideRegion(props: {
                               get session() {
                                 return props.view
                               },
+                              get screen() {
+                                return props.screen
+                              },
                             }}
                           />
                           <Show when={tabsVisible()}>
@@ -229,6 +234,7 @@ export function SideRegion(props: {
                       <RegionContent
                         region={props.region}
                         view={props.view}
+                        screen={props.screen}
                         frame={{
                           shown: tabsOpen,
                           present: tabsVisible,
@@ -263,6 +269,9 @@ export function SideRegion(props: {
                     input={{
                       get session() {
                         return props.view
+                      },
+                      get screen() {
+                        return props.screen
                       },
                     }}
                   />

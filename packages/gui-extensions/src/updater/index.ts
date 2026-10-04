@@ -1,11 +1,11 @@
-import { Schema, Struct } from "effect"
+import { Schema } from "effect"
 import { Extension, Store } from "../sdk"
 import { Updater } from "./contract"
 import en from "./i18n/en"
 
-const ReleaseNotes = Schema.Struct({ enabled: Schema.Boolean }).mapFields(Struct.map(Schema.mutableKey))
+const ReleaseNotes = Schema.Struct({ enabled: Schema.Boolean })
 
-const Seen = Schema.Struct({ version: Schema.optional(Schema.String) }).mapFields(Struct.map(Schema.mutableKey))
+const Seen = Schema.Struct({ version: Schema.optional(Schema.String) })
 
 export default Extension.define({
   id: "updater",

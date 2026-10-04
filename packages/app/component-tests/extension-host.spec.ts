@@ -1,5 +1,15 @@
-import type { Owner } from "solid-js"
-import type { Context, Contract, DialogHandle, Dialogs, SessionRef } from "@opencode/gui-extensions/sdk"
+import type { Component, Owner } from "solid-js"
+import type {
+  Context,
+  Contract,
+  DialogHandle,
+  Dialogs,
+  Live,
+  PanelTab,
+  SessionRef,
+  SessionScreen,
+} from "@opencode/gui-extensions/sdk"
+import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/gui-extensions/sdk/bridge"
 import { expect, sourceURL, story } from "../../storybook/playwright/story"
 
 const fixture = sourceURL(new URL("./extension-host.fixture.tsx", import.meta.url))
@@ -33,29 +43,32 @@ story("an extension that finishes loading after the host unmounts is never set u
   expect(setups).toBe(0)
 })
 
-story("an async setup that resolves after the host unmounts releases everything it registers", async ({ page }) => {
+story("async work from synchronous setup cannot register after the host unmounts", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountExtensionHost, onCleanup } = await import(fixture)
     const host = mountExtensionHost()
     const started = Promise.withResolvers<void>()
     const resume = Promise.withResolvers<void>()
+    const done = Promise.withResolvers<void>()
     const cleaned: string[] = []
     const point = { kind: "point" as const, id: "fixture-point" }
     const resumed = { aborted: false }
-    host.load(async (ctx: Context) => {
+    host.load((ctx: Context) => {
       ctx.add(point, "before")
       onCleanup(() => void cleaned.push("owner"))
       started.resolve()
-      await resume.promise
-      // After an await there is no owner: the signal tells the setup it outlived its instance.
-      resumed.aborted = ctx.signal.aborted
-      ctx.add(point, "after")
+      void resume.promise.then(() => {
+        // A promise callback has no owner; the signal says the work outlived the instance.
+        resumed.aborted = ctx.signal.aborted
+        ctx.add(point, "after")
+        done.resolve()
+      })
     })
     await started.promise
     const before = host.entries(point.id)
     host.unmount()
     resume.resolve()
-    await new Promise((resolve) => setTimeout(resolve, 100))
+    await done.promise
 
     return { before, after: host.entries(point.id), cleaned, aborted: resumed.aborted }
   }, fixture)
@@ -183,17 +196,23 @@ story(
     const result = await page.evaluate(async (fixture) => {
       const { mountSessionRegion, until, Panel, Slot } = await import(fixture)
       const mounts = { single: 0, grouped: 0, slot: 0 }
-      const inputs: Partial<Record<keyof typeof mounts, { readonly session: { readonly id: string } }>> = {}
+
+      const inputs: Partial<
+        Record<keyof typeof mounts, { readonly session: { readonly id: string }; readonly screen: SessionScreen }>
+      > = {}
+
       const kept: Kept = {}
       const node = () => document.createElement("p")
 
       // One render of each kind the host has: a selected tab, a group that stays mounted, and a slot.
-      const render = (kind: keyof typeof mounts) => (input: { readonly session: { readonly id: string } }) => {
-        mounts[kind]++
-        inputs[kind] = input
+      const render =
+        (kind: keyof typeof mounts) =>
+        (input: { readonly session: { readonly id: string }; readonly screen: SessionScreen }) => {
+          mounts[kind]++
+          inputs[kind] = input
 
-        return node()
-      }
+          return node()
+        }
 
       const host = mountSessionRegion({
         active: "single:main",
@@ -230,9 +249,13 @@ story(
       const seen = () => ({
         mounts: { ...mounts },
         sessions: [inputs.single?.session.id, inputs.grouped?.session.id, inputs.slot?.session.id],
+        screens: [inputs.single?.screen === screen, inputs.grouped?.screen === screen, inputs.slot?.screen === screen],
         kept: session?.id,
         fresh: kept.ctx?.sessions.current() !== session,
-        screen: { same: kept.ctx?.screen.current() === screen, session: screen?.session?.id },
+        screen: {
+          same: kept.ctx?.screen.current() === screen,
+          aligned: !!kept.ctx?.screen.current() === !!kept.ctx?.sessions.current(),
+        },
       })
 
       const steps = [seen()]
@@ -242,21 +265,28 @@ story(
       screen?.composer.attach({ type: "file", path: "notes.md" })
       host.route("a")
       steps.push(seen())
+      host.leave()
+      const home = seen()
       host.unmount()
 
-      return { steps, attached: host.attached }
+      return { steps, home, attached: host.attached }
     }, fixture)
 
     const step = (id: string, fresh: boolean) => ({
       mounts: { single: 1, grouped: 1, slot: 1 },
       sessions: [id, id, id],
+      screens: [true, true, true],
       kept: "a",
       fresh,
-      screen: { same: true, session: id },
+      screen: { same: true, aligned: true },
     })
 
     // Routing A again makes a new object for the new visit; the kept one still names A.
-    expect(result).toEqual({ steps: [step("a", false), step("b", true), step("a", true)], attached: ["b"] })
+    expect(result).toEqual({
+      steps: [step("a", false), step("b", true), step("a", true)],
+      home: { ...step("a", true), screen: { same: false, aligned: true } },
+      attached: ["b"],
+    })
   },
 )
 
@@ -295,7 +325,9 @@ story(
                   scope: { server: "local" },
                 })
 
-                prefs.update((draft) => ({ count: draft.count + 1 }))
+                prefs.update((draft) => {
+                  draft.count++
+                })
                 reads.state = createMemo(() => ctx.layout.state("fixture:main", session))
                 reads.font = createMemo(() => ctx.appearance.font("mono"))
                 reads.prefs = prefs
@@ -339,6 +371,84 @@ story(
     })
   },
 )
+
+// Selection follows opt-in tier order, not the strip's pinned-first order. Unrelated regular tabs never opt in.
+const tiers: readonly { name: string; tabs: readonly PanelTab[]; active?: string; expected: string }[] = [
+  {
+    name: "regular tabs, in stored order",
+    tabs: [
+      { id: "details", title: "Details" },
+      { id: "review", title: "Review", pinned: true, fallback: true },
+      { id: "context", title: "Context", first: true, fallback: true },
+      { id: "file-one", title: "File one", fallback: true },
+      { id: "file-two", title: "File two", fallback: true },
+    ],
+    expected: "file-one",
+  },
+  {
+    name: "first tabs before pinned tabs",
+    tabs: [
+      { id: "details", title: "Details" },
+      { id: "review", title: "Review", pinned: true, fallback: true },
+      { id: "context", title: "Context", first: true, fallback: true },
+    ],
+    expected: "context",
+  },
+  {
+    name: "pinned tabs when no other tier opts in",
+    tabs: [
+      { id: "details", title: "Details" },
+      { id: "review", title: "Review", pinned: true, fallback: true },
+    ],
+    expected: "review",
+  },
+  {
+    name: "no implicit fallback",
+    tabs: [{ id: "details", title: "Details", fallback: false }],
+    expected: "",
+  },
+  {
+    name: "a stored selection wins without opting in",
+    tabs: [
+      { id: "details", title: "Details" },
+      { id: "file", title: "File", fallback: true },
+    ],
+    active: "details:main",
+    expected: "details",
+  },
+]
+
+tiers.forEach((row) => {
+  story(`panel fallback: ${row.name}`, async ({ page }) => {
+    const selected = await page.evaluate(
+      async (input) => {
+        const { mountSessionRegion, Panel, until } = await import(input.fixture)
+
+        const host = mountSessionRegion({
+          active: input.row.active ?? "gone:main",
+          definitions: input.row.tabs.map((tab) => ({
+            id: tab.id,
+            renderer: async () => ({
+              default: (ctx: Context) => {
+                const item = { ...tab, id: "main" }
+                ctx.add(Panel, { id: "main", region: "side", list: () => [item], render: () => ctx.id })
+              },
+            }),
+          })),
+        })
+
+        await until(() => input.row.tabs.every((tab) => host.status(tab.id) === "active"))
+        const result = host.container.textContent
+        host.unmount()
+
+        return result
+      },
+      { fixture, row },
+    )
+
+    expect(selected).toBe(row.expected)
+  })
+})
 
 story("an extension reloaded while disabled starts when it is enabled again", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
@@ -495,10 +605,26 @@ story("an extension that requires a contract starts once it is active and restar
     ]
 
     // Hard contracts gate startup: a consumer whose provider is disabled settles the gate without starting.
-    const gated = mountExtensions({ definitions, disabled: ["provider"] })
+    const gated = mountExtensions({ definitions: [definitions[1], definitions[0]], disabled: ["provider"] })
     await until(() => gated.ready())
     const blocked = { status: gated.status("consumer"), log: [...log] }
     gated.unmount()
+
+    const failed = mountExtensions({
+      definitions: [
+        {
+          ...definitions[0],
+          renderer: async () => {
+            throw new Error("provider failed")
+          },
+        },
+        definitions[1],
+      ],
+    })
+
+    await until(() => failed.ready())
+    const failedProvider = { status: failed.status("consumer"), log: [...log] }
+    failed.unmount()
 
     const host = mountExtensions({ definitions })
     await new Promise((resolve) => setTimeout(resolve, 50))
@@ -509,17 +635,232 @@ story("an extension that requires a contract starts once it is active and restar
     await until(() => log.length === 3)
     host.disable(["provider"])
     await until(() => log.length === 4)
-    const outcome = { blocked, waiting, log, after: host.status("consumer") }
+    const outcome = { blocked, failedProvider, waiting, log, after: host.status("consumer") }
     host.unmount()
 
     return outcome
   }, fixture)
 
   expect(result).toEqual({
-    blocked: { status: "loading", log: [] },
+    blocked: { status: "blocked", log: [] },
+    failedProvider: { status: "blocked", log: [] },
     waiting: { status: "loading", log: [] },
     log: ["setup 1", "cleanup 1", "setup 2", "cleanup 2"],
-    after: "loading",
+    after: "blocked",
+  })
+})
+
+story("a contract component reads its provider context and preserves reactive props", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { bindExtension, createComponent, createSignal, Contract, mountExtensions, Slot, until, useExtension } =
+      await import(fixture)
+
+    const View: Contract<{ View: Component<{ readonly label: string }> }, "provider.view"> =
+      Contract.define("provider.view")
+
+    const observed = { context: "", read: () => "", change: () => {}, mounts: 0 }
+
+    const host = mountExtensions({
+      definitions: [
+        {
+          id: "provider",
+          provides: { view: View },
+          renderer: async () => ({
+            default: (ctx: Context) => {
+              ctx.provide(View, {
+                View: bindExtension((props: { readonly label: string }) => {
+                  observed.context = useExtension().id
+                  observed.read = () => props.label
+                  observed.mounts++
+
+                  return document.createTextNode(observed.context)
+                }),
+              })
+            },
+          }),
+        },
+        {
+          id: "consumer",
+          requires: { view: View },
+          renderer: async () => ({
+            default: (ctx: Context & { requires: { view: { View: Component<{ readonly label: string }> } } }) => {
+              const [label, setLabel] = createSignal("before")
+              observed.change = () => setLabel("after")
+              ctx.add(Slot, {
+                at: "window.bottom",
+                render: () =>
+                  createComponent(ctx.requires.view.View, {
+                    get label() {
+                      return label()
+                    },
+                  }),
+              })
+            },
+          }),
+        },
+      ],
+    })
+
+    await until(() => host.container.textContent === "provider")
+    const before = observed.read()
+    observed.change()
+    const outcome = { context: observed.context, mounts: observed.mounts, before, after: observed.read() }
+    host.unmount()
+
+    return outcome
+  }, fixture)
+
+  expect(result).toEqual({ context: "provider", mounts: 1, before: "before", after: "after" })
+})
+
+story("developer settings show a blocked hard dependency instead of loading forever", async ({ page }, info) => {
+  await page.evaluate(async (fixture) => {
+    const { Contract, mountExtensions, until } = await import(fixture)
+    const Tree = Contract.define("provider.tree")
+
+    const host = mountExtensions({
+      settings: true,
+      disabled: ["provider"],
+      definitions: [
+        { id: "provider", provides: { tree: Tree }, renderer: async () => ({ default: () => {} }) },
+        { id: "consumer", requires: { tree: Tree }, renderer: async () => ({ default: () => {} }) },
+      ],
+    })
+
+    await until(() => !!host.container.textContent?.includes("consumer"))
+  }, fixture)
+  const settings = page.getByRole("region", { name: "Extensions", exact: true })
+  await settings.screenshot({ path: info.outputPath("requires-status.png") })
+  await expect(settings.getByText("Blocked", { exact: true })).toBeVisible()
+  await expect(settings.getByText("Loading", { exact: true })).toHaveCount(0)
+})
+
+story("blocked chains expose their own reason and recover regardless of definition order", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { Contract, mountExtensions, until } = await import(fixture)
+    const Root: Contract<number, "root.value"> = Contract.define("root.value")
+    const Branch: Contract<number, "branch.value"> = Contract.define("branch.value")
+    const observed = { read: (): Live<number> => ({ status: "pending" }), starts: 0 }
+
+    const host = mountExtensions({
+      disabled: ["root"],
+      definitions: [
+        {
+          id: "leaf",
+          requires: { branch: Branch },
+          renderer: async () => ({
+            default: () => {
+              observed.starts++
+            },
+          }),
+        },
+        {
+          id: "observer",
+          uses: { branch: Branch },
+          renderer: async () => ({
+            default: (ctx: Context & { uses: { branch: () => Live<number> } }) => {
+              observed.read = ctx.uses.branch
+            },
+          }),
+        },
+        {
+          id: "branch",
+          requires: { root: Root },
+          provides: { branch: Branch },
+          renderer: async () => ({ default: (ctx: Context) => void ctx.provide(Branch, 2) }),
+        },
+        {
+          id: "root",
+          provides: { root: Root },
+          renderer: async () => ({ default: (ctx: Context) => void ctx.provide(Root, 1) }),
+        },
+      ],
+    })
+
+    await until(() => host.ready())
+
+    const blocked = {
+      branch: host.status("branch"),
+      leaf: host.status("leaf"),
+      live: observed.read(),
+      starts: observed.starts,
+    }
+
+    host.disable([])
+    await until(() => host.status("leaf") === "active")
+    const recovered = { live: observed.read(), starts: observed.starts }
+    host.unmount()
+
+    return { blocked, recovered }
+  }, fixture)
+
+  expect(result).toEqual({
+    blocked: { branch: "blocked", leaf: "blocked", live: { status: "inactive", reason: "blocked" }, starts: 0 },
+    recovered: { live: { status: "active", value: 2, generation: 1 }, starts: 1 },
+  })
+})
+
+const invalidSetups = ["promise", "thenable"]
+
+invalidSetups.forEach((kind) => {
+  story(`window setup rejects a returned ${kind}`, async ({ page }) => {
+    const result = await page.evaluate(
+      async (input) => {
+        const { mountExtensions, until } = await import(input.fixture)
+        const resume = Promise.withResolvers<void>()
+        const done = Promise.withResolvers<void>()
+        const point = { kind: "point" as const, id: "invalid-setup" }
+        const observed = { aborted: false }
+
+        const host = mountExtensions({
+          definitions: [
+            {
+              id: "invalid",
+              renderer: async () => ({
+                default: (ctx: Context) => {
+                  ctx.add(point, "before")
+
+                  if (input.kind === "thenable")
+                    return {
+                      then(resolve: () => void) {
+                        resolve()
+                      },
+                    }
+
+                  return resume.promise.then(() => {
+                    observed.aborted = ctx.signal.aborted
+                    ctx.add(point, "after")
+                    done.resolve()
+                  })
+                },
+              }),
+            },
+          ],
+        })
+
+        await until(() => host.ready())
+
+        const failed = {
+          status: host.status("invalid"),
+          error: host.failure("invalid")?.error.includes("Window setup must be synchronous"),
+          entries: host.entries(point.id),
+        }
+
+        resume.resolve()
+
+        if (input.kind === "promise") await done.promise
+        const after = { entries: host.entries(point.id), aborted: observed.aborted }
+        host.unmount()
+
+        return { failed, after }
+      },
+      { fixture, kind },
+    )
+
+    expect(result).toEqual({
+      failed: { status: "failed", error: true, entries: 0 },
+      after: { entries: 0, aborted: kind === "promise" },
+    })
   })
 })
 
@@ -554,4 +895,159 @@ story("declared global stores load before setup, so setup reads the stored value
   }, fixture)
 
   expect(result).toEqual({ held: { status: "loading", seen: [] }, seen: [true] })
+})
+
+story("startup enable state does not wait for the manager, and live updates beat older replies", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { Contract, mountExtensions, until } = await import(fixture)
+    const Provider: Contract<number, "disabled.value"> = Contract.define("disabled.value")
+    const Dependent: Contract<number, "dependent.value"> = Contract.define("dependent.value")
+    const observed = { read: (): Live<number> => ({ status: "pending" }) }
+    const initial = Promise.withResolvers<readonly EnableState[]>()
+    const reply = Promise.withResolvers<readonly Installed[]>()
+    const listeners = new Set<(message: BridgeMessage) => void>()
+    const setups: string[] = []
+
+    const list = (disabled: readonly string[]): Installed[] =>
+      ["dependent", "enabled", "disabled"].map((id) => ({
+        id,
+        name: id,
+        version: "1",
+        builtin: true,
+        enabled: !disabled.includes(id),
+      }))
+
+    const bridge: Bridge = {
+      packaged: false,
+      call: async () => undefined,
+      subscribe: async () => ({ available: false }),
+      on: (listener) => {
+        listeners.add(listener)
+
+        return () => void listeners.delete(listener)
+      },
+      embed() {},
+      capture: async () => undefined,
+      runMenubarItem() {},
+      configure() {},
+      manager: {
+        initial: initial.promise,
+        list: () => reply.promise,
+        enable: async () => {},
+        disable: async () => {},
+        reload: async () => {},
+        install: async () => {},
+        remove: async () => {},
+        source: async () => "",
+        asset: () => "",
+      },
+    }
+
+    const host = mountExtensions({
+      bridge,
+      // The consumer comes first; the provider's old-id setting arrives asynchronously from the preload.
+      definitions: [
+        {
+          id: "dependent",
+          requires: { provider: Provider },
+          provides: { value: Dependent },
+          renderer: async () => ({
+            default: (ctx: Context) => {
+              setups.push("dependent")
+              ctx.provide(Dependent, 2)
+            },
+          }),
+        },
+        {
+          id: "enabled",
+          uses: { value: Dependent },
+          renderer: async () => ({
+            default: (ctx: Context & { uses: { value: () => Live<number> } }) => {
+              setups.push("enabled")
+              observed.read = ctx.uses.value
+            },
+          }),
+        },
+        {
+          id: "disabled",
+          legacy: ["previous"],
+          provides: { value: Provider },
+          renderer: async () => ({
+            default: (ctx: Context) => {
+              setups.push("disabled")
+              ctx.provide(Provider, 1)
+            },
+          }),
+        },
+      ],
+    })
+
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    const before = [...setups]
+    initial.resolve([{ id: "previous", enabled: false }])
+    await until(() => host.ready())
+
+    const started = {
+      setups: [...setups],
+      status: host.status("disabled"),
+      dependent: host.status("dependent"),
+      live: observed.read(),
+    }
+
+    const unknown: { ready: boolean; setups: string[]; status?: string }[] = []
+
+    // A failed startup reply must not temporarily activate the disabled extension while list() waits.
+    for (const failure of ["unknown", "rejected"]) {
+      const initial = failure === "unknown" ? Promise.resolve(undefined) : Promise.reject(new Error("snapshot failed"))
+      const reply = Promise.withResolvers<readonly Installed[]>()
+
+      const failed = mountExtensions({
+        bridge: { ...bridge, manager: { ...bridge.manager, initial, list: () => reply.promise } },
+        definitions: [{ id: "disabled", renderer: async () => ({ default: () => void setups.push("wrongly enabled") }) }],
+      })
+
+      await new Promise((resolve) => setTimeout(resolve, 50))
+      const blocked = { ready: failed.ready(), setups: [...setups] }
+
+      reply.resolve(list(["disabled"]))
+      await until(() => failed.ready())
+      unknown.push({ ...blocked, status: failed.status("disabled") })
+      failed.unmount()
+    }
+
+    listeners.forEach((listener) => listener({ type: "extensions", list: list(["enabled"]) }))
+    await until(
+      () =>
+        host.status("disabled") === "active" &&
+        host.status("enabled") === "disabled" &&
+        host.status("dependent") === "active",
+    )
+    reply.resolve(list(["disabled"]))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    const updated = {
+      setups: [...setups],
+      status: [host.status("enabled"), host.status("disabled"), host.status("dependent")],
+    }
+
+    host.unmount()
+
+    return { before, started, unknown, updated, listeners: listeners.size }
+  }, fixture)
+
+  expect(result).toEqual({
+    before: [],
+    started: {
+      setups: ["enabled"],
+      status: "disabled",
+      dependent: "blocked",
+      live: { status: "inactive", reason: "blocked" },
+    },
+    unknown: [
+      { ready: false, setups: ["enabled"], status: "disabled" },
+      { ready: false, setups: ["enabled"], status: "disabled" },
+    ],
+    updated: { setups: ["enabled", "disabled", "dependent"], status: ["disabled", "active", "active"] },
+    listeners: 0,
+  })
 })

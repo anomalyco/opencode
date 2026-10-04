@@ -1,4 +1,5 @@
 import { createMemo, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
+import { extensionEnabled } from "@opencode/gui-extensions/sdk/bridge"
 import type { Definition } from "@opencode/gui-extensions/sdk"
 import { builtins } from "./builtins"
 import { createInstalled } from "./installed"
@@ -35,18 +36,21 @@ export function ExtensionRoot(props: ParentProps) {
   onCleanup(ipcs.dispose)
   const installed = createInstalled(bridge)
 
-  const disabled = createMemo(() => {
-    if (!installed.loaded()) return undefined
-
-    return new Set(installed.list().flatMap((item) => (item.enabled ? [] : [item.id])))
-  })
-
   const os = platform.platform === "desktop" ? platform.os : undefined
 
   // Built-ins only: installed `.ocdx` archives run their main entry until that format ships renderer bundles.
   const definitions = builtins.filter(
     (definition: Definition) => !definition.os || (!!os && definition.os.includes(os)),
   )
+
+  // Only enable preferences cross this boundary; the host derives blocked status from live hard dependencies.
+  const disabled = createMemo(() => {
+    const state = installed.enableState()
+
+    if (!state) return undefined
+
+    return new Set(definitions.flatMap((definition) => (extensionEnabled(definition, state) ? [] : [definition.id])))
+  })
 
   const failed = (id: string) => installed.list().some((item) => item.id === id && item.error !== undefined)
 

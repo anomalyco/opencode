@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test"
-import type { Ipc } from "@opencode/gui-extensions/sdk"
+import { Ipc } from "@opencode/gui-extensions/sdk"
+import { Schema } from "effect"
 import type { Bridge, BridgeMessage } from "@opencode/gui-extensions/sdk/bridge"
 import { createIpcClients } from "./ipc"
 
@@ -36,6 +37,38 @@ test.each<[string, BridgeMessage, Reply, { available: boolean; state: unknown }]
   await Bun.sleep(0)
   const client = ipcs.client(token)
   expect({ available: !!client, state: client?.state() }).toEqual(expected)
+  ipcs.dispose()
+})
+
+test("no-input methods pass their first argument's abort signal to the bridge", async () => {
+  const bridge = fakeBridge()
+  const controller = new AbortController()
+  const calls: { method: string; input?: unknown; signal?: AbortSignal }[] = []
+
+  const methods = Ipc.define({
+    id: "fixture",
+    methods: { info: { output: Schema.String }, echo: { input: Schema.String, output: Schema.String } },
+  })
+
+  const ipcs = createIpcClients({
+    ...bridge.value,
+    call: async (request, signal) => {
+      calls.push({ method: request.method, input: request.input, signal })
+
+      return "reply"
+    },
+  })
+
+  ipcs.typed(methods)
+  bridge.emit({ type: "available", ipc: "fixture", available: true })
+  const client = ipcs.typed(methods)
+
+  expect(await client?.info({ signal: controller.signal })).toBe("reply")
+  expect(await client?.echo("input", { signal: controller.signal })).toBe("reply")
+  expect(calls).toEqual([
+    { method: "info", input: null, signal: controller.signal },
+    { method: "echo", input: "input", signal: controller.signal },
+  ])
   ipcs.dispose()
 })
 

@@ -20,7 +20,7 @@ const setup: MainSetup<typeof definition> = (ctx) => {
     if (enabled && blocker.id === undefined) blocker.id = powerSaveBlocker.start("prevent-display-sleep")
 
     if (!enabled) release()
-    stored.update(() => enabled)
+    stored.set(enabled)
   }
 
   if (stored.value) keepScreenActive(true)

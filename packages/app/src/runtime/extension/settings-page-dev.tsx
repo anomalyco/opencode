@@ -36,6 +36,8 @@ export function GuiExtensionsSettings() {
 
     if (value === "disabled") return language.t("settings.guiExtensions.status.disabled")
 
+    if (value === "blocked") return language.t("settings.guiExtensions.status.blocked")
+
     return language.t("settings.guiExtensions.status.loading")
   }
 

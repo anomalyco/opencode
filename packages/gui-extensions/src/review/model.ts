@@ -55,7 +55,10 @@ export function createReviewModel(input: {
   const directory = () => screen.file.root
 
   // The filter is transient by design: a persisted filter would silently hide files after a reload.
-  const [state, setState] = createStore({ filter: "", initializingGit: false })
+  const [state, setState] = createStore<{ filter: string; initializingGit: Record<string, true | undefined> }>({
+    filter: "",
+    initializingGit: {},
+  })
 
   // The review panel's scroller and the file it scrolls to belong to the session the view shows.
   const [scroll, setScroll] = createVisitState<HTMLDivElement | undefined>(undefined)
@@ -259,12 +262,14 @@ export function createReviewModel(input: {
     lifetime.disposed = true
   })
 
-  // Initializes Git for the routed session. The request keeps that session's object, so its server and location stay
-  // its own; the outcome applies only while the screen still routes it.
-  const initializeGit = () => {
-    if (state.initializingGit) return
+  const alive = () => !lifetime.disposed && !ctx.signal.aborted
 
+  // Initializes Git for the routed session. The request keeps that session's object, so its server and location stay
+  // its own. Cache refresh follows the request's session; only error feedback depends on which session is routed.
+  const initializeGit = () => {
     const session = view()
+
+    if (state.initializingGit[session.key]) return
     const location = session.location
 
     if (!location || !session.server.connected) {
@@ -273,13 +278,13 @@ export function createReviewModel(input: {
       return
     }
 
-    const current = () => !lifetime.disposed && !ctx.signal.aborted && view().key === session.key
+    const current = () => alive() && view().key === session.key
 
-    setState("initializingGit", true)
+    setState("initializingGit", session.key, true)
     void session.server.client.vcs
       .init({ location, provider: "git" })
       .then(async () => {
-        if (!current()) return
+        if (!alive()) return
 
         const data = session.server.data
 
@@ -288,7 +293,11 @@ export function createReviewModel(input: {
         data.location.invalidate(location)
         data.location.vcs.invalidate(location)
         await data.project.sync()
+
+        if (!alive()) return
         await data.session.sync(session.id)
+
+        if (!alive()) return
         await Promise.all([data.location.syncInfo(location), data.location.vcs.sync(location)])
       })
       .catch((error) => {
@@ -301,7 +310,7 @@ export function createReviewModel(input: {
         })
       })
       .finally(() => {
-        if (current()) setState("initializingGit", false)
+        if (alive()) setState("initializingGit", session.key, undefined)
       })
   }
 
@@ -574,7 +583,7 @@ export function createReviewModel(input: {
     focusFile,
     hasChanges,
     initializeGit,
-    initializingGit: () => state.initializingGit,
+    initializingGit: () => !!state.initializingGit[view().key],
     loadDiff,
     mode,
     noGit: createMemo(() => {

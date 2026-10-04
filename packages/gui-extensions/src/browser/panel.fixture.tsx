@@ -11,11 +11,12 @@ import {
   type ParentComponent,
   type ParentProps,
 } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { Portal, render } from "solid-js/web"
 import type { Bridge, BridgeLayout } from "../sdk/bridge"
 import {
   ExtensionContext,
+  Live,
   PanelContext,
   type Appearance,
   type Build,
@@ -29,17 +30,20 @@ import {
   type Layout,
   type Locale,
   type MountedSession,
+  type Mutable,
   type PanelFrame,
   type PanelTab,
   type Router,
   type Servers,
   type SessionRef,
+  type SessionScreen,
+  type SetupContext,
   type Storage,
   type Workspaces,
 } from "../sdk"
-import type { InspectEvent } from "./connection"
 import browserEn from "./i18n/en"
-import type { Model } from "./model"
+import type definition from "./index"
+import { createModel } from "./model"
 import SessionBrowserPane from "./panel"
 import { BrowserPane, type PaneEvent } from "./ipc"
 
@@ -67,7 +71,7 @@ type PaneFixtureState = {
   captures: number
   holdCapture: boolean
   picker: Record<string, boolean | undefined>
-  highlights: string[]
+  highlights: { sessionKey: string; ref?: Browser.Ref }[]
   comments: ComposerNote[]
 }
 
@@ -105,9 +109,14 @@ export function mountBrowserPane(input: PaneHost) {
 
     // Each capture waits until the fixture releases it, so a spec can observe the pending state.
     const held: (() => void)[] = []
-    // Picker events reach the routed session's listeners only, as the model keys them by session.
-    const inspectors = new Map<string, Set<(event: InspectEvent) => void>>()
-    const emitInspect = (event: InspectEvent) => inspectors.get(store.session)?.forEach((listener) => listener(event))
+    const bindings = new Map<string, string>()
+    const listeners = new Set<(value: { binding: string; event: PaneEvent }) => void>()
+
+    const emit = (key: string, event: PaneEvent) => {
+      const binding = bindings.get(key)
+
+      if (binding) listeners.forEach((listener) => listener({ binding, event }))
+    }
 
     const tabs = ["Alpha", "Beta"].map((name) => ({
       id: Browser.TabID.make(`tab_${name === "Alpha" ? "11111111" : "22222222"}-1111-1111-1111-111111111111`),
@@ -160,56 +169,78 @@ export function mountBrowserPane(input: PaneHost) {
       open: () => [],
     }
 
-    // One object per session, as the host gives each routed session its own.
+    const server = { id: "browser-test", compatible: true, data: { on: () => () => undefined } }
+    const [reads, setReads] = createStore({ directory: 0 })
+
+    // Frozen session refs, as the real host supplies. Only the key belongs in the pane's transient state.
     const views = new Map(
       ["Alpha", "Beta", "Empty"].map((key) => {
-        // SAFETY: the pane reads only `key` of its session.
+        const value = Object.freeze({
+          key,
+          id: key,
+          server,
+          pending: false,
+          location: { directory: "/repo" },
+          get directory() {
+            setReads("directory", (count) => count + 1)
+
+            return "/repo"
+          },
+        })
+
+        // SAFETY: the pane reads only `key`; the real model reads these listed fields and `server.data.on`.
         // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-        return [key, { key } as unknown as MountedSession] as const
+        return [key, value as unknown as MountedSession] as const
       }),
     )
 
     const session = () => views.get(store.session) ?? views.get("Alpha")
 
     // The session screen: one object that follows the route, with the composer the pane attaches comments to.
+    // SAFETY: the pane reads only file.search and composer.attach; the model's workspace-link paths are not invoked.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const screen = {
-      get session() {
-        return session()
-      },
       file: { search: async () => [] },
       composer: { attach: (note: ComposerNote) => setStore("comments", (items) => [...items, note]) },
+    } as unknown as SessionScreen
+
+    const report = (key = store.session) => {
+      const tab = tabs.find((item) => item.title === key)
+
+      if (!tab) return
+      emit(key, {
+        type: "state",
+        state: {
+          tabs: [
+            {
+              ...tab,
+              url: store.url ?? tab.url,
+              loading: store.loading,
+              generation: store.generation,
+              loadError: store.loadErrors[key],
+            },
+          ],
+          focusedTabID: tab.id,
+        },
+        error: store.error,
+      })
     }
 
-    const fake = { ...base, screen: { current: () => screen } }
+    // Address rejection counters and cleanup run through the real model over this main-process Ipc boundary.
+    const pane: PaneClient = {
+      register: async (value) => {
+        bindings.set(value.session, value.binding)
+        queueMicrotask(() => {
+          report(value.session)
+          const tab = tabs.find((item) => item.title === value.session)
 
-    // SAFETY: the pane reads only `id`, `t`, `keybinds`, `desktop`, `embeds`, and the screen's `file.search` and
-    // `composer.attach`, of its extension's context.
-    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-    const extension = fake as unknown as Context
-
-    const fakeModel: Pick<
-      Model,
-      "tab" | "suspended" | "embed" | "error" | "mount" | "load" | "command" | "inspect" | "highlight" | "onInspect"
-    > = {
-      tab: (_session, id) => {
-        const tab = current()
-
-        if (tab.id !== id) return
-
-        return {
-          ...tab,
-          url: store.url ?? tab.url,
-          loading: store.loading,
-          generation: store.generation,
-          loadError: store.loadErrors[store.session],
-        }
+          if (tab) emit(value.session, { type: "embed", tabID: tab.id, embed: `embed-${tab.title}` })
+        })
       },
-      suspended: () => false,
-      embed: (_session, id) => `embed-${tabs.find((tab) => tab.id === id)?.title}`,
-      error: () => store.error ?? (store.loadErrors[store.session] ? "Request failed" : undefined),
-      mount: () => () => [],
-      load: () => undefined,
-      command: (_session, command) => {
+      load: async () => undefined,
+      command: async (value) => {
+        const command = value.command
+
         setStore("error", undefined)
 
         if (command.type === "navigate" || command.type === "reload") setStore("loadErrors", store.session, undefined)
@@ -225,28 +256,52 @@ export function mountBrowserPane(input: PaneHost) {
         }
 
         if (command.type === "stop") setStore("loading", false)
+        report()
       },
       // The desktop confirms each picker change, as the page does once inspect mode is armed.
-      inspect: (_session, tabID, enabled) => {
-        setStore("picker", store.session, enabled)
-        emitInspect({ type: "inspect", tabID, active: enabled })
+      inspect: async (value) => {
+        const key = Array.from(bindings).find((item) => item[1] === value.binding)?.[0]
+
+        if (!key) throw new Error("Unknown picker binding")
+        setStore("picker", key, value.enabled)
+        emit(key, { type: "inspect", tabID: value.tabID, active: value.enabled })
       },
-      highlight: (_session, _tabID, ref) => setStore("highlights", (items) => [...items, ref ?? "clear"]),
-      onInspect: (session, listener) => {
-        const set = inspectors.get(session.key) ?? new Set()
+      highlight: async (value) => {
+        const key = Array.from(bindings).find((item) => item[1] === value.binding)?.[0]
 
-        set.add(listener)
-        inspectors.set(session.key, set)
+        if (!key) throw new Error("Unknown highlight binding")
+        setStore("highlights", (items) => [...items, { sessionKey: key, ref: value.ref }])
+      },
+      close: async () => undefined,
+      state: () => undefined,
+      on: (_name, listener) => {
+        // SAFETY: the pane's Ipc has one event, whose payload is exactly this binding and PaneEvent.
+        const added = listener as (value: { binding: string; event: PaneEvent }) => void
+        listeners.add(added)
 
-        return () => set.delete(listener)
+        return () => void listeners.delete(added)
       },
     }
 
-    // SAFETY: these are every member of its model the pane reads (`props.model.*` in `./panel`).
-    const model = fakeModel as Model
+    const live = Live.accessor(() => ({ status: "active", generation: 1, value: pane }))
 
-    const pick = () =>
-      emitInspect({
+    const fake = {
+      ...base,
+      uses: { pane: { load: () => live } },
+      sessions: { current: session, list: () => Array.from(views.values()).filter((view) => view.key !== "Empty") },
+      screen: { current: () => screen },
+      layout: { narrow: () => false, stored: () => [], state: () => "visible", open() {}, close() {} },
+      links: { open() {} },
+    }
+
+    // SAFETY: the real model and pane use only the host boundaries implemented above in this fixture's flows.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const extension = fake as unknown as Context & SetupContext<typeof definition>
+    const model = createModel(extension)
+
+    const pick = () => {
+      setStore("picker", store.session, false)
+      emit(store.session, {
         type: "inspect",
         tabID: current().id,
         active: false,
@@ -259,6 +314,7 @@ export function mountBrowserPane(input: PaneHost) {
           rect: { x: 48, y: 40, width: 160, height: 36 },
         },
       })
+    }
 
     return (
       <ExtensionContext.Provider value={extension}>
@@ -269,33 +325,61 @@ export function mountBrowserPane(input: PaneHost) {
               {(name) => <button onClick={() => setStore({ session: name, mounted: name !== "Empty" })}>{name}</button>}
             </For>
             <button onClick={() => setStore("mounted", false)}>Unmount pane</button>
-            <button onClick={() => setStore({ url: "about:blank", loading: false })}>Blank page</button>
-            <button onClick={() => setStore({ url: "about:blank", loading: true })}>Loading page</button>
             <button
-              onClick={() =>
+              onClick={() => {
+                setStore({ url: "about:blank", loading: false })
+                report()
+              }}
+            >
+              Blank page
+            </button>
+            <button
+              onClick={() => {
+                setStore({ url: "about:blank", loading: true })
+                report()
+              }}
+            >
+              Loading page
+            </button>
+            <button
+              onClick={() => {
                 setStore({
                   loading: true,
                   generation: store.generation + 1,
                   loadErrors: { [store.session]: undefined },
                 })
-              }
+                report()
+              }}
             >
               Load current page
             </button>
-            <button onClick={() => setStore("loadErrors", store.session, "ERR_CONNECTION_REFUSED")}>Failed page</button>
+            <button
+              onClick={() => {
+                setStore("loadErrors", store.session, "ERR_CONNECTION_REFUSED")
+                report()
+              }}
+            >
+              Failed page
+            </button>
             <button onClick={() => setStore("delayNavigation", true)}>Delay navigation</button>
-            <button onClick={() => setStore({ error: "ERR_BLOCKED_BY_CLIENT", pendingURL: undefined })}>
+            <button
+              onClick={() => {
+                setStore({ error: "ERR_BLOCKED_BY_CLIENT", pendingURL: undefined })
+                report()
+              }}
+            >
               Block navigation
             </button>
             <button
-              onClick={() =>
+              onClick={() => {
                 setStore({
                   url: store.pendingURL,
                   pendingURL: undefined,
                   loading: false,
                   generation: store.generation + 1,
                 })
-              }
+                report()
+              }}
             >
               Complete navigation
             </button>
@@ -306,11 +390,16 @@ export function mountBrowserPane(input: PaneHost) {
             <button onClick={pick}>Pick element</button>
           </nav>
           <p>Captures: {store.captures}</p>
+          <p>Session getter reads: {reads.directory}</p>
           <p>Picker: {store.picker[store.session] ? "on" : "off"}</p>
-          <p>Highlights: {store.highlights.join(",")}</p>
+          <For each={tabs}>
+            {(tab) => <p>Picker {tab.title}: {store.picker[tab.title] ? "on" : "off"}</p>}
+          </For>
+          <p>Highlights: {store.highlights.map((item) => item.ref ?? "clear").join(",")}</p>
+          <p>Highlight owners: {store.highlights.map((item) => item.sessionKey).join(",")}</p>
           <div style={{ position: "relative", width: "640px", height: "360px", border: "1px solid #555" }}>
             <Show when={store.mounted && session()}>
-              {(view) => <SessionBrowserPane tab={() => current()} session={view()} model={model} />}
+              {(view) => <SessionBrowserPane tab={() => current()} session={view()} screen={screen} model={model} />}
             </Show>
           </div>
           <ul data-testid="fixture-comments">
@@ -394,7 +483,12 @@ type RegionHost = {
     }>
   >
   useExtensionHost(): { ready(): boolean }
-  createRegion(input: { region: "side"; view: Accessor<MountedSession>; tabs: Accessor<StripTabs> }): {
+  createRegion(input: {
+    region: "side"
+    view: Accessor<MountedSession>
+    screen: SessionScreen
+    tabs: Accessor<StripTabs>
+  }): {
     keys(): readonly string[]
     active(): string | undefined
     entry(key: string): { readonly tab: PanelTab } | undefined
@@ -511,12 +605,10 @@ export function mountBrowserRegion(input: RegionHost) {
     const view = () => views.get(store.session) ?? fallback
 
     // One screen object while the strip mounts, whichever session it routes.
-    const screen = {
-      get session() {
-        return view()
-      },
-      file,
-    }
+    // SAFETY: this fixture draws tab triggers only. Its file model implements the list, normalize and focus paths;
+    // comment, composer and file-view operations are never invoked here.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const screen = { file } as unknown as SessionScreen
 
     const layout = (extension: string): Layout => ({
       narrow: () => false,
@@ -550,17 +642,29 @@ export function mountBrowserRegion(input: RegionHost) {
 
       if (key === "file:tree") setTree(() => value)
 
-      return [value, (mutation: (draft: T) => void) => set(produce(mutation))] as const
+      return {
+        memory: [value, (mutation: (draft: T) => void) => set(produce(mutation))] as const,
+        store: {
+          value,
+          ready: () => true,
+          update: (mutate: (draft: Mutable<T>) => undefined) =>
+            set(
+              produce((draft) => {
+                // SAFETY: keep uses Solid's writable produce draft; readonly schema fields apply only to readers.
+                const returned = mutate(draft as Mutable<T>)
+
+                if (returned !== undefined) throw new Error("Use set(next) to replace the value.")
+              }),
+            ),
+          set: (next: T) => set(reconcile(next)),
+        },
+      }
     }
 
     // Loaded at once.
     const storage = (extension: string): Storage => ({
-      store: (key, options) => {
-        const [value, update] = keep(`${extension}:${key}`, options.initial)
-
-        return { value, ready: () => true, update }
-      },
-      memory: (key, options) => keep(`${extension}:${key}`, options.initial),
+      store: (key, options) => keep(`${extension}:${key}`, options.initial).store,
+      memory: (key, options) => keep(`${extension}:${key}`, options.initial).memory,
       remove() {},
     })
 
@@ -639,6 +743,7 @@ export function mountBrowserRegion(input: RegionHost) {
       const region = input.createRegion({
         region: "side",
         view,
+        screen,
         tabs: () => ({
           all: () => strip(view().key).all,
           active: () => strip(view().key).active,

@@ -30,7 +30,7 @@ function SettingsPairing(props: { client: Client }) {
 
   const local = useQuery(() => ({
     queryKey: [ctx.id, "local"],
-    queryFn: () => props.client.info(),
+    queryFn: (input) => props.client.info({ signal: input.signal }),
   }))
 
   // Reading pending query data would suspend the entire settings surface.

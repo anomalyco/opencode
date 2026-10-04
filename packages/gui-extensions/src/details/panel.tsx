@@ -32,7 +32,7 @@ export type DetailsPanelProps = {
 export default function SessionDetailsPanel(props: DetailsPanelProps) {
   const ctx = useExtension()
   const locale = ctx.locale
-  const data = props.session.server.data
+  const data = () => props.session.server.data
 
   const placement = createMemo(() =>
     props.mobile ? "top-end" : locale.direction() === "rtl" ? "right-start" : "left-start",
@@ -48,8 +48,8 @@ export default function SessionDetailsPanel(props: DetailsPanelProps) {
     return getFilename(workspace ?? props.session.directory)
   }
 
-  const branch = () => data.location.vcs.info({ directory: props.session.directory })?.branch.current
-  const baseBranch = () => data.location.vcs.info({ directory: props.project.worktree })?.branch.current
+  const branch = () => data().location.vcs.info({ directory: props.session.directory })?.branch.current
+  const baseBranch = () => data().location.vcs.info({ directory: props.project.worktree })?.branch.current
 
   return (
     <div data-component="session-summary-panel" data-mobile={props.mobile || undefined}>

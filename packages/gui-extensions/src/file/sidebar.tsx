@@ -14,7 +14,7 @@ export default function FileSidebar(props: { session: MountedSession; screen: Se
   const changes = () => current(shared.changes())
 
   // The host mounts this only while the tree is open, which is when its changes should stay loaded.
-  createKeyed(shared.changes, (service) => onCleanup(service.watch(props.session, "tree")))
+  createKeyed(shared.changes, (service) => onCleanup(service.watch(props.screen, "tree")))
 
   // Lists the root again when the directory, the tree tab or the connection changes, and whenever the root
   // listing is unloaded: the workspace's tree resets to a new root entry. Loading that listing is the same key.

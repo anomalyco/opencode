@@ -60,21 +60,22 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Mo
     })
   })
 
-  // While the dock shows, an empty workspace gets its first terminal, once per workspace in a row.
+  // While the dock shows, a workspace first observed empty gets its first terminal, once per workspace in a row.
   createKeyed(opened, () => {
-    const created = { workspace: "" }
+    const seen = { workspace: "" }
 
     createKeyed(
       () => {
         const workspace = terminal()
 
-        return workspace.ready() && workspace.all().length === 0 ? workspace : undefined
+        return workspace.ready() ? workspace : undefined
       },
       (workspace) => {
-        if (created.workspace === workspace.key) return
+        if (seen.workspace === workspace.key) return
 
-        workspace.new()
-        created.workspace = workspace.key
+        seen.workspace = workspace.key
+
+        if (workspace.all().length === 0) workspace.new()
       },
     )
   })

@@ -34,7 +34,7 @@ export function createBrowserRestoreStore(storage: Storage) {
       const target = store(key)
       const value = { tabs: state.tabs.map((tab) => ({ id: tab.id, url: tab.url })), focusedTabID: state.focusedTabID }
 
-      if (JSON.stringify(target.value) !== JSON.stringify(value)) target.update(() => value)
+      if (JSON.stringify(target.value) !== JSON.stringify(value)) target.set(value)
     },
     // Also drops the unimported desktop row, as the pane's own close always did.
     remove(key: string) {

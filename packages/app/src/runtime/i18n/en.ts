@@ -628,6 +628,7 @@ export const dict = {
   "settings.guiExtensions.status.active": "Active",
   "settings.guiExtensions.status.failed": "Failed",
   "settings.guiExtensions.status.disabled": "Disabled",
+  "settings.guiExtensions.status.blocked": "Blocked",
   "settings.tab.about": "About",
   "settings.about.version": "Version {{version}}",
   "settings.about.devVersion": "development",

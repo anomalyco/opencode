@@ -128,6 +128,7 @@ export function createHost(input: {
   const manager = createManager(
     input.db,
     (id) => id.startsWith("opencode") || definitions.some((definition) => definition.id === id),
+    definitions,
   )
 
   const embeds = createEmbeds()
@@ -600,13 +601,19 @@ export function createHost(input: {
       const ids = [...local.map((definition) => definition.id), ...manager.installed().map((item) => item.id)]
       await Promise.all(ids.map((id) => lifecycle.activate(id)))
     },
-    /** Activates the extension an Ipc belongs to ahead of `start`. Ipc ids start with their extension's id. */
+    /** Activates the declared provider ahead of `start`, falling back to the Ipc id's extension prefix. */
     demand(ipc: string) {
       if (ipcs.has(ipc)) return
 
-      const id = [...local.map((definition) => definition.id), ...manager.installed().map((item) => item.id)].find(
-        (id) => ipc === id || ipc.startsWith(`${id}.`),
+      const declared = local.find((definition) =>
+        Object.values(definition.provides ?? {}).some((token) => token.id === ipc),
       )
+
+      const id =
+        declared?.id ??
+        [...local.map((definition) => definition.id), ...manager.installed().map((item) => item.id)].find(
+          (id) => ipc === id || ipc.startsWith(`${id}.`),
+        )
 
       if (id) void lifecycle.activate(id)
     },
