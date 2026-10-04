@@ -175,6 +175,7 @@ const layer = Layer.effect(
       promotion: SessionInput.Delivery | undefined,
       step: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
+      allowCompaction = true,
     ) {
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
@@ -221,7 +222,7 @@ const layer = Layer.effect(
         tools: toolMaterialization?.definitions ?? [],
         toolChoice: isLastStep ? "none" : undefined,
       })
-      if (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request }))
+      if (allowCompaction && (yield* compaction.compactIfNeeded({ sessionID: session.id, entries, model, request })))
         return yield* Effect.die(continueAfterCompaction(currentStep))
       const startSnapshot = yield* snapshots.capture()
       const publisher = createLLMEventPublisher(events, {
@@ -237,6 +238,16 @@ const layer = Layer.effect(
       const withPublication = Semaphore.makeUnsafe(1).withPermit
       const publish = (event: LLMEvent, outputPaths: ReadonlyArray<string> = []) =>
         withPublication(publisher.publish(event, outputPaths))
+      if (!allowCompaction && compaction.exceedsContext({ model, request })) {
+        yield* publish(
+          LLMEvent.providerError({
+            message:
+              "The request is still too large after context compaction. The attached content exceeds the available context window. Please remove the attachment, reduce its size, or remove older context.",
+            classification: "context-overflow",
+          }),
+        )
+        return { needsContinuation: false, step: currentStep }
+      }
       let overflowFailure: ProviderErrorEvent | undefined
       const providerStream = llm.stream(request).pipe(
         Stream.runForEach((event) =>
@@ -361,29 +372,29 @@ const layer = Layer.effect(
       step: number,
     ) => Effect.Effect<{ readonly needsContinuation: boolean; readonly step: number }, RunError>
 
-    const runAfterOverflowCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step).pipe(
+    const runAfterCompaction: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
+      return yield* runTurnAttempt(sessionID, promotion, step, undefined, false).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
-            if (defect.transition._tag === "ContinueAfterOverflowCompaction")
-              return yield* Effect.die("Post-compaction provider attempt cannot recover another overflow")
-            yield* Effect.yieldNow
-            return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
+            return yield* Effect.die("Post-compaction provider attempt cannot recover another compaction")
           }),
         ),
       )
     })
 
     const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step, compaction.compactAfterOverflow).pipe(
+      return yield* runTurnAttempt(sessionID, promotion, step, compaction.compactAfterOverflow, true).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
             yield* Effect.yieldNow
-            if (defect.transition._tag === "ContinueAfterOverflowCompaction")
-              return yield* runAfterOverflowCompaction(sessionID, undefined, defect.transition.step)
-            return yield* runTurn(sessionID, undefined, defect.transition.step)
+            if (
+              defect.transition._tag === "ContinueAfterOverflowCompaction" ||
+              defect.transition._tag === "ContinueAfterCompaction"
+            )
+              return yield* runAfterCompaction(sessionID, undefined, defect.transition.step)
+            return yield* Effect.die(defect)
           }),
         ),
       )

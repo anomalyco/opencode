@@ -181,10 +181,14 @@ export const make = (dependencies: Dependencies) => {
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
     const selected = select(input.entries, config.tokens)
     const previousSummary = input.entries.find((entry) => entry.message.type === "compaction")?.message
-    if (!selected || (selected.head.length === 0 && previousSummary?.type !== "compaction")) return false
+    const summaryContext = [
+      previousSummary?.type === "compaction" ? previousSummary.recent : "",
+      selected?.head ?? "",
+    ].filter(Boolean)
+    if (summaryContext.length === 0) return false
     const summaryPrompt = buildPrompt({
       previousSummary: previousSummary?.type === "compaction" ? previousSummary.summary : undefined,
-      context: [previousSummary?.type === "compaction" ? previousSummary.recent : "", selected.head].filter(Boolean),
+      context: summaryContext,
     })
     const summaryOutput = Math.min(output || SUMMARY_OUTPUT_TOKENS, SUMMARY_OUTPUT_TOKENS)
     if (Token.estimate(summaryPrompt) > context - summaryOutput) return false
@@ -225,24 +229,36 @@ export const make = (dependencies: Dependencies) => {
       timestamp: yield* DateTime.now,
       reason: "auto",
       text: summary,
-      recent: selected.recent,
+      recent: selected?.recent ?? "",
     })
     return true
   })
-  const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
-    if (!config.auto) return false
+  const isOversized = (input: { readonly model: Model; readonly request: LLMRequest }) => {
     const context = input.model.route.defaults.limits?.context
     if (context === undefined || context <= 0) return false
     const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
-    if (
-      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) <=
+    return (
+      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) >
       context - Math.max(output, config.buffer)
     )
-      return false
+  }
+  const exceedsContext = (input: { readonly model: Model; readonly request: LLMRequest }) => {
+    const context = input.model.route.defaults.limits?.context
+    if (context === undefined || context <= 0) return false
+    const output = input.request.generation?.maxTokens ?? input.model.route.defaults.limits?.output ?? 0
+    return (
+      estimate({ system: input.request.system, messages: input.request.messages, tools: input.request.tools }) >
+      context - output
+    )
+  }
+  const compactIfNeeded = Effect.fn("SessionCompaction.compactIfNeeded")(function* (input: Input) {
+    if (!config.auto || !isOversized(input)) return false
     return yield* compactAfterOverflow(input)
   })
   return {
     compactIfNeeded,
     compactAfterOverflow,
+    isOversized,
+    exceedsContext,
   }
 }

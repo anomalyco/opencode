@@ -1211,6 +1211,49 @@ describe("SessionRunnerLLM", () => {
     }),
   )
 
+  it.effect("stops and errors instead of looping when attached content exceeds context after compaction", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* SessionV2.Service
+      response = fragmentFixture("text", "text-first", ["Earlier answer"]).completeEvents
+      yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({ text: "Earlier question ".repeat(60) }),
+        resume: false,
+      })
+      yield* session.resume(sessionID)
+
+      currentModel = Model.make({
+        id: "oversized-after-compaction",
+        provider: "fake",
+        route: OpenAIChat.route.with({ limits: { context: 1_000, output: 50 } }),
+      })
+      requests.length = 0
+      responses = [
+        fragmentFixture("text", "text-summary", ["## Objective\n- Preserve the task"]).completeEvents,
+      ]
+      yield* session.prompt({
+        sessionID,
+        prompt: Prompt.make({
+          text: "Recent attached prompt ".repeat(145),
+        }),
+        resume: false,
+      })
+      yield* session.resume(sessionID)
+
+      expect(requests).toHaveLength(1)
+      const context = yield* (yield* SessionStore.Service).context(sessionID)
+      expect(context.map((message) => message.type)).toEqual(["compaction", "assistant"])
+      expect(context[1]).toMatchObject({
+        type: "assistant",
+        finish: "error",
+        error: {
+          message: expect.stringContaining("still too large after context compaction"),
+        },
+      })
+    }),
+  )
+
   it.effect("forces one compaction and retries after provider context overflow", () =>
     Effect.gen(function* () {
       const session = yield* setupOverflowRecovery
