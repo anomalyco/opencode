@@ -3,6 +3,8 @@ import { createStore } from "solid-js/store"
 import { DateTime } from "luxon"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import { createSimpleContext } from "@opencode-ai/ui/context"
+import { useServerSync } from "@/context/server-sync"
+import { customModelKeysFromConfig } from "@/context/model-keys"
 import { useProviders } from "@/hooks/use-providers"
 import { Persist, persisted } from "@/utils/persist"
 
@@ -22,11 +24,21 @@ function modelKey(model: ModelKey) {
   return `${model.providerID}:${model.modelID}`
 }
 
+/**
+ * Model keys (`providerID:modelID`) explicitly declared in the user's config
+ * (`provider.<id>.models`). The user added these on purpose, so they are
+ * visible in the model picker by default — regardless of whether they are the
+ * latest release of their family. User visibility preferences (show/hide)
+ * still take precedence.
+ */
+export { customModelKeysFromConfig } from "./model-keys"
+
 export const { use: useModels, provider: ModelsProvider } = createSimpleContext({
   name: "Models",
   gate: false,
   init: (props: { directory?: Accessor<string | undefined> } = {}) => {
     const providers = useProviders(() => props.directory?.())
+    const serverSync = useServerSync()
 
     const [store, setStore, _, ready] = persisted(
       Persist.global("model", ["model.v1"]),
@@ -93,6 +105,8 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       return map
     })
 
+    const customModelKeys = createMemo(() => customModelKeysFromConfig(serverSync().data.config))
+
     const list = createMemo(() =>
       available().map((m) => ({
         ...m,
@@ -117,6 +131,7 @@ export const { use: useModels, provider: ModelsProvider } = createSimpleContext(
       const state = visibility().get(key)
       if (state === "hide") return false
       if (state === "show") return true
+      if (customModelKeys().has(key)) return true
       if (latestSet().has(key)) return true
       const date = release().get(key)
       if (!date?.isValid) return true
