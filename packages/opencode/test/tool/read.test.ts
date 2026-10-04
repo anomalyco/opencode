@@ -606,3 +606,33 @@ describe("tool.read binary detection", () => {
     }),
   )
 })
+
+describe("tool.read telemetry metrics", () => {
+  it.live("includes chars, lines and estimatedTokens in metadata for file", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const content = "line 1\nline 2\nline 3\n"
+      yield* put(path.join(dir, "test.txt"), content)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "test.txt") })
+      expect(result.metadata.telemetry).toBeDefined()
+      expect(result.metadata.telemetry?.chars).toBe(result.output.length)
+      expect(result.metadata.telemetry?.lines).toBe(3)
+      expect(result.metadata.telemetry?.estimatedTokens).toBeGreaterThan(0)
+    }),
+  )
+
+  it.live("includes chars, lines and estimatedTokens in metadata for directory", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      yield* put(path.join(dir, "a.txt"), "hello")
+      yield* put(path.join(dir, "b.txt"), "world")
+
+      const result = yield* exec(dir, { filePath: dir })
+      expect(result.metadata.telemetry).toBeDefined()
+      expect(result.metadata.telemetry?.chars).toBe(result.output.length)
+      expect(result.metadata.telemetry?.lines).toBe(2)
+      expect(result.metadata.telemetry?.estimatedTokens).toBeGreaterThan(0)
+    }),
+  )
+})

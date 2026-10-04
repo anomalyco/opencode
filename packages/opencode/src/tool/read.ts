@@ -9,6 +9,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { Token } from "@/util/token"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -59,6 +60,11 @@ type Metadata = {
   truncated: boolean
   loaded: string[]
   display?: Display
+  telemetry?: {
+    chars: number
+    lines?: number
+    estimatedTokens: number
+  }
 }
 
 export const ReadTool = Tool.define<
@@ -269,22 +275,29 @@ export const ReadTool = Tool.define<
         const sliced = items.slice(start, start + limit)
         const truncated = start + sliced.length < items.length
 
+        const dirOutput = [
+          `<path>${filepath}</path>`,
+          `<type>directory</type>`,
+          `<entries>`,
+          sliced.join("\n"),
+          truncated
+            ? `\n(Showing ${sliced.length} of ${items.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.length})`
+            : `\n(${items.length} entries)`,
+          `</entries>`,
+        ].join("\n")
+
         return {
           title,
-          output: [
-            `<path>${filepath}</path>`,
-            `<type>directory</type>`,
-            `<entries>`,
-            sliced.join("\n"),
-            truncated
-              ? `\n(Showing ${sliced.length} of ${items.length} entries. Use 'offset' parameter to read beyond entry ${offset + sliced.length})`
-              : `\n(${items.length} entries)`,
-            `</entries>`,
-          ].join("\n"),
+          output: dirOutput,
           metadata: {
             preview: sliced.slice(0, 20).join("\n"),
             truncated,
             loaded: [] as string[],
+            telemetry: {
+              chars: dirOutput.length,
+              lines: sliced.length,
+              estimatedTokens: Token.estimate(dirOutput),
+            },
             display: {
               type: "directory" as const,
               path: filepath,
@@ -363,6 +376,11 @@ export const ReadTool = Tool.define<
           preview: file.raw.slice(0, 20).join("\n"),
           truncated,
           loaded: loaded.map((item) => item.filepath),
+          telemetry: {
+            chars: output.length,
+            lines: file.raw.length,
+            estimatedTokens: Token.estimate(output),
+          },
           display: {
             type: "file" as const,
             path: filepath,

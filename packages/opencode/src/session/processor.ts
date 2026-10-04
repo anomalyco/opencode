@@ -25,6 +25,7 @@ import { isRecord } from "@/util/record"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Database } from "@opencode-ai/core/database/database"
 import { Usage, type LLMEvent } from "@opencode-ai/llm"
+import { Token } from "@/util/token"
 
 const DOOM_LOOP_THRESHOLD = 3
 export type Result = "compact" | "stop" | "continue"
@@ -168,13 +169,30 @@ const layer = Layer.effect(
       ) {
         const match = yield* readToolCall(toolCallID)
         if (!match || match.part.state.status !== "running") return
+        const charCount = output.output.length
+        const estimatedTokens = Token.estimate(output.output)
+        const telemetry = {
+          chars: charCount,
+          estimatedTokens,
+          ...output.metadata?.telemetry,
+        }
+        yield* Effect.logInfo("tool.payload.telemetry", {
+          tool: match.part.tool,
+          sessionID: match.part.sessionID,
+          toolCallID,
+          chars: telemetry.chars,
+          estimatedTokens: telemetry.estimatedTokens,
+        })
         yield* session.updatePart({
           ...match.part,
           state: {
             status: "completed",
             input: match.part.state.input,
             output: output.output,
-            metadata: output.metadata,
+            metadata: {
+              ...output.metadata,
+              telemetry,
+            },
             title: output.title,
             time: { start: match.part.state.time.start, end: Date.now() },
             attachments: output.attachments,
