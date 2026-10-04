@@ -11,6 +11,7 @@ import { PermissionV2 } from "../permission"
 import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
 import { SemanticEmbedder } from "../semantic/embedder"
+import { SemanticCache } from "../semantic/cache"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -117,6 +118,7 @@ const layer = Layer.effectDiscard(
     const location = yield* Location.Service
     const permission = yield* PermissionV2.Service
     const embedder = yield* SemanticEmbedder.Service
+    const cache = yield* SemanticCache.Service
 
     yield* tools
       .register({
@@ -220,16 +222,47 @@ const layer = Layer.effectDiscard(
                 return []
               }
 
-              // Batch embedding: query + all chunks in one vectorization pass
-              const textsToEmbed = [input.query, ...allChunks.map((c) => c.text)]
-              const embeddings = yield* embedder.embed(textsToEmbed)
+              const embedModel = process.env.OPENCODE_EMBED_MODEL || "nomic-embed-text"
 
-              const queryVector = embeddings[0]
-              if (!queryVector) return []
+              // Query embedding: check cache first, embed if missing
+              const queryHash = cache.hashText(input.query)
+              let queryVector = yield* cache.get(queryHash, embedModel).pipe(Effect.catch(() => Effect.succeed(undefined)))
+              if (!queryVector) {
+                queryVector = yield* embedder.embedOne(input.query)
+                yield* cache.set(queryHash, embedModel, queryVector).pipe(Effect.catch(() => Effect.void))
+              }
 
-              const chunkVectors = embeddings.slice(1)
+              // Chunk embeddings: check batch cache for hits
+              const chunkHashes = allChunks.map((c) => cache.hashText(c.text))
+              const cachedMap = yield* cache.getBatch(chunkHashes, embedModel).pipe(
+                Effect.catch(() => Effect.succeed(new Map<string, readonly number[]>())),
+              )
+
+              // Identify missing chunks that need embedding
+              const missingChunks: { index: number; text: string; hash: string }[] = []
+              for (let i = 0; i < allChunks.length; i++) {
+                const hash = chunkHashes[i]!
+                if (!cachedMap.has(hash)) {
+                  missingChunks.push({ index: i, text: allChunks[i]!.text, hash })
+                }
+              }
+
+              // Embed only missing chunks via local embedder
+              if (missingChunks.length > 0) {
+                const newEmbeddings = yield* embedder.embed(missingChunks.map((m) => m.text))
+                const newEntries = missingChunks.map((m, idx) => ({
+                  hash: m.hash,
+                  vector: newEmbeddings[idx]!,
+                }))
+                for (const entry of newEntries) {
+                  cachedMap.set(entry.hash, entry.vector)
+                }
+                yield* cache.setBatch(newEntries, embedModel).pipe(Effect.catch(() => Effect.void))
+              }
+
               const scoredChunks = allChunks.map((chunk, index) => {
-                const vec = chunkVectors[index]
+                const hash = chunkHashes[index]!
+                const vec = cachedMap.get(hash)
                 const score = vec ? SemanticEmbedder.cosineSimilarity(queryVector, vec) : 0
                 return {
                   path: chunk.relativePath,
@@ -253,5 +286,5 @@ const layer = Layer.effectDiscard(
 export const node = makeLocationNode({
   name: "tool/semantic-search",
   layer,
-  deps: [ToolRegistry.node, FSUtil.node, Ripgrep.node, Location.node, PermissionV2.node, SemanticEmbedder.node],
+  deps: [ToolRegistry.node, FSUtil.node, Ripgrep.node, Location.node, PermissionV2.node, SemanticEmbedder.node, SemanticCache.node],
 })

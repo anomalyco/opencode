@@ -1,6 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { Effect } from "effect"
 import { cosineSimilarity, SemanticEmbedder } from "../src/semantic/embedder"
+import { SemanticCache } from "../src/semantic/cache"
 import {
   chunkFile,
   toModelOutput,
@@ -142,6 +143,55 @@ describe("Semantic Search & Local Embeddings", () => {
         expect(Array.isArray(vec)).toBe(true)
         expect(vec.length).toBe(768) // nomic-embed-text dimensions
       }
+    })
+  })
+
+  describe("SemanticCache Service (SQLite Vector Persistence)", () => {
+    it("hashes text consistently using sha256", () => {
+      const h1 = SemanticCache.hashText("function hello() {}")
+      const h2 = SemanticCache.hashText("function hello() {}")
+      const h3 = SemanticCache.hashText("function world() {}")
+      expect(h1).toBe(h2)
+      expect(h1).not.toBe(h3)
+      expect(h1).toHaveLength(64) // hex SHA-256 length
+    })
+
+    it("persists and reads vectors with float precision in SQLite", async () => {
+      const db = SemanticCache.createDatabase(":memory:")
+      const cache = SemanticCache.makeService(db)
+
+      const testHash = "hash_123"
+      const testVec = [0.123, -0.456, 0.789, 0.0]
+      const model = "test-model"
+
+      await Effect.runPromise(cache.set(testHash, model, testVec))
+      const readVec = await Effect.runPromise(cache.get(testHash, model))
+
+      expect(readVec).toBeDefined()
+      expect(readVec?.length).toBe(testVec.length)
+      for (let i = 0; i < testVec.length; i++) {
+        expect(Math.abs(readVec![i]! - testVec[i]!)).toBeLessThan(1e-5)
+      }
+    })
+
+    it("supports batch get and set with zero overhead", async () => {
+      const db = SemanticCache.createDatabase(":memory:")
+      const cache = SemanticCache.makeService(db)
+      const model = "nomic-embed-text"
+
+      const entries = [
+        { hash: "h1", vector: [1.0, 2.0, 3.0] },
+        { hash: "h2", vector: [4.0, 5.0, 6.0] },
+        { hash: "h3", vector: [7.0, 8.0, 9.0] },
+      ]
+
+      await Effect.runPromise(cache.setBatch(entries, model))
+
+      const batch = await Effect.runPromise(cache.getBatch(["h1", "h3", "missing"], model))
+      expect(batch.size).toBe(2)
+      expect(batch.has("h1")).toBe(true)
+      expect(batch.has("h3")).toBe(true)
+      expect(batch.has("missing")).toBe(false)
     })
   })
 })
