@@ -605,6 +605,150 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("keeps opaque MCP tool files replayable on OpenAI Chat", () =>
+    Effect.gen(function* () {
+      const file = {
+        type: "file" as const,
+        uri: "data:application/vnd.apache.parquet;base64,AAECAw==",
+        mime: "application/vnd.apache.parquet",
+      }
+      const messages = [
+        Message.user("Read the MCP output."),
+        Message.assistant([
+          ToolCallPart.make({ id: "call_parquet", name: "mcp_read", input: { path: "events.parquet" } }),
+        ]),
+        Message.tool({
+          id: "call_parquet",
+          name: "mcp_read",
+          result: {
+            type: "content",
+            value: [{ type: "text", text: "MCP returned one file." }, file],
+          },
+        }),
+      ]
+      const request = LLM.request({ model, messages })
+      const prepared = yield* compileRequest(request)
+      expect(JSON.stringify(prepared.body.messages)).not.toContain("AAECAw==")
+
+      expect(prepared.body.messages).toContainEqual(
+        expect.objectContaining({
+          role: "tool",
+          tool_call_id: "call_parquet",
+          content: expect.stringContaining("MCP returned one file."),
+        }),
+      )
+      expect(prepared.body.messages).toContainEqual(
+        expect.objectContaining({
+          role: "tool",
+          tool_call_id: "call_parquet",
+          content: expect.stringContaining('"file"'),
+        }),
+      )
+      expect(prepared.body.messages).toContainEqual(
+        expect.objectContaining({
+          role: "tool",
+          tool_call_id: "call_parquet",
+          content: expect.stringContaining("application/vnd.apache.parquet"),
+        }),
+      )
+      expect(request.messages[2]?.content[0]).toMatchObject({
+        type: "tool-result",
+        id: "call_parquet",
+        result: {
+          type: "content",
+          value: [
+            { type: "text", text: "MCP returned one file." },
+            { type: "file", uri: file.uri, mime: file.mime },
+          ],
+        },
+      })
+
+      const resumed = LLM.request({
+        model,
+        messages: [
+          ...messages,
+          Message.assistant("The attached file could not be inspected."),
+          Message.user("Explain how I can continue."),
+        ],
+      })
+      const replay = yield* compileRequest(resumed)
+      expect(JSON.stringify(replay.body.messages)).not.toContain("AAECAw==")
+
+      expect(replay.body.messages).toContainEqual(
+        expect.objectContaining({
+          role: "tool",
+          tool_call_id: "call_parquet",
+          content: expect.stringContaining('"file"'),
+        }),
+      )
+    }),
+  )
+
+  it.effect("keeps supported tool attachments paired around an unsupported file", () =>
+    Effect.gen(function* () {
+      const image = "data:image/png;base64,iVBORw0KGgo="
+      const pdf = "data:application/pdf;base64,JVBERi0xLjQ="
+      const csvData = "Q09MTElTSU9O"
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "call_png", name: "mcp_read", input: {} }),
+              ToolCallPart.make({ id: "call_pdf", name: "mcp_read", input: {} }),
+              ToolCallPart.make({ id: "call_csv", name: "mcp_read", input: {} }),
+            ]),
+            Message.tool({
+              id: "call_png",
+              name: "mcp_read",
+              result: {
+                type: "content",
+                value: [
+                  { type: "file", uri: image, mime: "image/png", name: "chart.png" },
+                  { type: "file", uri: `data:text/csv;base64,${csvData}`, mime: "text/csv", name: "rows.csv" },
+                ],
+              },
+            }),
+            Message.tool({
+              id: "call_pdf",
+              name: "mcp_read",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: pdf, mime: "application/pdf", name: "report.pdf" }],
+              },
+            }),
+            Message.tool({
+              id: "call_csv",
+              name: "mcp_read",
+              result: {
+                type: "content",
+                value: [{ type: "file", uri: `data:text/csv;base64,${csvData}`, mime: "text/csv" }],
+              },
+            }),
+          ],
+        }),
+      )
+      const toolMessages = prepared.body.messages.filter((message) => message.role === "tool")
+      expect(JSON.stringify(prepared.body.messages)).not.toContain(csvData)
+
+      expect(toolMessages.map((message) => message.tool_call_id)).toEqual(["call_png", "call_pdf", "call_csv"])
+      expect(toolMessages[2]?.content).toContain('"file"')
+      expect(toolMessages[2]?.content).toContain("omitted")
+      expect(toolMessages).toMatchObject([
+        { content: expect.stringContaining("rows.csv") },
+        { content: "" },
+        { content: expect.stringContaining("text/csv") },
+      ])
+      expect(prepared.body.messages.at(-1)).toEqual({
+        role: "user",
+        content: [
+          { type: "image_url", image_url: { url: image } },
+          { type: "file", file: { filename: "report.pdf", file_data: pdf } },
+        ],
+      })
+    }),
+  )
+
   it.effect("bridges image tool results before their synthetic user message when required", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
