@@ -21,6 +21,7 @@ import "@/shell/search-list.css"
 
 const statusLabels = {
   connected: "mcp.status.connected",
+  idle: "mcp.status.idle",
   failed: "mcp.status.failed",
   needs_auth: "mcp.status.needs_auth",
   disabled: "mcp.status.disabled",
