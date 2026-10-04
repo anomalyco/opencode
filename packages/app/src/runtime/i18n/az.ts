@@ -270,6 +270,7 @@ export const dict = {
   "mcp.status.failed": "uğursuz",
   "mcp.status.needs_auth": "avtorizasiya lazımdır",
   "mcp.status.disabled": "deaktiv",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Yeni sessiyaya ayırmaq üçün mesaj yoxdur",
   "dialog.directory.action.selectFile": "Fayl seçin",
   "dialog.directory.action.selectFolder": "Qovluğu seçin",

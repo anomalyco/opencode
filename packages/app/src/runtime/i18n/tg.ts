@@ -269,6 +269,7 @@ export const dict = {
   "mcp.status.failed": "ноком шуд",
   "mcp.status.needs_auth": "аутент лозим аст",
   "mcp.status.disabled": "маъюб",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Паёме барои сохтани шоха нест",
   "dialog.directory.action.selectFile": "Файлро интихоб кунед",
   "dialog.directory.action.selectFolder": "Папкаро интихоб кунед",

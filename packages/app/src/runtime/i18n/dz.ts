@@ -280,6 +280,7 @@ export const dict = {
   "mcp.status.failed": "མཐར་མ་འཁྱོལ་བ་",
   "mcp.status.needs_auth": "auth དགོཔ་ཨིན།",
   "mcp.status.disabled": "དབང༌པོ༌སྐྱོན༌ཅན༌",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "ལས་ཕོརཀ་འབད་ནི་ལུ་འཕྲིན་དོན་མེད།",
   "dialog.directory.action.selectFile": "ཡིག་སྣོད་སེལ་འཐུ་འབད།",
   "dialog.directory.action.selectFolder": "སྣོད་འཛིན་སེལ་འཐུ་འབད།",

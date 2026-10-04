@@ -293,6 +293,7 @@ export const dict = {
   "mcp.status.failed": "zlyhalo",
   "mcp.status.needs_auth": "vyžaduje overenie",
   "mcp.status.disabled": "vypnuté",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Žiadne správy na vytvorenie vetvy",
   "dialog.directory.action.selectFile": "Vybrať súbor",
   "dialog.directory.action.selectFolder": "Vybrať priečinok",

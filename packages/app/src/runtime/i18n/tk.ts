@@ -268,6 +268,7 @@ export const dict = {
   "mcp.status.failed": "şowsuz",
   "mcp.status.needs_auth": "auth gerek",
   "mcp.status.disabled": "maýyp",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Şahalandyrmaly habar ýok",
   "dialog.directory.action.selectFile": "Faýly saýlaň",
   "dialog.directory.action.selectFolder": "Papkany saýlaň",

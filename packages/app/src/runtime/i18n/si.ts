@@ -271,6 +271,7 @@ export const dict = {
   "mcp.status.failed": "අසාර්ථක විය",
   "mcp.status.needs_auth": "auth අවශ්‍යයි",
   "mcp.status.disabled": "ආබාධිතයි",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "ෆෝක් කිරීමට පණිවිඩ නැත",
   "dialog.directory.action.selectFile": "ගොනුව තෝරන්න",
   "dialog.directory.action.selectFolder": "ෆෝල්ඩරය තෝරන්න",

@@ -302,6 +302,7 @@ export const dict = {
   "mcp.status.needs_auth": "perlu autentikasi",
   "mcp.status.disabled": "nonaktif",
 
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Tidak ada pesan yang dapat dicabangkan",
 
   "dialog.directory.action.selectFile": "Pilih berkas",

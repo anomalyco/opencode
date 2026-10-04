@@ -269,6 +269,7 @@ export const dict = {
   "mcp.status.failed": "амжилтгүй болсон",
   "mcp.status.needs_auth": "auth хэрэгтэй",
   "mcp.status.disabled": "тахир дутуу болсон",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Салаалах зурвас алга",
   "dialog.directory.action.selectFile": "Файл сонгоно уу",
   "dialog.directory.action.selectFolder": "Фолдер сонгоно уу",

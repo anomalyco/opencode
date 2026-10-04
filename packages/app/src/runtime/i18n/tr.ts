@@ -304,6 +304,7 @@ export const dict = {
   "mcp.status.needs_auth": "kimlik doğrulama gerekli",
   "mcp.status.disabled": "devre dışı",
 
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Dallandırılacak mesaj yok",
 
   "dialog.directory.action.selectFile": "Dosya seç",

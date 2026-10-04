@@ -281,6 +281,7 @@ export const dict = {
   "mcp.status.failed": "није успело",
   "mcp.status.needs_auth": "потребан је аутх",
   "mcp.status.disabled": "онемогућен",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Нема порука од којих треба да се рачвате",
   "dialog.directory.action.selectFile": "Изаберите датотеку",
   "dialog.directory.action.selectFolder": "Изаберите фасциклу",

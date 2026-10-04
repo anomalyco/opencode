@@ -267,6 +267,7 @@ export const dict = {
   "mcp.status.failed": "ያልተሳካ",
   "mcp.status.needs_auth": "auth ያስፈልገዋል",
   "mcp.status.disabled": "የተሰናከለ",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "አዲስ ቅርንጫፍ ለመፍጠር መልዕክት የለም",
   "dialog.directory.action.selectFile": "ፋይል ምረጥ",
   "dialog.directory.action.selectFolder": "አቃፊን ምረጥ",

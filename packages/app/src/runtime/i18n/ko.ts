@@ -201,6 +201,7 @@ export const dict = {
   "mcp.status.failed": "실패",
   "mcp.status.needs_auth": "인증 필요",
   "mcp.status.disabled": "비활성화됨",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "분기할 메시지 없음",
   "dialog.directory.action.selectFile": "파일 선택",
   "dialog.directory.action.selectFolder": "폴더 선택",

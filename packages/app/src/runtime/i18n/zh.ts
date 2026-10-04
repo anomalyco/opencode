@@ -317,6 +317,7 @@ export const dict = {
   "mcp.status.needs_auth": "需要授权",
   "mcp.status.disabled": "已禁用",
 
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "没有可用于创建新会话的消息",
 
   "dialog.directory.action.selectFile": "选择文件",

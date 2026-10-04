@@ -272,6 +272,7 @@ export const dict = {
   "mcp.status.failed": "błąd",
   "mcp.status.needs_auth": "wymaga autoryzacji",
   "mcp.status.disabled": "wyłączone",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Brak wiadomości do rozwidlenia",
   "dialog.directory.action.selectFile": "Wybierz plik",
   "dialog.directory.action.selectFolder": "Wybierz folder",

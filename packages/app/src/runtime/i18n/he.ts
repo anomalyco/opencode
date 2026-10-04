@@ -276,6 +276,7 @@ export const dict = {
   "mcp.status.failed": "נכשל",
   "mcp.status.needs_auth": "נדרש אימות",
   "mcp.status.disabled": "מושבת",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "אין הודעות שמהן אפשר ליצור הפעלה",
   "dialog.directory.action.selectFile": "בחר קובץ",
   "dialog.directory.action.selectFolder": "בחר תיקייה",

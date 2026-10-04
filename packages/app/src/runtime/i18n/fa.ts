@@ -277,6 +277,7 @@ export const dict = {
   "mcp.status.failed": "شکست خورد",
   "mcp.status.needs_auth": "نیاز به احراز هویت",
   "mcp.status.disabled": "از کار افتاده است",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "هیچ پیامی برای فورک وجود ندارد",
   "dialog.directory.action.selectFile": "فایل را انتخاب کنید",
   "dialog.directory.action.selectFolder": "پوشه را انتخاب کنید",

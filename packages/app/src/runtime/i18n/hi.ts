@@ -274,6 +274,7 @@ export const dict = {
   "mcp.status.failed": "असफल",
   "mcp.status.needs_auth": "प्रमाणीकरण की आवश्यकता है",
   "mcp.status.disabled": "अक्षम",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "फ़ोर्क करने के लिए कोई संदेश नहीं",
   "dialog.directory.action.selectFile": "फ़ाइल का चयन करें",
   "dialog.directory.action.selectFolder": "फ़ोल्डर चुनें",

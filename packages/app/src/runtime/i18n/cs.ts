@@ -268,6 +268,7 @@ export const dict = {
   "mcp.status.failed": "nepodařilo",
   "mcp.status.needs_auth": "potřebuje autentizaci",
   "mcp.status.disabled": "zakázáno",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Žádné zprávy k rozvětvení",
   "dialog.directory.action.selectFile": "Vyberte soubor",
   "dialog.directory.action.selectFolder": "Vyberte složku",

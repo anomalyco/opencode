@@ -279,6 +279,7 @@ export const dict = {
   "mcp.status.failed": "失敗",
   "mcp.status.needs_auth": "認証が必要",
   "mcp.status.disabled": "無効",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "フォーク元のメッセージがありません",
   "dialog.directory.action.selectFile": "ファイルを選択",
   "dialog.directory.action.selectFolder": "フォルダを選択",

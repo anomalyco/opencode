@@ -268,6 +268,7 @@ export const dict = {
   "mcp.status.failed": "dështoi",
   "mcp.status.needs_auth": "nevojiten auth",
   "mcp.status.disabled": "me aftësi të kufizuara",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Nuk ka mesazhe për të marrë nga",
   "dialog.directory.action.selectFile": "Zgjidhni skedarin",
   "dialog.directory.action.selectFolder": "Zgjidhni dosjen",

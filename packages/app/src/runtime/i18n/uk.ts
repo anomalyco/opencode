@@ -320,6 +320,7 @@ export const dict = {
   "mcp.status.needs_auth": "потрібна авторизація",
   "mcp.status.disabled": "вимкнено",
 
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Немає повідомлень для відгалуження",
 
   "dialog.directory.action.selectFile": "Вибрати файл",

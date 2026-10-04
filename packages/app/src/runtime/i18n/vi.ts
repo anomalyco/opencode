@@ -281,6 +281,7 @@ export const dict = {
   "mcp.status.failed": "thất bại",
   "mcp.status.needs_auth": "cần xác thực",
   "mcp.status.disabled": "đã tắt",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Không có tin nhắn nào để phân nhánh",
   "dialog.directory.action.selectFile": "Chọn tệp",
   "dialog.directory.action.selectFolder": "Chọn thư mục",

@@ -274,6 +274,7 @@ export const dict = {
   "mcp.status.failed": "ފެއިލްވުން",
   "mcp.status.needs_auth": "ބޭނުންވަނީ އޮތޯއެވެ",
   "mcp.status.disabled": "ނުކުޅެދޭ",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "ފޯކް ކުރާނެ މެސެޖެއް ނެތެވެ",
   "dialog.directory.action.selectFile": "ފައިލް ހޮވާށެވެ",
   "dialog.directory.action.selectFolder": "ފޯލްޑަރ ހޮވާށެވެ",

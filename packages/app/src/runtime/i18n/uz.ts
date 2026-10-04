@@ -269,6 +269,7 @@ export const dict = {
   "mcp.status.failed": "muvaffaqiyatsiz",
   "mcp.status.needs_auth": "avtorizatsiya kerak",
   "mcp.status.disabled": "nogiron",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Hech qanday xabar yo'q",
   "dialog.directory.action.selectFile": "Faylni tanlang",
   "dialog.directory.action.selectFolder": "Jildni tanlang",

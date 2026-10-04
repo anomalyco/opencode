@@ -281,6 +281,7 @@ export const dict = {
   "mcp.status.failed": "nepavyko",
   "mcp.status.needs_auth": "reikia autentifikavimo",
   "mcp.status.disabled": "neįgalus",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Nėra pranešimų, iš kurių būtų galima išsišakoti",
   "dialog.directory.action.selectFile": "Pasirinkite failą",
   "dialog.directory.action.selectFolder": "Pasirinkite aplanką",

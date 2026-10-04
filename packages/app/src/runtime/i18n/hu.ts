@@ -280,6 +280,7 @@ export const dict = {
   "mcp.status.failed": "sikertelen",
   "mcp.status.needs_auth": "hitelesítést igényel",
   "mcp.status.disabled": "letiltva",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Nincsenek üzenetek, ahonnan elágazhatna",
   "dialog.directory.action.selectFile": "Válassza ki a fájlt",
   "dialog.directory.action.selectFolder": "Válasszon mappát",

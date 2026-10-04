@@ -301,6 +301,7 @@ export const dict = {
   "mcp.status.needs_auth": "需要授權",
   "mcp.status.disabled": "已停用",
 
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "沒有可用於分支的訊息",
 
   "dialog.directory.action.selectFile": "選擇檔案",

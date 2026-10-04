@@ -431,6 +431,7 @@ export const dict = {
   "mcp.status.failed": "fallito",
   "mcp.status.needs_auth": "richiede l'autenticazione",
   "mcp.status.disabled": "disabilitato",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Nessun messaggio da cui effettuare il fork",
   "dialog.directory.action.selectFile": "Seleziona file",
   "dialog.directory.action.selectFolder": "Seleziona la cartella",

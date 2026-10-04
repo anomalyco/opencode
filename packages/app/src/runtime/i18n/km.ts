@@ -275,6 +275,7 @@ export const dict = {
   "mcp.status.failed": "បរាជ័យ",
   "mcp.status.needs_auth": "ត្រូវការសិទ្ធិ",
   "mcp.status.disabled": "បានបិទ",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "គ្មានសារដែលត្រូវបំបែកពី",
   "dialog.directory.action.selectFile": "ជ្រើសរើសឯកសារ",
   "dialog.directory.action.selectFolder": "ជ្រើសរើសថត",

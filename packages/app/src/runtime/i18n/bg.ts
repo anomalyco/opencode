@@ -269,6 +269,7 @@ export const dict = {
   "mcp.status.failed": "неуспешно",
   "mcp.status.needs_auth": "се нуждае от авт",
   "mcp.status.disabled": "деактивиран",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Няма съобщения за разклонение",
   "dialog.directory.action.selectFile": "Изберете файл",
   "dialog.directory.action.selectFolder": "Изберете папка",

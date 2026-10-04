@@ -272,6 +272,7 @@ export const dict = {
   "mcp.status.failed": "ব্যর্থ",
   "mcp.status.needs_auth": "প্রমাণ প্রয়োজন",
   "mcp.status.disabled": "অক্ষম",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "থেকে কাঁটাচামচ কোন বার্তা",
   "dialog.directory.action.selectFile": "ফাইল নির্বাচন করুন",
   "dialog.directory.action.selectFolder": "ফোল্ডার নির্বাচন করুন",

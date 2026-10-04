@@ -269,6 +269,7 @@ export const dict = {
   "mcp.status.failed": "ձախողվեց",
   "mcp.status.needs_auth": "անհրաժեշտ է վավերացում",
   "mcp.status.disabled": "անջատված",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Չկան պատառաքաղված հաղորդագրություններ",
   "dialog.directory.action.selectFile": "Ընտրել ֆայլը",
   "dialog.directory.action.selectFolder": "Ընտրել թղթապանակ",

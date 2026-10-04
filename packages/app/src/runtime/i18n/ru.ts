@@ -291,6 +291,7 @@ export const dict = {
   "mcp.status.needs_auth": "требуется авторизация",
   "mcp.status.disabled": "отключено",
 
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Нет сообщений для ответвления",
 
   "dialog.directory.action.selectFile": "Выбрать файл",

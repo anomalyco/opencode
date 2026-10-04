@@ -280,6 +280,7 @@ export const dict = {
   "mcp.status.failed": "nije uspio",
   "mcp.status.needs_auth": "treba autorizaciju",
   "mcp.status.disabled": "onemogućeno",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Nema poruka za račvanje",
   "dialog.directory.action.selectFile": "Odaberite datoteku",
   "dialog.directory.action.selectFolder": "Odaberite mapu",

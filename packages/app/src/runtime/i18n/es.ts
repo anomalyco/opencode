@@ -517,6 +517,7 @@ export const dict = {
   "mcp.status.needs_auth": "requiere autenticación",
   "mcp.status.disabled": "deshabilitado",
 
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "No hay mensajes desde donde bifurcar",
 
   "dialog.directory.action.selectFile": "Seleccionar archivo",

@@ -475,6 +475,7 @@ export const dict = {
   "mcp.status.failed": "misslyckades",
   "mcp.status.needs_auth": "behöver autentisering",
   "mcp.status.disabled": "inaktiverad",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Inga meddelanden att förgrena från",
   "dialog.directory.action.selectFile": "Välj fil",
   "dialog.directory.action.selectFolder": "Välj mapp",

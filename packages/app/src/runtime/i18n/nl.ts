@@ -483,6 +483,7 @@ export const dict = {
   "mcp.status.failed": "mislukt",
   "mcp.status.needs_auth": "heeft autorisatie nodig",
   "mcp.status.disabled": "uitgeschakeld",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Geen berichten om van af te splitsen",
   "dialog.directory.action.selectFile": "Selecteer bestand",
   "dialog.directory.action.selectFolder": "Selecteer map",

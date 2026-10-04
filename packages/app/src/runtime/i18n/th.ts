@@ -299,6 +299,7 @@ export const dict = {
   "mcp.status.needs_auth": "ต้องยืนยันตัวตน",
   "mcp.status.disabled": "ปิดใช้งาน",
 
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "ไม่มีข้อความให้แตกแขนง",
 
   "dialog.directory.action.selectFile": "เลือกไฟล์",

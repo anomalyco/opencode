@@ -268,6 +268,7 @@ export const dict = {
   "mcp.status.failed": "fracassat",
   "mcp.status.needs_auth": "necessita autenticació",
   "mcp.status.disabled": "discapacitat",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "No hi ha missatges per bifurcar",
   "dialog.directory.action.selectFile": "Seleccioneu el fitxer",
   "dialog.directory.action.selectFolder": "Seleccioneu la carpeta",

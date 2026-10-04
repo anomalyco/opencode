@@ -267,6 +267,7 @@ export const dict = {
   "mcp.status.failed": "miseydnaðist",
   "mcp.status.needs_auth": "hevur brúk fyri auth",
   "mcp.status.disabled": "óarbeiðsførur",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Eingi boð at greina frá",
   "dialog.directory.action.selectFile": "Vel fílu",
   "dialog.directory.action.selectFolder": "Vel mappu",

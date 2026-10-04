@@ -502,6 +502,7 @@ export const dict = {
   "mcp.status.failed": "en échec",
   "mcp.status.needs_auth": "authentification requise",
   "mcp.status.disabled": "désactivé",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Aucun message à partir duquel bifurquer",
   "dialog.directory.action.selectFile": "Sélectionner le fichier",
   "dialog.directory.action.selectFolder": "Sélectionner le dossier",

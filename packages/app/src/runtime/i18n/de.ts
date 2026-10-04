@@ -429,6 +429,7 @@ export const dict = {
   "mcp.status.failed": "fehlgeschlagen",
   "mcp.status.needs_auth": "Authentifizierung erforderlich",
   "mcp.status.disabled": "deaktiviert",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Keine Nachrichten zum Abzweigen vorhanden",
   "dialog.directory.action.selectFile": "Datei auswählen",
   "dialog.directory.action.selectFolder": "Ordner auswählen",

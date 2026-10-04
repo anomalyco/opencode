@@ -408,6 +408,7 @@ export const dict = {
   "mcp.status.failed": "epäonnistunut",
   "mcp.status.needs_auth": "tarvitsee todennusta",
   "mcp.status.disabled": "pois käytöstä",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Ei viestejä, joista voisi haarauttaa",
   "dialog.directory.action.selectFile": "Valitse tiedosto",
   "dialog.directory.action.selectFolder": "Valitse kansio",

@@ -270,6 +270,7 @@ export const dict = {
   "mcp.status.failed": "απέτυχε",
   "mcp.status.needs_auth": "χρειάζεται εξουσιοδότηση",
   "mcp.status.disabled": "απενεργοποιημένο",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Δεν υπάρχουν μηνύματα για διακλάδωση",
   "dialog.directory.action.selectFile": "Επιλογή αρχείου",
   "dialog.directory.action.selectFolder": "Επιλογή φακέλου",

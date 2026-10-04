@@ -292,6 +292,7 @@ export const dict = {
   "mcp.status.needs_auth": "potrebna autentifikacija",
   "mcp.status.disabled": "onemogućeno",
 
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Nema poruka za fork",
 
   "dialog.directory.action.selectFile": "Odaberi datoteku",

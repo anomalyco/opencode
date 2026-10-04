@@ -267,6 +267,7 @@ export const dict = {
   "mcp.status.failed": "ebaõnnestunud",
   "mcp.status.needs_auth": "vajab autentimist",
   "mcp.status.disabled": "puudega",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Ühtegi sõnumit pole",
   "dialog.directory.action.selectFile": "Valige fail",
   "dialog.directory.action.selectFolder": "Valige kaust",

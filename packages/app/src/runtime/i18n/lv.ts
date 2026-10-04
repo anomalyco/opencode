@@ -268,6 +268,7 @@ export const dict = {
   "mcp.status.failed": "neizdevās",
   "mcp.status.needs_auth": "nepieciešama autorizācija",
   "mcp.status.disabled": "atspējots",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Nav ziņu, no kurām atzarot",
   "dialog.directory.action.selectFile": "Izvēlieties failu",
   "dialog.directory.action.selectFolder": "Izvēlieties mapi",

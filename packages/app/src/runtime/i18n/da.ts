@@ -428,6 +428,7 @@ export const dict = {
   "mcp.status.needs_auth": "kræver godkendelse",
   "mcp.status.disabled": "deaktiveret",
 
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Ingen beskeder at forgrene fra",
 
   "dialog.directory.action.selectFile": "Vælg fil",

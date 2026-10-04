@@ -267,6 +267,7 @@ export const dict = {
   "mcp.status.failed": "eșuat",
   "mcp.status.needs_auth": "necesită autentificare",
   "mcp.status.disabled": "dezactivat",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Niciun mesaj de bifurcat",
   "dialog.directory.action.selectFile": "Selectează fișier",
   "dialog.directory.action.selectFolder": "Selectează folder",

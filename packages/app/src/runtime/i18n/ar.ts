@@ -280,6 +280,7 @@ export const dict = {
   "mcp.status.failed": "فشل",
   "mcp.status.needs_auth": "يحتاج إلى مصادقة",
   "mcp.status.disabled": "معطل",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "لا توجد رسائل للتفرع منها",
   "dialog.directory.action.selectFile": "اختيار ملف",
   "dialog.directory.action.selectFolder": "اختيار مجلد",

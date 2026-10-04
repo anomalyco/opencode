@@ -14,12 +14,9 @@ import { extractPromptComments, extractPromptFromMessage } from "@/composer/prom
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { useServer } from "@/runtime/server/current"
 import { sessionHref } from "@/shell/routes/session"
+import type { SessionMessageUser } from "@opencode/client/promise"
 
-interface ForkableMessage {
-  id: string
-  text: string
-  time: string
-}
+type ForkItem = { kind: "full" } | { kind: "message"; id: string; text: string; time: string }
 
 function formatTime(date: Date): string {
   return date.toLocaleTimeString(undefined, { timeStyle: "short" })
@@ -36,47 +33,48 @@ export const DialogFork: Component = () => {
   const language = useLanguage()
   const server = useServer()
 
-  const messages = createMemo((): ForkableMessage[] => {
+  const items = createMemo((): ForkItem[] => {
     const sessionID = params.id
     if (!sessionID) return []
 
-    const msgs = data.session.message.list(sessionID)
-    const result: ForkableMessage[] = []
-
-    for (const message of msgs) {
-      if (message.type !== "user" || !message.text) continue
-
-      result.push({
+    const messages = data.session.message
+      .list(sessionID)
+      .filter((message): message is SessionMessageUser => message.type === "user" && message.text.length > 0)
+      .toReversed()
+      .map((message) => ({
+        kind: "message" as const,
         id: message.id,
         text: message.text.replace(/\n/g, " ").slice(0, 200),
         time: formatTime(new Date(message.time.created)),
-      })
-    }
+      }))
 
-    return result.reverse()
+    return [{ kind: "full" }, ...messages]
   })
 
-  const handleSelect = (item: ForkableMessage | undefined) => {
+  const handleSelect = (item: ForkItem | undefined) => {
     if (!item) return
 
     const sessionID = params.id
     if (!sessionID) return
-    const message = data.session.message.get(sessionID, item.id)
-    if (message?.type !== "user") return
-    const restored = extractPromptFromMessage(message, {
-      directory: location().directory,
-      attachmentName: language.t("common.attachment"),
-    })
+    const source = item.kind === "message" ? data.session.message.get(sessionID, item.id) : undefined
+    const message = source?.type === "user" ? source : undefined
+    if (item.kind === "message" && !message) return
+    const restored = message
+      ? extractPromptFromMessage(message, {
+          directory: location().directory,
+          attachmentName: language.t("common.attachment"),
+        })
+      : undefined
     const dir = base64Encode(location().directory)
 
     serverSDK.api.session
-      .fork({ sessionID, before: item.id })
+      .fork(item.kind === "message" ? { sessionID, before: item.id } : { sessionID })
       .then((forked) => {
         data.session.remember(forked)
         dialog.close()
         const target = prompt.capture({ dir, id: forked.id })
-        target.set(restored)
-        target.context.replaceComments(extractPromptComments(message).map(commentContextItem))
+        if (restored) target.set(restored)
+        if (message) target.context.replaceComments(extractPromptComments(message).map(commentContextItem))
         navigate(sessionHref(server.key, forked.id))
       })
       .catch((err: unknown) => {
@@ -95,17 +93,27 @@ export const DialogFork: Component = () => {
           class="flex-1 px-3 min-h-0 [&_[data-slot=list-scroll]]:flex-1 [&_[data-slot=list-scroll]]:min-h-0"
           search={{ placeholder: language.t("common.search.placeholder"), autofocus: true }}
           emptyMessage={language.t("dialog.fork.empty")}
-          key={(x) => x.id}
-          items={messages}
+          key={(item) => (item.kind === "full" ? "full" : item.id)}
+          items={items}
           filterKeys={["text"]}
+          skipFilter={(item) => item.kind === "full"}
+          sortBy={(a, b) => (a.kind === "full" ? -1 : 1) - (b.kind === "full" ? -1 : 1)}
           onSelect={handleSelect}
         >
-          {(item) => (
-            <div class="w-full flex items-center gap-2">
-              <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
-              <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
-            </div>
-          )}
+          {(item) =>
+            item.kind === "full" ? (
+              <div class="w-full flex items-center gap-2">
+                <span class="truncate flex-1 min-w-0 text-left font-normal">
+                  {language.t("dialog.fork.fullSession")}
+                </span>
+              </div>
+            ) : (
+              <div class="w-full flex items-center gap-2">
+                <span class="truncate flex-1 min-w-0 text-left font-normal">{item.text}</span>
+                <span class="text-text-weak shrink-0 font-normal">{item.time}</span>
+              </div>
+            )
+          }
         </List>
       </DialogBody>
     </Dialog>

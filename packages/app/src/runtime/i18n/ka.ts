@@ -268,6 +268,7 @@ export const dict = {
   "mcp.status.failed": "ვერ მოხერხდა",
   "mcp.status.needs_auth": "საჭიროა ავტორიზაცია",
   "mcp.status.disabled": "გამორთულია",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "განშტოებისთვის შეტყობინებები არ არის",
   "dialog.directory.action.selectFile": "აირჩიეთ ფაილი",
   "dialog.directory.action.selectFolder": "აირჩიე საქაღალდე",

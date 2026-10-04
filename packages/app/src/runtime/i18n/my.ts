@@ -278,6 +278,7 @@ export const dict = {
   "mcp.status.failed": "မအောင်မြင်ပါ။",
   "mcp.status.needs_auth": "အထောက်အထား လိုအပ်သည်။",
   "mcp.status.disabled": "ပိတ်ထားသည်။",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "လမ်းခွဲရန် မက်ဆေ့ချ်များ မရှိပါ။",
   "dialog.directory.action.selectFile": "ဖိုင်ကို ရွေးပါ။",
   "dialog.directory.action.selectFolder": "ဖိုင်တွဲကို ရွေးပါ။",

@@ -277,6 +277,7 @@ export const dict = {
   "mcp.status.failed": "gagal",
   "mcp.status.needs_auth": "perlu pengesahan",
   "mcp.status.disabled": "dilumpuhkan",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Tiada mesej untuk dicabang",
   "dialog.directory.action.selectFile": "Pilih fail",
   "dialog.directory.action.selectFolder": "Pilih folder",

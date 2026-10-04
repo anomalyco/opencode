@@ -275,6 +275,7 @@ export const dict = {
   "mcp.status.failed": "ناکام ہویا",
   "mcp.status.needs_auth": "تصدیق دی لوڑ اے",
   "mcp.status.disabled": "بند",
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "فورک کرن لئی کوئی پیغام نئیں",
   "dialog.directory.action.selectFile": "فائل چنو",
   "dialog.directory.action.selectFolder": "فولڈر چنو",

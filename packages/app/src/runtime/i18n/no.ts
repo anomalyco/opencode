@@ -489,6 +489,7 @@ export const dict = {
   "mcp.status.needs_auth": "trenger autentisering",
   "mcp.status.disabled": "deaktivert",
 
+  "dialog.fork.fullSession": "Full session",
   "dialog.fork.empty": "Ingen meldinger å forgrene fra",
 
   "dialog.directory.action.selectFile": "Velg fil",
