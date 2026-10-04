@@ -1561,6 +1561,39 @@ it.instance("shell rejects with BusyError when loop running", () =>
   }),
 )
 
+it.instance(
+  "revert rejects with BusyError while loop running and succeeds after cancel",
+  () =>
+    Effect.gen(function* () {
+      const { llm } = yield* useServerConfig(providerCfg)
+      const prompt = yield* SessionPrompt.Service
+      const revert = yield* SessionRevert.Service
+      const sessions = yield* Session.Service
+      yield* llm.hang
+
+      const chat = yield* sessions.create({})
+      const message = yield* user(chat.id, "hi")
+
+      const fiber = yield* prompt.loop({ sessionID: chat.id }).pipe(Effect.forkChild)
+      yield* llm.wait(1)
+      yield* waitForBusy(chat.id)
+
+      const busy = yield* revert.revert({ sessionID: chat.id, messageID: message.id }).pipe(Effect.exit)
+      expect(Exit.isFailure(busy)).toBe(true)
+      if (Exit.isFailure(busy)) {
+        expect(Cause.squash(busy.cause)).toBeInstanceOf(Session.BusyError)
+        expect(Cause.squash(busy.cause)).toMatchObject({ _tag: "SessionBusyError", sessionID: chat.id })
+      }
+
+      yield* prompt.cancel(chat.id)
+      yield* Fiber.await(fiber)
+
+      const info = yield* revert.revert({ sessionID: chat.id, messageID: message.id })
+      expect(info.revert?.messageID).toBe(message.id)
+    }),
+  { git: true },
+)
+
 unixNoLLMServer(
   "shell captures stdout and stderr in completed tool output",
   () =>

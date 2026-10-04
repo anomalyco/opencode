@@ -4,8 +4,10 @@ import { DialogSelect } from "../../ui/dialog-select"
 import { useSDK } from "../../context/sdk"
 import { useRoute } from "../../context/route"
 import { useClipboard } from "../../context/clipboard"
+import { useToast } from "../../ui/toast"
 import type { PromptInfo } from "../../component/prompt/history"
 import { stripPromptPartIDs as strip } from "../../prompt/part"
+import { revertMessage } from "../../util/revert"
 
 export function DialogMessage(props: {
   messageID: string
@@ -17,6 +19,7 @@ export function DialogMessage(props: {
   const message = createMemo(() => sync.data.message[props.sessionID]?.find((x) => x.id === props.messageID))
   const route = useRoute()
   const clipboard = useClipboard()
+  const toast = useToast()
 
   return (
     <DialogSelect
@@ -26,17 +29,25 @@ export function DialogMessage(props: {
           title: "Revert",
           value: "session.revert",
           description: "undo messages and file changes",
-          onSelect: (dialog) => {
+          onSelect: async (dialog) => {
             const msg = message()
             if (!msg) return
+            const parts = sync.data.part[msg.id]
+            dialog.clear()
 
-            void sdk.client.session.revert({
+            const result = await revertMessage({
               sessionID: props.sessionID,
               messageID: msg.id,
+              status: sync.data.session_status?.[props.sessionID],
+              abort: (input) => sdk.client.session.abort(input),
+              revert: (input) => sdk.client.session.revert(input),
             })
+            if (!result.ok) {
+              toast.show({ variant: "error", message: "Failed to revert message" })
+              return
+            }
 
             if (props.setPrompt) {
-              const parts = sync.data.part[msg.id]
               const promptInfo = parts.reduce(
                 (agg, part) => {
                   if (part.type === "text") {
@@ -49,8 +60,6 @@ export function DialogMessage(props: {
               )
               props.setPrompt(promptInfo)
             }
-
-            dialog.clear()
           },
         },
         {
