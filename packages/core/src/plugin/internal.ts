@@ -12,6 +12,7 @@ import { ConfigAgentPlugin } from "../config/plugin/agent"
 import { ConfigCommandPlugin } from "../config/plugin/command"
 import { ConfigExternalPlugin } from "../config/plugin/external"
 import { ConfigProviderPlugin } from "../config/plugin/provider"
+import { OpenAICompatibleLimitsPlugin } from "./provider/openai-compatible-limits"
 import { ConfigReferencePlugin } from "../config/plugin/reference"
 import { ConfigSkillPlugin } from "../config/plugin/skill"
 import { EventV2 } from "../event"
@@ -117,6 +118,7 @@ const layer = Layer.effectDiscard(
         yield* add(ConfigSkillPlugin.Plugin)
         for (const item of ProviderPlugins) yield* add(item)
         yield* add(ConfigExternalPlugin.Plugin)
+        yield* add(OpenAICompatibleLimitsPlugin)
         yield* add(ConfigProviderPlugin.Plugin)
         yield* add(VariantPlugin.Plugin)
       }),

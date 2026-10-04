@@ -2668,6 +2668,27 @@ Configuration details:
 
 The `limit` fields allow OpenCode to understand how much context you have left. Standard providers pull these from models.dev automatically.
 
+##### Automatic limit discovery
+
+For custom `@ai-sdk/openai-compatible` providers, OpenCode reads context limits
+directly from the provider: on startup it requests `GET {baseURL}/models` and
+fills in `context`, `input`, and `output` for any model that advertises
+`context_length`, `max_input_tokens`, or `max_output_tokens` — the fields most
+OpenAI-compatible servers (vLLM, LM Studio, LiteLLM, Ollama, OpenRouter, …)
+already publish. Auto-compaction then uses the real window instead of running
+unbounded until the upstream rejects the request.
+
+Precedence, highest first:
+
+1. The `limit` you set in the config — always wins, per field
+2. Values from models.dev (for known providers)
+3. The provider's advertisement — fills only the missing fields
+
+Discovery fails open: if the endpoint is unreachable, errors, or returns
+malformed data, OpenCode keeps whatever limits it already has and never blocks
+startup. A manual `limit` in the config is still the right choice when the
+server does not advertise limits or advertises wrong ones.
+
 ---
 
 ## Troubleshooting
