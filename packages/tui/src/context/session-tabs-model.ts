@@ -296,7 +296,7 @@ export function groupSessionTabRows(
     acc.set(key, { directory, indices: [tabIndex] })
     return acc
   }, new Map<string, { directory: string; indices: number[] }>())
-  return [...groups.entries()].flatMap(([key, group]) => {
+  return [...groups.entries()].flatMap(([key, group]): SessionTabRow[] => {
     const isCollapsed = collapsed?.[key] ?? false
     const label = labelOf ? labelOf(key, group.directory) : defaultSessionTabGroupLabel(group.directory)
     const header: SessionTabHeaderRow = {
@@ -307,7 +307,7 @@ export function groupSessionTabRows(
       firstTabIndex: group.indices[0] ?? 0,
     }
     if (isCollapsed) return [header]
-    return [header, ...group.indices.map((tabIndex) => ({ kind: "tab" as const, key, tabIndex }))]
+    return [header, ...group.indices.map((tabIndex): SessionTabItemRow => ({ kind: "tab", key, tabIndex }))]
   })
 }
 

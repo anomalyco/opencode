@@ -8,5 +8,6 @@ export function projectName(project?: { canonical: string; name?: string }, fall
 
 export function directoryKey(directory: string | undefined) {
   if (directory === undefined) return ""
-  return directory.replace(/[/\\]+$/, "") || directory
+  const trimmed = directory.replace(/[/\\]+$/, "")
+  return trimmed === "" && directory !== "" ? "/" : trimmed
 }

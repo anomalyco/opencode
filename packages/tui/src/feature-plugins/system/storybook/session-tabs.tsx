@@ -582,7 +582,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
           { shortcut: "r", label: "reset idle" },
           { shortcut: "v", label: "all states" },
           { shortcut: "G", label: "collapse groups" },
-          { shortcut: "click ▾", label: "toggle group" },
+          { shortcut: "click ▸/▾", label: "toggle group" },
           { shortcut: "esc", label: "back" },
         ]}
       />

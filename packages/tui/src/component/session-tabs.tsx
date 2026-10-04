@@ -622,7 +622,7 @@ function VerticalSessionTabs(props: {
     })
     const session = owner ? data?.session.get(owner.sessionID) : undefined
     const project = session ? data?.project.get(session.projectID) : undefined
-    return projectName(project, directory) ?? directory
+    return projectName(project, directory) || directory || "Unknown"
   }
   const statuses = createMemo(
     () =>
@@ -651,7 +651,7 @@ function VerticalSessionTabs(props: {
     // tab order (not the drag preview) so a reorder preview never rebuilds
     // the list mid-gesture and breaks the pointer capture a tab drag relies on.
     // Tab contents resolve through `ordered()` below, so the preview still
-    // swaps titles, numbers, and glow live without moving any boxes.
+    // swaps titles and glow live without moving any boxes.
     return groupSessionTabRows(tabs.tabs(), directoryOf, collapsedMap(), labelOf)
   })
   // Headers are 1 row tall; tab rows keep their 2-row height (1 row when compact).

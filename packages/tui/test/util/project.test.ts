@@ -12,6 +12,7 @@ describe("directoryKey", () => {
 
   test("keeps the filesystem root intact", () => {
     expect(directoryKey("/")).toBe("/")
+    expect(directoryKey("///")).toBe("/")
   })
 
   test("maps a missing directory to the unknown group", () => {
