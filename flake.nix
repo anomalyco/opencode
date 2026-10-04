@@ -26,6 +26,11 @@
             openssl
             git
           ];
+          shellHook = pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isLinux ''
+            # bun dev loads the unpatched registry addon, which needs libstdc++.
+            # The packaged build patches the addon instead (nix/opencode.nix).
+            export LD_LIBRARY_PATH=${pkgs.lib.makeLibraryPath [ (pkgs.lib.getLib pkgs.stdenv.cc.cc) ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}
+          '';
         };
       });
 

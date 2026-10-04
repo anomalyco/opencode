@@ -1,9 +1,11 @@
 {
   lib,
+  stdenv,
   stdenvNoCC,
   callPackage,
   bun,
   nodejs,
+  patchelf,
   sysctl,
   makeBinaryWrapper,
   models-dev,
@@ -26,7 +28,7 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     makeBinaryWrapper
     models-dev
     writableTmpDirAsHomeHook
-  ];
+  ] ++ lib.optionals stdenvNoCC.hostPlatform.isLinux [ patchelf ];
 
   postPatch = ''
     # NOTE: Relax Bun version check to be a warning instead of an error
@@ -43,6 +45,37 @@ stdenvNoCC.mkDerivation (finalAttrs: {
     patchShebangs packages/*/node_modules
 
     runHook postConfigure
+  '';
+
+  # bun dlopens this addon, which links libstdc++ with no RUNPATH, so on NixOS the
+  # load fails and every directory watch dies (#53210).
+  # Patch it here, before buildPhase embeds it into the standalone binary, rather
+  # than exporting LD_LIBRARY_PATH: every spawned process inherits that, and it
+  # outranks the program's own RUNPATH.
+  postConfigure = lib.optionalString stdenvNoCC.hostPlatform.isLinux /* sh */ ''
+    shopt -s nullglob
+    watcher_paths=(
+      node_modules/.bun/@parcel+watcher-linux-*-glibc@*/node_modules/@parcel/watcher-linux-*-glibc/watcher.node
+    )
+    shopt -u nullglob
+
+    echo "postConfigure: Patching ''${#watcher_paths[@]} @parcel/watcher addon(s)" >&2
+    patched_watchers=0
+    for watcher_path in "''${watcher_paths[@]}"; do
+      chmod u+w "$watcher_path"
+      patchelf --add-rpath ${lib.makeLibraryPath [ (lib.getLib stdenv.cc.cc) ]} "$watcher_path"
+      # Check the patch worked so the lib can be loaded successfully
+      bun -e 'require(process.argv[1])' "$PWD/$watcher_path"
+      (( patched_watchers += 1 ))
+    done
+
+    if (( patched_watchers != 0 )); then
+      echo "postConfigure: Patched $patched_watchers native FS watcher(s)" >&2
+    else
+      # Fail the build if nothing was patched rather than ship an un-bootable watcher.
+      echo "postConfigure: no @parcel/watcher glibc addon to patch under node_modules/.bun" >&2
+      exit 1
+    fi
   '';
 
   env.MODELS_DEV_API_JSON = "${models-dev}/dist/_api.json";
