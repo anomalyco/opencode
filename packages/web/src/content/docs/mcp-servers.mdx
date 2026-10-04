@@ -510,3 +510,34 @@ Alternatively, you can add something like this to your [AGENTS.md](/docs/rules/)
 ```md title="AGENTS.md"
 If you are unsure how to do something, use `gh_grep` to search code examples from GitHub.
 ```
+
+---
+
+### Silicon Valley Atlas
+
+Add [Silicon Valley Atlas](https://svatlas.io) to search sourced startup and founder profiles and manage your outreach lists.
+
+```json title="opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "svatlas": {
+      "type": "remote",
+      "url": "https://svatlas.io/mcp",
+      "enabled": true
+    }
+  }
+}
+```
+
+Authenticate with your Atlas Google account:
+
+```bash
+opencode mcp auth svatlas
+```
+
+Atlas currently restricts Google sign-in to its test users. Meaning search and product matching count toward your account's monthly quota. List changes apply to your signed-in account.
+
+```text
+Find two startups building accounts payable automation. Use svatlas.
+```
