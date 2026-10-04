@@ -1,11 +1,16 @@
 import { InputRenderable } from "@opentui/core"
-import { expect, test } from "bun:test"
+import { beforeEach, expect, test } from "bun:test"
 import { mkdir, symlink } from "node:fs/promises"
 import path from "node:path"
+import { takeDraft } from "../src/component/prompt/draft-stash"
 import { createAppFixture } from "./fixture/app"
 import { tmpdir } from "./fixture/fixture"
 
 type Fixture = Awaited<ReturnType<typeof createAppFixture>>
+
+beforeEach(() => {
+  takeDraft(undefined)
+})
 
 test("setup layers before and after await reach keyboard, palette, and slash across disable and enable", async () => {
   await using plugin = await copyPlugin()
