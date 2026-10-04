@@ -989,6 +989,9 @@ const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
   return messages
 })
 
+// TODO: Move per-model capability heuristics (`supportsEffortUpdates`, `supportsNativeSystemUpdates`,
+// `supportsThinkingBlockBinding`) into explicit model/provider `compatibility` metadata so the protocol
+// only reads `request.model.compatibility`.
 // Per-turn effort started with Claude Opus 5 and every Claude 5.1 model; later versions of any family inherit it.
 const supportsEffortUpdates = (model: LLMRequest["model"]) => {
   const override = model.compatibility?.supportsEffortUpdates
