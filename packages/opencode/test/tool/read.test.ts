@@ -396,6 +396,30 @@ describe("tool.read truncation", () => {
     }),
   )
 
+  it.instance("does not report a partial byte-capped scan as the total line count", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* put(path.join(test.directory, "capped-lines.txt"), `${"x".repeat(100)}\n`.repeat(1000))
+
+      const result = yield* run({ filePath: path.join(test.directory, "capped-lines.txt") })
+      expect(result.metadata.truncated).toBe(true)
+      expect(result.output).toContain("Output capped at")
+      expect(result.metadata.display).toMatchObject({ type: "file", lineStart: 1, truncated: true })
+      expect(result.metadata.display).not.toHaveProperty("totalLines")
+    }),
+  )
+
+  it.instance("reports the exact total line count after a complete limited scan", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      yield* put(path.join(test.directory, "limited-lines.txt"), "line\n".repeat(1000))
+
+      const result = yield* run({ filePath: path.join(test.directory, "limited-lines.txt"), limit: 10 })
+      expect(result.metadata.display).toMatchObject({ lineEnd: 10, totalLines: 1000, truncated: true })
+      expect(result.output).toContain("Showing lines 1-10 of 1000")
+    }),
+  )
+
   it.live("respects offset parameter", () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()

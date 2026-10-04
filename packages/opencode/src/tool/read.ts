@@ -50,7 +50,7 @@ type Display =
       text: string
       lineStart: number
       lineEnd: number
-      totalLines: number
+      totalLines?: number
       truncated: boolean
     }
 
@@ -369,7 +369,7 @@ export const ReadTool = Tool.define<
             text: file.raw.join("\n"),
             lineStart: file.offset,
             lineEnd: last,
-            totalLines: file.count,
+            ...(file.cut ? {} : { totalLines: file.count }),
             truncated,
           },
         },
