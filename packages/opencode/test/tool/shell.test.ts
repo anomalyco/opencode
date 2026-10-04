@@ -1196,4 +1196,30 @@ describe("tool.shell truncation", () => {
       }),
     ),
   )
+
+  it.live("prunes noisy test output while preserving full raw log on disk", () =>
+    runIn(
+      projectRoot,
+      Effect.gen(function* () {
+        const code = "for (let i = 1; i <= 200; i++) console.log(\"✓ suite > test_\" + i + \" passed [1ms]\"); console.log(\"FAIL: suite > critical_failure\"); console.log(\"  Error: Expected true, got false\"); console.log(\"    at test_fn (/app/test.ts:42:10)\"); console.log(\" 200 pass\"); console.log(\" 1 fail\");"
+        const result = yield* run({
+          command: `${bin} -e ${evalarg(code)}`,
+        })
+
+        mustTruncate(result)
+        expect(result.output).toContain("critical_failure")
+        expect(result.output).toContain("at test_fn (/app/test.ts:42:10)")
+        expect(result.output).toContain("pruned 190 passing tests")
+
+        const filepath = (result.metadata as { outputPath?: string }).outputPath
+        expect(filepath).toBeTruthy()
+
+        const fs = yield* FSUtil.Service
+        const saved = yield* fs.readFileString(filepath!)
+        expect(saved).toContain("test_1 passed")
+        expect(saved).toContain("test_200 passed")
+        expect(saved).toContain("critical_failure")
+      }),
+    ),
+  )
 })

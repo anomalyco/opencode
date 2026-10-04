@@ -16,6 +16,7 @@ import { Shell } from "@opencode-ai/core/shell"
 import { ShellID } from "./shell/id"
 
 import * as Truncate from "./truncate"
+import { TerminalPruner } from "@opencode-ai/core/util/terminal-pruner"
 import { Plugin } from "@/plugin"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
@@ -566,7 +567,21 @@ export const ShellTool = Tool.define(
       }
       if (aborted) meta.push("User aborted the command")
       const raw = list.map((item) => item.text).join("")
-      const end = tail(raw, limits.maxLines, limits.maxBytes)
+      const targetLines = Math.min(limits.maxLines, 80)
+      const pruneResult = TerminalPruner.prune(raw, {
+        maxLines: targetLines,
+        command: input.command,
+      })
+
+      if (pruneResult.pruned) {
+        cut = true
+        if (!file) {
+          file = yield* trunc.write(raw)
+        }
+      }
+
+      const effectiveText = pruneResult.pruned ? pruneResult.content : raw
+      const end = tail(effectiveText, limits.maxLines, limits.maxBytes)
       if (end.cut) cut = true
       if (!file && end.cut) {
         file = yield* trunc.write(raw)
