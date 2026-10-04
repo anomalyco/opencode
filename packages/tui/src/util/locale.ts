@@ -25,6 +25,23 @@ export function number(num: number): string {
   return num.toString()
 }
 
+/**
+ * Renders a USD amount.
+ * Amounts of at least one cent keep two decimals.
+ * Smaller amounts collapse to one truncated (never rounded-up) significant digit, since
+ * sub-cent steps are dominated by noise.
+ * `undefined` renders as an em dash; non-positive or non-finite values render as `$0.00`.
+ */
+export function formatCost(cost: number | undefined): string {
+  if (cost === undefined) return "—"
+  if (!(cost > 0)) return "$0.00"
+  if (cost >= 0.01) return `$${cost.toFixed(2)}`
+  const decimals = Math.floor(-Math.log10(cost)) + 1
+  const factor = 10 ** decimals
+  // Truncate toward zero so a step never reads as costing more than it did.
+  return `$${(Math.trunc(cost * factor) / factor).toFixed(decimals).replace(/0+$/, "")}`
+}
+
 export function duration(input: number) {
   if (input < 1000) {
     return `${input}ms`
@@ -50,6 +67,13 @@ export function duration(input: number) {
 export function truncate(str: string, len: number): string {
   if (str.length <= len) return str
   return str.slice(0, len - 1) + "…"
+}
+
+/** Center `text` within `width` columns, biasing the extra padding right. */
+export function padCenter(text: string, width: number) {
+  const padding = Math.max(0, width - text.length)
+  const left = Math.floor(padding / 2)
+  return " ".repeat(left) + text + " ".repeat(padding - left)
 }
 
 const graphemeSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" })
