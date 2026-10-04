@@ -21,6 +21,14 @@ test("managed service ports are stable per installation channel", () => {
   expect(ServiceConfig.defaultPort("preview-a")).not.toBe(ServiceConfig.defaultPort("preview-b"))
 })
 
+test("managed service ports inside WSL are stable per distro and leave the host port free", () => {
+  expect(ServiceConfig.defaultPort("dev", "Debian")).toBe(ServiceConfig.defaultPort("latest", "Debian"))
+  expect(ServiceConfig.defaultPort("next", "Debian")).toBe(ServiceConfig.defaultPort("latest", "Debian"))
+  expect(ServiceConfig.defaultPort("latest", "Debian")).not.toBe(ServiceConfig.defaultPort("latest"))
+  expect(ServiceConfig.defaultPort("latest", "Debian")).not.toBe(ServiceConfig.defaultPort("latest", "Ubuntu"))
+  expect(ServiceConfig.defaultPort("latest", "Debian")).not.toBe(ServiceConfig.defaultPort("local", "Debian"))
+})
+
 test("service disabled accepts only booleans without changing configuration on invalid input", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-disabled-config-"))
   const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
