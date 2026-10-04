@@ -12,6 +12,7 @@ import { Ripgrep } from "../ripgrep"
 import { RelativePath } from "../schema"
 import { SemanticEmbedder } from "../semantic/embedder"
 import { SemanticCache } from "../semantic/cache"
+import { hybridRank } from "../semantic/rrf"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
@@ -265,6 +266,7 @@ const layer = Layer.effectDiscard(
                 const vec = cachedMap.get(hash)
                 const score = vec ? SemanticEmbedder.cosineSimilarity(queryVector, vec) : 0
                 return {
+                  id: `${chunk.relativePath}:${chunk.startLine}-${chunk.endLine}`,
                   path: chunk.relativePath,
                   startLine: chunk.startLine,
                   endLine: chunk.endLine,
@@ -273,9 +275,22 @@ const layer = Layer.effectDiscard(
                 }
               })
 
-              // Sort by descending similarity score
-              scoredChunks.sort((a, b) => b.score - a.score)
-              return scoredChunks.slice(0, limit)
+              // Fuse dense similarity and lexical query matching via RRF
+              const ranked = hybridRank({
+                query: input.query,
+                candidates: scoredChunks,
+                idFn: (c) => c.id,
+                textFn: (c) => c.snippet,
+                denseScoreFn: (c) => c.score,
+              })
+
+              return ranked.slice(0, limit).map((r) => ({
+                path: r.item.path,
+                startLine: r.item.startLine,
+                endLine: r.item.endLine,
+                score: r.item.score,
+                snippet: r.item.snippet,
+              }))
             }).pipe(Effect.mapError(() => new ToolFailure({ message: `Semantic search failed for: ${input.query}` }))),
         }),
       })
