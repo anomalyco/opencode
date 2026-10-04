@@ -1460,7 +1460,7 @@ export function make(options: ClientOptions) {
     project: {
       list: (requestOptions?: RequestOptions) =>
         request<ProjectListOutput>(
-          { method: "GET", path: `/api/project`, successStatus: 200, declaredStatuses: [400, 401, 404], empty: false },
+          { method: "GET", path: `/api/project`, successStatus: 200, declaredStatuses: [400, 401], empty: false },
           requestOptions,
         ),
       update: (input: ProjectUpdateInput, requestOptions?: RequestOptions) =>
