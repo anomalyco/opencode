@@ -9,6 +9,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { Instruction } from "../session/instruction"
 import { isPdfAttachment, sniffAttachmentMime } from "@/util/media"
+import { Skeleton } from "../skeleton"
 
 const DEFAULT_READ_LIMIT = 2000
 const MAX_LINE_LENGTH = 2000
@@ -32,6 +33,10 @@ export const Parameters = Schema.Struct({
   }),
   limit: Schema.optional(NonNegativeInt).annotate({
     description: "The maximum number of lines to read (defaults to 2000)",
+  }),
+  view: Schema.optional(Schema.Literals(["full", "skeleton"])).annotate({
+    description:
+      "When set to 'skeleton', extracts interfaces, types and function/method signatures, omitting implementation bodies. Recommended for large files to save tokens.",
   }),
 })
 
@@ -72,6 +77,7 @@ export const ReadTool = Tool.define<
     const instruction = yield* Instruction.Service
     const lsp = yield* LSP.Service
     const scope = yield* Scope.Scope
+    const skeleton = yield* Effect.serviceOption(Skeleton.Service)
 
     const miss = Effect.fn("ReadTool.miss")(function* (filepath: string) {
       const dir = path.dirname(filepath)
@@ -326,6 +332,48 @@ export const ReadTool = Tool.define<
 
       if (isBinaryFile(filepath, sample)) {
         return yield* Effect.fail(new Error(`Cannot read binary file: ${filepath}`))
+      }
+
+      if (params.view === "skeleton" && Option.isSome(skeleton) && skeleton.value.supports(filepath)) {
+        const content = yield* fs.readFileString(filepath)
+        const pruned = yield* skeleton.value.prune(filepath, content)
+        if (pruned.pruned) {
+          const rawLines = pruned.content.split("\n")
+          let output = [
+            `<path>${filepath}</path>`,
+            `<type>file</type>`,
+            `<view>skeleton</view>`,
+            "<content>\n",
+          ].join("\n")
+          output += rawLines.map((line, i) => `${i + 1}: ${line}`).join("\n")
+          output += `\n\n(Showing skeleton outline: ${pruned.skeletonLines} lines vs original ${pruned.originalLines} lines)`
+          output += "\n</content>"
+
+          yield* warm(filepath)
+
+          if (loaded.length > 0) {
+            output += `\n\n<system-reminder>\n${loaded.map((item) => item.content).join("\n\n")}\n</system-reminder>`
+          }
+
+          return {
+            title,
+            output,
+            metadata: {
+              preview: rawLines.slice(0, 20).join("\n"),
+              truncated: false,
+              loaded: loaded.map((item) => item.filepath),
+              display: {
+                type: "file" as const,
+                path: filepath,
+                text: pruned.content,
+                lineStart: 1,
+                lineEnd: rawLines.length,
+                totalLines: rawLines.length,
+                truncated: false,
+              },
+            },
+          }
+        }
       }
 
       const file = yield* lines(filepath, { limit: params.limit ?? DEFAULT_READ_LIMIT, offset: params.offset || 1 })
