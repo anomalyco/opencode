@@ -35,6 +35,7 @@ test("compact rail renders and controls session tabs", async () => {
       setItems((items) => moveSessionTab(items, sessionID, index))
     },
     detail: () => "project-alpha",
+    directory: () => "/repo/alpha",
     status: (sessionID: string) => (sessionID === "second" ? status() : EMPTY_SESSION_TAB_STATUS),
   } satisfies SessionTabsController
   const app = await testRender(
@@ -73,30 +74,31 @@ test("compact rail renders and controls session tabs", async () => {
     ).toEqual([
       "▄▄▄▄▄",
       "  ⌕  ",
+      "     ",
+      "  +  ",
+      "     ",
+      "▾...a",
       "▄▄▄▄▄",
       "  F  ",
       "▀▀▀▀▀",
       "  S  ",
       "     ",
-      "  T  ",
-      "     ",
-      "  +  ",
-      "     ",
     ])
+    expect(app.captureCharFrame().split("\n")[11].slice(0, 5)).toBe("  T  ")
     expect(app.captureCharFrame().split("\n")[0].indexOf("transcript")).toBe(5)
     expect(app.captureCharFrame()).not.toContain("First session")
     expect(
-      app.captureSpans().lines[3].spans.find((span) => span.text.trim() === "F")!.attributes & TextAttributes.BOLD,
+      app.captureSpans().lines[7].spans.find((span) => span.text.trim() === "F")!.attributes & TextAttributes.BOLD,
     ).toBe(TextAttributes.BOLD)
 
     setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true })
-    await app.waitForFrame((frame) => frame.split("\n")[5].slice(0, 5).trim() === SPINNER_FRAMES[0])
+    await app.waitForFrame((frame) => frame.split("\n")[9].slice(0, 5).trim() === SPINNER_FRAMES[0])
     setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true, attention: "question" })
-    await app.waitForFrame((frame) => frame.split("\n")[5].slice(0, 5).trim() === "?")
+    await app.waitForFrame((frame) => frame.split("\n")[9].slice(0, 5).trim() === "?")
 
     setIndicators("numbers")
-    await app.waitForFrame((frame) => frame.split("\n")[5].slice(0, 5).trim() === "2")
-    expect([3, 5, 7].map((row) => app.captureCharFrame().split("\n")[row].slice(0, 5).trim())).toEqual([
+    await app.waitForFrame((frame) => frame.split("\n")[9].slice(0, 5).trim() === "2")
+    expect([7, 9, 11].map((row) => app.captureCharFrame().split("\n")[row].slice(0, 5).trim())).toEqual([
       "1",
       "2",
       "3",
@@ -104,7 +106,7 @@ test("compact rail renders and controls session tabs", async () => {
     setIndicators("status")
     setStatus(EMPTY_SESSION_TAB_STATUS)
 
-    await app.mockMouse.moveTo(2, 5)
+    await app.mockMouse.moveTo(2, 9)
     await app.waitForFrame((frame) => frame.includes("Second session") && frame.includes("project-alpha"))
     expect(active()).toBe("first")
     await app.mockMouse.moveTo(10, 0)
@@ -112,7 +114,15 @@ test("compact rail renders and controls session tabs", async () => {
 
     await app.mockMouse.click(2, 1)
     expect(searches()).toBe(1)
-    await app.mockMouse.drag(2, 3, 2, 7)
+    // Settle a frame per drag step so every position lands: a burst of drag
+    // events can drop moves mid-gesture before the preview catches up.
+    await app.mockMouse.pressDown(2, 7)
+    await app.mockMouse.moveTo(2, 9)
+    await app.renderOnce()
+    await app.mockMouse.moveTo(2, 11)
+    await app.renderOnce()
+    await app.mockMouse.release(2, 11)
+    await app.renderOnce()
     expect(items().map((tab) => tab.sessionID)).toEqual(["second", "third", "first"])
 
     setItems(Array.from({ length: 40 }, (_, index) => ({ sessionID: `tab-${index + 1}`, title: `Session ${index + 1}` })))

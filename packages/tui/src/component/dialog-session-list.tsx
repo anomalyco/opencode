@@ -22,7 +22,7 @@ import { useSessionTabs } from "../context/session-tabs"
 import { useStorage } from "../context/storage"
 import { useConfig } from "../config"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
-import { projectName } from "../util/project"
+import { directoryKey, projectName } from "../util/project"
 import { useLocation } from "../context/location"
 
 export function DialogSessionList() {
@@ -140,7 +140,6 @@ export function DialogSessionList() {
   })
 
   const options = createMemo(() => {
-    const today = new Date().toDateString()
     const sessionMap = new Map(
       sessions()
         .filter((session) => !session.parentID)
@@ -182,10 +181,7 @@ export function DialogSessionList() {
 
     const remaining = sessions()
       .filter((session) => !session.parentID && !pinnedSet.has(session.id))
-      .map((session) => {
-        const date = new Date(session.time.updated).toDateString()
-        return option(session, date === today ? "Today" : date)
-      })
+      .map((session) => option(session, directoryKey(session.location.directory)))
 
     return [...pinned.map((sessionID) => option(sessionMap.get(sessionID)!, "Pinned")), ...remaining]
   })

@@ -142,7 +142,11 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         await app.waitForFrame((frame) => frame.includes(`${state.label.padStart(2)} First`))
         const rows = app.captureCharFrame().split("\n")
         expect(rows.find((line) => line.includes("First"))!.indexOf("First")).toBe(titleColumn)
-        expect(rows[orientation === "vertical" ? 2 : 1]?.trim()).toBe(orientation === "vertical" ? "project" : "")
+        expect(
+          orientation === "vertical"
+            ? rows[rows.findIndex((line) => line.includes("First")) + 1]?.trim()
+            : rows[1]?.trim(),
+        ).toBe(orientation === "vertical" ? "project" : "")
       }
 
       for (const attention of ["question", "permission"] as const) {
@@ -156,11 +160,15 @@ for (const orientation of ["horizontal", "vertical"] as const) {
             .find((span) => span.text.trim() === (attention === "question" ? "?" : "!"))?.fg
         expect(indicatorColor()?.toInts()).toEqual(theme.hue.accent[200].toInts())
         const glow = () => {
-          const colors = app
-            .captureSpans()
-            .lines[
-              orientation === "vertical" ? 1 : 0
-            ]!.spans.flatMap((span) => Array.from({ length: span.width }, () => span.bg))
+          const lines = app.captureSpans().lines
+          const titleLine =
+            orientation === "vertical"
+              ? Math.max(
+                  0,
+                  lines.findIndex((line) => line.spans.map((span) => span.text).join("").includes("First")),
+                )
+              : 0
+          const colors = lines[titleLine]!.spans.flatMap((span) => Array.from({ length: span.width }, () => span.bg))
           return (
             Math.abs(colors[1]!.r - colors[18]!.r) +
             Math.abs(colors[1]!.g - colors[18]!.g) +
@@ -189,7 +197,12 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         expect(color?.toInts()).toEqual(
           (unread === "error" ? theme.text.feedback.error.base : theme.hue.accent[200]).toInts(),
         )
-        await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
+        await app.mockMouse.click(
+          1,
+          orientation === "vertical"
+            ? app.captureCharFrame().split("\n").findIndex((line) => line.includes("First"))
+            : 0,
+        )
         await app.renderOnce()
         expect(active()).toBe("first")
         expect(status().unread).toBeUndefined()
