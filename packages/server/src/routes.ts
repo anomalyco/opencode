@@ -183,12 +183,7 @@ function makeRoutes<AuthError, AuthServices>(
   )
 }
 
-/**
- * MCP servers identify the client by `clientInfo.name`. Always report "opencode" so
- * servers can recognize it regardless of artifact (cli, desktop, acp, sdk). `app.name`
- * carries that artifact for telemetry and must not leak into the MCP handshake.
- * `OPENCODE_CLIENT` remains an explicit override for anyone who needs a different name.
- */
+// MCP servers key on clientInfo.name, so default to "opencode", not the app artifact. OPENCODE_CLIENT overrides.
 export function mcpClientInfo(app: ServerOptions["app"]) {
   return {
     name: process.env.OPENCODE_CLIENT ?? "opencode",
