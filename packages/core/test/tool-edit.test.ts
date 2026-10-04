@@ -409,6 +409,74 @@ describe("EditTool", () => {
       (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
     ),
   )
+
+  it.live("enriches disambiguation error with surrounding lines in multi-line files", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "multiline.txt")
+        const code = [
+          "function first() {",
+          "  return validate()",
+          "}",
+          "function second() {",
+          "  return validate()",
+          "}",
+        ].join("\n")
+        return Effect.promise(() => fs.writeFile(target, code)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const res = yield* executeTool(
+                  registry,
+                  call({ path: "multiline.txt", oldString: "  return validate()", newString: "  return true" }),
+                )
+                expect(res.type).toBe("error")
+                if (res.type === "error") {
+                  expect(res.value).toContain("Found multiple exact matches for oldString")
+                  expect(res.value).toContain("Match 1 at line 2")
+                  expect(res.value).toContain("Match 2 at line 5")
+                  expect(res.value).toContain("function first()")
+                  expect(res.value).toContain("function second()")
+                }
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
+  it.live("applies fuzzy line-trimmed match when trailing whitespace differs", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const target = path.join(tmp.path, "trailing.txt")
+        // File has trailing space after rate = 0.21;
+        const code = "function tax() {\n  const rate = 0.21;   \n  return rate;\n}"
+        return Effect.promise(() => fs.writeFile(target, code)).pipe(
+          Effect.andThen(
+            withTool(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                // Model sends target without trailing space
+                const res = yield* executeTool(
+                  registry,
+                  call({ path: "trailing.txt", oldString: "  const rate = 0.21;", newString: "  const rate = 0.25;" }),
+                )
+                expect(res.type).toBe("text")
+                const updated = yield* Effect.promise(() => fs.readFile(target, "utf8"))
+                expect(updated).toContain("const rate = 0.25;")
+              }),
+            ),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
 })
 
 test("keeps the locked edit schema, semantics docstring, and deferred TODOs visible", async () => {

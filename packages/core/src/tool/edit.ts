@@ -18,6 +18,7 @@ import { PermissionV2 } from "../permission"
 import { ToolRegistry } from "./registry"
 import { Tool } from "./tool"
 import { Tools } from "./tools"
+import { PatchOptimizer } from "./patch-optimizer"
 
 export const name = "edit"
 
@@ -160,22 +161,32 @@ const layer = Layer.effectDiscard(
                 )
                 const source = decodeUtf8(yield* unableToEdit(fs.readFile(target.canonical)))
                 const ending = detectLineEnding(source.text)
-                const oldString = convertToLineEnding(input.oldString, ending)
-                const newString = convertToLineEnding(input.newString, ending)
-                const replacements = countOccurrences(source.text, oldString)
+                let oldString = convertToLineEnding(input.oldString, ending)
+                let newString = convertToLineEnding(input.newString, ending)
+                let replacements = countOccurrences(source.text, oldString)
                 if (replacements === 0) {
-                  return yield* new ToolFailure({
-                    message:
-                      "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
-                  })
+                  const fuzzy = PatchOptimizer.fuzzyLineTrimMatch(source.text, oldString)
+                  if (fuzzy.matched && fuzzy.actualSubstring) {
+                    oldString = fuzzy.actualSubstring
+                    replacements = 1
+                  } else {
+                    return yield* new ToolFailure({
+                      message:
+                        "Could not find oldString in the file. It must match exactly, including whitespace and indentation.",
+                    })
+                  }
                 }
                 if (replacements > 1 && input.replaceAll !== true) {
+                  const occurrences = PatchOptimizer.findOccurrencesWithContext(source.text, oldString)
+                  const disambiguation = PatchOptimizer.formatDisambiguationPrompt(occurrences, oldString)
                   return yield* new ToolFailure({
-                    message:
-                      "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
+                    message: disambiguation
+                      ? `Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.\n\n${disambiguation}`
+                      : "Found multiple exact matches for oldString. Provide more surrounding context or set replaceAll to true.",
                   })
                 }
 
+                newString = PatchOptimizer.cleanTrailingWhitespace(newString)
                 const replaced =
                   input.replaceAll === true
                     ? source.text.replaceAll(oldString, newString)
