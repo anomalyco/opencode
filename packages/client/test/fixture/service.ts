@@ -91,6 +91,10 @@ const server = Bun.serve({
   },
 })
 
+// Install handlers before publishing: a test may signal as soon as the registration appears.
+process.on("SIGTERM", () => void shutdown("SIGTERM"))
+process.on("SIGINT", () => void shutdown("SIGINT"))
+
 await writeFile(
   registration + ".tmp",
   JSON.stringify({
@@ -115,5 +119,3 @@ async function shutdown(signal?: NodeJS.Signals) {
   server.stop(true)
   process.exit()
 }
-process.on("SIGTERM", () => void shutdown("SIGTERM"))
-process.on("SIGINT", () => void shutdown("SIGINT"))
