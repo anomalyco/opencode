@@ -392,6 +392,36 @@ describe("BashTool", () => {
     ),
   )
 
+  it.live("prunes verbose command output on CPU while preserving failure details", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => tmpdir()),
+      (tmp) => {
+        reset()
+        const noise = Array.from({ length: 120 }, (_, i) => `✓ test_case_${i} passed [0.1ms]`).join("\n")
+        const failure = "✕ test_critical failed\n  AssertionError: expected true to be false"
+        result = {
+          ...result,
+          exitCode: 1,
+          output: Buffer.from(`Test Suite\n${noise}\n${failure}\n\n1 failed, 120 passed`),
+        }
+        return withTool(tmp.path, (registry) => settleTool(registry, call({ command: "bun test" }))).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(settled.output?.structured).toMatchObject({
+                exit: 1,
+                truncated: true,
+              })
+              const text = (settled.output?.content[0] as { text: string }).text
+              expect(text).toContain("pruned")
+              expect(text).toContain("✕ test_critical failed")
+            }),
+          ),
+        )
+      },
+      (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+    ),
+  )
+
   it.live("returns a useful timeout settlement", () =>
     Effect.acquireUseRelease(
       Effect.promise(() => tmpdir()),
