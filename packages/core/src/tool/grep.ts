@@ -15,6 +15,7 @@ import { Tool } from "./tool"
 import { Tools } from "./tools"
 
 export const name = "grep"
+export const DEFAULT_LIMIT = 100
 
 export const Input = Schema.Struct({
   pattern: FileSystem.GrepInput.fields.pattern.annotate({
@@ -27,7 +28,7 @@ export const Input = Schema.Struct({
     description: 'File glob to include in the search (for example, "*.js" or "*.{ts,tsx}")',
   }),
   limit: FileSystem.GrepInput.fields.limit.annotate({
-    description: "Maximum matches to return",
+    description: `Maximum matches to return. Defaults to ${DEFAULT_LIMIT}.`,
   }),
 })
 
@@ -35,7 +36,7 @@ export const Output = Schema.Array(FileSystem.Match)
 type ModelOutput = typeof Output.Encoded
 
 /** Format raw search matches into the familiar concise model output. */
-export const toModelOutput = (output: ModelOutput) => {
+export const toModelOutput = (output: ModelOutput, limit?: number) => {
   const lines = output.length === 0 ? ["No files found"] : [`Found ${output.length} matches`]
   let current = ""
   for (const match of output) {
@@ -45,6 +46,9 @@ export const toModelOutput = (output: ModelOutput) => {
       lines.push(`${match.entry.path}:`)
     }
     lines.push(`  Line ${match.line}: ${match.text}`)
+  }
+  if (limit !== undefined && output.length >= limit) {
+    lines.push(`\n[Results bounded at limit of ${limit} matches. Narrow search with path or include to see more.]`)
   }
   return lines.join("\n")
 }
@@ -65,7 +69,7 @@ const layer = Layer.effectDiscard(
             "Search file contents by regular expression within the active Location or an absolute managed tool-output file. Use a path to narrow the search, include to filter files by glob, and limit to bound the match count. Returns concise file resources, line numbers, and bounded line previews.",
           input: Input,
           output: Output,
-          toModelOutput: ({ output }) => [
+          toModelOutput: ({ input, output }) => [
             {
               type: "text",
               text: toModelOutput(
@@ -73,11 +77,13 @@ const layer = Layer.effectDiscard(
                   ...match,
                   entry: { ...match.entry, path: path.resolve(location.directory, match.entry.path) },
                 })),
+                input.limit ?? DEFAULT_LIMIT,
               ),
             },
           ],
           execute: (input, context) =>
             Effect.gen(function* () {
+              const limit = input.limit ?? DEFAULT_LIMIT
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
@@ -86,7 +92,7 @@ const layer = Layer.effectDiscard(
                   root: ".",
                   path: input.path,
                   include: input.include,
-                  limit: input.limit,
+                  limit,
                 },
                 sessionID: context.sessionID,
                 agent: context.agent,
@@ -100,7 +106,7 @@ const layer = Layer.effectDiscard(
                   pattern: input.pattern,
                   file: info?.type === "File" ? path.basename(target) : undefined,
                   include: input.include,
-                  limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                  limit,
                 })
                 .pipe(
                   Effect.map((result) =>

@@ -14,6 +14,7 @@ import { Tool } from "./tool"
 import { Tools } from "./tools"
 
 export const name = "glob"
+export const DEFAULT_LIMIT = 100
 
 export const Input = Schema.Struct({
   pattern: FileSystem.GlobInput.fields.pattern.annotate({ description: "Glob pattern to match files against" }),
@@ -21,7 +22,7 @@ export const Input = Schema.Struct({
     description: "Relative directory to search. Defaults to the active Location.",
   }),
   limit: FileSystem.GlobInput.fields.limit.annotate({
-    description: "Maximum results to return",
+    description: `Maximum results to return. Defaults to ${DEFAULT_LIMIT}.`,
   }),
 })
 
@@ -29,8 +30,11 @@ export const Output = Schema.Array(FileSystem.Entry)
 type ModelOutput = typeof Output.Encoded
 
 /** Format raw search results into the concise line-oriented output models expect. */
-export const toModelOutput = (output: ModelOutput) => {
+export const toModelOutput = (output: ModelOutput, limit?: number) => {
   const lines = output.length === 0 ? ["No files found"] : output.map((item) => item.path)
+  if (limit !== undefined && output.length >= limit) {
+    lines.push(`\n[Results bounded at limit of ${limit} files. Narrow search with a more specific path or pattern.]`)
+  }
   return lines.join("\n")
 }
 
@@ -49,16 +53,18 @@ const layer = Layer.effectDiscard(
             "Find files by glob pattern within the active Location. Returns concise relative file resources. Use a relative path to narrow the search and limit to bound the result count.",
           input: Input,
           output: Output,
-          toModelOutput: ({ output }) => [
+          toModelOutput: ({ input, output }) => [
             {
               type: "text",
               text: toModelOutput(
                 output.map((entry) => ({ ...entry, path: path.resolve(location.directory, entry.path) })),
+                input.limit ?? DEFAULT_LIMIT,
               ),
             },
           ],
           execute: (input, context) =>
             Effect.gen(function* () {
+              const limit = input.limit ?? DEFAULT_LIMIT
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
@@ -66,7 +72,7 @@ const layer = Layer.effectDiscard(
                 metadata: {
                   root: input.path ?? ".",
                   path: input.path,
-                  limit: input.limit,
+                  limit,
                 },
                 sessionID: context.sessionID,
                 agent: context.agent,
@@ -77,7 +83,7 @@ const layer = Layer.effectDiscard(
                 .glob({
                   cwd,
                   pattern: input.pattern,
-                  limit: input.limit ?? Number.MAX_SAFE_INTEGER,
+                  limit,
                 })
                 .pipe(
                   Effect.map((result) =>
