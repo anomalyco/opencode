@@ -16,6 +16,7 @@ import { SessionID, MessageID } from "../../src/session/schema"
 import { Instruction } from "../../src/session/instruction"
 import { ReadTool } from "../../src/tool/read"
 import { Truncate } from "@/tool/truncate"
+import { Skeleton } from "@/skeleton"
 import { Tool } from "@/tool/tool"
 import { Filesystem } from "@/util/filesystem"
 import {
@@ -54,6 +55,7 @@ const readLayer = (flags: Partial<RuntimeFlags.Info> = {}) =>
       LSP.node,
       Ripgrep.node,
       Truncate.node,
+      Skeleton.node,
     ]),
   )
 
@@ -633,6 +635,49 @@ describe("tool.read telemetry metrics", () => {
       expect(result.metadata.telemetry?.chars).toBe(result.output.length)
       expect(result.metadata.telemetry?.lines).toBe(2)
       expect(result.metadata.telemetry?.estimatedTokens).toBeGreaterThan(0)
+    }),
+  )
+})
+
+describe("tool.read skeleton view", () => {
+  it.live("returns pruned skeleton when view is 'skeleton'", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const code = `export interface User {
+  id: string
+}
+
+export class Service {
+  process(data: string): boolean {
+    const a = 1
+    const b = 2
+    return a + b > 0
+  }
+}
+`
+      yield* put(path.join(dir, "service.ts"), code)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "service.ts"), view: "skeleton" })
+      expect(result.output).toContain("<view>skeleton</view>")
+      expect(result.output).toContain("export interface User")
+      expect(result.output).toContain("process(data: string): boolean { /* body omitted */ }")
+      expect(result.output).not.toContain("const a = 1")
+    }),
+  )
+
+  it.live("returns full content when view is omitted or 'full'", () =>
+    Effect.gen(function* () {
+      const dir = yield* tmpdirScoped()
+      const code = `export function foo(): string {
+  const message = "full content"
+  return message
+}
+`
+      yield* put(path.join(dir, "foo.ts"), code)
+
+      const result = yield* exec(dir, { filePath: path.join(dir, "foo.ts") })
+      expect(result.output).not.toContain("<view>skeleton</view>")
+      expect(result.output).toContain('const message = "full content"')
     }),
   )
 })
