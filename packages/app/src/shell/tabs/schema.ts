@@ -26,30 +26,28 @@ export const Draft = Persistence.struct({
 
 const SessionCodec = Session.pipe(
   Schema.decodeTo(Schema.toType(Session), {
-    decode: SchemaGetter.transform((tab) => ({
-      type: tab.type,
-      server: tab.server,
-      sessionId: tab.sessionId,
-      ...(tab.routeSessionId && tab.routeSessionId !== tab.sessionId
-        ? { routeSessionId: tab.routeSessionId, ...(tab.routeParentId ? { routeParentId: tab.routeParentId } : {}) }
-        : {}),
-    })),
+    decode: SchemaGetter.transform(withRoute),
     encode: SchemaGetter.transform((tab) => tab),
   }),
 )
 
 export const Tab = Schema.Union([Session, Draft])
+
 export const Tabs = Persistence.array(Schema.Union([SessionCodec, Draft]))
+
 export const Recent = Persistence.struct({
   key: Schema.optional(Schema.String),
 })
+
 export const Info = Persistence.struct({
   title: Schema.optional(Schema.String),
   directory: Schema.optional(Schema.String),
 })
+
 export const Infos = Schema.Record(Schema.String, Schema.mutableKey(Info))
+
 // The dock and side regions keep the names they were stored under before extensions.
-export const Panes = Schema.Record(
+export const Regions = Schema.Record(
   Schema.String,
   Schema.mutableKey(
     Persistence.struct({
@@ -60,5 +58,18 @@ export const Panes = Schema.Record(
     }).pipe(Schema.encodeKeys({ dock: "terminal", side: "review", dockHeight: "terminalHeight" })),
   ),
 )
+
 export const ClosedTab = Schema.Struct({ tab: SessionCodec, index: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)) })
+
 export const Closed = Persistence.array(ClosedTab)
+
+/** A tab keeps its route only when it differs from the session, and the route's parent only with the route. */
+function withRoute(tab: typeof Session.Type) {
+  const base = { type: tab.type, server: tab.server, sessionId: tab.sessionId }
+
+  if (!tab.routeSessionId || tab.routeSessionId === tab.sessionId) return base
+
+  const routed = { ...base, routeSessionId: tab.routeSessionId }
+
+  return tab.routeParentId ? { ...routed, routeParentId: tab.routeParentId } : routed
+}

@@ -10,4 +10,6 @@ export default {
   "git.description": "Fylg við, kanna og angra broytingar í hesi verkætlan",
   loadingChanges: "Heinta broytingar…",
   noChanges: "Ongar broytingar",
+  "settings.wrapLines.title": "Brót linjur",
+  "settings.wrapLines.description": "Pakka langar linjur inn í fartelefon diffs í staðin fyri at rulla vatnrætt",
 }

@@ -8,7 +8,7 @@ import { TextInput } from "@opencode/ui/text-input"
 import { createMemo, For, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { showToast } from "@opencode/ui/toast"
-import { useExtension, type Context, type RemoteClient } from "../sdk"
+import { useExtension, type Context, type IpcClient } from "../sdk"
 import type { Wsl, WslServersState } from "./contract"
 import { useWslAddServerProbes } from "./probes"
 import { addServerViewModel, type AddServerText } from "./model"
@@ -17,16 +17,18 @@ export { default as css } from "./dialog.css?inline"
 
 function isWslRuntimeMissing(error: string | null | undefined) {
   if (!error) return true
+
   return /WSL is not installed|not been installed|wsl(?:\.exe)? --install/i.test(error)
 }
 
 function translate(language: Context, value: AddServerText) {
   if (value.params) return language.t(value.key, value.params)
+
   return language.t(value.key)
 }
 
 interface DialogWslServerProps {
-  api: RemoteClient<(typeof Wsl)["spec"]> | undefined
+  api: IpcClient<(typeof Wsl)["spec"]> | undefined
   state: WslServersState | undefined
 }
 
@@ -35,9 +37,12 @@ export function DialogAddWslServer(props: DialogWslServerProps) {
   const controller = useWslAddServerController(props)
   const model = controller.model
   const primaryButton = () => model().primaryButton
+
   const primaryButtonStyle = () => {
     const width = primaryButton().width
+
     if (!width) return undefined
+
     return { width }
   }
 
@@ -167,6 +172,7 @@ export function DialogAddWslServer(props: DialogWslServerProps) {
                     <For each={model().addableInstalledDistros}>
                       {(item) => {
                         const status = () => model().distroStatuses[item.name] ?? null
+
                         return (
                           <RadioItem
                             class={`settings-wsl-distro-row${item.version === 1 ? " settings-wsl-distro-row--unsupported" : ""}`}
@@ -245,20 +251,32 @@ export function DialogAddWslServer(props: DialogWslServerProps) {
 function useWslAddServerController(props: DialogWslServerProps) {
   const language = useExtension()
   const dialog = useDialog()
+
   // Without its main side, WSL reads as unavailable and every action fails, as when the desktop could not start it.
   const api = () => {
     const client = props.api
+
     if (!client) throw new Error(language.t("error.unavailable"))
+
     return client
   }
-  const [store, setStore] = createStore({
-    view: "main" as "main" | "catalog",
-    selectedDistro: null as string | null,
+
+  const [store, setStore] = createStore<{
+    view: "main" | "catalog"
+    selectedDistro: string | null
+    catalogSearch: string
+    catalogTarget: string | null
+    adding: boolean
+  }>({
+    view: "main",
+    selectedDistro: null,
     catalogSearch: "",
-    catalogTarget: null as string | null,
+    catalogTarget: null,
     adding: false,
   })
+
   const current = createMemo(() => (props.api ? props.state : unavailable(language.t("error.unavailable"))))
+
   const viewModel = (probingAddable: boolean) =>
     addServerViewModel({
       state: current(),
@@ -269,7 +287,9 @@ function useWslAddServerController(props: DialogWslServerProps) {
       adding: store.adding,
       probingAddable,
     })
+
   const baseModel = createMemo(() => viewModel(false))
+
   const probes = useWslAddServerProbes({
     state: current,
     api,
@@ -280,6 +300,7 @@ function useWslAddServerController(props: DialogWslServerProps) {
     addableInstalledDistros: () => baseModel().addableInstalledDistros,
     onError: (error) => requestError(language, error),
   })
+
   const model = createMemo(() => viewModel(probes.probingAddable()))
 
   const openCatalog = () => {
@@ -291,7 +312,7 @@ function useWslAddServerController(props: DialogWslServerProps) {
     })
   }
 
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async <T,>(action: () => Promise<T>) => {
     try {
       await action()
     } catch (err) {
@@ -317,6 +338,7 @@ function useWslAddServerController(props: DialogWslServerProps) {
   const installCatalogDistro = () => {
     if (model().installingCatalogDistro) return
     const name = model().catalogTarget
+
     if (!name) return
     installDistro(name)
   }
@@ -328,15 +350,21 @@ function useWslAddServerController(props: DialogWslServerProps) {
 
   const runPrimary = async () => {
     const button = model().primaryButton
+
     if (button.loading) return
     const distro = model().selectedDistro
     const action = button.action
+
     if (!distro || !action) return
+
     if (action === "install-opencode") {
       await run(() => api().installOpencode({ name: distro }))
+
       return
     }
+
     setStore("adding", true)
+
     try {
       await api().addServer({ distro })
       dialog.close()
@@ -376,15 +404,19 @@ function DialogWslSetup(props: {
 }) {
   const language = useExtension()
   const dialog = useDialog()
+
   const title = () =>
     props.state === "pendingRestart"
       ? language.t("onboarding.restartRequired")
       : props.installable
         ? language.t("onboarding.wslNotInstalled.title")
         : language.t("onboarding.wslUnavailable.title")
+
   const description = () => {
     if (props.state === "pendingRestart") return language.t("onboarding.windowsRestartRequired")
+
     if (!props.installable) return language.t("onboarding.wslUnavailable.description")
+
     return language.t("onboarding.wslNotInstalled.description")
   }
 
@@ -436,12 +468,12 @@ function DialogWslSetup(props: {
   )
 }
 
-function requestError(language: Context, err: unknown) {
-  console.error("WSL servers request failed", err instanceof Error ? (err.stack ?? err.message) : String(err))
+function requestError(language: Context, cause: unknown) {
+  console.error("WSL servers request failed", cause instanceof Error ? (cause.stack ?? cause.message) : String(cause))
   showToast({
     variant: "error",
     title: language.t("common.requestFailed"),
-    description: err instanceof Error ? err.message : String(err),
+    description: cause instanceof Error ? cause.message : String(cause),
   })
 }
 

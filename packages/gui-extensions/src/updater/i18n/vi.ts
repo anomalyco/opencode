@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Bản cập nhật đã sẵn sàng",
   "dialog.restart": "Khởi động lại",
   "dialog.later": "Để sau",
+  "releaseNotes.action.getStarted": "Bắt đầu",
+  "releaseNotes.action.next": "Tiếp theo",
+  "releaseNotes.action.hideFuture": "Không hiển thị lại",
+  "releaseNotes.media.alt": "Xem trước bản phát hành",
 }

@@ -16,12 +16,14 @@ import {
 } from "@/shell/commands/desktop-menu"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useExtensionMenubar } from "@/runtime/extension/menubar"
+import { useMenubarItems } from "@/runtime/extension/menubar-items"
 
 const accelerators = DESKTOP_MENU.flatMap((menu) => menu.items ?? []).flatMap((entry) => {
   if (entry.type === "separator" || !entry.action || !entry.accelerator?.windows) return []
+
   // Let the focused editor handle editing shortcuts without restoring stale menu focus.
   if (entry.action.startsWith("edit.")) return []
+
   return [{ action: entry.action, keybind: parseKeybind(entry.accelerator.windows) }]
 })
 
@@ -35,7 +37,8 @@ export function WindowsAppMenu(props: {
 }) {
   let lastFocused: HTMLElement | undefined
   const language = useLanguage()
-  const menubar = useExtensionMenubar()
+  const menubar = useMenubarItems()
+
   const entries = (menu: DesktopMenu) =>
     desktopMenuWithExtensions(
       (menu.items ?? [])
@@ -48,29 +51,40 @@ export function WindowsAppMenu(props: {
     const active = document.activeElement
     lastFocused = active instanceof HTMLElement ? active : undefined
   }
+
   const commandDisabled = (id: string) => {
     const option = props.command.options.find((option) => option.id === id)
+
     if (!option) return true
+
     return option.disabled ?? false
   }
+
   const runCommand = (id: string) => {
     if (commandDisabled(id)) return
     props.command.trigger(id)
   }
+
   const runAction = (action: DesktopMenuAction) => {
     if (action.startsWith("edit.") && lastFocused?.isConnected) lastFocused.focus({ preventScroll: true })
     void props.platform.runDesktopMenuAction?.(action)
   }
+
   const runEntry = (entry: DesktopMenuEntry) => {
     if (entry.type === "separator") return
+
     if (entry.command) {
       runCommand(entry.command)
+
       return
     }
+
     if (entry.action) {
       runAction(entry.action)
+
       return
     }
+
     if (entry.href) props.platform.openExternal(entry.href)
   }
 
@@ -81,6 +95,7 @@ export function WindowsAppMenu(props: {
       (event) => {
         if (event.defaultPrevented) return
         const action = windowsMenuAccelerator(event)
+
         if (!action) return
         event.preventDefault()
         event.stopPropagation()
@@ -116,6 +131,7 @@ export function WindowsAppMenu(props: {
                   <For each={entries(menu)}>
                     {(item) => {
                       const entry = item.entry
+
                       // Static menu data: an early return keeps the union narrowing a Show fallback would lose.
                       if ("menu" in entry)
                         return (
@@ -125,12 +141,23 @@ export function WindowsAppMenu(props: {
                             onSelect={() => menubar?.run(entry.id)}
                           />
                         )
+
                       if (entry.type === "separator") return <Menu.Separator />
+
+                      // Plain accessors rather than conditional JSX expressions, which compile to memos created
+                      // where the menu reads the prop, possibly outside this owner.
+                      const label = () => (entry.labelKey ? language.t(entry.labelKey) : "")
+
+                      const keybind = () =>
+                        entry.command ? props.command.keybind(entry.command) : entry.accelerator?.windows
+
+                      const disabled = () => (entry.command ? commandDisabled(entry.command) : false)
+
                       return (
                         <DesktopMenuItem
-                          label={entry.labelKey ? language.t(entry.labelKey) : ""}
-                          keybind={entry.command ? props.command.keybind(entry.command) : entry.accelerator?.windows}
-                          disabled={entry.command ? commandDisabled(entry.command) : false}
+                          label={label()}
+                          keybind={keybind()}
+                          disabled={disabled()}
                           onSelect={() => runEntry(entry)}
                         />
                       )

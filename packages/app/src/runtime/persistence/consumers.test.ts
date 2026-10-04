@@ -8,7 +8,6 @@ import { languageSchema } from "@/runtime/i18n/language"
 import { HomeServersSchema } from "@/home/projects/controller"
 import { ModelProvidersSchema } from "@/settings/models/models"
 import { NotificationStore, type Notification } from "@/shell/notifications/notification"
-import { HighlightsStore } from "@/shell/updates/highlights"
 import { IconState, ProjectState, VcsState } from "@/runtime/server/persistence"
 
 function stored<S extends Schema.ConstraintCodec<object, unknown>>(
@@ -16,13 +15,9 @@ function stored<S extends Schema.ConstraintCodec<object, unknown>>(
   schema: S,
   initial: NoInfer<S["Type"]>,
   cases: [unknown, unknown][],
-): {
-  name: string
-  decode: (input: unknown) => unknown
-  encode: (value: unknown) => unknown
-  cases: [unknown, unknown][]
-} {
+) {
   const codec = Persistence.withInitial(schema, initial)
+
   return { name, decode: Schema.decodeUnknownSync(codec), encode: Schema.encodeUnknownSync(codec), cases }
 }
 
@@ -30,6 +25,7 @@ const notifications: Notification[] = [
   { type: "turn-complete", time: 123, viewed: false, session: "session-1" },
   { type: "error", time: 124, viewed: true, error: { type: "api", message: "failed", status: 500 } },
 ]
+
 const collapsed = [
   [{}, { collapsed: {} }],
   [{ collapsed: [] }, { collapsed: {} }],
@@ -70,11 +66,6 @@ describe("persisted consumer schemas", () => {
       ],
       [{}, { list: [] }],
       [{ list: {} }, { list: [] }],
-    ]),
-    stored("release highlights", HighlightsStore, { version: undefined }, [
-      [{}, { version: undefined }],
-      [{ version: null }, { version: undefined }],
-      [{ version: "1.2.3", legacy: true }, { version: "1.2.3" }],
     ]),
     stored("VCS cache", VcsState, { value: undefined }, [
       [{}, { value: undefined }],
@@ -119,7 +110,7 @@ describe("persisted consumer schemas", () => {
   ])("$name defaults missing or invalid values and round-trips valid ones", (row) => {
     row.cases.forEach(([input, expected]) => {
       const value = row.decode(input)
-      expect(value).toEqual(expected)
+      expect<unknown>(value).toEqual(expected)
       expect(row.decode(row.encode(value))).toEqual(value)
     })
   })
@@ -138,6 +129,7 @@ describe("persisted consumer schemas", () => {
         invalid: "build",
       },
     })
+
     expect(state.session.good).toEqual({
       agent: "build",
       model: { providerID: "provider", modelID: "model", variant: "high" },
@@ -152,6 +144,7 @@ describe("persisted consumer schemas", () => {
   test("file views validate scroll positions and line sides independently", () => {
     const decode = Schema.decodeUnknownSync(Persistence.withInitial(FileViewsSchema, { file: {} }))
     expect(decode({})).toEqual({ file: {} })
+
     const state = decode({
       file: {
         good: {
@@ -164,6 +157,7 @@ describe("persisted consumer schemas", () => {
         invalid: false,
       },
     })
+
     expect(state.file.good).toEqual({
       scrollTop: 12,
       scrollLeft: 4,

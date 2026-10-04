@@ -370,10 +370,6 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Worktree startup script",
   "dialog.project.edit.worktree.startup.placeholder": "e.g. bun install",
 
-  "dialog.releaseNotes.action.getStarted": "Get started",
-  "dialog.releaseNotes.action.next": "Next",
-  "dialog.releaseNotes.action.hideFuture": "Don't show these in the future",
-  "dialog.releaseNotes.media.alt": "Release preview",
   "dialog.usageExceeded.dontShowAgain": "Don't show again",
 
   "toast.permissions.autoaccept.on.title": "Auto-accepting permissions",
@@ -512,7 +508,6 @@ export const dict = {
   "session.queue.attachments.one": "{{count}} attachment",
   "session.queue.attachments.other": "{{count}} attachments",
   "session.timeline.working": "Working",
-  "session.review.wrapLines": "Wrap lines",
 
   "session.files.selectToOpen": "Select a file to open",
 
@@ -633,6 +628,7 @@ export const dict = {
   "settings.guiExtensions.status.active": "Active",
   "settings.guiExtensions.status.failed": "Failed",
   "settings.guiExtensions.status.disabled": "Disabled",
+  "settings.guiExtensions.status.blocked": "Blocked",
   "settings.tab.about": "About",
   "settings.about.version": "Version {{version}}",
   "settings.about.devVersion": "development",
@@ -763,8 +759,6 @@ export const dict = {
   "settings.general.row.uiFont.description": "Customise the font used throughout the interface",
   "settings.general.row.mobileTitlebarBottom.title": "Bottom navigation",
   "settings.general.row.mobileTitlebarBottom.description": "Place the title bar at the bottom of the screen on mobile",
-  "settings.general.row.mobileDiffWrap.description":
-    "Wrap long lines in mobile diffs instead of scrolling horizontally",
   "settings.general.row.showCustomAgents.title": "Show agent",
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",

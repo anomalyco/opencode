@@ -1,7 +1,6 @@
-import { fileURLToPath } from "node:url"
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, sourceURL, story } from "../../storybook/playwright/story"
 
-const fixture = `/@fs/${fileURLToPath(new URL("./timeline-virtualizer.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
+const fixture = sourceURL(new URL("./timeline-virtualizer.fixture.tsx", import.meta.url))
 
 story.beforeEach(async ({ mount }) => {
   const component = await mount("opencode-composer-flow--mixed-attachments")

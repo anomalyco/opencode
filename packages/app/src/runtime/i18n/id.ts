@@ -335,11 +335,6 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Skrip awal ruang kerja",
   "dialog.project.edit.worktree.startup.placeholder": "mis. bun install",
 
-  "dialog.releaseNotes.action.getStarted": "Mulai",
-  "dialog.releaseNotes.action.next": "Berikutnya",
-  "dialog.releaseNotes.action.hideFuture": "Jangan tampilkan ini di masa depan",
-  "dialog.releaseNotes.media.alt": "Pratinjau rilis",
-
   "dialog.usageExceeded.dontShowAgain": "Jangan tampilkan lagi",
 
   "toast.permissions.autoaccept.on.title": "Menerima izin secara otomatis",
@@ -787,7 +782,6 @@ export const dict = {
   "session.view.select": "Tampilan sesi",
   "session.background.moveRunning": "Pindah ke latar belakang",
   "session.timeline.working": "Bekerja",
-  "session.review.wrapLines": "Bungkus garis",
   "session.websearch.title": "Pencarian web pihak ketiga",
   "session.websearch.description": "Pilih agen penyedia pencarian yang digunakan untuk mencari web",
   "session.websearch.provider": "Penyedia pencarian",
@@ -846,8 +840,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Subagen",
   "settings.timeline.category.notices": "Pemberitahuan",
   "settings.timeline.category.tools": "Alat lainnya",
-  "settings.general.row.mobileDiffWrap.description":
-    "Bungkus garis panjang dalam perbedaan seluler alih-alih menggulir secara horizontal",
 
   "provider.connect.error.unsupportedFields": "Formulir autentikasi ini berisi bidang yang tidak didukung",
   "settings.about.writtenByNames": "Ditulis oleh {{names}}",

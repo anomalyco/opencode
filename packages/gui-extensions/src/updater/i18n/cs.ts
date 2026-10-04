@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Aktualizace připravena",
   "dialog.restart": "Restartujte",
   "dialog.later": "Později",
+  "releaseNotes.action.getStarted": "Začněte",
+  "releaseNotes.action.next": "Další",
+  "releaseNotes.action.hideFuture": "V budoucnu je nezobrazujte",
+  "releaseNotes.media.alt": "Náhled vydání",
 }

@@ -10,4 +10,6 @@ export default {
   "git.description": "Հետեւել, վերանայել և հետարկել այս նախագծի փոփոխությունները",
   loadingChanges: "Բեռնվում են փոփոխություններ…",
   noChanges: "Ոչ փոփոխություններ",
+  "settings.wrapLines.title": "Տողերը փաթաթել",
+  "settings.wrapLines.description": "Բջջային diff-երում երկար տողերը փաթաթել՝ հորիզոնական ոլորելու փոխարեն",
 }

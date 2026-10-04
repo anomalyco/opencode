@@ -453,6 +453,7 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@opencode/ai/providers/fireworks" ||
     name === "@opencode/ai/providers/openai-compatible" ||
     name === "@opencode/ai/providers/google" ||
+    name === "@opencode/ai/providers/google/interactions" ||
     name === "@opencode/ai/providers/groq" ||
     name === "@opencode/ai/providers/mistral" ||
     name === "@opencode/ai/providers/togetherai" ||

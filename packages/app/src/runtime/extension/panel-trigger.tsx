@@ -6,7 +6,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Tabs } from "@opencode/ui/tabs"
-import type { PanelTab } from "@opencode/gui-extensions/sdk"
+import type { MountedSession, PanelTab } from "@opencode/gui-extensions/sdk"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useCommand } from "@/shell/commands/command"
 import { Contribution } from "./render"
@@ -16,6 +16,7 @@ export function PanelTrigger(props: {
   value: string
   extension: string
   tab: PanelTab
+  session: MountedSession
   index: number
   active: boolean
   preview: boolean
@@ -25,7 +26,9 @@ export function PanelTrigger(props: {
   const language = useLanguage()
   const command = useCommand()
   const closeKeybind = createMemo(() => command.keybindParts("file.close"))
-  // The label renders once per label function; state is read through getters so selection never remounts it.
+
+  // The label renders once per label function; state is read through getters so neither selection nor a session
+  // switch remounts it.
   const state = {
     get active() {
       return props.active
@@ -33,14 +36,23 @@ export function PanelTrigger(props: {
     get preview() {
       return props.preview
     },
+    get session() {
+      return props.session
+    },
   }
+
   const label = createMemo(() => props.tab.label)
+
   const rendered = createMemo(() => {
     const render = label()
+
     if (!render) return
+
     return <Contribution extension={props.extension}>{() => untrack(() => render(state))}</Contribution>
   })
+
   const content = () => rendered() ?? props.tab.title
+
   const tooltip = (button: JSX.Element) => (
     <Tooltip
       value={
@@ -57,6 +69,7 @@ export function PanelTrigger(props: {
       {button}
     </Tooltip>
   )
+
   const closeButton = (reveal: boolean) =>
     tooltip(
       <IconButton
@@ -77,9 +90,24 @@ export function PanelTrigger(props: {
         aria-label={language.t("common.closeTab")}
       />,
     )
+
+  const compactClose = () =>
+    tooltip(<Tabs.CloseButton onClick={() => props.onClose(props.value)} aria-label={language.t("common.closeTab")} />)
+
+  // The close button `closable` asks for; a plain one by default.
+  const close = () => {
+    const closable = props.tab.closable
+
+    if (closable === false) return undefined
+
+    if (closable === "compact") return compactClose()
+
+    return closeButton(closable === "hover")
+  }
+
   return (
-    <Switch fallback={<SortableTrigger {...props} content={content()} close={closeButton(false)} />}>
-      <Match when={props.tab.kind === "pinned"}>
+    <Switch fallback={<SortableTrigger {...props} content={content()} close={close()} />}>
+      <Match when={props.tab.pinned}>
         <Tabs.Trigger
           value={props.value}
           id={props.tab.dom?.tab}
@@ -88,26 +116,24 @@ export function PanelTrigger(props: {
           {content()}
         </Tabs.Trigger>
       </Match>
-      <Match when={props.tab.kind === "fixed"}>
+      <Match when={props.tab.draggable === false && props.tab.closable === "compact"}>
         <Tabs.Trigger
           value={props.value}
           id={props.tab.dom?.tab}
           onMiddleClick={() => props.onClose(props.value)}
-          closeButton={tooltip(
-            <Tabs.CloseButton onClick={() => props.onClose(props.value)} aria-label={language.t("common.closeTab")} />,
-          )}
+          closeButton={compactClose()}
           hideCloseButton
         >
           {content()}
         </Tabs.Trigger>
       </Match>
-      <Match when={props.tab.kind === "launcher"}>
+      <Match when={props.tab.draggable === false}>
         <Tabs.Trigger
           value={props.value}
           id={props.tab.dom?.tab}
           class="group"
-          onMiddleClick={() => props.onClose(props.value)}
-          closeButton={closeButton(true)}
+          onMiddleClick={props.tab.closable === false ? undefined : () => props.onClose(props.value)}
+          closeButton={close()}
           hideCloseButton
         >
           {content()}
@@ -124,7 +150,7 @@ function SortableTrigger(props: {
   active: boolean
   preview: boolean
   content: JSX.Element
-  close: JSX.Element
+  close: JSX.Element | undefined
   onClose: (value: string) => void
   onPromote: (value: string) => void
 }): JSX.Element {
@@ -136,6 +162,7 @@ function SortableTrigger(props: {
       return props.index
     },
   })
+
   return (
     <div ref={sortable.ref} class="h-full flex items-center">
       <div class="relative">
@@ -144,7 +171,7 @@ function SortableTrigger(props: {
           id={props.tab.dom?.tab}
           aria-controls={props.active ? props.tab.dom?.panel : undefined}
           aria-label={props.tab.missing ? props.tab.title : undefined}
-          onMiddleClick={() => props.onClose(props.value)}
+          onMiddleClick={props.tab.closable === false ? undefined : () => props.onClose(props.value)}
           onDblClick={() => {
             if (props.preview) props.onPromote(props.value)
           }}

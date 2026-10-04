@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Përditësimi gati",
   "dialog.restart": "Rinis",
   "dialog.later": "Më vonë",
+  "releaseNotes.action.getStarted": "Filloni",
+  "releaseNotes.action.next": "Tjetra",
+  "releaseNotes.action.hideFuture": "Mos i shfaq këto në të ardhmen",
+  "releaseNotes.media.alt": "Pamja paraprake e publikimit",
 }

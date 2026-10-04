@@ -6,8 +6,9 @@ import type { HexColor, ResolvedV2Theme } from "@opencode/ui/theme/types"
 import { showToast } from "@opencode/ui/toast"
 import { createPtyClient } from "@opencode/client/solid"
 import type { FitAddon, Terminal as Term } from "ghostty-web"
-import { type ComponentProps, createEffect, createMemo, onCleanup, onMount, splitProps } from "solid-js"
-import { App, Native, System, useExtension, type ServerRef } from "../sdk"
+import { Option, Predicate, Schema } from "effect"
+import { type ComponentProps, createMemo, onCleanup, onMount, splitProps } from "solid-js"
+import { createKeyed, useExtension, type ServerRef } from "../sdk"
 import type { TerminalModel } from "./model"
 import type { LocalPTY } from "./state"
 import { SerializeAddon } from "./serialize"
@@ -21,6 +22,7 @@ import { terminalWriter } from "./writer"
 // actually scroll back through while capping teardown cost and snapshot size; the live
 // terminal keeps its full 10k scrollback while mounted.
 const persistedScrollbackRows = 2_000
+
 export interface TerminalProps extends ComponentProps<"div"> {
   pty: LocalPTY
   server: ServerRef
@@ -31,7 +33,7 @@ export interface TerminalProps extends ComponentProps<"div"> {
   onSubmit?: () => void
   onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
   onConnect?: () => void
-  onConnectError?: (error: unknown) => void
+  onConnectError?: (error: Error) => void
 }
 
 type TerminalColors = {
@@ -41,7 +43,7 @@ type TerminalColors = {
   selectionBackground: string
 }
 
-const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
+const DEFAULT_TERMINAL_COLORS = {
   light: {
     background: "#fcfcfc",
     foreground: "#211e1e",
@@ -54,7 +56,14 @@ const DEFAULT_TERMINAL_COLORS: Record<"light" | "dark", TerminalColors> = {
     cursor: "#d4d4d4",
     selectionBackground: withAlpha("#d4d4d4", 0.25),
   },
-}
+} as const satisfies Record<"light" | "dark", TerminalColors>
+
+// The server's binary control frames carry JSON such as the output cursor.
+const ControlFrame = Schema.fromJsonString(Schema.Struct({ cursor: Schema.optional(Schema.Number) }))
+
+const decodeControlFrame = Schema.decodeUnknownOption(ControlFrame)
+
+const isHexColor = (value: string): value is HexColor => value.startsWith("#")
 
 const debugTerminal = (...values: unknown[]) => {
   if (!import.meta.env.DEV) return
@@ -63,13 +72,18 @@ const debugTerminal = (...values: unknown[]) => {
 
 const resolveV2Token = (tokens: ResolvedV2Theme, key: string) => {
   let current = tokens[key]
+
   for (let i = 0; i < 8 && current; i++) {
     const match = /^var\(--([^)]+)\)$/.exec(current.trim())
+
     if (!match) {
       const hex = current.trim()
+
       if (/^#[0-9a-fA-F]{8}$/.test(hex)) return hex.slice(0, 7)
+
       return hex
     }
+
     current = tokens[match[1]]
   }
 }
@@ -83,9 +97,11 @@ const useTerminalUiBindings = (input: {
 }) => {
   const handleCopy = (event: ClipboardEvent) => {
     const selection = input.term.getSelection()
+
     if (!selection) return
 
     const clipboard = event.clipboardData
+
     if (!clipboard) return
 
     event.preventDefault()
@@ -95,6 +111,7 @@ const useTerminalUiBindings = (input: {
   const handlePaste = (event: ClipboardEvent) => {
     const clipboard = event.clipboardData
     const text = clipboard?.getData("text/plain") ?? clipboard?.getData("text") ?? ""
+
     if (!text) return
 
     event.preventDefault()
@@ -105,6 +122,7 @@ const useTerminalUiBindings = (input: {
   const handleTextareaFocus = () => {
     input.term.options.cursorBlink = true
   }
+
   const handleTextareaBlur = () => {
     input.term.options.cursorBlink = false
   }
@@ -141,11 +159,13 @@ const persistTerminal = (input: {
   onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
 }) => {
   if (!input.addon || !input.onCleanup || !input.term) return
+
   const buffer = (() => {
     try {
       return input.addon.serialize({ scrollback: persistedScrollbackRows })
     } catch {
       debugTerminal("failed to serialize terminal buffer")
+
       return ""
     }
   })()
@@ -162,11 +182,13 @@ const persistTerminal = (input: {
 
 export const Terminal = (props: TerminalProps) => {
   const extension = useExtension()
-  const app = extension.use(App)
-  const system = extension.use(System)
-  const native = extension.use(Native)
+  const appearance = extension.appearance
+  const keybinds = extension.keybinds
+  const system = extension.system
+  const desktop = extension.desktop
   const theme = useTheme()
   let container!: HTMLDivElement
+
   const [local, others] = splitProps(props, [
     "pty",
     "server",
@@ -179,23 +201,27 @@ export const Terminal = (props: TerminalProps) => {
     "onConnect",
     "onConnectError",
   ])
+
   // Intentional mount-time capture: the imperative xterm/WebSocket lifecycle needs stable values, and each
   // cached surface belongs to one workspace.
   const server = local.server
   const directory = local.directory
   const id = local.pty.id
-  const restore = typeof local.pty.buffer === "string" ? local.pty.buffer : ""
+  const restore = local.pty.buffer ?? ""
+  const stored = { cols: local.pty.cols, rows: local.pty.rows }
+
   const restoreSize =
     restore &&
-    typeof local.pty.cols === "number" &&
-    Number.isSafeInteger(local.pty.cols) &&
-    local.pty.cols > 0 &&
-    typeof local.pty.rows === "number" &&
-    Number.isSafeInteger(local.pty.rows) &&
-    local.pty.rows > 0
-      ? { cols: local.pty.cols, rows: local.pty.rows }
+    stored.cols !== undefined &&
+    Number.isSafeInteger(stored.cols) &&
+    stored.cols > 0 &&
+    stored.rows !== undefined &&
+    Number.isSafeInteger(stored.rows) &&
+    stored.rows > 0
+      ? { cols: stored.cols, rows: stored.rows }
       : undefined
-  const scrollY = typeof local.pty.scrollY === "number" ? local.pty.scrollY : undefined
+
+  const scrollY = local.pty.scrollY
   let ws: WebSocket | undefined
   let term: Term | undefined
   let serializeAddon: SerializeAddon
@@ -207,8 +233,9 @@ export const Terminal = (props: TerminalProps) => {
   let lastSize: { cols: number; rows: number } | undefined
   let disposed = false
   const cleanups: VoidFunction[] = []
-  const start =
-    typeof local.pty.cursor === "number" && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
+
+  const start = local.pty.cursor !== undefined && Number.isSafeInteger(local.pty.cursor) ? local.pty.cursor : undefined
+
   let cursor = start ?? 0
   let seek = start !== undefined ? start : restore ? -1 : 0
   let output: ReturnType<typeof terminalWriter> | undefined
@@ -219,6 +246,7 @@ export const Terminal = (props: TerminalProps) => {
 
   const reveal = () => {
     if (revealed) return
+
     if (!serializeAddon.serializeAsText({ trimWhitespace: true })) return
     revealed = true
     container.style.opacity = "1"
@@ -227,6 +255,7 @@ export const Terminal = (props: TerminalProps) => {
   const cleanup = () => {
     if (!cleanups.length) return
     const fns = cleanups.splice(0).reverse()
+
     for (const fn of fns) {
       try {
         fn()
@@ -252,16 +281,21 @@ export const Terminal = (props: TerminalProps) => {
     const mode = theme.mode() === "dark" ? "dark" : "light"
     const fallback = DEFAULT_TERMINAL_COLORS[mode]
     const currentTheme = theme.themes()[theme.themeId()]
+
     if (!currentTheme) return fallback
     const variant = mode === "dark" ? currentTheme.dark : currentTheme.light
+
     if (!variant?.seeds && !variant?.palette) return fallback
     const resolved = resolveThemeVariant(variant, mode === "dark")
     const text = resolved["text-stronger"] ?? fallback.foreground
+
     const background =
       resolveV2Token(resolveThemeVariantV2(variant, mode === "dark"), "v2-background-bg-base") ?? fallback.background
+
     const alpha = mode === "dark" ? 0.25 : 0.2
-    const base = text.startsWith("#") ? (text as HexColor) : (fallback.foreground as HexColor)
+    const base = isHexColor(text) ? text : fallback.foreground
     const selectionBackground = withAlpha(base, alpha)
+
     return {
       background,
       foreground: text,
@@ -274,11 +308,14 @@ export const Terminal = (props: TerminalProps) => {
 
   const scheduleFit = () => {
     if (disposed) return
+
     if (!fitAddon) return
+
     if (fitFrame !== undefined) return
 
     fitFrame = requestAnimationFrame(() => {
       fitFrame = undefined
+
       if (disposed) return
       fitAddon.fit()
     })
@@ -286,10 +323,13 @@ export const Terminal = (props: TerminalProps) => {
 
   const scheduleSize = (cols: number, rows: number) => {
     if (disposed) return
+
     if (lastSize?.cols === cols && lastSize?.rows === rows) {
       pendingSize = undefined
+
       if (sizeTimer !== undefined) clearTimeout(sizeTimer)
       sizeTimer = undefined
+
       return
     }
 
@@ -298,6 +338,7 @@ export const Terminal = (props: TerminalProps) => {
     if (!lastSize) {
       lastSize = pendingSize
       void pushSize(cols, rows)
+
       return
     }
 
@@ -305,73 +346,88 @@ export const Terminal = (props: TerminalProps) => {
     sizeTimer = setTimeout(() => {
       sizeTimer = undefined
       const next = pendingSize
+
       if (!next) return
       pendingSize = undefined
+
       if (disposed) return
+
       if (lastSize?.cols === next.cols && lastSize?.rows === next.rows) return
       lastSize = next
       void pushSize(next.cols, next.rows)
     }, 100)
   }
 
-  createEffect(() => {
-    const colors = terminalColors()
-    const mode = theme.mode() === "dark" ? "dark" : "light"
-    if (!term) return
-    setOptionIfSupported(term, "theme", colors)
-    setOptionIfSupported(term, "colorScheme", mode)
-  })
+  // The terminal follows the theme and font; it is created with the current ones, so changes before then wait.
+  createKeyed(
+    () => ({ colors: terminalColors(), mode: theme.mode() === "dark" ? "dark" : "light" }),
+    (current) => {
+      if (!term) return
 
-  createEffect(() => {
-    const font = app.font("mono")
-    if (!term) return
-    setOptionIfSupported(term, "fontFamily", font)
-    scheduleFit()
-  })
+      setOptionIfSupported(term, "theme", current.colors)
+      setOptionIfSupported(term, "colorScheme", current.mode)
+    },
+  )
 
-  let zoom = native?.zoom()
-  createEffect(() => {
-    const next = native?.zoom()
-    if (next === undefined) return
-    if (next === zoom) return
-    zoom = next
-    scheduleFit()
-  })
+  createKeyed(
+    () => appearance.font("mono"),
+    (font) => {
+      if (!term) return
+
+      setOptionIfSupported(term, "fontFamily", font)
+      scheduleFit()
+    },
+  )
+
+  // A new zoom refits; the first value finds no fit addon yet.
+  createKeyed(
+    () => desktop?.zoom(),
+    () => scheduleFit(),
+  )
 
   const focusTerminal = () => {
     const t = term
+
     if (!t) return
     const focus = () => (t.textarea ? t.textarea.focus({ preventScroll: true }) : t.focus())
     focus()
     setTimeout(focus, 0)
   }
+
   const handlePointerDown = () => {
     const activeElement = document.activeElement
+
     if (activeElement instanceof HTMLElement && activeElement !== container && !container.contains(activeElement)) {
       activeElement.blur()
     }
+
     focusTerminal()
   }
 
   const handleLinkClick = (event: MouseEvent) => {
     if (!event.shiftKey && !event.ctrlKey && !event.metaKey) return
+
     if (event.altKey) return
+
     if (event.button !== 0) return
 
     const t = term
+
     if (!t) return
 
     const text = getHoveredLinkText(t)
+
     if (!text) return
 
     event.preventDefault()
     event.stopImmediatePropagation()
-    system.open(text)
+    system.openExternal(text)
   }
 
   onMount(() => {
     const run = async () => {
       const loaded = await local.ghostty()
+
       if (disposed) return
 
       const mod = loaded.mod
@@ -383,18 +439,22 @@ export const Terminal = (props: TerminalProps) => {
         cols: restoreSize?.cols,
         rows: restoreSize?.rows,
         fontSize: 14,
-        fontFamily: app.font("mono"),
+        fontFamily: appearance.font("mono"),
         allowTransparency: false,
         convertEol: false,
         theme: terminalColors(),
         scrollback: 10_000,
         ghostty: g,
       })
+
       cleanups.push(() => t.dispose())
+
       if (disposed) {
         cleanup()
+
         return
       }
+
       term = t
       setOptionIfSupported(t, "colorScheme", theme.mode() === "dark" ? "dark" : "light")
       output = terminalWriter((data, done) =>
@@ -407,18 +467,21 @@ export const Terminal = (props: TerminalProps) => {
         const key = event.key.toLowerCase()
 
         const input = terminalKeyInput(event)
+
         if (input) {
           t.input(input, true)
+
           return true
         }
 
         if (event.ctrlKey && event.shiftKey && !event.metaKey && key === "c") {
           document.execCommand("copy")
+
           return true
         }
 
         // allow for toggle terminal keybinds in parent
-        return app.matches("terminal.toggle", event)
+        return keybinds.matches("terminal.toggle", event)
       })
 
       const fit = new mod.FitAddon()
@@ -443,14 +506,18 @@ export const Terminal = (props: TerminalProps) => {
         focusTerminal()
         local.onAutoFocus?.()
       }
+
       if (local.autoFocus !== true) {
         const restoreFocus = () => {
           const current = document.activeElement
+
           if (current !== container && !container.contains(current)) return
           t.blur()
           t.textarea?.blur()
+
           if (active instanceof HTMLElement && active.isConnected) active.focus()
         }
+
         restoreFocus()
         const timer = setTimeout(restoreFocus, 0)
         cleanups.push(() => clearTimeout(timer))
@@ -463,16 +530,21 @@ export const Terminal = (props: TerminalProps) => {
       const onResize = t.onResize((size) => {
         scheduleSize(size.cols, size.rows)
       })
+
       cleanups.push(() => disposeIfDisposable(onResize))
+
       const onData = t.onData((data) => {
         if (ws?.readyState === WebSocket.OPEN) ws.send(data)
       })
+
       cleanups.push(() => disposeIfDisposable(onData))
+
       const onKey = t.onKey((key) => {
         if (key.key == "Enter") {
           props.onSubmit?.()
         }
       })
+
       cleanups.push(() => disposeIfDisposable(onKey))
 
       const startResize = () => {
@@ -486,8 +558,10 @@ export const Terminal = (props: TerminalProps) => {
         new Promise<void>((resolve) => {
           if (!output) {
             resolve()
+
             return
           }
+
           output.push(data)
           output.flush(resolve)
         })
@@ -497,25 +571,31 @@ export const Terminal = (props: TerminalProps) => {
         reveal()
         fit.fit()
         scheduleSize(t.cols, t.rows)
+
         if (scrollY !== undefined) t.scrollToLine(scrollY)
         startResize()
       } else {
         fit.fit()
         scheduleSize(t.cols, t.rows)
+
         if (restore) {
           await write(restore)
           reveal()
+
           if (scrollY !== undefined) t.scrollToLine(scrollY)
         }
+
         startResize()
       }
 
       const once = { value: false }
       const decoder = new TextDecoder()
 
-      const fail = (err: unknown) => {
+      const fail = (err: Error) => {
         if (disposed) return
+
         if (once.value) return
+
         once.value = true
         local.onConnectError?.(err)
       }
@@ -525,25 +605,32 @@ export const Terminal = (props: TerminalProps) => {
           .get({ ptyID: id, location: { directory } })
           .then((result) => result.data.status === "exited")
           .catch((err) => {
-            if (err && typeof err === "object" && "_tag" in err && err._tag === "PtyNotFoundError") return true
+            if (Predicate.isTagged(err, "PtyNotFoundError")) return true
+
             debugTerminal("failed to inspect terminal session", err)
+
             return false
           })
       }
 
-      const retry = (err: unknown) => {
+      const retry = (err: Error) => {
         if (disposed) return
+
         if (reconn !== undefined) return
 
         const ms = Math.min(250 * 2 ** Math.min(tries, 4), 4_000)
         reconn = setTimeout(async () => {
           reconn = undefined
+
           if (disposed) return
+
           if (await gone()) {
             if (disposed) return
             fail(err)
+
             return
           }
+
           if (disposed) return
           tries += 1
           open()
@@ -562,13 +649,18 @@ export const Terminal = (props: TerminalProps) => {
           })
           .catch((err) => {
             fail(err)
+
             return undefined
           })
+
         if (!socket || once.value) return
+
         if (disposed) {
           socket.close(1000)
+
           return
         }
+
         ws = socket
 
         const handleOpen = () => {
@@ -576,31 +668,41 @@ export const Terminal = (props: TerminalProps) => {
           tries = 0
           local.onConnect?.()
           scheduleSize(t.cols, t.rows)
+
           if (t.getMode(2031)) t.write("\x1b[?996n")
         }
 
         const handleMessage = (event: MessageEvent) => {
           if (disposed) return
+
           if (event.data instanceof ArrayBuffer) {
             const bytes = new Uint8Array(event.data)
+
             if (bytes[0] !== 0) return
-            const json = decoder.decode(bytes.subarray(1))
-            try {
-              const meta = JSON.parse(json) as { cursor?: unknown }
-              const next = meta?.cursor
-              if (typeof next === "number" && Number.isSafeInteger(next) && next >= 0) {
-                cursor = next
-                seek = next
-              }
-            } catch (err) {
-              debugTerminal("invalid websocket control frame", err)
+            const meta = decodeControlFrame(decoder.decode(bytes.subarray(1)))
+
+            if (Option.isNone(meta)) {
+              debugTerminal("invalid websocket control frame")
+
+              return
             }
+
+            const next = meta.value.cursor
+
+            if (next !== undefined && Number.isSafeInteger(next) && next >= 0) {
+              cursor = next
+              seek = next
+            }
+
             return
           }
 
-          const data = typeof event.data === "string" ? event.data : ""
+          // The PTY client receives binary frames as ArrayBuffers, handled above; the rest are text.
+          const data = String(event.data)
+
           if (!data) return
           output?.push(data)
+
           if (!revealed) output?.flush(reveal)
           cursor += data.length
           seek = cursor
@@ -616,19 +718,25 @@ export const Terminal = (props: TerminalProps) => {
           socket.removeEventListener("message", handleMessage)
           socket.removeEventListener("error", handleError)
           socket.removeEventListener("close", handleClose)
+
           if (ws === socket) ws = undefined
+
           if (drop === stop) drop = undefined
+
           if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) socket.close(1000)
         }
 
         const handleClose = (event: CloseEvent) => {
           if (ws === socket) ws = undefined
+
           if (drop === stop) drop = undefined
           socket.removeEventListener("open", handleOpen)
           socket.removeEventListener("message", handleMessage)
           socket.removeEventListener("error", handleError)
           socket.removeEventListener("close", handleClose)
+
           if (disposed) return
+
           if (event.code === 1000) return
           retry(new Error(extension.t("connectionLost.abnormalClose", { code: event.code })))
         }
@@ -656,10 +764,14 @@ export const Terminal = (props: TerminalProps) => {
 
   onCleanup(() => {
     disposed = true
+
     if (fitFrame !== undefined) cancelAnimationFrame(fitFrame)
+
     if (sizeTimer !== undefined) clearTimeout(sizeTimer)
+
     if (reconn !== undefined) clearTimeout(reconn)
     drop?.()
+
     if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) ws.close(1000)
 
     const finalize = () => {
@@ -669,6 +781,7 @@ export const Terminal = (props: TerminalProps) => {
 
     if (!output) {
       finalize()
+
       return
     }
 

@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "अपडेट तैयार है",
   "dialog.restart": "पुनः आरंभ करें",
   "dialog.later": "बाद में",
+  "releaseNotes.action.getStarted": "शुरू करें",
+  "releaseNotes.action.next": "अगला",
+  "releaseNotes.action.hideFuture": "भविष्य में इन्हें न दिखाएँ",
+  "releaseNotes.media.alt": "रिलीज़ पूर्वावलोकन",
 }
