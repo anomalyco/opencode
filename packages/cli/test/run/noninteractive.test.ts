@@ -372,8 +372,125 @@ describe("runNonInteractivePrompt", () => {
       output.stdout
         .split("\n")
         .filter(Boolean)
-        .map((line) => JSON.parse(line)),
+        .map((line) => JSON.parse(line))
+        .filter((event) => event.type === "text"),
     ).toEqual([expect.objectContaining({ type: "text", part: expect.objectContaining({ text: "projected answer" }) })])
+  })
+
+  test("emits the final step's step_start and step_finish when idle wins before its events arrive", async () => {
+    const tokens = { input: 120, output: 4, reasoning: 0, cache: { read: 0, write: 0 } }
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID)],
+      wait: () => Bun.sleep(5),
+      messages: (messageID) => [
+        {
+          id: "msg_assistant",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+          content: [{ type: "text", text: "tool-ok" }],
+          snapshot: { start: "snap_start", end: "snap_end" },
+          finish: "stop",
+          cost: 0.0012,
+          tokens,
+          time: { created: 2, completed: 3 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+    })
+
+    expect(
+      output.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line)),
+    ).toEqual([
+      expect.objectContaining({
+        type: "step_start",
+        part: expect.objectContaining({ messageID: "msg_assistant", type: "step-start", snapshot: "snap_start" }),
+      }),
+      expect.objectContaining({ type: "text", part: expect.objectContaining({ text: "tool-ok" }) }),
+      expect.objectContaining({
+        type: "step_finish",
+        part: expect.objectContaining({
+          messageID: "msg_assistant",
+          type: "step-finish",
+          reason: "stop",
+          snapshot: "snap_end",
+          cost: 0.0012,
+          tokens,
+        }),
+      }),
+    ])
+  })
+
+  test("reports a failed final step as an error without step_finish when idle wins", async () => {
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [prompted(messageID)],
+      wait: () => Bun.sleep(5),
+      messages: (messageID) => [
+        {
+          id: "msg_assistant",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+          content: [],
+          finish: "content-filter",
+          error: { type: "unknown", message: "blocked by content filter" },
+          time: { created: 2, completed: 3 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+    })
+
+    expect(
+      output.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line).type),
+    ).toEqual(["step_start", "error"])
+  })
+
+  test("does not repeat step events that arrived before idle", async () => {
+    const tokens = { input: 120, output: 4, reasoning: 0, cache: { read: 0, write: 0 } }
+    const output = await capture({
+      format: "json",
+      turn: (messageID) => [
+        prompted(messageID),
+        stepStarted(),
+        {
+          id: "evt_step_ended",
+          created: 2,
+          type: "session.step.ended",
+          durable: { aggregateID: "ses_1", seq: 2, version: 1 },
+          data: { sessionID: "ses_1", assistantMessageID: "msg_assistant", finish: "stop", cost: 0, tokens },
+        },
+        settled(),
+      ],
+      messages: (messageID) => [
+        {
+          id: "msg_assistant",
+          type: "assistant",
+          agent: "build",
+          model: { providerID: "test", id: "test-model" },
+          content: [],
+          finish: "stop",
+          cost: 0,
+          tokens,
+          time: { created: 1, completed: 2 },
+        },
+        { id: messageID, type: "user", text: "hello", time: { created: 1 } },
+      ],
+    })
+
+    expect(
+      output.stdout
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line).type),
+    ).toEqual(["step_start", "step_finish"])
   })
 
   test("reports an observed execution failure before prompt promotion", async () => {

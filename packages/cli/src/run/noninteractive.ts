@@ -85,6 +85,8 @@ export async function runNonInteractivePrompt(input: Input) {
   const renderedText = new Map<string, string>()
   const renderedReasoning = new Map<string, string>()
   const renderedTools = new Set<string>()
+  const startedSteps = new Set<string>()
+  const endedSteps = new Set<string>()
   let submitted = false
   let promoted = false
   let emittedError = false
@@ -280,6 +282,7 @@ export async function runNonInteractivePrompt(input: Input) {
           }
           continue
         }
+        startedSteps.add(event.data.assistantMessageID)
         if (!emit("step_start", time, { part }) && input.format !== "json") {
           UI.empty()
           UI.println(`> ${event.data.agent} · ${event.data.model.id}`)
@@ -495,6 +498,7 @@ export async function runNonInteractivePrompt(input: Input) {
 
       if (event.type === "session.step.ended") {
         flushStep()
+        endedSteps.add(event.data.assistantMessageID)
         const part = {
           id: partID(event.id),
           sessionID: input.sessionID,
@@ -570,6 +574,17 @@ export async function runNonInteractivePrompt(input: Input) {
     for (const message of projected.messages) {
       if (message.type !== "assistant") continue
       const timestamp = message.time.completed ?? message.time.created
+      // Idle can win the race against this step's live events, which are dropped once finalizing.
+      if (!startedSteps.has(message.id))
+        emit("step_start", message.time.created, {
+          part: {
+            id: projectedPartID(message.id, "step-start"),
+            sessionID: input.sessionID,
+            messageID: message.id,
+            type: "step-start",
+            snapshot: message.snapshot?.start,
+          },
+        })
       let textOrdinal = 0
       let reasoningOrdinal = 0
       for (const item of message.content) {
@@ -661,6 +676,20 @@ export async function runNonInteractivePrompt(input: Input) {
         await input.renderToolError(item)
         UI.error(item.state.error.message)
       }
+
+      if (message.finish && !message.error && !endedSteps.has(message.id))
+        emit("step_finish", timestamp, {
+          part: {
+            id: projectedPartID(message.id, "step-finish"),
+            sessionID: input.sessionID,
+            messageID: message.id,
+            type: "step-finish",
+            reason: message.finish,
+            snapshot: message.snapshot?.end,
+            cost: message.cost,
+            tokens: message.tokens,
+          },
+        })
 
       // A declined tool call ends its step with an interrupted-step error that is
       // only a consequence of our own rejection; it was already reported above.
