@@ -4,6 +4,9 @@ import { dict as en } from "./en"
 export const dict = {
   ...en,
   "go.promo.spaceBunny": "Space Bunny Free, um novo modelo anônimo, está disponível por tempo limitado",
+  "go.referral.ended.label": "Aviso",
+  "go.referral.ended":
+    "O programa de indicação foi encerrado. Links de indicação não geram mais crédito para você nem para quem os compartilhou.",
   "go.graph.bonus": "{{count}}× mais uso",
   "nav.github": "GitHub",
   "nav.docs": "Documentação",
@@ -265,6 +268,7 @@ export const dict = {
   "go.meta.description":
     "O Go custa $10/mês, com limites generosos de uso e acesso confiável aos principais modelos de codificação.",
   "go.hero.title": "Modelos de codificação de baixo custo para todos",
+  "go.hero.tagline": "Use com qualquer agente. Adicione créditos se precisar. Cancele quando quiser.",
   "go.hero.body":
     "O Go traz a codificação com agentes para programadores em todo o mundo. Oferecendo limites generosos e acesso confiável aos modelos de código aberto mais capazes, para que você possa construir com agentes poderosos sem se preocupar com custos ou disponibilidade.",
 
@@ -272,6 +276,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Assinar o Go",
   "go.cta.price": "$10/mês",
+  "go.plans.month": "por mês",
+  "go.plans.plus.cta": "Assinar Go Plus",
+  "go.plans.plus.description": "O Go Plus custa $40/mês e oferece limites maiores.",
+  "go.plans.go.feature1": "Modelos selecionados e acessíveis",
+  "go.plans.go.feature2": "Testados para programação com agentes",
+  "go.plans.go.feature3": "Limites generosos e acesso confiável",
+  "go.plans.plus.feature1": "Tudo o que está incluído no Go",
+  "go.plans.plus.feature2": "Limites maiores para sessões de programação mais longas e focadas",
+  "go.plans.plus.feature3": "Para projetos maiores e exigentes",
+  "go.plans.limits": "Limites",
+  "go.plans.description": "Solicitações estimadas a cada 5 horas e limites mensais por modelo",
+  "go.plans.legend": "Planos",
   "go.pricing.body":
     "Use com qualquer agente. $10/mês. Recarregue o crédito se necessário. Cancele a qualquer momento.",
   "go.graph.free": "Grátis",
@@ -385,7 +401,7 @@ export const dict = {
 
   "go.faq.q9": "Qual a diferença entre os modelos gratuitos e o Go?",
   "go.faq.a9":
-    "Os modelos gratuitos incluem Big Pickle e modelos promocionais disponíveis no momento, com uma cota de 200 requisições/dia. O Go oferece uma seleção de modelos com cotas de requisição mais altas aplicadas em janelas móveis (5 horas, semanal e mensal), aproximadamente equivalentes a cotas básicas de $12 por 5 horas, $30 por semana e $60 por mês; as cotas específicas podem variar por modelo (as contagens reais de requisições variam de acordo com o modelo e o uso).",
+    "Os modelos gratuitos incluem Big Pickle e modelos promocionais disponíveis no momento, com uma cota de 200 requisições/dia. O Go oferece uma seleção de modelos com cotas de requisição mais altas em janelas móveis: 20% da cota mensal a cada 5 horas, 50% por semana e 100% por mês. As cotas específicas podem variar por modelo (as contagens reais de requisições variam de acordo com o modelo e o uso).",
   "go.faq.q10": "Posso receber um reembolso?",
   "go.faq.a10":
     "Você pode ter direito a um reembolso se a cobrança foi feita nos últimos 14 dias e você não usou sua cota do Go durante esse período de faturamento. {{contact}} para solicitar um reembolso.",
@@ -652,7 +668,6 @@ export const dict = {
   "workspace.payments.type.subscription": "assinatura",
   "workspace.payments.view": "Ver",
 
-  "workspace.black.loading": "Carregando...",
   "workspace.black.time.day": "dia",
   "workspace.black.time.days": "dias",
   "workspace.black.time.hour": "hora",
@@ -662,7 +677,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "alguns segundos",
   "workspace.black.subscription.title": "Assinatura",
   "workspace.black.subscription.message": "Você assina o OpenCode Black por ${{plan}} por mês.",
-  "workspace.black.subscription.manage": "Gerenciar Assinatura",
+  "workspace.black.subscription.ending":
+    "O OpenCode Black termina com o seu período de cobrança atual e não será renovado. Vamos migrar você para o novo console.",
   "workspace.black.subscription.rollingUsage": "Uso de 5 horas",
   "workspace.black.subscription.weeklyUsage": "Uso Semanal",
   "workspace.black.subscription.resetsIn": "Reinicia em",
