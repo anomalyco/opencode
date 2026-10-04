@@ -40,6 +40,8 @@ stdenv.mkDerivation (finalAttrs: {
     copyDesktopItems
   ]
   ++ lib.optionals stdenv.hostPlatform.isDarwin [
+    darwin.cctools
+    darwin.sigtool
     # Ad-hoc sign the .app: --config.mac.identity=null below skips signing.
     darwin.autoSignDarwinBinariesHook
   ];

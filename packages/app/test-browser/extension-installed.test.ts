@@ -6,18 +6,21 @@ import { createInstalled } from "../src/runtime/extension/installed"
 test("a list main pushes while the initial list is pending wins over the older reply", async () => {
   const listeners = new Set<(message: BridgeMessage) => void>()
   const reply = Promise.withResolvers<readonly Installed[]>()
+
   const bridge: Bridge = {
+    packaged: false,
     call: () => Promise.reject(new Error("no calls in this test")),
     subscribe: async () => ({ available: false }),
     on: (listener) => {
       listeners.add(listener)
+
       return () => {
         listeners.delete(listener)
       }
     },
-    surface: () => {},
+    embed: () => {},
     capture: async () => undefined,
-    menubar: () => {},
+    runMenubarItem: () => {},
     configure: () => {},
     manager: {
       list: () => reply.promise,
@@ -30,6 +33,7 @@ test("a list main pushes while the initial list is pending wins over the older r
       asset: () => "",
     },
   }
+
   const extension = { id: "fixture", name: "Fixture", version: "1.0.0", builtin: true }
   const root = createRoot((dispose) => ({ installed: createInstalled(bridge), dispose }))
   // Another window disabled the extension before this window's initial list arrived.

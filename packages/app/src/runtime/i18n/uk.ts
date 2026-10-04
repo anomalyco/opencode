@@ -353,11 +353,6 @@ export const dict = {
   "dialog.project.edit.worktree.startup": "Скрипт запуску робочої області",
   "dialog.project.edit.worktree.startup.placeholder": "напр. bun install",
 
-  "dialog.releaseNotes.action.getStarted": "Розпочати",
-  "dialog.releaseNotes.action.next": "Далі",
-  "dialog.releaseNotes.action.hideFuture": "Не показувати це в майбутньому",
-  "dialog.releaseNotes.media.alt": "Попередній перегляд релізу",
-
   "dialog.usageExceeded.dontShowAgain": "Більше не показувати",
 
   "toast.permissions.autoaccept.on.title": "Автоматичне прийняття дозволів",
@@ -809,7 +804,6 @@ export const dict = {
   "session.view.select": "Вид сеансу",
   "session.background.moveRunning": "Перейти до фону",
   "session.timeline.working": "Працює",
-  "session.review.wrapLines": "Переносити рядки",
   "session.websearch.title": "Веб-пошук сторонніх розробників",
   "session.websearch.description": "Виберіть пошукову службу, яку агенти використовують для пошуку в Інтернеті",
   "session.websearch.provider": "Пошукова служба",
@@ -870,8 +864,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Субагенти",
   "settings.timeline.category.notices": "Повідомлення",
   "settings.timeline.category.tools": "Інші інструменти",
-  "settings.general.row.mobileDiffWrap.description":
-    "Переносити довгі рядки в мобільні відмінності замість прокручування по горизонталі",
   "provider.connect.error.unsupportedFields": "Ця форма автентифікації містить непідтримувані поля",
   "settings.about.writtenByNames": "Автор: {{names}}",
   "settings.about.illustratedByNames": "Ілюстрації: {{names}}",

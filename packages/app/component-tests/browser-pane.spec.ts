@@ -1,24 +1,25 @@
-import { fileURLToPath } from "node:url"
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, sourceURL, story } from "../../storybook/playwright/story"
 
-const source = (path: string) => `/@fs/${fileURLToPath(new URL(path, import.meta.url)).replaceAll("\\", "/")}`
+const source = (path: string) => sourceURL(new URL(path, import.meta.url))
+
 const modules = {
   fixture: source("../../gui-extensions/src/browser/panel.fixture.tsx"),
-  surface: source("../src/runtime/extension/surface.tsx"),
+  embeds: source("../src/runtime/extension/embeds.tsx"),
   language: source("../src/runtime/i18n/language.tsx"),
 }
 
 story.beforeEach(async ({ mount, page }) => {
-  // Any story loads the app styles; the fixture mounts the pane beside it on the real host surface.
+  // Any story loads the app styles; the fixture mounts the pane beside it on the real host embeds.
   await mount("ui-line-comment--editor")
   await page.evaluate(async (modules) => {
-    const [{ mountBrowserPane }, { createSurfaces }, language] = await Promise.all([
+    const [{ mountBrowserPane }, { createEmbeds }, language] = await Promise.all([
       import(modules.fixture),
-      import(modules.surface),
+      import(modules.embeds),
       import(modules.language),
     ])
+
     mountBrowserPane({
-      createSurfaces,
+      createEmbeds,
       LanguageProvider: language.LanguageProvider,
       UiI18nBridge: language.UiI18nBridge,
       useLanguage: language.useLanguage,
@@ -26,6 +27,7 @@ story.beforeEach(async ({ mount, page }) => {
   }, modules)
   await expect(page.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
+
 story("hides a native page when another takes the pane, the pane hides, or it unmounts", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const alpha = root.getByTestId("native-Alpha")
@@ -50,11 +52,14 @@ story("hides the native view immediately while the pane stays mounted", async ({
   const root = page.getByTestId("browser-pane-fixture")
   const toggle = root.getByRole("button", { name: "Toggle Review tab", exact: true })
   await expect(toggle).toBeEnabled()
+
   // Read in the same task as the click so a deferred animation-frame hide cannot pass.
   const visible = await toggle.evaluate((element) => {
     element.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
     return document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
   })
+
   expect(visible).toBe("false")
   await expect(root.locator("#browser-panel")).toHaveCount(1)
   await toggle.click()
@@ -108,6 +113,19 @@ story("comments on a picked element over a still of the page", async ({ page }) 
   await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
   await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+
+  // The pane stays mounted when Beta is routed, and its picker then listens to Beta's page.
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByTestId("native-Beta")).toHaveAttribute("data-visible", "true")
+  await picker.click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(editor).toBeFocused()
+  await editor.fill("Beta's button too")
+  await editor.press("Enter")
+  await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([
+    "button.primary @e7: Make this the primary colour",
+    "button.primary @e7: Beta's button too",
+  ])
 })
 
 story("cancels the picker and a comment with Escape", async ({ page }) => {
@@ -157,6 +175,7 @@ story("keeps the comment editor and its actions inside the page", async ({ page 
     .poll(async () => {
       const surface = await root.locator('[data-component="browser-comment"]').boundingBox()
       const box = await editor.boundingBox()
+
       return !!surface && !!box && box.y + box.height <= surface.y + surface.height
     })
     .toBe(true)
@@ -280,10 +299,12 @@ story("selects the full URL when the address field gains focus", async ({ page }
   await address.focus()
   await expect(address).toHaveJSProperty("selectionStart", 0)
   await expect(address).toHaveJSProperty("selectionEnd", "https://example.com/".length)
+  // A click on the focused field places the caret instead of selecting the URL again.
   await address.press("ArrowRight")
   await address.click()
-  await expect(address).toHaveJSProperty("selectionStart", 0)
-  await expect(address).toHaveJSProperty("selectionEnd", "https://example.com/".length)
+  await expect
+    .poll(() => address.evaluate((input: HTMLInputElement) => input.selectionStart === input.selectionEnd))
+    .toBe(true)
 })
 
 story("keeps the current page visible while a submitted URL loads", async ({ page }) => {

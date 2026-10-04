@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, For, Show, type JSX, type ParentProps } from "solid-js"
+import { createMemo, createSignal, For, Show, type JSX, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import { AppIcon } from "@opencode/ui/app-icon"
 import { Icon } from "@opencode/ui/icon"
@@ -7,7 +7,7 @@ import { Spinner } from "@opencode/ui/spinner"
 import { SplitButton, SplitButtonAction, SplitButtonMenuTrigger } from "@opencode/ui/split-button"
 import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
-import { Native, useExtension, type Context, type OS, type SessionView } from "../sdk"
+import { createLatest, useExtension, type Context, type OS, type MountedSession, type SessionScreen } from "../sdk"
 import type { OpenApp } from "./apps"
 import { useShared } from "./context"
 import { openInAppParentPath } from "./path"
@@ -44,18 +44,23 @@ const LINUX_OPEN_APPS = [
 
 function openAppsForOS(os: OS) {
   if (os === "macos") return MAC_OPEN_APPS
+
   if (os === "windows") return WINDOWS_OPEN_APPS
+
   return LINUX_OPEN_APPS
 }
 
 // File manager names match the host's project menus.
 function fileManagerApp(os: OS) {
   if (os === "macos") return { label: "open.finder", icon: "finder" } as const
+
   if (os === "windows") return { label: "open.fileExplorer", icon: "file-explorer" } as const
+
   return { label: "open.fileManager", icon: "finder" } as const
 }
 
-const showRequestError = (ctx: Context, err: unknown) => {
+// A rejection's reason: usually an Error, else whatever the platform rejected with.
+const showRequestError = (ctx: Context, err: Error | string) => {
   showToast({
     variant: "error",
     title: ctx.t("common.requestFailed"),
@@ -63,64 +68,59 @@ const showRequestError = (ctx: Context, err: unknown) => {
   })
 }
 
-export function useOpenInApp(input: { session: SessionView; path: () => string }) {
+export function useOpenInApp(input: { session: MountedSession; path: () => string }) {
   const ctx = useExtension()
-  const native = ctx.use(Native)
+  const desktop = ctx.desktop
   const shared = useShared()
 
-  const os = () => native?.os ?? "linux"
+  const os = () => desktop?.os ?? "linux"
   const apps = createMemo(() => openAppsForOS(os()))
   const fileManager = createMemo(() => fileManagerApp(os()))
 
-  const [exists, setExists] = createStore<Partial<Record<OpenApp, boolean>>>({
-    finder: true,
-  })
-
   const checkAppExists = (app: string) => {
     const cached = shared.installed.get(app)
+
     if (cached) return cached
-    const request = Promise.resolve(native?.installed(app))
+
+    const request = Promise.resolve(desktop?.installed(app))
       .then(Boolean)
       .catch(() => false)
+
     shared.installed.set(app, request)
+
     return request
   }
 
-  createEffect(() => {
-    if (!native) return
-
-    const list = apps()
-
-    setExists(Object.fromEntries(list.map((app) => [app.id, undefined])) as Partial<Record<OpenApp, boolean>>)
-
-    void Promise.all(list.map((app) => checkAppExists(app.openWith).then((ok) => [app.id, ok] as const))).then(
-      (entries) => {
-        setExists(Object.fromEntries(entries) as Partial<Record<OpenApp, boolean>>)
-      },
-    )
-  })
+  // Which of the OS's apps are installed; none are listed until the check answers.
+  const installed = createLatest(
+    () => desktop && apps(),
+    (list) =>
+      Promise.all(list.map((app) => checkAppExists(app.openWith).then((ok) => [app.id, ok] as const))).then(
+        (entries) => new Map<OpenApp, boolean>(entries),
+      ),
+  )
 
   const options = createMemo(() => {
     return [
       { id: "finder", label: ctx.t(fileManager().label), icon: fileManager().icon },
       ...apps()
-        .filter((app) => exists[app.id])
+        .filter((app) => installed.latest?.get(app.id))
         .map((app) => ({ ...app, label: ctx.t(app.label) })),
     ] as const
   })
 
   const [menu, setMenu] = createStore({ open: false })
-  const [openRequest, setOpenRequest] = createStore({
-    app: undefined as OpenApp | undefined,
-  })
+  const [openRequest, setOpenRequest] = createStore<{ app?: OpenApp }>({})
 
-  const canOpen = createMemo(() => !!native && input.session.server.local)
+  const canOpen = createMemo(() => !!desktop && input.session.server.local)
+
   const current = createMemo(
     () =>
       options().find((o) => o.id === shared.app?.current()) ??
       options()[0] ??
       ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
   )
+
   const opening = createMemo(() => openRequest.app !== undefined)
 
   const selectApp = (app: OpenApp | "finder") => {
@@ -129,18 +129,23 @@ export function useOpenInApp(input: { session: SessionView; path: () => string }
   }
 
   const openPath = (app: OpenApp | "finder", target = input.path(), reveal = false) => {
-    if (opening() || !canOpen() || !native) return
+    if (opening() || !canOpen() || !desktop) return
+
     if (!target) return
 
     const item = options().find((o) => o.id === app)
     const openWith = item && "openWith" in item ? item.openWith : undefined
     setOpenRequest("app", app)
+
     const request =
       app === "finder" && reveal
-        ? native.reveal(target).then((revealed) => (revealed ? undefined : native.launch(openInAppParentPath(target))))
-        : native.launch(target, openWith)
+        ? desktop
+            .reveal(target)
+            .then((revealed) => (revealed ? undefined : desktop.launch(openInAppParentPath(target))))
+        : desktop.launch(target, openWith)
+
     request
-      .catch((err: unknown) => showRequestError(ctx, err))
+      .catch((err) => showRequestError(ctx, err))
       .finally(() => {
         setOpenRequest("app", undefined)
       })
@@ -154,12 +159,14 @@ export function useOpenInApp(input: { session: SessionView; path: () => string }
         showToast({
           variant: "success",
           // Solid resolves JSX accessors under the toast's render owner, not this imperative call site.
+          // SAFETY: the toast inserts `icon` as a child, and Solid's insert renders a function child as an accessor.
+          // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
           icon: (() => <Icon name="circle-check" />) as unknown as JSX.Element,
           title: ctx.t("common.copied"),
           description: target,
         })
       })
-      .catch((err: unknown) => showRequestError(ctx, err))
+      .catch((err) => showRequestError(ctx, err))
   }
 
   return {
@@ -177,9 +184,9 @@ export function useOpenInApp(input: { session: SessionView; path: () => string }
 
 type OpenInAppState = ReturnType<typeof useOpenInApp>
 
-export default function OpenInAppButton(props: { session: SessionView }) {
+export default function OpenInAppButton(props: { session: MountedSession; screen: SessionScreen }) {
   const ctx = useExtension()
-  const directory = () => props.session.file.root
+  const directory = () => props.screen.file.root
   const state = useOpenInApp({ session: props.session, path: directory })
 
   return (
@@ -194,6 +201,7 @@ export default function OpenInAppButton(props: { session: SessionView }) {
             onPointerDown={(event) => event.stopPropagation()}
             onClick={(event) => {
               event.stopPropagation()
+
               if (state.opening()) return
               state.openPath(state.current().id)
             }}
@@ -268,7 +276,9 @@ function OpenInAppMenuItemsV2(props: {
           <Menu.RadioGroup
             value={props.state.current().id}
             onChange={(value) => {
-              props.state.selectApp(value as OpenApp)
+              const option = props.state.options().find((item) => item.id === value)
+
+              if (option) props.state.selectApp(option.id)
             }}
           >
             <For each={props.state.options()}>
@@ -312,6 +322,7 @@ export function OpenInAppContextMenuV2(
   }>,
 ) {
   const state = props.state
+
   if (!state) return props.children
   const [open, setOpen] = createSignal(false)
 

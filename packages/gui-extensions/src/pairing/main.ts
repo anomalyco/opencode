@@ -1,33 +1,37 @@
 import { powerSaveBlocker } from "electron"
-import { Schema } from "effect"
-import { MainApp, MainStorage, type Setup } from "../sdk/main"
+import type { MainSetup } from "../sdk/main"
 import { Pairing } from "./contract"
+import type definition from "./index"
 
-const setup: Setup = (ctx) => {
-  const app = ctx.use(MainApp)
-  const stored = ctx.use(MainStorage).store("keepScreenActive", {
-    schema: Schema.Boolean,
-    initial: false,
-    from: "state:opencode.settings/keepScreenActive",
-  })
-  const blocker = { id: undefined as number | undefined }
+/** The display sleep blocker this instance holds, if any. */
+type Blocker = { id?: number }
+
+const setup: MainSetup<typeof definition> = (ctx) => {
+  const stored = ctx.stores.keepScreenActive
+  const blocker: Blocker = {}
+
   const release = () => {
     if (blocker.id === undefined) return
     powerSaveBlocker.stop(blocker.id)
     blocker.id = undefined
   }
+
   const keepScreenActive = (enabled: boolean) => {
     if (enabled && blocker.id === undefined) blocker.id = powerSaveBlocker.start("prevent-display-sleep")
+
     if (!enabled) release()
-    stored.set(enabled)
+    stored.update(() => enabled)
   }
-  if (stored.get()) keepScreenActive(true)
-  ctx.cleanup(release)
+
+  if (stored.value) keepScreenActive(true)
+  ctx.scope.addFinalizer(release)
 
   const client = async () => {
-    const server = app.server("sidecar")
+    const server = ctx.serverEndpoints.get("sidecar")
+
     if (!server) throw new Error("The local desktop server is not ready")
     const { OpenCode } = await import("@opencode/client/promise")
+
     return OpenCode.make({ baseUrl: server.url, headers: server.headers })
   }
 

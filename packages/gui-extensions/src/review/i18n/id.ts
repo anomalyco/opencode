@@ -10,4 +10,7 @@ export default {
   "git.description": "Lacak, tinjau, dan urungkan perubahan di proyek ini",
   loadingChanges: "Memuat perubahan…",
   noChanges: "Tidak ada perubahan",
+  "settings.wrapLines.title": "Bungkus garis",
+  "settings.wrapLines.description":
+    "Bungkus garis panjang dalam perbedaan seluler alih-alih menggulir secara horizontal",
 }

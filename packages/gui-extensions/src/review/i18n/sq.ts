@@ -10,4 +10,7 @@ export default {
   "git.description": "Gjurmoni, rishikoni dhe anuloni ndryshimet në këtë projekt",
   loadingChanges: "Ndryshimet po ngarkohen…",
   noChanges: "Nuk ka ndryshime",
+  "settings.wrapLines.title": "Mbështill rreshtat",
+  "settings.wrapLines.description":
+    "Mbështillni linjat e gjata në diferenca celulare në vend që të lëvizni horizontalisht",
 }

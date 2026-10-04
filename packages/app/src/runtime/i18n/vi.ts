@@ -309,10 +309,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Chọn màu {{color}}",
   "dialog.project.edit.worktree.startup": "Tập lệnh khởi động không gian làm việc",
   "dialog.project.edit.worktree.startup.placeholder": "ví dụ: bun install",
-  "dialog.releaseNotes.action.getStarted": "Bắt đầu",
-  "dialog.releaseNotes.action.next": "Tiếp theo",
-  "dialog.releaseNotes.action.hideFuture": "Không hiển thị lại",
-  "dialog.releaseNotes.media.alt": "Xem trước bản phát hành",
   "dialog.usageExceeded.dontShowAgain": "Không hiển thị lại",
 
   "toast.permissions.autoaccept.on.title": "Tự động chấp nhận quyền",
@@ -724,7 +720,6 @@ export const dict = {
   "session.view.select": "Chế độ xem phiên",
   "session.background.moveRunning": "Di chuyển đến nền",
   "session.timeline.working": "Đang làm việc",
-  "session.review.wrapLines": "Đường quấn",
   "session.websearch.title": "Tìm kiếm trên web của bên thứ ba",
   "session.websearch.description": "Chọn đại lý nhà cung cấp dịch vụ tìm kiếm sử dụng để tìm kiếm trên web",
   "session.websearch.provider": "Tìm kiếm nhà cung cấp",
@@ -784,8 +779,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Chất phụ",
   "settings.timeline.category.notices": "Thông báo",
   "settings.timeline.category.tools": "Các công cụ khác",
-  "settings.general.row.mobileDiffWrap.description":
-    "Quấn các dòng dài trong các khác biệt trên thiết bị di động thay vì cuộn theo chiều ngang",
 
   "provider.connect.error.unsupportedFields": "Biểu mẫu xác thực này chứa các trường không được hỗ trợ",
   "settings.about.writtenByNames": "Được viết bởi {{names}}",

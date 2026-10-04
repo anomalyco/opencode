@@ -1,9 +1,9 @@
 import type { JSX } from "solid-js"
 import type { ChangeKind } from "../review/contract"
-import { Service, type SessionView } from "../sdk"
+import { Contract, type MountedSession } from "../sdk"
 
 export interface FileTreeProps {
-  readonly session: SessionView
+  readonly session: MountedSession
   /** The files to show, as a tree of only these paths. */
   readonly allowed: readonly string[]
   readonly kinds?: ReadonlyMap<string, ChangeKind>
@@ -12,7 +12,7 @@ export interface FileTreeProps {
 }
 
 export interface FileListProps {
-  readonly session: SessionView
+  readonly session: MountedSession
   readonly files: readonly string[]
   readonly kinds?: ReadonlyMap<string, ChangeKind>
   readonly active?: string
@@ -27,4 +27,4 @@ export interface FileTree {
   List(props: FileListProps): JSX.Element
 }
 
-export const FileTree = Service.define<FileTree>("file.tree")
+export const FileTree = Contract.define<FileTree, "file.tree">("file.tree")

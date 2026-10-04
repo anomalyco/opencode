@@ -12,4 +12,7 @@ export default {
   "git.description": "Tieni traccia, rivedi e annulla le modifiche in questo progetto",
   loadingChanges: "Caricamento modifiche…",
   noChanges: "Nessuna modifica",
+  "settings.wrapLines.title": "A capo automatico",
+  "settings.wrapLines.description":
+    "Manda a capo le righe lunghe nei diff per dispositivi mobili invece di scorrere orizzontalmente",
 }

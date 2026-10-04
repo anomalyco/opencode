@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Yeniləmə hazırdır",
   "dialog.restart": "Yenidən başlat",
   "dialog.later": "Daha sonra",
+  "releaseNotes.action.getStarted": "Başla",
+  "releaseNotes.action.next": "Növbəti",
+  "releaseNotes.action.hideFuture": "Gələcəkdə göstərmə",
+  "releaseNotes.media.alt": "Buraxılış önbaxışı",
 }

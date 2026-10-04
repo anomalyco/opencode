@@ -10,4 +10,6 @@ export default {
   "git.description": "追蹤、檢閱及復原此專案中的變更",
   loadingChanges: "正在載入變更…",
   noChanges: "沒有變更",
+  "settings.wrapLines.title": "換行",
+  "settings.wrapLines.description": "在行動裝置差異中換行，而不是水平捲動",
 }

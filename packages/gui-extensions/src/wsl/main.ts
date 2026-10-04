@@ -1,44 +1,50 @@
-import { Schema } from "effect"
-import { Cli, MainApp, MainStorage, type Setup } from "../sdk/main"
-import { Wsl, type WslServerConfig } from "./contract"
+import { Option, Schema } from "effect"
+import type { MainSetup } from "../sdk/main"
+import { Wsl } from "./contract"
+import type definition from "./index"
 import { createWslRuntime } from "./runtime"
 import { createWslServersController, wslServerIdForDistro } from "./servers"
 import { spawnWslSidecar } from "./sidecar"
 
-// Read leniently like the settings file it migrates from: one bad record must not drop the others.
-const Stored = Schema.Struct({ servers: Schema.Array(Schema.Unknown) })
+// A record is kept when it names a distro; an id that is missing or not a non-empty string is derived from the distro.
+const Distro = Schema.Struct({ distro: Schema.NonEmptyString })
 
-const setup: Setup = (ctx) => {
-  const cli = ctx.use(Cli)
-  const app = ctx.use(MainApp)
-  const packaged = app.packaged
+const Id = Schema.Struct({ id: Schema.NonEmptyString })
+
+const setup: MainSetup<typeof definition> = (ctx) => {
+  const cli = ctx.cli
+  const packaged = ctx.build.packaged
+  const desktopLog = ctx.log
   const t = ctx.t
   const runtime = createWslRuntime(t)
-  const saved = ctx
-    .use(MainStorage)
-    .store("servers", { schema: Stored, initial: { servers: [] }, from: "settings:wslServers" })
+  // Read leniently like the settings file it migrates from: one bad record must not drop the others.
+  const saved = ctx.stores.servers
+
   // Development builds of the desktop app can build the Linux CLI from this checkout.
   const local =
     packaged || !process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD || !process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT
       ? undefined
       : { script: process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD, output: process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT }
-  const log = (level: "info" | "error", message: string, data: Record<string, unknown>) =>
-    app.log(level, `[wsl] ${message}`, data)
+
+  const log = <Data extends Readonly<Record<string, unknown>>>(level: "info" | "error", message: string, data: Data) =>
+    desktopLog.write(level, `[wsl] ${message}`, data)
+
   const controller = createWslServersController({
     cli: { version: cli.version },
     runtime,
     t,
     log,
     readServers: () =>
-      saved.get().servers.flatMap((value) => {
-        if (!value || typeof value !== "object") return []
-        const record = value as Record<string, unknown>
-        const distro = typeof record.distro === "string" && record.distro.length > 0 ? record.distro : null
-        if (!distro) return []
-        const id = typeof record.id === "string" && record.id.length > 0 ? record.id : wslServerIdForDistro(distro)
-        return [{ id, distro } satisfies WslServerConfig]
+      saved.value.servers.flatMap((value) => {
+        const record = Schema.decodeUnknownOption(Distro)(value)
+
+        if (Option.isNone(record)) return []
+        const distro = record.value.distro
+        const id = Schema.decodeUnknownOption(Id)(value)
+
+        return [{ id: Option.isSome(id) ? id.value.id : wslServerIdForDistro(distro), distro }]
       }),
-    writeServers: (servers) => saved.set({ servers }),
+    writeServers: (servers) => saved.update(() => ({ servers })),
     installCli: local
       ? async (distro) => {
           const { buildLocalWslCli } = await import("./local")
@@ -48,6 +54,7 @@ const setup: Setup = (ctx) => {
       : (distro, build) => runtime.installCli(distro, build),
     spawnSidecar: (distro, signal) => {
       log("info", "spawning wsl sidecar", { distro })
+
       return spawnWslSidecar(distro, {
         runtime,
         t,
@@ -57,7 +64,8 @@ const setup: Setup = (ctx) => {
       })
     },
   })
-  const provided = ctx.provide(Wsl, {
+
+  const provider = ctx.provide(Wsl, {
     state: () => controller.getState(),
     probeRuntime: () => controller.probeRuntime(),
     refreshDistros: () => controller.refreshDistros(),
@@ -69,9 +77,11 @@ const setup: Setup = (ctx) => {
     removeServer: (input) => controller.removeServer(input.id),
     startServer: (input) => controller.startServer(input.id),
   })
-  ctx.cleanup(controller.subscribe(() => provided.changed()))
+
+  ctx.scope.addFinalizer(controller.subscribe(() => provider.changed()))
+  // Finalizers run in reverse: the servers stop before the state stops being published.
+  ctx.scope.addFinalizer(() => controller.stopServers())
   controller.startConfiguredServers()
-  return () => controller.stopServers()
 }
 
 export default setup

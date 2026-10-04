@@ -10,4 +10,6 @@ export default {
   "git.description": "ردیابی، بررسی، و لغو تغییرات در این پروژه",
   loadingChanges: "در حال بارگیری تغییرات…",
   noChanges: "بدون تغییر",
+  "settings.wrapLines.title": "شکستن خطوط",
+  "settings.wrapLines.description": "شکستن خطوط بلند در تفاوت‌های تلفن همراه به‌جای پیمایش افقی",
 }
