@@ -134,6 +134,143 @@ it.effect("compaction truncation does not split surrogate pairs", () =>
   }),
 )
 
+it.effect("compaction summarizes an oversized latest exchange instead of retaining it", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    const store = yield* SessionStore.Service
+    const session = yield* insertSession(Session.ID.make("ses_oversized_recent"))
+    const user = (text: string) =>
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text,
+        time: { created: DateTime.makeUnsafe(0) },
+      })
+    const assistant = Schema.decodeUnknownSync(SessionMessage.Assistant)({
+      id: SessionMessage.ID.create(),
+      type: "assistant",
+      agent: Agent.defaultID,
+      model: resolved.ref,
+      content: [
+        { type: "reasoning", id: "thought", text: "Earlier reasoning. ".repeat(4_000), time: { created: 0 } },
+        { type: "text", text: "The analysis is complete." },
+      ],
+      time: { created: 0, completed: 0 },
+    })
+    const context = {
+      ...loaded(session, [user("Earlier question"), user("Investigate this regression"), assistant]),
+      model: { ...resolved, limit: { context: 16_000, output: 4_000 } },
+    }
+    expect(yield* compaction.compact({ reason: "overflow", context })).toEqual({ status: "completed" })
+
+    const messages = yield* store.context(session.id)
+    expect(SessionCompaction.estimateContext({ ...context, messages })).toBeLessThan(context.model.limit.context)
+    expect(messages[0]).toMatchObject({ type: "compaction", status: "completed", recent: "" })
+    expect(JSON.stringify(requests[0]?.messages)).toContain("Investigate this regression")
+    expect(JSON.stringify(requests[0]?.messages)).toContain("The analysis is complete.")
+    expect(JSON.stringify(requests[0]?.messages)).not.toContain("Earlier reasoning.")
+  }),
+)
+
+for (const keep of [0, 50, 15_000]) {
+  it.effect(`compaction keeps complete exchanges within a ${keep} token recent budget`, () =>
+    Effect.gen(function* () {
+      requests = []
+      const compaction = yield* SessionCompaction.Service
+      const store = yield* SessionStore.Service
+      yield* compaction.transform((editor) => editor.configure({ keep }))
+      const session = yield* insertSession(Session.ID.make(`ses_recent_budget_${keep}`))
+      const user = (text: string) =>
+        SessionMessage.User.make({
+          id: SessionMessage.ID.create(),
+          type: "user",
+          text,
+          time: { created: DateTime.makeUnsafe(0) },
+        })
+      const assistant = Schema.decodeUnknownSync(SessionMessage.Assistant)({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: Agent.defaultID,
+        model: resolved.ref,
+        content: [{ type: "text", text: "Recent answer" }],
+        time: { created: 0, completed: 0 },
+      })
+      const messages = [user("Earlier question"), user("x".repeat(1_000)), assistant, user("Newest question")]
+      expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
+      expect((yield* store.context(session.id))[0]).toMatchObject({
+        recent: keep === 0 ? "" : "[User]: Newest question",
+      })
+      expect(JSON.stringify(requests[0]?.messages)).toContain("Recent answer")
+      expect(JSON.stringify(requests[0]?.messages).includes("Newest question")).toBe(keep === 0)
+    }),
+  )
+}
+
+it.effect("compaction counts separators when retaining a whole exchange", () =>
+  Effect.gen(function* () {
+    const compaction = yield* SessionCompaction.Service
+    const store = yield* SessionStore.Service
+    yield* compaction.transform((editor) => editor.configure({ keep: 7 }))
+    const session = yield* insertSession(Session.ID.make("ses_recent_separators"))
+    const user = (text: string) =>
+      SessionMessage.User.make({
+        id: SessionMessage.ID.create(),
+        type: "user",
+        text,
+        time: { created: DateTime.makeUnsafe(0) },
+      })
+    const assistant = Schema.decodeUnknownSync(SessionMessage.Assistant)({
+      id: SessionMessage.ID.create(),
+      type: "assistant",
+      agent: Agent.defaultID,
+      model: resolved.ref,
+      content: [{ type: "text", text: "abcd" }],
+      time: { created: 0, completed: 0 },
+    })
+    // The entries estimate as 3 + 4 tokens separately, but their joined text estimates as 8.
+    expect(yield* compactManually(session, [user("Earlier question"), user("abcde"), assistant])).toEqual({
+      status: "completed",
+    })
+    expect((yield* store.context(session.id))[0]).toMatchObject({ recent: "" })
+  }),
+)
+
+for (const text of ["Recent answer", "Recent answer ".repeat(100)]) {
+  it.effect(`compaction bounds assistant-only history after a checkpoint (${text.length} characters)`, () =>
+    Effect.gen(function* () {
+      requests = []
+      const compaction = yield* SessionCompaction.Service
+      const store = yield* SessionStore.Service
+      yield* compaction.transform((editor) => editor.configure({ keep: 50 }))
+      const session = yield* insertSession(Session.ID.make(`ses_recent_checkpoint_${text.length}`))
+      const checkpoint = Schema.decodeUnknownSync(SessionMessage.CompactionCompleted)({
+        id: SessionMessage.ID.create(),
+        type: "compaction",
+        status: "completed",
+        reason: "auto",
+        summary: "Earlier summary",
+        recent: "Earlier exact context",
+        time: { created: 0, completed: 0 },
+      })
+      const assistant = Schema.decodeUnknownSync(SessionMessage.Assistant)({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: Agent.defaultID,
+        model: resolved.ref,
+        content: [{ type: "text", text }],
+        time: { created: 0, completed: 0 },
+      })
+      expect(yield* compactManually(session, [checkpoint, assistant])).toEqual({ status: "completed" })
+      expect((yield* store.context(session.id))[0]).toMatchObject({
+        recent: text.length < 50 ? `[Assistant]: ${text}` : "",
+      })
+      expect(JSON.stringify(requests[0]?.messages)).toContain("Earlier exact context")
+      expect(JSON.stringify(requests[0]?.messages).includes(text)).toBe(text.length > 50)
+    }),
+  )
+}
+
 test("compaction prompt requires the checkpoint headings in order", () => {
   const prompt = SessionCompaction.buildPrompt(false)
   expect(prompt.match(/^#{2,3} .+$/gm)).toEqual([
