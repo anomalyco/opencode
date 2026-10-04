@@ -32,7 +32,10 @@ export function useMcpToggle(directory?: Accessor<string | undefined>, onSuccess
       const server = (await serverSDK.api.mcp.list({ location: ref })).data.find((item) => item.name === name)
 
       if (!server || (server.status.status === "pending" && typeof input === "string")) return
-      const enabled = typeof input === "string" ? server.status.status !== "connected" : input.enabled
+      const enabled =
+        typeof input === "string"
+          ? server.status.status !== "connected" && server.status.status !== "idle"
+          : input.enabled
 
       if (!enabled) {
         await serverSDK.api.mcp.disconnect({ server: name, location: ref })

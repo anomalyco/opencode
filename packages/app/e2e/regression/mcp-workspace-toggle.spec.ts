@@ -94,6 +94,24 @@ for (const shared of [true, false]) {
 }
 
 for (const surface of ["popover", "dialog"] as const) {
+  test(`idle MCP stays enabled and disconnects from the ${surface}`, async ({ page }) => {
+    const actions: Parameters<NonNullable<MockServerConfig["onMcpAction"]>>[0][] = []
+    const view = await open(page, {
+      surface,
+      mcp: [{ name: "figma-desktop", status: { status: "idle" } }],
+      onMcpAction: (action) => void actions.push(action),
+    })
+    await expect(view.toggle).toBeChecked()
+    await expect(view.toggle).toBeEnabled()
+    if (surface === "popover") await expect(view.panel.locator(".session-service-status")).toHaveText("Idle")
+    if (surface === "dialog") await expect(view.panel.getByText("idle", { exact: true })).toBeVisible()
+    if (surface === "dialog") await expect(view.panel.getByText("1 of 1 enabled", { exact: true })).toBeVisible()
+    await view.panel.locator('[data-slot="switch-control"]').click()
+    await expect(view.toggle).not.toBeChecked()
+    await expect(view.toggle).toBeEnabled()
+    expect(actions).toEqual([{ server: "figma-desktop", action: "disconnect", directory: workspace }])
+  })
+
   test(`shows connection failures from the MCP ${surface} and allows reconnecting`, async ({ page }) => {
     const error = "Streamable HTTP error: Error POSTing to endpoint: 404 Not Found"
     const state = { fail: true }

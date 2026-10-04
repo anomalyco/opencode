@@ -315,6 +315,7 @@ export const dict = {
   "dialog.mcp.empty": "No MCPs configured",
 
   "mcp.status.connected": "connected",
+  "mcp.status.idle": "idle",
   "mcp.status.failed": "failed",
   "mcp.status.needs_auth": "needs auth",
   "mcp.status.disabled": "disabled",

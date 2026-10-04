@@ -5,7 +5,7 @@ describe("toggleMcp", () => {
   test("runs the status action before refreshing the owning query", async () => {
     const calls: string[] = []
 
-    const input = (status: "connected" | "needs_auth" | "disabled") => ({
+    const input = (status: "connected" | "idle" | "needs_auth" | "disabled") => ({
       status,
       connect: async () => {
         calls.push("connect")
@@ -22,6 +22,10 @@ describe("toggleMcp", () => {
     })
 
     await toggleMcp(input("connected"))
+    expect(calls).toEqual(["disconnect", "refresh"])
+
+    calls.length = 0
+    await toggleMcp(input("idle"))
     expect(calls).toEqual(["disconnect", "refresh"])
 
     calls.length = 0
