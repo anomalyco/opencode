@@ -103,15 +103,8 @@ const OpenAIResponsesToolChoice = Schema.Union([
   Schema.Struct({ type: Schema.tag("image_generation") }),
 ])
 
-const OpenAIResponsesInputItem = Schema.Union([
-  OpenResponses.InputItem,
-  OpenAIResponsesHostedToolItem,
-  OpenResponses.ConfigurationUpdate,
-])
-
 const OpenAIResponsesCoreFields = {
   ...OpenResponses.coreFields,
-  input: Schema.Array(OpenAIResponsesInputItem),
   tools: optionalArray(OpenAIResponsesTools),
   tool_choice: Schema.optional(OpenAIResponsesToolChoice),
   context_management: Schema.optional(
@@ -134,14 +127,14 @@ export type OpenAIResponsesBody = Schema.Schema.Type<typeof OpenAIResponsesBody>
 export const CompactionTrigger = Schema.Struct({ type: Schema.Literal("compaction_trigger") })
 const CheckpointBody = Schema.Struct({
   ...OpenAIResponsesBody.fields,
-  input: Schema.Array(Schema.Union([OpenAIResponsesInputItem, CompactionTrigger])),
+  input: Schema.Array(Schema.Union([OpenResponses.InputItem, CompactionTrigger])),
 })
 
 const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(OpenAIResponsesHostedToolItem)(item) ? item : undefined),
-}
+} satisfies OpenResponses.ProviderAdapter
 
 // GPT-6 and later default to `configuration_update` support, except in `reasoning.mode: "pro"`
 // or alongside automatic `context_management` compaction.

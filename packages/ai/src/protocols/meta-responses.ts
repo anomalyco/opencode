@@ -46,7 +46,6 @@ const ImageItem = Schema.Struct({
 
 const Body = Schema.Struct({
   ...OpenResponses.coreFields,
-  input: Schema.Array(Schema.Union([OpenResponses.InputItem, ImageItem])),
   tools: optionalArray(Schema.Union([OpenResponses.Tool, NativeTool])),
   stream: Schema.Literal(true),
 })
@@ -63,7 +62,7 @@ const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(ImageItem)(item) ? item : undefined),
-}
+} satisfies OpenResponses.ProviderAdapter
 
 const fromRequest = Effect.fn("MetaResponses.fromRequest")(function* (request: LLMRequest) {
   const key = request.model.route.providerMetadataKey ?? String(request.model.provider)

@@ -170,6 +170,15 @@ export const ConfigurationUpdate = Schema.Struct({
 })
 export type ConfigurationUpdate = Schema.Schema.Type<typeof ConfigurationUpdate>
 
+export const HostedToolReplay = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+    id: Schema.String,
+  }),
+  [JsonObject],
+)
+export type HostedToolReplayItem = Schema.Schema.Type<typeof HostedToolReplay>
+
 export const InputItem = Schema.Union([
   CompactionItem,
   ConfigurationUpdate,
@@ -205,13 +214,9 @@ export const InputItem = Schema.Union([
     output: OpenResponsesFunctionCallOutput,
   }),
   HostedToolItem,
+  HostedToolReplay,
 ])
 type OpenResponsesInputItem = Schema.Schema.Type<typeof InputItem>
-export type HostedToolReplayItem = {
-  readonly type: string
-  readonly id: string
-  readonly [key: string]: unknown
-}
 
 // Mutable counterpart of the schema reasoning item so `lowerMessages` can fold
 // multiple streamed summary parts into the same item before flushing.
@@ -247,7 +252,7 @@ export const coreFields = {
   model: Schema.String,
   input: Schema.Array(InputItem),
   instructions: Schema.optional(Schema.String),
-  tools: optionalArray(Tool),
+  tools: optionalArray(Schema.Union([Tool, Schema.Struct({ type: Schema.String })])),
   tool_choice: Schema.optional(ToolChoice),
   store: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -384,22 +389,21 @@ export const decodeChannelEvent = (frame: string) =>
     ),
   )
 
-export interface ProviderAdapter<
-  out Hosted extends HostedToolReplayItem = HostedToolReplayItem,
-  out NativeTool extends { readonly type: string } = { readonly type: string },
-> {
+export interface ProviderAdapter {
   readonly id: string
   readonly name: string
-  readonly nativeTool?: (native: NonNullable<ToolDefinition["native"]>) => Effect.Effect<NativeTool, AIError>
+  readonly nativeTool?: (
+    native: NonNullable<ToolDefinition["native"]>,
+  ) => Effect.Effect<{ readonly type: string }, AIError>
   readonly lowerMedia?: (input: {
     readonly part: MediaPart
     readonly media: Media.Inline | undefined
     readonly request: LLMRequest
   }) => MediaInput | undefined
-  readonly restoreHostedToolItem?: (item: unknown) => Hosted | undefined
+  readonly restoreHostedToolItem?: (item: unknown) => HostedToolReplayItem | undefined
 }
 
-const BASE_ADAPTER: ProviderAdapter<never, never> = { id: ADAPTER, name: NAME }
+const BASE_ADAPTER: ProviderAdapter = { id: ADAPTER, name: NAME }
 
 export interface ParserState {
   readonly provider: LLMRequest["model"]["provider"]
@@ -445,16 +449,10 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (protoco
   }
 })
 
-export const lowerTools = <
-  Hosted extends HostedToolReplayItem = never,
-  NativeTool extends { readonly type: string } = never,
->(
-  tools: ReadonlyArray<ToolDefinition>,
-  adapter: ProviderAdapter<Hosted, NativeTool>,
-) =>
+export const lowerTools = (tools: ReadonlyArray<ToolDefinition>, adapter: ProviderAdapter) =>
   Effect.forEach(
     tools,
-    (tool): Effect.Effect<Schema.Schema.Type<typeof Tool> | NativeTool, AIError> =>
+    (tool): Effect.Effect<Schema.Schema.Type<typeof Tool> | { readonly type: string }, AIError> =>
       tool.native !== undefined && adapter.nativeTool ? adapter.nativeTool(tool.native) : lowerTool(adapter.name, tool),
   )
 
@@ -587,12 +585,11 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = <Hosted extends HostedToolReplayItem = never>(
+const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
   request: LLMRequest,
-  adapter: ProviderAdapter<Hosted>,
-) =>
-  Effect.gen(function* () {
-  const input: Array<OpenResponsesInputItem | Hosted> = []
+  adapter: ProviderAdapter,
+) {
+  const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
 
   for (const message of request.messages) {
@@ -752,18 +749,17 @@ const lowerMessages = <Hosted extends HostedToolReplayItem = never>(
   return input
 })
 
-export const lowerConversation = <Hosted extends HostedToolReplayItem = never>(
+export const lowerConversation = Effect.fn("OpenResponses.lowerConversation")(function* (
   request: LLMRequest,
-  adapter: ProviderAdapter<Hosted>,
-) =>
-  Effect.gen(function* () {
-    const instructions = ProviderShared.joinText(request.system)
-    return {
-      model: request.model.id,
-      input: yield* lowerMessages(request, adapter),
-      ...(instructions ? { instructions } : {}),
-    }
-  })
+  adapter: ProviderAdapter,
+) {
+  const instructions = ProviderShared.joinText(request.system)
+  return {
+    model: request.model.id,
+    input: yield* lowerMessages(request, adapter),
+    ...(instructions ? { instructions } : {}),
+  }
+})
 
 export const lowerGeneration = (request: LLMRequest, options = OpenResponsesOptions.resolve(request)) => {
   const generation = request.generation
@@ -813,28 +809,22 @@ export const allowedToolChoice = (request: LLMRequest) => {
   }
 }
 
-export const fromRequestWithAdapter = <
-  Hosted extends HostedToolReplayItem = never,
-  NativeTool extends { readonly type: string } = never,
->(
+export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAdapter")(function* (
   request: LLMRequest,
-  adapter: ProviderAdapter<Hosted, NativeTool>,
-) =>
-  Effect.gen(function* () {
-    const projected = ProviderShared.flattenToolRequest(request)
-    return {
-      ...(yield* lowerConversation(projected.request, adapter)),
-      ...lowerGeneration(request),
-      tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter),
-      tool_choice:
-        allowedToolChoice(request) ??
-        (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice) : undefined),
-    }
-  })
-
-export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (request: LLMRequest) {
-  return yield* fromRequestWithAdapter(request, BASE_ADAPTER)
+  adapter: ProviderAdapter,
+) {
+  const projected = ProviderShared.flattenToolRequest(request)
+  return {
+    ...(yield* lowerConversation(projected.request, adapter)),
+    ...lowerGeneration(request),
+    tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter),
+    tool_choice:
+      allowedToolChoice(request) ??
+      (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice) : undefined),
+  }
 })
+
+export const fromRequest = (request: LLMRequest) => fromRequestWithAdapter(request, BASE_ADAPTER)
 
 // =============================================================================
 // Stream Parsing

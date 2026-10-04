@@ -33,7 +33,6 @@ const XAIResponsesHostedToolItem = Schema.Union([
 
 const XAIResponsesBody = Schema.Struct({
   ...OpenResponses.coreFields,
-  input: Schema.Array(Schema.Union([OpenResponses.InputItem, XAIResponsesHostedToolItem])),
   stream: Schema.Literal(true),
 })
 
@@ -41,7 +40,7 @@ const adapter = {
   id: ADAPTER,
   name: NAME,
   restoreHostedToolItem: (item: unknown) => (Schema.is(XAIResponsesHostedToolItem)(item) ? item : undefined),
-}
+} satisfies OpenResponses.ProviderAdapter
 
 const fromRequest = Effect.fn("XAIResponses.fromRequest")(function* (request: LLMRequest) {
   if (request.providerOptions?.contextManagement !== undefined)
