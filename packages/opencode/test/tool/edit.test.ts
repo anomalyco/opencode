@@ -11,6 +11,7 @@ import { Format } from "../../src/format"
 import { Agent } from "../../src/agent/agent"
 import { EventV2Bridge } from "../../src/event-v2-bridge"
 import { Truncate } from "@/tool/truncate"
+import { SyntaxValidator } from "@/syntax"
 import { SessionID, MessageID } from "../../src/session/schema"
 import * as Tool from "../../src/tool/tool"
 import { testEffect } from "../lib/effect"
@@ -32,7 +33,7 @@ afterEach(async () => {
 })
 
 const layer = LayerNode.compile(
-  LayerNode.group([LSP.node, FSUtil.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node]),
+  LayerNode.group([LSP.node, FSUtil.node, Format.node, EventV2Bridge.node, Truncate.node, Agent.node, SyntaxValidator.node]),
 )
 
 const it = testEffect(layer)
@@ -568,6 +569,58 @@ describe("tool.edit", () => {
         ])
 
         expect(yield* load(filepath)).toBe("top = 1\nmiddle = keep\nbottom = 2\n")
+      }),
+    )
+  })
+
+  describe("syntax validation", () => {
+    it.instance("detects syntax errors in edited TypeScript file", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "test.ts")
+        yield* put(filepath, "export function foo(): string {\n  return 'hello'\n}\n")
+
+        const res = yield* run({
+          filePath: filepath,
+          oldString: "return 'hello'",
+          newString: "const broken = ",
+        })
+
+        expect(res.output).toContain("Syntax error(s) detected in test.ts")
+        expect(res.output).toContain("Expression expected")
+      }),
+    )
+
+    it.instance("detects syntax errors in edited Python file", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "app.py")
+        yield* put(filepath, "def calculate():\n    return 42\n")
+
+        const res = yield* run({
+          filePath: filepath,
+          oldString: "def calculate():",
+          newString: "def calculate(",
+        })
+
+        expect(res.output).toContain("Syntax error(s) detected in app.py")
+      }),
+    )
+
+    it.instance("applies clean edit without syntax error reports when syntax is valid", () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const filepath = path.join(test.directory, "valid.ts")
+        yield* put(filepath, "export function add(a: number, b: number): number {\n  return a + b\n}\n")
+
+        const res = yield* run({
+          filePath: filepath,
+          oldString: "return a + b",
+          newString: "const sum = a + b\n  return sum",
+        })
+
+        expect(res.output).not.toContain("Syntax error(s) detected")
+        expect(res.metadata.syntaxErrors?.length).toBe(0)
       }),
     )
   })

@@ -4,7 +4,7 @@
 // https://github.com/cline/cline/blob/main/evals/diff-edits/diff-apply/diff-06-26-25.ts
 
 import * as path from "path"
-import { Effect, Schema, Semaphore } from "effect"
+import { Effect, Option, Schema, Semaphore } from "effect"
 import * as Tool from "./tool"
 import { LSP } from "@/lsp/lsp"
 import { createTwoFilesPatch, diffLines } from "diff"
@@ -18,6 +18,7 @@ import { Snapshot } from "@/snapshot"
 import { assertExternalDirectoryEffect } from "./external-directory"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import * as Bom from "@/util/bom"
+import { SyntaxValidator } from "../syntax"
 
 function normalizeLineEndings(text: string): string {
   return text.replaceAll("\r\n", "\n")
@@ -62,6 +63,7 @@ export const EditTool = Tool.define(
     const afs = yield* FSUtil.Service
     const format = yield* Format.Service
     const events = yield* EventV2Bridge.Service
+    const syntax = yield* Effect.serviceOption(SyntaxValidator.Service)
 
     return {
       description: DESCRIPTION,
@@ -200,11 +202,21 @@ export const EditTool = Tool.define(
           const block = LSP.Diagnostic.report(filePath, diagnostics[normalizedFilePath] ?? [])
           if (block) output += `\n\nLSP errors detected in this file, please fix:\n${block}`
 
+          let syntaxErrors: readonly SyntaxValidator.SyntaxDiagnostic[] = []
+          if (Option.isSome(syntax) && syntax.value.supports(filePath)) {
+            const validation = yield* syntax.value.validate(filePath, contentNew)
+            if (!validation.valid) {
+              syntaxErrors = validation.errors
+              output += `\n\n${syntax.value.formatReport(filePath, validation.errors)}`
+            }
+          }
+
           return {
             metadata: {
               diagnostics,
               diff,
               filediff,
+              syntaxErrors,
             },
             title: `${path.relative(instance.worktree, filePath)}`,
             output,

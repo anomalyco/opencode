@@ -10,6 +10,7 @@ import { ShareNext } from "@/share/share-next"
 import { Effect, Layer } from "effect"
 import { Config } from "@/config/config"
 import { Skeleton } from "../skeleton"
+import { SyntaxValidator } from "../syntax"
 import { Service } from "./bootstrap-service"
 
 export { Service } from "./bootstrap-service"
@@ -53,7 +54,7 @@ const layer = Layer.effect(
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,
-  deps: [Config.node, Format.node, LSP.node, Plugin.node, Project.node, ShareNext.node, Skeleton.node, Snapshot.node, Vcs.node],
+  deps: [Config.node, Format.node, LSP.node, Plugin.node, Project.node, ShareNext.node, Skeleton.node, Snapshot.node, SyntaxValidator.node, Vcs.node],
 })
 
 export * as InstanceBootstrap from "./bootstrap"
