@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "עדכון מוכן",
   "dialog.restart": "הפעל מחדש",
   "dialog.later": "מאוחר יותר",
+  "releaseNotes.action.getStarted": "התחל",
+  "releaseNotes.action.next": "הבא",
+  "releaseNotes.action.hideFuture": "אל תציג אותם בעתיד",
+  "releaseNotes.media.alt": "תצוגה מקדימה של הגרסה",
 }

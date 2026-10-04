@@ -860,8 +860,10 @@ type SessionDomain = Pick<
   | "compact"
   | "synthetic"
   | "interrupt"
-  | "rename"
+  | "update"
+  | "move"
   | "wait"
+  | "context"
 >
 ```
 
@@ -890,7 +892,7 @@ effect: (ctx) =>
         id: Skill.ID.make("review"),
         name: Skill.Name.make("Review"),
         description: "Review the current changes",
-        location: "/workspace/.opencode/skills/review.md",
+        path: "/workspace/.opencode/skills/review/SKILL.md",
         content: "Review the current changes for correctness and missing tests.",
       }))
       const review = editor.get("review")
@@ -1084,6 +1086,11 @@ Provider callbacks receive the current location, working-copy root, canonical pr
 store. Diff callbacks also receive the selected mode, requested context, and output byte budget. Repository discovery
 continues to use OpenCode's built-in Git and Mercurial detectors.
 
+Providers can optionally implement `init(scope)` to create a repository in `scope.worktree`. Initialization selects
+the provider by ID (Git by default), not by the detected repository type. Register a provider with `init` even when
+the location has no repository yet; OpenCode checks that the directory exists and has no repository before calling
+it, then rediscovers the project. New repository formats still need discovery support beyond this callback.
+
 Schemas: [`Vcs.Info`](/api#schema-Vcs.Info), [`Vcs.FileStatus`](/api#schema-Vcs.FileStatus),
 [`FileDiff.Info`](/api#schema-FileDiff.Info).
 
@@ -1096,9 +1103,14 @@ interface VcsEditor {
   }
 }
 
-interface VcsDomain extends VcsApi<unknown> {
+interface VcsDomain extends Omit<VcsApi<unknown>, "init"> {
   readonly transform: Transform<VcsEditor>
   readonly reload: () => Effect.Effect<void>
+}
+
+interface VcsDefinition {
+  readonly init?: (scope: VcsScope) => Effect.Effect<void, unknown>
+  // Existing info, branches, status, and diff callbacks are required.
 }
 ```
 

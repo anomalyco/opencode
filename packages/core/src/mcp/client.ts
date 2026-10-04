@@ -26,7 +26,7 @@ import {
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
-import { Cause, Effect, Exit, Schema } from "effect"
+import { Cause, Clock, Duration, Effect, Exit, Schedule, Schema } from "effect"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
 import type { Session } from "@opencode/schema/session"
 import { McpStdio } from "./stdio.js"
@@ -48,6 +48,14 @@ const describe = (error: unknown) => {
         : undefined
   return detail && !error.message.includes(detail) ? `${error.message} (${detail})` : error.message
 }
+
+// Overloaded or restarting servers and dropped connections usually recover within a second.
+// Fetch reports network failures as a TypeError carrying a system error code.
+// 501 means the server will never support the request.
+const isTransient = (error: unknown) =>
+  error instanceof SdkHttpError
+    ? error.status === 408 || error.status === 429 || (error.status >= 500 && error.status !== 501)
+    : error instanceof TypeError && "code" in error
 
 export type { GetPromptResult, Prompt, ReadResourceResult, Resource, Tool }
 export type ResourceTemplate = ResourceTemplateType
@@ -159,6 +167,20 @@ export const connect = Effect.fnUntraced(function* (
       ? `${describe(error)}: ${lastError}`
       : describe(error)
 
+  // Two more attempts, 250 ms and 1 s later, while the failure is transient and the deadline has not passed.
+  const retrying = <A, E>(what: string, effect: Effect.Effect<A, E>, deadline = Infinity) =>
+    Effect.retry(
+      effect,
+      Schedule.max([Schedule.exponential("250 millis", 4), Schedule.recurs(2)]).pipe(
+        Schedule.setInputType<E>(),
+        Schedule.while(({ input, now, duration }) =>
+          !isTransient(input) || now + Duration.toMillis(duration) >= deadline
+            ? Effect.succeed(false)
+            : Effect.logWarning(`retrying ${what}`, { server, error: describe(input) }).pipe(Effect.as(true)),
+        ),
+      ),
+    )
+
   const initialize = Effect.fnUntraced(function* (transport: Transport) {
     const runFork = Effect.runForkWith(yield* Effect.context())
     const client = new Client(clientInfo, {
@@ -245,22 +267,28 @@ export const connect = Effect.fnUntraced(function* (
     const url = new URL(config.url)
     const addedCodemode = config.codemode !== false && !url.searchParams.has("codemode")
     if (addedCodemode) url.searchParams.set("codemode", "false")
-    const open = (url: URL) => {
+    const open = Effect.fnUntraced(function* (url: URL) {
       session.transport = new StreamableHTTPClientTransport(url, {
         requestInit: config.headers ? { headers: config.headers } : undefined,
         authProvider,
         fetch,
       })
-      return initialize(session.transport)
-    }
+      return yield* initialize(session.transport)
+    })
 
-    return yield* open(url).pipe(
-      Effect.catch((error) => {
-        if (!addedCodemode || !(error instanceof SdkHttpError) || (error.status !== 400 && error.status !== 404))
-          return Effect.fail(error)
-        // Servers that reject unknown query params get one retry at the configured URL.
-        return open(new URL(config.url))
-      }),
+    // Every attempt opens a fresh transport; no retry starts once the startup timeout has passed.
+    const deadline = (yield* Clock.currentTimeMillis) + (config.timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT)
+    return yield* retrying(
+      "MCP connect",
+      open(url).pipe(
+        Effect.catch((error) => {
+          if (!addedCodemode || !(error instanceof SdkHttpError) || (error.status !== 400 && error.status !== 404))
+            return Effect.fail(error)
+          // Servers that reject unknown query params get one retry at the configured URL.
+          return open(new URL(config.url))
+        }),
+      ),
+      deadline,
     )
   }).pipe(Effect.exit)
   if (Exit.isSuccess(exit)) {
@@ -292,20 +320,23 @@ export const connect = Effect.fnUntraced(function* (
       Effect.tryPromise({ try: run, catch: failure }).pipe(
         Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
       )
+    // Listing is read-only, so a transient failure is safe to retry.
+    const list = <A>(what: string, run: () => Promise<A>) =>
+      retrying(what, Effect.tryPromise({ try: run, catch: (error) => error })).pipe(
+        Effect.mapError(failure),
+        Effect.tapError((error) => Effect.logWarning(`failed to ${what}`, { server, error: error.message })),
+      )
 
     return {
       modern: client.getProtocolEra() === "modern",
       instructions: client.getInstructions()?.trim() || undefined,
-      tools: () =>
-        request("list MCP tools", () => client.listTools(undefined, catalog)).pipe(Effect.map((r) => r.tools)),
+      tools: () => list("list MCP tools", () => client.listTools(undefined, catalog)).pipe(Effect.map((r) => r.tools)),
       prompts: () =>
-        request("list MCP prompts", () => client.listPrompts(undefined, catalog)).pipe(Effect.map((r) => r.prompts)),
+        list("list MCP prompts", () => client.listPrompts(undefined, catalog)).pipe(Effect.map((r) => r.prompts)),
       resources: () =>
-        request("list MCP resources", () => client.listResources(undefined, catalog)).pipe(
-          Effect.map((r) => r.resources),
-        ),
+        list("list MCP resources", () => client.listResources(undefined, catalog)).pipe(Effect.map((r) => r.resources)),
       resourceTemplates: () =>
-        request("list MCP resource templates", () => client.listResourceTemplates(undefined, catalog)).pipe(
+        list("list MCP resource templates", () => client.listResourceTemplates(undefined, catalog)).pipe(
           Effect.map((r) => r.resourceTemplates),
         ),
       readResource: (input) => {

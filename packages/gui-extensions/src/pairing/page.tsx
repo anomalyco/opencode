@@ -4,31 +4,42 @@ import { Icon } from "@opencode/ui/icon"
 import { Switch } from "@opencode/ui/switch"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/solid-query"
-import { createEffect, createMemo, onCleanup, Show, type Accessor, type JSX } from "solid-js"
+import { createMemo, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { renderSVG } from "uqr"
-import { Dialogs, System, useExtension, type RemoteClient } from "../sdk"
+import { useExtension, type Live, type IpcClient } from "../sdk"
 import type { Pairing } from "./contract"
 
-type Client = RemoteClient<typeof Pairing.spec>
+type Client = IpcClient<typeof Pairing.spec>
 
-export default function PairingPage(props: { pairing: Accessor<Client | undefined> }) {
-  return <Show when={props.pairing()}>{(client) => <SettingsPairing client={client()} />}</Show>
+// The page shows nothing until the main side is up, and again while it is away.
+export default function PairingPage(props: { pairing: Accessor<Live<Client>> }) {
+  const client = () => {
+    const live = props.pairing()
+
+    return live.status === "active" ? live.value : undefined
+  }
+
+  return <Show when={client()}>{(client) => <SettingsPairing client={client()} />}</Show>
 }
 
 function SettingsPairing(props: { client: Client }) {
   const ctx = useExtension()
   // The extension's dialogs close with it, so disabling pairing also stops the dialog's code polling.
-  const dialogs = ctx.use(Dialogs)
+  const dialogs = ctx.dialogs
   const queryClient = useQueryClient()
+
   const local = useQuery(() => ({
     queryKey: [ctx.id, "local"],
-    queryFn: () => props.client.info(),
+    queryFn: (input) => props.client.info({ signal: input.signal }),
   }))
+
   // Reading pending query data would suspend the entire settings surface.
   const localInfo = () => (local.isSuccess ? local.data : undefined)
+
   const localHost = createMemo(() =>
     localInfo()?.urls.find((value) => {
       const host = new URL(value).hostname
+
       return (
         host !== "localhost" &&
         !host.endsWith(".localhost") &&
@@ -39,10 +50,12 @@ function SettingsPairing(props: { client: Client }) {
       )
     }),
   )
+
   const screenActive = useQuery(() => ({
     queryKey: [ctx.id, "screen-active"],
     queryFn: () => props.client.screenActive(),
   }))
+
   const screenActivity = useMutation(() => ({
     mutationFn: (enabled: boolean) => props.client.setScreenActive(enabled),
     onSuccess: (_, enabled) => queryClient.setQueryData([ctx.id, "screen-active"], enabled),
@@ -67,7 +80,7 @@ function SettingsPairing(props: { client: Client }) {
                 variant="neutral"
                 disabled={!localHost()}
                 onClick={() =>
-                  dialogs.push(() => (
+                  dialogs.open(() => (
                     <DialogPairing title={ctx.t("connection")} host={localHost()!} code={() => props.client.code()} />
                   ))
                 }
@@ -104,9 +117,13 @@ function SettingsPairing(props: { client: Client }) {
   )
 }
 
+/** The pending return from "Copied" to the copy label. */
+type CopiedTimer = { timeout?: ReturnType<typeof setTimeout> }
+
 function DialogPairing(props: { title: string; host: string; code: () => Promise<string> }) {
   const ctx = useExtension()
-  const system = ctx.use(System)
+  const system = ctx.system
+
   // Codes are single-use, so keep replacing the link while the dialog is open.
   const code = useQuery(() => ({
     queryKey: [ctx.id, "code"],
@@ -114,25 +131,35 @@ function DialogPairing(props: { title: string; host: string; code: () => Promise
     gcTime: 0,
     refetchInterval: 60_000,
   }))
+
   const url = createMemo(() => {
     if (!code.isSuccess) return
+
     return new URL(`/auth/connect/${code.data}`, props.host).href
   })
+
+  // "Copied" shows for two seconds after each copy.
+  const copied: CopiedTimer = {}
+  onCleanup(() => clearTimeout(copied.timeout))
+
   const copy = useMutation(() => ({
     mutationFn: async () => {
       const value = url()
+
       if (!value) return
       await system.copy(value)
     },
+    onMutate: () => clearTimeout(copied.timeout),
+    onSuccess: () => {
+      copied.timeout = setTimeout(() => copy.reset(), 2000)
+    },
   }))
-  createEffect(() => {
-    if (!copy.isSuccess) return
-    const timeout = setTimeout(() => copy.reset(), 2000)
-    onCleanup(() => clearTimeout(timeout))
-  })
+
   const qr = createMemo(() => {
     const value = url()
+
     if (!value) return
+
     return renderSVG(value, { border: 4, blackColor: "currentColor", whiteColor: "transparent" })
   })
 

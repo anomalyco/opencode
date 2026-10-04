@@ -572,8 +572,10 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/baseten": basetenChat,
   "@opencode/ai/providers/cerebras": openaiChat,
   "@opencode/ai/providers/cloudflare-workers-ai": workersAIChat,
+  "@opencode/ai/providers/cohere/chat": openaiChat,
   "@opencode/ai/providers/deepinfra": deepinfraChat,
   "@opencode/ai/providers/deepseek": deepseekChat,
+  "@opencode/ai/providers/digitalocean": openaiChat,
   "@opencode/ai/providers/fireworks": openaiChat,
   "@opencode/ai/providers/groq": openaiChat,
   "@opencode/ai/providers/meta/chat": openaiChat,
@@ -597,11 +599,11 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/google-vertex": gemini,
 
   "@opencode/ai/providers/amazon-bedrock": bedrockConverse,
+  "@opencode/ai/providers/cohere": cohere,
   "@opencode/ai/providers/openrouter": openrouter,
 
   [Provider.aisdk("venice-ai-sdk-provider")]: openaiChat,
   "@opencode/ai/providers/cloudflare-ai-gateway": cloudflareAIGateway,
   [Provider.aisdk("@ai-sdk/gateway")]: vercelGateway,
   [Provider.aisdk("@jerome-benoit/sap-ai-provider-v2")]: sapAICore,
-  [Provider.aisdk("@ai-sdk/cohere")]: cohere,
 }

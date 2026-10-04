@@ -168,10 +168,20 @@ export const ConfigurationUpdate = Schema.Struct({
   type: Schema.Literal("configuration_update"),
   reasoning: Schema.Struct({ effort: OpenResponsesOptions.ReasoningEffort }),
 })
-type ConfigurationUpdate = Schema.Schema.Type<typeof ConfigurationUpdate>
+export type ConfigurationUpdate = Schema.Schema.Type<typeof ConfigurationUpdate>
+
+export const HostedToolReplay = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+    id: Schema.String,
+  }),
+  [JsonObject],
+)
+export type HostedToolReplayItem = Schema.Schema.Type<typeof HostedToolReplay>
 
 export const InputItem = Schema.Union([
   CompactionItem,
+  ConfigurationUpdate,
   Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("system"), content: Schema.String }),
   Schema.Struct({ type: Schema.tag("message"), role: Schema.tag("developer"), content: Schema.String }),
   Schema.Struct({
@@ -204,24 +214,9 @@ export const InputItem = Schema.Union([
     output: OpenResponsesFunctionCallOutput,
   }),
   HostedToolItem,
+  HostedToolReplay,
 ])
 type OpenResponsesInputItem = Schema.Schema.Type<typeof InputItem>
-export type HostedToolReplayItem = {
-  readonly type: string
-  readonly id: string
-  readonly [key: string]: unknown
-}
-type LoweredInputItem =
-  | OpenResponsesInputItem
-  | HostedToolReplayItem
-  | ConfigurationUpdate
-  | {
-      readonly type: "message"
-      readonly id?: string
-      readonly role: "assistant"
-      readonly content: ReadonlyArray<{ readonly type: "output_text"; readonly text: string }>
-      readonly phase?: MessagePhase | null
-    }
 
 // Mutable counterpart of the schema reasoning item so `lowerMessages` can fold
 // multiple streamed summary parts into the same item before flushing.
@@ -238,6 +233,14 @@ export const Tool = Schema.Struct({
   parameters: JsonObject,
   strict: Schema.optional(Schema.Boolean),
 })
+
+export const HostedTool = Schema.StructWithRest(
+  Schema.Struct({
+    type: Schema.String,
+  }),
+  [JsonObject],
+)
+export type HostedTool = Schema.Schema.Type<typeof HostedTool>
 
 export const ToolChoice = Schema.Union([
   Schema.Literals(["auto", "none", "required"]),
@@ -257,7 +260,7 @@ export const coreFields = {
   model: Schema.String,
   input: Schema.Array(InputItem),
   instructions: Schema.optional(Schema.String),
-  tools: optionalArray(Tool),
+  tools: optionalArray(Schema.Union([Tool, HostedTool])),
   tool_choice: Schema.optional(ToolChoice),
   store: Schema.optional(Schema.Boolean),
   metadata: Schema.optional(Schema.Record(Schema.String, Schema.String)),
@@ -292,7 +295,7 @@ export const coreFields = {
   frequency_penalty: Schema.optional(Schema.Number),
 }
 
-const OpenResponsesBody = Schema.Struct({
+export const OpenResponsesBody = Schema.Struct({
   ...coreFields,
   stream: Schema.Literal(true),
 })
@@ -397,9 +400,7 @@ export const decodeChannelEvent = (frame: string) =>
 export interface ProviderAdapter {
   readonly id: string
   readonly name: string
-  readonly nativeTool?: (
-    native: NonNullable<ToolDefinition["native"]>,
-  ) => Effect.Effect<{ readonly type: string }, AIError>
+  readonly nativeTool?: (native: NonNullable<ToolDefinition["native"]>) => Effect.Effect<HostedTool, AIError>
   readonly lowerMedia?: (input: {
     readonly part: MediaPart
     readonly media: Media.Inline | undefined
@@ -455,8 +456,10 @@ export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (protoco
 })
 
 export const lowerTools = (tools: ReadonlyArray<ToolDefinition>, adapter: ProviderAdapter) =>
-  Effect.forEach(tools, (tool) =>
-    tool.native !== undefined && adapter.nativeTool ? adapter.nativeTool(tool.native) : lowerTool(adapter.name, tool),
+  Effect.forEach(
+    tools,
+    (tool): Effect.Effect<Schema.Schema.Type<typeof Tool> | HostedTool, AIError> =>
+      tool.native !== undefined && adapter.nativeTool ? adapter.nativeTool(tool.native) : lowerTool(adapter.name, tool),
   )
 
 export const lowerToolChoice = (protocolName: string, toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
@@ -592,7 +595,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
-  const input: LoweredInputItem[] = []
+  const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
 
   for (const message of request.messages) {
@@ -827,11 +830,7 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   }
 })
 
-const decodeBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesBody))
-
-export const fromRequest = Effect.fn("OpenResponses.fromRequest")(function* (request: LLMRequest) {
-  return yield* decodeBody(yield* fromRequestWithAdapter(request, BASE_ADAPTER))
-})
+export const fromRequest = (request: LLMRequest) => fromRequestWithAdapter(request, BASE_ADAPTER)
 
 // =============================================================================
 // Stream Parsing

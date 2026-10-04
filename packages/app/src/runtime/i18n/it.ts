@@ -134,7 +134,6 @@ export const dict = {
   "session.view.select": "Vista sessione",
   "session.background.moveRunning": "Sposta in background",
   "session.timeline.working": "In elaborazione",
-  "session.review.wrapLines": "A capo automatico",
   "session.websearch.title": "Ricerca web di terze parti",
   "session.websearch.description": "Seleziona il provider di ricerca utilizzato dagli agenti per cercare sul web",
   "session.websearch.provider": "Provider di ricerca",
@@ -195,8 +194,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Subagenti",
   "settings.timeline.category.notices": "Avvisi",
   "settings.timeline.category.tools": "Altri strumenti",
-  "settings.general.row.mobileDiffWrap.description":
-    "Manda a capo le righe lunghe nei diff per dispositivi mobili invece di scorrere orizzontalmente",
   "session.background.shell.many": "{{count}} shell",
   "session.background.subagent.many": "{{count}} subagenti",
   "settings.about.otherContributor.many": "{{count}} altri",
@@ -462,10 +459,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Seleziona il colore {{color}}",
   "dialog.project.edit.worktree.startup": "Script di avvio dell'area di lavoro",
   "dialog.project.edit.worktree.startup.placeholder": "es. bun install",
-  "dialog.releaseNotes.action.getStarted": "Inizia",
-  "dialog.releaseNotes.action.next": "Avanti",
-  "dialog.releaseNotes.action.hideFuture": "Non mostrarli in futuro",
-  "dialog.releaseNotes.media.alt": "Anteprima delle novità",
   "dialog.usageExceeded.dontShowAgain": "Non mostrare più",
 
   "toast.permissions.autoaccept.on.title": "Accettazione automatica delle autorizzazioni",

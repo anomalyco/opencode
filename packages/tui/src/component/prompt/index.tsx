@@ -38,7 +38,7 @@ import { expandPastedTextPlaceholders, expandTrackedPastedText } from "../../pro
 import { usePromptStash } from "../../prompt/stash"
 import { DialogStash } from "../dialog-stash"
 import { type AutocompleteOption, type AutocompleteRef, Autocomplete } from "./autocomplete"
-import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
+import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { Locale } from "../../util/locale"
 import { errorMessage } from "../../util/error"
 import { createColors, createFrames } from "../../ui/spinner"
@@ -79,9 +79,6 @@ export type PromptProps = {
   onSubmit?: () => void
   onEmptySubmit?: () => boolean | Promise<boolean>
   ref?: (ref: PromptRef | undefined) => void
-  hint?: JSX.Element
-  right?: JSX.Element
-  showPlaceholder?: boolean
   placeholders?: {
     normal?: string[]
     shell?: string[]
@@ -315,7 +312,6 @@ export function Prompt(props: PromptProps) {
   }))
   const [cursorVersion, setCursorVersion] = createSignal(0)
   const connected = useConnected()
-  const hasRightContent = createMemo(() => Boolean(props.right))
 
   function promptModelWarning() {
     toast.show({
@@ -1594,7 +1590,6 @@ export function Prompt(props: PromptProps) {
   })
 
   const placeholderText = createMemo(() => {
-    if (props.showPlaceholder === false) return undefined
     const value = (() => {
       if (store.mode === "shell") {
         if (!shell().length) return undefined
@@ -1848,11 +1843,6 @@ export function Prompt(props: PromptProps) {
                 modelAlpha={modelMetaAlpha()}
                 variantAlpha={variantMetaAlpha()}
               />
-              <Show when={hasRightContent()}>
-                <box flexDirection="row" gap={1} alignItems="center">
-                  {props.right}
-                </box>
-              </Show>
             </box>
           </box>
         </box>
@@ -1930,7 +1920,7 @@ export function Prompt(props: PromptProps) {
                     </box>
                   </Match>
                   <Match when={true}>
-                    <Show when={!props.hint && locationLabelDisplay()} fallback={props.hint ?? <text />}>
+                    <Show when={locationLabelDisplay()} fallback={<text />}>
                       {(location) => (
                         <text
                           id="prompt.footer.location"

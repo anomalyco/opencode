@@ -35,7 +35,7 @@ const checkMacosApp = Effect.fn("DesktopFiles.checkMacosApp")(function* (appName
 const resolveWindowsAppPath = Effect.fn("DesktopFiles.resolveWindowsAppPath")(function* (appName: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
-  const result = yield* Effect.tryPromise(() => execFilePromise("where", [appName])).pipe(
+  const result = yield* Effect.tryPromise(() => execFilePromise("where", [appName], { windowsHide: true })).pipe(
     Effect.orElseSucceed(() => undefined),
   )
   if (!result) return null

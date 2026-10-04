@@ -1,7 +1,6 @@
 import { expect, test } from "@playwright/test"
 import {
   defineVisualRegions,
-  mapVisualRegions,
   reportVisualStability,
   startVisualProbe,
   stopVisualProbe,

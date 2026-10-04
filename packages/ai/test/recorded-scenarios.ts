@@ -127,11 +127,6 @@ const assistantContent = (events: ReadonlyArray<LLMEvent>) =>
 export const expectFinish = (events: ReadonlyArray<LLMEvent>, reason: FinishReason) =>
   expect(events.at(-1)).toMatchObject({ type: "finish", reason: { normalized: reason } })
 
-export const expectWeatherToolCall = (response: LLMResponse) =>
-  expect(response.toolCalls).toMatchObject([
-    { type: "tool-call", id: expect.any(String), name: weatherToolName, input: { city: "Paris" } },
-  ])
-
 export const expectWeatherToolLoop = (events: ReadonlyArray<LLMEvent>) => {
   const finishes = events.filter(LLMEvent.is.finish)
   expect(finishes).toHaveLength(1)

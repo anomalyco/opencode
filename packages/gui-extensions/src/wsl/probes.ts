@@ -1,7 +1,7 @@
 import { useMutation } from "@tanstack/solid-query"
-import { createEffect } from "solid-js"
+import { createMemo } from "solid-js"
 import type { Accessor } from "solid-js"
-import type { RemoteClient } from "../sdk"
+import { createKeyed, type IpcClient } from "../sdk"
 import type { Wsl, WslInstalledDistro, WslServersState } from "./contract"
 import {
   addServerProbePlan,
@@ -13,35 +13,42 @@ import {
 
 export function useWslAddServerProbes(input: {
   state: Accessor<WslServersState | undefined>
-  api: RemoteClient<(typeof Wsl)["spec"]>
+  api: () => IpcClient<(typeof Wsl)["spec"]>
   view: Accessor<WslAddServerView>
   adding: Accessor<boolean>
   busy: Accessor<boolean>
   selectedDistro: Accessor<string | null>
   addableInstalledDistros: Accessor<WslInstalledDistro[]>
-  onError: (error: unknown) => void
+  onError: (cause: unknown) => void
 }) {
   const gate = createProbeFailureGate()
+
   const probe = useMutation(() => ({
     mutationFn: async (command: AddServerProbePlan) => {
       if (command.kind === "addable") {
         await runAddableProbePlan({
           plan: command.plan,
-          probeAddable: (distros) => input.api.probeAddable({ distros }),
+          probeAddable: (distros) => input.api().probeAddable({ distros }),
         })
+
         return
       }
-      if (command.plan.action === "probeRuntime") await input.api.probeRuntime()
-      if (command.plan.action === "refreshDistros") await input.api.refreshDistros()
+
+      if (command.plan.action === "probeRuntime") await input.api().probeRuntime()
+
+      if (command.plan.action === "refreshDistros") await input.api().refreshDistros()
     },
     onError: input.onError,
     onSettled: (_result, error, command) => {
-      if (command) gate.settle(command.key, error)
+      if (command) gate.settle(command.key, error === null)
     },
   }))
 
-  createEffect(() => {
+  // The probe main should run next for what the dialog shows: one at a time, and not again after it failed until the
+  // user asks to check again.
+  const next = createMemo(() => {
     if (probe.isPending) return
+
     const command = addServerProbePlan({
       state: input.state(),
       view: input.view(),
@@ -50,9 +57,12 @@ export function useWslAddServerProbes(input: {
       selectedDistro: input.selectedDistro(),
       addableInstalledDistros: input.addableInstalledDistros(),
     })
-    if (!command || !gate.accepts(command.key)) return
-    probe.mutate(command)
+
+    return command && gate.accepts(command.key) ? command : undefined
   })
+
+  // Asks main to probe; its answer arrives as a new state.
+  createKeyed(next, (command) => probe.mutate(command))
 
   return {
     probingAddable: () => probe.isPending && probe.variables?.kind === "addable",

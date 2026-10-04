@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "යාවත්කාලීනය සූදානම්",
   "dialog.restart": "යළි අරඹන්න",
   "dialog.later": "පසුව",
+  "releaseNotes.action.getStarted": "පටන් ගන්න",
+  "releaseNotes.action.next": "ඊළඟ",
+  "releaseNotes.action.hideFuture": "මේවා ඉස්සරහට පෙන්නන්න එපා",
+  "releaseNotes.media.alt": "පෙරදසුන නිකුත් කරන්න",
 }

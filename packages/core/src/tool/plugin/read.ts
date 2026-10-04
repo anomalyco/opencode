@@ -94,9 +94,10 @@ export const Plugin = {
                   targets: [FILENAME],
                   start: result.content.type === "list-page" ? resolved : dirname(resolved),
                   stop: root,
+                  type: "file",
                 })
                 const candidates = (yield* Effect.forEach(discovered, fs.resolve)).filter(
-                  (file) => !FSUtil.contains(dirname(file), root),
+                  (file) => !FSUtil.contains(dirname(file), root) && file !== resolved,
                 )
                 if (candidates.length === 0) return
                 yield* sessionInstructions.load({ sessionID: context.sessionID, paths: candidates })
