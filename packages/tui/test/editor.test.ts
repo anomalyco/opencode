@@ -22,6 +22,19 @@ test("rejects when the external editor cannot start", async () => {
   await expect(openEditor({ value: "original", renderer: renderer as never })).rejects.toThrow()
 })
 
+test("returns empty content saved by the external editor", async () => {
+  delete process.env.VISUAL
+  process.env.EDITOR = `${process.execPath} -e Bun.write(process.argv[1],\"\")`
+  const renderer = {
+    suspend() {},
+    resume() {},
+    requestRender() {},
+    currentRenderBuffer: { clear() {} },
+  }
+
+  await expect(openEditor({ value: "original", renderer: renderer as never })).resolves.toBe("")
+})
+
 test("normalizes a single trailing editor newline for one-line prompts", () => {
   expect(normalizePromptContent("hello\n")).toBe("hello")
   expect(normalizePromptContent("hello\r\n")).toBe("hello")

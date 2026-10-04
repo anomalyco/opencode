@@ -44,7 +44,7 @@ export async function openEditor(input: { value: string; renderer: CliRenderer; 
         reject(new Error(`Editor exited with ${signal ? `signal ${signal}` : `code ${code}`}`))
       })
     })
-    return (await readFile(file, "utf8")) || undefined
+    return await readFile(file, "utf8")
   } finally {
     await rm(file, { force: true }).catch(() => {})
     input.renderer.currentRenderBuffer.clear()
