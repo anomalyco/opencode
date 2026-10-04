@@ -73,14 +73,11 @@ export interface DialogSelectOption<T = any> {
   searchText?: string
   searchFooter?: JSX.Element | string
   details?: string[]
-  detailsColor?: RGBA
-  detailsWrap?: boolean
   footer?: JSX.Element | string
   footerColor?: RGBA
   titleWidth?: number
   truncateTitle?: boolean | "left"
   category?: string
-  categoryView?: JSX.Element
   disabled?: boolean
   bg?: RGBA
   fg?: RGBA
@@ -749,16 +746,9 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                 <>
                   <Show when={category}>
                     <box paddingTop={index() > 0 ? 1 : 0} paddingLeft={3}>
-                      <Show
-                        when={options[0]?.categoryView}
-                        fallback={
-                          <text fg={theme.hue.accent[200]} attributes={TextAttributes.BOLD}>
-                            {category}
-                          </text>
-                        }
-                      >
-                        {options[0]?.categoryView}
-                      </Show>
+                      <text fg={theme.hue.accent[200]} attributes={TextAttributes.BOLD}>
+                        {category}
+                      </text>
                     </box>
                   </Show>
                   <For each={options}>
@@ -826,13 +816,8 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
                           <For each={option.details}>
                             {(detail) => (
                               <box paddingLeft={3} paddingRight={3}>
-                                <text
-                                  fg={option.detailsColor ?? theme.text.muted}
-                                  wrapMode={option.detailsWrap ? "word" : "none"}
-                                >
-                                  {option.detailsWrap
-                                    ? detail
-                                    : Locale.truncateMiddle(detail, Math.max(1, Math.min(76, dimensions().width - 12)))}
+                                <text fg={theme.text.muted} wrapMode="none">
+                                  {Locale.truncateMiddle(detail, Math.max(1, Math.min(76, dimensions().width - 12)))}
                                 </text>
                               </box>
                             )}

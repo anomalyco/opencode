@@ -10,4 +10,6 @@ export default {
   "git.description": "Kövesse nyomon, tekintse át és vonja vissza a változtatásokat ebben a projektben",
   loadingChanges: "Módosítások betöltése…",
   noChanges: "Nincs változás",
+  "settings.wrapLines.title": "Sorok tördelése",
+  "settings.wrapLines.description": "Vízszintes görgetés helyett csavarja be a hosszú sorokat mobil diff-be",
 }

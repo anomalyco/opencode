@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, on, onCleanup, onMount } from "solid-js"
+import { For, Show, createMemo, onCleanup, onMount, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
@@ -11,7 +11,7 @@ import { IconButton } from "@opencode/ui/icon-button"
 import { Icon } from "@opencode/ui/icon"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Keybind } from "@opencode/ui/keybind"
-import { App, useExtension, usePanel, type SessionView } from "../sdk"
+import { createKeyed, useExtension, usePanel, type MountedSession } from "../sdk"
 import type { TerminalModel, TerminalWorkspace } from "./model"
 import type { LocalPTY } from "./state"
 import { SortableTerminalTab } from "./tab"
@@ -29,9 +29,15 @@ type CachedTerminalSurface = {
   focus: boolean
 }
 
-export default function TerminalPanel(props: { model: TerminalModel; session: SessionView; onClose: () => void }) {
+type TerminalPanelState = {
+  recovered: Record<string, boolean>
+  surfaces: CachedTerminalSurface[]
+  workspaces: string[]
+}
+
+export default function TerminalPanel(props: { model: TerminalModel; session: MountedSession; onClose: () => void }) {
   const extension = useExtension()
-  const app = extension.use(App)
+  const keybinds = extension.keybinds
   const frame = usePanel()
   const terminal = createMemo(() => props.model.load(props.session))
   const workspaceKey = () => terminal().key
@@ -42,100 +48,140 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Se
 
   onCleanup(() => terminal().cancelFocus())
 
-  const [store, setStore] = createStore({
-    autoCreated: undefined as string | undefined,
-    recovered: {} as Record<string, boolean>,
-    surfaces: [] as CachedTerminalSurface[],
-    workspaces: [] as string[],
-  })
+  const [store, setStore] = createStore<TerminalPanelState>({ recovered: {}, surfaces: [], workspaces: [] })
 
-  const newTerminalKeybind = createMemo(() => [...app.keybind("terminal.new")])
+  const newTerminalKeybind = createMemo(() => [...keybinds.keybind("terminal.new")])
 
   onMount(() => {
     makeEventListener(document, "focusin", (event) => {
       if (event.target instanceof Element && event.target.closest("#terminal-panel")) return
+
       setStore("surfaces", (surface) => surface.focus, "focus", false)
     })
   })
 
-  createEffect(() => {
-    if (!opened()) {
-      setStore("autoCreated", undefined)
-      return
-    }
+  // While the dock shows, an empty workspace gets its first terminal, once per workspace in a row.
+  createKeyed(opened, () => {
+    const created = { workspace: "" }
 
-    const workspace = workspaceKey()
-    if (!terminal().ready() || terminal().all().length !== 0 || store.autoCreated === workspace) return
-    terminal().new()
-    setStore("autoCreated", workspace)
-  })
+    createKeyed(
+      () => {
+        const workspace = terminal()
 
-  createEffect(
-    on(
-      () => [workspaceKey(), terminal().all().length] as const,
-      ([workspace, count], previous) => {
-        if (!previous || previous[0] !== workspace || previous[1] <= 0 || count !== 0) return
-        if (!opened()) return
-        close()
+        return workspace.ready() && workspace.all().length === 0 ? workspace : undefined
       },
-    ),
-  )
+      (workspace) => {
+        if (created.workspace === workspace.key) return
 
-  createEffect(
-    on(
-      () => [opened(), terminal().active(), terminal().focusRequested(terminal().active())] as const,
-      ([next, id, requested]) => {
-        if (!next || !id || !requested) return
-        requestAnimationFrame(() => {
-          if (!opened() || terminal().active() !== id || !terminal().focusRequested(id)) return
-          focusTerminalById(id)
-        })
+        workspace.new()
+        created.workspace = workspace.key
       },
-    ),
-  )
-
-  createEffect(() => {
-    const dir = props.session.directory
-    if (!dir) return
-    if (!terminal().ready()) return
-
-    props.model.handoff.set(
-      workspaceKey(),
-      terminal()
-        .all()
-        .map((pty) => terminalTabLabel({ title: pty.title, titleNumber: pty.titleNumber, t: extension.t })),
     )
   })
 
+  // The dock closes when the shown workspace loses its last terminal, e.g. when its shell exits.
+  createKeyed(
+    () => (terminal().all().length > 0 ? terminal() : undefined),
+    (workspace) =>
+      onCleanup(() =>
+        untrack(() => {
+          if (terminal() === workspace && workspace.all().length === 0 && opened()) close()
+        }),
+      ),
+  )
+
+  // Focuses the active terminal once the dock shows it and a focus request names it.
+  createKeyed(
+    () => {
+      const id = terminal().active()
+
+      return opened() && id && terminal().focusRequested(id) ? { id } : undefined
+    },
+    (request) =>
+      requestAnimationFrame(() => {
+        if (!opened() || terminal().active() !== request.id || !terminal().focusRequested(request.id)) return
+
+        focusTerminalById(request.id)
+      }),
+  )
+
+  // The titles outlive this instance: after a reload they show until the stored terminals load.
+  createKeyed(
+    () => {
+      if (!props.session.directory || !terminal().ready()) return
+
+      return {
+        workspace: workspaceKey(),
+        titles: terminal()
+          .all()
+          .map((pty) => terminalTabLabel({ title: pty.title, titleNumber: pty.titleNumber, t: extension.t })),
+      }
+    },
+    (handoff) => props.model.handoff.set(handoff.workspace, handoff.titles),
+    {
+      // A terminal changing anything but its title keeps the titles.
+      equals: (previous, next) =>
+        previous.workspace === next.workspace &&
+        previous.titles.length === next.titles.length &&
+        previous.titles.every((title, index) => title === next.titles[index]),
+    },
+  )
+
   const handoff = createMemo(() => {
     const dir = props.session.directory
+
     if (!dir) return []
+
     return props.model.handoff.get(workspaceKey()) ?? []
   })
 
   const all = () => terminal().all()
 
-  createEffect(
-    on(
-      () => [workspaceKey(), terminal().ready(), terminal().active(), terminal().all()] as const,
-      ([workspace, ready, active, ptys]) => {
-        if (!ready) return
+  // Keeps each shown terminal mounted for the workspaces shown last, so switching back keeps its screen and session.
+  createKeyed(
+    () => ({
+      workspace: workspaceKey(),
+      ready: terminal().ready(),
+      active: terminal().active(),
+      ptys: terminal().all(),
+    }),
+    (current) => {
+      if (!current.ready) return
 
-        const ids = new Set(ptys.map((pty) => pty.id))
-        const surfaces = store.surfaces.filter((surface) => surface.workspace !== workspace || ids.has(surface.pty.id))
-        const pty = ptys.find((item) => item.id === active)
-        const key = pty ? `${workspace}\0${pty.id}` : undefined
-        if (pty && key && !surfaces.some((surface) => surface.key === key)) {
-          surfaces.push({ key, workspace, pty, ops: terminal(), focus: terminal().focusRequested(pty.id) })
-        }
+      const ids = new Set(current.ptys.map((pty) => pty.id))
 
-        const workspaces = [...store.workspaces.filter((item) => item !== workspace), workspace].slice(
-          -MAX_CACHED_TERMINAL_WORKSPACES,
-        )
-        const keep = new Set(workspaces)
-        setStore({ surfaces: surfaces.filter((surface) => keep.has(surface.workspace)), workspaces })
-      },
-    ),
+      const surfaces = store.surfaces.filter(
+        (surface) => surface.workspace !== current.workspace || ids.has(surface.pty.id),
+      )
+
+      const pty = current.ptys.find((item) => item.id === current.active)
+      const key = pty ? `${current.workspace}\0${pty.id}` : undefined
+
+      if (pty && key && !surfaces.some((surface) => surface.key === key)) {
+        surfaces.push({
+          key,
+          workspace: current.workspace,
+          pty,
+          ops: terminal(),
+          focus: terminal().focusRequested(pty.id),
+        })
+      }
+
+      const workspaces = [...store.workspaces.filter((item) => item !== current.workspace), current.workspace].slice(
+        -MAX_CACHED_TERMINAL_WORKSPACES,
+      )
+
+      const keep = new Set(workspaces)
+
+      setStore({ surfaces: surfaces.filter((surface) => keep.has(surface.workspace)), workspaces })
+    },
+    {
+      equals: (previous, next) =>
+        previous.workspace === next.workspace &&
+        previous.ready === next.ready &&
+        previous.active === next.active &&
+        previous.ptys === next.ptys,
+    },
   )
 
   const recoverTerminal = (key: string, id: string, clone: (id: string) => Promise<void>) => {
@@ -148,8 +194,10 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Se
     setStore("recovered", key, false)
     trim(id)
     const index = store.surfaces.findIndex((surface) => surface.key === key)
+
     if (!store.surfaces[index]?.focus) return
     setStore("surfaces", index, "focus", false)
+
     if (!opened() || terminal().active() !== id) return
     focusTerminalById(id)
     terminal().consumeFocus(id)
@@ -157,6 +205,7 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Se
 
   const handleTerminalDragEnd = () => {
     const activeId = terminal().active()
+
     if (!activeId) return
     requestAnimationFrame(() => {
       if (terminal().active() !== activeId) return
@@ -207,9 +256,11 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Se
         ]}
         onDragEnd={(event) => {
           const source = event.operation.source
+
           if (!event.canceled && isSortable(source) && source.initialIndex !== source.index) {
             terminal().move(source.id.toString(), source.index)
           }
+
           handleTerminalDragEnd()
         }}
       >
@@ -226,7 +277,9 @@ export default function TerminalPanel(props: { model: TerminalModel; session: Se
                 class="!border-b-0"
                 onPointerDown={(event: PointerEvent & { currentTarget: HTMLDivElement }) => {
                   const active = document.activeElement
+
                   if (event.target === active) return
+
                   if (active instanceof HTMLInputElement && event.currentTarget.contains(active)) active.blur()
                 }}
               >

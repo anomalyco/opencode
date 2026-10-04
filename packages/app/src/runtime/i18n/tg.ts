@@ -297,10 +297,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Ранги {{color}}-ро интихоб кунед",
   "dialog.project.edit.worktree.startup": "Скрипти оғозёбии фазои корӣ",
   "dialog.project.edit.worktree.startup.placeholder": "масалан. bun install",
-  "dialog.releaseNotes.action.getStarted": "Оғоз кунед",
-  "dialog.releaseNotes.action.next": "Баъдӣ",
-  "dialog.releaseNotes.action.hideFuture": "Инҳоро дар оянда нишон надиҳед",
-  "dialog.releaseNotes.media.alt": "Намоиши пешнамоиш",
   "toast.permissions.autoaccept.on.title": "Қабули худкор иҷозатҳо",
   "toast.permissions.autoaccept.on.description": "Дархостҳои иҷозат ба таври худкор тасдиқ карда мешаванд",
   "toast.permissions.autoaccept.off.title": "Қабули худкори иҷозатҳоро қатъ кард",
@@ -717,7 +713,6 @@ export const dict = {
   "session.view.select": "Намуди сессия",
   "session.background.moveRunning": "Ба замина гузаронед",
   "session.timeline.working": "Кор карда истодааст",
-  "session.review.wrapLines": "Сатрҳоро печонед",
   "session.websearch.title": "Ҷустуҷӯи веби тарафи сеюм",
   "session.websearch.description":
     "Провайдери ҷустуҷӯеро интихоб кунед, ки агентҳо барои ҷустуҷӯи веб истифода мебаранд",
@@ -780,8 +775,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Зер-агентҳо",
   "settings.timeline.category.notices": "Огоҳиҳо",
   "settings.timeline.category.tools": "Абзорҳои дигар",
-  "settings.general.row.mobileDiffWrap.description":
-    "Сатрҳои дарозро дар diff-ҳои мобилӣ ба ҷойи ҳаракати уфуқӣ печонед",
   "provider.connect.error.unsupportedFields": "Ин шакли аутентификатсия майдонҳои дастгиринашаванда дорад",
   "settings.about.writtenByNames": "Муаллиф: {{names}}",
   "settings.about.illustratedByNames": "Мусаввир: {{names}}",

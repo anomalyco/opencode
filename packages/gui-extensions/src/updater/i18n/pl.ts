@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Aktualizacja jest gotowa",
   "dialog.restart": "Uruchom ponownie",
   "dialog.later": "Później",
+  "releaseNotes.action.getStarted": "Rozpocznij",
+  "releaseNotes.action.next": "Dalej",
+  "releaseNotes.action.hideFuture": "Nie pokazuj tego w przyszłości",
+  "releaseNotes.media.alt": "Podgląd wydania",
 }

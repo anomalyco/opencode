@@ -180,6 +180,22 @@ const make = Effect.gen(function* () {
     process.platform === "win32" ? "opencode.exe" : "opencode",
   )
 
+  // On Windows a bare `bash` may be the WSL launcher, which cannot run the installer against Windows paths.
+  const installerBash = Effect.fnUntraced(function* () {
+    if (process.platform !== "win32") return "bash"
+    if (process.env.OPENCODE_GIT_BASH_PATH) return process.env.OPENCODE_GIT_BASH_PATH
+    const git = yield* exec(["git", "--exec-path"]).pipe(Effect.orElseSucceed(() => undefined))
+    const bash = git?.code === 0 ? path.resolve(git.stdout.trim(), "..", "..", "..", "bin", "bash.exe") : undefined
+    if (bash && (yield* fs.exists(bash).pipe(Effect.orElseSucceed(() => false)))) return bash
+    return yield* Effect.fail(
+      new UpgradeError({
+        title: "Git Bash is required to update OpenCode",
+        detail: "The OpenCode installer runs with Git Bash on Windows, and it was not found.",
+        retry: "Install Git for Windows or set OPENCODE_GIT_BASH_PATH, then run opencode upgrade again.",
+      }),
+    )
+  })
+
   const method = Effect.fnUntraced(function* () {
     if (path.resolve(process.execPath) === curlBinary) return "curl"
     if (installedFormula) return "brew"
@@ -395,6 +411,7 @@ const make = Effect.gen(function* () {
           )
         }
         if (method === "curl") {
+          const bash = yield* installerBash()
           yield* fs.makeDirectory(global.cache, { recursive: true })
           const directory = yield* temporaryDirectory("update-")
           const installer = path.join(directory, "install")
@@ -409,7 +426,7 @@ const make = Effect.gen(function* () {
             method,
             runUpgrade({
               method,
-              command: ["bash", installer, "--version", version, "--no-modify-path"],
+              command: [bash, installer, "--version", version, "--no-modify-path"],
               displayCommand: ["opencode", "upgrade", version, "--method", "curl"],
               title: "The OpenCode installer failed",
             }),

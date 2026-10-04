@@ -10,6 +10,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 export function AddServerMenu(props: { onAddServer: () => void; compact?: boolean }) {
   const language = useLanguage()
   const items = useServerAddItems()
+
   return (
     <Show
       when={items().length > 0}
@@ -52,7 +53,7 @@ export function AddServerMenu(props: { onAddServer: () => void; compact?: boolea
         <Menu.Portal>
           <Menu.Content>
             <Menu.Item onSelect={props.onAddServer}>{language.t("dialog.server.add.button")}</Menu.Item>
-            <For each={items()}>{(item) => <Menu.Item onSelect={() => item.run("")}>{item.title}</Menu.Item>}</For>
+            <For each={items()}>{(item) => <Menu.Item onSelect={() => item.run()}>{item.title}</Menu.Item>}</For>
           </Menu.Content>
         </Menu.Portal>
       </Menu>

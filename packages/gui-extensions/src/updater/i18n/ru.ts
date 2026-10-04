@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Обновление готово",
   "dialog.restart": "Перезапустить",
   "dialog.later": "Позже",
+  "releaseNotes.action.getStarted": "Начать",
+  "releaseNotes.action.next": "Далее",
+  "releaseNotes.action.hideFuture": "Больше не показывать",
+  "releaseNotes.media.alt": "Предварительный просмотр выпуска",
 }

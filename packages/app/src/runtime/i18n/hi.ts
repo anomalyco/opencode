@@ -302,10 +302,6 @@ export const dict = {
   "dialog.project.edit.color.select": "{{color}} रंग चुनें",
   "dialog.project.edit.worktree.startup": "वर्कस्पेस स्टार्टअप स्क्रिप्ट",
   "dialog.project.edit.worktree.startup.placeholder": "जैसे: bun install",
-  "dialog.releaseNotes.action.getStarted": "शुरू करें",
-  "dialog.releaseNotes.action.next": "अगला",
-  "dialog.releaseNotes.action.hideFuture": "भविष्य में इन्हें न दिखाएँ",
-  "dialog.releaseNotes.media.alt": "रिलीज़ पूर्वावलोकन",
   "dialog.usageExceeded.dontShowAgain": "फिर से न दिखाएँ",
 
   "toast.permissions.autoaccept.on.title": "अनुमतियाँ स्वतः स्वीकार करना",
@@ -719,7 +715,6 @@ export const dict = {
   "session.view.select": "सेशन दृश्य",
   "session.background.moveRunning": "बैकग्राउंड में ले जाएँ",
   "session.timeline.working": "कार्य जारी है",
-  "session.review.wrapLines": "पंक्तियाँ लपेटें",
   "session.websearch.title": "तृतीय-पक्ष वेब खोज",
   "session.websearch.description": "एजेंटों द्वारा वेब खोजने के लिए उपयोग किया जाने वाला खोज प्रोवाइडर चुनें",
   "session.websearch.provider": "खोज प्रोवाइडर",
@@ -778,8 +773,6 @@ export const dict = {
   "settings.timeline.category.subagents": "सबएजेंट",
   "settings.timeline.category.notices": "सूचनाएँ",
   "settings.timeline.category.tools": "अन्य टूल",
-  "settings.general.row.mobileDiffWrap.description":
-    "मोबाइल डिफ़ में लंबी पंक्तियों को क्षैतिज रूप से स्क्रॉल करने के बजाय लपेटें",
 
   "provider.connect.error.unsupportedFields": "इस प्रमाणीकरण फ़ॉर्म में असमर्थित फ़ील्ड हैं",
   "settings.about.writtenByNames": "{{names}} द्वारा लिखित",

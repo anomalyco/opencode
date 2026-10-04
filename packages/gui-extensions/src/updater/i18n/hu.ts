@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "A frissítés készen áll",
   "dialog.restart": "Újraindítás",
   "dialog.later": "Később",
+  "releaseNotes.action.getStarted": "Kezdje el",
+  "releaseNotes.action.next": "Következő",
+  "releaseNotes.action.hideFuture": "Ne mutasd ezeket a jövőben",
+  "releaseNotes.media.alt": "Kiadás előnézete",
 }

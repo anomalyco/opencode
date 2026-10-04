@@ -1,15 +1,15 @@
 import { createContext, useContext, type Accessor } from "solid-js"
 import type { Browser } from "../browser/contract"
 import type { Changes } from "../review/contract"
-import type { LineRange, SessionView } from "../sdk"
+import type { LineRange, Live, MountedSession, OpenOptions } from "../sdk"
 import type { OpenApp } from "./apps"
 
 export type TreeTab = "changes" | "all"
 
 /** Per-window file state that setup owns and its lazily loaded views share. */
 export interface FileShared {
-  readonly changes: Accessor<Changes | undefined>
-  readonly browser: Accessor<Browser | undefined>
+  readonly changes: Accessor<Live<Changes>>
+  readonly browser: Accessor<Live<Browser>>
   readonly tree: {
     tab(): TreeTab
     setTab(tab: TreeTab): void
@@ -28,14 +28,21 @@ export interface FileShared {
     set(session: string, files: Record<string, LineRange | null>): void
   }
   /** The tab is the session's selected side tab. */
-  active(session: SessionView, id: string): boolean
-  open(session: SessionView, path: string, options?: { readonly preview?: boolean }): void
+  active(session: MountedSession, id: string): boolean
+  open(session: MountedSession, path: string, options?: OpenOptions): void
 }
 
 export const FileContext = createContext<FileShared>()
 
 export function useShared() {
   const value = useContext(FileContext)
+
   if (!value) throw new Error("File views render inside the file extension")
+
   return value
+}
+
+/** A provider's value while it is active; views that only show its data render nothing from it otherwise. */
+export function current<T>(live: Live<T>) {
+  return live.status === "active" ? live.value : undefined
 }

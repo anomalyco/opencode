@@ -10,4 +10,7 @@ export default {
   "git.description": "Jejak, semak dan undur perubahan dalam projek ini",
   loadingChanges: "Memuat perubahan…",
   noChanges: "Tiada perubahan",
+  "settings.wrapLines.title": "Balut garisan",
+  "settings.wrapLines.description":
+    "Balut garisan panjang dalam perbezaan mudah alih dan bukannya menatal secara mendatar",
 }

@@ -1,13 +1,12 @@
-import { fileURLToPath } from "node:url"
 import type { Page } from "@playwright/test"
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, sourceURL, story } from "../../storybook/playwright/story"
 
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4ioAAAAASUVORK5CYII=",
   "base64",
 )
 
-const fixture = `/@fs/${fileURLToPath(new URL("./markdown.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
+const fixture = sourceURL(new URL("./markdown.fixture.tsx", import.meta.url))
 
 story.beforeEach(async ({ mount }) => {
   const root = await mount("components-markdown--complete-response")

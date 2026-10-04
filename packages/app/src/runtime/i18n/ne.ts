@@ -1,4 +1,8 @@
-export const dict: Record<string, string> = {
+import en from "./en"
+
+type Keys = keyof typeof en
+
+export const dict = {
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "फाइल",
   "desktop.menu.edit": "सम्पादन गर्नुहोस्",
@@ -297,10 +301,6 @@ export const dict: Record<string, string> = {
   "dialog.project.edit.color.select": "{{color}} रंग चयन गर्नुहोस्",
   "dialog.project.edit.worktree.startup": "कार्यस्थान स्टार्टअप स्क्रिप्ट",
   "dialog.project.edit.worktree.startup.placeholder": "जस्तै बन स्थापना",
-  "dialog.releaseNotes.action.getStarted": "सुरु गर्नुहोस्",
-  "dialog.releaseNotes.action.next": "अर्को",
-  "dialog.releaseNotes.action.hideFuture": "भविष्यमा यी नदेखाउनुहोस्",
-  "dialog.releaseNotes.media.alt": "रिलिज पूर्वावलोकन",
   "toast.permissions.autoaccept.on.title": "स्वत: स्वीकार गर्ने अनुमतिहरू",
   "toast.permissions.autoaccept.on.description": "अनुमति अनुरोधहरू स्वचालित रूपमा स्वीकृत हुनेछन्",
   "toast.permissions.autoaccept.off.title": "स्वत: स्वीकार गर्ने अनुमतिहरू रोकियो",
@@ -714,7 +714,6 @@ export const dict: Record<string, string> = {
   "session.view.select": "सत्र दृश्य",
   "session.background.moveRunning": "पृष्ठभूमिमा सार्नुहोस्",
   "session.timeline.working": "काम हुँदै छ",
-  "session.review.wrapLines": "लाइनहरू बेर्नुहोस्",
   "session.websearch.title": "तेस्रो-पक्ष वेब खोज",
   "session.websearch.description": "एजेन्टहरूले वेब खोज्न प्रयोग गर्ने खोज प्रदायक छान्नुहोस्",
   "session.websearch.provider": "खोज प्रदायक",
@@ -774,8 +773,6 @@ export const dict: Record<string, string> = {
   "settings.timeline.category.subagents": "उप-एजेन्टहरू",
   "settings.timeline.category.notices": "सूचनाहरू",
   "settings.timeline.category.tools": "अन्य उपकरणहरू",
-  "settings.general.row.mobileDiffWrap.description":
-    "मोबाइल डिफमा तेर्सो स्क्रोल गर्नुको सट्टा लामा लाइनहरू बेर्नुहोस्",
 
   "provider.connect.error.unsupportedFields": "यो प्रमाणीकरण फारममा असमर्थित फिल्डहरू छन्",
   "settings.about.writtenByNames": "{{names}} द्वारा लिखित",
@@ -902,4 +899,4 @@ export const dict: Record<string, string> = {
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}} को अपलोड रद्द गर्नुहोस्",
   "prompt.toast.uploadFailed.title": "अपलोड असफल भयो",
-}
+} satisfies Partial<Record<Keys, string>>

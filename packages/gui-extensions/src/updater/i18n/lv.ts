@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Atjauninājums gatavs",
   "dialog.restart": "Pārstartēt",
   "dialog.later": "Vēlāk",
+  "releaseNotes.action.getStarted": "Sākt",
+  "releaseNotes.action.next": "Tālāk",
+  "releaseNotes.action.hideFuture": "Turpmāk nerādīt",
+  "releaseNotes.media.alt": "Versijas priekšskatījums",
 }
