@@ -14,6 +14,14 @@ describe.concurrent("core.share", () => {
     await Share.remove({ id: share.id, secret: share.secret })
   })
 
+  test("should remove a share as admin", async () => {
+    const share = await Share.create({ sessionID: Identifier.descending() })
+
+    await Share.removeAdmin({ id: share.id })
+
+    expect(await Share.get(share.id)).toBeUndefined()
+  })
+
   test("should sync data to a share", async () => {
     const sessionID = Identifier.descending()
     const share = await Share.create({ sessionID })

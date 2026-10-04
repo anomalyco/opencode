@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpencodeClient, type Provider } from "@opencode-ai/sdk/v2"
-import { TuiConfig, type Resolved } from "@/cli/cmd/tui/config/tui"
-import { formatBindings } from "@/cli/cmd/run/keymap.shared"
-import { resolveDiffStyle, resolveFooterKeybinds, resolveModelInfo } from "@/cli/cmd/run/runtime.boot"
+import type { Resolved } from "@opencode-ai/tui/config"
+import { TuiConfig } from "@/config/tui"
+import { resolveDiffStyle, resolveModelInfo, resolveRunTuiConfig } from "@/cli/cmd/run/runtime.boot"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 function model(id: string, providerID: string, context: number, variants?: Record<string, Record<string, never>>) {
@@ -111,35 +111,44 @@ describe("run runtime boot", () => {
       }),
     )
 
-    const result = await resolveFooterKeybinds()
+    const result = await resolveRunTuiConfig()
 
-    expect(result.leader).toBe("ctrl+g")
-    expect(result.leaderTimeout).toBe(2000)
-    expect(formatBindings(result.commandList, result.leader)).toBe("ctrl+p")
-    expect(formatBindings(result.variantCycle, result.leader)).toBe("ctrl+t, alt+t")
-    expect(formatBindings(result.interrupt, result.leader)).toBe("ctrl+c")
-    expect(formatBindings(result.historyPrevious, result.leader)).toBe("k")
-    expect(formatBindings(result.historyNext, result.leader)).toBe("j")
-    expect(formatBindings(result.inputClear, result.leader)).toBe("ctrl+l")
-    expect(formatBindings(result.inputSubmit, result.leader)).toBe("ctrl+s")
-    expect(formatBindings(result.inputNewline, result.leader)).toBe("alt+return")
+    expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+g")
+    expect(result.leader_timeout).toBe(2000)
+    expect(result.keybinds.get("command.palette.show")?.[0]?.key).toBe("ctrl+p")
+    expect(result.keybinds.get("variant.cycle").map((item) => item.key)).toEqual(["ctrl+t", "alt+t"])
+    expect(result.keybinds.get("session.interrupt")?.[0]?.key).toBe("ctrl+c")
+    expect(result.keybinds.get("prompt.history.previous")?.[0]?.key).toBe("k")
+    expect(result.keybinds.get("prompt.history.next")?.[0]?.key).toBe("j")
+    expect(result.keybinds.get("prompt.clear")?.[0]?.key).toBe("ctrl+l")
+    expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("ctrl+s")
+    expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("alt+return")
   })
 
-  test("falls back to default keybinds when config load fails", async () => {
+  test("falls back to default tui keymap config when config load fails", async () => {
     spyOn(TuiConfig, "get").mockRejectedValue(new Error("boom"))
 
-    const result = await resolveFooterKeybinds()
+    const result = await resolveRunTuiConfig()
 
-    expect(result.leader).toBe("ctrl+x")
-    expect(result.leaderTimeout).toBe(2000)
-    expect(formatBindings(result.commandList, result.leader)).toBe("ctrl+p")
-    expect(formatBindings(result.variantCycle, result.leader)).toBe("ctrl+t")
-    expect(formatBindings(result.interrupt, result.leader)).toBe("esc")
-    expect(formatBindings(result.historyPrevious, result.leader)).toBe("up")
-    expect(formatBindings(result.historyNext, result.leader)).toBe("down")
-    expect(formatBindings(result.inputClear, result.leader)).toBe("ctrl+c")
-    expect(formatBindings(result.inputSubmit, result.leader)).toBe("return")
-    expect(formatBindings(result.inputNewline, result.leader)).toBe("shift+return, ctrl+return, alt+return, ctrl+j")
+    expect(result.keybinds.get("leader")?.[0]?.key).toBe("ctrl+x")
+    expect(result.leader_timeout).toBe(2000)
+    expect(result.diff_style).toBe("auto")
+    expect(result.keybinds.get("command.palette.show")?.[0]?.key).toBe("ctrl+p")
+    expect(result.keybinds.get("variant.cycle")?.[0]?.key).toBe("ctrl+t")
+    expect(result.keybinds.get("session.interrupt")?.[0]?.key).toBe("escape")
+    expect(result.keybinds.get("prompt.history.previous")?.[0]?.key).toBe("up")
+    expect(result.keybinds.get("prompt.history.next")?.[0]?.key).toBe("down")
+    expect(result.keybinds.get("prompt.clear")?.[0]?.key).toBe("ctrl+c")
+    expect(result.keybinds.get("input.submit")?.[0]?.key).toBe("return")
+    expect(result.keybinds.get("input.newline")?.[0]?.key).toBe("shift+return,ctrl+return,alt+return,ctrl+j")
+  })
+
+  test("preserves disabled leader from resolved tui config", async () => {
+    spyOn(TuiConfig, "get").mockResolvedValue(config({ leader: "none" }))
+
+    const result = await resolveRunTuiConfig()
+
+    expect(result.keybinds.get("leader")).toEqual([])
   })
 
   test("reads diff style and falls back to auto", async () => {

@@ -1,0 +1,24 @@
+{
+  "name": "glm52-rise-video",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "render": "remotion render src/index.tsx GLM52Rise out/glm-52-broke-out.mp4 --codec h264 --pixel-format yuv420p",
+    "render:sheep": "remotion render src/index.tsx NZSheep out/nz-sheep.mp4 --codec h264 --pixel-format yuv420p",
+    "render:novel": "remotion render src/index.tsx NovelTokens out/novel-1984.mp4 --codec h264 --pixel-format yuv420p",
+    "render:flash": "remotion render src/index.tsx FlashShare out/flash-share.mp4 --codec h264 --pixel-format yuv420p",
+    "render:minimax": "remotion render src/index.tsx MiniMaxClimb out/minimax-climb.mp4 --codec h264 --pixel-format yuv420p",
+    "still:june": "remotion still src/index.tsx JuneTotals out/june-totals.png --frame=0"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.384",
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3",
+    "remotion": "^4.0.384"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3",
+    "typescript": "^5.8.2"
+  }
+}

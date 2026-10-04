@@ -1,9 +1,7 @@
 import { beforeAll, describe, expect, mock, test } from "bun:test"
+import { ServerScope } from "@/utils/server-scope"
 
-type ServerKey = Parameters<typeof import("./terminal").getTerminalServerScope>[1]
-
-let getWorkspaceTerminalCacheKey: (dir: string, scope?: string) => string
-let getTerminalServerScope: typeof import("./terminal").getTerminalServerScope
+let getWorkspaceTerminalCacheKey: typeof import("./terminal").getWorkspaceTerminalCacheKey
 let getLegacyTerminalStorageKeys: (dir: string, legacySessionID?: string) => string[]
 let migrateTerminalState: (value: unknown) => unknown
 
@@ -11,6 +9,8 @@ beforeAll(async () => {
   mock.module("@solidjs/router", () => ({
     useNavigate: () => () => undefined,
     useParams: () => ({}),
+    useLocation: () => ({}),
+    useSearchParams: () => [{}, () => undefined],
   }))
   mock.module("@opencode-ai/ui/context", () => ({
     createSimpleContext: () => ({
@@ -20,53 +20,19 @@ beforeAll(async () => {
   }))
   const mod = await import("./terminal")
   getWorkspaceTerminalCacheKey = mod.getWorkspaceTerminalCacheKey
-  getTerminalServerScope = mod.getTerminalServerScope
   getLegacyTerminalStorageKeys = mod.getLegacyTerminalStorageKeys
   migrateTerminalState = mod.migrateTerminalState
 })
 
 describe("getWorkspaceTerminalCacheKey", () => {
   test("uses workspace-only directory cache key", () => {
-    expect(getWorkspaceTerminalCacheKey("/repo")).toBe("/repo:__workspace__")
+    expect(String(getWorkspaceTerminalCacheKey("/repo"))).toBe("local\u0000/repo\u0000__workspace__")
   })
 
   test("can include a server scope", () => {
-    expect(getWorkspaceTerminalCacheKey("/repo", "wsl:Debian")).toBe("wsl:Debian:/repo:__workspace__")
-  })
-})
-
-describe("getTerminalServerScope", () => {
-  test("preserves local server keys", () => {
-    expect(
-      getTerminalServerScope(
-        { type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } },
-        "sidecar" as ServerKey,
-      ),
-    ).toBeUndefined()
-    expect(
-      getTerminalServerScope(
-        { type: "http", http: { url: "http://localhost:4096" } },
-        "http://localhost:4096" as ServerKey,
-      ),
-    ).toBeUndefined()
-    expect(
-      getTerminalServerScope({ type: "http", http: { url: "http://[::1]:4096" } }, "http://[::1]:4096" as ServerKey),
-    ).toBeUndefined()
-  })
-
-  test("scopes non-local server keys", () => {
-    expect(
-      getTerminalServerScope(
-        { type: "sidecar", variant: "wsl", distro: "Debian", http: { url: "http://127.0.0.1:4096" } },
-        "wsl:Debian" as ServerKey,
-      ),
-    ).toBe("wsl:Debian" as ServerKey)
-    expect(
-      getTerminalServerScope(
-        { type: "http", http: { url: "https://example.com" } },
-        "https://example.com" as ServerKey,
-      ),
-    ).toBe("https://example.com" as ServerKey)
+    expect(String(getWorkspaceTerminalCacheKey("/repo", "ssh:debian" as ServerScope))).toBe(
+      "ssh:debian\u0000/repo\u0000__workspace__",
+    )
   })
 })
 

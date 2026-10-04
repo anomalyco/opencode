@@ -2,6 +2,7 @@ import { Question } from "@/question"
 import { QuestionID } from "@/question/schema"
 import { Schema } from "effect"
 import { HttpApi, HttpApiEndpoint, HttpApiError, HttpApiGroup, OpenApi } from "effect/unstable/httpapi"
+import { QuestionNotFoundError } from "../errors"
 import { Authorization } from "../middleware/authorization"
 import { InstanceContextMiddleware } from "../middleware/instance-context"
 import { WorkspaceRoutingMiddleware, WorkspaceRoutingQuery } from "../middleware/workspace-routing"
@@ -33,7 +34,7 @@ export const QuestionApi = HttpApi.make("question")
           query: WorkspaceRoutingQuery,
           payload: ReplyPayload,
           success: described(Schema.Boolean, "Question answered successfully"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, QuestionNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "question.reply",
@@ -45,7 +46,7 @@ export const QuestionApi = HttpApi.make("question")
           params: { requestID: QuestionID },
           query: WorkspaceRoutingQuery,
           success: described(Schema.Boolean, "Question rejected successfully"),
-          error: [HttpApiError.BadRequest, HttpApiError.NotFound],
+          error: [HttpApiError.BadRequest, QuestionNotFoundError],
         }).annotateMerge(
           OpenApi.annotations({
             identifier: "question.reject",

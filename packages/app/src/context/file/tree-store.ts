@@ -127,10 +127,14 @@ export function createFileTreeStore(options: TreeStoreOptions) {
     return promise
   }
 
-  const expandDir = (input: string) => {
+  // `list: false` marks a directory expanded without fetching its children, for
+  // trees whose nodes are synthesized from a filter; listing directories that
+  // only exist on a diff's base branch fails and surfaces error toasts.
+  const expandDir = (input: string, behavior?: { list?: boolean }) => {
     const dir = options.normalizeDir(input)
     ensureDir(dir)
     setTree("dir", dir, "expanded", true)
+    if (behavior?.list === false) return
     void listDir(dir)
   }
 

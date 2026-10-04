@@ -22,6 +22,7 @@ import {
   TransportReason,
   UnknownProviderReason,
 } from "../schema"
+import { isContextOverflow } from "../provider-error"
 
 export interface Interface {
   readonly execute: (
@@ -249,8 +250,18 @@ const statusReason = (input: {
       http: input.http,
     })
   }
-  if (input.status === 400 || input.status === 404 || input.status === 409 || input.status === 422) {
-    return new InvalidRequestReason({ message: input.message, http: input.http })
+  if (
+    input.status === 400 ||
+    input.status === 404 ||
+    input.status === 409 ||
+    input.status === 413 ||
+    input.status === 422
+  ) {
+    return new InvalidRequestReason({
+      message: input.message,
+      classification: isContextOverflow(body) ? "context-overflow" : undefined,
+      http: input.http,
+    })
   }
   if (input.status >= 500 || retryableStatus(input.status)) {
     return new ProviderInternalReason({
@@ -369,6 +380,6 @@ export const layer: Layer.Layer<Service, never, HttpClient.HttpClient> = Layer.e
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
+export const fetchLayer = layer.pipe(Layer.provide(FetchHttpClient.layer))
 
 export * as RequestExecutor from "./executor"

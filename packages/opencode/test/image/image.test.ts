@@ -1,20 +1,18 @@
 import { describe, expect } from "bun:test"
-import { Cause, Effect, Exit, Layer } from "effect"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { Cause, Effect, Exit } from "effect"
 import { Image } from "@/image/image"
+import { Config } from "@/config/config"
 import { MessageID, PartID, SessionID } from "@/session/schema"
 import path from "node:path"
 import { TestConfig } from "../fixture/config"
 import { testEffect } from "../lib/effect"
 
-const it = testEffect(Layer.mergeAll(Image.layer.pipe(Layer.provide(TestConfig.layer()))))
+const it = testEffect(LayerNode.compile(Image.node, [[Config.node, TestConfig.layer()]]))
 const tiny = testEffect(
-  Layer.mergeAll(
-    Image.layer.pipe(
-      Layer.provide(
-        TestConfig.layer({ get: () => Effect.succeed({ attachment: { image: { max_base64_bytes: 1 } } }) }),
-      ),
-    ),
-  ),
+  LayerNode.compile(Image.node, [
+    [Config.node, TestConfig.layer({ get: () => Effect.succeed({ attachment: { image: { max_base64_bytes: 1 } } }) })],
+  ]),
 )
 
 function part(mime: string, data: string) {

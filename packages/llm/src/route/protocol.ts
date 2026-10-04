@@ -52,8 +52,8 @@ export interface ProtocolBody<Body> {
 export interface ProtocolStream<Frame, Event, State> {
   /** Schema for one decoded streaming event, decoded from a transport frame. */
   readonly event: Schema.Codec<Event, Frame>
-  /** Initial parser state. Called once per response. */
-  readonly initial: () => State
+  /** Initial parser state. Called once per response with the resolved request. */
+  readonly initial: (request: LLMRequest) => State
   /** Translate one event into emitted `LLMEvent`s plus the next state. */
   readonly step: (state: State, event: Event) => Effect.Effect<readonly [State, ReadonlyArray<LLMEvent>], LLMError>
   /** Optional request-completion signal for transports that do not end naturally. */

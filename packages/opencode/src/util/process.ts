@@ -1,9 +1,10 @@
 import { type ChildProcess } from "child_process"
+import type { Stream } from "node:stream"
 import launch from "cross-spawn"
 import { buffer } from "node:stream/consumers"
 import { errorMessage } from "./error"
 
-export type Stdio = "inherit" | "pipe" | "ignore"
+export type Stdio = "inherit" | "pipe" | "ignore" | number | Stream
 export type Shell = boolean | string
 
 export interface Options {

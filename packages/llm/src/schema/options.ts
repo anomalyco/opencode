@@ -1,8 +1,7 @@
 import { Schema } from "effect"
-import { JsonSchema, ModelID, ProviderID, RouteID } from "./ids"
-
-const isRecord = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+import { JsonSchema, ModelID, ProviderID } from "./ids"
+import type { AnyRoute } from "../route/client"
+import { isRecord } from "../utils/record"
 
 export const mergeJsonRecords = (
   ...items: ReadonlyArray<Record<string, unknown> | undefined>
@@ -135,66 +134,113 @@ export namespace ModelLimits {
     input instanceof ModelLimits ? input : new ModelLimits(input ?? {})
 }
 
-export class ModelRef extends Schema.Class<ModelRef>("LLM.ModelRef")({
-  id: ModelID,
-  provider: ProviderID,
-  route: RouteID,
-  baseURL: Schema.String,
-  /** Provider-specific API key convenience. Provider helpers normalize this into `auth`. */
-  apiKey: Schema.optional(Schema.String),
-  /** Optional transport auth policy. Opaque because it may contain functions. */
-  auth: Schema.optional(Schema.Any),
-  headers: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  /**
-   * Query params appended to the request URL by `Endpoint.baseURL`. Used for
-   * deployment-level URL-scoped settings such as Azure's `api-version` or any
-   * provider that requires a per-request key in the URL. Generic concern, so
-   * lives as a typed first-class field instead of `native`.
-   */
-  queryParams: Schema.optional(Schema.Record(Schema.String, Schema.String)),
-  limits: ModelLimits,
-  /** Provider-neutral generation defaults. Request-level values override them. */
+export class ModelDefaults extends Schema.Class<ModelDefaults>("LLM.ModelDefaults")({
+  limits: Schema.optional(ModelLimits),
   generation: Schema.optional(GenerationOptions),
-  /** Provider-owned typed-at-the-facade options for non-portable knobs. */
   providerOptions: Schema.optional(ProviderOptions),
-  /** Serializable raw HTTP overlays applied to the final outgoing request. */
   http: Schema.optional(HttpOptions),
-  /**
-   * Provider-specific opaque options. Reach for this only when the value is
-   * genuinely provider-private and does not fit a typed axis (e.g. Bedrock's
-   * `aws_credentials` / `aws_region` for SigV4). Anything used by more than
-   * one route should grow into a typed field instead.
-   */
-  native: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
 }) {}
 
-export namespace ModelRef {
-  export type Input = ConstructorParameters<typeof ModelRef>[0]
+export namespace ModelDefaults {
+  export type Input =
+    | ModelDefaults
+    | {
+        readonly limits?: ModelLimits.Input
+        readonly generation?: GenerationOptions.Input
+        readonly providerOptions?: ProviderOptions
+        readonly http?: HttpOptions.Input
+      }
 
-  export const input = (model: ModelRef): Input => ({
-    id: model.id,
-    provider: model.provider,
-    route: model.route,
-    baseURL: model.baseURL,
-    apiKey: model.apiKey,
-    auth: model.auth,
-    headers: model.headers,
-    queryParams: model.queryParams,
-    limits: model.limits,
-    generation: model.generation,
-    providerOptions: model.providerOptions,
-    http: model.http,
-    native: model.native,
-  })
+  /** Normalize selected-model request defaults without applying precedence. */
+  export const make = (input: Input) => {
+    if (input instanceof ModelDefaults) return input
+    return new ModelDefaults({
+      limits: input.limits === undefined ? undefined : ModelLimits.make(input.limits),
+      generation: input.generation === undefined ? undefined : GenerationOptions.make(input.generation),
+      providerOptions: input.providerOptions,
+      http: input.http === undefined ? undefined : HttpOptions.make(input.http),
+    })
+  }
+}
 
-  export const update = (model: ModelRef, patch: Partial<Input>) => {
+export const ModelToolSchemaCompatibility = Schema.Literals(["gemini", "moonshot"])
+export type ModelToolSchemaCompatibility = Schema.Schema.Type<typeof ModelToolSchemaCompatibility>
+
+export class ModelCompatibility extends Schema.Class<ModelCompatibility>("LLM.ModelCompatibility")({
+  toolSchema: Schema.optional(ModelToolSchemaCompatibility),
+}) {}
+
+export namespace ModelCompatibility {
+  export type Input = ModelCompatibility | ConstructorParameters<typeof ModelCompatibility>[0]
+
+  /** Normalize model/upstream compatibility metadata without projecting requests. */
+  export const make = (input: Input) => (input instanceof ModelCompatibility ? input : new ModelCompatibility(input))
+}
+
+export class Model {
+  readonly id: ModelID
+  readonly provider: ProviderID
+  readonly route: AnyRoute
+  readonly defaults?: ModelDefaults
+  readonly compatibility?: ModelCompatibility
+
+  constructor(input: Model.ConstructorInput) {
+    this.id = input.id
+    this.provider = input.provider
+    this.route = input.route
+    this.defaults = input.defaults
+    this.compatibility = input.compatibility
+  }
+
+  static make(input: Model.Input) {
+    return new Model({
+      id: ModelID.make(input.id),
+      provider: ProviderID.make(input.provider),
+      route: input.route,
+      defaults: input.defaults === undefined ? undefined : ModelDefaults.make(input.defaults),
+      compatibility: input.compatibility === undefined ? undefined : ModelCompatibility.make(input.compatibility),
+    })
+  }
+
+  static input(model: Model): Model.ConstructorInput {
+    return {
+      id: model.id,
+      provider: model.provider,
+      route: model.route,
+      defaults: model.defaults,
+      compatibility: model.compatibility,
+    }
+  }
+
+  static update(model: Model, patch: Partial<Model.Input>) {
     if (Object.keys(patch).length === 0) return model
-    return new ModelRef({
-      ...input(model),
+    return Model.make({
+      ...Model.input(model),
       ...patch,
     })
   }
 }
+
+export namespace Model {
+  export type ConstructorInput = {
+    readonly id: ModelID
+    readonly provider: ProviderID
+    readonly route: AnyRoute
+    readonly defaults?: ModelDefaults
+    readonly compatibility?: ModelCompatibility
+  }
+
+  export type Input = Omit<ConstructorInput, "id" | "provider" | "defaults" | "compatibility"> & {
+    readonly id: string | ModelID
+    readonly provider: string | ProviderID
+    readonly defaults?: ModelDefaults.Input
+    readonly compatibility?: ModelCompatibility.Input
+  }
+}
+
+export type ModelInput = Model.Input
+
+export const ModelSchema = Schema.declare((value): value is Model => value instanceof Model, { expected: "LLM.Model" })
 
 export class CacheHint extends Schema.Class<CacheHint>("LLM.CacheHint")({
   type: Schema.Literals(["ephemeral", "persistent"]),

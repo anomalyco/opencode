@@ -1,28 +1,27 @@
 import { describe, expect } from "bun:test"
+import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { LayerNode } from "@opencode-ai/core/effect/layer-node"
+import { SessionProjector } from "@opencode-ai/core/session/projector"
 import fs from "fs/promises"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
+import { Effect } from "effect"
 import { Session } from "@/session/session"
-import { ModelID, ProviderID } from "../../src/provider/schema"
+
 import { SessionRevert } from "../../src/session/revert"
 import { MessageV2 } from "../../src/session/message-v2"
 import { Snapshot } from "../../src/snapshot"
-import * as Log from "@opencode-ai/core/util/log"
 import { MessageID, PartID, SessionID } from "../../src/session/schema"
-import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { provideTmpdirInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
+import { ProviderV2 } from "@opencode-ai/core/provider"
+import { ModelV2 } from "@opencode-ai/core/model"
 
-void Log.init({ print: false })
-
-const env = Layer.mergeAll(
-  Session.defaultLayer,
-  SessionRevert.defaultLayer,
-  Snapshot.defaultLayer,
-  CrossSpawnSpawner.defaultLayer,
+const it = testEffect(
+  LayerNode.compile(
+    LayerNode.group([Session.node, SessionRevert.node, Snapshot.node, SessionProjector.node, CrossSpawnSpawner.node]),
+  ),
 )
-
-const it = testEffect(env)
 
 const user = Effect.fn("test.user")(function* (sessionID: SessionID, agent = "default") {
   const session = yield* Session.Service
@@ -31,8 +30,20 @@ const user = Effect.fn("test.user")(function* (sessionID: SessionID, agent = "de
     role: "user" as const,
     sessionID,
     agent,
-    model: { providerID: ProviderID.make("openai"), modelID: ModelID.make("gpt-4") },
+    model: { providerID: ProviderV2.ID.make("openai"), modelID: ModelV2.ID.make("gpt-4") },
     time: { created: Date.now() },
+  })
+})
+
+const userAt = Effect.fn("test.userAt")(function* (sessionID: SessionID, id: string, created: number) {
+  const session = yield* Session.Service
+  return yield* session.updateMessage({
+    id: MessageID.make(id),
+    role: "user" as const,
+    sessionID,
+    agent: "default",
+    model: { providerID: ProviderV2.ID.make("openai"), modelID: ModelV2.ID.make("gpt-4") },
+    time: { created },
   })
 })
 
@@ -47,8 +58,8 @@ const assistant = Effect.fn("test.assistant")(function* (sessionID: SessionID, p
     path: { cwd: dir, root: dir },
     cost: 0,
     tokens: { output: 0, input: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-    modelID: ModelID.make("gpt-4"),
-    providerID: ProviderID.make("openai"),
+    modelID: ModelV2.ID.make("gpt-4"),
+    providerID: ProviderV2.ID.make("openai"),
     parentID,
     time: { created: Date.now() },
     finish: "end_turn",
@@ -114,8 +125,8 @@ describe("revert + compact workflow", () => {
             sessionID,
             agent: "default",
             model: {
-              providerID: ProviderID.make("openai"),
-              modelID: ModelID.make("gpt-4"),
+              providerID: ProviderV2.ID.make("openai"),
+              modelID: ModelV2.ID.make("gpt-4"),
             },
             time: {
               created: Date.now(),
@@ -130,7 +141,7 @@ describe("revert + compact workflow", () => {
             text: "Hello, please help me",
           })
 
-          const assistantMsg1: MessageV2.Assistant = {
+          const assistantMsg1: SessionV1.Assistant = {
             id: MessageID.ascending(),
             role: "assistant",
             sessionID,
@@ -147,8 +158,8 @@ describe("revert + compact workflow", () => {
               reasoning: 0,
               cache: { read: 0, write: 0 },
             },
-            modelID: ModelID.make("gpt-4"),
-            providerID: ProviderID.make("openai"),
+            modelID: ModelV2.ID.make("gpt-4"),
+            providerID: ProviderV2.ID.make("openai"),
             parentID: userMsg1.id,
             time: {
               created: Date.now(),
@@ -171,8 +182,8 @@ describe("revert + compact workflow", () => {
             sessionID,
             agent: "default",
             model: {
-              providerID: ProviderID.make("openai"),
-              modelID: ModelID.make("gpt-4"),
+              providerID: ProviderV2.ID.make("openai"),
+              modelID: ModelV2.ID.make("gpt-4"),
             },
             time: {
               created: Date.now(),
@@ -187,7 +198,7 @@ describe("revert + compact workflow", () => {
             text: "What's the capital of France?",
           })
 
-          const assistantMsg2: MessageV2.Assistant = {
+          const assistantMsg2: SessionV1.Assistant = {
             id: MessageID.ascending(),
             role: "assistant",
             sessionID,
@@ -204,8 +215,8 @@ describe("revert + compact workflow", () => {
               reasoning: 0,
               cache: { read: 0, write: 0 },
             },
-            modelID: ModelID.make("gpt-4"),
-            providerID: ProviderID.make("openai"),
+            modelID: ModelV2.ID.make("gpt-4"),
+            providerID: ProviderV2.ID.make("openai"),
             parentID: userMsg2.id,
             time: {
               created: Date.now(),
@@ -276,8 +287,8 @@ describe("revert + compact workflow", () => {
             sessionID,
             agent: "default",
             model: {
-              providerID: ProviderID.make("openai"),
-              modelID: ModelID.make("gpt-4"),
+              providerID: ProviderV2.ID.make("openai"),
+              modelID: ModelV2.ID.make("gpt-4"),
             },
             time: {
               created: Date.now(),
@@ -292,7 +303,7 @@ describe("revert + compact workflow", () => {
             text: "Hello",
           })
 
-          const assistantMsg: MessageV2.Assistant = {
+          const assistantMsg: SessionV1.Assistant = {
             id: MessageID.ascending(),
             role: "assistant",
             sessionID,
@@ -309,8 +320,8 @@ describe("revert + compact workflow", () => {
               reasoning: 0,
               cache: { read: 0, write: 0 },
             },
-            modelID: ModelID.make("gpt-4"),
-            providerID: ProviderID.make("openai"),
+            modelID: ModelV2.ID.make("gpt-4"),
+            providerID: ProviderV2.ID.make("openai"),
             parentID: userMsg.id,
             time: {
               created: Date.now(),
@@ -422,6 +433,39 @@ describe("revert + compact workflow", () => {
           expect(ids).toContain(a1.id)
           expect(ids).not.toContain(u2.id)
           expect(ids).not.toContain(a2.id)
+        }),
+      { git: true },
+    ),
+  )
+
+  it.live(
+    "reverts chronological suffixes on both sides of mixed message ID ordering",
+    provideTmpdirInstance(
+      () =>
+        Effect.gen(function* () {
+          const session = yield* Session.Service
+          const revert = yield* SessionRevert.Service
+          const ids = ["msg_z9-before", "msg_z1-before-wrap", "msg_a0-after-wrap", "msg_a1-after"]
+
+          const run = Effect.fn("test.mixedIDRevert")(function* (target: number) {
+            const info = yield* session.create({})
+            for (const [index, id] of ids.entries()) {
+              const message = yield* userAt(info.id, id, index + 1)
+              yield* text(info.id, message.id, id)
+            }
+
+            const reverted = yield* revert.revert({
+              sessionID: info.id,
+              messageID: MessageID.make(ids[target]!),
+            })
+            yield* revert.cleanup(reverted)
+            const remaining = yield* session.messages({ sessionID: info.id })
+            yield* session.remove(info.id)
+            return remaining.map((msg) => msg.info.time.created)
+          })
+
+          expect(yield* run(1)).toEqual([1])
+          expect(yield* run(2)).toEqual([1, 2])
         }),
       { git: true },
     ),

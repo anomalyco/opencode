@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import { getAdapter, registerAdapter } from "../../src/control-plane/adapters"
-import { ProjectID } from "../../src/project/schema"
+import { ProjectV2 } from "@opencode-ai/core/project"
 import type { WorkspaceInfo } from "../../src/control-plane/types"
 
 function info(projectID: WorkspaceInfo["projectID"], type: string): WorkspaceInfo {
@@ -36,8 +36,8 @@ function adapter(dir: string) {
 describe("control-plane/adapters", () => {
   test("isolates custom adapters by project", async () => {
     const type = `demo-${Math.random().toString(36).slice(2)}`
-    const one = ProjectID.make(`project-${Math.random().toString(36).slice(2)}`)
-    const two = ProjectID.make(`project-${Math.random().toString(36).slice(2)}`)
+    const one = ProjectV2.ID.make(`project-${Math.random().toString(36).slice(2)}`)
+    const two = ProjectV2.ID.make(`project-${Math.random().toString(36).slice(2)}`)
     registerAdapter(one, type, adapter("/one"))
     registerAdapter(two, type, adapter("/two"))
 
@@ -53,7 +53,7 @@ describe("control-plane/adapters", () => {
 
   test("latest install wins within a project", async () => {
     const type = `demo-${Math.random().toString(36).slice(2)}`
-    const id = ProjectID.make(`project-${Math.random().toString(36).slice(2)}`)
+    const id = ProjectV2.ID.make(`project-${Math.random().toString(36).slice(2)}`)
     registerAdapter(id, type, adapter("/one"))
 
     expect(await (await getAdapter(id, type)).target(info(id, type))).toEqual({

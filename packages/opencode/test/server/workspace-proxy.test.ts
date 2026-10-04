@@ -112,6 +112,22 @@ describe("HttpApi workspace proxy", () => {
     }),
   )
 
+  it.live("proxies bodyless Web mutation requests as an empty body", () =>
+    Effect.gen(function* () {
+      const url = yield* listenServer(
+        Effect.fnUntraced(function* (req: HttpServerRequest.HttpServerRequest) {
+          return yield* HttpServerResponse.json({ method: req.method, body: yield* req.text })
+        }),
+      )
+      const request = HttpServerRequest.fromWeb(new Request("http://localhost/session/abc/abort", { method: "POST" }))
+      const httpClient = yield* HttpClient.HttpClient
+      const response = yield* HttpApiProxy.http(httpClient, `${url}/session/abc/abort`, undefined, request)
+
+      expect(response.status).toBe(200)
+      expect(yield* HttpServerResponse.toClientResponse(response).json).toEqual({ method: "POST", body: "" })
+    }),
+  )
+
   it.live("strips opencode-internal headers and merges extra headers", () =>
     Effect.gen(function* () {
       let forwarded: Record<string, string> = {}

@@ -489,13 +489,13 @@ opencode run "Hello world"
   "$schema": "https://opencode.ai/config.json",
   "compaction": {
     "auto": true,
-    "prune": true
+    "prune": false
   }
 }
 ```
 
 - `auto` - ضغط الجلسة تلقائيًا عند امتلاء السياق (الافتراضي: `true`).
-- `prune` - إزالة مخرجات الأدوات القديمة لتوفير الرموز (tokens) (الافتراضي: `true`).
+- `prune` - إزالة مخرجات الأدوات القديمة لتوفير الرموز (tokens) (الافتراضي: `false`).
 - `reserved` - مخزن مؤقت للرموز (tokens) من أجل الضغط. يترك نافذة كافية لتجنب الفيضان أثناء الضغط.
 
 ---

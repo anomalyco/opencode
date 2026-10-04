@@ -5,6 +5,7 @@ import { jwtVerify, createRemoteJWKSet } from "jose"
 import { createAppAuth } from "@octokit/auth-app"
 import { Octokit } from "@octokit/rest"
 import { Resource } from "sst"
+import { parseRepositoryClaim } from "./github"
 
 type Env = {
   SYNC_SERVER: DurableObjectNamespace<SyncServer>
@@ -269,42 +270,41 @@ export default new Hono<{ Bindings: Env }>()
 
     // verify token
     const JWKS = createRemoteJWKSet(new URL(JWKS_URL))
-    let owner, repo
+    let repository: ReturnType<typeof parseRepositoryClaim>
     try {
       const { payload } = await jwtVerify(token, JWKS, {
         issuer: GITHUB_ISSUER,
         audience: EXPECTED_AUDIENCE,
       })
-      const sub = payload.sub // e.g. 'repo:my-org/my-repo:ref:refs/heads/main'
-      const parts = sub.split(":")[1].split("/")
-      owner = parts[0]
-      repo = parts[1]
+      repository = parseRepositoryClaim(payload)
     } catch (err) {
       console.error("Token verification failed:", err)
       return c.json({ error: "Invalid or expired token" }, { status: 403 })
     }
 
-    // Create app JWT token
-    const auth = createAppAuth({
-      appId: Resource.GITHUB_APP_ID.value,
-      privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
-    })
-    const appAuth = await auth({ type: "app" })
-
-    // Lookup installation
-    const octokit = new Octokit({ auth: appAuth.token })
-    const { data: installation } = await octokit.apps.getRepoInstallation({
-      owner,
-      repo,
-    })
-
-    // Get installation token
-    const installationAuth = await auth({
-      type: "installation",
-      installationId: installation.id,
-    })
-
-    return c.json({ token: installationAuth.token })
+    try {
+      const auth = createAppAuth({
+        appId: Resource.GITHUB_APP_ID.value,
+        privateKey: Resource.GITHUB_APP_PRIVATE_KEY.value,
+      })
+      const appAuth = await auth({ type: "app" })
+      const octokit = new Octokit({ auth: appAuth.token })
+      const { data: installation } = await octokit.apps.getRepoInstallation({
+        owner: repository.owner,
+        repo: repository.repo,
+      })
+      const installationAuth = await auth({
+        type: "installation",
+        installationId: installation.id,
+      })
+      return c.json({ token: installationAuth.token })
+    } catch (error) {
+      console.error("GitHub App token exchange failed:", error)
+      return c.json(
+        { error: `Failed to exchange GitHub App token for ${repository.owner}/${repository.repo}` },
+        { status: 502 },
+      )
+    }
   })
   /**
    * Used by the GitHub action to get GitHub installation access token given user PAT token (used when testing `opencode github run` locally)

@@ -3,15 +3,24 @@ import type { PlatformError } from "effect/PlatformError"
 import { ChildProcess } from "effect/unstable/process"
 import { ChildProcessSpawner } from "effect/unstable/process/ChildProcessSpawner"
 import { CrossSpawnSpawner } from "./cross-spawn-spawner"
+import { makeGlobalNode } from "./effect/app-node"
 
 export class AppProcessError extends Schema.TaggedErrorClass<AppProcessError>()("AppProcessError", {
   command: Schema.String,
   exitCode: Schema.optional(Schema.Number),
   stderr: Schema.optional(Schema.String),
-  cause: Schema.optional(Schema.Defect),
-}) {}
+  cause: Schema.optional(Schema.Defect()),
+}) {
+  override get message() {
+    const detail =
+      this.stderr?.trim() || (this.cause instanceof Error ? this.cause.message : this.cause && String(this.cause))
+    const status = this.exitCode === undefined ? "" : ` (exit ${this.exitCode})`
+    return `Command failed${status}: ${this.command}${detail ? `: ${detail}` : ""}`
+  }
+}
 
 export interface RunOptions {
+  readonly combineOutput?: boolean
   readonly maxOutputBytes?: number
   readonly maxErrorBytes?: number
   readonly signal?: AbortSignal
@@ -29,8 +38,10 @@ export interface RunStreamOptions {
 export interface RunResult {
   readonly command: string
   readonly exitCode: number
+  readonly output?: Buffer
   readonly stdout: Buffer
   readonly stderr: Buffer
+  readonly outputTruncated?: boolean
   readonly stdoutTruncated: boolean
   readonly stderrTruncated: boolean
 }
@@ -79,7 +90,7 @@ const describeCommand = (command: ChildProcess.Command): string => {
 const wrapError = (description: string, cause: unknown): AppProcessError =>
   cause instanceof AppProcessError ? cause : new AppProcessError({ command: description, cause })
 
-const abortError = (signal: AbortSignal): Error => {
+export const abortError = (signal: AbortSignal): Error => {
   const reason = signal.reason
   if (reason instanceof Error) return reason
   const err = new Error("Aborted")
@@ -87,7 +98,7 @@ const abortError = (signal: AbortSignal): Error => {
   return err
 }
 
-const waitForAbort = (signal: AbortSignal) =>
+export const waitForAbort = (signal: AbortSignal) =>
   Effect.callback<never, Error>((resume) => {
     if (signal.aborted) {
       resume(Effect.fail(abortError(signal)))
@@ -107,7 +118,7 @@ const normalizeStdin = (
       ? Stream.make(input)
       : input
 
-const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, maxOutputBytes: number | undefined) =>
+export const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, maxOutputBytes: number | undefined) =>
   Stream.runFold(
     stream,
     () => ({ chunks: [] as Uint8Array[], bytes: 0, truncated: false }),
@@ -125,7 +136,7 @@ const collectStream = (stream: Stream.Stream<Uint8Array, PlatformError>, maxOutp
     },
   ).pipe(Effect.map((x) => ({ buffer: Buffer.concat(x.chunks), truncated: x.truncated })))
 
-export const layer = Layer.effect(
+const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner
@@ -135,6 +146,22 @@ export const layer = Layer.effect(
       const collect = Effect.scoped(
         Effect.gen(function* () {
           const handle = yield* spawner.spawn(command)
+          if (options?.combineOutput) {
+            const [output, exitCode] = yield* Effect.all(
+              [collectStream(handle.all, options.maxOutputBytes), handle.exitCode],
+              { concurrency: "unbounded" },
+            )
+            return {
+              command: description,
+              exitCode,
+              output: output.buffer,
+              stdout: Buffer.alloc(0),
+              stderr: Buffer.alloc(0),
+              outputTruncated: output.truncated,
+              stdoutTruncated: false,
+              stderrTruncated: false,
+            } satisfies RunResult
+          }
           const [stdout, stderr, exitCode] = yield* Effect.all(
             [
               collectStream(handle.stdout, options?.maxOutputBytes),
@@ -229,6 +256,6 @@ export const layer = Layer.effect(
   }),
 )
 
-export const defaultLayer = layer.pipe(Layer.provide(CrossSpawnSpawner.defaultLayer))
+export const node = makeGlobalNode({ service: Service, layer: layer, deps: [CrossSpawnSpawner.node] })
 
 export * as AppProcess from "./process"

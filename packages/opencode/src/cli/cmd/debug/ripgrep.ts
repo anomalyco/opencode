@@ -1,6 +1,6 @@
 import { EOL } from "os"
-import { Effect, Stream } from "effect"
-import { Ripgrep } from "../../../file/ripgrep"
+import { Effect } from "effect"
+import { Ripgrep } from "@opencode-ai/core/ripgrep"
 import { effectCmd } from "../../effect-cmd"
 import { cmd } from "../cmd"
 import { InstanceRef } from "@/effect/instance-ref"
@@ -8,23 +8,8 @@ import { InstanceRef } from "@/effect/instance-ref"
 export const RipgrepCommand = cmd({
   command: "rg",
   describe: "ripgrep debugging utilities",
-  builder: (yargs) => yargs.command(TreeCommand).command(FilesCommand).command(SearchCommand).demandCommand(),
+  builder: (yargs) => yargs.command(FilesCommand).command(SearchCommand).demandCommand(),
   async handler() {},
-})
-
-const TreeCommand = effectCmd({
-  command: "tree",
-  describe: "show file tree using ripgrep",
-  builder: (yargs) =>
-    yargs.option("limit", {
-      type: "number",
-    }),
-  handler: Effect.fn("Cli.debug.rg.tree")(function* (args) {
-    const ctx = yield* InstanceRef
-    if (!ctx) return
-    const tree = yield* Effect.orDie(Ripgrep.Service.use((svc) => svc.tree({ cwd: ctx.directory, limit: args.limit })))
-    process.stdout.write(tree + EOL)
-  }),
 })
 
 const FilesCommand = effectCmd({
@@ -47,19 +32,15 @@ const FilesCommand = effectCmd({
   handler: Effect.fn("Cli.debug.rg.files")(function* (args) {
     const ctx = yield* InstanceRef
     if (!ctx) return
-    const rg = yield* Ripgrep.Service
-    const files = yield* rg
-      .files({
+    const ripgrep = yield* Ripgrep.Service
+    const files = yield* ripgrep
+      .glob({
         cwd: ctx.directory,
-        glob: args.glob ? [args.glob] : undefined,
+        pattern: args.glob ?? "**/*",
+        limit: args.limit ?? 10_000,
       })
-      .pipe(
-        Stream.take(args.limit ?? Infinity),
-        Stream.runCollect,
-        Effect.map((c) => [...c]),
-        Effect.orDie,
-      )
-    process.stdout.write(files.join(EOL) + EOL)
+      .pipe(Effect.orDie)
+    process.stdout.write(files.map((file) => file.path).join(EOL) + EOL)
   }),
 })
 
@@ -84,16 +65,15 @@ const SearchCommand = effectCmd({
   handler: Effect.fn("Cli.debug.rg.search")(function* (args) {
     const ctx = yield* InstanceRef
     if (!ctx) return
-    const results = yield* Effect.orDie(
-      Ripgrep.Service.use((svc) =>
-        svc.search({
-          cwd: ctx.directory,
-          pattern: args.pattern,
-          glob: args.glob as string[] | undefined,
-          limit: args.limit,
-        }),
-      ),
-    )
-    process.stdout.write(JSON.stringify(results.items, null, 2) + EOL)
+    const ripgrep = yield* Ripgrep.Service
+    const results = yield* ripgrep
+      .grep({
+        cwd: ctx.directory,
+        pattern: args.pattern,
+        include: args.glob?.[0],
+        limit: args.limit ?? 10_000,
+      })
+      .pipe(Effect.orDie)
+    process.stdout.write(JSON.stringify(results, null, 2) + EOL)
   }),
 })

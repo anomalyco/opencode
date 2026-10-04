@@ -1,0 +1,107 @@
+diff --git a/dist/model/FileTreeController.js b/dist/model/FileTreeController.js
+index 37c5d1ffedd5aff0258dec41b1b5cedb240aa3a6..365c42ef4c824bfd13d14f0d09226929af625c73 100644
+--- a/dist/model/FileTreeController.js
++++ b/dist/model/FileTreeController.js
+@@ -1052,8 +1052,8 @@ var FileTreeController = class {
+ 		this.#setExpandedPaths(expandedPaths);
+ 		return focusCandidate ?? this.#focusedPath;
+ 	}
+-	#emit() {
+-		for (const listener of this.#listeners) listener();
++	#emit(event) {
++		for (const listener of this.#listeners) listener(event);
+ 	}
+ 	#emitMutation(event) {
+ 		this.#mutationListeners.get(event.operation)?.forEach((listener) => {
+@@ -1149,7 +1149,7 @@ var FileTreeController = class {
+ 			const searchFocusCandidate = this.#searchValue != null && this.#searchValue.length > 0 ? this.#refreshActiveSearchState() : this.#searchValue === "" ? this.#focusedPath : focusPathCandidate;
+ 			const shouldBuildFullProjection = this.#searchValue != null || event.operation !== "expand" && event.operation !== "collapse";
+ 			this.#rebuildVisibleProjection(searchFocusCandidate, shouldBuildFullProjection);
+-			this.#emit();
++			this.#emit(event);
+ 			const mutationEvent = toTreesMutationEvent(event);
+ 			if (mutationEvent != null) this.#emitMutation(mutationEvent);
+ 		});
+diff --git a/dist/model/internalTypes.d.ts b/dist/model/internalTypes.d.ts
+index 5b0fdd5a3b483439ae256795f3dad5a32182ab78..073c6f21edc20ce5bd44b122fe02b83de802b887 100644
+--- a/dist/model/internalTypes.d.ts
++++ b/dist/model/internalTypes.d.ts
+@@ -4,7 +4,10 @@ import { FileTreeCompositionOptions, FileTreePublicId, FileTreeRenderOptions, Fi
+ import { FileTreeController } from "./FileTreeController.js";
+ 
+ //#region src/model/internalTypes.d.ts
+-type FileTreeControllerListener = () => void;
++type FileTreeControllerListener = (event?: {
++  operation: 'expand' | 'collapse';
++  path: string;
++}) => void;
+ interface FileTreeStickyRowCandidate {
+   row: FileTreeVisibleRow;
+   subtreeEndIndex: number;
+diff --git a/dist/model/publicTypes.d.ts b/dist/model/publicTypes.d.ts
+index 84a7e2d14f67c1aad8230f19a3426ab7403f378e..752e262e6d2d8a836931b7b83a93d89a75e6209c 100644
+--- a/dist/model/publicTypes.d.ts
++++ b/dist/model/publicTypes.d.ts
+@@ -167,6 +167,10 @@ type FileTreeOptionSurface = FileTreeRenderOptions & {
+   gitStatus?: readonly GitStatusEntry[];
+   id?: string;
+   icons?: FileTreeIcons;
++  onExpansionChange?: (change: {
++    expanded: boolean;
++    path: FileTreePublicId;
++  }) => void;
+   onSelectionChange?: FileTreeSelectionChangeListener;
+   renderRowDecoration?: FileTreeRowDecorationRenderer;
+   search?: boolean;
+diff --git a/dist/render/FileTree.js b/dist/render/FileTree.js
+index 6db15e51b833192f79b71a15febe1612a4c185d0..36a4e6ac527595849c1db0e6bbebb475b6030b7b 100644
+--- a/dist/render/FileTree.js
++++ b/dist/render/FileTree.js
+@@ -63,6 +63,7 @@ var FileTree = class {
+ 	#composition;
+ 	#controller;
+ 	#id;
++	#onExpansionChange;
+ 	#onSelectionChange;
+ 	#renderRowDecoration;
+ 	#renamingEnabled;
+@@ -80,16 +81,18 @@ var FileTree = class {
+ 	#appliedUnsafeCSS;
+ 	#selectionVersion;
+ 	#selectionSubscription = null;
++	#expansionSubscription = null;
+ 	#wrapper;
+ 	#wroteHostItemHeight = false;
+ 	#wroteHostDensityFactor = false;
+ 	constructor(options) {
+-		const { composition, density, fileTreeSearchMode, gitStatus, id, initialSearchQuery, icons, itemHeight, onSearchChange, onSelectionChange, overscan, renderRowDecoration, renaming, search, searchBlurBehavior, searchFakeFocus, stickyFolders, unsafeCSS, initialVisibleRowCount,...controllerOptions } = options;
++		const { composition, density, fileTreeSearchMode, gitStatus, id, initialSearchQuery, icons, itemHeight, onExpansionChange, onSearchChange, onSelectionChange, overscan, renderRowDecoration, renaming, search, searchBlurBehavior, searchFakeFocus, stickyFolders, unsafeCSS, initialVisibleRowCount,...controllerOptions } = options;
+ 		this.#composition = composition;
+ 		this.#id = createClientId(id);
+ 		this.#gitStatusState = resolveFileTreeGitStatusState(gitStatus);
+ 		this.#icons = icons;
+ 		this.#unsafeCSS = unsafeCSS;
++		this.#onExpansionChange = onExpansionChange;
+ 		this.#onSelectionChange = onSelectionChange;
+ 		this.#renderRowDecoration = renderRowDecoration;
+ 		this.#renamingEnabled = renaming != null && renaming !== false;
+@@ -114,6 +117,10 @@ var FileTree = class {
+ 		this.#selectionSubscription = this.#onSelectionChange == null ? null : this.subscribe(() => {
+ 			this.#emitSelectionChange();
+ 		});
++		this.#expansionSubscription = this.#onExpansionChange == null ? null : this.#controller.subscribe((event) => {
++			if (event?.operation !== "expand" && event?.operation !== "collapse") return;
++			this.#onExpansionChange?.({ path: event.path, expanded: event.operation === "expand" });
++		});
+ 	}
+ 	unmount() {
+ 		if (this.#wrapper != null) {
+@@ -133,6 +140,8 @@ var FileTree = class {
+ 		this.unmount();
+ 		this.#selectionSubscription?.();
+ 		this.#selectionSubscription = null;
++		this.#expansionSubscription?.();
++		this.#expansionSubscription = null;
+ 		this.#controller.destroy();
+ 	}
+ 	getFileTreeContainer() {

@@ -1,25 +1,30 @@
-import { Array as Arr, Effect, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Route } from "../route/client"
 import { Auth } from "../route/auth"
 import { Endpoint } from "../route/endpoint"
-import { Framing } from "../route/framing"
 import { HttpTransport } from "../route/transport"
 import { Protocol } from "../route/protocol"
 import {
   LLMEvent,
   Usage,
   type FinishReason,
+  type JsonSchema,
   type LLMRequest,
+  type MediaPart,
+  type ReasoningPart,
   type TextPart,
   type ToolCallPart,
   type ToolDefinition,
+  type ToolContent,
 } from "../schema"
 import { isRecord, JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared"
 import { OpenAIOptions } from "./utils/openai-options"
 import { Lifecycle } from "./utils/lifecycle"
+import { ToolSchemaProjection } from "./utils/tool-schema"
 import { ToolStream } from "./utils/tool-stream"
 
 const ADAPTER = "openai-chat"
+const IMAGE_MIMES = new Set<string>(ProviderShared.IMAGE_MIMES)
 export const DEFAULT_BASE_URL = "https://api.openai.com/v1"
 export const PATH = "/chat/completions"
 
@@ -51,9 +56,20 @@ const OpenAIChatAssistantToolCall = Schema.Struct({
 })
 type OpenAIChatAssistantToolCall = Schema.Schema.Type<typeof OpenAIChatAssistantToolCall>
 
+const OpenAIChatUserContent = Schema.Union([
+  Schema.Struct({ type: Schema.Literal("text"), text: Schema.String }),
+  Schema.Struct({
+    type: Schema.Literal("image_url"),
+    image_url: Schema.Struct({ url: Schema.String }),
+  }),
+])
+
 const OpenAIChatMessage = Schema.Union([
   Schema.Struct({ role: Schema.Literal("system"), content: Schema.String }),
-  Schema.Struct({ role: Schema.Literal("user"), content: Schema.String }),
+  Schema.Struct({
+    role: Schema.Literal("user"),
+    content: Schema.Union([Schema.String, Schema.Array(OpenAIChatUserContent)]),
+  }),
   Schema.Struct({
     role: Schema.Literal("assistant"),
     content: Schema.NullOr(Schema.String),
@@ -128,6 +144,7 @@ type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta
 
 const OpenAIChatDelta = Schema.Struct({
   content: optionalNull(Schema.String),
+  reasoning_content: optionalNull(Schema.String),
   tool_calls: optionalNull(Schema.Array(OpenAIChatToolCallDelta)),
 })
 
@@ -159,12 +176,12 @@ const invalid = ProviderShared.invalidRequest
 // Lowering is the only place that knows how common LLM messages map onto the
 // OpenAI Chat wire format. Keep provider quirks here instead of leaking native
 // fields into `LLMRequest`.
-const lowerTool = (tool: ToolDefinition): OpenAIChatTool => ({
+const lowerTool = (tool: ToolDefinition, inputSchema: JsonSchema): OpenAIChatTool => ({
   type: "function",
   function: {
     name: tool.name,
     description: tool.description,
-    parameters: tool.inputSchema,
+    parameters: ToolSchemaProjection.openAI(inputSchema),
   },
 })
 
@@ -185,29 +202,47 @@ const lowerToolCall = (part: ToolCallPart): OpenAIChatAssistantToolCall => ({
   },
 })
 
+const lowerMedia = Effect.fn("OpenAIChat.lowerMedia")(function* (part: MediaPart) {
+  const media = yield* ProviderShared.validateMedia("OpenAI Chat", part, IMAGE_MIMES)
+  return { type: "image_url" as const, image_url: { url: media.dataUrl } }
+})
+
 const openAICompatibleReasoningContent = (native: unknown) =>
   isRecord(native) && typeof native.reasoning_content === "string" ? native.reasoning_content : undefined
 
 const lowerUserMessage = Effect.fn("OpenAIChat.lowerUserMessage")(function* (message: OpenAIChatRequestMessage) {
-  const content: TextPart[] = []
+  const content: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
   for (const part of message.content) {
-    if (!ProviderShared.supportsContent(part, ["text"]))
-      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text"])
-    content.push(part)
+    if (part.type === "text") {
+      content.push({ type: "text", text: part.text })
+      continue
+    }
+    if (part.type === "media") {
+      content.push(yield* lowerMedia(part))
+      continue
+    }
+    return yield* ProviderShared.unsupportedContent("OpenAI Chat", "user", ["text", "media"])
   }
-  return { role: "user" as const, content: ProviderShared.joinText(content) }
+  if (content.every((part) => part.type === "text"))
+    return { role: "user" as const, content: content.map((part) => part.text).join("") }
+  return { role: "user" as const, content }
 })
 
 const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(function* (
   message: OpenAIChatRequestMessage,
 ) {
   const content: TextPart[] = []
+  const reasoning: ReasoningPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
-    if (!ProviderShared.supportsContent(part, ["text", "tool-call"]))
-      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "tool-call"])
+    if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
+      return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "reasoning", "tool-call"])
     if (part.type === "text") {
       content.push(part)
+      continue
+    }
+    if (part.type === "reasoning") {
+      reasoning.push(part)
       continue
     }
     if (part.type === "tool-call") {
@@ -219,30 +254,80 @@ const lowerAssistantMessage = Effect.fn("OpenAIChat.lowerAssistantMessage")(func
     role: "assistant" as const,
     content: content.length === 0 ? null : ProviderShared.joinText(content),
     tool_calls: toolCalls.length === 0 ? undefined : toolCalls,
-    reasoning_content: openAICompatibleReasoningContent(message.native?.openaiCompatible),
+    reasoning_content:
+      reasoning.length > 0
+        ? reasoning.map((part) => part.text).join("")
+        : openAICompatibleReasoningContent(message.native?.openaiCompatible),
   }
 })
 
 const lowerToolMessages = Effect.fn("OpenAIChat.lowerToolMessages")(function* (message: OpenAIChatRequestMessage) {
   const messages: OpenAIChatMessage[] = []
+  const images: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
   for (const part of message.content) {
     if (!ProviderShared.supportsContent(part, ["tool-result"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "tool", ["tool-result"])
-    messages.push({ role: "tool", tool_call_id: part.id, content: ProviderShared.toolResultText(part) })
+    if (part.result.type !== "content") {
+      messages.push({ role: "tool", tool_call_id: part.id, content: ProviderShared.toolResultText(part) })
+      continue
+    }
+    const content: ReadonlyArray<ToolContent> = part.result.value
+    const text = content.filter((item) => item.type === "text").map((item) => item.text)
+    messages.push({ role: "tool", tool_call_id: part.id, content: text.join("\n") })
+    const files = content.filter((item) => item.type === "file")
+    images.push(
+      ...(yield* Effect.forEach(files, (item) =>
+        lowerMedia({ type: "media", mediaType: item.mime, data: item.uri, filename: item.name }),
+      )),
+    )
   }
-  return messages
+  return { messages, images }
 })
 
 const lowerMessage = Effect.fn("OpenAIChat.lowerMessage")(function* (message: OpenAIChatRequestMessage) {
   if (message.role === "user") return [yield* lowerUserMessage(message)]
   if (message.role === "assistant") return [yield* lowerAssistantMessage(message)]
-  return yield* lowerToolMessages(message)
+  return (yield* lowerToolMessages(message)).messages
 })
 
 const lowerMessages = Effect.fn("OpenAIChat.lowerMessages")(function* (request: LLMRequest) {
   const system: OpenAIChatMessage[] =
     request.system.length === 0 ? [] : [{ role: "system", content: ProviderShared.joinText(request.system) }]
-  return [...system, ...Arr.flatten(yield* Effect.forEach(request.messages, lowerMessage))]
+  const messages = [...system]
+  const pendingImages: Array<Schema.Schema.Type<typeof OpenAIChatUserContent>> = []
+  const flushImages = () => {
+    if (pendingImages.length === 0) return
+    messages.push({ role: "user", content: pendingImages.splice(0) })
+  }
+  for (const message of request.messages) {
+    if (message.role === "system") {
+      const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
+      if (pendingImages.length > 0) {
+        messages.push({ role: "user", content: [...pendingImages.splice(0), { type: "text", text: part.text }] })
+        continue
+      }
+      const previous = messages.at(-1)
+      if (previous?.role === "user" && typeof previous.content === "string")
+        messages[messages.length - 1] = { role: "user", content: `${previous.content}\n${part.text}` }
+      else if (previous?.role === "user" && Array.isArray(previous.content))
+        messages[messages.length - 1] = {
+          role: "user",
+          content: [...previous.content, { type: "text", text: part.text }],
+        }
+      else messages.push({ role: "user", content: part.text })
+      continue
+    }
+    if (message.role === "tool") {
+      const lowered = yield* lowerToolMessages(message)
+      messages.push(...lowered.messages)
+      pendingImages.push(...lowered.images)
+      continue
+    }
+    flushImages()
+    messages.push(...(yield* lowerMessage(message)))
+  }
+  flushImages()
+  return messages
 })
 
 const lowerOptions = Effect.fn("OpenAIChat.lowerOptions")(function* (request: LLMRequest) {
@@ -260,10 +345,16 @@ const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (request: LLMR
   // `fromRequest` returns the provider body only. Endpoint, auth, framing,
   // validation, and HTTP execution are composed by `Route.make`.
   const generation = request.generation
+  const toolSchemaCompatibility = request.model.compatibility?.toolSchema
   return {
     model: request.model.id,
     messages: yield* lowerMessages(request),
-    tools: request.tools.length === 0 ? undefined : request.tools.map(lowerTool),
+    tools:
+      request.tools.length === 0
+        ? undefined
+        : request.tools.map((tool) =>
+            lowerTool(tool, ToolSchemaProjection.modelCompatibility(tool.inputSchema, toolSchemaCompatibility)),
+          ),
     tool_choice: request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined,
     stream: true as const,
     stream_options: { include_usage: true },
@@ -325,7 +416,15 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
 
     let lifecycle = state.lifecycle
 
-    if (delta?.content) lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    if (delta?.reasoning_content)
+      lifecycle = Lifecycle.reasoningDelta(lifecycle, events, "reasoning-0", delta.reasoning_content)
+
+    if (delta?.content) {
+      lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
+      lifecycle = Lifecycle.textDelta(lifecycle, events, "text-0", delta.content)
+    }
+
+    if (toolDeltas.length) lifecycle = Lifecycle.reasoningEnd(lifecycle, events, "reasoning-0")
 
     for (const tool of toolDeltas) {
       const result = ToolStream.appendOrStart(
@@ -393,28 +492,15 @@ export const protocol = Protocol.make({
   },
 })
 
-const encodeBody = Schema.encodeSync(Schema.fromJsonString(OpenAIChatBody))
-
-export const httpTransport = HttpTransport.httpJson({
-  endpoint: Endpoint.path(PATH),
-  auth: Auth.bearer(),
-  framing: Framing.sse,
-  encodeBody,
-})
+export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>()
 
 export const route = Route.make({
   id: ADAPTER,
   provider: "openai",
   protocol,
+  endpoint: Endpoint.path(PATH, { baseURL: DEFAULT_BASE_URL }),
+  auth: Auth.none,
   transport: httpTransport,
-  defaults: {
-    baseURL: DEFAULT_BASE_URL,
-  },
 })
-
-// =============================================================================
-// Model Helper
-// =============================================================================
-export const model = route.model
 
 export * as OpenAIChat from "./openai-chat"

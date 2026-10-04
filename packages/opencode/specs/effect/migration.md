@@ -33,7 +33,7 @@ genuinely outside `AppLayer`.
 
 ## Platform Edges
 
-- Use `AppFileSystem.Service` instead of raw filesystem APIs in
+- Use `FSUtil.Service` instead of raw filesystem APIs in
   effectified services.
 - Use `AppProcess.Service` instead of raw process wrappers.
 - Use `HttpClient.HttpClient` instead of raw `fetch` in Effect code.

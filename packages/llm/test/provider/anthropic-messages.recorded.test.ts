@@ -1,16 +1,14 @@
-import { Redactor } from "@opencode-ai/http-recorder"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
 import { LLM, LLMError, Message, ToolCallPart } from "../../src"
 import { LLMClient } from "../../src/route"
-import * as AnthropicMessages from "../../src/protocols/anthropic-messages"
+import * as Anthropic from "../../src/providers/anthropic"
 import { weatherToolName } from "../recorded-scenarios"
 import { recordedTests } from "../recorded-test"
 
-const model = AnthropicMessages.model({
-  id: "claude-haiku-4-5-20251001",
+const model = Anthropic.configure({
   apiKey: process.env.ANTHROPIC_API_KEY ?? "fixture",
-})
+}).model("claude-haiku-4-5-20251001")
 
 const malformedToolOrderRequest = LLM.request({
   id: "recorded_anthropic_malformed_tool_order",
@@ -31,7 +29,7 @@ const recorded = recordedTests({
   provider: "anthropic",
   protocol: "anthropic-messages",
   requires: ["ANTHROPIC_API_KEY"],
-  options: { redactor: Redactor.defaults({ requestHeaders: { allow: ["content-type", "anthropic-version"] } }) },
+  options: { redact: { allowRequestHeaders: ["anthropic-version"] } },
 })
 
 describe("Anthropic Messages sad-path recorded", () => {

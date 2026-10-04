@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto"
 import { describe, expect } from "bun:test"
 import { Flag } from "@opencode-ai/core/flag/flag"
-import * as Log from "@opencode-ai/core/util/log"
-import { ConfigProvider, Effect, Layer } from "effect"
+import { ConfigProvider, Effect, Layer, Option } from "effect"
+import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import {
   HttpClient,
   HttpClientRequest,
@@ -12,15 +12,13 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from "effect/unstable/http"
-import { AppFileSystem } from "@opencode-ai/core/filesystem"
+import { FSUtil } from "@opencode-ai/core/fs-util"
 import { RuntimeFlags } from "../../src/effect/runtime-flags"
 import { ServerAuth } from "../../src/server/auth"
 import { authorizationRouterMiddleware } from "../../src/server/routes/instance/httpapi/middleware/authorization"
 import { HttpApiApp } from "../../src/server/routes/instance/httpapi/server"
 import { serveEmbeddedUIEffect, serveUIEffect } from "../../src/server/shared/ui"
 import { testEffect } from "../lib/effect"
-
-void Log.init({ print: false })
 
 const testStateLayer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -42,7 +40,15 @@ const testStateLayer = Layer.effectDiscard(
   }),
 )
 
-const it = testEffect(Layer.mergeAll(testStateLayer, AppFileSystem.defaultLayer, RuntimeFlags.layer()))
+const fsUtilLayer = AppNodeBuilder.build(FSUtil.node)
+const it = testEffect(Layer.mergeAll(testStateLayer, fsUtilLayer, RuntimeFlags.layer()))
+
+function authConfigLayer(input?: { password?: string; username?: string }) {
+  return ServerAuth.Config.configLayer({
+    password: input?.password === undefined ? Option.none() : Option.some(input.password),
+    username: input?.username ?? "opencode",
+  })
+}
 
 function restoreEnv(key: string, value: string | undefined) {
   if (value === undefined) {
@@ -89,7 +95,7 @@ function uiApp(input?: {
   const handler = HttpRouter.toWebHandler(
     HttpRouter.use((router) =>
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const client = yield* HttpClient.HttpClient
         const flags = yield* RuntimeFlags.Service
         yield* router.add("*", "/*", (request) =>
@@ -97,18 +103,12 @@ function uiApp(input?: {
         )
       }),
     ).pipe(
-      Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(ServerAuth.Config.defaultLayer))),
+      Layer.provide(authorizationRouterMiddleware.layer.pipe(Layer.provide(authConfigLayer(input)))),
       Layer.provide([
-        AppFileSystem.defaultLayer,
+        fsUtilLayer,
         input?.client ?? httpClient(new Response("ui")),
         RuntimeFlags.layer({ disableEmbeddedWebUi: input?.disableEmbeddedWebUi ?? false }),
         HttpServer.layerServices,
-        ConfigProvider.layer(
-          ConfigProvider.fromUnknown({
-            OPENCODE_SERVER_PASSWORD: input?.password,
-            OPENCODE_SERVER_USERNAME: input?.username,
-          }),
-        ),
       ]),
     ),
     { disableLogger: true },
@@ -132,7 +132,7 @@ function routeOrderingApp() {
   const handler = HttpRouter.toWebHandler(
     HttpRouter.use((router) =>
       Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const client = yield* HttpClient.HttpClient
         const flags = yield* RuntimeFlags.Service
         yield* router.add("GET", "/session/:sessionID", () =>
@@ -144,7 +144,7 @@ function routeOrderingApp() {
       }),
     ).pipe(
       Layer.provide([
-        AppFileSystem.defaultLayer,
+        fsUtilLayer,
         RuntimeFlags.layer({ disableEmbeddedWebUi: true }),
         httpClient(new Response("ui"), (request) => {
           proxiedUrl = request.url
@@ -210,7 +210,7 @@ describe("HttpApi UI fallback", () => {
       let proxiedUrl: string | undefined
 
       const response = yield* Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const client = yield* HttpClient.HttpClient
         const flags = yield* RuntimeFlags.Service
         return yield* serveUIEffect(HttpServerRequest.fromWeb(new Request("http://localhost/assets/app.js")), {
@@ -260,7 +260,7 @@ describe("HttpApi UI fallback", () => {
   it.live("strips upstream transfer-encoding header from proxied assets", () =>
     Effect.gen(function* () {
       const response = yield* Effect.gen(function* () {
-        const fs = yield* AppFileSystem.Service
+        const fs = yield* FSUtil.Service
         const client = yield* HttpClient.HttpClient
         const flags = yield* RuntimeFlags.Service
         return yield* serveUIEffect(HttpServerRequest.fromWeb(new Request("http://localhost/")), {
@@ -303,7 +303,7 @@ describe("HttpApi UI fallback", () => {
     Effect.gen(function* () {
       let readPath: string | undefined
 
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const response = yield* serveEmbeddedUIEffect(
         "/assets/app.js",
         {
@@ -326,11 +326,11 @@ describe("HttpApi UI fallback", () => {
     }),
   )
 
-  it.live("allows embedded UI terminal wasm and theme preload CSP", () =>
+  it.live("allows embedded UI terminal wasm, blob attachments, and theme preload CSP", () =>
     Effect.gen(function* () {
       const script = 'document.documentElement.dataset.theme = "dark"'
 
-      const fs = yield* AppFileSystem.Service
+      const fs = yield* FSUtil.Service
       const response = yield* serveEmbeddedUIEffect(
         "/",
         {
@@ -351,7 +351,8 @@ describe("HttpApi UI fallback", () => {
       const csp = response.headers.get("content-security-policy") ?? ""
       expect(csp).toContain("script-src 'self' 'wasm-unsafe-eval'")
       expect(csp).toContain(`'sha256-${createHash("sha256").update(script).digest("base64")}'`)
-      expect(csp).toContain("connect-src * data:")
+      expect(csp).toContain("img-src 'self' data: https: blob:")
+      expect(csp).toContain("connect-src * data: blob:")
     }),
   )
 
@@ -400,6 +401,20 @@ describe("HttpApi UI fallback", () => {
         disableEmbeddedWebUi: true,
       }).request("/", {
         headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+      })
+
+      expect(response.status).toBe(200)
+    }),
+  )
+
+  it.live("accepts basic auth passwords containing colons for the web UI", () =>
+    Effect.gen(function* () {
+      const response = yield* uiApp({
+        password: "sec:ret",
+        username: "opencode",
+        disableEmbeddedWebUi: true,
+      }).request("/", {
+        headers: { authorization: `Basic ${btoa("opencode:sec:ret")}` },
       })
 
       expect(response.status).toBe(200)

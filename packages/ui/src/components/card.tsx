@@ -40,7 +40,7 @@ export function Card(props: CardProps) {
   const variant = () => split.variant ?? "normal"
   const accent = () => {
     const v = variant()
-    if (v === "error") return "var(--icon-critical-base)"
+    if (v === "error") return "var(--v2-state-fg-danger)"
     if (v === "warning") return "var(--icon-warning-active)"
     if (v === "success") return "var(--icon-success-active)"
     if (v === "info") return "var(--icon-info-active)"

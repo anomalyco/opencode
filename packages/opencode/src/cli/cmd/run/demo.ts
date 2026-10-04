@@ -181,7 +181,7 @@ function showSubagent(
     callID: string
     label: string
     description: string
-    status: "running" | "completed" | "error"
+    status: "running" | "completed" | "cancelled" | "error"
     title?: string
     toolCalls?: number
     commits: StreamCommit[]

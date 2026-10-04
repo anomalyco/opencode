@@ -155,6 +155,26 @@ export namespace Billing {
     return amountInMicroCents
   }
 
+  export const subtractLiteUsage = async (workspaceID: string, amountInMicroCents: number) => {
+    await Database.transaction(async (tx) => {
+      const lite = await tx
+        .select({ id: LiteTable.id })
+        .from(LiteTable)
+        .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
+        .then((rows) => rows[0])
+      if (!lite) throw new Error("Subscribe to Go before applying referral rewards")
+
+      await tx
+        .update(LiteTable)
+        .set({
+          monthlyUsage: sql`GREATEST(0, COALESCE(${LiteTable.monthlyUsage}, 0) - ${amountInMicroCents})`,
+          weeklyUsage: sql`GREATEST(0, COALESCE(${LiteTable.weeklyUsage}, 0) - ${amountInMicroCents})`,
+          rollingUsage: sql`GREATEST(0, COALESCE(${LiteTable.rollingUsage}, 0) - ${amountInMicroCents})`,
+        })
+        .where(and(eq(LiteTable.workspaceID, workspaceID), isNull(LiteTable.timeDeleted)))
+    })
+  }
+
   export const redeemCoupon = async (email: string, type: (typeof CouponType)[number]) => {
     // validate coupon type
     await (async () => {
@@ -252,7 +272,10 @@ export namespace Billing {
         },
         payment_method_options: {
           card: {
-            setup_future_usage: "on_session",
+            setup_future_usage: "off_session",
+          },
+          link: {
+            setup_future_usage: "off_session",
           },
         },
         //payment_method_data: {
@@ -281,6 +304,7 @@ export namespace Billing {
     }),
     async (input) => {
       const user = Actor.assert("user")
+      throw new Error("Go subscriptions have moved to the new Console")
       const { successUrl, cancelUrl, method } = input
 
       const email = (await User.getAuthEmail(user.properties.userID))!
@@ -305,7 +329,6 @@ export namespace Billing {
           return LiteData.threeMonths100Coupon
         if (coupons.some((coupon) => coupon.type === "GOFREEMONTH" && !coupon.timeRedeemed))
           return LiteData.firstMonth100Coupon
-        if (!coupons.some((coupon) => coupon.type === "GO1MONTH50")) return LiteData.firstMonth50Coupon
         return undefined
       })()
       const createSession = () =>

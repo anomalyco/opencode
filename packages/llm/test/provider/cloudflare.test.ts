@@ -2,7 +2,7 @@ import { describe, expect } from "bun:test"
 import { ConfigProvider, Effect, Schema } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
 import { LLM } from "../../src"
-import * as Cloudflare from "../../src/providers/cloudflare"
+import { CloudflareAIGateway, CloudflareWorkersAI } from "../../src/providers/cloudflare"
 import { LLMClient } from "../../src/route"
 import { it } from "../lib/effect"
 import { dynamicResponse } from "../lib/http"
@@ -21,18 +21,18 @@ const deltaChunk = (delta: object, finishReason: string | null = null) => ({
 describe("Cloudflare", () => {
   it.effect("prepares AI Gateway models through the OpenAI-compatible Chat protocol", () =>
     Effect.gen(function* () {
-      const model = Cloudflare.aiGateway("workers-ai/@cf/meta/llama-3.3-70b-instruct", {
+      const model = CloudflareAIGateway.configure({
         accountId: "test-account",
         gatewayId: "test-gateway",
         apiKey: "test-token",
-      })
+      }).model("workers-ai/@cf/meta/llama-3.3-70b-instruct")
 
       expect(model).toMatchObject({
         id: "workers-ai/@cf/meta/llama-3.3-70b-instruct",
         provider: "cloudflare-ai-gateway",
-        route: "cloudflare-ai-gateway",
-        baseURL: "https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat",
+        route: { id: "cloudflare-ai-gateway" },
       })
+      expect(model.route.endpoint.baseURL).toBe("https://gateway.ai.cloudflare.com/v1/test-account/test-gateway/compat")
 
       const prepared = yield* LLMClient.prepare(LLM.request({ model, prompt: "Say hello." }))
 
@@ -49,11 +49,11 @@ describe("Cloudflare", () => {
     Effect.gen(function* () {
       const response = yield* LLM.generate(
         LLM.request({
-          model: Cloudflare.aiGateway("openai/gpt-4o-mini", {
+          model: CloudflareAIGateway.configure({
             accountId: "test-account",
             gatewayId: "test-gateway",
             apiKey: "test-token",
-          }),
+          }).model("openai/gpt-4o-mini"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -86,11 +86,11 @@ describe("Cloudflare", () => {
   it.effect("defaults AI Gateway id to default when omitted or blank", () =>
     Effect.gen(function* () {
       expect(
-        Cloudflare.aiGateway("workers-ai/@cf/meta/llama-3.3-70b-instruct", {
+        CloudflareAIGateway.configure({
           accountId: "test-account",
           gatewayId: "",
           gatewayApiKey: "test-token",
-        }).baseURL,
+        }).model("workers-ai/@cf/meta/llama-3.3-70b-instruct").route.endpoint.baseURL,
       ).toBe("https://gateway.ai.cloudflare.com/v1/test-account/default/compat")
     }),
   )
@@ -99,11 +99,11 @@ describe("Cloudflare", () => {
     Effect.gen(function* () {
       yield* LLM.generate(
         LLM.request({
-          model: Cloudflare.aiGateway("openai/gpt-4o-mini", {
+          model: CloudflareAIGateway.configure({
             accountId: "test-account",
             gatewayApiKey: "gateway-token",
             apiKey: "provider-token",
-          }),
+          }).model("openai/gpt-4o-mini"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -129,31 +129,31 @@ describe("Cloudflare", () => {
     Effect.gen(function* () {
       const prepared = yield* LLMClient.prepare(
         LLM.request({
-          model: Cloudflare.aiGateway("openai/gpt-4o-mini", {
+          model: CloudflareAIGateway.configure({
             baseURL: "https://gateway.proxy.test/v1/custom/compat",
             apiKey: "test-token",
-          }),
+          }).model("openai/gpt-4o-mini"),
           prompt: "Say hello.",
         }),
       )
 
-      expect(prepared.model.baseURL).toBe("https://gateway.proxy.test/v1/custom/compat")
+      expect(prepared.model.route.endpoint.baseURL).toBe("https://gateway.proxy.test/v1/custom/compat")
     }),
   )
 
   it.effect("prepares direct Workers AI models through the OpenAI-compatible Chat protocol", () =>
     Effect.gen(function* () {
-      const model = Cloudflare.workersAI("@cf/meta/llama-3.1-8b-instruct", {
+      const model = CloudflareWorkersAI.configure({
         accountId: "test-account",
         apiKey: "test-token",
-      })
+      }).model("@cf/meta/llama-3.1-8b-instruct")
 
       expect(model).toMatchObject({
         id: "@cf/meta/llama-3.1-8b-instruct",
         provider: "cloudflare-workers-ai",
-        route: "cloudflare-workers-ai",
-        baseURL: "https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1",
+        route: { id: "cloudflare-workers-ai" },
       })
+      expect(model.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1")
 
       const prepared = yield* LLMClient.prepare(LLM.request({ model, prompt: "Say hello." }))
 
@@ -170,10 +170,10 @@ describe("Cloudflare", () => {
     Effect.gen(function* () {
       const response = yield* LLM.generate(
         LLM.request({
-          model: Cloudflare.workersAI("@cf/meta/llama-3.1-8b-instruct", {
+          model: CloudflareWorkersAI.configure({
             accountId: "test-account",
             apiKey: "test-token",
-          }),
+          }).model("@cf/meta/llama-3.1-8b-instruct"),
           prompt: "Say hello.",
         }),
       ).pipe(
@@ -205,9 +205,9 @@ describe("Cloudflare", () => {
     Effect.gen(function* () {
       yield* LLM.generate(
         LLM.request({
-          model: Cloudflare.workersAI("@cf/meta/llama-3.1-8b-instruct", {
+          model: CloudflareWorkersAI.configure({
             accountId: "test-account",
-          }),
+          }).model("@cf/meta/llama-3.1-8b-instruct"),
           prompt: "Say hello.",
         }),
       ).pipe(

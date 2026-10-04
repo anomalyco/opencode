@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SnapshotFileDiff } from "@opencode-ai/sdk/v2"
+import type { FileDiffInfo } from "@opencode-ai/client/promise"
 import type { Message } from "@opencode-ai/sdk/v2/client"
 import { diffs, message } from "./diffs"
 
@@ -9,7 +10,7 @@ const item = {
   additions: 1,
   deletions: 1,
   status: "modified",
-} satisfies SnapshotFileDiff
+} satisfies FileDiffInfo & SnapshotFileDiff
 
 describe("diffs", () => {
   test("keeps valid arrays", () => {

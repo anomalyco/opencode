@@ -1,9 +1,9 @@
 import { Provider } from "../src/provider"
-import { ProviderID, type ModelRef } from "../src/schema"
+import { ProviderID, type Model } from "../src/schema"
 
-declare const model: (id: string) => ModelRef
-declare const requiredModel: (id: string, options: { readonly baseURL: string }) => ModelRef
-declare const chat: (id: string, options: { readonly apiKey: string }) => ModelRef
+declare const model: (id: string) => Model
+declare const requiredModel: (id: string, options: { readonly baseURL: string }) => Model
+declare const chat: (id: string, options: { readonly apiKey: string }) => Model
 
 Provider.make({
   id: ProviderID.make("example"),
@@ -22,6 +22,8 @@ const requiredProvider = Provider.make({
   model: requiredModel,
 })
 
+// Provider.make is advanced structural typing coverage; built-in providers use
+// configure(...).model(id) facades instead of second-argument selectors.
 requiredProvider.model("custom", { baseURL: "https://example.com/v1" })
 
 // @ts-expect-error Provider.make preserves required model options.

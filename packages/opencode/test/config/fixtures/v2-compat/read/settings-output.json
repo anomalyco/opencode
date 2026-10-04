@@ -1,0 +1,27 @@
+{
+  "compaction": {
+    "auto": false,
+    "preserve_recent_tokens": 12000,
+    "reserved": 2048
+  },
+  "experimental": {
+    "policies": [
+      {
+        "effect": "deny",
+        "action": "provider.use",
+        "resource": "openai"
+      }
+    ],
+    "batch_tool": true
+  },
+  "snapshot": false,
+  "attachment": {
+    "image": {
+      "auto_resize": false,
+      "max_width": 1920,
+      "max_height": 1080,
+      "max_base64_bytes": 4096
+    }
+  },
+  "subagent_depth": 3
+}

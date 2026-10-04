@@ -1,20 +1,13 @@
 import { Effect, Stream } from "effect"
 import { Headers, HttpClientRequest } from "effect/unstable/http"
-import { Auth, type Auth as AuthDef } from "../auth"
-import { type Endpoint, render as renderEndpoint } from "../endpoint"
-import type { Framing } from "../framing"
-import type { Transport } from "./index"
+import { Auth } from "../auth"
+import { render as renderEndpoint } from "../endpoint"
+import { Framing, type Framing as FramingDef } from "../framing"
+import type { Transport, TransportPrepareInput } from "./index"
 import * as ProviderShared from "../../protocols/shared"
 import { mergeJsonRecords, type LLMRequest } from "../../schema"
 
-export interface JsonRequestInput<Body> {
-  readonly body: Body
-  readonly request: LLMRequest
-  readonly endpoint: Endpoint<Body>
-  readonly auth: AuthDef
-  readonly encodeBody: (body: Body) => string
-  readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
-}
+export type JsonRequestInput<Body> = TransportPrepareInput<Body>
 
 export interface JsonRequestParts<Body = unknown> {
   readonly url: string
@@ -25,7 +18,7 @@ export interface JsonRequestParts<Body = unknown> {
 
 export interface HttpPrepared<Frame> {
   readonly request: HttpClientRequest.HttpClientRequest
-  readonly framing: Framing<Frame>
+  readonly framing: FramingDef<Frame>
 }
 
 const applyQuery = (url: string, query: Record<string, string> | undefined) => {
@@ -35,9 +28,56 @@ const applyQuery = (url: string, query: Record<string, string> | undefined) => {
   return next.toString()
 }
 
+const PROTOCOL_BODY_OVERLAY_DENYLIST = new Set([
+  "content",
+  "contents",
+  "frequencyPenalty",
+  "frequency_penalty",
+  "generationConfig",
+  "inferenceConfig",
+  "input",
+  "maxTokens",
+  "max_tokens",
+  "messages",
+  "model",
+  "presencePenalty",
+  "presence_penalty",
+  "responseFormat",
+  "response_format",
+  "seed",
+  "stop",
+  "stopSequences",
+  "stop_sequences",
+  "stream",
+  "streamOptions",
+  "stream_options",
+  "system",
+  "systemInstruction",
+  "system_instruction",
+  "temperature",
+  "thinking",
+  "toolChoice",
+  "toolConfig",
+  "tool_choice",
+  "tool_config",
+  "tools",
+  "topK",
+  "topP",
+  "top_k",
+  "top_p",
+])
+
+const forbiddenBodyOverlayKeys = (body: Record<string, unknown>) =>
+  Object.keys(body).filter((key) => PROTOCOL_BODY_OVERLAY_DENYLIST.has(key))
+
 const bodyWithOverlay = <Body>(body: Body, request: LLMRequest, encodeBody: (body: Body) => string) =>
   Effect.gen(function* () {
     if (request.http?.body === undefined) return { jsonBody: body, bodyText: encodeBody(body) }
+    const forbiddenKeys = forbiddenBodyOverlayKeys(request.http.body)
+    if (forbiddenKeys.length > 0)
+      return yield* ProviderShared.invalidRequest(
+        `http.body cannot overlay protocol-owned field(s): ${forbiddenKeys.join(", ")}`,
+      )
     if (ProviderShared.isRecord(body)) {
       const overlaid = mergeJsonRecords(body, request.http.body) ?? {}
       return { jsonBody: overlaid, bodyText: ProviderShared.encodeJson(overlaid) }
@@ -52,28 +92,21 @@ export const jsonRequestParts = <Body>(input: JsonRequestInput<Body>) =>
       input.request.http?.query,
     )
     const body = yield* bodyWithOverlay(input.body, input.request, input.encodeBody)
-    const headers = yield* Auth.toEffect(Auth.isAuth(input.request.model.auth) ? input.request.model.auth : input.auth)(
-      {
-        request: input.request,
-        method: "POST",
-        url,
-        body: body.bodyText,
-        headers: Headers.fromInput({
-          ...(input.headers?.({ request: input.request }) ?? {}),
-          ...input.request.model.headers,
-          ...input.request.http?.headers,
-        }),
-      },
-    )
+    const headers = yield* Auth.toEffect(input.auth)({
+      request: input.request,
+      method: "POST",
+      url,
+      body: body.bodyText,
+      headers: Headers.fromInput({
+        ...input.headers?.({ request: input.request }),
+        ...input.request.http?.headers,
+      }),
+    })
     return { url, jsonBody: body.jsonBody, bodyText: body.bodyText, headers }
   })
 
-export interface HttpJsonInput<Body, Frame> {
-  readonly endpoint: Endpoint<Body>
-  readonly auth?: AuthDef
-  readonly framing: Framing<Frame>
-  readonly encodeBody: (body: Body) => string
-  readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
+export interface HttpJsonInput<_Body, Frame> {
+  readonly framing: FramingDef<Frame>
 }
 
 export type HttpJsonPatch<Body, Frame> = Partial<HttpJsonInput<Body, Frame>>
@@ -85,14 +118,9 @@ export interface HttpJsonTransport<Body, Frame> extends Transport<Body, HttpPrep
 export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJsonTransport<Body, Frame> => ({
   id: "http-json",
   with: (patch) => httpJson({ ...input, ...patch }),
-  prepare: (body, request) =>
+  prepare: (prepareInput) =>
     jsonRequestParts({
-      body,
-      request,
-      endpoint: input.endpoint,
-      auth: input.auth ?? Auth.bearer(),
-      encodeBody: input.encodeBody,
-      headers: input.headers,
+      ...prepareInput,
     }).pipe(
       Effect.map((parts) => ({
         request: ProviderShared.jsonPost({ url: parts.url, body: parts.bodyText, headers: parts.headers }),
@@ -109,8 +137,8 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
               response.stream.pipe(
                 Stream.mapError((error) =>
                   ProviderShared.eventError(
-                    `${request.model.provider}/${request.model.route}`,
-                    `Failed to read ${request.model.provider}/${request.model.route} stream`,
+                    `${request.model.provider}/${request.model.route.id}`,
+                    `Failed to read ${request.model.provider}/${request.model.route.id} stream`,
                     ProviderShared.errorText(error),
                   ),
                 ),
@@ -120,3 +148,8 @@ export const httpJson = <Body, Frame>(input: HttpJsonInput<Body, Frame>): HttpJs
         ),
     ),
 })
+
+export const sseJson = {
+  id: "http-json/sse",
+  with: <Body>() => httpJson<Body, string>({ framing: Framing.sse }),
+} as const
