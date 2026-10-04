@@ -80,6 +80,7 @@ const en = {
   "range.2W": "2 Weeks",
   "range.1M": "1 Month",
   "range.2M": "2 Months",
+  "chart.weekly": "Weekly",
   "chart.daily": "Daily",
   "chart.input": "Input",
   "chart.output": "Output",
@@ -97,10 +98,14 @@ const en = {
   "chart.leaderboardAria": "Model token leaderboard",
   "chart.scrollableLeaderboardAria": "Scrollable model token leaderboard",
   "chart.byAuthor": "by {{author}}",
+  "chart.vsPreviousWeek": "vs previous week",
+  "chart.date": "Date",
   "home.updated": "Updated",
   "home.noRows": "No rows yet",
   "home.justNow": "just now",
   "home.heroCopy": "See which models are winning real usage, how the mix is shifting, and what that means for cost.",
+  "home.summary":
+    "As of {{date}}, {{first}} led OpenCode usage over the past 7 days with {{firstTokens}} tokens, followed by {{second}} ({{secondTokens}}) and {{third}} ({{thirdTokens}}).",
   "home.loadingTitle": "Loading data",
   "home.loadingDescription": "Reading model aggregates.",
   "home.usageTitle": "Usage",
@@ -146,6 +151,8 @@ const en = {
   "lab.title": "{{lab}} AI Model Usage & Rankings | OpenCode Data",
   "lab.description":
     "Compare {{lab}} models used in OpenCode, including token usage, model rankings, context windows, release dates, costs, and model-specific data.",
+  "lab.summary":
+    "{{lab}} models processed {{tokens}} tokens across OpenCode over the past two months, {{share}} of all usage. {{model}} was the most-used {{lab}} model.",
   "lab.loadingTitle": "Model Lab",
   "lab.loadingDescription": "Reading model availability and recent OpenCode usage.",
   "lab.notFound": "No models matched this lab.",
@@ -172,6 +179,10 @@ const en = {
   "model.title": "{{model}} Usage, Cost & Rank | OpenCode Data",
   "model.description":
     "View {{model}} OpenCode usage data, including token volume, weekly rank, token mix, costs, cache ratio, sessions, geo breakdowns, and peer models.",
+  "model.summary":
+    "{{model}} ranked #{{rank}} by tokens across OpenCode last week, with {{share}} of tokens over the past two months.",
+  "model.summaryUnranked": "{{model}} had {{share}} of tokens across OpenCode over the past two months.",
+  "model.summaryPrice": "{{model}} costs {{input}} per 1M input tokens and {{output}} per 1M output tokens.",
   "model.loadingTitle": "Model Data",
   "model.loadingDescription": "Reading model aggregates.",
   "model.loadingProfile": "Reading the model profile.",
@@ -245,6 +256,21 @@ const en = {
   "model.pdf": "PDF",
   "format.users": "users",
   "format.tokens": "tokens",
+  "methodology.title": "Methodology",
+  "methodology.description": "How this data is collected.",
+  "methodology.updatesLabel": "Updates",
+  "methodology.updates": "Aggregated every hour. Days and weeks use UTC.",
+  "methodology.tokensLabel": "Tokens",
+  "methodology.tokens": "Input, output, reasoning, and cached tokens for each request.",
+  "methodology.usersLabel": "Users and sessions",
+  "methodology.users": "Approximate counts of distinct users and OpenCode sessions.",
+  "methodology.costLabel": "Cost",
+  "methodology.cost":
+    "Session cost is the average cost per OpenCode session. Token prices are list prices from the OpenCode model catalog.",
+  "methodology.retentionLabel": "Retention",
+  "methodology.retention": "The share of a model's users in one week who use it again the next week.",
+  "methodology.citeLabel": "Citation",
+  "methodology.cite": "Cite OpenCode Data (opencode.ai/data) with the update time shown at the top of the page.",
 } as const
 
 export type Key = keyof typeof en
@@ -273,4 +299,14 @@ const dictionaries = {
 
 export function dict(locale: Locale) {
   return dictionaries[locale]
+}
+
+export function translate(locale: Locale, key: Key, params?: Record<string, string | number>) {
+  const text = dictionaries[locale][key]
+  if (!params) return text
+  return text.replace(/\{\{(\w+)\}\}/g, (raw, key) => {
+    const value = params[key]
+    if (value === undefined || value === null) return raw
+    return String(value)
+  })
 }
