@@ -1,3 +1,4 @@
+import type { Project } from "@opencode/schema/project"
 import { useStorage } from "../context/storage"
 
 type RecentDirectory = {
@@ -16,10 +17,10 @@ export function useDirectoryRecents() {
   })
 
   return {
-    list(projectID: string) {
+    list(projectID: Project.ID) {
       return (store.projects[projectID] ?? []).toSorted((a, b) => b.usedAt - a.usedAt)
     },
-    touch(projectID: string, directory: string) {
+    touch(projectID: Project.ID, directory: string) {
       void updateStore((draft) => {
         draft.projects[projectID] = [
           { directory, usedAt: Date.now() },
@@ -27,7 +28,7 @@ export function useDirectoryRecents() {
         ].slice(0, 10)
       }).catch((error) => console.error("Failed to persist directory recents", error))
     },
-    remove(projectID: string, directory: string) {
+    remove(projectID: Project.ID, directory: string) {
       void updateStore((draft) => {
         draft.projects[projectID] = (draft.projects[projectID] ?? []).filter((item) => item.directory !== directory)
       }).catch((error) => console.error("Failed to remove directory recent", error))

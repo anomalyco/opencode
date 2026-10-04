@@ -1,3 +1,4 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
 import type {
   SessionMessageAssistant,
   SessionMessageAssistantReasoning,
@@ -21,7 +22,7 @@ type Item = {
  */
 export function summarizeActivity(
   node: Extract<SessionNode, { type: "group" }>,
-  message: (messageID: string) => SessionMessageInfo | undefined,
+  message: (messageID: SessionMessage.ID) => SessionMessageInfo | undefined,
   pending: readonly PartRef[],
   closed: boolean,
 ) {

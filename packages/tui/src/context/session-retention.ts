@@ -1,15 +1,16 @@
+import type { Session } from "@opencode/schema/session"
 import { createEffect, untrack, type Accessor } from "solid-js"
 import type { Data } from "@opencode/client/solid"
 
 export function createSessionRetention(input: {
   session: Pick<Data["session"], "list" | "root" | "evict">
-  current: Accessor<string | undefined>
-  keep: Accessor<readonly string[]>
+  current: Accessor<Session.ID | undefined>
+  keep: Accessor<readonly Session.ID[]>
   limit: number
 }) {
-  let previous: string | undefined
-  let recent: string[] = []
-  let evicted = new Map<string, string>()
+  let previous: Session.ID | undefined
+  let recent: Session.ID[] = []
+  let evicted = new Map<Session.ID, Session.ID>()
 
   createEffect(() => {
     const viewed = input.current()

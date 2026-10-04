@@ -1,3 +1,6 @@
+import type { SessionID } from "@opencode/schema/session-id"
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { ProjectID } from "@opencode/schema/project-id"
 import type {
   AgentInfo,
   CommandInfo,
@@ -68,46 +71,49 @@ export interface Data {
   readonly listen: (handler: (event: { details: OpenCodeEvent }) => void) => () => void
   readonly session: {
     list(): SessionInfo[]
-    get(sessionID: string): SessionInfo | undefined
-    root(sessionID: string): string
-    family(sessionID: string): string[]
-    cost(sessionID: string): number
-    status(sessionID: string): "idle" | "running"
+    get(sessionID: SessionID): SessionInfo | undefined
+    root(sessionID: SessionID): SessionID
+    family(sessionID: SessionID): SessionID[]
+    cost(sessionID: SessionID): number
+    status(sessionID: SessionID): "idle" | "running"
     readonly pending: {
-      list(sessionID: string): SessionInboxInfo[]
-      sync(sessionID: string): Promise<void>
-      invalidate(sessionID: string): void
+      list(sessionID: SessionID): SessionInboxInfo[]
+      sync(sessionID: SessionID): Promise<void>
+      invalidate(sessionID: SessionID): void
     }
-    sync(sessionID: string): Promise<void>
-    invalidate(sessionID: string): void
+    sync(sessionID: SessionID): Promise<void>
+    invalidate(sessionID: SessionID): void
     readonly message: {
-      list(sessionID: string): SessionMessageInfo[]
-      get(sessionID: string, messageID: string): SessionMessageInfo | undefined
-      sync(sessionID: string): Promise<void>
-      invalidate(sessionID: string): void
+      list(sessionID: SessionID): SessionMessageInfo[]
+      get(sessionID: SessionID, messageID: SessionMessage.ID): SessionMessageInfo | undefined
+      sync(sessionID: SessionID): Promise<void>
+      invalidate(sessionID: SessionID): void
     }
     readonly permission: {
-      list(sessionID: string): PermissionRequest[] | undefined
-      sync(sessionID: string): Promise<void>
-      invalidate(sessionID: string): void
+      list(sessionID: SessionID): PermissionRequest[] | undefined
+      sync(sessionID: SessionID): Promise<void>
+      invalidate(sessionID: SessionID): void
     }
     readonly form: {
-      list(sessionID: string, location?: LocationRef): Array<FormInfo & { readonly location?: LocationRef }> | undefined
-      sync(sessionID: string, location?: LocationRef): Promise<void>
-      invalidate(sessionID: string, location?: LocationRef): void
+      list(
+        sessionID: SessionID,
+        location?: LocationRef,
+      ): Array<FormInfo & { readonly location?: LocationRef }> | undefined
+      sync(sessionID: SessionID, location?: LocationRef): Promise<void>
+      invalidate(sessionID: SessionID, location?: LocationRef): void
       reply(input: SessionFormReplyInput, location?: LocationRef): Promise<void>
       cancel(input: SessionFormCancelInput, location?: LocationRef): Promise<void>
     }
   }
   readonly project: {
     list(): Project[]
-    get(projectID: string): Project | undefined
+    get(projectID: ProjectID): Project | undefined
     sync(): Promise<void>
     invalidate(): void
     readonly permission: {
-      list(projectID: string): PermissionSavedInfo[] | undefined
-      sync(projectID: string): Promise<void>
-      invalidate(projectID: string): void
+      list(projectID: ProjectID): PermissionSavedInfo[] | undefined
+      sync(projectID: ProjectID): Promise<void>
+      invalidate(projectID: ProjectID): void
     }
   }
   readonly shell: {
@@ -141,7 +147,7 @@ export interface Data {
 
 export type Route =
   | { readonly type: "home" }
-  | { readonly type: "session"; readonly sessionID: string }
+  | { readonly type: "session"; readonly sessionID: SessionID }
   | {
       readonly type: "plugin"
       readonly id: string
@@ -157,7 +163,7 @@ export interface Page {
 }
 
 type PromptFooterInput = {
-  readonly sessionID?: string
+  readonly sessionID?: SessionID
   readonly mode: "normal" | "shell"
   readonly showDetails: boolean
 }
@@ -168,7 +174,7 @@ export type PanelPresentation = "panel" | "fullscreen"
 export interface PanelInput {
   /** Selected content name, set by ui.panel.open. Contributions decide whether to render it. */
   readonly name: string
-  readonly sessionID: string
+  readonly sessionID: SessionID
   readonly width: number
   readonly presentation: PanelPresentation
   readonly focused: boolean
@@ -195,10 +201,10 @@ export interface SlotMap {
   readonly "prompt.footer": PromptFooterInput
   readonly "prompt.footer.status": PromptFooterInput
   readonly "prompt.footer.file": PromptFooterInput
-  readonly "session.composer.top": { readonly sessionID: string }
+  readonly "session.composer.top": { readonly sessionID: SessionID }
   readonly "session.panel": PanelInput
-  readonly "sidebar.content": { readonly sessionID: string }
-  readonly "sidebar.footer": { readonly sessionID: string }
+  readonly "sidebar.content": { readonly sessionID: SessionID }
+  readonly "sidebar.footer": { readonly sessionID: SessionID }
 }
 export type SlotPath = keyof SlotMap
 
@@ -274,7 +280,7 @@ export interface ToastOptions {
   readonly variant?: ToastVariant
   readonly duration?: number
   /** When this session's family is not open, the title defaults to the session title and the toast offers to open it. */
-  readonly sessionID?: string
+  readonly sessionID?: SessionID
 }
 
 export interface Toast {
@@ -476,14 +482,14 @@ export interface UI {
     /** Closes this plugin's active panel. Other plugins' panels are unaffected. */
     close(): void
     /** This plugin's active panel, if any. Reactive when read in a Solid computation. */
-    current(): { readonly name: string; readonly sessionID: string } | undefined
+    current(): { readonly name: string; readonly sessionID: SessionID } | undefined
   }
   readonly tabs: {
     /** Returns whether session tabs are enabled for this TUI. */
     enabled(): boolean
     /** Returns the currently open root-session tabs. Reactive when read in a Solid computation. */
     list(): readonly {
-      readonly sessionID: string
+      readonly sessionID: SessionID
       readonly title?: string
       readonly active: boolean
       readonly busy: boolean
@@ -491,13 +497,13 @@ export interface UI {
       readonly unread?: "activity" | "error"
     }[]
     /** Opens a tab for a session without focusing it. Returns false when tabs are disabled. */
-    open(sessionID: string): boolean
+    open(sessionID: SessionID): boolean
     /** Opens a tab when needed, then focuses it. Returns false when tabs are disabled. */
-    focus(sessionID: string): boolean
+    focus(sessionID: SessionID): boolean
     /** Moves an open tab to an index and returns false when it is not open. */
-    move(sessionID: string, index: number): boolean
+    move(sessionID: SessionID, index: number): boolean
     /** Closes an open tab, or the active tab when omitted, and returns false when no tab matched. */
-    close(sessionID?: string): boolean
+    close(sessionID?: SessionID): boolean
   }
   readonly model: {
     /** The prompt's selected model; variant is undefined for the model default. Reactive when read in a Solid computation. */

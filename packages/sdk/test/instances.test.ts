@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import { join } from "node:path"
 import { Schema } from "effect"
+import { Agent } from "@opencode/schema/agent"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { OpenCode, Session, SessionMessage } from "../src"
 
@@ -111,7 +112,7 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
     }),
   )
 
-  await first.sessions.switchAgent({ sessionID, agent: "plan" })
+  await first.sessions.switchAgent({ sessionID, agent: Agent.ID.make("plan") })
   const fork = await first.sessions.fork({ sessionID })
   expect(fork.metadata).toEqual(original.metadata)
   expect(fork.location).toEqual(original.location)

@@ -1,3 +1,4 @@
+import { ProjectID } from "@opencode/schema/project-id"
 import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
 import { OpenCode } from "@opencode/client/promise"
@@ -50,10 +51,10 @@ test("bootstraps projects through the native store setter and preserves subseque
     expect(store.config).toEqual({})
 
     // A refetch keeps the inventory a view already loaded for this project.
-    queryClient.setQueryData(worktreeInventoryKey(ServerScope.local, "project"), [
-      { directory: "/repo" },
-      { directory: "/repo/feature", strategy: "git" },
-    ])
+    queryClient.setQueryData(
+      worktreeInventoryKey(ServerScope.local, ProjectID.make("project", { disableChecks: true })),
+      [{ directory: "/repo" }, { directory: "/repo/feature", strategy: "git" }],
+    )
     await bootstrapGlobal({ serverAPI: api, scope: ServerScope.local, setGlobalStore: setStore, queryClient })
     expect(store.project[0]?.sandboxes).toEqual(["/repo/feature"])
     expect(store.project[0]?.worktrees).toEqual([

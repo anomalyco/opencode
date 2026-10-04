@@ -1,3 +1,5 @@
+import type { SessionID } from "@opencode/schema/session-id"
+import type { SessionMessage } from "@opencode/schema/session-message"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
@@ -6,7 +8,7 @@ import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 
 export type TimelineSearchMatch = {
-  messageID: string
+  messageID: SessionMessage.ID
   role: "user" | "assistant"
   revealID: string
   partID: string
@@ -79,7 +81,7 @@ function applyHighlights(
 }
 
 export function createTimelineSearchController(input: {
-  sessionID: () => string | undefined
+  sessionID: () => SessionID | undefined
   scrollRef: () => HTMLDivElement | undefined
   revealMessage: (id: string, partID?: string) => void
   pauseAutoScroll: () => void

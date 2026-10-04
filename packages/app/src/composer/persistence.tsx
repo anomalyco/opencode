@@ -1,8 +1,8 @@
 import { base64Encode } from "@opencode/util/encode"
 import { createSimpleContext } from "@opencode/ui/context"
-import { useParams, useSearchParams } from "@solidjs/router"
+import { useSearchParams } from "@solidjs/router"
 import { createMemo, createResource, createRoot, getOwner, onCleanup } from "solid-js"
-import { requireServerKey } from "@/shell/routes/session"
+import { useSessionParams, requireServerKey } from "@/shell/routes/session"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -72,7 +72,7 @@ export const { use: useComposerState, provider: ComposerPersistenceProvider } = 
   name: "ComposerState",
   gate: false,
   init: () => {
-    const params = useParams<{ serverKey?: string; id?: string }>()
+    const params = useSessionParams()
     const sdk = useWorkspaceLocation()
     const [search] = useSearchParams<{ draftId?: string }>()
     const serverSDK = useServerSDK()

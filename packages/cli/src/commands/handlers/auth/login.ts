@@ -1,3 +1,4 @@
+import type { Integration } from "@opencode/schema/integration"
 import { intro, log, outro, select, spinner, text } from "@clack/prompts"
 import { Effect, Option } from "effect"
 import type { FormAnswer, IntegrationInfo, OpenCodeClient } from "@opencode/client"
@@ -250,8 +251,8 @@ const commandLogin = Effect.fn("cli.auth.login.command")(function* (
 
 const waitForOAuth = Effect.fn("cli.auth.login.oauth.wait")(function* (
   client: OpenCodeClient,
-  integrationID: string,
-  attemptID: string,
+  integrationID: Integration.ID,
+  attemptID: Integration.AttemptID,
 ) {
   while (true) {
     const response = yield* request((signal) =>
@@ -264,8 +265,8 @@ const waitForOAuth = Effect.fn("cli.auth.login.oauth.wait")(function* (
 
 const waitForCommand = Effect.fn("cli.auth.login.command.wait")(function* (
   client: OpenCodeClient,
-  integrationID: string,
-  attemptID: string,
+  integrationID: Integration.ID,
+  attemptID: Integration.AttemptID,
   update: (message: string) => void,
 ) {
   while (true) {

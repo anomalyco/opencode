@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import type { PromptInfo } from "../../prompt/history"
 
 // Holds one in-progress draft per tab across Prompt remounts. A draft is
@@ -7,12 +8,12 @@ export type DraftEntry = { prompt: PromptInfo; cursor: number }
 
 const byTab = new Map<string | undefined, DraftEntry>()
 
-export function takeDraft(sessionID: string | undefined) {
+export function takeDraft(sessionID: Session.ID | undefined) {
   const entry = byTab.get(sessionID)
   byTab.delete(sessionID)
   return entry
 }
 
-export function saveDraft(sessionID: string | undefined, entry: DraftEntry) {
+export function saveDraft(sessionID: Session.ID | undefined, entry: DraftEntry) {
   byTab.set(sessionID, entry)
 }

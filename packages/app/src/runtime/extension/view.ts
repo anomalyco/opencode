@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import { createEffect, createMemo, createSignal, onCleanup, type Accessor } from "solid-js"
 import type {
   BackgroundTask,
@@ -137,14 +138,15 @@ export function createSessionView(session: SessionModel) {
       return `${server.key}\n${session.identity.sessionID() ?? ""}`
     },
     get id() {
-      return session.identity.sessionID() ?? ""
+      return session.identity.sessionID() ?? SessionID.make("", { disableChecks: true })
     },
     get tab() {
       return session.layout.tabKey() ?? ""
     },
     server: serverRef,
     get pending() {
-      return server.ctx.data.session.creating(session.identity.sessionID() ?? "")
+      const id = session.identity.sessionID()
+      return !!id && server.ctx.data.session.creating(id)
     },
     get location() {
       return session.data.info()?.location

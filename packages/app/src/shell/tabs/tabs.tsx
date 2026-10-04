@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { SessionInfo, SessionMessageUser } from "@opencode/client/promise"
 import type { ComposerSelection } from "@/composer/adapter"
 import { createSimpleContext } from "@opencode/ui/context"
@@ -51,7 +52,7 @@ export function sessionHasOpenTab(tabs: Tab[], server: ServerConnection.Key, ses
   return sessionIDHasOpenTab(tabs, server, session.id)
 }
 
-export function findSessionTab(tabs: Tab[], server: ServerConnection.Key, sessionID: string) {
+export function findSessionTab(tabs: Tab[], server: ServerConnection.Key, sessionID: SessionID) {
   return tabs.find(
     (tab) =>
       tab.type === "session" &&
@@ -60,7 +61,7 @@ export function findSessionTab(tabs: Tab[], server: ServerConnection.Key, sessio
   )
 }
 
-export function sessionIDHasOpenTab(tabs: Tab[], server: ServerConnection.Key, sessionID: string) {
+export function sessionIDHasOpenTab(tabs: Tab[], server: ServerConnection.Key, sessionID: SessionID) {
   return !!findSessionTab(tabs, server, sessionID)
 }
 
@@ -285,7 +286,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         memory.remove(`draft:${draftID}`)
         removeDraftPersisted(draftID)
       },
-      pendingSession(server: ServerConnection.Key, sessionID: string): PendingSession | undefined {
+      pendingSession(server: ServerConnection.Key, sessionID: SessionID): PendingSession | undefined {
         return pending[tabKey({ type: "session", server, sessionId: sessionID })]
       },
       prepareSession(
@@ -475,7 +476,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
         const key = tabKey(tab)
         if (recentKey() !== key) setRecentKey(key)
       },
-      rememberSessionRoute(tab: SessionTab, sessionId: string, parentId?: string) {
+      rememberSessionRoute(tab: SessionTab, sessionId: SessionID, parentId?: SessionID) {
         const index = store.findIndex((item) => tabKey(item) === tabKey(tab))
         if (index === -1) return
         setStore(

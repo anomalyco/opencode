@@ -1,3 +1,8 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import { type Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
@@ -11,9 +16,9 @@ test.each([40, 120])("shell completion notices do not navigate at width %s", asy
   const setup = await createTestRenderer({ width, height: 36, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const session = {
-    id: "ses_notices",
+    id: Session.ID.make("ses_notices", { disableChecks: true }),
     title: "Completion notices",
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     location: { directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -41,8 +46,11 @@ test.each([40, 120])("shell completion notices do not navigate at width %s", asy
     {
       id: "assistant-0",
       type: "assistant",
-      agent: "build",
-      model: { providerID: "test", id: "test" },
+      agent: Agent.ID.make("build", { disableChecks: true }),
+      model: {
+        providerID: Provider.ID.make("test", { disableChecks: true }),
+        id: Model.ID.make("test", { disableChecks: true }),
+      },
       content: [
         {
           type: "tool",
@@ -93,7 +101,7 @@ test.each([40, 120])("shell completion notices do not navigate at width %s", asy
         update: async () => ({}),
       },
       packages: { prepare: async () => ({ directory: "" }) },
-      args: { sessionID: session.id },
+      args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       log: () => {},
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
@@ -132,15 +140,20 @@ test.each([40, 120])("subagent completion notices navigate to the child session 
   const setup = await createTestRenderer({ width, height: 20, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const parent = {
-    id: "ses_parent",
+    id: Session.ID.make("ses_parent", { disableChecks: true }),
     title: "Parent session",
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     location: { directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
   }
-  const child = { ...parent, id: "ses_child", title: "Diagnose authentication", parentID: parent.id }
+  const child = {
+    ...parent,
+    id: Session.ID.make("ses_child", { disableChecks: true }),
+    title: "Diagnose authentication",
+    parentID: Session.ID.make(parent.id, { disableChecks: true }),
+  }
   const messages = [
     { id: "user-0", type: "user", text: "Run a background subagent", time: { created: 0 } },
     {
@@ -148,7 +161,12 @@ test.each([40, 120])("subagent completion notices navigate to the child session 
       type: "synthetic",
       text: "Subagent result",
       description: "Diagnose subagent search auth",
-      metadata: { source: "subagent", childID: child.id, agent: "general", state: "completed" },
+      metadata: {
+        source: "subagent",
+        childID: child.id,
+        agent: Agent.ID.make("general", { disableChecks: true }),
+        state: "completed",
+      },
       time: { created: 1 },
     },
   ]
@@ -174,7 +192,7 @@ test.each([40, 120])("subagent completion notices navigate to the child session 
         update: async () => ({}),
       },
       packages: { prepare: async () => ({ directory: "" }) },
-      args: { sessionID: parent.id },
+      args: { sessionID: Session.ID.make(parent.id, { disableChecks: true }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       log: () => {},
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),

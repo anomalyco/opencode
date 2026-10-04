@@ -1,7 +1,7 @@
+import { useSessionParams } from "@/shell/routes/session"
 import { createEffect, createMemo } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { FormInfo, PermissionRequest } from "@opencode/client/promise"
-import { useParams } from "@solidjs/router"
 import { showToast } from "@/shell/notifications/toast"
 import { useServerSDK } from "@/runtime/server/client"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -13,7 +13,7 @@ import { createSessionBackground } from "@/session/requests/background"
 import { useData } from "@/runtime/server/current"
 
 export function createSessionRequestModel() {
-  const params = useParams()
+  const params = useSessionParams()
   const sdk = useWorkspaceLocation()
   const serverSDK = useServerSDK()
   const data = useData()

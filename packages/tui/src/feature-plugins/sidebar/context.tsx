@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, Show } from "solid-js"
 import { contextUsage } from "../../util/session"
@@ -7,7 +8,7 @@ const money = new Intl.NumberFormat("en-US", {
   currency: "USD",
 })
 
-export function SidebarContext(props: { context: Plugin.Context; sessionID: string }) {
+export function SidebarContext(props: { context: Plugin.Context; sessionID: Session.ID }) {
   const theme = props.context.theme
   const msg = createMemo(() => props.context.data.session.message.list(props.sessionID))
   const session = createMemo(() => props.context.data.session.get(props.sessionID))

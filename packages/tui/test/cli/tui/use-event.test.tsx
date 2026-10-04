@@ -1,3 +1,5 @@
+import { Session } from "@opencode/schema/session"
+import { Event } from "@opencode/schema/event"
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client"
@@ -26,7 +28,7 @@ function event(payload: OpenCodeEvent, input: { directory: string }): OpenCodeEv
 
 function vcs(branch: string): OpenCodeEvent {
   return {
-    id: `evt_vcs_${branch}`,
+    id: Event.ID.make(`evt_vcs_${branch}`, { disableChecks: true }),
     created: 0,
     type: "vcs.branch.updated",
     data: {
@@ -37,7 +39,7 @@ function vcs(branch: string): OpenCodeEvent {
 
 function update(version: string): OpenCodeEvent {
   return {
-    id: `evt_update_${version}`,
+    id: Event.ID.make(`evt_update_${version}`, { disableChecks: true }),
     created: 0,
     type: "installation.update-available",
     data: {
@@ -104,11 +106,11 @@ describe("useEvent", () => {
     })
     const durable = event(
       {
-        id: "evt_renamed",
+        id: Event.ID.make("evt_renamed", { disableChecks: true }),
         created: 1,
         type: "session.renamed",
-        durable: { aggregateID: "ses_test", seq: 1, version: 1 },
-        data: { sessionID: "ses_test", title: "Renamed" },
+        durable: { aggregateID: Session.ID.make("ses_test", { disableChecks: true }), seq: 1, version: 1 },
+        data: { sessionID: Session.ID.make("ses_test", { disableChecks: true }), title: "Renamed" },
       },
       { directory: "/tmp/project" },
     )

@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { SessionInfo } from "@opencode/client/promise"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -202,8 +203,8 @@ export function SessionProjectMenu(props: {
 }
 
 export function SessionAncestorTrail(props: {
-  sessionID: string
-  parentID: string
+  sessionID: SessionID
+  parentID: SessionID
   parentTitle?: string
   trailing: boolean
 }) {
@@ -212,9 +213,9 @@ export function SessionAncestorTrail(props: {
   const navigate = useNavigate()
   const language = useLanguage()
   const ancestors = createMemo(() => {
-    const path: { id: string; title: string; direct: boolean }[] = []
+    const path: { id: SessionID; title: string; direct: boolean }[] = []
     const seen = new Set([props.sessionID])
-    let id: string | undefined = props.parentID
+    let id: SessionID | undefined = props.parentID
     while (id && !seen.has(id)) {
       seen.add(id)
       const info = server.ctx.data.session.get(id)
@@ -229,7 +230,7 @@ export function SessionAncestorTrail(props: {
     }
     return path
   })
-  const open = (id: string) => {
+  const open = (id: SessionID) => {
     const tab = tabs.store.find(
       (item) =>
         item.type === "session" &&
@@ -286,7 +287,7 @@ export function SessionAncestorTrail(props: {
   )
 }
 
-export function SessionIdentityHeader(props: { sessionID: string; session?: SessionInfo }) {
+export function SessionIdentityHeader(props: { sessionID: SessionID; session?: SessionInfo }) {
   const server = useServer()
   const tabs = useTabs()
   const language = useLanguage()

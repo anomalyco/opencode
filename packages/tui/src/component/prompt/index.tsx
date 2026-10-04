@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import {
   BoxRenderable,
   RGBA,
@@ -72,7 +73,7 @@ import { truncateFilePath } from "../../ui/file-path"
 import { PromptMetadataRow } from "./metadata"
 
 export type PromptProps = {
-  sessionID?: string
+  sessionID?: Session.ID
   visible?: boolean
   disabled?: boolean
   muted?: boolean
@@ -211,7 +212,7 @@ export function Prompt(props: PromptProps) {
   const config = useConfig().data
   const dialog = useDialog()
   const toast = useToast()
-  const status = createMemo(() => data.session.status(props.sessionID ?? ""))
+  const status = createMemo(() => (props.sessionID ? data.session.status(props.sessionID) : "idle"))
   const history = usePromptHistory()
   const stash = usePromptStash()
   const keymap = Keymap.use()

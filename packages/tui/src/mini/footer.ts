@@ -1,3 +1,5 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { Session } from "@opencode/schema/session"
 // RunFooter -- the mutable control surface for direct interactive mode.
 //
 // In the split-footer architecture, scrollback is immutable (append-only)
@@ -101,10 +103,10 @@ type RunFooterOptions = {
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
   onInterrupt?: () => void
   onBackground?: () => void
-  onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: string) => Promise<void>
+  onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: SessionMessage.ID) => Promise<void>
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
-  onSubagentSelect?: (sessionID: string | undefined) => void
-  onSubagentInterrupt?: (sessionID: string) => void
+  onSubagentSelect?: (sessionID: Session.ID | undefined) => void
+  onSubagentInterrupt?: (sessionID: Session.ID) => void
   subscribeThemeSignal: (listener: () => void) => () => void
 }
 

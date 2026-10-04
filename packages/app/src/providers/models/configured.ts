@@ -1,3 +1,5 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { createEffect, createMemo, on } from "solid-js"
 import { useData } from "@/runtime/server/current"
 import { useWorkspaceLocation } from "@/workspaces/location"
@@ -20,9 +22,10 @@ export function useConfiguredModel() {
     const entry = documents()?.findLast((entry) => entry.type === "document" && entry.info.model !== undefined)
     const model = entry?.type === "document" ? entry.info.model : undefined
     if (!model) return
-    if (typeof model !== "string") return { providerID: model.providerID, modelID: model.model, variant: model.variant }
+    if (typeof model !== "string")
+      return { providerID: model.providerID, modelID: Model.ID.make(model.model), variant: model.variant }
     const [providerID, ...parts] = model.split("/")
-    return { providerID, modelID: parts.join("/"), variant: undefined }
+    return { providerID: Provider.ID.make(providerID), modelID: Model.ID.make(parts.join("/")), variant: undefined }
   })
   return Object.assign(model, { ready: () => documents() !== undefined })
 }

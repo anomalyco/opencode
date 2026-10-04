@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { MouseButton } from "@opentui/core"
@@ -11,12 +12,12 @@ import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 test("releasing a transcript selection over tab controls does not activate them", async () => {
-  const [active, setActive] = createSignal("first")
+  const [active, setActive] = createSignal(Session.ID.make("first", { disableChecks: true }))
   const [added, setAdded] = createSignal(0)
   const controller = {
     tabs: () => [
-      { sessionID: "first", title: "First" },
-      { sessionID: "second", title: "Second" },
+      { sessionID: Session.ID.make("first", { disableChecks: true }), title: "First" },
+      { sessionID: Session.ID.make("second", { disableChecks: true }), title: "Second" },
     ],
     current: active,
     select: setActive,
@@ -46,10 +47,10 @@ test("releasing a transcript selection over tab controls does not activate them"
     await app.waitForFrame((frame) => frame.includes("Second"))
     await app.mockMouse.pressDown(5, 1)
     await app.mockMouse.release(40, 0)
-    expect(active()).toBe("first")
+    expect(active()).toBe(Session.ID.make("first", { disableChecks: true }))
 
     await app.mockMouse.click(40, 0)
-    expect(active()).toBe("second")
+    expect(active()).toBe(Session.ID.make("second", { disableChecks: true }))
 
     await app.mockMouse.pressDown(5, 1)
     await app.mockMouse.release(58, 0)
@@ -63,12 +64,12 @@ test("releasing a transcript selection over tab controls does not activate them"
 })
 
 test("middle-click closes a session tab without selecting it", async () => {
-  const [active, setActive] = createSignal("first")
+  const [active, setActive] = createSignal(Session.ID.make("first", { disableChecks: true }))
   const closed: Array<string | undefined> = []
   const controller = {
     tabs: () => [
-      { sessionID: "first", title: "First" },
-      { sessionID: "second", title: "Second" },
+      { sessionID: Session.ID.make("first", { disableChecks: true }), title: "First" },
+      { sessionID: Session.ID.make("second", { disableChecks: true }), title: "Second" },
     ],
     current: active,
     select: setActive,
@@ -94,20 +95,20 @@ test("middle-click closes a session tab without selecting it", async () => {
     await app.waitForFrame((frame) => frame.includes("Second"))
     await app.mockMouse.click(40, 0, MouseButton.MIDDLE)
     expect(closed).toEqual(["second"])
-    expect(active()).toBe("first")
+    expect(active()).toBe(Session.ID.make("first", { disableChecks: true }))
   } finally {
     app.renderer.destroy()
   }
 })
 
 test("keeps consecutive close controls fixed across overflow window changes", async () => {
-  const [active, setActive] = createSignal("fifth")
+  const [active, setActive] = createSignal(Session.ID.make("fifth", { disableChecks: true }))
   const [items, setItems] = createSignal([
-    { sessionID: "first", title: "First" },
-    { sessionID: "second", title: "Second" },
-    { sessionID: "third", title: "Third" },
-    { sessionID: "fourth", title: "Fourth" },
-    { sessionID: "fifth", title: "Fifth" },
+    { sessionID: Session.ID.make("first", { disableChecks: true }), title: "First" },
+    { sessionID: Session.ID.make("second", { disableChecks: true }), title: "Second" },
+    { sessionID: Session.ID.make("third", { disableChecks: true }), title: "Third" },
+    { sessionID: Session.ID.make("fourth", { disableChecks: true }), title: "Fourth" },
+    { sessionID: Session.ID.make("fifth", { disableChecks: true }), title: "Fifth" },
   ])
   const closed: string[] = []
   const controller = {
@@ -118,7 +119,7 @@ test("keeps consecutive close controls fixed across overflow window changes", as
       if (!sessionID) return
       const current = items()
       closed.push(sessionID)
-      setActive("first")
+      setActive(Session.ID.make("first", { disableChecks: true }))
       setItems(current.filter((tab) => tab.sessionID !== sessionID))
     },
     move() {},
@@ -154,12 +155,12 @@ test("keeps consecutive close controls fixed across overflow window changes", as
 })
 
 test("reflows held tabs when the pointer leaves the strip", async () => {
-  const [active, setActive] = createSignal("first")
+  const [active, setActive] = createSignal(Session.ID.make("first", { disableChecks: true }))
   const [items, setItems] = createSignal([
-    { sessionID: "first", title: "First" },
-    { sessionID: "second", title: "Second" },
-    { sessionID: "third", title: "Third" },
-    { sessionID: "fourth", title: "Fourth" },
+    { sessionID: Session.ID.make("first", { disableChecks: true }), title: "First" },
+    { sessionID: Session.ID.make("second", { disableChecks: true }), title: "Second" },
+    { sessionID: Session.ID.make("third", { disableChecks: true }), title: "Third" },
+    { sessionID: Session.ID.make("fourth", { disableChecks: true }), title: "Fourth" },
   ])
   const controller = {
     tabs: items,

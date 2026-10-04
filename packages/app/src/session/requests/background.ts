@@ -1,20 +1,21 @@
+import { SessionID } from "@opencode/schema/session-id"
 import type { SessionInfo, SessionMessageAssistant, SessionMessageInfo, ShellInfo } from "@opencode/client/promise"
 import { createMemo } from "solid-js"
 
 type Task =
-  | { id: string; type: "subagent"; label: string; agent?: string }
+  | { id: SessionID; type: "subagent"; label: string; agent?: string }
   | { id: string; type: "shell"; label: string }
 
 export function createSessionBackground(input: {
-  sessionID: () => string | undefined
-  messages: (id: string) => SessionMessageInfo[]
+  sessionID: () => SessionID | undefined
+  messages: (id: SessionID) => SessionMessageInfo[]
   sessions: () => SessionInfo[]
-  status: (id: string) => "idle" | "running"
+  status: (id: SessionID) => "idle" | "running"
   shells: () => ShellInfo[]
 }) {
   const history = createMemo(() => {
     const completed = new Set<string>()
-    const subagents: { id: string; type: "subagent"; label: string; agent: string | undefined }[] = []
+    const subagents: { id: SessionID; type: "subagent"; label: string; agent: string | undefined }[] = []
     const shells: { partID: string; task: { id: string; type: "shell"; label: string } }[] = []
     const id = input.sessionID()
     const assistant = (id ? input.messages(id) : []).reduce<SessionMessageAssistant | undefined>((latest, message) => {
@@ -37,7 +38,8 @@ export function createSessionBackground(input: {
           const description = part.state.input.description
           const agent = part.state.input.agent
           subagents.push({
-            id: sessionID,
+            // Tool metadata retains its existing string contract.
+            id: SessionID.make(sessionID, { disableChecks: true }),
             type: "subagent",
             label: typeof description === "string" ? description : sessionID,
             agent: typeof agent === "string" ? agent : undefined,

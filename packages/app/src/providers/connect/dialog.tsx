@@ -1,3 +1,4 @@
+import { useSessionParams } from "@/shell/routes/session"
 import { Button } from "@opencode/ui/button"
 import { Badge } from "@opencode/ui/badge"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -21,7 +22,6 @@ import {
   Switch,
 } from "solid-js"
 import { createStore } from "solid-js/store"
-import { useParams } from "@solidjs/router"
 import { ExternalLink } from "@/runtime/platform/external-link"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -380,7 +380,7 @@ function ProviderConnection(props: {
   onAuthorization: (authorization: boolean) => void
 }) {
   const dialog = useDialog()
-  const params = useParams()
+  const params = useSessionParams()
   const language = useLanguage()
   const platform = usePlatform()
   const sdk = useServerSDK()

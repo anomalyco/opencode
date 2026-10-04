@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useKeyboard, useRenderer } from "@opentui/solid"
@@ -77,7 +78,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       key: "sessionID",
     })
     const fallback = empty()
-    const [promptPulses, setPromptPulses] = createSignal<Record<string, number>>({})
+    const [promptPulses, setPromptPulses] = createSignal<Record<Session.ID, number>>({})
     let history: SessionTabHistory = { entries: [], index: -1 }
     // User-closed tabs eligible for reopening; in-memory like history, deleted sessions pruned.
     const [closedTabs, setClosedTabs] = createSignal<ClosedSessionTab[]>([])
@@ -87,9 +88,9 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     // just closed. Removing a tab marks it cancelled so any late-applying
     // registration becomes a no-op; navigating to the session again clears
     // the mark.
-    const cancelledTabs = new Set<string>()
-    const scrollAnchors = new Map<string, ScrollAnchor>()
-    const [expandedGroups, setExpandedGroups] = createStore<Record<string, Record<string, boolean> | undefined>>({})
+    const cancelledTabs = new Set<Session.ID>()
+    const scrollAnchors = new Map<Session.ID, ScrollAnchor>()
+    const [expandedGroups, setExpandedGroups] = createStore<Record<Session.ID, Record<string, boolean> | undefined>>({})
 
     const onFocus = () => setFocused(true)
     const onBlur = () => setFocused(false)
@@ -114,16 +115,16 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       )
     }
 
-    const root = (sessionID: string) => data.session.root(sessionID)
-    const title = (sessionID: string, persisted?: string, fallback?: string) => {
+    const root = (sessionID: Session.ID) => data.session.root(sessionID)
+    const title = (sessionID: Session.ID, persisted?: string, fallback?: string) => {
       const session = data.session.get(sessionID)
       return session?.title ?? persisted ?? fallback ?? (session ? withTimestampedFallback(session) : undefined)
     }
-    const isUnread = (sessionID: string) => {
+    const isUnread = (sessionID: Session.ID) => {
       const info = data.session.get(sessionID)
       return info?.time.idle !== undefined && (info.time.viewed === undefined || info.time.idle > info.time.viewed)
     }
-    const family = (sessionID: string) => {
+    const family = (sessionID: Session.ID) => {
       const session = root(sessionID)
       const members = data.session.family(session)
       return members.length > 0 ? members : [session]
@@ -149,7 +150,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       const sessionID = current()
       return sessionID !== undefined && !state().tabs.some((tab) => tab.sessionID === sessionID)
     }, false)
-    const status = (sessionID: string) => {
+    const status = (sessionID: Session.ID) => {
       const session = root(sessionID)
       const members = family(session)
       return {
@@ -204,7 +205,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
 
     // Viewed state is server-global, so acknowledgement runs even with tabs disabled: other
     // clients rely on this client reporting what its user has seen.
-    const acknowledged = new Map<string, number>()
+    const acknowledged = new Map<Session.ID, number>()
     const [viewRetry, setViewRetry] = createSignal(0)
     let viewRetryTimer: ReturnType<typeof setTimeout> | undefined
     let viewRetryAttempt = 0
@@ -263,7 +264,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       if (client.connection.status() !== "connected") return
       const signature = openTabSessions()
       if (signature === "") return
-      const sessionIDs = signature.split("\n")
+      const sessionIDs = signature.split("\n").map((id) => Session.ID.make(id, { disableChecks: true }))
       let stale = false
       void (async () => {
         await Promise.allSettled(sessionIDs.map((sessionID) => data.session.sync(sessionID, { children: true })))
@@ -322,7 +323,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       }),
     )
 
-    function remove(sessionID: string, navigate: boolean) {
+    function remove(sessionID: Session.ID, navigate: boolean) {
       const target = root(sessionID)
       cancelledTabs.add(target)
       family(target).forEach((id) => {
@@ -368,12 +369,12 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
       },
       current,
       status,
-      scrollAnchor(sessionID: string) {
+      scrollAnchor(sessionID: Session.ID) {
         const target = root(sessionID)
         if (!state().tabs.some((tab) => tab.sessionID === target)) return
         return scrollAnchors.get(sessionID)
       },
-      setScrollAnchor(sessionID: string, anchor: ScrollAnchor | undefined) {
+      setScrollAnchor(sessionID: Session.ID, anchor: ScrollAnchor | undefined) {
         const target = root(sessionID)
         if (anchor === undefined || !state().tabs.some((tab) => tab.sessionID === target)) {
           scrollAnchors.delete(sessionID)
@@ -384,17 +385,17 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           return
         scrollAnchors.set(sessionID, anchor)
       },
-      groupExpanded(sessionID: string, groupID: string) {
+      groupExpanded(sessionID: Session.ID, groupID: string) {
         return expandedGroups[sessionID]?.[groupID]
       },
-      setGroupExpanded(sessionID: string, groupID: string, expanded: boolean) {
+      setGroupExpanded(sessionID: Session.ID, groupID: string, expanded: boolean) {
         setExpandedGroups(sessionID, (current) => ({ ...current, [groupID]: expanded }))
       },
-      select(sessionID: string) {
+      select(sessionID: Session.ID) {
         if (!enabled()) return
         route.navigate({ type: "session", sessionID: root(sessionID) })
       },
-      open(sessionID: string) {
+      open(sessionID: Session.ID) {
         if (!enabled()) return
         const session = root(sessionID)
         if (state().tabs.some((tab) => tab.sessionID === session)) return
@@ -417,7 +418,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
           ),
         })
       },
-      close(sessionID?: string) {
+      close(sessionID?: Session.ID) {
         if (!enabled()) return
         const target = sessionID ? root(sessionID) : current()
         if (!target) {
@@ -432,7 +433,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         if (tab) setClosedTabs((entries) => recordClosedSessionTab(entries, tab, index))
         remove(target, true)
       },
-      reopen(sessionID?: string) {
+      reopen(sessionID?: Session.ID) {
         if (!enabled()) return
         const result = reopenSessionTab(closedTabs(), state().tabs, sessionID)
         setClosedTabs(result.stack)
@@ -444,7 +445,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
         })
         route.navigate({ type: "session", sessionID: result.sessionID })
       },
-      move(sessionID: string, index: number) {
+      move(sessionID: Session.ID, index: number) {
         if (!enabled()) return
         const session = root(sessionID)
         if (moveSessionTab(state().tabs, session, index) === state().tabs) return

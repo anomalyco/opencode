@@ -1,3 +1,4 @@
+import { Pty } from "@opencode/schema/pty"
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { TerminalState } from "./state"
@@ -17,14 +18,23 @@ describe("TerminalState", () => {
       ],
     })
     expect(decoded).toEqual({
-      active: "one",
+      active: Pty.ID.make("one", { disableChecks: true }),
       all: [
-        { id: "one", title: "Terminal 2", titleNumber: 2 },
-        { id: "two", title: "logs", titleNumber: 4, rows: 24, cols: 80, buffer: "output", cursor: 12, scrollY: 3 },
+        { id: Pty.ID.make("one", { disableChecks: true }), title: "Terminal 2", titleNumber: 2 },
+        {
+          id: Pty.ID.make("two", { disableChecks: true }),
+          title: "logs",
+          titleNumber: 4,
+          rows: 24,
+          cols: 80,
+          buffer: "output",
+          cursor: 12,
+          scrollY: 3,
+        },
       ],
     })
     const active = decodeTerminalState({ ...decoded, active: "two" })
-    expect(active.active).toBe("two")
+    expect(active.active).toBe(Pty.ID.make("two", { disableChecks: true }))
     expect(decodeTerminalState(Schema.encodeSync(TerminalState)(active))).toEqual(active)
   })
 
@@ -49,10 +59,10 @@ describe("TerminalState", () => {
         ],
       }),
     ).toEqual({
-      active: "one",
+      active: Pty.ID.make("one", { disableChecks: true }),
       all: [
-        { id: "one", title: "Terminal 3", titleNumber: 3, cols: 80, scrollY: 0 },
-        { id: "two", title: "", titleNumber: 0, buffer: "saved", cursor: 0 },
+        { id: Pty.ID.make("one", { disableChecks: true }), title: "Terminal 3", titleNumber: 3, cols: 80, scrollY: 0 },
+        { id: Pty.ID.make("two", { disableChecks: true }), title: "", titleNumber: 0, buffer: "saved", cursor: 0 },
       ],
     })
   })

@@ -1,3 +1,4 @@
+import { Shell } from "@opencode/schema/shell"
 import { describe, expect, test, vi } from "bun:test"
 import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
 import { followShellOutput, SHELL_OUTPUT_TAIL_BYTES } from "./shell-output"
@@ -37,7 +38,13 @@ describe("followShellOutput", () => {
         return Promise.reject({ _tag: "ShellNotFoundError", id: input.id, message: "Shell command not found" })
       }
       const follow = () =>
-        followShellOutput({ id: "shell_missing", directory: "/repo", running: true, load, onOutput() {} })
+        followShellOutput({
+          id: Shell.ID.make("shell_missing", { disableChecks: true }),
+          directory: "/repo",
+          running: true,
+          load,
+          onOutput() {},
+        })
 
       const stop = follow()
       await flush()
@@ -66,7 +73,7 @@ describe("followShellOutput", () => {
       const outputs: string[] = []
       const follow = (running: boolean) =>
         followShellOutput({
-          id: "shell_live",
+          id: Shell.ID.make("shell_live", { disableChecks: true }),
           directory: "/repo",
           running,
           load: shell.load,
@@ -114,7 +121,7 @@ describe("followShellOutput", () => {
     const shell = server(() => "a".repeat(SHELL_OUTPUT_TAIL_BYTES) + "tail", SHELL_OUTPUT_TAIL_BYTES)
     const outputs: string[] = []
     followShellOutput({
-      id: "shell_large",
+      id: Shell.ID.make("shell_large", { disableChecks: true }),
       directory: "/repo",
       running: false,
       load: shell.load,

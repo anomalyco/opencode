@@ -1,3 +1,5 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { Session } from "@opencode/schema/session"
 // Lifecycle management for the split-footer renderer.
 //
 // Creates the OpenTUI CliRenderer in split-footer mode, resolves the theme
@@ -58,7 +60,7 @@ export type LifecycleInput = {
   findFiles: (query: string) => Promise<string[]>
   agents: RunAgent[]
   references: RunReference[]
-  sessionID: string
+  sessionID: Session.ID
   sessionTitle?: string
   getSessionID?: () => string | undefined
   first: boolean
@@ -77,9 +79,9 @@ export type LifecycleInput = {
   onVariantSelect?: (variant: string | undefined) => CycleResult | void | Promise<CycleResult | void>
   onInterrupt?: () => void
   onBackground?: () => void
-  onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: string) => Promise<void>
-  onSubagentSelect?: (sessionID: string | undefined) => void
-  onSubagentInterrupt?: (sessionID: string) => void
+  onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: SessionMessage.ID) => Promise<void>
+  onSubagentSelect?: (sessionID: Session.ID | undefined) => void
+  onSubagentInterrupt?: (sessionID: Session.ID) => void
 }
 
 export type Lifecycle = {
@@ -88,7 +90,12 @@ export type Lifecycle = {
   refreshTheme(): void
   setTitle(title?: string): void
   resetForReplay(): Promise<void>
-  close(input: { showExit: boolean; sessionTitle?: string; sessionID?: string; history?: RunPrompt[] }): Promise<void>
+  close(input: {
+    showExit: boolean
+    sessionTitle?: string
+    sessionID?: Session.ID
+    history?: RunPrompt[]
+  }): Promise<void>
 }
 
 // Gracefully tears down the renderer. Order matters: switch external output
@@ -300,7 +307,7 @@ export async function createRuntimeLifecycle(input: LifecycleInput): Promise<Lif
   const close = async (next: {
     showExit: boolean
     sessionTitle?: string
-    sessionID?: string
+    sessionID?: Session.ID
     history?: RunPrompt[]
   }) => {
     if (closed) {

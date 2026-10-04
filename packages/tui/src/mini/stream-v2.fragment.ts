@@ -1,5 +1,6 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
 export type FragmentRef = {
-  messageID: string
+  messageID: SessionMessage.ID
   partID: string
 }
 
@@ -16,7 +17,7 @@ export type FragmentUpdate = FragmentRef & {
 
 export type FragmentRestore = { type: "append"; suffix: string } | { type: "covered" } | { type: "conflict" }
 
-export function fragmentRef(messageID: string, kind: "text" | "reasoning", ordinal: number): FragmentRef {
+export function fragmentRef(messageID: SessionMessage.ID, kind: "text" | "reasoning", ordinal: number): FragmentRef {
   return { messageID, partID: `${kind}:${ordinal}` }
 }
 

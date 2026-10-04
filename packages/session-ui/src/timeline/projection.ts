@@ -1,3 +1,6 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import type { SessionMessage } from "@opencode/schema/session-message"
 import type {
   ModelRef,
   SessionMessageAssistant,
@@ -172,7 +175,7 @@ export namespace Timeline {
     detail?: TimelineDetail,
   ) {
     type Turn = {
-      id: string
+      id: SessionMessage.ID
       time: { created: number }
       user?: SessionMessageUser
       shell?: SessionMessageShell
@@ -291,7 +294,7 @@ export namespace Timeline {
 
   export function constructMessageRows(
     userMessage: SessionMessageUser | undefined,
-    turnID: string,
+    turnID: SessionMessage.ID,
     entries: Entry[],
     index: number,
     showReasoning: boolean,
@@ -500,7 +503,7 @@ export function reuseTimelineRows(previous: TimelineRow.TimelineRow[] | undefine
 function indexUserContext(messages: SessionMessageInfo[]) {
   const result = new Map<string, { agent: string; model: ModelRef }>()
   let agent = ""
-  let model: ModelRef = { id: "", providerID: "" }
+  let model: ModelRef = { id: Model.ID.make(""), providerID: Provider.ID.make("") }
   let userID: string | undefined
 
   messages.forEach((message) => {
@@ -528,9 +531,9 @@ function indexUserContext(messages: SessionMessageInfo[]) {
           localModelID &&
           typeof localModel.providerID === "string"
             ? {
-                id: localModelID,
-                providerID: localModel.providerID,
-                variant: typeof localModel.variant === "string" ? localModel.variant : undefined,
+                id: Model.ID.make(localModelID),
+                providerID: Provider.ID.make(localModel.providerID),
+                variant: typeof localModel.variant === "string" ? Model.VariantID.make(localModel.variant) : undefined,
               }
             : model,
       })
@@ -612,7 +615,7 @@ function renderable(content: Content, showReasoning: boolean, detail?: TimelineD
 }
 
 function groupContent(
-  items: { messageID: string; partID: string; content: Content }[],
+  items: { messageID: SessionMessage.ID; partID: string; content: Content }[],
   shellToolDefaultOpen: boolean,
   editToolDefaultOpen: boolean,
   detail?: TimelineDetail,

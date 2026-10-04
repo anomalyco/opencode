@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import { batch, untrack, type Accessor } from "solid-js"
 import { createStore, type SetStoreFunction } from "solid-js/store"
 import { Persist, persisted } from "@/runtime/persistence/storage"
@@ -31,7 +32,7 @@ export type {
   TextPart,
 } from "./schema"
 
-export type PromptScope = { draftID: string } | { dir: string; id?: string }
+export type PromptScope = { draftID: string } | { dir: string; id?: SessionID }
 
 type InitialPrompt = {
   prompt?: string

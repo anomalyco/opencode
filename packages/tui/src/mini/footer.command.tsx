@@ -1,3 +1,6 @@
+import { Model } from "@opencode/schema/model"
+import type { Provider } from "@opencode/schema/provider"
+import type { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes, type InputRenderable, type KeyEvent } from "@opentui/core"
 import { useKeyboard, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
@@ -49,8 +52,8 @@ type CommandEntry =
   | (PanelEntry & { action: "exit" })
 
 type ModelEntry = PanelEntry & {
-  providerID: string
-  modelID: string
+  providerID: Provider.ID
+  modelID: Model.ID
   providerName: string
   current: boolean
 }
@@ -70,7 +73,7 @@ type QueuedPromptEntry = PanelEntry & {
 }
 
 type SubagentEntry = PanelEntry & {
-  sessionID: string
+  sessionID: Session.ID
   current: boolean
 }
 
@@ -865,7 +868,7 @@ export function RunSubagentSelectBody(props: {
   tabs: Accessor<FooterSubagentTab[]>
   current: Accessor<string | undefined>
   onClose: () => void
-  onSelect: (sessionID: string) => void
+  onSelect: (sessionID: Session.ID) => void
   onRows?: (rows: number) => void
   mono?: boolean
 }) {
@@ -1132,7 +1135,7 @@ export function RunModelSelectBody(props: {
                   : undefined
             return {
               providerID: provider.id,
-              modelID,
+              modelID: Model.ID.make(modelID),
               providerName: provider.name,
               category: provider.name,
               display: title,

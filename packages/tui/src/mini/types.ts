@@ -1,3 +1,10 @@
+import type { Agent } from "@opencode/schema/agent"
+import type { Model } from "@opencode/schema/model"
+import type { Provider } from "@opencode/schema/provider"
+import type { Skill } from "@opencode/schema/skill"
+import type { Form } from "@opencode/schema/form"
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { Session } from "@opencode/schema/session"
 // Shared type vocabulary for the direct interactive mode (`opencode mini`).
 //
 // Direct mode uses a split-footer terminal layout: immutable scrollback for the
@@ -32,7 +39,7 @@ export type RunFilePart = {
   mime: string
 }
 
-type PromptModel = { providerID: string; modelID: string }
+type PromptModel = { providerID: Provider.ID; modelID: Model.ID }
 
 export type RunPromptPart =
   | {
@@ -48,7 +55,7 @@ export type RunPromptPart =
       }
     }
   | { type: "agent"; name: string; source?: { start: number; end: number; value: string } }
-  | { type: "skill"; id: string; source?: { start: number; end: number; value: string } }
+  | { type: "skill"; id: Skill.ID; source?: { start: number; end: number; value: string } }
 
 export type RunCommand = {
   name: string
@@ -69,7 +76,7 @@ type RunProviderModel = {
 }
 
 export type RunProvider = {
-  id: string
+  id: Provider.ID
   name: string
   models: Record<string, RunProviderModel>
 }
@@ -77,7 +84,7 @@ export type RunProvider = {
 export type RunDelivery = SessionInbox.Delivery
 
 export type RunPrompt = {
-  messageID?: string
+  messageID?: SessionMessage.ID
   text: string
   parts: RunPromptPart[]
   delivery?: RunDelivery
@@ -90,16 +97,16 @@ export type RunPrompt = {
 }
 
 export type FooterQueuedPrompt = {
-  messageID: string
+  messageID: SessionMessage.ID
   prompt: RunPrompt
   delivery: RunDelivery
-  skills?: ReadonlyArray<{ id: string; name: string }>
+  skills?: ReadonlyArray<{ id: Skill.ID; name: string }>
 }
 
 export type QueuedPromptAction = "steer" | "queue" | "cancel"
 
 export type RunAgent = {
-  id: string
+  id: Agent.ID
   name: string
   description?: string
   mode: "subagent" | "primary" | "all"
@@ -111,9 +118,9 @@ export type RunReference = ReferenceListOutput["data"][number]
 export type RunInput = {
   sdk: OpenCodeClient
   location: LocationGetOutput
-  agent: string | undefined
+  agent: Agent.ID | undefined
   model: PromptModel | undefined
-  variant: string | undefined
+  variant: Model.VariantID | undefined
   files: RunFilePart[]
   demo?: boolean
 }
@@ -160,7 +167,7 @@ export type MiniHost = {
   }
   preferences: {
     resolveVariant(model: RunInput["model"]): Promise<string | undefined>
-    saveVariant(model: RunInput["model"], variant: string | undefined): Promise<void>
+    saveVariant(model: RunInput["model"], variant: Model.VariantID | undefined): Promise<void>
   }
 }
 
@@ -254,8 +261,8 @@ type MiniToolState =
 // Interactive Mini commits carry SessionMessageAssistantTool directly.
 export type MiniToolPart = {
   partID: string
-  sessionID: string
-  messageID: string
+  sessionID: Session.ID
+  messageID: SessionMessage.ID
   type?: "tool"
   id: string
   tool: string
@@ -292,7 +299,7 @@ export type FooterPromptRoute =
   | { type: "composer" }
   | { type: "queued-menu" }
   | { type: "subagent-menu" }
-  | { type: "subagent"; sessionID: string }
+  | { type: "subagent"; sessionID: Session.ID }
   | { type: "command" }
   | { type: "agent" }
   | { type: "model" }
@@ -300,7 +307,7 @@ export type FooterPromptRoute =
   | { type: "settings" }
 
 export type FooterSubagentTab = {
-  sessionID: string
+  sessionID: Session.ID
   label: string
   description: string
   status: "running" | "completed" | "cancelled" | "error"
@@ -329,7 +336,7 @@ export type FooterEvent =
     }
   | {
       type: "agent"
-      agent: string | undefined
+      agent: Agent.ID | undefined
     }
   | {
       type: "catalog"
@@ -382,14 +389,14 @@ export type PermissionReply = Parameters<OpenCodeClient["permission"]["reply"]>[
 
 export type FormReply = {
   sessionID: string
-  formID: string
+  formID: Form.ID
   answer: FormAnswer
   location?: LocationRef
 }
 
 export type FormCancel = {
   sessionID: string
-  formID: string
+  formID: Form.ID
   location?: LocationRef
 }
 
@@ -437,7 +444,7 @@ export type StreamCommit = {
   source: StreamSource
   compaction?: true
   summary?: TurnSummary
-  messageID?: string
+  messageID?: SessionMessage.ID
   partID?: string
   tool?: string
   directory?: string

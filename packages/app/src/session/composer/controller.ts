@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import { createEffect, createMemo, on, type Accessor } from "solid-js"
 import type { ComposerControls } from "@/composer/adapter"
 import { setCursorPosition } from "@/composer/editor/dom"
@@ -8,7 +9,7 @@ import { createSessionQueue } from "./queue"
 import { createSessionComposerRegionController } from "./session-composer-region-controller"
 
 export function createSessionComposerController(input: {
-  sessionID: string
+  sessionID: SessionID
   controls: Accessor<ComposerControls>
   dock: Parameters<typeof createSessionComposerRegionController>[0]
 }) {

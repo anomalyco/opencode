@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 export type ConfigInvalidError = {
   name: "ConfigInvalidError"
   data: {
@@ -52,17 +53,17 @@ function unwrapNamedError(error: unknown): unknown {
 // Client-synthesized session not-found errors share one constructor and
 // predicate so the message contract cannot drift between route session
 // resolution (session-resolution.ts) and not-found fallback matching (session.tsx).
-const sessionNotFoundMessage = (sessionID: string) => `Session not found: ${sessionID}`
+const sessionNotFoundMessage = (sessionID: SessionID) => `Session not found: ${sessionID}`
 
-export function sessionNotFoundError(sessionID: string) {
+export function sessionNotFoundError(sessionID: SessionID) {
   return new Error(sessionNotFoundMessage(sessionID))
 }
 
-export function isLocalSessionNotFoundError(error: unknown, sessionID: string) {
+export function isLocalSessionNotFoundError(error: unknown, sessionID: SessionID) {
   return error instanceof Error && error.message === sessionNotFoundMessage(sessionID)
 }
 
-export function isSessionNotFoundError(error: unknown, sessionID: string) {
+export function isSessionNotFoundError(error: unknown, sessionID: SessionID) {
   const unwrapped = unwrapNamedError(error)
   if (typeof unwrapped !== "object" || unwrapped === null) return false
   const value = unwrapped as Record<string, unknown>

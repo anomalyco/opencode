@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createPanelState } from "../src/context/panel"
@@ -6,7 +7,7 @@ test("presentation changes preserve the selected panel identity", () => {
   createRoot((dispose) => {
     const panels = createPanelState()
     panels.setWidth(160)
-    panels.open({ plugin: "review", name: "diff", sessionID: "session" })
+    panels.open({ plugin: "review", name: "diff", sessionID: Session.ID.make("session", { disableChecks: true }) })
     const current = panels.current()
     expect(panels.presentation()).toBe("panel")
     panels.toggleFullscreen()
@@ -15,7 +16,7 @@ test("presentation changes preserve the selected panel identity", () => {
     panels.toggleFullscreen()
     expect(panels.presentation()).toBe("panel")
     expect(panels.current()).toBe(current)
-    panels.open({ plugin: "review", name: "diff", sessionID: "session" })
+    panels.open({ plugin: "review", name: "diff", sessionID: Session.ID.make("session", { disableChecks: true }) })
     expect(panels.current()).toBe(current)
     dispose()
   })
@@ -24,7 +25,7 @@ test("presentation changes preserve the selected panel identity", () => {
 test("narrow geometry overrides presentation without discarding the user's choice", () => {
   createRoot((dispose) => {
     const panels = createPanelState()
-    panels.open({ plugin: "review", name: "diff", sessionID: "session" })
+    panels.open({ plugin: "review", name: "diff", sessionID: Session.ID.make("session", { disableChecks: true }) })
     panels.setWidth(80)
     expect(panels.canSplit()).toBe(false)
     expect(panels.presentation()).toBe("fullscreen")
@@ -43,13 +44,25 @@ test("narrow geometry overrides presentation without discarding the user's choic
 test("opening a different name changes the panel selection", () => {
   createRoot((dispose) => {
     const panels = createPanelState()
-    panels.open({ plugin: "review", name: "review.diff", sessionID: "session" })
+    panels.open({
+      plugin: "review",
+      name: "review.diff",
+      sessionID: Session.ID.make("session", { disableChecks: true }),
+    })
     const current = panels.current()
-    panels.open({ plugin: "review", name: "review.history", sessionID: "session" })
+    panels.open({
+      plugin: "review",
+      name: "review.history",
+      sessionID: Session.ID.make("session", { disableChecks: true }),
+    })
     expect(panels.current()).not.toBe(current)
     expect(panels.current()?.name).toBe("review.history")
-    panels.open({ plugin: "tasks", name: "tasks.list", sessionID: "session" })
-    expect(panels.current()).toEqual({ plugin: "tasks", name: "tasks.list", sessionID: "session" })
+    panels.open({ plugin: "tasks", name: "tasks.list", sessionID: Session.ID.make("session", { disableChecks: true }) })
+    expect(panels.current()).toEqual({
+      plugin: "tasks",
+      name: "tasks.list",
+      sessionID: Session.ID.make("session", { disableChecks: true }),
+    })
     panels.release("review")
     expect(panels.current()?.name).toBe("tasks.list")
     dispose()
@@ -59,7 +72,7 @@ test("opening a different name changes the panel selection", () => {
 test("releasing a plugin contribution only closes its own selected panel", () => {
   createRoot((dispose) => {
     const panels = createPanelState()
-    panels.open({ plugin: "review", name: "diff", sessionID: "session" })
+    panels.open({ plugin: "review", name: "diff", sessionID: Session.ID.make("session", { disableChecks: true }) })
     const current = panels.current()
     panels.release("other")
     expect(panels.current()).toBe(current)

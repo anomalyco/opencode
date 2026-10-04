@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import { createContext, useContext, type ParentProps } from "solid-js"
 
 export type ReadMarkdownImage = (path: string, signal: AbortSignal) => Promise<Blob | undefined>
@@ -7,14 +8,14 @@ export type OpenMarkdownLocalFile = (path: string) => void
 const context = createContext<{
   readonly readImage?: ReadMarkdownImage
   readonly openLocalFile?: OpenMarkdownLocalFile
-  readonly openSession?: (sessionID: string) => void
+  readonly openSession?: (sessionID: SessionID) => void
 }>()
 
 export function MarkdownProvider(
   props: ParentProps<{
     readImage?: ReadMarkdownImage
     openLocalFile?: OpenMarkdownLocalFile
-    openSession?: (id: string) => void
+    openSession?: (id: SessionID) => void
   }>,
 ) {
   const parent = useMarkdown()

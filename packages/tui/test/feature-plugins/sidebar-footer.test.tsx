@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { RGBA } from "@opentui/core"
@@ -51,7 +52,7 @@ async function render(input: Context, height = 22) {
   const app = await testRender(
     () => (
       <box width={38}>
-        <SidebarOnboarding context={input} sessionID="session" />
+        <SidebarOnboarding context={input} sessionID={Session.ID.make("session", { disableChecks: true })} />
       </box>
     ),
     { width: 38, height },

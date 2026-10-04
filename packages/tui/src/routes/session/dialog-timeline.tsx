@@ -1,3 +1,5 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { Session } from "@opencode/schema/session"
 import { createMemo, onMount } from "solid-js"
 import { useData } from "../../context/data"
 import { DialogSelect, type DialogSelectOption } from "../../ui/dialog-select"
@@ -7,8 +9,8 @@ import { useDialog } from "../../ui/dialog"
 import type { PromptInfo } from "../../prompt/history"
 
 export function DialogTimeline(props: {
-  sessionID: string
-  onMove: (messageID: string) => void
+  sessionID: Session.ID
+  onMove: (messageID: SessionMessage.ID) => void
   setPrompt?: (prompt: PromptInfo) => void
 }) {
   const data = useData()
@@ -18,9 +20,9 @@ export function DialogTimeline(props: {
     dialog.setSize("large")
   })
 
-  const options = createMemo((): DialogSelectOption<string>[] => {
+  const options = createMemo((): DialogSelectOption<SessionMessage.ID>[] => {
     const messages = data.session.message.list(props.sessionID)
-    const result = [] as DialogSelectOption<string>[]
+    const result = [] as DialogSelectOption<SessionMessage.ID>[]
     for (const message of messages) {
       if (message.type !== "user") continue
       result.push({

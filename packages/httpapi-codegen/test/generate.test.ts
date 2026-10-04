@@ -672,6 +672,44 @@ describe("HttpApiCodegen.generate", () => {
     expect(types).not.toContain("Brand")
   })
 
+  test("retains referenced ID brands in Promise inputs, nested outputs and records", () => {
+    const ID = Schema.String.pipe(Schema.brand("SessionID"))
+    const Other = Schema.String.pipe(Schema.brand("MessageID"))
+    const output = emitPromise(
+      compileContract(
+        api(
+          HttpApiEndpoint.get("get", "/session/:sessionID", {
+            params: { sessionID: ID },
+            success: Schema.Struct({
+              data: Schema.Struct({
+                id: ID,
+                message: Schema.Struct({ id: Other }),
+                sessions: Schema.Record(ID, Schema.Struct({ id: ID })),
+                time: Schema.Number,
+              }),
+            }),
+          }),
+        ),
+      ),
+      {
+        brandReferences: [
+          { schema: ID, name: "Session.ID", import: 'import type { Session } from "./schema"' },
+          { schema: Other, name: "Message.ID", import: 'import type { Message } from "./schema"' },
+        ],
+        mutableOutputs: true,
+      },
+    )
+    const types = output.files.find((file) => file.path === "types.ts")?.content
+    expect(types).toContain('readonly "sessionID": Session.ID')
+    expect(types).toContain('import type { Session } from "./schema"')
+    expect(types).toContain('import type { Message } from "./schema"')
+    expect(types).toContain('"id": Session.ID')
+    expect(types).toContain('"id": Message.ID')
+    expect(types).toContain("[x: Session.ID]")
+    expect(types).toContain('"time": number')
+    expect(types).not.toContain("Brand.Brand")
+  })
+
   test("preserves suggestions for open string unions in Promise wire types", () => {
     const Field = Schema.Union([Schema.Literals(["reasoning", "reasoning_content"]), Schema.String]).annotate({
       identifier: "Field",

@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import type { Route } from "@opencode/plugin/tui/context"
 import { createPluginContext, type Registry, type usePluginHost } from "../src/plugin/api"
@@ -7,7 +8,7 @@ type Shown = Parameters<Host["toast"]["show"]>[0]
 
 const sessions: Record<string, { id: string; title?: string; parentID?: string }> = {
   parent: { id: "parent", title: "Parent session" },
-  child: { id: "child", title: "Child session", parentID: "parent" },
+  child: { id: "child", title: "Child session", parentID: Session.ID.make("parent", { disableChecks: true }) },
   other: { id: "other", title: "Other session" },
 }
 
@@ -45,18 +46,18 @@ test.each([
   ["parent", "child"],
   ["child", "parent"],
 ])("toast for %s's family shows as-is while %s is open", (target, routed) => {
-  const harness = setup({ type: "session", sessionID: routed })
-  harness.toast.show({ sessionID: target, message: "done" })
+  const harness = setup({ type: "session", sessionID: Session.ID.make(routed, { disableChecks: true }) })
+  harness.toast.show({ sessionID: Session.ID.make(target, { disableChecks: true }), message: "done" })
   expect(harness.shown).toEqual([{ title: undefined, message: "done", variant: "info", duration: undefined }])
 })
 
-test.each<Route>([{ type: "home" }, { type: "session", sessionID: "parent" }])(
-  "toast for a session that is not open gains its title and an Open action (%j)",
-  (route) => {
-    const harness = setup(route)
-    harness.toast.show({ sessionID: "other", message: "done" })
-    expect(harness.shown[0]).toMatchObject({ title: "Other session", action: { label: "Open" } })
-    harness.shown[0].action?.run()
-    expect(harness.navigated).toEqual([{ type: "session", sessionID: "other" }])
-  },
-)
+test.each<Route>([
+  { type: "home" },
+  { type: "session", sessionID: Session.ID.make("parent", { disableChecks: true }) },
+])("toast for a session that is not open gains its title and an Open action (%j)", (route) => {
+  const harness = setup(route)
+  harness.toast.show({ sessionID: Session.ID.make("other", { disableChecks: true }), message: "done" })
+  expect(harness.shown[0]).toMatchObject({ title: "Other session", action: { label: "Open" } })
+  harness.shown[0].action?.run()
+  expect(harness.navigated).toEqual([{ type: "session", sessionID: Session.ID.make("other", { disableChecks: true }) }])
+})

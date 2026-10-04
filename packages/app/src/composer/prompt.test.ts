@@ -1,3 +1,5 @@
+import { Skill } from "@opencode/schema/skill"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { extractPromptComments, extractPromptFromMessage } from "./prompt"
@@ -5,7 +7,7 @@ import { extractPromptComments, extractPromptFromMessage } from "./prompt"
 describe("extractPromptFromMessage", () => {
   test("restores uploaded attachments in order, optimistic data URLs, and review comments", () => {
     const message = {
-      id: "msg_1",
+      id: SessionMessage.ID.make("msg_1", { disableChecks: true }),
       type: "user",
       text: "model text",
       metadata: {
@@ -48,7 +50,7 @@ describe("extractPromptFromMessage", () => {
 
   test("keeps the directory of a file mention without an at-sign", () => {
     const message = {
-      id: "msg_1",
+      id: SessionMessage.ID.make("msg_1", { disableChecks: true }),
       type: "user",
       text: "inspect src/client.ts",
       files: [
@@ -71,7 +73,7 @@ describe("extractPromptFromMessage", () => {
 
   test("uses model text when presentation metadata is incomplete", () => {
     const message = {
-      id: "msg_1",
+      id: SessionMessage.ID.make("msg_1", { disableChecks: true }),
       type: "user",
       text: "model text",
       metadata: { displayText: "partial display text" },
@@ -83,10 +85,16 @@ describe("extractPromptFromMessage", () => {
 
   test("restores skill mentions as structured Composer parts", () => {
     const message = {
-      id: "msg_1",
+      id: SessionMessage.ID.make("msg_1", { disableChecks: true }),
       type: "user",
       text: "Use @review",
-      skills: [{ id: "review", name: "Review", mention: { text: "@review", start: 4, end: 11 } }],
+      skills: [
+        {
+          id: Skill.ID.make("review", { disableChecks: true }),
+          name: "Review",
+          mention: { text: "@review", start: 4, end: 11 },
+        },
+      ],
       time: { created: 1 },
     } satisfies SessionMessageUser
 

@@ -261,7 +261,7 @@ export function createPluginContext(input: {
           list: () => host.local.model.variant.list(),
           set(variant) {
             if (!host.local.model.selection()) return false
-            if (variant !== undefined && !host.local.model.variant.list().includes(variant)) return false
+            if (variant !== undefined && !host.local.model.variant.list().some((item) => item === variant)) return false
             host.local.model.variant.set(variant)
             return true
           },

@@ -1,3 +1,10 @@
+import { Project } from "@opencode/schema/project"
+import { Form } from "@opencode/schema/form"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { WorkspaceID } from "@opencode/schema/workspace-id"
+import { Session } from "@opencode/schema/session"
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode } from "@opencode/client/promise"
 import { runInteractiveDeferredMode } from "../../src/mini/runtime"
@@ -62,7 +69,7 @@ describe("run interactive runtime", () => {
     const turnStarted = defer<void>()
     const model = catalogModel({
       id: "resolved",
-      providerID: "test",
+      providerID: Provider.ID.make("test", { disableChecks: true }),
       name: "Resolved Model",
       variants: ["low", "high"],
     })
@@ -92,14 +99,17 @@ describe("run interactive runtime", () => {
         sdk,
         directory: "/tmp",
         target: async () => ({
-          sessionID: "ses_root",
-          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
-          agent: "build",
+          sessionID: Session.ID.make("ses_root", { disableChecks: true }),
+          location: {
+            directory: "/tmp",
+            project: { id: Project.ID.make("pro-1", { disableChecks: true }), directory: "/tmp", canonical: "/tmp" },
+          },
+          agent: Agent.ID.make("build", { disableChecks: true }),
           model: undefined,
           variant: undefined,
           resume: false,
         }),
-        agent: "build",
+        agent: Agent.ID.make("build", { disableChecks: true }),
         model: undefined,
         variant: undefined,
         files: [],
@@ -154,7 +164,10 @@ describe("run interactive runtime", () => {
     expect(events).toContainEqual({
       type: "model",
       model: "Resolved Model · Test Provider",
-      selection: { providerID: "test", modelID: "resolved" },
+      selection: {
+        providerID: Provider.ID.make("test", { disableChecks: true }),
+        modelID: Model.ID.make("resolved", { disableChecks: true }),
+      },
     })
     expect(lifecycle.onCycleVariant?.()).toMatchObject({ status: "variant low", variant: "low" })
     lifecycle.onAgentSelect?.("review")
@@ -181,15 +194,24 @@ describe("run interactive runtime", () => {
         sdk,
         directory: "/tmp",
         target: async () => ({
-          sessionID: "ses_root",
-          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
-          agent: "build",
-          model: { providerID: "test", modelID: "model" },
+          sessionID: Session.ID.make("ses_root", { disableChecks: true }),
+          location: {
+            directory: "/tmp",
+            project: { id: Project.ID.make("pro-1", { disableChecks: true }), directory: "/tmp", canonical: "/tmp" },
+          },
+          agent: Agent.ID.make("build", { disableChecks: true }),
+          model: {
+            providerID: Provider.ID.make("test", { disableChecks: true }),
+            modelID: Model.ID.make("model", { disableChecks: true }),
+          },
           variant: undefined,
           resume: false,
         }),
-        agent: "build",
-        model: { providerID: "test", modelID: "model" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("test", { disableChecks: true }),
+          modelID: Model.ID.make("model", { disableChecks: true }),
+        },
         variant: undefined,
         files: [],
         thinking: false,
@@ -215,7 +237,8 @@ describe("run interactive runtime", () => {
               waitForIdle: async () => {},
               interruptActiveTurn: async () => {},
               selectSubagent: () => {},
-              settleForm: (sessionID: string, formID: string) => settled.push({ sessionID, formID }),
+              settleForm: (sessionID: string, formID: string) =>
+                settled.push({ sessionID: Session.ID.make(sessionID, { disableChecks: true }), formID }),
               replayOnResize: async () => false,
               close: async () => {},
             }
@@ -227,8 +250,8 @@ describe("run interactive runtime", () => {
     await streamStarted.promise
 
     await lifecycle.onFormReply({
-      sessionID: "global",
-      formID: "frm_global",
+      sessionID: Session.ID.make("global", { disableChecks: true }),
+      formID: Form.ID.make("frm_global", { disableChecks: true }),
       answer: { value: "yes" },
       location: { directory: "/remote work" },
     })
@@ -249,9 +272,13 @@ describe("run interactive runtime", () => {
 
     reply.mockImplementationOnce(() => Promise.reject({ _tag: "FormInvalidAnswerError", message: "Invalid answer" }))
     await expect(
-      lifecycle.onFormReply({ sessionID: "ses_child", formID: "frm_invalid", answer: { value: 3 } }),
+      lifecycle.onFormReply({
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        formID: Form.ID.make("frm_invalid", { disableChecks: true }),
+        answer: { value: 3 },
+      }),
     ).rejects.toEqual({ _tag: "FormInvalidAnswerError", message: "Invalid answer" })
-    expect(settled.some((item) => item.formID === "frm_invalid")).toBe(false)
+    expect(settled.some((item) => item.formID === Form.ID.make("frm_invalid", { disableChecks: true }))).toBe(false)
 
     api.close()
     await task
@@ -275,17 +302,26 @@ describe("run interactive runtime", () => {
           resolved++
           api.close()
           return {
-            sessionID: "ses-deferred",
+            sessionID: Session.ID.make("ses-deferred", { disableChecks: true }),
             sessionTitle: "Deferred",
-            location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
-            agent: "build",
-            model: { providerID: "openai", modelID: "gpt-5" },
+            location: {
+              directory: "/tmp",
+              project: { id: Project.ID.make("pro-1", { disableChecks: true }), directory: "/tmp", canonical: "/tmp" },
+            },
+            agent: Agent.ID.make("build", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("openai", { disableChecks: true }),
+              modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+            },
             variant: undefined,
             resume: false,
           }
         },
-        agent: "build",
-        model: { providerID: "openai", modelID: "gpt-5" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("openai", { disableChecks: true }),
+          modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+        },
         variant: undefined,
         files: [],
         thinking: false,
@@ -329,13 +365,17 @@ describe("run interactive runtime", () => {
       () =>
         ok({
           id: "ses-resume",
-          projectID: "pro-1",
+          projectID: Project.ID.make("pro-1", { disableChecks: true }),
           title: "Resume",
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 1, updated: 1 },
           location: { directory: "/tmp" },
-          model: { providerID: "openai", id: "gpt-5", variant: "high" },
+          model: {
+            providerID: Provider.ID.make("openai", { disableChecks: true }),
+            id: Model.ID.make("gpt-5", { disableChecks: true }),
+            variant: "high",
+          },
         }) as never,
     )
     spyOn(sdk.message, "list").mockImplementation(
@@ -350,7 +390,7 @@ describe("run interactive runtime", () => {
       models: [
         catalogModel({
           id: "gpt-5",
-          providerID: "openai",
+          providerID: Provider.ID.make("openai", { disableChecks: true }),
           name: "Little Frank",
           variants: ["high"],
         }),
@@ -363,15 +403,21 @@ describe("run interactive runtime", () => {
         sdk,
         directory: "/tmp",
         target: async () => ({
-          sessionID: "ses-resume",
+          sessionID: Session.ID.make("ses-resume", { disableChecks: true }),
           sessionTitle: "Resume",
-          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
-          agent: "review",
-          model: { providerID: "openai", modelID: "gpt-5" },
-          variant: "high",
+          location: {
+            directory: "/tmp",
+            project: { id: Project.ID.make("pro-1", { disableChecks: true }), directory: "/tmp", canonical: "/tmp" },
+          },
+          agent: Agent.ID.make("review", { disableChecks: true }),
+          model: {
+            providerID: Provider.ID.make("openai", { disableChecks: true }),
+            modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+          },
+          variant: Model.VariantID.make("high", { disableChecks: true }),
           resume: true,
         }),
-        agent: "build",
+        agent: Agent.ID.make("build", { disableChecks: true }),
         model: undefined,
         variant: undefined,
         files: [],
@@ -401,12 +447,15 @@ describe("run interactive runtime", () => {
       type: "history",
       history: [{ text: "previous prompt", parts: [] }],
     })
-    expect(events).toContainEqual({ type: "agent", agent: "review" })
+    expect(events).toContainEqual({ type: "agent", agent: Agent.ID.make("review", { disableChecks: true }) })
     expect(titles).toEqual(["Resume"])
     expect(events).toContainEqual({
       type: "model",
       model: "Little Frank · OpenAI · high",
-      selection: { providerID: "openai", modelID: "gpt-5" },
+      selection: {
+        providerID: Provider.ID.make("openai", { disableChecks: true }),
+        modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+      },
     })
   })
 
@@ -446,15 +495,18 @@ describe("run interactive runtime", () => {
         sdk,
         directory: "/tmp",
         target: async () => ({
-          sessionID: "ses-resume-abort",
+          sessionID: Session.ID.make("ses-resume-abort", { disableChecks: true }),
           sessionTitle: "Cached title",
-          location: { directory: "/tmp", project: { id: "pro-1", directory: "/tmp", canonical: "/tmp" } },
-          agent: "build",
+          location: {
+            directory: "/tmp",
+            project: { id: Project.ID.make("pro-1", { disableChecks: true }), directory: "/tmp", canonical: "/tmp" },
+          },
+          agent: Agent.ID.make("build", { disableChecks: true }),
           model: undefined,
           variant: undefined,
           resume: true,
         }),
-        agent: "build",
+        agent: Agent.ID.make("build", { disableChecks: true }),
         model: undefined,
         variant: undefined,
         files: [],
@@ -502,7 +554,7 @@ describe("run interactive runtime", () => {
     let runtimeConfig: LifecycleInput["tuiConfig"] | undefined
     const tuiConfig = createTuiResolvedConfig({ keybinds: { "variant.cycle": "ctrl+g" } })
     const catalogs = stubCatalogLists(sdk, {
-      location: { directory: "/session", workspaceID: "work-1" },
+      location: { directory: "/session", workspaceID: WorkspaceID.make("work-1", { disableChecks: true }) },
     })
     const fileFind = spyOn(sdk.file, "find").mockResolvedValue({
       location: {
@@ -521,15 +573,22 @@ describe("run interactive runtime", () => {
         target: async () => {
           targets++
           return {
-            sessionID: "ses-target",
+            sessionID: Session.ID.make("ses-target", { disableChecks: true }),
             location: {
               directory: "/session",
               workspaceID: "work-1",
-              project: { id: "location-project", directory: "/session", canonical: "/session" },
+              project: {
+                id: Project.ID.make("location-project", { disableChecks: true }),
+                directory: "/session",
+                canonical: "/session",
+              },
             },
-            agent: "review",
-            model: { providerID: "openai", modelID: "gpt-5" },
-            variant: "high",
+            agent: Agent.ID.make("review", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("openai", { disableChecks: true }),
+              modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+            },
+            variant: Model.VariantID.make("high", { disableChecks: true }),
             resume: false,
           }
         },

@@ -1,3 +1,5 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { Session } from "@opencode/schema/session"
 import { createMemo } from "solid-js"
 import { useData } from "../../context/data"
 import { DialogSelect } from "../../ui/dialog-select"
@@ -10,8 +12,8 @@ import type { PromptInfo } from "../../prompt/history"
 import { projectedPromptInput } from "../../prompt/codec"
 
 export function DialogMessage(props: {
-  messageID: string
-  sessionID: string
+  messageID: SessionMessage.ID
+  sessionID: Session.ID
   setPrompt?: (prompt: PromptInfo) => void
 }) {
   const data = useData()

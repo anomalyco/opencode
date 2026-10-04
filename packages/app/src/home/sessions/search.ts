@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
 import { serverName } from "@/runtime/server/registry"
@@ -88,7 +89,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     setState({ value, highlighted: "", exact: undefined, lookingUp: false })
     if (!looksLikeSessionID(sessionID)) return
     setState("lookingUp", true)
-    void sessions.session.lookup(sessionID).then(
+    void sessions.session.lookup(SessionID.make(sessionID)).then(
       (record) => {
         if (current !== lookup) return
         setState({ exact: record, lookingUp: false })

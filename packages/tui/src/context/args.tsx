@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import { mergeProps } from "solid-js"
 import { createSimpleContext } from "./helper"
 
@@ -6,8 +7,8 @@ export interface Args {
   agent?: string
   prompt?: string
   continue?: boolean
-  sessionID?: string
-  newSessionID?: string
+  sessionID?: Session.ID
+  newSessionID?: Session.ID
   fork?: boolean
   auto?: boolean
 }
@@ -23,7 +24,7 @@ export const { use: useArgs, provider: ArgsProvider } = createSimpleContext({
         pending = undefined
         return id
       },
-      restoreNewSessionID(id: string) {
+      restoreNewSessionID(id: Session.ID) {
         pending ??= id
       },
     })

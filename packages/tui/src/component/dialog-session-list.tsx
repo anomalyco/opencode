@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import { createMemo, createResource, createSignal, onMount, Show } from "solid-js"
 import path from "path"
 import type { SessionInfo } from "@opencode/client"
@@ -39,7 +40,7 @@ export function DialogSessionList() {
   const [filter, setFilter] = createSignal("")
   const shortcuts = Keymap.useShortcuts()
   const [search, setSearch] = createDebouncedSignal("", 150)
-  const [toDelete, setToDelete] = createSignal<string>()
+  const [toDelete, setToDelete] = createSignal<Session.ID>()
   const [prefs, updatePrefs] = useStorage().store("session-list", {
     initial: { allProjects: config.tabs?.scope !== "cwd" },
   })
@@ -253,7 +254,7 @@ export function DialogSessionList() {
         {
           command: "session.delete",
           title: "delete",
-          onTrigger: (option: { value: string }) => {
+          onTrigger: (option: { value: Session.ID }) => {
             if (toDelete() !== option.value) {
               setToDelete(option.value)
               return
@@ -280,7 +281,7 @@ export function DialogSessionList() {
         {
           command: "session.rename",
           title: "rename",
-          onTrigger: (option: { value: string; title: string }) =>
+          onTrigger: (option: { value: Session.ID; title: string }) =>
             DialogSessionRename.show(dialog, option.value, option.title),
         },
       ]}

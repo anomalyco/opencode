@@ -467,7 +467,7 @@ function failSubmission(
   kind: "shell" | "command" | "prompt",
   error: unknown,
   restore: () => boolean,
-  messageID?: string,
+  messageID?: SessionMessage.ID,
   rollback?: () => void,
 ) {
   if (messageID && session.admitted(messageID)) return

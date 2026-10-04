@@ -1,6 +1,8 @@
+import { Provider } from "@opencode/schema/provider"
+import { Model } from "@opencode/schema/model"
 export function parse(value: string) {
   const [providerID, ...modelID] = value.split("/")
-  return { providerID, modelID: modelID.join("/") }
+  return { providerID: Provider.ID.make(providerID), modelID: Model.ID.make(modelID.join("/")) }
 }
 
 export function formatRef(model: { providerID: string; id: string; variant?: string }) {

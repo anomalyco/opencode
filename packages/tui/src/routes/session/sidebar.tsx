@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import { useData } from "../../context/data"
 import { createMemo, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
@@ -10,7 +11,7 @@ import "../../component/title-shimmer"
 import { getScrollAcceleration } from "../../util/scroll"
 import { SESSION_SIDEBAR_WIDTH } from "../../ui/layout"
 
-export function Sidebar(props: { sessionID: string; overlay?: boolean }) {
+export function Sidebar(props: { sessionID: Session.ID; overlay?: boolean }) {
   const data = useData()
   const theme = useTheme()
   const config = useConfig().data

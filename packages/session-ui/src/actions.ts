@@ -1,3 +1,5 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { SessionID } from "@opencode/schema/session-id"
 import type { PromptFileAttachment } from "@opencode/client/promise"
 
 export type SessionUserComment =
@@ -27,5 +29,5 @@ export type SessionUserAttachmentReference = {
 
 export type SessionUserActions = {
   openAttachment?: (file: PromptFileAttachment) => void
-  revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
+  revert?: (input: { sessionID: SessionID; messageID: SessionMessage.ID }) => Promise<void> | void
 }

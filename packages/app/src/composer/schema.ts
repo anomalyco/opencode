@@ -1,3 +1,6 @@
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { Schema, SchemaGetter, Struct } from "effect"
 import { checksum } from "@opencode/util/encode"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -118,9 +121,9 @@ export const Prompt = Persistence.array(ContentPart)
 export type Prompt = typeof Prompt.Type
 
 export const PromptModel = Persistence.struct({
-  providerID: Schema.String,
-  modelID: Schema.String,
-  variant: Persistence.optional(Schema.NullOr(Schema.String)),
+  providerID: Provider.ID,
+  modelID: Model.ID,
+  variant: Persistence.optional(Schema.NullOr(Model.VariantID)),
 })
 export type PromptModel = typeof PromptModel.Type
 
@@ -268,10 +271,10 @@ export const ComposerStore = Persistence.struct({
   retry: Persistence.optional(
     Schema.Struct({
       id: SessionMessage.ID,
-      agent: Schema.String,
-      providerID: Schema.String,
-      modelID: Schema.String,
-      variant: Persistence.optional(Schema.String),
+      agent: Agent.ID,
+      providerID: Provider.ID,
+      modelID: Model.ID,
+      variant: Persistence.optional(Model.VariantID),
     }),
   ),
   context: Persistence.struct({ items: Persistence.array(ContextEntry) }),

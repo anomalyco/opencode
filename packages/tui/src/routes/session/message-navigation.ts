@@ -1,3 +1,4 @@
+import { SessionMessage } from "@opencode/schema/session-message"
 import type { SessionMessageInfo } from "@opencode/client"
 
 type MessageChild = {
@@ -28,16 +29,16 @@ export function findMessageBoundary(input: {
   const visible = input.children
     .flatMap((child) => {
       if (!child.id) return []
-      const message = messages.get(child.id)
+      const message = messages.get(SessionMessage.ID.make(child.id, { disableChecks: true }))
       if (!message) return []
       if (message.type === "user" && message.text.trim()) {
         const y = input.scrollTop + child.y - input.viewportY
-        return [{ id: child.id, y, top: y }]
+        return [{ id: message.id, y, top: y }]
       }
       if (input.userOnly || message.type !== "assistant") return []
       if (!message.content.some((content) => content.type === "text" && content.text.trim())) return []
       const y = input.scrollTop + child.y - input.viewportY
-      return [{ id: child.id, y, top: Math.max(0, y - 1) }]
+      return [{ id: message.id, y, top: Math.max(0, y - 1) }]
     })
     .sort((a, b) => a.y - b.y)
 

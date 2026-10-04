@@ -1,3 +1,5 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { Effect, Option, Schema, SchemaGetter } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 
@@ -92,17 +94,17 @@ export function serverState(canonicalLocalServer: () => string | undefined = () 
 export const ModelState = Persistence.struct({
   user: Persistence.array(
     Persistence.struct({
-      providerID: Schema.String,
-      modelID: Schema.String,
+      providerID: Provider.ID,
+      modelID: Model.ID,
       visibility: Schema.Literals(["show", "hide"]),
       favorite: Schema.optional(Schema.Boolean),
     }),
   ),
-  recent: Persistence.array(Persistence.struct({ providerID: Schema.String, modelID: Schema.String })),
+  recent: Persistence.array(Persistence.struct({ providerID: Provider.ID, modelID: Model.ID })),
   variant: Schema.Record(
     Schema.String,
     Schema.mutableKey(
-      Schema.UndefinedOr(Schema.String).pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
+      Schema.UndefinedOr(Model.VariantID).pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))),
     ),
   ),
 })

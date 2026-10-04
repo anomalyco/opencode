@@ -1,3 +1,6 @@
+import { Provider } from "@opencode/schema/provider"
+import { Model } from "@opencode/schema/model"
+import { Agent } from "@opencode/schema/agent"
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { WorkspaceOnboardingSchema, ProviderTipSchema, WorkspaceTipSchema } from "@/new-session/view"
@@ -133,17 +136,29 @@ describe("persisted consumer schemas", () => {
   test("model selection validates nested model keys and preserves explicit null variants", () => {
     const state = Schema.decodeUnknownSync(Persistence.withInitial(ModelSelectionSchema, { session: {} }))({
       session: {
-        good: { agent: "build", model: { providerID: "provider", modelID: "model", variant: "high" }, variant: null },
-        partial: { agent: "plan", model: { providerID: "provider", modelID: 42 }, variant: false },
+        good: {
+          agent: Agent.ID.make("build"),
+          model: {
+            providerID: Provider.ID.make("provider"),
+            modelID: Model.ID.make("model"),
+            variant: Model.VariantID.make("high"),
+          },
+          variant: null,
+        },
+        partial: { agent: "plan", model: { providerID: Provider.ID.make("provider"), modelID: 42 }, variant: false },
         invalid: "build",
       },
     })
     expect(state.session.good).toEqual({
-      agent: "build",
-      model: { providerID: "provider", modelID: "model", variant: "high" },
+      agent: Agent.ID.make("build"),
+      model: {
+        providerID: Provider.ID.make("provider"),
+        modelID: Model.ID.make("model"),
+        variant: Model.VariantID.make("high"),
+      },
       variant: null,
     })
-    expect(state.session.partial?.agent).toBe("plan")
+    expect(state.session.partial?.agent).toBe(Agent.ID.make("plan", { disableChecks: true }))
     expect(state.session.partial?.model).toBeUndefined()
     expect(state.session.partial?.variant).toBeUndefined()
     expect(state.session.invalid).toBeUndefined()

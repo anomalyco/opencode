@@ -1,3 +1,12 @@
+import { Model } from "@opencode/schema/model"
+import { Shell } from "@opencode/schema/shell"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { Project } from "@opencode/schema/project"
+import { Plugin } from "@opencode/schema/plugin"
+import { Session } from "@opencode/schema/session"
+import { Event } from "@opencode/schema/event"
 import { expect, test } from "bun:test"
 import { EmbeddedTerminalRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
@@ -16,9 +25,9 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
   const projects = Promise.withResolvers<Response>()
   const refresh = Promise.withResolvers<Response>()
   const cachedSession = {
-    id: "ses_cached",
+    id: Session.ID.make("ses_cached", { disableChecks: true }),
     title: "Cached session",
-    projectID: "proj_fixture",
+    projectID: Project.ID.make("proj_fixture", { disableChecks: true }),
     location: { directory: "/fixture" },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -65,7 +74,18 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
     expect(requests).toBe(1)
     setup.mockInput.pressEscape()
     await setup.waitForFrame((frame) => !frame.includes("Fixture project"))
-    response.resolve(json({ data: [{ ...cachedSession, id: "ses_disposed", title: "Disposed response" }], cursor: {} }))
+    response.resolve(
+      json({
+        data: [
+          {
+            ...cachedSession,
+            id: Session.ID.make("ses_disposed", { disableChecks: true }),
+            title: "Disposed response",
+          },
+        ],
+        cursor: {},
+      }),
+    )
     await setup.renderOnce()
     expect(setup.captureCharFrame()).not.toContain("Fixture project")
     setup.mockInput.pressKey("o", { ctrl: true })
@@ -80,11 +100,11 @@ test.each([100, 44])("Ctrl-O is immediate, dismissible, and prunes cached deleti
     setup.mockInput.pressKey("o", { ctrl: true })
     await setup.waitForFrame((frame) => frame.includes("Cached") && frame.includes("Refreshing"))
     setup.events.emit({
-      id: "evt_deleted",
+      id: Event.ID.make("evt_deleted", { disableChecks: true }),
       created: 1,
       type: "session.deleted",
-      durable: { aggregateID: "ses_cached", seq: 1, version: 2 },
-      data: { sessionID: "ses_cached" },
+      durable: { aggregateID: Session.ID.make("ses_cached", { disableChecks: true }), seq: 1, version: 2 },
+      data: { sessionID: Session.ID.make("ses_cached", { disableChecks: true }) },
     })
     await setup.waitForFrame((frame) => !frame.includes("Cached"))
     refresh.resolve(json({ data: [cachedSession], cursor: {} }))
@@ -110,9 +130,9 @@ test.each(["dismissed", "refreshing"])(
     const metadata = Promise.withResolvers<Response>()
     const destinationRequested = Promise.withResolvers<void>()
     const cached = {
-      id: "ses_cached_move",
+      id: Session.ID.make("ses_cached_move", { disableChecks: true }),
       title: "Cached movement",
-      projectID: "proj_old",
+      projectID: Project.ID.make("proj_old", { disableChecks: true }),
       location: { directory: "/fixture/old" },
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -176,11 +196,15 @@ test.each(["dismissed", "refreshing"])(
         await setup.waitForFrame((frame) => frame.includes(cached.title) && frame.includes("Refreshing"))
       }
       setup.events.emit({
-        id: "evt_cached_moved",
+        id: Event.ID.make("evt_cached_moved", { disableChecks: true }),
         created: 3,
         type: "session.moved",
         durable: { aggregateID: cached.id, seq: 1, version: 1 },
-        data: { sessionID: cached.id, location: { directory: "/fixture/new" }, projectID: "proj_new" },
+        data: {
+          sessionID: Session.ID.make(cached.id, { disableChecks: true }),
+          location: { directory: "/fixture/new" },
+          projectID: Project.ID.make("proj_new", { disableChecks: true }),
+        },
       })
       if (phase === "dismissed") {
         setup.mockInput.pressKey("o", { ctrl: true })
@@ -209,7 +233,15 @@ test.each(["dismissed", "refreshing"])(
       expect(locations.some((query) => query.includes("/fixture/old"))).toBe(false)
     } finally {
       refresh.resolve(json({ data: [], cursor: {} }))
-      metadata.resolve(json({ data: { ...cached, projectID: "proj_new", location: { directory: "/fixture/new" } } }))
+      metadata.resolve(
+        json({
+          data: {
+            ...cached,
+            projectID: Project.ID.make("proj_new", { disableChecks: true }),
+            location: { directory: "/fixture/new" },
+          },
+        }),
+      )
     }
   },
 )
@@ -281,7 +313,7 @@ test("session lifecycle updates the terminal title and prints the epilogue after
     const session = {
       id: "dummy",
       title: "Demo session",
-      projectID: "project",
+      projectID: Project.ID.make("project", { disableChecks: true }),
       location: { directory },
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -318,18 +350,18 @@ test("session lifecycle updates the terminal title and prints the epilogue after
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
-        args: { sessionID: "dummy" },
+        args: { sessionID: Session.ID.make("dummy", { disableChecks: true }) },
         log: () => {},
       }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
 
     await initialTitleSet
     events.emit({
-      id: "evt_renamed",
+      id: Event.ID.make("evt_renamed", { disableChecks: true }),
       created: 1,
       type: "session.renamed",
       durable: { aggregateID: "dummy", seq: 1, version: 1 },
-      data: { sessionID: "dummy", title: "Renamed session" },
+      data: { sessionID: Session.ID.make("dummy", { disableChecks: true }), title: "Renamed session" },
     })
     await renamedTitleSet
     setup.renderer.destroy()
@@ -362,7 +394,7 @@ test("session title generated while an untitled session is loading remains visib
   let sessionRequests = 0
   const session = {
     id: "dummy",
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     location: { directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -393,18 +425,18 @@ test("session title generated while an untitled session is loading remains visib
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
-        args: { sessionID: "dummy" },
+        args: { sessionID: Session.ID.make("dummy", { disableChecks: true }) },
         log: () => {},
       }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
 
     await sessionRequested.promise
     events.emit({
-      id: "evt_renamed",
+      id: Event.ID.make("evt_renamed", { disableChecks: true }),
       created: 1,
       type: "session.renamed",
       durable: { aggregateID: "dummy", seq: 1, version: 1 },
-      data: { sessionID: "dummy", title: "Generated title" },
+      data: { sessionID: Session.ID.make("dummy", { disableChecks: true }), title: "Generated title" },
     })
     await Promise.race([
       renameSyncRequested.promise,
@@ -436,9 +468,9 @@ test("vertical session tabs switch to horizontal below readable content width", 
   await using state = await tmpdir()
   await Bun.write(path.join(state.path, "test", "tui", "layout.json"), JSON.stringify({ verticalTabsWidth: 42 }))
   const session = {
-    id: "ses_resize",
+    id: Session.ID.make("ses_resize", { disableChecks: true }),
     title: "Resize fixture",
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     location: { directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -452,7 +484,7 @@ test("vertical session tabs switch to horizontal below readable content width", 
       tabs: { mode: "on", layout: "vertical", indicators: "status" },
       session: { sidebar: "hide" },
     },
-    args: { sessionID: session.id },
+    args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
     fetch: (url) => {
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
       if (/^\/api\/session\/ses_resize\/(message|inbox|permission)$/.test(url.pathname))
@@ -474,9 +506,9 @@ test("narrow vertical session tabs collapse to a compact rail with the terminal"
   await using state = await tmpdir()
   await Bun.write(path.join(state.path, "test", "tui", "layout.json"), JSON.stringify({ verticalTabsWidth: 5 }))
   const session = {
-    id: "ses_resize",
+    id: Session.ID.make("ses_resize", { disableChecks: true }),
     title: "Resize fixture",
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     location: { directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -490,7 +522,7 @@ test("narrow vertical session tabs collapse to a compact rail with the terminal"
       tabs: { mode: "on", layout: "vertical", indicators: "status" },
       session: { sidebar: "hide" },
     },
-    args: { sessionID: session.id },
+    args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
     fetch: (url) => {
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
       if (/^\/api\/session\/ses_resize\/(message|inbox|permission)$/.test(url.pathname))
@@ -514,12 +546,15 @@ test("automatic rename refreshes the displayed title before settling, even witho
   const bodies: unknown[] = []
   const location = { directory, project: { id: "project", directory, canonical: directory } }
   const session = {
-    id: "ses_rename",
+    id: Session.ID.make("ses_rename", { disableChecks: true }),
     title: "Compiler cleanup",
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     location: { directory },
-    agent: "build",
-    model: { providerID: "provider", id: "model" },
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      providerID: Provider.ID.make("provider", { disableChecks: true }),
+      id: Model.ID.make("model", { disableChecks: true }),
+    },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
@@ -529,13 +564,23 @@ test("automatic rename refreshes the displayed title before settling, even witho
     height: 20,
     state: state.path,
     config: { tabs: { mode: "on", layout: "vertical" }, session: { sidebar: "hide" } },
-    args: { sessionID: session.id },
+    args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
     fetch: async (url, request) => {
       if (url.pathname === "/api/location") return json(location)
       if (url.pathname === "/api/agent")
         return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
       if (url.pathname === "/api/model")
-        return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
+        return json({
+          location,
+          data: [
+            {
+              id: "model",
+              providerID: Provider.ID.make("provider", { disableChecks: true }),
+              name: "Model",
+              variants: [],
+            },
+          ],
+        })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
       if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
       if (url.pathname === "/api/session/ses_rename" && request.method === "PATCH") {
@@ -571,12 +616,15 @@ test("automatic rename refreshes the displayed title before settling, even witho
 test.each([80, 120])("completes custom Markdown and ordinary fences in a session at width %s", async (width) => {
   await using state = await tmpdir()
   const session = {
-    id: "ses_markdown",
+    id: Session.ID.make("ses_markdown", { disableChecks: true }),
     title: "Markdown fixture",
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     location: { directory },
-    agent: "build",
-    model: { providerID: "fixture", id: "model" },
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      providerID: Provider.ID.make("fixture", { disableChecks: true }),
+      id: Model.ID.make("model", { disableChecks: true }),
+    },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 1, updated: 2 },
@@ -588,28 +636,28 @@ test.each([80, 120])("completes custom Markdown and ordinary fences in a session
     height: 55,
     state: state.path,
     config: { animations: false, tabs: { mode: "off" }, session: { sidebar: "hide" } },
-    args: { sessionID: session.id },
+    args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
     fetch: (url) => {
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
       if (url.pathname === `/api/session/${session.id}/message`)
         return json({
           data: [
             {
-              id: "msg_markdown",
+              id: SessionMessage.ID.make("msg_markdown", { disableChecks: true }),
               type: "assistant",
-              agent: session.agent,
+              agent: Agent.ID.make(session.agent, { disableChecks: true }),
               model: session.model,
               time: { created: 2 },
               content: [{ type: "text", text: initial }],
             },
             {
-              id: "msg_compaction",
+              id: SessionMessage.ID.make("msg_compaction", { disableChecks: true }),
               type: "compaction",
               time: { created: 1 },
               status: "completed",
               reason: "manual",
               summary: "```latex\ny^2\n```",
-              recent: "msg_markdown",
+              recent: SessionMessage.ID.make("msg_markdown", { disableChecks: true }),
             },
           ],
           cursor: {},
@@ -636,25 +684,25 @@ test.each([80, 120])("completes custom Markdown and ordinary fences in a session
 
   // Queue final text and completion together to exercise TextPart's reactive property order.
   setup.events.emit({
-    id: "evt_markdown_text_ended",
+    id: Event.ID.make("evt_markdown_text_ended", { disableChecks: true }),
     created: 3,
     type: "session.text.ended",
     durable: { aggregateID: session.id, seq: 1, version: 1 },
     data: {
-      sessionID: session.id,
-      assistantMessageID: "msg_markdown",
+      sessionID: Session.ID.make(session.id, { disableChecks: true }),
+      assistantMessageID: SessionMessage.ID.make("msg_markdown", { disableChecks: true }),
       ordinal: 0,
       text: `${initial} final\n\`\`\`\n\nMARKDOWN_END`,
     },
   })
   setup.events.emit({
-    id: "evt_markdown_step_ended",
+    id: Event.ID.make("evt_markdown_step_ended", { disableChecks: true }),
     created: 4,
     type: "session.step.ended",
     durable: { aggregateID: session.id, seq: 2, version: 1 },
     data: {
-      sessionID: session.id,
-      assistantMessageID: "msg_markdown",
+      sessionID: Session.ID.make(session.id, { disableChecks: true }),
+      assistantMessageID: SessionMessage.ID.make("msg_markdown", { disableChecks: true }),
       finish: "stop",
       cost: 0,
       tokens: session.tokens,
@@ -677,12 +725,15 @@ test.each([80, 120])("completes custom Markdown and ordinary fences in a session
 test("keeps assistant footer metrics current after prepend, same-length refresh, and revert", async () => {
   await using state = await tmpdir()
   const session = {
-    id: "ses_footer",
+    id: Session.ID.make("ses_footer", { disableChecks: true }),
     title: "Footer fixture",
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     location: { directory },
-    agent: "build",
-    model: { providerID: "fixture", id: "model" },
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      providerID: Provider.ID.make("fixture", { disableChecks: true }),
+      id: Model.ID.make("model", { disableChecks: true }),
+    },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 100, updated: 5000 },
@@ -693,7 +744,7 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
     height: 40,
     state: state.path,
     config: { animations: false, tabs: { mode: "off" }, session: { sidebar: "hide", tps: true } },
-    args: { sessionID: session.id },
+    args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
     fetch: (url) => {
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
       if (url.pathname === `/api/session/${session.id}/message`) {
@@ -701,13 +752,18 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
           return json({
             data: [
               {
-                id: "msg_0001",
+                id: SessionMessage.ID.make("msg_0001", { disableChecks: true }),
                 type: "system",
                 text: "Earlier instructions",
                 description: "Prepended instructions",
                 time: { created: 200 },
               },
-              { id: "msg_0000", type: "user", text: "Prepended input", time: { created: 100 } },
+              {
+                id: SessionMessage.ID.make("msg_0000", { disableChecks: true }),
+                type: "user",
+                text: "Prepended input",
+                time: { created: 100 },
+              },
             ],
             cursor: {},
           })
@@ -716,9 +772,9 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
             ...(refresh
               ? [
                   {
-                    id: "msg_0005",
+                    id: SessionMessage.ID.make("msg_0005", { disableChecks: true }),
                     type: "assistant",
-                    agent: session.agent,
+                    agent: Agent.ID.make(session.agent, { disableChecks: true }),
                     model: session.model,
                     time: { created: 7000, streamed: 8000, completed: 9000 },
                     finish: "stop",
@@ -726,13 +782,18 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
                     tokens: { ...session.tokens, output: 50 },
                     content: [{ type: "text", text: "Later answer" }],
                   },
-                  { id: "msg_0004", type: "user", text: "Later input", time: { created: 6000 } },
+                  {
+                    id: SessionMessage.ID.make("msg_0004", { disableChecks: true }),
+                    type: "user",
+                    text: "Later input",
+                    time: { created: 6000 },
+                  },
                 ]
               : []),
             {
-              id: "msg_0003",
+              id: SessionMessage.ID.make("msg_0003", { disableChecks: true }),
               type: "assistant",
-              agent: session.agent,
+              agent: Agent.ID.make(session.agent, { disableChecks: true }),
               model: session.model,
               time: { created: 2000, streamed: 3000, completed: 5000 },
               finish: "stop",
@@ -740,7 +801,12 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
               tokens: { ...session.tokens, output: 20 },
               content: [{ type: "text", text: "Original answer" }],
             },
-            { id: "msg_0002", type: "user", text: "Current input", time: { created: 1000 } },
+            {
+              id: SessionMessage.ID.make("msg_0002", { disableChecks: true }),
+              type: "user",
+              text: "Current input",
+              time: { created: 1000 },
+            },
           ],
           cursor: { next: "older" },
         })
@@ -789,11 +855,14 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
   expect(refreshed).toContain("3.0s \u00b7 50.0 tok/s")
 
   setup.events.emit({
-    id: "evt_footer_reverted",
+    id: Event.ID.make("evt_footer_reverted", { disableChecks: true }),
     created: 10000,
     type: "session.revert.committed",
     durable: { aggregateID: session.id, seq: 1, version: 1 },
-    data: { sessionID: session.id, to: "msg_0004" },
+    data: {
+      sessionID: Session.ID.make(session.id, { disableChecks: true }),
+      to: SessionMessage.ID.make("msg_0004", { disableChecks: true }),
+    },
   })
   const reverted = await setup.waitForFrame(
     (frame) => frame.includes("Original answer") && !frame.includes("Later input") && !frame.includes("Later answer"),
@@ -812,10 +881,13 @@ test("session startup prompt is submitted exactly once", async () => {
   const session = {
     id: "dummy",
     title: "Demo session",
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     location: { directory: cwd },
-    agent: "build",
-    model: { providerID: "provider", id: "model" },
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      providerID: Provider.ID.make("provider", { disableChecks: true }),
+      id: Model.ID.make("model", { disableChecks: true }),
+    },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
@@ -837,7 +909,14 @@ test("session startup prompt is submitted exactly once", async () => {
     if (url.pathname === "/api/model")
       return json({
         location,
-        data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }],
+        data: [
+          {
+            id: "model",
+            providerID: Provider.ID.make("provider", { disableChecks: true }),
+            name: "Model",
+            variants: [],
+          },
+        ],
       })
     if (url.pathname === "/api/session/dummy/prompt") {
       bodies.push(await request.json())
@@ -856,7 +935,7 @@ test("session startup prompt is submitted exactly once", async () => {
         config: { get: async () => ({}), update: async () => ({}) },
         packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
-        args: { sessionID: "dummy", prompt: "RESUME_READY" },
+        args: { sessionID: Session.ID.make("dummy", { disableChecks: true }), prompt: "RESUME_READY" },
         log: () => {},
       }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
@@ -896,14 +975,24 @@ test("home startup prompt is submitted exactly once", async () => {
       if (url.pathname === "/api/agent")
         return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
       if (url.pathname === "/api/model")
-        return json({ location, data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }] })
+        return json({
+          location,
+          data: [
+            {
+              id: "model",
+              providerID: Provider.ID.make("provider", { disableChecks: true }),
+              name: "Model",
+              variants: [],
+            },
+          ],
+        })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
       if (url.pathname === "/api/session" && request.method === "POST") {
         const input: unknown = await request.json()
         if (typeof input !== "object" || input === null) throw new Error("Expected a session input")
         session = {
           ...input,
-          projectID: "project",
+          projectID: Project.ID.make("project", { disableChecks: true }),
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, updated: 0 },
@@ -954,7 +1043,17 @@ test.each([false, true])("uses the resolved launch directory for new prompts (fa
       if (url.pathname === "/api/agent")
         return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
       if (url.pathname === "/api/model")
-        return json({ location, data: [{ id: "model", providerID: "provider", name: "Remote Model", variants: [] }] })
+        return json({
+          location,
+          data: [
+            {
+              id: "model",
+              providerID: Provider.ID.make("provider", { disableChecks: true }),
+              name: "Remote Model",
+              variants: [],
+            },
+          ],
+        })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "provider", name: "Provider" }] })
       if (url.pathname === "/api/session" && request.method === "POST") {
         const input: unknown = await request.json()
@@ -962,7 +1061,7 @@ test.each([false, true])("uses the resolved launch directory for new prompts (fa
         created.resolve(input)
         session = {
           ...input,
-          projectID: "project",
+          projectID: Project.ID.make("project", { disableChecks: true }),
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 0, updated: 0 },
@@ -1058,22 +1157,22 @@ test("error investigations repeatedly seed editable home drafts without creating
 test("completed user shell output replaces a partial live read when the final read fails", async () => {
   await using state = await tmpdir()
   const session = {
-    id: "ses_shell_output",
+    id: Session.ID.make("ses_shell_output", { disableChecks: true }),
     title: "Shell output fixture",
-    projectID: "proj_test",
+    projectID: Project.ID.make("proj_test", { disableChecks: true }),
     location: { directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
   }
   const shell = {
-    id: "sh_output",
+    id: Shell.ID.make("sh_output", { disableChecks: true }),
     command: "echo shell-output-fixture",
     status: "running" as const,
     cwd: directory,
     shell: "/bin/sh",
     file: `${directory}/shell.out`,
-    metadata: { sessionID: session.id, background: true },
+    metadata: { sessionID: Session.ID.make(session.id, { disableChecks: true }), background: true },
     time: { started: 1 },
   }
   const partial = "first live output\n"
@@ -1083,7 +1182,7 @@ test("completed user shell output replaces a partial live read when the final re
   await using setup = await createAppFixture({
     state: state.path,
     config: { animations: false, tabs: { mode: "off" }, session: { sidebar: "hide" } },
-    args: { sessionID: session.id },
+    args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
     fetch: (url) => {
       if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
@@ -1091,7 +1190,7 @@ test("completed user shell output replaces a partial live read when the final re
         return json({
           data: [
             {
-              id: "msg_shell_output",
+              id: SessionMessage.ID.make("msg_shell_output", { disableChecks: true }),
               type: "shell",
               shellID: shell.id,
               command: shell.command,
@@ -1133,7 +1232,7 @@ test("completed user shell output replaces a partial live read when the final re
 
   finished = true
   setup.events.emit({
-    id: "evt_shell_exited",
+    id: Event.ID.make("evt_shell_exited", { disableChecks: true }),
     created: 2,
     type: "shell.exited",
     location: { directory },
@@ -1141,12 +1240,12 @@ test("completed user shell output replaces a partial live read when the final re
   })
   await setup.waitFor(() => failedReads > 0)
   setup.events.emit({
-    id: "evt_shell_ended",
+    id: Event.ID.make("evt_shell_ended", { disableChecks: true }),
     created: 3,
     type: "session.shell.ended",
     durable: { aggregateID: session.id, seq: 1, version: 1 },
     data: {
-      sessionID: session.id,
+      sessionID: Session.ID.make(session.id, { disableChecks: true }),
       shell: { ...shell, status: "exited", exit: 0, time: { started: 1, completed: 2 } },
       output: { output: completed, cursor: completed.length, size: completed.length, truncated: false },
     },
@@ -1163,10 +1262,13 @@ test("new session inherits the active session model", async () => {
   const session = {
     id: "dummy",
     title: "Demo session",
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     location: { directory: cwd },
-    agent: "build",
-    model: { providerID: "provider", id: "session-model" },
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      providerID: Provider.ID.make("provider", { disableChecks: true }),
+      id: Model.ID.make("session-model", { disableChecks: true }),
+    },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
     time: { created: 0, updated: 0 },
@@ -1174,7 +1276,7 @@ test("new session inherits the active session model", async () => {
   await using setup = await createAppFixture({
     width: 80,
     height: 24,
-    args: { sessionID: "dummy" },
+    args: { sessionID: Session.ID.make("dummy", { disableChecks: true }) },
     fetch: (url) => {
       if (url.pathname === "/api/fs/list") return json({ location, data: [] })
       if (url.pathname === "/api/location") return json(location)
@@ -1190,8 +1292,18 @@ test("new session inherits the active session model", async () => {
         return json({
           location,
           data: [
-            { id: "home-model", providerID: "provider", name: "Home Model", variants: [] },
-            { id: "session-model", providerID: "provider", name: "Session Model", variants: [] },
+            {
+              id: "home-model",
+              providerID: Provider.ID.make("provider", { disableChecks: true }),
+              name: "Home Model",
+              variants: [],
+            },
+            {
+              id: "session-model",
+              providerID: Provider.ID.make("provider", { disableChecks: true }),
+              name: "Session Model",
+              variants: [],
+            },
           ],
         })
     },
@@ -1253,7 +1365,7 @@ test("keeps the prompt display stable while a new location catalog loads", async
           data: [
             {
               id: requestedDirectory === target ? "target-model" : "source-model",
-              providerID: "provider",
+              providerID: Provider.ID.make("provider", { disableChecks: true }),
               name: requestedDirectory === target ? "Target Model" : "Source Model",
               variants: [],
             },
@@ -1354,7 +1466,7 @@ test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
     const session = {
       id: "dummy",
       title: "Selection fixture",
-      projectID: "project",
+      projectID: Project.ID.make("project", { disableChecks: true }),
       location: { directory },
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -1362,7 +1474,7 @@ test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
     }
     const pty = {
       id: "pty_fixture",
-      sessionID: session.id,
+      sessionID: Session.ID.make(session.id, { disableChecks: true }),
       title: "Terminal",
       command: "/bin/sh",
       args: [],
@@ -1427,7 +1539,7 @@ test.skipIf(process.platform === "win32").each(["manual", "select"] as const)(
             update: async () => ({}),
           },
           packages: { prepare: async () => ({ directory: "" }) },
-          args: { sessionID: session.id },
+          args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
           terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
           log: () => {},
         }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
@@ -1503,8 +1615,8 @@ test.each([100, 44])(
   async (width) => {
     await using state = await tmpdir()
     const session = {
-      id: "ses_failure",
-      projectID: "proj_test",
+      id: Session.ID.make("ses_failure", { disableChecks: true }),
+      projectID: Project.ID.make("proj_test", { disableChecks: true }),
       location: { directory },
       title: "Failure fixture",
       cost: 0,
@@ -1514,7 +1626,7 @@ test.each([100, 44])(
     await using setup = await createAppFixture({
       width,
       state: state.path,
-      args: { sessionID: session.id },
+      args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
       config: { animations: false, tabs: { mode: "off" } },
       fetch: (url) => {
         if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
@@ -1531,12 +1643,12 @@ test.each([100, 44])(
     await setup.mockInput.typeText("Keep this draft")
     await setup.waitForFrame((frame) => frame.includes("Keep this draft"))
     setup.events.emit({
-      id: "evt_execution_failed",
+      id: Event.ID.make("evt_execution_failed", { disableChecks: true }),
       created: 2,
       type: "session.execution.failed",
       durable: { aggregateID: session.id, seq: 1, version: 1 },
       data: {
-        sessionID: session.id,
+        sessionID: Session.ID.make(session.id, { disableChecks: true }),
         error: { type: "unknown", message: 'Plugin "broken-skills" failed during skill.transform.' },
       },
     })
@@ -1564,12 +1676,17 @@ test.each([
   }
   let inventory: PluginInfo[] = [
     {
-      id: "broken",
+      id: Plugin.ID.make("broken", { disableChecks: true }),
       source: { type: "builtin" },
       features: { server: true },
       state: initial ? failure : { status: "active" },
     },
-    { id: "healthy", source: { type: "builtin" }, features: { server: true }, state: { status: "active" } },
+    {
+      id: Plugin.ID.make("healthy", { disableChecks: true }),
+      source: { type: "builtin" },
+      features: { server: true },
+      state: { status: "active" },
+    },
   ]
   let requests = 0
   await using setup = await createAppFixture({
@@ -1589,7 +1706,12 @@ test.each([
   if (!initial) {
     expect(setup.captureCharFrame()).not.toContain("Plugin failed")
     inventory = inventory.map((plugin) => (plugin.id === "broken" ? { ...plugin, state: failure } : plugin))
-    setup.events.emit({ id: "evt_failure", created: 1, type: "plugin.updated", data: {} })
+    setup.events.emit({
+      id: Event.ID.make("evt_failure", { disableChecks: true }),
+      created: 1,
+      type: "plugin.updated",
+      data: {},
+    })
   }
   await setup.waitForFrame((frame) => frame.includes("Plugin failed:") && frame.includes("broken"))
   expect(setup.captureCharFrame()).toContain("/plugins")
@@ -1616,17 +1738,32 @@ test.each([
   expect(setup.captureCharFrame()).toContain("1 plugin failed")
 
   const seen = requests
-  setup.events.emit({ id: "evt_repeat", created: 2, type: "plugin.updated", data: {} })
-  setup.events.emit({ id: "evt_reconnect", type: "server.connected", data: {} })
+  setup.events.emit({
+    id: Event.ID.make("evt_repeat", { disableChecks: true }),
+    created: 2,
+    type: "plugin.updated",
+    data: {},
+  })
+  setup.events.emit({ id: Event.ID.make("evt_reconnect", { disableChecks: true }), type: "server.connected", data: {} })
   await setup.waitFor(() => requests >= seen + 2)
   await setup.flush()
   expect(setup.captureCharFrame()).not.toContain("Plugin failed:")
 
   inventory = inventory.map((plugin) => ({ ...plugin, state: { status: "active" } }))
-  setup.events.emit({ id: "evt_recovered", created: 3, type: "plugin.updated", data: {} })
+  setup.events.emit({
+    id: Event.ID.make("evt_recovered", { disableChecks: true }),
+    created: 3,
+    type: "plugin.updated",
+    data: {},
+  })
   await setup.waitForFrame((frame) => !frame.includes("1 plugin failed"))
   inventory = inventory.map((plugin) => (plugin.id === "broken" ? { ...plugin, state: failure } : plugin))
-  setup.events.emit({ id: "evt_failed_again", created: 4, type: "plugin.updated", data: {} })
+  setup.events.emit({
+    id: Event.ID.make("evt_failed_again", { disableChecks: true }),
+    created: 4,
+    type: "plugin.updated",
+    data: {},
+  })
   await setup.waitForFrame((frame) => frame.includes("Plugin failed:") && frame.includes("broken"))
 })
 
@@ -1665,20 +1802,23 @@ test.each([44, 100])(
   async (width) => {
     await using state = await tmpdir()
     const session = {
-      id: "ses_countdown",
-      projectID: "proj_test",
+      id: Session.ID.make("ses_countdown", { disableChecks: true }),
+      projectID: Project.ID.make("proj_test", { disableChecks: true }),
       location: { directory },
       title: "Retry countdown",
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
       time: { created: 1, updated: 1 },
     }
-    const model = { id: "model", providerID: "provider" }
+    const model = {
+      id: Model.ID.make("model", { disableChecks: true }),
+      providerID: Provider.ID.make("provider", { disableChecks: true }),
+    }
     const error = { type: "provider.transport" as const, message: "Provider unavailable" }
     await using setup = await createAppFixture({
       width,
       state: state.path,
-      args: { sessionID: session.id },
+      args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
       config: { animations: false, tabs: { mode: "off" } },
       fetch: (url) => {
         if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
@@ -1687,9 +1827,9 @@ test.each([44, 100])(
           return json({
             data: [
               {
-                id: "msg_countdown",
+                id: SessionMessage.ID.make("msg_countdown", { disableChecks: true }),
                 type: "assistant",
-                agent: "build",
+                agent: Agent.ID.make("build", { disableChecks: true }),
                 model,
                 content: [],
                 error,
@@ -1715,37 +1855,55 @@ test.each([44, 100])(
     expect(setup.captureCharFrame()).not.toContain("in 0s")
 
     setup.events.emit({
-      id: "evt_countdown_rescheduled",
+      id: Event.ID.make("evt_countdown_rescheduled", { disableChecks: true }),
       created: 2,
       type: "session.retry.scheduled",
       durable: { aggregateID: session.id, seq: 1, version: 1 },
-      data: { sessionID: session.id, assistantMessageID: "msg_countdown", attempt: 3, at: Date.now() + 10_500, error },
+      data: {
+        sessionID: Session.ID.make(session.id, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_countdown", { disableChecks: true }),
+        attempt: 3,
+        at: Date.now() + 10_500,
+        error,
+      },
     })
     await setup.waitForFrame((frame) => frame.includes("Retrying in 11s") && frame.includes("attempt 3"))
     setup.events.emit({
-      id: "evt_countdown_started",
+      id: Event.ID.make("evt_countdown_started", { disableChecks: true }),
       created: 3,
       type: "session.step.started",
       durable: { aggregateID: session.id, seq: 2, version: 1 },
-      data: { sessionID: session.id, assistantMessageID: "msg_countdown", agent: "build", model, started: 3 },
+      data: {
+        sessionID: Session.ID.make(session.id, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_countdown", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model,
+        started: 3,
+      },
     })
     await setup.waitForFrame((frame) => !frame.includes("Retrying") && !frame.includes("Retry due"))
 
     setup.events.emit({
-      id: "evt_countdown_expired",
+      id: Event.ID.make("evt_countdown_expired", { disableChecks: true }),
       created: 4,
       type: "session.retry.scheduled",
       durable: { aggregateID: session.id, seq: 3, version: 1 },
-      data: { sessionID: session.id, assistantMessageID: "msg_countdown", attempt: 4, at: Date.now() - 1_000, error },
+      data: {
+        sessionID: Session.ID.make(session.id, { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_countdown", { disableChecks: true }),
+        attempt: 4,
+        at: Date.now() - 1_000,
+        error,
+      },
     })
     await setup.waitForFrame((frame) => frame.includes("Retry due") && frame.includes("attempt 4"))
     expect(setup.captureCharFrame()).not.toContain("in -")
     setup.events.emit({
-      id: "evt_countdown_interrupted",
+      id: Event.ID.make("evt_countdown_interrupted", { disableChecks: true }),
       created: 5,
       type: "session.execution.interrupted",
       durable: { aggregateID: session.id, seq: 4, version: 1 },
-      data: { sessionID: session.id, reason: "shutdown" },
+      data: { sessionID: Session.ID.make(session.id, { disableChecks: true }), reason: "shutdown" },
     })
     await setup.waitForFrame((frame) => !frame.includes("Retrying") && !frame.includes("Retry due"))
   },

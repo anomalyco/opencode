@@ -1,10 +1,12 @@
+import type { Provider } from "@opencode/schema/provider"
+import { Model } from "@opencode/schema/model"
 import { type Accessor, createMemo } from "solid-js"
 import { filter, firstBy, flat, groupBy, mapValues, pipe, uniqueBy, values } from "remeda"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useProviders } from "@/providers/catalog/providers"
 import { useGlobal } from "@/runtime/server/runtime"
 
-export type ModelKey = { providerID: string; modelID: string }
+export type ModelKey = { providerID: Provider.ID; modelID: Model.ID }
 
 type Visibility = "show" | "hide"
 const RECENT_LIMIT = 5
@@ -115,13 +117,13 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
   const variantKey = (model: ModelKey) => `${model.providerID}/${model.modelID}`
   const getVariant = (model: ModelKey) => store.variant?.[variantKey(model)]
 
-  const setVariant = (model: ModelKey, value: string | undefined) => {
+  const setVariant = (model: ModelKey, value: Model.VariantID | undefined) => {
     const key = variantKey(model)
     if (!store.variant) {
-      setStore("variant", { [key]: value ?? "default" })
+      setStore("variant", { [key]: value ?? Model.VariantID.make("default") })
       return
     }
-    setStore("variant", key, value ?? "default")
+    setStore("variant", key, value ?? Model.VariantID.make("default"))
   }
 
   return {

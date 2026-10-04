@@ -1,3 +1,5 @@
+import { Session } from "@opencode/schema/session"
+import { Agent } from "@opencode/schema/agent"
 import type { LocationGetOutput, ModelRef, OpenCodeClient, SessionInfo } from "@opencode/client/promise"
 import { Model } from "@opencode/schema/model"
 import { errorMessage } from "./util/error"
@@ -8,7 +10,7 @@ export type SessionTarget = {
   session: SessionInfo
   location: LocationGetOutput
   model: ModelRef | undefined
-  agent: string | undefined
+  agent: Agent.ID | undefined
   resume: boolean
 }
 
@@ -17,9 +19,9 @@ export type SessionTargetPreparation = (input: {
   location: LocationGetOutput
   session: SessionInfo | undefined
   model: ModelRef | undefined
-  agent: string | undefined
+  agent: Agent.ID | undefined
   signal?: AbortSignal
-}) => Promise<{ model: ModelRef | undefined; agent: string | undefined }>
+}) => Promise<{ model: ModelRef | undefined; agent: Agent.ID | undefined }>
 
 export class SessionTargetMutationError extends Error {
   override readonly name = "SessionTargetMutationError"
@@ -55,7 +57,7 @@ export async function resolveSessionTarget(input: {
     location,
     session: selected,
     model: input.model ?? selected?.model,
-    agent: input.agent ?? selected?.agent,
+    agent: input.agent === undefined ? selected?.agent : Agent.ID.make(input.agent),
     signal: input.signal,
   })
   const session =
@@ -63,7 +65,7 @@ export async function resolveSessionTarget(input: {
     (await input.client.session
       .create(
         {
-          id: input.session,
+          id: input.session === undefined ? undefined : Session.ID.make(input.session, { disableChecks: true }),
           agent: prepared.agent,
           model: prepared.model,
           location: { directory: location.directory },
@@ -132,10 +134,13 @@ async function selectSession(input: {
 }
 
 export function findSession(client: OpenCodeClient, sessionID: string, signal?: AbortSignal) {
-  return client.session.get({ sessionID }, ...requestOptions(signal)).catch((error) => {
-    if (error && typeof error === "object" && "_tag" in error && error._tag === "SessionNotFoundError") return undefined
-    throw error
-  })
+  return client.session
+    .get({ sessionID: Session.ID.make(sessionID, { disableChecks: true }) }, ...requestOptions(signal))
+    .catch((error) => {
+      if (error && typeof error === "object" && "_tag" in error && error._tag === "SessionNotFoundError")
+        return undefined
+      throw error
+    })
 }
 
 async function latestSession(

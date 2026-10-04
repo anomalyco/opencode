@@ -1,3 +1,6 @@
+import { Provider } from "@opencode/schema/provider"
+import { Model } from "@opencode/schema/model"
+import { Agent } from "@opencode/schema/agent"
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
@@ -33,8 +36,13 @@ describe("composer persistence schemas", () => {
       prompt: [null, { type: "unknown" }],
       cursor: -1,
       mode: "unknown",
-      model: { providerID: 42, modelID: "model" },
-      retry: { id: "bad", agent: "build", providerID: "provider", modelID: "model" },
+      model: { providerID: 42, modelID: Model.ID.make("model") },
+      retry: {
+        id: "bad",
+        agent: Agent.ID.make("build"),
+        providerID: Provider.ID.make("provider"),
+        modelID: Model.ID.make("model"),
+      },
       context: {
         items: [
           { type: "file", path: "src/app.ts", commentID: "note", key: "stale" },
@@ -131,8 +139,14 @@ describe("composer persistence schemas", () => {
           source: { type: "invalid" },
         },
       ],
-      model: { providerID: "provider", modelID: "model", variant: null },
-      retry: { id: "msg_retry", agent: "build", providerID: "provider", modelID: "model", variant: false },
+      model: { providerID: Provider.ID.make("provider"), modelID: Model.ID.make("model"), variant: null },
+      retry: {
+        id: "msg_retry",
+        agent: Agent.ID.make("build"),
+        providerID: Provider.ID.make("provider"),
+        modelID: Model.ID.make("model"),
+        variant: false,
+      },
     })
     expect(value.prompt.map((part) => part.type)).toEqual(["text", "agent", "skill", "file"])
     expect(value.prompt[3]).toEqual({
@@ -146,9 +160,9 @@ describe("composer persistence schemas", () => {
     expect(value.model?.variant).toBeNull()
     expect(value.retry).toEqual({
       id: SessionMessage.ID.make("msg_retry"),
-      agent: "build",
-      providerID: "provider",
-      modelID: "model",
+      agent: Agent.ID.make("build"),
+      providerID: Provider.ID.make("provider"),
+      modelID: Model.ID.make("model"),
     })
     expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
   })

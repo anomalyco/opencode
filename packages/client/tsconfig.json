@@ -8,5 +8,5 @@
     "allowJs": false,
     "noUncheckedIndexedAccess": false
   },
-  "include": ["src"]
+  "include": ["src", "test/identifier.types.ts"]
 }

@@ -1,3 +1,8 @@
+import { SessionID } from "@opencode/schema/session-id"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { describe, expect, test } from "bun:test"
 import { readShareDocument } from "../../src/core/share-document"
 import { Share } from "../../src/core/share"
@@ -32,8 +37,15 @@ describe("share document", () => {
 
     const result = await readShareDocument(data)
 
-    expect(result.session.id).toBe("ses_current")
-    expect(result.messages).toEqual([{ id: "msg_current", type: "user", text: "Current prompt", time: { created: 1 } }])
+    expect(result.session.id).toBe(SessionID.make("ses_current", { disableChecks: true }))
+    expect(result.messages).toEqual([
+      {
+        id: SessionMessage.ID.make("msg_current", { disableChecks: true }),
+        type: "user",
+        text: "Current prompt",
+        time: { created: 1 },
+      },
+    ])
   })
 
   test("maps a legacy Session without changing its blob", async () => {
@@ -151,17 +163,26 @@ describe("share document", () => {
     expect(result.session).toMatchObject({ model: { id: "model", providerID: "provider" }, cost: 0 })
     expect(result.messages).toEqual([
       {
-        id: messageID,
+        id: SessionMessage.ID.make(messageID, { disableChecks: true }),
         type: "user",
         text: "Stored prompt\n\nVisible ignored text",
-        metadata: { agent: "build", model: { id: "model", providerID: "provider" } },
+        metadata: {
+          agent: Agent.ID.make("build", { disableChecks: true }),
+          model: {
+            id: Model.ID.make("model", { disableChecks: true }),
+            providerID: Provider.ID.make("provider", { disableChecks: true }),
+          },
+        },
         time: { created: 1 },
       },
       {
-        id: assistantID,
+        id: SessionMessage.ID.make(assistantID, { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { id: "model", providerID: "provider" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          id: Model.ID.make("model", { disableChecks: true }),
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+        },
         content: [
           { type: "text", text: "Stored response" },
           {

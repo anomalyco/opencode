@@ -1,11 +1,12 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import { DataProvider } from "@opencode/session-ui/context"
 import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
-import { useNavigate, useParams } from "@solidjs/router"
+import { useNavigate } from "@solidjs/router"
 import { createMemo, type ParentProps } from "solid-js"
 import { useProviders } from "@/providers/catalog/providers"
 import { LocalProvider } from "@/providers/models/selection"
 import type { ServerConnection } from "@/runtime/server/registry"
-import { sessionHref } from "@/shell/routes/session"
+import { useSessionParams, sessionHref } from "@/shell/routes/session"
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { useTabs } from "@/shell/tabs/tabs"
@@ -20,7 +21,7 @@ export function SessionUIProvider(
   }>,
 ) {
   const navigate = useNavigate()
-  const params = useParams()
+  const params = useSessionParams()
   const data = useData()
   const serverSDK = useServerSDK()
   const tabs = useTabs()
@@ -30,8 +31,8 @@ export function SessionUIProvider(
     const dir = directory()
     return (path, signal) => readLocalImage(serverSDK.api, dir, path, signal)
   })
-  const href = (sessionID: string) => sessionHref(props.server, sessionID)
-  const navigateToSession = async (sessionID: string) => {
+  const href = (sessionID: SessionID) => sessionHref(props.server, sessionID)
+  const navigateToSession = async (sessionID: SessionID) => {
     const tab = tabs.store.find(
       (item) =>
         item.type === "session" &&
@@ -42,7 +43,7 @@ export function SessionUIProvider(
     await data.session.sync(sessionID).catch(() => undefined)
     navigate(href(sessionID))
   }
-  const openReferencedSession = async (sessionID: string) => {
+  const openReferencedSession = async (sessionID: SessionID) => {
     // The transcript may mention a session from another server (or one that was deleted).
     // Resolve it on this server before touching tabs or the current route.
     const session = await serverSDK.api.session.get({ sessionID }).catch(() => undefined)

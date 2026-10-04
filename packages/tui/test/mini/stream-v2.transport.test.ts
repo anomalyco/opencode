@@ -1,3 +1,16 @@
+import { Credential } from "@opencode/schema/credential"
+import { Integration } from "@opencode/schema/integration"
+import { Project } from "@opencode/schema/project"
+import { Form } from "@opencode/schema/form"
+import { Skill } from "@opencode/schema/skill"
+import { Shell } from "@opencode/schema/shell"
+import { Permission } from "@opencode/schema/permission"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Event } from "@opencode/schema/event"
+import { Session } from "@opencode/schema/session"
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
@@ -65,7 +78,7 @@ function defer<T = void>() {
   return { promise, resolve }
 }
 
-function connected(id = "evt_connected") {
+function connected(id = Event.ID.make("evt_connected", { disableChecks: true })) {
   return { id, type: "server.connected", data: {} } satisfies RunV2Event
 }
 
@@ -79,10 +92,13 @@ function durable(sessionID: string, seq = 0, version: 1 | 2 = 1) {
   return { aggregateID: sessionID, seq, version }
 }
 
-function promptAdmission(input: Parameters<OpenCodeClient["session"]["prompt"]>[0], sessionID = "ses_1") {
+function promptAdmission(
+  input: Parameters<OpenCodeClient["session"]["prompt"]>[0],
+  sessionID = Session.ID.make("ses_1", { disableChecks: true }),
+) {
   return {
-    id: input.id ?? "msg_prompt",
-    sessionID,
+    id: input.id ?? SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
+    sessionID: Session.ID.make(sessionID, { disableChecks: true }),
     type: "user" as const,
     payload: {
       text: input.text,
@@ -112,7 +128,7 @@ const image = {
 
 function compaction(status: "running" | "completed", summary: string): SessionMessages[number] {
   const message = {
-    id: "msg_compaction",
+    id: SessionMessage.ID.make("msg_compaction", { disableChecks: true }),
     type: "compaction" as const,
     reason: "auto" as const,
     summary,
@@ -125,8 +141,8 @@ function compaction(status: "running" | "completed", summary: string): SessionMe
 
 function form(id: string, sessionID: string, title = id): FormInfo {
   return {
-    id,
-    sessionID,
+    id: Form.ID.make(id, { disableChecks: true }),
+    sessionID: Session.ID.make(sessionID, { disableChecks: true }),
     title,
     fields: [
       {
@@ -162,7 +178,7 @@ function sdk(input: {
     ok({
       data: input.messages?.[request.sessionID] ?? [
         {
-          id: "msg_old",
+          id: SessionMessage.ID.make("msg_old", { disableChecks: true }),
           type: "user" as const,
           text: "previous prompt",
           files: [],
@@ -251,7 +267,7 @@ describe("V2 mini transport", () => {
     const live: StreamCommit[] = []
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
@@ -282,11 +298,14 @@ describe("V2 mini transport", () => {
       expect(ui.commits).toEqual([])
       const item = inbox.shift()!
       events.push({
-        id: "evt_cancelled",
+        id: Event.ID.make("evt_cancelled", { disableChecks: true }),
         created: 3,
         type: "session.inbox.cancelled",
-        durable: durable("ses_1", 1),
-        data: { sessionID: "ses_1", inboxID: item.id },
+        durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
+        data: {
+          sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+          inboxID: SessionMessage.ID.make(item.id, { disableChecks: true }),
+        },
       })
       while (ui.events.findLast((event) => event.type === "queued.prompts")?.prompts.length !== 0) await Bun.sleep(0)
       await transport.replayOnResize({
@@ -322,8 +341,8 @@ describe("V2 mini transport", () => {
       image,
     ]
     const pending = {
-      id: "msg_prompt",
-      sessionID: "ses_1",
+      id: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       type: "user",
       payload: { text: "look [Image 1]", files },
       delivery: "steer",
@@ -335,7 +354,7 @@ describe("V2 mini transport", () => {
     })
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
@@ -347,7 +366,7 @@ describe("V2 mini transport", () => {
         model: undefined,
         variant: undefined,
         prompt: {
-          messageID: pending.id,
+          messageID: SessionMessage.ID.make(pending.id, { disableChecks: true }),
           text: pending.payload.text,
           parts: [
             {
@@ -372,11 +391,14 @@ describe("V2 mini transport", () => {
     }
     expect(ui.commits).toEqual([])
     events.push({
-      id: "evt_delivered",
+      id: Event.ID.make("evt_delivered", { disableChecks: true }),
       created: 1,
       type: "session.inbox.delivered",
-      durable: durable("ses_1"),
-      data: { sessionID: "ses_1", inboxID: pending.id },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make(pending.id, { disableChecks: true }),
+      },
     })
     while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.status === "waiting for assistant"))
       await Bun.sleep(0)
@@ -406,7 +428,7 @@ describe("V2 mini transport", () => {
         kind: "user",
         source: "system",
         text: pending.payload.text,
-        messageID: pending.id,
+        messageID: SessionMessage.ID.make(pending.id, { disableChecks: true }),
         phase: "start",
       },
       {
@@ -414,7 +436,7 @@ describe("V2 mini transport", () => {
         source: "system",
         text: "remote.png",
         image: "data:image/png;base64,c2VydmVy",
-        messageID: pending.id,
+        messageID: SessionMessage.ID.make(pending.id, { disableChecks: true }),
         partID: "image:0",
         phase: "final",
       },
@@ -423,7 +445,7 @@ describe("V2 mini transport", () => {
         source: "system",
         text: image.name,
         image: "data:image/png;base64,cG5n",
-        messageID: pending.id,
+        messageID: SessionMessage.ID.make(pending.id, { disableChecks: true }),
         partID: "image:1",
         phase: "final",
       },
@@ -455,7 +477,7 @@ describe("V2 mini transport", () => {
           messages: {
             ses_1: [
               {
-                id: "msg_images",
+                id: SessionMessage.ID.make("msg_images", { disableChecks: true }),
                 type: "user",
                 text: "",
                 files: [
@@ -469,7 +491,7 @@ describe("V2 mini transport", () => {
             ],
           },
         }),
-        sessionID: "ses_1",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         thinking: false,
         replay,
         footer: ui.api,
@@ -494,7 +516,7 @@ describe("V2 mini transport", () => {
           ses_1: [compaction("completed", "## Transport")],
         },
       }),
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
@@ -520,23 +542,28 @@ describe("V2 mini transport", () => {
           ses_1: [compaction("running", "")],
         },
       }),
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
 
     events.push({
-      id: "evt_compaction_delta",
+      id: Event.ID.make("evt_compaction_delta", { disableChecks: true }),
       created: 2,
       type: "session.compaction.delta",
-      data: { sessionID: "ses_1", text: "Transport" },
+      data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }), text: "Transport" },
     })
     events.push({
-      id: "evt_compaction_ended",
+      id: Event.ID.make("evt_compaction_ended", { disableChecks: true }),
       created: 3,
       type: "session.compaction.ended",
-      durable: durable("ses_1", 3),
-      data: { sessionID: "ses_1", reason: "auto", text: "Transport", recent: "" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 3),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        reason: "auto",
+        text: "Transport",
+        recent: "",
+      },
     })
 
     while (!ui.commits.some((commit) => commit.phase === "final")) await Bun.sleep(0)
@@ -554,18 +581,18 @@ describe("V2 mini transport", () => {
     const titles: string[] = []
     const transport = await createSessionTransport({
       sdk: sdk({ streams: [events] }),
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: footer().api,
       onSessionTitle: (title) => titles.push(title),
     })
 
     events.push({
-      id: "evt_renamed",
+      id: Event.ID.make("evt_renamed", { disableChecks: true }),
       created: 1,
       type: "session.renamed",
-      durable: durable("ses_1", 1),
-      data: { sessionID: "ses_1", title: "Greeting" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
+      data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }), title: "Greeting" },
     })
 
     while (titles.length === 0) await Bun.sleep(0)
@@ -579,33 +606,36 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: sdk({ streams: [events] }),
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
       contextLimit: (model) => (model.providerID === "test" && model.modelID === "model" ? 160_000 : undefined),
     })
 
     events.push({
-      id: "evt_step_started",
+      id: Event.ID.make("evt_step_started", { disableChecks: true }),
       created: 1,
       type: "session.step.started",
-      durable: durable("ses_1", 1),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
       data: {
         started: 1,
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
-        agent: "build",
-        model: { providerID: "test", id: "model" },
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("test", { disableChecks: true }),
+          id: Model.ID.make("model", { disableChecks: true }),
+        },
       },
     })
     events.push({
-      id: "evt_step_ended",
+      id: Event.ID.make("evt_step_ended", { disableChecks: true }),
       created: 2,
       type: "session.step.ended",
-      durable: durable("ses_1", 2),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 2),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         finish: "stop",
         cost: 0,
         tokens: { input: 7_000, output: 500, reasoning: 8, cache: { read: 0, write: 0 } },
@@ -616,13 +646,13 @@ describe("V2 mini transport", () => {
     expect(ui.events).toContainEqual({ type: "stream.patch", patch: { usage: { tokens: 7_508, percent: 5 } } })
 
     events.push({
-      id: "evt_cost_only",
+      id: Event.ID.make("evt_cost_only", { disableChecks: true }),
       created: 3,
       type: "session.step.ended",
-      durable: durable("ses_1", 3),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 3),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_cost_only",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_cost_only", { disableChecks: true }),
         finish: "stop",
         cost: 0.1234,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -642,7 +672,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: sdk({ streams: [events], messages: { ses_1: [] } }),
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       tools: false,
       footer: ui.api,
@@ -650,62 +680,73 @@ describe("V2 mini transport", () => {
     const tokens = { input: 1, output: 1, reasoning: 0, cache: { read: 0, write: 0 } }
 
     events.push({
-      id: "evt_work_text",
+      id: Event.ID.make("evt_work_text", { disableChecks: true }),
       created: 1,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_work",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_work", { disableChecks: true }),
         ordinal: 0,
         delta: "I'll check.",
       },
     })
     events.push({
-      id: "evt_tool_start",
+      id: Event.ID.make("evt_tool_start", { disableChecks: true }),
       created: 2,
       type: "session.tool.input.started",
-      durable: durable("ses_1", 1),
-      data: { sessionID: "ses_1", assistantMessageID: "msg_work", id: "call_read", name: "read" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_work", { disableChecks: true }),
+        id: "call_read",
+        name: "read",
+      },
     })
     events.push({
-      id: "evt_tool_called",
+      id: Event.ID.make("evt_tool_called", { disableChecks: true }),
       created: 3,
       type: "session.tool.called",
-      durable: durable("ses_1", 2),
-      data: { sessionID: "ses_1", assistantMessageID: "msg_work", id: "call_read", input: {}, executed: true },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 2),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_work", { disableChecks: true }),
+        id: "call_read",
+        input: {},
+        executed: true,
+      },
     })
     events.push({
-      id: "evt_work_step",
+      id: Event.ID.make("evt_work_step", { disableChecks: true }),
       created: 4,
       type: "session.step.ended",
-      durable: durable("ses_1", 3),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 3),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_work",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_work", { disableChecks: true }),
         finish: "tool-calls",
         cost: 0,
         tokens,
       },
     })
     events.push({
-      id: "evt_final_text",
+      id: Event.ID.make("evt_final_text", { disableChecks: true }),
       created: 5,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_final",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_final", { disableChecks: true }),
         ordinal: 0,
         delta: "Done.",
       },
     })
     events.push({
-      id: "evt_final_step",
+      id: Event.ID.make("evt_final_step", { disableChecks: true }),
       created: 6,
       type: "session.step.ended",
-      durable: durable("ses_1", 4),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 4),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_final",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_final", { disableChecks: true }),
         finish: "stop",
         cost: 0,
         tokens,
@@ -729,29 +770,42 @@ describe("V2 mini transport", () => {
         messages: {
           ses_1: [
             {
-              id: "msg_final",
+              id: SessionMessage.ID.make("msg_final", { disableChecks: true }),
               type: "assistant",
-              agent: "build",
-              model: { providerID: "test", id: "model" },
+              agent: Agent.ID.make("build", { disableChecks: true }),
+              model: {
+                providerID: Provider.ID.make("test", { disableChecks: true }),
+                id: Model.ID.make("model", { disableChecks: true }),
+              },
               content: [{ type: "text", text: "Done." }],
               time: { created: 4, completed: 5 },
             },
             {
-              id: "msg_work",
+              id: SessionMessage.ID.make("msg_work", { disableChecks: true }),
               type: "assistant",
-              agent: "build",
-              model: { providerID: "test", id: "model" },
+              agent: Agent.ID.make("build", { disableChecks: true }),
+              model: {
+                providerID: Provider.ID.make("test", { disableChecks: true }),
+                id: Model.ID.make("model", { disableChecks: true }),
+              },
               content: [
                 { type: "text", text: "I'll check." },
                 canonicalToolPart("read", { status: "completed", input: {}, content: [{ type: "text", text: "file" }] }),
               ],
               time: { created: 2, completed: 3 },
             },
-            { id: "msg_user", type: "user", text: "what happened", files: [], agents: [], time: { created: 1 } },
+            {
+              id: SessionMessage.ID.make("msg_user", { disableChecks: true }),
+              type: "user",
+              text: "what happened",
+              files: [],
+              agents: [],
+              time: { created: 1 },
+            },
           ],
         },
       }),
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       tools: false,
       replay: true,
@@ -771,34 +825,66 @@ describe("V2 mini transport", () => {
     const client = sdk({
       streams: [events],
       sessions: [
-        { id: "ses_child", parentID: "ses_1", title: "Child", time: { updated: 2 } },
-        { id: "ses_grandchild", parentID: "ses_child", title: "Grandchild", time: { updated: 1 } },
+        {
+          id: Session.ID.make("ses_child", { disableChecks: true }),
+          parentID: Session.ID.make("ses_1", { disableChecks: true }),
+          title: "Child",
+          time: { updated: 2 },
+        },
+        {
+          id: Session.ID.make("ses_grandchild", { disableChecks: true }),
+          parentID: Session.ID.make("ses_child", { disableChecks: true }),
+          title: "Grandchild",
+          time: { updated: 1 },
+        },
       ],
       forms: {
-        ses_child: [form("frm_child", "ses_child")],
-        ses_grandchild: [form("frm_grandchild", "ses_grandchild")],
+        ses_child: [
+          form(
+            Form.ID.make("frm_child", { disableChecks: true }),
+            Session.ID.make("ses_child", { disableChecks: true }),
+          ),
+        ],
+        ses_grandchild: [
+          form(
+            Form.ID.make("frm_grandchild", { disableChecks: true }),
+            Session.ID.make("ses_grandchild", { disableChecks: true }),
+          ),
+        ],
       },
     })
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
     const snapshots = ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
 
-    expect(snapshots.at(-1)?.tabs.map((item) => item.sessionID)).toEqual(["ses_child", "ses_grandchild"])
-    expect(snapshots.at(-1)?.forms.map((item) => item.id)).toEqual(["frm_child", "frm_grandchild"])
+    expect(snapshots.at(-1)?.tabs.map((item) => item.sessionID)).toEqual([
+      Session.ID.make("ses_child", { disableChecks: true }),
+      Session.ID.make("ses_grandchild", { disableChecks: true }),
+    ])
+    expect(snapshots.at(-1)?.forms.map((item) => item.id)).toEqual([
+      Form.ID.make("frm_child", { disableChecks: true }),
+      Form.ID.make("frm_grandchild", { disableChecks: true }),
+    ])
     expect(
       ui.events.find(
-        (event) => event.type === "stream.view" && event.view.type === "form" && event.view.request.id === "frm_child",
+        (event) =>
+          event.type === "stream.view" &&
+          event.view.type === "form" &&
+          event.view.request.id === Form.ID.make("frm_child", { disableChecks: true }),
       ),
     ).toMatchObject({
       type: "stream.view",
       view: { type: "form", request: { id: "frm_child", sessionID: "ses_child" } },
     })
-    transport.settleForm?.("ses_child", "frm_child")
+    transport.settleForm?.(
+      Session.ID.make("ses_child", { disableChecks: true }),
+      Form.ID.make("frm_child", { disableChecks: true }),
+    )
     expect(ui.events.at(-1)).toMatchObject({
       type: "stream.view",
       view: { type: "form", request: { id: "frm_grandchild", sessionID: "ses_grandchild" } },
@@ -810,10 +896,13 @@ describe("V2 mini transport", () => {
     const events = feed()
     events.push(connected())
     const sourceMessage = {
-      id: "msg_child_source",
+      id: SessionMessage.ID.make("msg_child_source", { disableChecks: true }),
       type: "assistant" as const,
-      agent: "build",
-      model: { providerID: "test", id: "model" },
+      agent: Agent.ID.make("build", { disableChecks: true }),
+      model: {
+        providerID: Provider.ID.make("test", { disableChecks: true }),
+        id: Model.ID.make("model", { disableChecks: true }),
+      },
       content: [
         canonicalToolPart(
           "shell",
@@ -828,15 +917,26 @@ describe("V2 mini transport", () => {
       time: { created: 1 },
     }
     const permission: PermissionRequest = {
-      id: "per_child_startup",
-      sessionID: "ses_child",
+      id: Permission.ID.make("per_child_startup", { disableChecks: true }),
+      sessionID: Session.ID.make("ses_child", { disableChecks: true }),
       action: "shell",
       resources: ["git status --short"],
-      source: { type: "tool", messageID: "msg_child_source", id: "call_child_source" },
+      source: {
+        type: "tool",
+        messageID: SessionMessage.ID.make("msg_child_source", { disableChecks: true }),
+        id: "call_child_source",
+      },
     }
     const client = sdk({
       streams: [events],
-      sessions: [{ id: "ses_child", parentID: "ses_1", title: "Child", time: { updated: 1 } }],
+      sessions: [
+        {
+          id: Session.ID.make("ses_child", { disableChecks: true }),
+          parentID: Session.ID.make("ses_1", { disableChecks: true }),
+          title: "Child",
+          time: { updated: 1 },
+        },
+      ],
       permissions: { ses_child: [permission] },
       messages: {
         ses_child: [sourceMessage],
@@ -853,7 +953,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -906,20 +1006,40 @@ describe("V2 mini transport", () => {
     events.push(connected())
     const client = sdk({
       streams: [events],
-      sessions: [{ id: "ses_child", parentID: "ses_1", title: "Child", time: { updated: 1 } }],
+      sessions: [
+        {
+          id: Session.ID.make("ses_child", { disableChecks: true }),
+          parentID: Session.ID.make("ses_1", { disableChecks: true }),
+          title: "Child",
+          time: { updated: 1 },
+        },
+      ],
       globalLocation: { directory: "/work" },
     })
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
       location: { directory: "/work" },
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
-    const child = form("frm_child_live", "ses_child")
-    events.push({ id: "evt_child_form", created: 1, type: "form.created", data: { form: eventForm(child) } })
-    events.push({ id: "evt_child_form_retry", created: 2, type: "form.created", data: { form: eventForm(child) } })
+    const child = form(
+      Form.ID.make("frm_child_live", { disableChecks: true }),
+      Session.ID.make("ses_child", { disableChecks: true }),
+    )
+    events.push({
+      id: Event.ID.make("evt_child_form", { disableChecks: true }),
+      created: 1,
+      type: "form.created",
+      data: { form: eventForm(child) },
+    })
+    events.push({
+      id: Event.ID.make("evt_child_form_retry", { disableChecks: true }),
+      created: 2,
+      type: "form.created",
+      data: { form: eventForm(child) },
+    })
     while (
       !ui.events.some(
         (event) => event.type === "stream.view" && event.view.type === "form" && event.view.request.id === child.id,
@@ -930,14 +1050,18 @@ describe("V2 mini transport", () => {
     expect(childSnapshots.at(-1)?.forms.filter((item) => item.id === child.id)).toHaveLength(1)
 
     events.push({
-      id: "evt_child_form_done",
+      id: Event.ID.make("evt_child_form_done", { disableChecks: true }),
       created: 3,
       type: "form.replied",
-      data: { id: child.id, sessionID: "ses_child", answer: { answer: "yes" } },
+      data: {
+        id: child.id,
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        answer: { answer: "yes" },
+      },
     })
-    const global = form("frm_global_live", "global")
+    const global = form(Form.ID.make("frm_global_live", { disableChecks: true }), "global")
     events.push({
-      id: "evt_global_wrong",
+      id: Event.ID.make("evt_global_wrong", { disableChecks: true }),
       created: 4,
       type: "form.created",
       location: { directory: "/other" },
@@ -950,7 +1074,7 @@ describe("V2 mini transport", () => {
       ),
     ).toBe(false)
     events.push({
-      id: "evt_global_right",
+      id: Event.ID.make("evt_global_right", { disableChecks: true }),
       created: 5,
       type: "form.created",
       location: { directory: "/work" },
@@ -971,11 +1095,11 @@ describe("V2 mini transport", () => {
     })
     const beforeCancel = ui.events.filter((event) => event.type === "stream.view").length
     events.push({
-      id: "evt_global_done",
+      id: Event.ID.make("evt_global_done", { disableChecks: true }),
       created: 6,
       type: "form.cancelled",
       location: { directory: "/work" },
-      data: { id: global.id, sessionID: "global" },
+      data: { id: global.id, sessionID: Session.ID.make("global", { disableChecks: true }) },
     })
     while (ui.events.filter((event) => event.type === "stream.view").length === beforeCancel) await Bun.sleep(0)
     expect(ui.events.filter((event) => event.type === "stream.view").at(-1)).toEqual({
@@ -998,7 +1122,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -1013,38 +1137,38 @@ describe("V2 mini transport", () => {
       agent: undefined,
       model: undefined,
       variant: undefined,
-      prompt: { messageID: "msg_prompt", text: "hello", parts: [] },
+      prompt: { messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }), text: "hello", parts: [] },
       files: [],
       includeFiles: true,
     })
     while (!admitted) await Bun.sleep(0)
     events.push({
-      id: "evt_prompted",
+      id: Event.ID.make("evt_prompted", { disableChecks: true }),
       created: 0,
       type: "session.inbox.delivered",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        inboxID: "msg_prompt",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
       },
     })
     events.push({
-      id: "evt_text",
+      id: Event.ID.make("evt_text", { disableChecks: true }),
       created: 0,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         ordinal: 0,
         delta: "ans",
       },
     })
     events.push({
-      id: "evt_settled",
+      id: Event.ID.make("evt_settled", { disableChecks: true }),
       created: 0,
       type: "session.execution.succeeded",
-      durable: durable("ses_1"),
-      data: { sessionID: "ses_1" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
+      data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }) },
     })
     let done = false
     void turn.then(() => {
@@ -1053,12 +1177,20 @@ describe("V2 mini transport", () => {
     await Bun.sleep(0)
     expect(done).toBe(false)
     messages.push(
-      { id: "msg_prompt", type: "user", text: "hello", time: { created: 2 } },
       {
-        id: "msg_assistant",
+        id: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
+        type: "user",
+        text: "hello",
+        time: { created: 2 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         type: "assistant",
-        agent: "build",
-        model: { providerID: "test", id: "model" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("test", { disableChecks: true }),
+          id: Model.ID.make("model", { disableChecks: true }),
+        },
         content: [{ type: "text", text: "answer" }],
         time: { created: 3, completed: 4 },
       },
@@ -1078,23 +1210,23 @@ describe("V2 mini transport", () => {
       pending: {
         ses_1: [
           {
-            id: "msg_queued",
-            sessionID: "ses_1",
+            id: SessionMessage.ID.make("msg_queued", { disableChecks: true }),
+            sessionID: Session.ID.make("ses_1", { disableChecks: true }),
             time: { created: 1 },
             type: "user",
             payload: {
               text: "follow up",
               files: [image],
               skills: [
-                { id: "effect", name: "Effect", text: "Use Effect services" },
-                { id: "effect", name: "Effect" },
+                { id: Skill.ID.make("effect", { disableChecks: true }), name: "Effect", text: "Use Effect services" },
+                { id: Skill.ID.make("effect", { disableChecks: true }), name: "Effect" },
               ],
             },
             delivery: "queue",
           },
           {
-            id: "msg_cancelled",
-            sessionID: "ses_1",
+            id: SessionMessage.ID.make("msg_cancelled", { disableChecks: true }),
+            sessionID: Session.ID.make("ses_1", { disableChecks: true }),
             time: { created: 2 },
             type: "user",
             payload: { text: "remove me", files: [image] },
@@ -1106,7 +1238,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -1116,54 +1248,70 @@ describe("V2 mini transport", () => {
         ?.prompts.map((item) => [item.messageID, item.delivery])
 
     expect(pending()).toEqual([
-      ["msg_queued", "queue"],
-      ["msg_cancelled", delivery],
+      [SessionMessage.ID.make("msg_queued", { disableChecks: true }), "queue"],
+      [SessionMessage.ID.make("msg_cancelled", { disableChecks: true }), delivery],
     ])
     events.push({
-      id: "evt_steered",
+      id: Event.ID.make("evt_steered", { disableChecks: true }),
       created: 3,
       type: "session.inbox.delivery.changed",
-      durable: durable("ses_1", 2),
-      data: { sessionID: "ses_1", inboxID: "msg_queued", delivery: "steer" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 2),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_queued", { disableChecks: true }),
+        delivery: "steer",
+      },
     })
     while (pending()?.[0]?.[1] !== "steer") await Bun.sleep(0)
 
     expect(pending()).toEqual([
-      ["msg_queued", "steer"],
-      ["msg_cancelled", delivery],
+      [SessionMessage.ID.make("msg_queued", { disableChecks: true }), "steer"],
+      [SessionMessage.ID.make("msg_cancelled", { disableChecks: true }), delivery],
     ])
     expect(ui.commits).toEqual([])
     events.push({
-      id: "evt_queued",
+      id: Event.ID.make("evt_queued", { disableChecks: true }),
       created: 4,
       type: "session.inbox.delivery.changed",
-      durable: durable("ses_1", 3),
-      data: { sessionID: "ses_1", inboxID: "msg_queued", delivery: "queue" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 3),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_queued", { disableChecks: true }),
+        delivery: "queue",
+      },
     })
     while (pending()?.[0]?.[1] !== "queue") await Bun.sleep(0)
     expect(pending()).toEqual([
-      ["msg_queued", "queue"],
-      ["msg_cancelled", delivery],
+      [SessionMessage.ID.make("msg_queued", { disableChecks: true }), "queue"],
+      [SessionMessage.ID.make("msg_cancelled", { disableChecks: true }), delivery],
     ])
     events.push({
-      id: "evt_cancelled",
+      id: Event.ID.make("evt_cancelled", { disableChecks: true }),
       created: 5,
       type: "session.inbox.cancelled",
-      durable: durable("ses_1", 4),
-      data: { sessionID: "ses_1", inboxID: "msg_cancelled" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 4),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_cancelled", { disableChecks: true }),
+      },
     })
     while (pending()?.length !== 1) await Bun.sleep(0)
-    expect(pending()).toEqual([["msg_queued", "queue"]])
+    expect(pending()).toEqual([[SessionMessage.ID.make("msg_queued", { disableChecks: true }), "queue"]])
     expect(ui.commits).toEqual([])
     events.push({
-      id: "evt_promoted",
+      id: Event.ID.make("evt_promoted", { disableChecks: true }),
       created: 6,
       type: "session.inbox.delivered",
-      durable: durable("ses_1", 5),
-      data: { sessionID: "ses_1", inboxID: "msg_queued" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 5),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_queued", { disableChecks: true }),
+      },
     })
     while (pending()?.length !== 0) await Bun.sleep(0)
-    expect(ui.commits.filter((item) => item.messageID === "msg_queued")).toHaveLength(3)
+    expect(
+      ui.commits.filter((item) => item.messageID === SessionMessage.ID.make("msg_queued", { disableChecks: true })),
+    ).toHaveLength(3)
     expect(ui.commits.filter((commit) => !commit.image)).toEqual([
       expect.objectContaining({ kind: "system", partID: "skill:effect", text: '→ Skill "Effect"' }),
       expect.objectContaining({ kind: "user", text: "follow up" }),
@@ -1176,10 +1324,13 @@ describe("V2 mini transport", () => {
     )
     await transport.admitPromptTurn(
       {
-        agent: "review",
-        model: { providerID: "test", modelID: "next" },
-        variant: "high",
-        prompt: { messageID: "msg_next", text: "another", parts: [] },
+        agent: Agent.ID.make("review", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("test", { disableChecks: true }),
+          modelID: Model.ID.make("next", { disableChecks: true }),
+        },
+        variant: Model.VariantID.make("high", { disableChecks: true }),
+        prompt: { messageID: SessionMessage.ID.make("msg_next", { disableChecks: true }), text: "another", parts: [] },
         files: [],
         includeFiles: false,
       },
@@ -1191,25 +1342,29 @@ describe("V2 mini transport", () => {
       expect.anything(),
     )
     expect(prompt).toHaveBeenCalledWith(expect.objectContaining({ delivery }), expect.anything())
-    expect(pending()).toEqual([["msg_next", delivery]])
-    expect(ui.commits.some((commit) => commit.messageID === "msg_next")).toBe(false)
+    expect(pending()).toEqual([[SessionMessage.ID.make("msg_next", { disableChecks: true }), delivery]])
+    expect(
+      ui.commits.some((commit) => commit.messageID === SessionMessage.ID.make("msg_next", { disableChecks: true })),
+    ).toBe(false)
     events.push({
-      id: "evt_earlier_admission",
+      id: Event.ID.make("evt_earlier_admission", { disableChecks: true }),
       created: 3,
       type: "session.inbox.enqueued",
-      durable: durable("ses_1", 1),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
       data: {
-        sessionID: "ses_1",
-        inboxID: "msg_earlier",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_earlier", { disableChecks: true }),
         item: { type: "user", payload: { text: "earlier" }, delivery: "steer" },
       },
     })
     await Bun.sleep(10)
     expect(pending()).toEqual([
-      ["msg_next", delivery],
-      ["msg_earlier", "steer"],
+      [SessionMessage.ID.make("msg_next", { disableChecks: true }), delivery],
+      [SessionMessage.ID.make("msg_earlier", { disableChecks: true }), "steer"],
     ])
-    expect(ui.commits.some((commit) => commit.messageID === "msg_earlier")).toBe(false)
+    expect(
+      ui.commits.some((commit) => commit.messageID === SessionMessage.ID.make("msg_earlier", { disableChecks: true })),
+    ).toBe(false)
     await transport.close()
   })
 
@@ -1221,7 +1376,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -1235,24 +1390,31 @@ describe("V2 mini transport", () => {
       agent: undefined,
       model: undefined,
       variant: undefined,
-      prompt: { messageID: "msg_prompt", text: "hello", parts: [] },
+      prompt: { messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }), text: "hello", parts: [] },
       files: [],
       includeFiles: false,
     })
     while (!admitted) await Bun.sleep(0)
     events.push({
-      id: "evt_failed",
+      id: Event.ID.make("evt_failed", { disableChecks: true }),
       created: 2,
       type: "session.execution.failed",
-      durable: durable("ses_1", 2),
-      data: { sessionID: "ses_1", error: { type: "unknown", message: "instructions unavailable" } },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 2),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        error: { type: "unknown", message: "instructions unavailable" },
+      },
     })
     await Bun.sleep(0)
     idle.resolve()
 
     await turn
     expect(ui.commits).toContainEqual(
-      expect.objectContaining({ kind: "error", messageID: "msg_prompt", text: "instructions unavailable" }),
+      expect.objectContaining({
+        kind: "error",
+        messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
+        text: "instructions unavailable",
+      }),
     )
     await transport.close()
   })
@@ -1266,7 +1428,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -1280,53 +1442,80 @@ describe("V2 mini transport", () => {
       agent: undefined,
       model: undefined,
       variant: undefined,
-      prompt: { messageID: "msg_prompt", text: "hello", parts: [] },
+      prompt: { messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }), text: "hello", parts: [] },
       files: [],
       includeFiles: false,
     })
     while (!admitted) await Bun.sleep(0)
     events.push({
-      id: "evt_prompt_promoted",
+      id: Event.ID.make("evt_prompt_promoted", { disableChecks: true }),
       created: 2,
       type: "session.inbox.delivered",
-      durable: durable("ses_1", 2),
-      data: { sessionID: "ses_1", inboxID: "msg_prompt" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 2),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
+      },
     })
     await transport.admitPromptTurn(
       {
         agent: undefined,
         model: undefined,
         variant: undefined,
-        prompt: { messageID: "msg_queued", text: "follow up", parts: [] },
+        prompt: {
+          messageID: SessionMessage.ID.make("msg_queued", { disableChecks: true }),
+          text: "follow up",
+          parts: [],
+        },
         files: [],
         includeFiles: false,
       },
       "queue",
     )
     events.push({
-      id: "evt_queued_promoted",
+      id: Event.ID.make("evt_queued_promoted", { disableChecks: true }),
       created: 3,
       type: "session.inbox.delivered",
-      durable: durable("ses_1", 3),
-      data: { sessionID: "ses_1", inboxID: "msg_queued" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 3),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_queued", { disableChecks: true }),
+      },
     })
     events.push({
-      id: "evt_failed",
+      id: Event.ID.make("evt_failed", { disableChecks: true }),
       created: 4,
       type: "session.execution.failed",
-      durable: durable("ses_1", 4),
-      data: { sessionID: "ses_1", error: { type: "unknown", message: "model unavailable" } },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 4),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        error: { type: "unknown", message: "model unavailable" },
+      },
     })
     await Bun.sleep(0)
     messages.push(
-      { id: "msg_prompt", type: "user", text: "hello", time: { created: 2 } },
-      { id: "msg_queued", type: "user", text: "follow up", time: { created: 3 } },
+      {
+        id: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
+        type: "user",
+        text: "hello",
+        time: { created: 2 },
+      },
+      {
+        id: SessionMessage.ID.make("msg_queued", { disableChecks: true }),
+        type: "user",
+        text: "follow up",
+        time: { created: 3 },
+      },
     )
     idle.resolve()
 
     await turn
     expect(ui.commits).toContainEqual(
-      expect.objectContaining({ kind: "error", messageID: "msg_queued", text: "model unavailable" }),
+      expect.objectContaining({
+        kind: "error",
+        messageID: SessionMessage.ID.make("msg_queued", { disableChecks: true }),
+        text: "model unavailable",
+      }),
     )
     await transport.close()
   })
@@ -1348,7 +1537,7 @@ describe("V2 mini transport", () => {
     const transport = await createSessionTransport({
       sdk: client,
       readTextFile: (url) => fs.readFile(new URL(url), "utf8"),
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -1357,21 +1546,21 @@ describe("V2 mini transport", () => {
       request = input
       queueMicrotask(() => {
         events.push({
-          id: "evt_prompted",
+          id: Event.ID.make("evt_prompted", { disableChecks: true }),
           created: 0,
           type: "session.inbox.delivered",
-          durable: durable("ses_1"),
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
           data: {
-            sessionID: "ses_1",
-            inboxID: "msg_prompt",
+            sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+            inboxID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
           },
         })
         events.push({
-          id: "evt_settled",
+          id: Event.ID.make("evt_settled", { disableChecks: true }),
           created: 0,
           type: "session.execution.succeeded",
-          durable: durable("ses_1"),
-          data: { sessionID: "ses_1" },
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
+          data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }) },
         })
       })
       return ok({ data: promptAdmission(input) }) as never
@@ -1382,7 +1571,7 @@ describe("V2 mini transport", () => {
       model: undefined,
       variant: undefined,
       prompt: {
-        messageID: "msg_prompt",
+        messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
         text: "Review @note.ts and @docs",
         parts: [
           {
@@ -1435,7 +1624,7 @@ describe("V2 mini transport", () => {
     const transport = await createSessionTransport({
       sdk: client,
       location: { directory: "/remote/project" },
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -1446,21 +1635,21 @@ describe("V2 mini transport", () => {
       request = input
       queueMicrotask(() => {
         events.push({
-          id: "evt_prompted",
+          id: Event.ID.make("evt_prompted", { disableChecks: true }),
           created: 0,
           type: "session.inbox.delivered",
-          durable: durable("ses_1"),
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
           data: {
-            sessionID: "ses_1",
-            inboxID: "msg_prompt",
+            sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+            inboxID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
           },
         })
         events.push({
-          id: "evt_settled",
+          id: Event.ID.make("evt_settled", { disableChecks: true }),
           created: 0,
           type: "session.execution.succeeded",
-          durable: durable("ses_1"),
-          data: { sessionID: "ses_1" },
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
+          data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }) },
         })
       })
       return ok({ data: promptAdmission(input) })
@@ -1471,7 +1660,7 @@ describe("V2 mini transport", () => {
       model: undefined,
       variant: undefined,
       prompt: {
-        messageID: "msg_prompt",
+        messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
         text: "Review @note.ts and @docs",
         parts: [
           {
@@ -1523,7 +1712,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -1534,21 +1723,21 @@ describe("V2 mini transport", () => {
       request = input
       queueMicrotask(() => {
         events.push({
-          id: "evt_prompted",
+          id: Event.ID.make("evt_prompted", { disableChecks: true }),
           created: 0,
           type: "session.inbox.delivered",
-          durable: durable("ses_1"),
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
           data: {
-            sessionID: "ses_1",
-            inboxID: "msg_prompt",
+            sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+            inboxID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
           },
         })
         events.push({
-          id: "evt_settled",
+          id: Event.ID.make("evt_settled", { disableChecks: true }),
           created: 0,
           type: "session.execution.succeeded",
-          durable: durable("ses_1"),
-          data: { sessionID: "ses_1" },
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
+          data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }) },
         })
       })
       return ok({ data: promptAdmission(input) })
@@ -1559,7 +1748,7 @@ describe("V2 mini transport", () => {
       model: undefined,
       variant: undefined,
       prompt: {
-        messageID: "msg_prompt",
+        messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
         text: "Review @diagram.png",
         parts: [
           {
@@ -1593,15 +1782,20 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
     events.push({
-      id: "evt_permission",
+      id: Event.ID.make("evt_permission", { disableChecks: true }),
       created: 0,
       type: "permission.asked",
-      data: { id: "per_1", sessionID: "ses_1", action: "read", resources: ["/tmp/file"] },
+      data: {
+        id: Permission.ID.make("per_1", { disableChecks: true }),
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        action: "read",
+        resources: ["/tmp/file"],
+      },
     })
 
     await Bun.sleep(0)
@@ -1610,8 +1804,8 @@ describe("V2 mini transport", () => {
       view: {
         type: "permission",
         request: {
-          id: "per_1",
-          sessionID: "ses_1",
+          id: Permission.ID.make("per_1", { disableChecks: true }),
+          sessionID: Session.ID.make("ses_1", { disableChecks: true }),
           action: "read",
           resources: ["/tmp/file"],
         },
@@ -1623,8 +1817,8 @@ describe("V2 mini transport", () => {
   test("reconnects and hydrates without completing before session.wait", async () => {
     const first = feed()
     const second = feed()
-    first.push(connected("evt_connected_1"))
-    second.push(connected("evt_connected_2"))
+    first.push(connected(Event.ID.make("evt_connected_1", { disableChecks: true })))
+    second.push(connected(Event.ID.make("evt_connected_2", { disableChecks: true })))
     const idle = defer()
     let running = true
     const client = sdk({
@@ -1642,7 +1836,7 @@ describe("V2 mini transport", () => {
         data: projected
           ? [
               {
-                id: "msg_prompt",
+                id: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
                 type: "user",
                 text: "hello",
                 files: [],
@@ -1657,7 +1851,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -1673,7 +1867,7 @@ describe("V2 mini transport", () => {
       agent: undefined,
       model: undefined,
       variant: undefined,
-      prompt: { messageID: "msg_prompt", text: "hello", parts: [] },
+      prompt: { messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }), text: "hello", parts: [] },
       files: [],
       includeFiles: true,
     })
@@ -1681,18 +1875,24 @@ describe("V2 mini transport", () => {
     projected = true
     running = false
     second.push({
-      id: "evt_prior_failed",
+      id: Event.ID.make("evt_prior_failed", { disableChecks: true }),
       created: 1,
       type: "session.execution.failed",
-      durable: durable("ses_1", 1),
-      data: { sessionID: "ses_1", error: { type: "unknown", message: "prior execution failed" } },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        error: { type: "unknown", message: "prior execution failed" },
+      },
     })
     second.push({
-      id: "evt_prompted",
+      id: Event.ID.make("evt_prompted", { disableChecks: true }),
       created: 2,
       type: "session.inbox.delivered",
-      durable: durable("ses_1", 2),
-      data: { sessionID: "ses_1", inboxID: "msg_prompt" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 2),
+      data: {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
+      },
     })
     first.close()
     while (!ui.events.some((event) => event.type === "stream.patch" && event.patch.status === "reconnecting"))
@@ -1705,8 +1905,8 @@ describe("V2 mini transport", () => {
   test("renders the user row once when reconnect hydration recovers a missed delivery", async () => {
     const first = feed()
     const second = feed()
-    first.push(connected("evt_connected_1"))
-    second.push(connected("evt_connected_2"))
+    first.push(connected(Event.ID.make("evt_connected_1", { disableChecks: true })))
+    second.push(connected(Event.ID.make("evt_connected_2", { disableChecks: true })))
     const idle = defer()
     let running = true
     let projected = false
@@ -1724,7 +1924,7 @@ describe("V2 mini transport", () => {
         data: projected
           ? [
               {
-                id: "msg_prompt",
+                id: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
                 type: "user",
                 text: "hello",
                 files: [image],
@@ -1739,7 +1939,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -1753,7 +1953,7 @@ describe("V2 mini transport", () => {
       agent: undefined,
       model: undefined,
       variant: undefined,
-      prompt: { messageID: "msg_prompt", text: "hello", parts: [] },
+      prompt: { messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }), text: "hello", parts: [] },
       files: [],
       includeFiles: true,
     })
@@ -1766,7 +1966,12 @@ describe("V2 mini transport", () => {
     await turn
 
     expect(
-      ui.commits.filter((item) => item.kind === "user" && !item.image && item.messageID === "msg_prompt"),
+      ui.commits.filter(
+        (item) =>
+          item.kind === "user" &&
+          !item.image &&
+          item.messageID === SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
+      ),
     ).toHaveLength(1)
     expect(ui.commits.filter((item) => item.image)).toEqual([
       expect.objectContaining({ kind: "user", messageID: "msg_prompt", image: "data:image/png;base64,cG5n" }),
@@ -1777,13 +1982,27 @@ describe("V2 mini transport", () => {
   test("replaces the client for buffered hydration, descendants, turns, and interrupts", async () => {
     const firstEvents = feed()
     const secondEvents = feed()
-    firstEvents.push(connected("evt_connected_1"))
-    secondEvents.push(connected("evt_connected_2"))
+    firstEvents.push(connected(Event.ID.make("evt_connected_1", { disableChecks: true })))
+    secondEvents.push(connected(Event.ID.make("evt_connected_2", { disableChecks: true })))
     const first = sdk({ streams: [firstEvents] })
     const second = sdk({
       streams: [secondEvents],
-      sessions: [{ id: "ses_child", parentID: "ses_1", title: "Child", time: { updated: 2 } }],
-      forms: { ses_child: [form("frm_child", "ses_child")] },
+      sessions: [
+        {
+          id: Session.ID.make("ses_child", { disableChecks: true }),
+          parentID: Session.ID.make("ses_1", { disableChecks: true }),
+          title: "Child",
+          time: { updated: 2 },
+        },
+      ],
+      forms: {
+        ses_child: [
+          form(
+            Form.ID.make("frm_child", { disableChecks: true }),
+            Session.ID.make("ses_child", { disableChecks: true }),
+          ),
+        ],
+      },
     })
     const firstPrompt = spyOn(first.session, "prompt")
     const firstInterrupt = spyOn(first.session, "interrupt")
@@ -1791,10 +2010,13 @@ describe("V2 mini transport", () => {
       ok({
         data: [
           {
-            id: "msg_assistant",
+            id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
             type: "assistant",
-            agent: "build",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("build", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [{ type: "text", text: "partial" }],
             time: { created: 1 },
           },
@@ -1813,16 +2035,19 @@ describe("V2 mini transport", () => {
       releaseCatalog = resolve
     })
     spyOn(second.message, "list").mockImplementation(async (request) => {
-      if (request.sessionID !== "ses_1") return ok({ data: [], cursor: {} })
+      if (request.sessionID !== Session.ID.make("ses_1", { disableChecks: true })) return ok({ data: [], cursor: {} })
       replacementHydrating = true
       await hydration
       return ok({
         data: [
           {
-            id: "msg_assistant",
+            id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
             type: "assistant",
-            agent: "build",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("build", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [{ type: "text", text: "partial replacement" }],
             time: { created: 1 },
           },
@@ -1836,7 +2061,7 @@ describe("V2 mini transport", () => {
       sdk: first,
       reconnect: async () => second,
       onClient: (client) => current.push(client),
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
@@ -1851,18 +2076,21 @@ describe("V2 mini transport", () => {
     const prompt = spyOn(second.session, "prompt").mockImplementation((request) => {
       queueMicrotask(() => {
         secondEvents.push({
-          id: "evt_replacement_prompt",
+          id: Event.ID.make("evt_replacement_prompt", { disableChecks: true }),
           created: 3,
           type: "session.inbox.delivered",
-          durable: durable("ses_1", 1),
-          data: { sessionID: "ses_1", inboxID: "msg_replacement" },
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
+          data: {
+            sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+            inboxID: SessionMessage.ID.make("msg_replacement", { disableChecks: true }),
+          },
         })
         secondEvents.push({
-          id: "evt_replacement_settled",
+          id: Event.ID.make("evt_replacement_settled", { disableChecks: true }),
           created: 4,
           type: "session.execution.succeeded",
-          durable: durable("ses_1", 2),
-          data: { sessionID: "ses_1" },
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 2),
+          data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }) },
         })
       })
       return ok({ data: promptAdmission(request) }) as never
@@ -1871,19 +2099,23 @@ describe("V2 mini transport", () => {
       agent: undefined,
       model: undefined,
       variant: undefined,
-      prompt: { messageID: "msg_replacement", text: "replacement prompt", parts: [] },
+      prompt: {
+        messageID: SessionMessage.ID.make("msg_replacement", { disableChecks: true }),
+        text: "replacement prompt",
+        parts: [],
+      },
       files: [],
       includeFiles: true,
     })
     await Bun.sleep(0)
     expect(prompt).not.toHaveBeenCalled()
     secondEvents.push({
-      id: "evt_buffered_text",
+      id: Event.ID.make("evt_buffered_text", { disableChecks: true }),
       created: 2,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         ordinal: 0,
         delta: " replacement",
       },
@@ -1891,7 +2123,10 @@ describe("V2 mini transport", () => {
     releaseHydration()
     while (
       !ui.events.some(
-        (event) => event.type === "stream.view" && event.view.type === "form" && event.view.request.id === "frm_child",
+        (event) =>
+          event.type === "stream.view" &&
+          event.view.type === "form" &&
+          event.view.request.id === Form.ID.make("frm_child", { disableChecks: true }),
       )
     )
       await Bun.sleep(0)
@@ -1907,10 +2142,11 @@ describe("V2 mini transport", () => {
       { sessionID: "ses_child" },
       { signal: expect.any(AbortSignal) },
     )
-    expect(ui.commits.filter((commit) => commit.messageID === "msg_assistant").map((commit) => commit.text)).toEqual([
-      "partial",
-      " replacement",
-    ])
+    expect(
+      ui.commits
+        .filter((commit) => commit.messageID === SessionMessage.ID.make("msg_assistant", { disableChecks: true }))
+        .map((commit) => commit.text),
+    ).toEqual(["partial", " replacement"])
     const interrupt = spyOn(second.session, "interrupt").mockImplementation(() => ok({ interrupted: true }))
     await transport.interruptActiveTurn()
 
@@ -1924,13 +2160,13 @@ describe("V2 mini transport", () => {
   test("sends a prompt after the event stream reconnects", async () => {
     const first = feed()
     const second = feed()
-    first.push(connected("evt_connected_1"))
-    second.push(connected("evt_connected_2"))
+    first.push(connected(Event.ID.make("evt_connected_1", { disableChecks: true })))
+    second.push(connected(Event.ID.make("evt_connected_2", { disableChecks: true })))
     const client = sdk({ streams: [first, second] })
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -1944,7 +2180,11 @@ describe("V2 mini transport", () => {
       agent: undefined,
       model: undefined,
       variant: undefined,
-      prompt: { messageID: "msg_after_reconnect", text: "hello", parts: [] },
+      prompt: {
+        messageID: SessionMessage.ID.make("msg_after_reconnect", { disableChecks: true }),
+        text: "hello",
+        parts: [],
+      },
       files: [],
       includeFiles: true,
     })
@@ -1956,13 +2196,13 @@ describe("V2 mini transport", () => {
   test("reconnects even when catalog refresh hangs", async () => {
     const first = feed()
     const second = feed()
-    first.push(connected("evt_connected_1"))
-    second.push(connected("evt_connected_2"))
+    first.push(connected(Event.ID.make("evt_connected_1", { disableChecks: true })))
+    second.push(connected(Event.ID.make("evt_connected_2", { disableChecks: true })))
     const client = sdk({ streams: [first, second] })
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
       onCatalogRefresh: (signal) =>
@@ -1980,7 +2220,11 @@ describe("V2 mini transport", () => {
       agent: undefined,
       model: undefined,
       variant: undefined,
-      prompt: { messageID: "msg_after_hanging_catalog", text: "hello", parts: [] },
+      prompt: {
+        messageID: SessionMessage.ID.make("msg_after_hanging_catalog", { disableChecks: true }),
+        text: "hello",
+        parts: [],
+      },
       files: [],
       includeFiles: true,
     })
@@ -1995,7 +2239,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
@@ -2004,10 +2248,13 @@ describe("V2 mini transport", () => {
       ok({
         data: [
           {
-            id: "msg_assistant",
+            id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
             type: "assistant",
-            agent: "build",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("build", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [{ type: "text", text: "the answer" }],
             time: { created: 2, completed: 3 },
           },
@@ -2021,23 +2268,23 @@ describe("V2 mini transport", () => {
     })
     const replay = transport.replayOnResize({ localRows: () => [], reset: () => resetting })
     events.push({
-      id: "evt_text_started",
+      id: Event.ID.make("evt_text_started", { disableChecks: true }),
       created: 0,
       type: "session.text.started",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         ordinal: 0,
       },
     })
     events.push({
-      id: "evt_text",
+      id: Event.ID.make("evt_text", { disableChecks: true }),
       created: 0,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         ordinal: 0,
         delta: "answer",
       },
@@ -2059,10 +2306,13 @@ describe("V2 mini transport", () => {
       ok({
         data: [
           {
-            id: "msg_assistant",
+            id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
             type: "assistant",
-            agent: "build",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("build", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [{ type: "text", text: "partial" }],
             time: { created: 2, completed: 3 },
           },
@@ -2074,19 +2324,19 @@ describe("V2 mini transport", () => {
     const live: StreamCommit[] = []
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
       onCommit: (commit) => live.push(commit),
     })
     events.push({
-      id: "evt_text",
+      id: Event.ID.make("evt_text", { disableChecks: true }),
       created: 0,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         ordinal: 0,
         delta: " suffix",
       },
@@ -2108,13 +2358,11 @@ describe("V2 mini transport", () => {
       reset: async () => {},
     })
 
-    expect(ui.commits.filter((commit) => commit.messageID === "msg_assistant").map((commit) => commit.text)).toEqual([
-      "partial",
-      " suffix",
-      "partial",
-      " suffix",
-      "entirely local",
-    ])
+    expect(
+      ui.commits
+        .filter((commit) => commit.messageID === SessionMessage.ID.make("msg_assistant", { disableChecks: true }))
+        .map((commit) => commit.text),
+    ).toEqual(["partial", " suffix", "partial", " suffix", "entirely local"])
     await transport.close()
   })
 
@@ -2126,10 +2374,13 @@ describe("V2 mini transport", () => {
       ok({
         data: [
           {
-            id: "msg_assistant",
+            id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
             type: "assistant",
-            agent: "build",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("build", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [{ type: "text", text: "partial" }],
             time: { created: 2, completed: 3 },
           },
@@ -2141,7 +2392,7 @@ describe("V2 mini transport", () => {
     const live: StreamCommit[] = []
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
@@ -2156,12 +2407,12 @@ describe("V2 mini transport", () => {
       reset: () => resetting,
     })
     events.push({
-      id: "evt_text",
+      id: Event.ID.make("evt_text", { disableChecks: true }),
       created: 0,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         ordinal: 0,
         delta: " suffix",
       },
@@ -2170,11 +2421,11 @@ describe("V2 mini transport", () => {
     reset()
     await replay
 
-    expect(ui.commits.filter((commit) => commit.messageID === "msg_assistant").map((commit) => commit.text)).toEqual([
-      "partial",
-      "partial",
-      " suffix",
-    ])
+    expect(
+      ui.commits
+        .filter((commit) => commit.messageID === SessionMessage.ID.make("msg_assistant", { disableChecks: true }))
+        .map((commit) => commit.text),
+    ).toEqual(["partial", "partial", " suffix"])
     expect(live.map((commit) => commit.text)).toEqual(["partial suffix"])
     await transport.close()
   })
@@ -2188,30 +2439,30 @@ describe("V2 mini transport", () => {
     const live: StreamCommit[] = []
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: true,
       replay: true,
       footer: ui.api,
       onCommit: (commit) => live.push(commit),
     })
     events.push({
-      id: "evt_text",
+      id: Event.ID.make("evt_text", { disableChecks: true }),
       created: 0,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         ordinal: 0,
         delta: "hello",
       },
     })
     events.push({
-      id: "evt_reasoning",
+      id: Event.ID.make("evt_reasoning", { disableChecks: true }),
       created: 0,
       type: "session.reasoning.delta",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         ordinal: 0,
         delta: "thought",
       },
@@ -2235,7 +2486,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
@@ -2276,19 +2527,19 @@ describe("V2 mini transport", () => {
     const live: StreamCommit[] = []
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
       onCommit: (commit) => live.push(commit),
     })
     events.push({
-      id: "evt_text_1",
+      id: Event.ID.make("evt_text_1", { disableChecks: true }),
       created: 0,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         ordinal: 0,
         delta: "hello",
       },
@@ -2301,12 +2552,12 @@ describe("V2 mini transport", () => {
       reset: async () => {},
     })
     events.push({
-      id: "evt_text_2",
+      id: Event.ID.make("evt_text_2", { disableChecks: true }),
       created: 0,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         ordinal: 0,
         delta: " world",
       },
@@ -2326,10 +2577,13 @@ describe("V2 mini transport", () => {
       ok({
         data: [
           {
-            id: "msg_assistant",
+            id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
             type: "assistant",
-            agent: "build",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("build", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [],
             error: { type: "provider.transport", message: "provider failed" },
             time: { created: 2, completed: 3 },
@@ -2341,19 +2595,19 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
     })
     events.push({
-      id: "evt_step_failed",
+      id: Event.ID.make("evt_step_failed", { disableChecks: true }),
       created: 2,
       type: "session.step.failed",
-      durable: durable("ses_1", 1),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         error: { type: "provider.transport", message: "provider failed" },
       },
     })
@@ -2371,33 +2625,36 @@ describe("V2 mini transport", () => {
     const live: StreamCommit[] = []
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
       onCommit: (commit) => live.push(commit),
     })
     events.push({
-      id: "evt_step_failed",
+      id: Event.ID.make("evt_step_failed", { disableChecks: true }),
       created: 2,
       type: "session.step.failed",
-      durable: durable("ses_1", 1),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         error: { type: "provider.transport", message: "provider failed" },
       },
     })
     await Bun.sleep(0)
-    expect(live[0]?.messageID).toBe("msg_assistant")
+    expect(live[0]?.messageID).toBe(SessionMessage.ID.make("msg_assistant", { disableChecks: true }))
     spyOn(client.message, "list").mockImplementation(() =>
       ok({
         data: [
           {
-            id: "msg_assistant",
+            id: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
             type: "assistant",
-            agent: "build",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("build", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [],
             error: { type: "provider.transport", message: "provider failed" },
             time: { created: 2, completed: 3 },
@@ -2423,7 +2680,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
@@ -2432,7 +2689,7 @@ describe("V2 mini transport", () => {
       ok({
         data: [
           {
-            id: "msg_prompt",
+            id: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
             type: "user",
             text: "hello",
             files: [],
@@ -2452,7 +2709,7 @@ describe("V2 mini transport", () => {
             source: "system",
             text: "model unavailable",
             phase: "start",
-            messageID: "msg_prompt",
+            messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
           },
         },
       ],
@@ -2471,10 +2728,13 @@ describe("V2 mini transport", () => {
       ok({
         data: [
           {
-            id: "msg_b",
+            id: SessionMessage.ID.make("msg_b", { disableChecks: true }),
             type: "assistant",
-            agent: "build",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("build", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [
               { type: "reasoning", text: "second thought" },
               { type: "text", text: "second answer" },
@@ -2482,10 +2742,13 @@ describe("V2 mini transport", () => {
             time: { created: 4, completed: 5 },
           },
           {
-            id: "msg_a",
+            id: SessionMessage.ID.make("msg_a", { disableChecks: true }),
             type: "assistant",
-            agent: "build",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("build", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [
               { type: "reasoning", text: "first thought" },
               { type: "text", text: "first answer" },
@@ -2500,7 +2763,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: true,
       replay: true,
       footer: ui.api,
@@ -2522,18 +2785,18 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: true,
       footer: ui.api,
     })
     events.push({
-      id: "evt_reasoning",
+      id: Event.ID.make("evt_reasoning", { disableChecks: true }),
       created: 0,
       type: "session.reasoning.ended",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_assistant",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_assistant", { disableChecks: true }),
         ordinal: 0,
         text: "considering",
       },
@@ -2551,40 +2814,48 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
 
-    for (const [index, messageID] of ["msg_tool_one", "msg_tool_two"].entries()) {
+    for (const [index, messageID] of [
+      SessionMessage.ID.make("msg_tool_one", { disableChecks: true }),
+      SessionMessage.ID.make("msg_tool_two", { disableChecks: true }),
+    ].entries()) {
       events.push({
-        id: `evt_repeated_input_${index}`,
+        id: Event.ID.make(`evt_repeated_input_${index}`, { disableChecks: true }),
         created: index * 3 + 1,
         type: "session.tool.input.started",
-        durable: durable("ses_1", index * 3),
-        data: { sessionID: "ses_1", assistantMessageID: messageID, id: "call_repeated", name: "read" },
+        durable: durable(Session.ID.make("ses_1", { disableChecks: true }), index * 3),
+        data: {
+          sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+          assistantMessageID: SessionMessage.ID.make(messageID, { disableChecks: true }),
+          id: "call_repeated",
+          name: "read",
+        },
       })
       events.push({
-        id: `evt_repeated_called_${index}`,
+        id: Event.ID.make(`evt_repeated_called_${index}`, { disableChecks: true }),
         created: index * 3 + 2,
         type: "session.tool.called",
-        durable: durable("ses_1", index * 3 + 1),
+        durable: durable(Session.ID.make("ses_1", { disableChecks: true }), index * 3 + 1),
         data: {
-          sessionID: "ses_1",
-          assistantMessageID: messageID,
+          sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+          assistantMessageID: SessionMessage.ID.make(messageID, { disableChecks: true }),
           id: "call_repeated",
           input: { path: `${index + 1}.txt` },
           executed: true,
         },
       })
       events.push({
-        id: `evt_repeated_success_${index}`,
+        id: Event.ID.make(`evt_repeated_success_${index}`, { disableChecks: true }),
         created: index * 3 + 3,
         type: "session.tool.success",
-        durable: durable("ses_1", index * 3 + 2, 2),
+        durable: durable(Session.ID.make("ses_1", { disableChecks: true }), index * 3 + 2, 2),
         data: {
-          sessionID: "ses_1",
-          assistantMessageID: messageID,
+          sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+          assistantMessageID: SessionMessage.ID.make(messageID, { disableChecks: true }),
           id: "call_repeated",
           metadata: {},
           content: [{ type: "text", text: "" }],
@@ -2596,10 +2867,10 @@ describe("V2 mini transport", () => {
 
     const commits = ui.commits.filter((item) => item.part?.id === "call_repeated")
     expect(commits.map((item) => [item.messageID, item.phase])).toEqual([
-      ["msg_tool_one", "start"],
-      ["msg_tool_one", "final"],
-      ["msg_tool_two", "start"],
-      ["msg_tool_two", "final"],
+      [SessionMessage.ID.make("msg_tool_one", { disableChecks: true }), "start"],
+      [SessionMessage.ID.make("msg_tool_one", { disableChecks: true }), "final"],
+      [SessionMessage.ID.make("msg_tool_two", { disableChecks: true }), "start"],
+      [SessionMessage.ID.make("msg_tool_two", { disableChecks: true }), "final"],
     ])
     expect(
       commits
@@ -2616,54 +2887,54 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
     events.push({
-      id: "evt_progress_input",
+      id: Event.ID.make("evt_progress_input", { disableChecks: true }),
       created: 1,
       type: "session.tool.input.started",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_progress",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_progress", { disableChecks: true }),
         id: "call_progress",
         name: "shell",
       },
     })
     events.push({
-      id: "evt_progress_called",
+      id: Event.ID.make("evt_progress_called", { disableChecks: true }),
       created: 2,
       type: "session.tool.called",
-      durable: durable("ses_1", 1),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_progress",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_progress", { disableChecks: true }),
         id: "call_progress",
         input: { command: "printf partial && false" },
         executed: true,
       },
     })
     events.push({
-      id: "evt_progress",
+      id: Event.ID.make("evt_progress", { disableChecks: true }),
       created: 3,
       type: "session.tool.progress",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_progress",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_progress", { disableChecks: true }),
         id: "call_progress",
         metadata: { checkpoint: 1 },
       },
     })
     events.push({
-      id: "evt_progress_failed",
+      id: Event.ID.make("evt_progress_failed", { disableChecks: true }),
       created: 4,
       type: "session.tool.failed",
-      durable: durable("ses_1", 3, 2),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 3, 2),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_progress",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_progress", { disableChecks: true }),
         id: "call_progress",
         error: { type: "unknown", message: "boom" },
         metadata: { checkpoint: 1 },
@@ -2698,7 +2969,7 @@ describe("V2 mini transport", () => {
       const live: StreamCommit[] = []
       const transport = await createSessionTransport({
         sdk: client,
-        sessionID: "ses_1",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         thinking: false,
         replay: true,
         footer: ui.api,
@@ -2712,32 +2983,49 @@ describe("V2 mini transport", () => {
         { type: "file", mime: "application/pdf", uri: "data:image/png;base64,cG5n" },
       ] satisfies [ToolContent, ...ToolContent[]]
       const error = { type: "unknown", message: "Tool failed after capturing image" } as const
-      const data = { sessionID: "ses_1", assistantMessageID: "msg_tool", id: "call_image", executed: true, content }
+      const data = {
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_tool", { disableChecks: true }),
+        id: "call_image",
+        executed: true,
+        content,
+      }
       const terminal: RunV2Event =
         status === "completed"
-          ? { id: "evt_result", created: 3, type: "session.tool.success", durable: durable("ses_1", 3, 2), data }
+          ? {
+              id: Event.ID.make("evt_result", { disableChecks: true }),
+              created: 3,
+              type: "session.tool.success",
+              durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 3, 2),
+              data,
+            }
           : {
-              id: "evt_result",
+              id: Event.ID.make("evt_result", { disableChecks: true }),
               created: 3,
               type: "session.tool.failed",
-              durable: durable("ses_1", 3, 2),
+              durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 3, 2),
               data: { ...data, error },
             }
       events.push({
-        id: "evt_input",
+        id: Event.ID.make("evt_input", { disableChecks: true }),
         created: 1,
         type: "session.tool.input.started",
-        durable: durable("ses_1", 1),
-        data: { sessionID: "ses_1", assistantMessageID: "msg_tool", id: "call_image", name: "read" },
+        durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
+        data: {
+          sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+          assistantMessageID: SessionMessage.ID.make("msg_tool", { disableChecks: true }),
+          id: "call_image",
+          name: "read",
+        },
       })
       events.push({
-        id: "evt_called",
+        id: Event.ID.make("evt_called", { disableChecks: true }),
         created: 2,
         type: "session.tool.called",
-        durable: durable("ses_1", 2),
+        durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 2),
         data: {
-          sessionID: "ses_1",
-          assistantMessageID: "msg_tool",
+          sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+          assistantMessageID: SessionMessage.ID.make("msg_tool", { disableChecks: true }),
           id: "call_image",
           input: { file_path: "image.png" },
           executed: true,
@@ -2755,17 +3043,20 @@ describe("V2 mini transport", () => {
           source: "tool",
           text: "[Image 1]",
           image: "data:image/png;base64,cG5n",
-          messageID: "msg_tool",
+          messageID: SessionMessage.ID.make("msg_tool", { disableChecks: true }),
           partID: "prt_call_image:image:0",
           phase: "final",
         },
       ])
 
       const message = {
-        id: "msg_tool",
+        id: SessionMessage.ID.make("msg_tool", { disableChecks: true }),
         type: "assistant" as const,
-        agent: "build",
-        model: { providerID: "test", id: "model" },
+        agent: Agent.ID.make("build", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("test", { disableChecks: true }),
+          id: Model.ID.make("model", { disableChecks: true }),
+        },
         content: [
           canonicalToolPart(
             "read",
@@ -2802,30 +3093,30 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
     events.push({
-      id: "evt_websearch_input",
+      id: Event.ID.make("evt_websearch_input", { disableChecks: true }),
       created: 1,
       type: "session.tool.input.started",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_websearch",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_websearch", { disableChecks: true }),
         id: "call_websearch",
         name: "websearch",
       },
     })
     events.push({
-      id: "evt_websearch_called",
+      id: Event.ID.make("evt_websearch_called", { disableChecks: true }),
       created: 2,
       type: "session.tool.called",
-      durable: durable("ses_1", 1),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_websearch",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_websearch", { disableChecks: true }),
         id: "call_websearch",
         input: { query: "effect" },
         executed: true,
@@ -2835,24 +3126,24 @@ describe("V2 mini transport", () => {
     expect(ui.commits.filter((item) => item.part?.id === "call_websearch")).toEqual([])
 
     events.push({
-      id: "evt_websearch_progress",
+      id: Event.ID.make("evt_websearch_progress", { disableChecks: true }),
       created: 3,
       type: "session.tool.progress",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_websearch",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_websearch", { disableChecks: true }),
         id: "call_websearch",
         metadata: { provider: "exa" },
       },
     })
     events.push({
-      id: "evt_websearch_failed",
+      id: Event.ID.make("evt_websearch_failed", { disableChecks: true }),
       created: 4,
       type: "session.tool.failed",
-      durable: durable("ses_1", 2, 2),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 2, 2),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_websearch",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_websearch", { disableChecks: true }),
         id: "call_websearch",
         error: { type: "tool.execution", message: "Web search request failed (HTTP 403)" },
         metadata: { provider: "exa" },
@@ -2877,7 +3168,7 @@ describe("V2 mini transport", () => {
     const transport = await createSessionTransport({
       sdk: client,
       location: { directory: "/project" },
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -2886,7 +3177,7 @@ describe("V2 mini transport", () => {
       () =>
         ok({
           location: { directory: "/tmp", project: { id: "proj_1", directory: "/tmp" } },
-          data: { id: "gpt-5", providerID: "openai" },
+          data: { id: "gpt-5", providerID: Provider.ID.make("openai", { disableChecks: true }) },
         }) as never,
     )
     const switched = spyOn(client.session, "switchModel").mockImplementation(() => ok(undefined))
@@ -2901,28 +3192,28 @@ describe("V2 mini transport", () => {
     const turn = transport.runPromptTurn({
       agent: undefined,
       model: undefined,
-      variant: "high",
-      prompt: { messageID: "msg_prompt", text: "hello", parts: [] },
+      variant: Model.VariantID.make("high", { disableChecks: true }),
+      prompt: { messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }), text: "hello", parts: [] },
       files: [],
       includeFiles: true,
     })
     while (!admitted) await Bun.sleep(0)
     events.push({
-      id: "evt_prompted",
+      id: Event.ID.make("evt_prompted", { disableChecks: true }),
       created: 0,
       type: "session.inbox.delivered",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        inboxID: "msg_prompt",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
       },
     })
     events.push({
-      id: "evt_settled",
+      id: Event.ID.make("evt_settled", { disableChecks: true }),
       created: 0,
       type: "session.execution.succeeded",
-      durable: durable("ses_1"),
-      data: { sessionID: "ses_1" },
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
+      data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }) },
     })
     await turn
 
@@ -2945,7 +3236,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -2962,20 +3253,20 @@ describe("V2 mini transport", () => {
       agent: undefined,
       model: undefined,
       variant: undefined,
-      prompt: { messageID: "msg_prompt", text: "hello", parts: [] },
+      prompt: { messageID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }), text: "hello", parts: [] },
       files: [],
       includeFiles: true,
       signal: controller.signal,
     })
     while (!admitted) await Bun.sleep(0)
     events.push({
-      id: "evt_prompted",
+      id: Event.ID.make("evt_prompted", { disableChecks: true }),
       created: 0,
       type: "session.inbox.delivered",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        inboxID: "msg_prompt",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
       },
     })
     await Bun.sleep(0)
@@ -2994,7 +3285,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -3003,14 +3294,18 @@ describe("V2 mini transport", () => {
       request = input
       queueMicrotask(() => {
         events.push({
-          id: input.id?.replace(/^msg_/, "evt_") ?? "evt_missing",
+          id: Event.ID.make(
+            input.id?.replace(/^msg_/, Event.ID.make("evt_", { disableChecks: true })) ??
+              Event.ID.make("evt_missing", { disableChecks: true }),
+            { disableChecks: true },
+          ),
           created: 0,
           type: "session.shell.started",
-          durable: durable("ses_1"),
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
           data: {
-            sessionID: "ses_1",
+            sessionID: Session.ID.make("ses_1", { disableChecks: true }),
             shell: {
-              id: "sh_shell",
+              id: Shell.ID.make("sh_shell", { disableChecks: true }),
               status: "running",
               command: "ls",
               cwd: "/tmp",
@@ -3022,14 +3317,14 @@ describe("V2 mini transport", () => {
           },
         })
         events.push({
-          id: "evt_shell_end",
+          id: Event.ID.make("evt_shell_end", { disableChecks: true }),
           created: 0,
           type: "session.shell.ended",
-          durable: durable("ses_1", 1),
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
           data: {
-            sessionID: "ses_1",
+            sessionID: Session.ID.make("ses_1", { disableChecks: true }),
             shell: {
-              id: "sh_shell",
+              id: Shell.ID.make("sh_shell", { disableChecks: true }),
               status: "exited",
               command: "ls",
               cwd: "/tmp",
@@ -3077,7 +3372,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -3119,7 +3414,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -3147,14 +3442,14 @@ describe("V2 mini transport", () => {
       })
     while (!request) await Bun.sleep(0)
     events.push({
-      id: "evt_unrelated_shell",
+      id: Event.ID.make("evt_unrelated_shell", { disableChecks: true }),
       created: 0,
       type: "session.shell.started",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         shell: {
-          id: "sh_unrelated",
+          id: Shell.ID.make("sh_unrelated", { disableChecks: true }),
           status: "running",
           command: "other",
           cwd: "/tmp",
@@ -3166,14 +3461,14 @@ describe("V2 mini transport", () => {
       },
     })
     events.push({
-      id: "evt_unrelated_end",
+      id: Event.ID.make("evt_unrelated_end", { disableChecks: true }),
       created: 0,
       type: "session.shell.ended",
-      durable: durable("ses_1", 1),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
       data: {
-        sessionID: "ses_1",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         shell: {
-          id: "sh_unrelated",
+          id: Shell.ID.make("sh_unrelated", { disableChecks: true }),
           status: "exited",
           command: "other",
           cwd: "/tmp",
@@ -3192,14 +3487,18 @@ describe("V2 mini transport", () => {
     expect(done).toBe(false)
 
     events.push({
-      id: request.id?.replace(/^msg_/, "evt_") ?? "evt_missing",
+      id: Event.ID.make(
+        request.id?.replace(/^msg_/, Event.ID.make("evt_", { disableChecks: true })) ??
+          Event.ID.make("evt_missing", { disableChecks: true }),
+        { disableChecks: true },
+      ),
       created: 0,
       type: "session.shell.started",
-      durable: durable("ses_1", 2),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 2),
       data: {
-        sessionID: "ses_1",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         shell: {
-          id: "sh_owned",
+          id: Shell.ID.make("sh_owned", { disableChecks: true }),
           status: "running",
           command: "pwd",
           cwd: "/tmp",
@@ -3211,14 +3510,14 @@ describe("V2 mini transport", () => {
       },
     })
     events.push({
-      id: "evt_owned_end",
+      id: Event.ID.make("evt_owned_end", { disableChecks: true }),
       created: 0,
       type: "session.shell.ended",
-      durable: durable("ses_1", 3),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 3),
       data: {
-        sessionID: "ses_1",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         shell: {
-          id: "sh_owned",
+          id: Shell.ID.make("sh_owned", { disableChecks: true }),
           status: "exited",
           command: "pwd",
           cwd: "/tmp",
@@ -3246,9 +3545,9 @@ describe("V2 mini transport", () => {
       messages: {
         ses_1: [
           {
-            id: "msg_shell",
+            id: SessionMessage.ID.make("msg_shell", { disableChecks: true }),
             type: "shell" as const,
-            shellID: "sh_1",
+            shellID: Shell.ID.make("sh_1", { disableChecks: true }),
             status: "exited",
             command: "ls",
             exit: 0,
@@ -3261,20 +3560,20 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
     })
     events.push({
-      id: "evt_shell_end",
+      id: Event.ID.make("evt_shell_end", { disableChecks: true }),
       created: 0,
       type: "session.shell.ended",
-      durable: durable("ses_1", 1),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
       data: {
-        sessionID: "ses_1",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         shell: {
-          id: "sh_1",
+          id: Shell.ID.make("sh_1", { disableChecks: true }),
           status: "exited",
           command: "ls",
           cwd: "/tmp",
@@ -3305,9 +3604,9 @@ describe("V2 mini transport", () => {
       messages: {
         ses_1: [
           {
-            id: "msg_failed_shell",
+            id: SessionMessage.ID.make("msg_failed_shell", { disableChecks: true }),
             type: "shell" as const,
-            shellID: "sh_failed",
+            shellID: Shell.ID.make("sh_failed", { disableChecks: true }),
             status: "exited",
             command: "false",
             exit: 7,
@@ -3320,20 +3619,20 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
     })
     events.push({
-      id: "evt_truncated_start",
+      id: Event.ID.make("evt_truncated_start", { disableChecks: true }),
       created: 0,
       type: "session.shell.started",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         shell: {
-          id: "sh_truncated",
+          id: Shell.ID.make("sh_truncated", { disableChecks: true }),
           status: "running",
           command: "long",
           cwd: "/tmp",
@@ -3345,14 +3644,14 @@ describe("V2 mini transport", () => {
       },
     })
     events.push({
-      id: "evt_truncated_end",
+      id: Event.ID.make("evt_truncated_end", { disableChecks: true }),
       created: 0,
       type: "session.shell.ended",
-      durable: durable("ses_1", 1),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
       data: {
-        sessionID: "ses_1",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         shell: {
-          id: "sh_truncated",
+          id: Shell.ID.make("sh_truncated", { disableChecks: true }),
           status: "exited",
           command: "long",
           cwd: "/tmp",
@@ -3381,7 +3680,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -3390,32 +3689,35 @@ describe("V2 mini transport", () => {
       request = input
       queueMicrotask(() => {
         events.push({
-          id: "evt_prompted",
+          id: Event.ID.make("evt_prompted", { disableChecks: true }),
           created: 0,
           type: "session.inbox.delivered",
-          durable: durable("ses_1"),
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
           data: {
-            sessionID: "ses_1",
-            inboxID: "msg_cmd",
+            sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+            inboxID: SessionMessage.ID.make("msg_cmd", { disableChecks: true }),
           },
         })
         events.push({
-          id: "evt_settled",
+          id: Event.ID.make("evt_settled", { disableChecks: true }),
           created: 0,
           type: "session.execution.succeeded",
-          durable: durable("ses_1"),
-          data: { sessionID: "ses_1" },
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
+          data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }) },
         })
       })
       return ok(undefined)
     })
 
     await transport.runPromptTurn({
-      agent: "build",
-      model: { providerID: "test", modelID: "model" },
+      agent: Agent.ID.make("build", { disableChecks: true }),
+      model: {
+        providerID: Provider.ID.make("test", { disableChecks: true }),
+        modelID: Model.ID.make("model", { disableChecks: true }),
+      },
       variant: undefined,
       prompt: {
-        messageID: "msg_cmd",
+        messageID: SessionMessage.ID.make("msg_cmd", { disableChecks: true }),
         text: "/deploy prod /api-design",
         parts: [
           {
@@ -3426,7 +3728,7 @@ describe("V2 mini transport", () => {
           },
           {
             type: "skill",
-            id: "api-design",
+            id: Skill.ID.make("api-design", { disableChecks: true }),
             source: { start: 13, end: 24, value: "/api-design" },
           },
         ],
@@ -3463,7 +3765,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -3472,23 +3774,26 @@ describe("V2 mini transport", () => {
       request = input
       queueMicrotask(() => {
         events.push({
-          id: "evt_prompted",
+          id: Event.ID.make("evt_prompted", { disableChecks: true }),
           created: 0,
           type: "session.inbox.delivered",
-          durable: durable("ses_1"),
-          data: { sessionID: "ses_1", inboxID: "msg_skill_attachment" },
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
+          data: {
+            sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+            inboxID: SessionMessage.ID.make("msg_skill_attachment", { disableChecks: true }),
+          },
         })
         events.push({
-          id: "evt_settled",
+          id: Event.ID.make("evt_settled", { disableChecks: true }),
           created: 0,
           type: "session.execution.succeeded",
-          durable: durable("ses_1"),
-          data: { sessionID: "ses_1" },
+          durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
+          data: { sessionID: Session.ID.make("ses_1", { disableChecks: true }) },
         })
       })
       return ok({
-        id: input.id ?? "msg_skill_attachment",
-        sessionID: "ses_1",
+        id: input.id ?? SessionMessage.ID.make("msg_skill_attachment", { disableChecks: true }),
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
         type: "user" as const,
         payload: { text: input.text },
         delivery: "steer" as const,
@@ -3501,12 +3806,12 @@ describe("V2 mini transport", () => {
       model: undefined,
       variant: undefined,
       prompt: {
-        messageID: "msg_skill_attachment",
+        messageID: SessionMessage.ID.make("msg_skill_attachment", { disableChecks: true }),
         text: "Review this /api-design",
         parts: [
           {
             type: "skill",
-            id: "api-design",
+            id: Skill.ID.make("api-design", { disableChecks: true }),
             source: { start: 12, end: 23, value: "/api-design" },
           },
         ],
@@ -3536,7 +3841,7 @@ describe("V2 mini transport", () => {
       location: {
         directory: "/project",
       },
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
       onCatalogRefresh: () => refreshes++,
@@ -3553,28 +3858,32 @@ describe("V2 mini transport", () => {
       "reference.updated",
     ] as const)
       events.push({
-        id: `evt_${type}`,
+        id: Event.ID.make(`evt_${type}`, { disableChecks: true }),
         created: 0,
         type,
         location: { directory: "/project" },
         data: {},
       })
     events.push({
-      id: "evt_credential.updated",
+      id: Event.ID.make("evt_credential.updated", { disableChecks: true }),
       created: 0,
       type: "credential.updated",
       data: {},
     })
     for (const credentialID of ["credential", null])
       events.push({
-        id: `evt_credential.switched.${credentialID}`,
+        id: Event.ID.make(`evt_credential.switched.${credentialID}`, { disableChecks: true }),
         created: 0,
         type: "credential.switched",
-        data: { credentialID, integrationID: "integration" },
+        data: {
+          credentialID:
+            credentialID === null ? credentialID : Credential.ID.make(credentialID, { disableChecks: true }),
+          integrationID: Integration.ID.make("integration", { disableChecks: true }),
+        },
       })
     for (const type of ["provider.updated", "model.updated"] as const)
       events.push({
-        id: `evt_foreign_${type}`,
+        id: Event.ID.make(`evt_foreign_${type}`, { disableChecks: true }),
         created: 0,
         type,
         location: { directory: "/other" },
@@ -3595,9 +3904,9 @@ describe("V2 mini transport", () => {
       messages: {
         ses_1: [
           {
-            id: "msg_skill",
+            id: SessionMessage.ID.make("msg_skill", { disableChecks: true }),
             type: "skill" as const,
-            skill: "tigerstyle",
+            skill: Skill.ID.make("tigerstyle", { disableChecks: true }),
             name: "tigerstyle",
             text: "skill instructions",
             time: { created: 2 },
@@ -3608,19 +3917,19 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       replay: true,
       footer: ui.api,
     })
     events.push({
-      id: "evt_skill",
+      id: Event.ID.make("evt_skill", { disableChecks: true }),
       created: 0,
       type: "session.skill.activated",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        id: "tigerstyle",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        id: Skill.ID.make("tigerstyle", { disableChecks: true }),
         name: "tigerstyle",
         text: "skill instructions",
       },
@@ -3639,52 +3948,61 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
     events.push({
-      id: "evt_failed_subagent_input",
+      id: Event.ID.make("evt_failed_subagent_input", { disableChecks: true }),
       created: 1,
       type: "session.tool.input.started",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_failed_subagent",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_failed_subagent", { disableChecks: true }),
         id: "call_failed_subagent",
         name: "subagent",
       },
     })
     events.push({
-      id: "evt_failed_subagent_called",
+      id: Event.ID.make("evt_failed_subagent_called", { disableChecks: true }),
       created: 2,
       type: "session.tool.called",
-      durable: durable("ses_1", 1),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_failed_subagent",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_failed_subagent", { disableChecks: true }),
         id: "call_failed_subagent",
-        input: { agent: "explore", description: "Inspect failure", prompt: "inspect" },
+        input: {
+          agent: Agent.ID.make("explore", { disableChecks: true }),
+          description: "Inspect failure",
+          prompt: "inspect",
+        },
         executed: true,
       },
     })
     events.push({
-      id: "evt_failed_subagent",
+      id: Event.ID.make("evt_failed_subagent", { disableChecks: true }),
       created: 3,
       type: "session.tool.failed",
-      durable: durable("ses_1", 2, 2),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 2, 2),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_failed_subagent",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_failed_subagent", { disableChecks: true }),
         id: "call_failed_subagent",
         error: { type: "unknown", message: "subagent failed" },
-        metadata: { sessionID: "ses_child_failed", status: "running" },
+        metadata: { sessionID: Session.ID.make("ses_child_failed", { disableChecks: true }), status: "running" },
         executed: true,
       },
     })
 
-    while (!states().some((state) => state.tabs.some((tab) => tab.sessionID === "ses_child_failed"))) await Bun.sleep(0)
+    while (
+      !states().some((state) =>
+        state.tabs.some((tab) => tab.sessionID === Session.ID.make("ses_child_failed", { disableChecks: true })),
+      )
+    )
+      await Bun.sleep(0)
     expect(states().at(-1)?.tabs).toMatchObject([
       {
         sessionID: "ses_child_failed",
@@ -3702,48 +4020,56 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
     events.push({
-      id: "evt_subagent_input",
+      id: Event.ID.make("evt_subagent_input", { disableChecks: true }),
       created: 1,
       type: "session.tool.input.started",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_subagent",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_subagent", { disableChecks: true }),
         id: "call_subagent",
         name: "subagent",
       },
     })
     events.push({
-      id: "evt_subagent_called",
+      id: Event.ID.make("evt_subagent_called", { disableChecks: true }),
       created: 2,
       type: "session.tool.called",
-      durable: durable("ses_1", 1),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_subagent",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_subagent", { disableChecks: true }),
         id: "call_subagent",
-        input: { agent: "explore", description: "Inspect progress", prompt: "inspect" },
+        input: {
+          agent: Agent.ID.make("explore", { disableChecks: true }),
+          description: "Inspect progress",
+          prompt: "inspect",
+        },
         executed: true,
       },
     })
     events.push({
-      id: "evt_subagent_progress",
+      id: Event.ID.make("evt_subagent_progress", { disableChecks: true }),
       created: 3,
       type: "session.tool.progress",
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_subagent",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_subagent", { disableChecks: true }),
         id: "call_subagent",
-        metadata: { sessionID: "ses_child_progress", status: "running" },
+        metadata: { sessionID: Session.ID.make("ses_child_progress", { disableChecks: true }), status: "running" },
       },
     })
-    while (!states().some((state) => state.tabs.some((tab) => tab.sessionID === "ses_child_progress")))
+    while (
+      !states().some((state) =>
+        state.tabs.some((tab) => tab.sessionID === Session.ID.make("ses_child_progress", { disableChecks: true })),
+      )
+    )
       await Bun.sleep(0)
     expect(states().at(-1)?.tabs).toMatchObject([
       {
@@ -3755,64 +4081,68 @@ describe("V2 mini transport", () => {
       },
     ])
 
-    transport.selectSubagent("ses_child_progress")
+    transport.selectSubagent(Session.ID.make("ses_child_progress", { disableChecks: true }))
     while (!states().at(-1)?.details.ses_child_progress) await Bun.sleep(0)
     events.push({
-      id: "evt_child_tool_input",
+      id: Event.ID.make("evt_child_tool_input", { disableChecks: true }),
       created: 4,
       type: "session.tool.input.started",
-      durable: durable("ses_child_progress"),
+      durable: durable(Session.ID.make("ses_child_progress", { disableChecks: true })),
       data: {
-        sessionID: "ses_child_progress",
-        assistantMessageID: "msg_child_tool",
+        sessionID: Session.ID.make("ses_child_progress", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_child_tool", { disableChecks: true }),
         id: "call_child_shell",
         name: "shell",
       },
     })
     events.push({
-      id: "evt_child_tool_called",
+      id: Event.ID.make("evt_child_tool_called", { disableChecks: true }),
       created: 5,
       type: "session.tool.called",
-      durable: durable("ses_child_progress", 1),
+      durable: durable(Session.ID.make("ses_child_progress", { disableChecks: true }), 1),
       data: {
-        sessionID: "ses_child_progress",
-        assistantMessageID: "msg_child_tool",
+        sessionID: Session.ID.make("ses_child_progress", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_child_tool", { disableChecks: true }),
         id: "call_child_shell",
         input: { command: "printf child && false" },
         executed: true,
       },
     })
     events.push({
-      id: "evt_child_tool_progress",
+      id: Event.ID.make("evt_child_tool_progress", { disableChecks: true }),
       created: 6,
       type: "session.tool.progress",
       data: {
-        sessionID: "ses_child_progress",
-        assistantMessageID: "msg_child_tool",
+        sessionID: Session.ID.make("ses_child_progress", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_child_tool", { disableChecks: true }),
         id: "call_child_shell",
         metadata: { checkpoint: "child" },
       },
     })
     events.push({
-      id: "evt_child_permission",
+      id: Event.ID.make("evt_child_permission", { disableChecks: true }),
       created: 7,
       type: "permission.asked",
       data: {
-        id: "per_child",
-        sessionID: "ses_child_progress",
+        id: Permission.ID.make("per_child", { disableChecks: true }),
+        sessionID: Session.ID.make("ses_child_progress", { disableChecks: true }),
         action: "shell",
         resources: ["printf child && false"],
-        source: { type: "tool", messageID: "msg_child_tool", id: "call_child_shell" },
+        source: {
+          type: "tool",
+          messageID: SessionMessage.ID.make("msg_child_tool", { disableChecks: true }),
+          id: Permission.ID.make("call_child_shell", { disableChecks: true }),
+        },
       },
     })
     events.push({
-      id: "evt_child_tool_failed",
+      id: Event.ID.make("evt_child_tool_failed", { disableChecks: true }),
       created: 8,
       type: "session.tool.failed",
-      durable: durable("ses_child_progress", 3, 2),
+      durable: durable(Session.ID.make("ses_child_progress", { disableChecks: true }), 3, 2),
       data: {
-        sessionID: "ses_child_progress",
-        assistantMessageID: "msg_child_tool",
+        sessionID: Session.ID.make("ses_child_progress", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_child_tool", { disableChecks: true }),
         id: "call_child_shell",
         error: { type: "unknown", message: "child boom" },
         metadata: { checkpoint: "child" },
@@ -3883,7 +4213,7 @@ describe("V2 mini transport", () => {
       messages: {
         ses_child: [
           {
-            id: "msg_task",
+            id: SessionMessage.ID.make("msg_task", { disableChecks: true }),
             type: "user" as const,
             text: "task prompt",
             files: [],
@@ -3891,10 +4221,13 @@ describe("V2 mini transport", () => {
             time: { created: 1 },
           },
           {
-            id: "msg_child_a",
+            id: SessionMessage.ID.make("msg_child_a", { disableChecks: true }),
             type: "assistant" as const,
-            agent: "explore",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("explore", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [{ type: "text" as const, text: "child answer" }],
             time: { created: 2 },
           },
@@ -3904,10 +4237,10 @@ describe("V2 mini transport", () => {
     spyOn(client.session, "get").mockImplementation(
       () =>
         ok({
-          id: "ses_child",
-          parentID: "ses_1",
-          projectID: "proj_1",
-          agent: "explore",
+          id: Session.ID.make("ses_child", { disableChecks: true }),
+          parentID: Session.ID.make("ses_1", { disableChecks: true }),
+          projectID: Project.ID.make("proj_1", { disableChecks: true }),
+          agent: Agent.ID.make("explore", { disableChecks: true }),
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 1, updated: 1 },
@@ -3918,24 +4251,27 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
-    transport.selectSubagent("ses_child")
+    transport.selectSubagent(Session.ID.make("ses_child", { disableChecks: true }))
 
     events.push({
-      id: "evt_child_step",
+      id: Event.ID.make("evt_child_step", { disableChecks: true }),
       created: 0,
       type: "session.step.started",
-      durable: durable("ses_child"),
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true })),
       data: {
         started: 0,
-        sessionID: "ses_child",
-        assistantMessageID: "msg_child_a",
-        agent: "explore",
-        model: { providerID: "test", id: "model" },
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_child_a", { disableChecks: true }),
+        agent: Agent.ID.make("explore", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("test", { disableChecks: true }),
+          id: Model.ID.make("model", { disableChecks: true }),
+        },
       },
     })
     while (!states().some((state) => state.details.ses_child?.commits.some((item) => item.text === "task prompt")))
@@ -3951,12 +4287,12 @@ describe("V2 mini transport", () => {
     ).toHaveLength(1)
 
     events.push({
-      id: "evt_child_text_replayed",
+      id: Event.ID.make("evt_child_text_replayed", { disableChecks: true }),
       created: 0,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_child",
-        assistantMessageID: "msg_child_a",
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_child_a", { disableChecks: true }),
         ordinal: 0,
         delta: "answer",
       },
@@ -3969,12 +4305,12 @@ describe("V2 mini transport", () => {
     ).toHaveLength(1)
 
     events.push({
-      id: "evt_child_text_suffix",
+      id: Event.ID.make("evt_child_text_suffix", { disableChecks: true }),
       created: 0,
       type: "session.text.delta",
       data: {
-        sessionID: "ses_child",
-        assistantMessageID: "msg_child_a",
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_child_a", { disableChecks: true }),
         ordinal: 0,
         delta: " suffix",
       },
@@ -3985,11 +4321,11 @@ describe("V2 mini transport", () => {
       await Bun.sleep(0)
 
     events.push({
-      id: "evt_child_settled",
+      id: Event.ID.make("evt_child_settled", { disableChecks: true }),
       created: 0,
       type: "session.execution.succeeded",
-      durable: durable("ses_child"),
-      data: { sessionID: "ses_child" },
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true })),
+      data: { sessionID: Session.ID.make("ses_child", { disableChecks: true }) },
     })
     while (!states().some((state) => state.tabs.some((tab) => tab.status === "completed"))) await Bun.sleep(0)
     await transport.close()
@@ -4001,27 +4337,33 @@ describe("V2 mini transport", () => {
     const client = sdk({
       streams: [events],
       messages: { ses_child: [] },
-      sessions: [{ id: "ses_child", parentID: "ses_1", time: { updated: 1 } }],
+      sessions: [
+        {
+          id: Session.ID.make("ses_child", { disableChecks: true }),
+          parentID: Session.ID.make("ses_1", { disableChecks: true }),
+          time: { updated: 1 },
+        },
+      ],
     })
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
-    transport.selectSubagent("ses_child")
+    transport.selectSubagent(Session.ID.make("ses_child", { disableChecks: true }))
     while (!states().some((state) => state.details.ses_child)) await Bun.sleep(0)
 
     events.push({
-      id: "evt_child_admitted",
+      id: Event.ID.make("evt_child_admitted", { disableChecks: true }),
       created: 1,
       type: "session.inbox.enqueued",
-      durable: durable("ses_child"),
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true })),
       data: {
-        sessionID: "ses_child",
-        inboxID: "msg_child_prompt",
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_child_prompt", { disableChecks: true }),
         item: { type: "user", payload: { text: "actual child prompt", files: [image] }, delivery: "steer" },
       },
     })
@@ -4029,21 +4371,28 @@ describe("V2 mini transport", () => {
     expect(
       states()
         .at(-1)
-        ?.details.ses_child?.commits.some((item) => item.messageID === "msg_child_prompt"),
+        ?.details.ses_child?.commits.some(
+          (item) => item.messageID === SessionMessage.ID.make("msg_child_prompt", { disableChecks: true }),
+        ),
     ).toBe(false)
 
     events.push({
-      id: "evt_child_promoted",
+      id: Event.ID.make("evt_child_promoted", { disableChecks: true }),
       created: 2,
       type: "session.inbox.delivered",
-      durable: durable("ses_child", 1),
-      data: { sessionID: "ses_child", inboxID: "msg_child_prompt" },
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true }), 1),
+      data: {
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_child_prompt", { disableChecks: true }),
+      },
     })
     while (
       !states()
         .at(-1)
         ?.details.ses_child?.commits.some(
-          (item) => item.messageID === "msg_child_prompt" && item.text === "actual child prompt",
+          (item) =>
+            item.messageID === SessionMessage.ID.make("msg_child_prompt", { disableChecks: true }) &&
+            item.text === "actual child prompt",
         )
     )
       await Bun.sleep(0)
@@ -4065,15 +4414,30 @@ describe("V2 mini transport", () => {
     const transport = await createSessionTransport({
       sdk: sdk({
         streams: [events],
-        sessions: [{ id: "ses_child", parentID: "ses_1", time: { updated: 1 } }],
+        sessions: [
+          {
+            id: Session.ID.make("ses_child", { disableChecks: true }),
+            parentID: Session.ID.make("ses_1", { disableChecks: true }),
+            time: { updated: 1 },
+          },
+        ],
         messages: {
           ses_child: [
-            { id: "msg_old_image", type: "user", text: "", files: [image, image], time: { created: 1 } },
             {
-              id: "msg_child_tool",
+              id: SessionMessage.ID.make("msg_old_image", { disableChecks: true }),
+              type: "user",
+              text: "",
+              files: [image, image],
+              time: { created: 1 },
+            },
+            {
+              id: SessionMessage.ID.make("msg_child_tool", { disableChecks: true }),
               type: "assistant",
-              agent: "build",
-              model: { providerID: "test", id: "model" },
+              agent: Agent.ID.make("build", { disableChecks: true }),
+              model: {
+                providerID: Provider.ID.make("test", { disableChecks: true }),
+                id: Model.ID.make("model", { disableChecks: true }),
+              },
               content: [
                 canonicalToolPart("read", {
                   status: "completed",
@@ -4088,8 +4452,8 @@ describe("V2 mini transport", () => {
         pending: {
           ses_child: [
             {
-              id: "msg_pending_image",
-              sessionID: "ses_child",
+              id: SessionMessage.ID.make("msg_pending_image", { disableChecks: true }),
+              sessionID: Session.ID.make("ses_child", { disableChecks: true }),
               type: "user",
               payload: { text: "", files: [image] },
               delivery: "queue",
@@ -4098,7 +4462,7 @@ describe("V2 mini transport", () => {
           ],
         },
       }),
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -4107,25 +4471,36 @@ describe("V2 mini transport", () => {
         .flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
         .at(-1)
         ?.details.ses_child?.commits.filter((commit) => commit.image) ?? []
-    transport.selectSubagent("ses_child")
+    transport.selectSubagent(Session.ID.make("ses_child", { disableChecks: true }))
     while (images().length < 2) await Bun.sleep(0)
     expect(
       images()
         .map((commit) => commit.kind)
         .sort(),
     ).toEqual(["tool", "user"])
-    expect(images().some((commit) => commit.messageID === "msg_pending_image")).toBe(false)
+    expect(
+      images().some(
+        (commit) => commit.messageID === SessionMessage.ID.make("msg_pending_image", { disableChecks: true }),
+      ),
+    ).toBe(false)
     const delivered: RunV2Event = {
-      id: "evt_child_image_delivered",
+      id: Event.ID.make("evt_child_image_delivered", { disableChecks: true }),
       created: 3,
       type: "session.inbox.delivered",
-      durable: durable("ses_child", 3),
-      data: { sessionID: "ses_child", inboxID: "msg_pending_image" },
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true }), 3),
+      data: {
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_pending_image", { disableChecks: true }),
+      },
     }
     events.push(delivered)
     events.push(delivered)
     while (images().length < 3) await Bun.sleep(0)
-    expect(images().filter((commit) => commit.messageID === "msg_pending_image")).toHaveLength(1)
+    expect(
+      images().filter(
+        (commit) => commit.messageID === SessionMessage.ID.make("msg_pending_image", { disableChecks: true }),
+      ),
+    ).toHaveLength(1)
     await transport.close()
   })
 
@@ -4134,7 +4509,13 @@ describe("V2 mini transport", () => {
     events.push(connected())
     const client = sdk({
       streams: [events],
-      sessions: [{ id: "ses_child", parentID: "ses_1", time: { updated: 1 } }],
+      sessions: [
+        {
+          id: Session.ID.make("ses_child", { disableChecks: true }),
+          parentID: Session.ID.make("ses_1", { disableChecks: true }),
+          time: { updated: 1 },
+        },
+      ],
     })
     let childHydrating = false
     let releaseHydration!: () => void
@@ -4142,7 +4523,7 @@ describe("V2 mini transport", () => {
       releaseHydration = resolve
     })
     spyOn(client.message, "list").mockImplementation(async (request) => {
-      if (request.sessionID === "ses_child") {
+      if (request.sessionID === Session.ID.make("ses_child", { disableChecks: true })) {
         childHydrating = true
         await hydration
       }
@@ -4151,19 +4532,19 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
     events.push({
-      id: "evt_child_admitted_race",
+      id: Event.ID.make("evt_child_admitted_race", { disableChecks: true }),
       created: 1,
       type: "session.inbox.enqueued",
-      durable: durable("ses_child"),
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true })),
       data: {
-        sessionID: "ses_child",
-        inboxID: "msg_child_race",
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_child_race", { disableChecks: true }),
         item: {
           type: "user",
           payload: { text: "prompt admitted before hydration", files: [image] },
@@ -4172,14 +4553,17 @@ describe("V2 mini transport", () => {
       },
     })
     await Bun.sleep(0)
-    transport.selectSubagent("ses_child")
+    transport.selectSubagent(Session.ID.make("ses_child", { disableChecks: true }))
     while (!childHydrating) await Bun.sleep(0)
     events.push({
-      id: "evt_child_promoted_race",
+      id: Event.ID.make("evt_child_promoted_race", { disableChecks: true }),
       created: 2,
       type: "session.inbox.delivered",
-      durable: durable("ses_child", 1),
-      data: { sessionID: "ses_child", inboxID: "msg_child_race" },
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true }), 1),
+      data: {
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        inboxID: SessionMessage.ID.make("msg_child_race", { disableChecks: true }),
+      },
     })
     await Bun.sleep(0)
     releaseHydration()
@@ -4189,7 +4573,9 @@ describe("V2 mini transport", () => {
       !states()
         .at(-1)
         ?.details.ses_child?.commits.some(
-          (item) => item.messageID === "msg_child_race" && item.text === "prompt admitted before hydration",
+          (item) =>
+            item.messageID === SessionMessage.ID.make("msg_child_race", { disableChecks: true }) &&
+            item.text === "prompt admitted before hydration",
         )
     )
       await Bun.sleep(0)
@@ -4209,7 +4595,13 @@ describe("V2 mini transport", () => {
     events.push(connected())
     const client = sdk({
       streams: [events],
-      sessions: [{ id: "ses_child", parentID: "ses_1", time: { updated: 1 } }],
+      sessions: [
+        {
+          id: Session.ID.make("ses_child", { disableChecks: true }),
+          parentID: Session.ID.make("ses_1", { disableChecks: true }),
+          time: { updated: 1 },
+        },
+      ],
     })
     let childRequests = 0
     let releaseStale!: () => void
@@ -4221,7 +4613,8 @@ describe("V2 mini transport", () => {
       releaseRetry = resolve
     })
     spyOn(client.message, "list").mockImplementation(async (request) => {
-      if (request.sessionID !== "ses_child") return ok({ data: [], cursor: {} })
+      if (request.sessionID !== Session.ID.make("ses_child", { disableChecks: true }))
+        return ok({ data: [], cursor: {} })
       childRequests++
       if (childRequests === 1) {
         await stale
@@ -4231,15 +4624,18 @@ describe("V2 mini transport", () => {
       return ok({
         data: [
           {
-            id: "msg_overflow_assistant",
+            id: SessionMessage.ID.make("msg_overflow_assistant", { disableChecks: true }),
             type: "assistant" as const,
-            agent: "explore",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("explore", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [{ type: "text" as const, id: "txt_overflow_64", text: "live 64" }],
             time: { created: 2, completed: 3 },
           },
           {
-            id: "msg_overflow_baseline",
+            id: SessionMessage.ID.make("msg_overflow_baseline", { disableChecks: true }),
             type: "user" as const,
             text: "baseline history",
             files: [],
@@ -4253,22 +4649,22 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
-    transport.selectSubagent("ses_child")
+    transport.selectSubagent(Session.ID.make("ses_child", { disableChecks: true }))
     while (childRequests < 1) await Bun.sleep(0)
 
     for (let index = 0; index < 65; index++)
       events.push({
-        id: `evt_overflow_${index}`,
+        id: Event.ID.make(`evt_overflow_${index}`, { disableChecks: true }),
         created: index,
         type: "session.text.delta",
         data: {
-          sessionID: "ses_child",
-          assistantMessageID: "msg_overflow_assistant",
+          sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+          assistantMessageID: SessionMessage.ID.make("msg_overflow_assistant", { disableChecks: true }),
           ordinal: index,
           delta: `live ${index}`,
         },
@@ -4308,7 +4704,13 @@ describe("V2 mini transport", () => {
     events.push(connected())
     const client = sdk({
       streams: [events],
-      sessions: [{ id: "ses_child", parentID: "ses_1", time: { updated: 1 } }],
+      sessions: [
+        {
+          id: Session.ID.make("ses_child", { disableChecks: true }),
+          parentID: Session.ID.make("ses_1", { disableChecks: true }),
+          time: { updated: 1 },
+        },
+      ],
     })
     let childHydrating = false
     let releaseHydration!: () => void
@@ -4316,16 +4718,20 @@ describe("V2 mini transport", () => {
       releaseHydration = resolve
     })
     spyOn(client.message, "list").mockImplementation(async (request) => {
-      if (request.sessionID !== "ses_child") return ok({ data: [], cursor: {} })
+      if (request.sessionID !== Session.ID.make("ses_child", { disableChecks: true }))
+        return ok({ data: [], cursor: {} })
       childHydrating = true
       await hydration
       return ok({
         data: [
           {
-            id: "msg_tool_projected",
+            id: SessionMessage.ID.make("msg_tool_projected", { disableChecks: true }),
             type: "assistant" as const,
-            agent: "explore",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("explore", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             content: [
               {
                 type: "tool" as const,
@@ -4349,28 +4755,33 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
     const states = () => ui.events.flatMap((event) => (event.type === "stream.subagent" ? [event.state] : []))
     const inputStarted = (id: string, name: string, seq: number) =>
       events.push({
-        id: `evt_started_${id}`,
+        id: Event.ID.make(`evt_started_${id}`, { disableChecks: true }),
         created: seq,
         type: "session.tool.input.started",
-        durable: durable("ses_child", seq),
-        data: { sessionID: "ses_child", assistantMessageID: "msg_tool_projected", id, name },
+        durable: durable(Session.ID.make("ses_child", { disableChecks: true }), seq),
+        data: {
+          sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+          assistantMessageID: SessionMessage.ID.make("msg_tool_projected", { disableChecks: true }),
+          id,
+          name,
+        },
       })
     const called = (id: string, input: Record<string, unknown>, seq: number) =>
       events.push({
-        id: `evt_called_${id}`,
+        id: Event.ID.make(`evt_called_${id}`, { disableChecks: true }),
         created: seq,
         type: "session.tool.called",
-        durable: durable("ses_child", seq),
+        durable: durable(Session.ID.make("ses_child", { disableChecks: true }), seq),
         data: {
-          sessionID: "ses_child",
-          assistantMessageID: "msg_tool_projected",
+          sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+          assistantMessageID: SessionMessage.ID.make("msg_tool_projected", { disableChecks: true }),
           id,
           input,
           executed: true,
@@ -4380,16 +4791,16 @@ describe("V2 mini transport", () => {
     inputStarted("call_terminal", "grep", 0)
     called("call_terminal", { pattern: "needle" }, 1)
     await Bun.sleep(0)
-    transport.selectSubagent("ses_child")
+    transport.selectSubagent(Session.ID.make("ses_child", { disableChecks: true }))
     while (!childHydrating) await Bun.sleep(0)
     events.push({
-      id: "evt_success_terminal",
+      id: Event.ID.make("evt_success_terminal", { disableChecks: true }),
       created: 2,
       type: "session.tool.success",
-      durable: durable("ses_child", 2, 2),
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true }), 2, 2),
       data: {
-        sessionID: "ses_child",
-        assistantMessageID: "msg_tool_projected",
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_tool_projected", { disableChecks: true }),
         id: "call_terminal",
         metadata: {},
         content: [{ type: "text", text: "found" }],
@@ -4429,10 +4840,10 @@ describe("V2 mini transport", () => {
     spyOn(client.session, "get").mockImplementation(async () => {
       await gate
       return ok({
-        id: "ses_child",
-        parentID: "ses_1",
-        projectID: "proj_1",
-        agent: "explore",
+        id: Session.ID.make("ses_child", { disableChecks: true }),
+        parentID: Session.ID.make("ses_1", { disableChecks: true }),
+        projectID: Project.ID.make("proj_1", { disableChecks: true }),
+        agent: Agent.ID.make("explore", { disableChecks: true }),
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         time: { created: 1, updated: 1 },
@@ -4443,7 +4854,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -4451,24 +4862,27 @@ describe("V2 mini transport", () => {
 
     // Both events arrive while session.get is still in flight.
     events.push({
-      id: "evt_child_step",
+      id: Event.ID.make("evt_child_step", { disableChecks: true }),
       created: 0,
       type: "session.step.started",
-      durable: durable("ses_child"),
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true })),
       data: {
         started: 0,
-        sessionID: "ses_child",
-        assistantMessageID: "msg_child_a",
-        agent: "explore",
-        model: { providerID: "test", id: "model" },
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_child_a", { disableChecks: true }),
+        agent: Agent.ID.make("explore", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("test", { disableChecks: true }),
+          id: Model.ID.make("model", { disableChecks: true }),
+        },
       },
     })
     events.push({
-      id: "evt_child_settled",
+      id: Event.ID.make("evt_child_settled", { disableChecks: true }),
       created: 0,
       type: "session.execution.interrupted",
-      durable: durable("ses_child"),
-      data: { sessionID: "ses_child", reason: "user" },
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true })),
+      data: { sessionID: Session.ID.make("ses_child", { disableChecks: true }), reason: "user" },
     })
     await Bun.sleep(0)
     resolveGet?.()
@@ -4487,10 +4901,10 @@ describe("V2 mini transport", () => {
     spyOn(client.session, "get").mockImplementation(async () => {
       await gate
       return ok({
-        id: "ses_child",
-        parentID: "ses_1",
-        projectID: "proj_1",
-        agent: "explore",
+        id: Session.ID.make("ses_child", { disableChecks: true }),
+        parentID: Session.ID.make("ses_1", { disableChecks: true }),
+        projectID: Project.ID.make("proj_1", { disableChecks: true }),
+        agent: Agent.ID.make("explore", { disableChecks: true }),
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         time: { created: 1, updated: 1 },
@@ -4501,7 +4915,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -4509,65 +4923,73 @@ describe("V2 mini transport", () => {
 
     // Child event arrives first and gets buffered behind the gated session.get.
     events.push({
-      id: "evt_child_step",
+      id: Event.ID.make("evt_child_step", { disableChecks: true }),
       created: 0,
       type: "session.step.started",
-      durable: durable("ses_child"),
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true })),
       data: {
         started: 0,
-        sessionID: "ses_child",
-        assistantMessageID: "msg_child_a",
-        agent: "explore",
-        model: { providerID: "test", id: "model" },
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_child_a", { disableChecks: true }),
+        agent: Agent.ID.make("explore", { disableChecks: true }),
+        model: {
+          providerID: Provider.ID.make("test", { disableChecks: true }),
+          id: Model.ID.make("model", { disableChecks: true }),
+        },
       },
     })
     // Parent's background subagent tool.success adopts the child mid-discovery.
     events.push({
-      id: "evt_parent_input",
+      id: Event.ID.make("evt_parent_input", { disableChecks: true }),
       created: 0,
       type: "session.tool.input.started",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_parent_a",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_parent_a", { disableChecks: true }),
         id: "call_sub",
         name: "subagent",
       },
     })
     events.push({
-      id: "evt_parent_call",
+      id: Event.ID.make("evt_parent_call", { disableChecks: true }),
       created: 0,
       type: "session.tool.called",
-      durable: durable("ses_1"),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true })),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_parent_a",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_parent_a", { disableChecks: true }),
         id: "call_sub",
-        input: { agent: "explore", description: "Find things", prompt: "go", background: true },
+        input: {
+          agent: Agent.ID.make("explore", { disableChecks: true }),
+          description: "Find things",
+          prompt: "go",
+          background: true,
+        },
         executed: true,
       },
     })
     events.push({
-      id: "evt_parent_success",
+      id: Event.ID.make("evt_parent_success", { disableChecks: true }),
       created: 0,
       type: "session.tool.success",
-      durable: durable("ses_1", 1, 2),
+      durable: durable(Session.ID.make("ses_1", { disableChecks: true }), 1, 2),
       data: {
-        sessionID: "ses_1",
-        assistantMessageID: "msg_parent_a",
+        sessionID: Session.ID.make("ses_1", { disableChecks: true }),
+        assistantMessageID: SessionMessage.ID.make("msg_parent_a", { disableChecks: true }),
         id: "call_sub",
-        metadata: { sessionID: "ses_child", status: "running", output: "" },
+        metadata: { sessionID: Session.ID.make("ses_child", { disableChecks: true }), status: "running", output: "" },
         content: [{ type: "text", text: "" }],
         executed: true,
       },
     })
     // The settled event arrives after adoption, so it applies directly.
     events.push({
-      id: "evt_child_settled",
+      id: Event.ID.make("evt_child_settled", { disableChecks: true }),
       created: 0,
       type: "session.execution.interrupted",
-      durable: durable("ses_child"),
-      data: { sessionID: "ses_child", reason: "shutdown" },
+      durable: durable(Session.ID.make("ses_child", { disableChecks: true })),
+      data: { sessionID: Session.ID.make("ses_child", { disableChecks: true }), reason: "shutdown" },
     })
     while (!states().some((state) => state.tabs.some((tab) => tab.status === "cancelled"))) await Bun.sleep(0)
 
@@ -4588,15 +5010,30 @@ describe("V2 mini transport", () => {
     const client = sdk({
       streams: [events],
       sessions: [
-        { id: "ses_child_old", parentID: "ses_1", title: "Earlier subagent", agent: "explore", time: { updated: 9 } },
-        { id: "ses_unrelated", title: "Different session", time: { updated: 5 } },
-        { id: "ses_sibling", parentID: "ses_2", title: "Someone else's child", time: { updated: 4 } },
+        {
+          id: Session.ID.make("ses_child_old", { disableChecks: true }),
+          parentID: Session.ID.make("ses_1", { disableChecks: true }),
+          title: "Earlier subagent",
+          agent: Agent.ID.make("explore", { disableChecks: true }),
+          time: { updated: 9 },
+        },
+        {
+          id: Session.ID.make("ses_unrelated", { disableChecks: true }),
+          title: "Different session",
+          time: { updated: 5 },
+        },
+        {
+          id: Session.ID.make("ses_sibling", { disableChecks: true }),
+          parentID: Session.ID.make("ses_2", { disableChecks: true }),
+          title: "Someone else's child",
+          time: { updated: 4 },
+        },
       ],
     })
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })
@@ -4624,10 +5061,13 @@ describe("V2 mini transport", () => {
       messages: {
         ses_1: [
           {
-            id: "msg_parent",
+            id: SessionMessage.ID.make("msg_parent", { disableChecks: true }),
             type: "assistant" as const,
-            agent: "build",
-            model: { providerID: "test", id: "model" },
+            agent: Agent.ID.make("build", { disableChecks: true }),
+            model: {
+              providerID: Provider.ID.make("test", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             time: { created: 1, completed: 3 },
             content: [
               {
@@ -4636,9 +5076,17 @@ describe("V2 mini transport", () => {
                 name: "subagent",
                 state: {
                   status: "completed" as const,
-                  input: { agent: "explore", description: "Find things", prompt: "go" },
+                  input: {
+                    agent: Agent.ID.make("explore", { disableChecks: true }),
+                    description: "Find things",
+                    prompt: "go",
+                  },
                   content: [{ type: "text" as const, text: "done" }],
-                  metadata: { sessionID: "ses_child", status: "completed", output: "done" },
+                  metadata: {
+                    sessionID: Session.ID.make("ses_child", { disableChecks: true }),
+                    status: "completed",
+                    output: "done",
+                  },
                 },
                 time: { created: 1, ran: 1, completed: 2 },
               },
@@ -4650,7 +5098,7 @@ describe("V2 mini transport", () => {
     const ui = footer()
     const transport = await createSessionTransport({
       sdk: client,
-      sessionID: "ses_1",
+      sessionID: Session.ID.make("ses_1", { disableChecks: true }),
       thinking: false,
       footer: ui.api,
     })

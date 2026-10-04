@@ -1,3 +1,4 @@
+import type { Credential } from "@opencode/schema/credential"
 import { autocomplete } from "@clack/prompts"
 import { Effect } from "effect"
 import type { IntegrationInfo } from "@opencode/client"
@@ -60,7 +61,7 @@ export const chooseCredential = Effect.fn("cli.auth.account.credential")(functio
       )
     return yield* Effect.fail(new Error(`Credential not found for ${integration.name}: ${target}`))
   }
-  return yield* prompt<string>(() =>
+  return yield* prompt<Credential.ID>(() =>
     autocomplete({
       message: `Select ${integration.name} account to ${action}`,
       maxItems: 8,

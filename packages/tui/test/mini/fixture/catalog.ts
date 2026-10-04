@@ -1,9 +1,11 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { spyOn } from "bun:test"
 import type { LocationRef, ModelListOutput, OpenCodeClient, ProviderListOutput } from "@opencode/client/promise"
 
 export function catalogProvider(id: string, name: string): ProviderListOutput["data"][number] {
   return {
-    id,
+    id: Provider.ID.make(id, { disableChecks: true }),
     name,
     activation: "auto",
     package: "",
@@ -19,16 +21,16 @@ export function catalogModel(input: {
   variants?: string[]
 }): ModelListOutput["data"][number] {
   return {
-    id: input.id,
-    modelID: input.modelID ?? input.id,
-    providerID: input.providerID,
+    id: Model.ID.make(input.id),
+    modelID: Model.ID.make(input.modelID ?? input.id),
+    providerID: Provider.ID.make(input.providerID),
     name: input.name ?? input.id,
     capabilities: {
       tools: true,
       input: ["text"],
       output: ["text"],
     },
-    variants: (input.variants ?? []).map((id) => ({ id })),
+    variants: (input.variants ?? []).map((id) => ({ id: Model.VariantID.make(id) })),
     time: { released: 1 },
     cost: [{ input: 0, output: 0, cache: { read: 0, write: 0 } }],
     status: "active",

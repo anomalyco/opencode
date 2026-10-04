@@ -30,7 +30,7 @@ smoke(
       })
       const base = HttpServer.formatAddress(server.address)
       const client = OpenCode.make({ baseUrl: base, headers: { authorization: `Basic ${btoa("opencode:secret")}` } })
-      const sessionID = "ses_terminal_read"
+      const sessionID = Session.ID.make("ses_terminal_read", { disableChecks: true })
       expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID }))).toBeNull()
       expect(existsSync(fixture.directory)).toBeFalse()
       yield* Effect.promise(async () => {
@@ -84,7 +84,11 @@ smoke(
         screen: { text: "18\n19\n20\n", cols: 40, rows: 4, cursor: { x: 0, y: 3 } },
       })
       expect(current.foregroundProcess === null || typeof current.foregroundProcess === "string").toBeTrue()
-      expect(yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID: "ses_other" }))).toBeNull()
+      expect(
+        yield* Effect.promise(() =>
+          client.experimental.persistentPty.read({ sessionID: Session.ID.make("ses_other", { disableChecks: true }) }),
+        ),
+      ).toBeNull()
       yield* Effect.promise(() => client.experimental.persistentPty.snapshot({ ptyID: second.id }))
       for (const lines of [2, 6, 65535]) {
         const value = yield* Effect.promise(() => client.experimental.persistentPty.read({ sessionID, lines }))
@@ -130,7 +134,7 @@ smoke(
   20_000,
 )
 
-async function waitForRead(client: ReturnType<typeof OpenCode.make>, sessionID: string, ptyID: string) {
+async function waitForRead(client: ReturnType<typeof OpenCode.make>, sessionID: Session.ID, ptyID: string) {
   for (let attempt = 0; attempt < 100; attempt++) {
     const result = await client.experimental.persistentPty.read({ sessionID })
     if (result?.ptyID === ptyID) return result

@@ -1,5 +1,6 @@
+import type { Session } from "@opencode/schema/session"
 export type SessionTab = {
-  sessionID: string
+  sessionID: Session.ID
   title?: string
 }
 
@@ -22,7 +23,7 @@ export function sessionTabDetail(
 }
 
 export type SessionTabHistory = {
-  entries: readonly string[]
+  entries: readonly Session.ID[]
   index: number
 }
 
@@ -43,7 +44,7 @@ export function openSessionTab(tabs: SessionTab[], tab: SessionTab): SessionTab[
   return tabs.map((item, position) => (position === index ? { ...item, title: tab.title } : item))
 }
 
-export function closeSessionTab(tabs: SessionTab[], sessionID: string) {
+export function closeSessionTab(tabs: SessionTab[], sessionID: Session.ID) {
   const index = tabs.findIndex((tab) => tab.sessionID === sessionID)
   // Like openSessionTab and moveSessionTab, a no-op returns the same reference so callers can
   // detect it by identity.
@@ -76,7 +77,11 @@ export function recordClosedSessionTab(
  * position. Entries for already-open sessions are consumed so repeated reopens walk the stack.
  * Selecting a session removes only its entry, preserving the rest of the closed history.
  */
-export function reopenSessionTab(stack: readonly ClosedSessionTab[], tabs: readonly SessionTab[], sessionID?: string) {
+export function reopenSessionTab(
+  stack: readonly ClosedSessionTab[],
+  tabs: readonly SessionTab[],
+  sessionID?: Session.ID,
+) {
   const remaining = [...stack]
   while (remaining.length > 0) {
     const index = sessionID ? remaining.findIndex((entry) => entry.tab.sessionID === sessionID) : remaining.length - 1
@@ -90,7 +95,7 @@ export function reopenSessionTab(stack: readonly ClosedSessionTab[], tabs: reado
   return { stack: remaining, tabs: undefined, sessionID: undefined }
 }
 
-export function moveSessionTab(tabs: SessionTab[], sessionID: string, index: number): SessionTab[] {
+export function moveSessionTab(tabs: SessionTab[], sessionID: Session.ID, index: number): SessionTab[] {
   const from = tabs.findIndex((tab) => tab.sessionID === sessionID)
   const to = Math.max(0, Math.min(tabs.length - 1, index))
   if (from === -1 || from === to) return tabs
@@ -118,7 +123,7 @@ export function cycleSessionTab(
 // session switch forever; the oldest entries fall off first.
 const SESSION_TAB_HISTORY_LIMIT = 100
 
-export function recordSessionTabHistory(history: SessionTabHistory, sessionID: string): SessionTabHistory {
+export function recordSessionTabHistory(history: SessionTabHistory, sessionID: Session.ID): SessionTabHistory {
   if (history.entries[history.index] === sessionID) return history
   const entries = [...history.entries.slice(0, history.index + 1), sessionID].slice(-SESSION_TAB_HISTORY_LIMIT)
   return { entries, index: entries.length - 1 }

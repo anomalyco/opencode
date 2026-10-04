@@ -1,3 +1,7 @@
+import { WorkspaceID } from "@opencode/schema/workspace-id"
+import { Project } from "@opencode/schema/project"
+import { Event } from "@opencode/schema/event"
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { once } from "node:events"
@@ -26,14 +30,17 @@ import { tmpdir } from "../../fixture/fixture"
 import { createTuiResolvedConfig } from "../../fixture/tui-runtime"
 
 test("selecting an unhydrated session preserves its location", async () => {
-  const remote = { directory: "/tmp/opencode/remote", workspaceID: "ws_remote" }
+  const remote = {
+    directory: "/tmp/opencode/remote",
+    workspaceID: WorkspaceID.make("ws_remote", { disableChecks: true }),
+  }
   const fixture = await renderOpen((url) => {
     if (url.pathname !== "/api/session") return undefined
     return json({
       data: [
         {
-          id: "ses_remote",
-          projectID: "proj_remote",
+          id: Session.ID.make("ses_remote", { disableChecks: true }),
+          projectID: Project.ID.make("proj_remote", { disableChecks: true }),
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 1, updated: 2 },
@@ -47,12 +54,15 @@ test("selecting an unhydrated session preserves its location", async () => {
 
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("Remote session"))
-    expect(fixture.data.session.get("ses_remote")).toBeUndefined()
+    expect(fixture.data.session.get(Session.ID.make("ses_remote", { disableChecks: true }))).toBeUndefined()
 
     fixture.app.mockInput.pressEnter()
     await fixture.app.waitFor(() => fixture.route.data.type === "session")
 
-    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_remote" })
+    expect(fixture.route.data).toEqual({
+      type: "session",
+      sessionID: Session.ID.make("ses_remote", { disableChecks: true }),
+    })
     expect(fixture.location.ref).toEqual(remote)
   } finally {
     await fixture.dispose()
@@ -60,15 +70,18 @@ test("selecting an unhydrated session preserves its location", async () => {
 })
 
 test("finds and opens an exact session ID outside the recent list", async () => {
-  const sessionID = "ses_04a7a3d82ffeIphUJgd3SnEqiv"
-  const remote = { directory: "/tmp/opencode/archive", workspaceID: "ws_archive" }
+  const sessionID = Session.ID.make("ses_04a7a3d82ffeIphUJgd3SnEqiv", { disableChecks: true })
+  const remote = {
+    directory: "/tmp/opencode/archive",
+    workspaceID: WorkspaceID.make("ws_archive", { disableChecks: true }),
+  }
   const fixture = await renderOpen((url) => {
     if (url.pathname === "/api/session") return json({ data: [], cursor: {} })
     if (url.pathname !== `/api/session/${sessionID}`) return undefined
     return json({
       data: {
         id: sessionID,
-        projectID: "proj_archive",
+        projectID: Project.ID.make("proj_archive", { disableChecks: true }),
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
         time: { created: 1, updated: 2 },
@@ -86,7 +99,7 @@ test("finds and opens an exact session ID outside the recent list", async () => 
     fixture.app.mockInput.pressEnter()
     await fixture.app.waitFor(() => fixture.route.data.type === "session")
 
-    expect(fixture.route.data).toEqual({ type: "session", sessionID })
+    expect(fixture.route.data).toEqual({ type: "session", sessionID: sessionID })
     expect(fixture.location.ref).toEqual(remote)
   } finally {
     await fixture.dispose()
@@ -157,8 +170,8 @@ test("shows only canonical projects while retaining sessions from other director
     return json({
       data: [
         {
-          id: "ses_global",
-          projectID: "global",
+          id: Session.ID.make("ses_global", { disableChecks: true }),
+          projectID: Project.ID.make("global", { disableChecks: true }),
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 1, updated: 3 },
@@ -166,8 +179,8 @@ test("shows only canonical projects while retaining sessions from other director
           location: { directory: "/tmp/standalone-notes" },
         },
         {
-          id: "ses_worktree",
-          projectID: "proj_current",
+          id: Session.ID.make("ses_worktree", { disableChecks: true }),
+          projectID: Project.ID.make("proj_current", { disableChecks: true }),
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 1, updated: 2 },
@@ -193,7 +206,10 @@ test("shows only canonical projects while retaining sessions from other director
     await fixture.app.waitForFrame((value) => value.includes("standalone-notes"))
     fixture.app.mockInput.pressEnter()
     await fixture.app.waitFor(() => fixture.route.data.type === "session")
-    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_global" })
+    expect(fixture.route.data).toEqual({
+      type: "session",
+      sessionID: Session.ID.make("ses_global", { disableChecks: true }),
+    })
   } finally {
     await fixture.dispose()
   }
@@ -216,8 +232,8 @@ test("keeps nested Git session directories out of projects and in their session 
     return json({
       data: [
         {
-          id: "ses_dashboard",
-          projectID: "proj_current",
+          id: Session.ID.make("ses_dashboard", { disableChecks: true }),
+          projectID: Project.ID.make("proj_current", { disableChecks: true }),
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
           time: { created: 1, updated: 2 },
@@ -318,8 +334,8 @@ test("does not show or trigger worktree navigation for non-Git and global direct
       return json({
         data: [
           {
-            id: "ses_global",
-            projectID: "global",
+            id: Session.ID.make("ses_global", { disableChecks: true }),
+            projectID: Project.ID.make("global", { disableChecks: true }),
             cost: 0,
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
             time: { created: 1, updated: 2 },
@@ -507,8 +523,8 @@ test("shows projects while sessions refresh and preserves the selected project",
       json({
         data: [
           {
-            id: "ses_recent",
-            projectID: "proj_first",
+            id: Session.ID.make("ses_recent", { disableChecks: true }),
+            projectID: Project.ID.make("proj_first", { disableChecks: true }),
             cost: 0,
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
             time: { created: 2, updated: 3 },
@@ -604,8 +620,8 @@ test.each([false, true])("keeps a filtered selection visible after refresh with 
 })
 
 const recentSession = {
-  id: "ses_recent",
-  projectID: "proj_recent",
+  id: Session.ID.make("ses_recent", { disableChecks: true }),
+  projectID: Project.ID.make("proj_recent", { disableChecks: true }),
   cost: 0,
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   time: { created: 1, updated: 2 },
@@ -661,26 +677,35 @@ test("keeps an uncached moved session in the first successful refresh", async ()
   try {
     await fixture.app.waitForFrame((frame) => frame.includes("Refreshing"))
     fixture.emit({
-      id: "evt_uncached_move",
+      id: Event.ID.make("evt_uncached_move", { disableChecks: true }),
       created: 3,
       type: "session.moved",
       durable: { aggregateID: recentSession.id, seq: 1, version: 1 },
-      data: { sessionID: recentSession.id, location: destination, projectID: "proj_destination" },
+      data: {
+        sessionID: Session.ID.make(recentSession.id, { disableChecks: true }),
+        location: destination,
+        projectID: Project.ID.make("proj_destination", { disableChecks: true }),
+      },
     })
     // The following event supplies an ordered-stream receipt barrier without hydrating metadata.
     fixture.emit({
-      id: "evt_move_received",
+      id: Event.ID.make("evt_move_received", { disableChecks: true }),
       created: 4,
       type: "session.execution.started",
       durable: { aggregateID: recentSession.id, seq: 2, version: 1 },
-      data: { sessionID: recentSession.id },
+      data: { sessionID: Session.ID.make(recentSession.id, { disableChecks: true }) },
     })
     await fixture.app.waitFor(() => fixture.data.session.status(recentSession.id) === "running")
     expect(fixture.data.session.get(recentSession.id)).toBeUndefined()
     response.resolve(
       json({
         data: [
-          { ...recentSession, location: destination, projectID: "proj_destination", time: { created: 1, updated: 3 } },
+          {
+            ...recentSession,
+            location: destination,
+            projectID: Project.ID.make("proj_destination", { disableChecks: true }),
+            time: { created: 1, updated: 3 },
+          },
         ],
         cursor: {},
       }),
@@ -769,8 +794,8 @@ test("option arrows jump between sections", async () => {
       return json({
         data: [
           {
-            id: "ses_recent",
-            projectID: "proj_recent",
+            id: Session.ID.make("ses_recent", { disableChecks: true }),
+            projectID: Project.ID.make("proj_recent", { disableChecks: true }),
             cost: 0,
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
             time: { created: 1, updated: 2 },

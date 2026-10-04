@@ -1,3 +1,8 @@
+import { Model } from "@opencode/schema/model"
+import { Agent } from "@opencode/schema/agent"
+import { Provider } from "@opencode/schema/provider"
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import { createTestRenderer } from "@opentui/core/testing"
 import { InputRenderable } from "@opentui/core"
@@ -17,16 +22,19 @@ test.each([70, 120])(
     const modelRequested = Promise.withResolvers<void>()
     const events = createEventStream()
     const mutations: string[] = []
-    const sessionID = "ses_compact"
+    const sessionID = Session.ID.make("ses_compact", { disableChecks: true })
     const location = { directory, project: { id: "project", directory, canonical: directory } }
     const calls = createFetch(async (url) => {
       if (url.pathname === `/api/session/${sessionID}`)
         return json({
           data: {
             id: sessionID,
-            projectID: "project",
+            projectID: Project.ID.make("project", { disableChecks: true }),
             title: "Compact fixture",
-            model: { providerID: "demo", id: "model" },
+            model: {
+              providerID: Provider.ID.make("demo", { disableChecks: true }),
+              id: Model.ID.make("model", { disableChecks: true }),
+            },
             location: { directory },
             cost: 0,
             tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -40,7 +48,17 @@ test.each([70, 120])(
         return json({ location, data: [{ id: "build", mode: "primary", hidden: false, permissions: [] }] })
       if (url.pathname === "/api/provider") return json({ location, data: [{ id: "demo", name: "Demo" }] })
       if (url.pathname === "/api/model")
-        return json({ location, data: [{ id: "model", providerID: "demo", name: "Demo Model", variants: [] }] })
+        return json({
+          location,
+          data: [
+            {
+              id: "model",
+              providerID: Provider.ID.make("demo", { disableChecks: true }),
+              name: "Demo Model",
+              variants: [],
+            },
+          ],
+        })
       if (url.pathname === `/api/session/${sessionID}/model`) {
         mutations.push("model")
         modelRequested.resolve()
@@ -61,7 +79,7 @@ test.each([70, 120])(
         config: { get: async () => ({ animations: false }), update: async () => ({}) },
         packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
-        args: { sessionID },
+        args: { sessionID: Session.ID.make(sessionID, { disableChecks: true }) },
         log: () => {},
       }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )
@@ -103,14 +121,17 @@ test.each(["first", "second"])(
     const firstRequested = Promise.withResolvers<void>()
     const secondRequested = Promise.withResolvers<string>()
     const events = createEventStream()
-    const sessionID = "ses_model_order"
+    const sessionID = Session.ID.make("ses_model_order", { disableChecks: true })
     const location = { directory, project: { id: "project", directory, canonical: directory } }
     const session = {
       id: sessionID,
-      projectID: "project",
+      projectID: Project.ID.make("project", { disableChecks: true }),
       title: "Model ordering fixture",
-      agent: "build",
-      model: { providerID: "demo", id: initial },
+      agent: Agent.ID.make("build", { disableChecks: true }),
+      model: {
+        providerID: Provider.ID.make("demo", { disableChecks: true }),
+        id: Model.ID.make(initial, { disableChecks: true }),
+      },
       location: { directory },
       cost: 0,
       tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -130,7 +151,7 @@ test.each(["first", "second"])(
           location,
           data: ["first", "second"].map((id) => ({
             id,
-            providerID: "demo",
+            providerID: Provider.ID.make("demo", { disableChecks: true }),
             name: `${id} model`,
             variants: [],
             cost: [],
@@ -148,7 +169,7 @@ test.each(["first", "second"])(
         return json({
           data: {
             id: (await request.json()).id,
-            sessionID,
+            sessionID: Session.ID.make(sessionID, { disableChecks: true }),
             type: "compaction",
             time: { created: 10 },
             payload: {},
@@ -167,7 +188,7 @@ test.each(["first", "second"])(
         return json({
           data: {
             id: body.id,
-            sessionID,
+            sessionID: Session.ID.make(sessionID, { disableChecks: true }),
             type: "user",
             time: { created: 10 },
             payload: { text: body.text },
@@ -186,7 +207,7 @@ test.each(["first", "second"])(
         config: { get: async () => ({ animations: false }), update: async () => ({}) },
         packages: { prepare: async () => ({ directory: "" }) },
         terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: ready.resolve }),
-        args: { sessionID },
+        args: { sessionID: Session.ID.make(sessionID, { disableChecks: true }) },
         log: () => {},
       }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
     )

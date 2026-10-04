@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { TextAttributes } from "@opentui/core"
 import { testRender } from "@opentui/solid"
@@ -15,11 +16,11 @@ import { TestTuiContexts } from "../fixture/tui-environment"
 import { createTuiResolvedConfig } from "../fixture/tui-runtime"
 
 test("compact rail renders and controls session tabs", async () => {
-  const [active, setActive] = createSignal("first")
+  const [active, setActive] = createSignal(Session.ID.make("first", { disableChecks: true }))
   const [items, setItems] = createSignal<SessionTab[]>([
-    { sessionID: "first", title: "First session" },
-    { sessionID: "second", title: "Second session" },
-    { sessionID: "third", title: "Third session" },
+    { sessionID: Session.ID.make("first", { disableChecks: true }), title: "First session" },
+    { sessionID: Session.ID.make("second", { disableChecks: true }), title: "Second session" },
+    { sessionID: Session.ID.make("third", { disableChecks: true }), title: "Third session" },
   ])
   const [status, setStatus] = createSignal(EMPTY_SESSION_TAB_STATUS)
   const [indicators, setIndicators] = createSignal<"status" | "numbers">("status")
@@ -32,7 +33,7 @@ test("compact rail renders and controls session tabs", async () => {
     select: setActive,
     close() {},
     move(sessionID: string, index: number) {
-      setItems((items) => moveSessionTab(items, sessionID, index))
+      setItems((items) => moveSessionTab(items, Session.ID.make(sessionID, { disableChecks: true }), index))
     },
     detail: () => "project-alpha",
     status: (sessionID: string) => (sessionID === "second" ? status() : EMPTY_SESSION_TAB_STATUS),
@@ -106,17 +107,26 @@ test("compact rail renders and controls session tabs", async () => {
 
     await app.mockMouse.moveTo(2, 5)
     await app.waitForFrame((frame) => frame.includes("Second session") && frame.includes("project-alpha"))
-    expect(active()).toBe("first")
+    expect(active()).toBe(Session.ID.make("first", { disableChecks: true }))
     await app.mockMouse.moveTo(10, 0)
     await app.waitForFrame((frame) => !frame.includes("Second session"))
 
     await app.mockMouse.click(2, 1)
     expect(searches()).toBe(1)
     await app.mockMouse.drag(2, 3, 2, 7)
-    expect(items().map((tab) => tab.sessionID)).toEqual(["second", "third", "first"])
+    expect(items().map((tab) => tab.sessionID)).toEqual([
+      Session.ID.make("second", { disableChecks: true }),
+      Session.ID.make("third", { disableChecks: true }),
+      Session.ID.make("first", { disableChecks: true }),
+    ])
 
-    setItems(Array.from({ length: 40 }, (_, index) => ({ sessionID: `tab-${index + 1}`, title: `Session ${index + 1}` })))
-    setActive("tab-40")
+    setItems(
+      Array.from({ length: 40 }, (_, index) => ({
+        sessionID: Session.ID.make(`tab-${index + 1}`, { disableChecks: true }),
+        title: `Session ${index + 1}`,
+      })),
+    )
+    setActive(Session.ID.make("tab-40", { disableChecks: true }))
     setIndicators("numbers")
     await app.waitForFrame((frame) => frame.split("\n").some((line) => line.slice(0, 5).trim() === "40"))
   } finally {

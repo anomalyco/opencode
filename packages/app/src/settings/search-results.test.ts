@@ -1,3 +1,4 @@
+import { ProjectID } from "@opencode/schema/project-id"
 import { describe, expect, test } from "bun:test"
 import { dict } from "@opencode/ui/i18n/en"
 import en from "@/runtime/i18n/en"
@@ -6,7 +7,12 @@ import { rankSettings } from "./search-results"
 import type { SettingsView } from "./surface"
 
 const strings: Record<string, string> = { ...dict, ...en }
-const project = { id: "proj_opencode", name: "OpenCode", worktree: "/projects/opencode", expanded: false }
+const project = {
+  id: ProjectID.make("proj_opencode", { disableChecks: true }),
+  name: "OpenCode",
+  worktree: "/projects/opencode",
+  expanded: false,
+}
 const servers: SettingsSearchServer[] = [
   { key: "local", name: "Local server", connected: true, projects: [project] },
   { key: "remote", name: "Build server", connected: true, projects: [project] },

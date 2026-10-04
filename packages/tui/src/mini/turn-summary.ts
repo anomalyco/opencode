@@ -1,10 +1,11 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
 import type { StreamCommit } from "./types"
 
 export function turnSummaryCommit(input: {
   agent: string
   model: string
   duration: string
-  messageID?: string
+  messageID?: SessionMessage.ID
 }): StreamCommit {
   return {
     kind: "system",

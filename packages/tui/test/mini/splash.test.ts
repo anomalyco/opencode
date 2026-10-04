@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import { RGBA, TextAttributes, type ScrollbackWriter } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
@@ -6,7 +7,7 @@ import { stringWidth } from "../../src/util/string-width"
 
 const preview = "1.18.4-preview.abcd1234567890"
 const marker = "▪"
-const sessionID = "ses_fac1eb1b0ffeOk15TDttH2E1Oy"
+const sessionID = Session.ID.make("ses_fac1eb1b0ffeOk15TDttH2E1Oy", { disableChecks: true })
 const theme = {
   left: RGBA.fromIndex(8, "#666666"),
   right: RGBA.defaultForeground("#cccccc"),

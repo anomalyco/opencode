@@ -1,12 +1,13 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { Data } from "@opencode/client/solid"
 import type { SessionInfo } from "@opencode/client/promise"
 import { onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { uuid } from "@/runtime/persistence/uuid"
 
-type SessionMutation = { readonly id: string; readonly type: "remove"; readonly sessionID: string }
+type SessionMutation = { readonly id: string; readonly type: "remove"; readonly sessionID: SessionID }
 
-export function createDesktopData(input: { data: Data; remove: (sessionID: string) => Promise<void> }) {
+export function createDesktopData(input: { data: Data; remove: (sessionID: SessionID) => Promise<void> }) {
   const mutation = createSessionMutations(input.remove)
   onCleanup(input.data.on("session.deleted", (event) => mutation.deleted(event.data.sessionID)))
 
@@ -21,7 +22,7 @@ export function createDesktopData(input: { data: Data; remove: (sessionID: strin
   }
 }
 
-export function createSessionMutations(remove: (sessionID: string) => Promise<void>) {
+export function createSessionMutations(remove: (sessionID: SessionID) => Promise<void>) {
   const [store, setStore] = createStore({ session: [] as SessionMutation[] })
 
   const clear = (id: string) => {
@@ -35,7 +36,7 @@ export function createSessionMutations(remove: (sessionID: string) => Promise<vo
       )
       return removed.size === 0 ? [...sessions] : sessions.filter((session) => !removed.has(session.id))
     },
-    remove(sessionID: string) {
+    remove(sessionID: SessionID) {
       const mutation = { id: uuid(), type: "remove" as const, sessionID }
       setStore("session", (current) => [...current, mutation])
       return Promise.resolve()
@@ -45,7 +46,7 @@ export function createSessionMutations(remove: (sessionID: string) => Promise<vo
           throw error
         })
     },
-    deleted(sessionID: string) {
+    deleted(sessionID: SessionID) {
       setStore("session", (current) => current.filter((mutation) => mutation.sessionID !== sessionID))
     },
   }

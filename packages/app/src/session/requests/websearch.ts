@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import type { FormInfo, FormOption, SessionFormReplyInput, FormStringField } from "@opencode/client/promise"
 import { createEffect, createMemo, createResource, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -13,7 +14,7 @@ export function createWebSearchRequest(input: {
   owner: () => string | undefined
   connected: () => boolean
   request: () => FormInfo | undefined
-  providers: (sessionID: string) => Promise<FormOption[]>
+  providers: (sessionID: SessionID) => Promise<FormOption[]>
   reply: (input: SessionFormReplyInput) => Promise<unknown>
   events: Pick<OpenCodeEventStream, "listen">
 }) {
@@ -25,7 +26,7 @@ export function createWebSearchRequest(input: {
   const [providers, resource] = createResource(input.request, async (form) => {
     const field = webSearchProviderField(form)
     if (field) return field.options ?? []
-    return input.providers(form.sessionID)
+    return input.providers(SessionID.make(form.sessionID, { disableChecks: true }))
   })
   const request = createMemo(() => store.sending?.form ?? input.request())
   const specific = createMemo(() => {

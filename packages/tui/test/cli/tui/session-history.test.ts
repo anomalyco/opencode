@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import { createHistoryPrepend } from "../../../src/routes/session/history"
 
@@ -6,7 +7,7 @@ test("loads older history and preserves the visible scroll anchor", async () => 
   let resolveLoad: (() => void) | undefined
   const scrolled: number[] = []
   const prepend = createHistoryPrepend({
-    sessionID: () => "session-1",
+    sessionID: () => Session.ID.make("session-1", { disableChecks: true }),
     more: () => true,
     loadMore: () =>
       new Promise<void>((resolve) => {
@@ -33,7 +34,7 @@ test("loads older history and preserves the visible scroll anchor", async () => 
 test("releases the history load after a failed request", async () => {
   let attempts = 0
   const prepend = createHistoryPrepend({
-    sessionID: () => "session-1",
+    sessionID: () => Session.ID.make("session-1", { disableChecks: true }),
     more: () => true,
     loadMore: () => {
       attempts++
@@ -53,7 +54,7 @@ test("releases the history load after a failed request", async () => {
 })
 
 test("does not move a different session after history loads", async () => {
-  let current = "session-1"
+  let current = Session.ID.make("session-1", { disableChecks: true })
   let resolveLoad: (() => void) | undefined
   const scrolled: number[] = []
   const prepend = createHistoryPrepend({
@@ -70,7 +71,7 @@ test("does not move a different session after history loads", async () => {
   })
 
   expect(prepend()).toBe(true)
-  current = "session-2"
+  current = Session.ID.make("session-2", { disableChecks: true })
   resolveLoad?.()
   await Promise.resolve()
   await Promise.resolve()
@@ -81,7 +82,7 @@ test("does not move a different session after history loads", async () => {
 test("continues navigation after the prepended page is laid out", async () => {
   const events: string[] = []
   const prepend = createHistoryPrepend({
-    sessionID: () => "session-1",
+    sessionID: () => Session.ID.make("session-1", { disableChecks: true }),
     more: () => true,
     loadMore: async () => {
       events.push("loaded")
@@ -108,7 +109,7 @@ test.each(["success", "failure", "cancel", "takeover"])("settles superseded prep
   const events: (number | string)[] = []
   let height = 100
   const prepend = createHistoryPrepend({
-    sessionID: () => "session-1",
+    sessionID: () => Session.ID.make("session-1", { disableChecks: true }),
     more: () => true,
     loadMore: () => load.promise,
     height: () => height,

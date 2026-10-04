@@ -1,3 +1,7 @@
+import { Project } from "@opencode/schema/project"
+import { Permission } from "@opencode/schema/permission"
+import { Form } from "@opencode/schema/form"
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import type { PermissionRequest } from "@opencode/client"
 import type { TextareaRenderable } from "@opentui/core"
@@ -31,10 +35,10 @@ async function mountPanes(root: string, render: () => JSX.Element, parentID?: st
     if (url.pathname === "/api/session/ses_scoped")
       return json({
         data: {
-          id: "ses_scoped",
+          id: Session.ID.make("ses_scoped", { disableChecks: true }),
           parentID,
           title: "Scoped session",
-          projectID: "proj_test",
+          projectID: Project.ID.make("proj_test", { disableChecks: true }),
           location: { directory: root },
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -55,7 +59,12 @@ async function mountPanes(root: string, render: () => JSX.Element, parentID?: st
   function Panes() {
     const data = useData()
     keymap = Keymap.use()
-    onMount(() => void data.session.sync("ses_scoped").then(ready.resolve, ready.reject))
+    onMount(
+      () =>
+        void data.session
+          .sync(Session.ID.make("ses_scoped", { disableChecks: true }))
+          .then(ready.resolve, ready.reject),
+    )
     return (
       <box>
         <InteractivityProvider enabled={!active()}>
@@ -100,12 +109,17 @@ async function mountPanes(root: string, render: () => JSX.Element, parentID?: st
 }
 
 function form(fields: FormWithLocation["fields"]): FormWithLocation {
-  return { id: "frm_scoped", sessionID: "ses_scoped", title: "Scoped form", fields }
+  return {
+    id: Form.ID.make("frm_scoped", { disableChecks: true }),
+    sessionID: Session.ID.make("ses_scoped", { disableChecks: true }),
+    title: "Scoped form",
+    fields,
+  }
 }
 
 const request = {
-  id: "per_scoped",
-  sessionID: "ses_scoped",
+  id: Permission.ID.make("per_scoped", { disableChecks: true }),
+  sessionID: Session.ID.make("ses_scoped", { disableChecks: true }),
   action: "shell",
   resources: ["echo scoped"],
 } satisfies PermissionRequest
@@ -252,7 +266,11 @@ test("permission layers leave the focused peer's Enter and navigation alone unti
 
 test("permission rejection text keeps its draft and regains focus when its scope resumes", async () => {
   await using tmp = await tmpdir()
-  const panes = await mountPanes(tmp.path, () => <PermissionPrompt request={request} />, "ses_parent")
+  const panes = await mountPanes(
+    tmp.path,
+    () => <PermissionPrompt request={request} />,
+    Session.ID.make("ses_parent", { disableChecks: true }),
+  )
   try {
     panes.setActive(true)
     panes.app.mockInput.pressEscape()

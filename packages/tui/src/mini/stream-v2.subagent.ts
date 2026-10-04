@@ -1,3 +1,5 @@
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Session } from "@opencode/schema/session"
 // Current-native subagent (child Session) tracking for the mini transport.
 //
 // Discovers child Sessions of the active parent from four current sources:
@@ -51,7 +53,7 @@ type V2Event = EventSubscribeOutput
 
 export function toolCommit(
   input: SessionMessageAssistantTool,
-  messageID: string,
+  messageID: SessionMessage.ID,
   phase: "start" | "progress" | "final",
   value?: string,
   directory?: string,
@@ -102,7 +104,7 @@ type ToolTrack = {
 }
 
 type ChildState = {
-  sessionID: string
+  sessionID: Session.ID
   label: string
   description: string
   status: FooterSubagentTab["status"]
@@ -116,7 +118,7 @@ type ChildState = {
   finishedTools: Set<string>
   permissions: MiniPermissionRequest[]
   forms: MiniFormRequest[]
-  messageIDs: Set<string>
+  messageIDs: Set<SessionMessage.ID>
   prompts: Map<string, Pick<SessionMessageUser, "text" | "files">>
   hydrated: boolean
   detailStale: boolean
@@ -124,7 +126,7 @@ type ChildState = {
 }
 
 export type SubagentTrackerInput = {
-  sessionID: string
+  sessionID: Session.ID
   thinking: boolean
   directory?: string
   signal: AbortSignal
@@ -133,7 +135,7 @@ export type SubagentTrackerInput = {
 
 export type SubagentTracker = {
   main(sdk: OpenCodeClient, event: V2Event, signal?: AbortSignal): void
-  foreign(sdk: OpenCodeClient, sessionID: string, event: V2Event, signal?: AbortSignal): void
+  foreign(sdk: OpenCodeClient, sessionID: Session.ID, event: V2Event, signal?: AbortSignal): void
   hydrate(next: {
     sdk: OpenCodeClient
     messages: SessionMessageInfo[]
@@ -142,15 +144,15 @@ export type SubagentTracker = {
     reconnect?: boolean
   }): Promise<void>
   ready(): Promise<void>
-  select(sdk: OpenCodeClient, sessionID: string | undefined): void
+  select(sdk: OpenCodeClient, sessionID: Session.ID | undefined): void
   snapshot(): FooterSubagentState
-  settleForm(sessionID: string, formID: string): void
+  settleForm(sessionID: Session.ID, formID: string): void
   close(): void
 }
 
 type DiscoveryJob = {
   sdk: OpenCodeClient
-  sessionID: string
+  sessionID: Session.ID
   signal: AbortSignal
   task: Promise<void>
   resolve: () => void
@@ -166,13 +168,15 @@ function text(value: unknown): string | undefined {
   return next || undefined
 }
 
-function sourceKey(messageID: string, id: string) {
+function sourceKey(messageID: SessionMessage.ID, id: string) {
   return `${messageID}\u0000${id}`
 }
 
 function permissionTool(request: PermissionRequest, tools: Map<string, SessionMessageAssistantTool>) {
   if (request.source?.type !== "tool") return request
-  const tool = tools.get(sourceKey(request.source.messageID, request.source.id))
+  const tool = tools.get(
+    sourceKey(SessionMessage.ID.make(request.source.messageID, { disableChecks: true }), request.source.id),
+  )
   return tool ? { ...request, tool } : request
 }
 
@@ -186,7 +190,7 @@ function childSessionID(metadata: Record<string, unknown> | undefined) {
   if (!sessionID || !sessionID.startsWith("ses")) return undefined
   const status = metadata?.status
   if (status !== "running" && status !== "completed") return undefined
-  return { sessionID, running: status === "running" }
+  return { sessionID: Session.ID.make(sessionID, { disableChecks: true }), running: status === "running" }
 }
 
 function tab(child: ChildState): FooterSubagentTab {
@@ -201,31 +205,31 @@ function tab(child: ChildState): FooterSubagentTab {
 }
 
 export function createSubagentTracker(input: SubagentTrackerInput): SubagentTracker {
-  const children = new Map<string, ChildState>()
+  const children = new Map<Session.ID, ChildState>()
   // Live subagent tool calls in the parent, so tool.success metadata
   // can be joined with the call's input metadata.
   const pendingCalls = new Map<string, Record<string, unknown>>()
   // Recently resolved non-family sessions. Retention is bounded so unrelated
   // process activity cannot grow tracker state for the lifetime of the TUI.
-  const checked = new Set<string>()
+  const checked = new Set<Session.ID>()
   // Foreign events buffered while a session.get discovery is in flight, so a
   // fast child (including its settled event) is not lost mid-discovery.
-  const pendingEvents = new Map<string, V2Event[]>()
-  const hydrationEvents = new Map<string, V2Event[]>()
-  const hydrationOverflow = new Set<string>()
-  const hydrations = new Map<string, Promise<void>>()
-  const blockerEvents = new Map<string, V2Event[]>()
-  const blockerHydrations = new Map<string, Promise<void>>()
-  const blockerRetryTimers = new Map<string, ReturnType<typeof setTimeout>>()
-  const blockerRetryAttempts = new Map<string, number>()
-  const discoveryJobs = new Map<string, DiscoveryJob>()
+  const pendingEvents = new Map<Session.ID, V2Event[]>()
+  const hydrationEvents = new Map<Session.ID, V2Event[]>()
+  const hydrationOverflow = new Set<Session.ID>()
+  const hydrations = new Map<Session.ID, Promise<void>>()
+  const blockerEvents = new Map<Session.ID, V2Event[]>()
+  const blockerHydrations = new Map<Session.ID, Promise<void>>()
+  const blockerRetryTimers = new Map<Session.ID, ReturnType<typeof setTimeout>>()
+  const blockerRetryAttempts = new Map<Session.ID, number>()
+  const discoveryJobs = new Map<Session.ID, DiscoveryJob>()
   const discoveryQueue: DiscoveryJob[] = []
   let activeDiscoveries = 0
-  let selected: string | undefined
+  let selected: Session.ID | undefined
   let blockerEpoch = 0
   let closed = false
   const active = (signal = input.signal) => !closed && !input.signal.aborted && !signal.aborted
-  const admitChild = (sessionID: string): ChildState | undefined => {
+  const admitChild = (sessionID: Session.ID): ChildState | undefined => {
     const existing = children.get(sessionID)
     if (!existing && children.size >= FAMILY_LIST_LIMIT) return
     const child: ChildState = existing ?? {
@@ -289,7 +293,11 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     if (meta.background === true) child.background = true
   }
 
-  const userFrame = (child: ChildState, messageID: string, prompt: Pick<SessionMessageUser, "text" | "files">) => {
+  const userFrame = (
+    child: ChildState,
+    messageID: SessionMessage.ID,
+    prompt: Pick<SessionMessageUser, "text" | "files">,
+  ) => {
     if (child.messageIDs.has(messageID)) return false
     child.messageIDs.add(messageID)
     if (prompt.text.trim())
@@ -305,7 +313,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     return true
   }
 
-  const childTool = (child: ChildState, item: SessionMessageAssistantTool, messageID: string) => {
+  const childTool = (child: ChildState, item: SessionMessageAssistantTool, messageID: SessionMessage.ID) => {
     const part = normalizeTool(item)
     const key = sourceKey(messageID, part.id)
     const frame = `tool:${key}`
@@ -461,8 +469,13 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       ...new Set(
         permissions.flatMap((request) => {
           if (request.source?.type !== "tool") return []
-          const key = sourceKey(request.source.messageID, request.source.id)
-          return child.toolSources.has(key) ? [] : [request.source.messageID]
+          const key = sourceKey(
+            SessionMessage.ID.make(request.source.messageID, { disableChecks: true }),
+            request.source.id,
+          )
+          return child.toolSources.has(key)
+            ? []
+            : [SessionMessage.ID.make(request.source.messageID, { disableChecks: true })]
         }),
       ),
     ]
@@ -492,7 +505,9 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
       permissions.some(
         (request) =>
           request.source?.type === "tool" &&
-          !child.toolSources.has(sourceKey(request.source.messageID, request.source.id)),
+          !child.toolSources.has(
+            sourceKey(SessionMessage.ID.make(request.source.messageID, { disableChecks: true }), request.source.id),
+          ),
       )
     )
       throw new Error("Permission source tool is unavailable")
@@ -573,7 +588,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     return blockerEpoch
   }
 
-  const rememberChecked = (sessionID: string) => {
+  const rememberChecked = (sessionID: Session.ID) => {
     checked.delete(sessionID)
     checked.add(sessionID)
     if (checked.size <= FAMILY_LIST_LIMIT) return
@@ -638,7 +653,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     }
   }
 
-  const discover = (sdk: OpenCodeClient, sessionID: string, signal = input.signal) => {
+  const discover = (sdk: OpenCodeClient, sessionID: Session.ID, signal = input.signal) => {
     if (!active(signal) || children.size >= FAMILY_LIST_LIMIT) return Promise.resolve()
     if (checked.has(sessionID) || children.has(sessionID) || sessionID === input.sessionID) return Promise.resolve()
     const existing = discoveryJobs.get(sessionID)
@@ -1064,7 +1079,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
           queue.push(session.id)
         }
       }
-      const activeSessions = Object.keys(next.active)
+      const activeSessions = Object.keys(next.active).map((id) => Session.ID.make(id, { disableChecks: true }))
       for (
         let offset = 0;
         offset < activeSessions.length && children.size < FAMILY_LIST_LIMIT;

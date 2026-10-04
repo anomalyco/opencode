@@ -1,3 +1,8 @@
+import type { Permission } from "@opencode/schema/permission"
+import { Session } from "@opencode/schema/session"
+import { Model } from "@opencode/schema/model"
+import type { Provider } from "@opencode/schema/provider"
+import type { Agent } from "@opencode/schema/agent"
 import type {
   EventSubscribeOutput,
   JsonValue,
@@ -13,9 +18,9 @@ import { readFile } from "node:fs/promises"
 import { nonEmptyToolContent, toolOutputText, type MiniToolPart } from "@opencode/tui/mini/tool"
 import { UI } from "./ui"
 
-type Model = {
-  providerID: string
-  modelID: string
+type InputModel = {
+  providerID: Provider.ID
+  modelID: Model.ID
 }
 
 type File = {
@@ -26,13 +31,13 @@ type File = {
 
 type Input = {
   client: OpenCodeClient
-  sessionID: string
+  sessionID: Session.ID
   location: LocationRef
   message: string
   files: File[]
-  agent?: string
-  model?: Model
-  variant?: string
+  agent?: Agent.ID
+  model?: InputModel
+  variant?: Model.VariantID
   thinking: boolean
   format: "default" | "json"
   auto: boolean
@@ -141,7 +146,7 @@ export async function runNonInteractivePrompt(input: Input) {
   // Subagents run in child sessions; their asks and questions belong to this run too. Other
   // sessions on a shared server (e.g. the TUI's) must be left alone.
   const owned = new Map<string, Promise<boolean>>([[input.sessionID, Promise.resolve(true)]])
-  const ownsSession = (sessionID: string): Promise<boolean> => {
+  const ownsSession = (sessionID: Session.ID): Promise<boolean> => {
     const known = owned.get(sessionID)
     if (known) return known
     const result =
@@ -156,8 +161,8 @@ export async function runNonInteractivePrompt(input: Input) {
   }
 
   const replyPermission = async (request: {
-    id: string
-    sessionID: string
+    id: Permission.ID
+    sessionID: Session.ID
     action: string
     resources: ReadonlyArray<string>
   }) => {
@@ -225,7 +230,7 @@ export async function runNonInteractivePrompt(input: Input) {
       if (
         event.type === "form.created" &&
         submitted &&
-        ((await ownsSession(event.data.form.sessionID)) ||
+        ((await ownsSession(Session.ID.make(event.data.form.sessionID, { disableChecks: true }))) ||
           (!input.attached &&
             event.data.form.sessionID === GLOBAL_FORM_SESSION_ID &&
             sameLocation(event.location, input.location)))

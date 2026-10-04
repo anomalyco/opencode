@@ -1,3 +1,5 @@
+import { WorkspaceID } from "@opencode/schema/workspace-id"
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { testRender } from "@opentui/solid"
@@ -16,7 +18,9 @@ test("the dev route wrapper restores the current route without replaying its pro
     return testRender(
       () => (
         <TuiStartupProvider value={{ skipInitialLoading: true }}>
-          <RouteProvider initialRoute={{ type: "session", sessionID: "ses_launch" }}>
+          <RouteProvider
+            initialRoute={{ type: "session", sessionID: Session.ID.make("ses_launch", { disableChecks: true }) }}
+          >
             <Probe />
           </RouteProvider>
         </TuiStartupProvider>
@@ -25,9 +29,15 @@ test("the dev route wrapper restores the current route without replaying its pro
     )
   }
   const routes: Route[] = [
-    { type: "home", location: { directory: "/selected/worktree", workspaceID: "wrk_test" } },
-    { type: "home", location: { directory: "/another/worktree", workspaceID: "wrk_other" } },
-    { type: "session", sessionID: "ses_selected" },
+    {
+      type: "home",
+      location: { directory: "/selected/worktree", workspaceID: WorkspaceID.make("wrk_test", { disableChecks: true }) },
+    },
+    {
+      type: "home",
+      location: { directory: "/another/worktree", workspaceID: WorkspaceID.make("wrk_other", { disableChecks: true }) },
+    },
+    { type: "session", sessionID: Session.ID.make("ses_selected", { disableChecks: true }) },
     { type: "plugin", id: "test", name: "page", data: { nested: { selected: 1 } } },
     { type: "plugin", id: "test", name: "page", data: { nested: { selected: 2 } } },
   ]

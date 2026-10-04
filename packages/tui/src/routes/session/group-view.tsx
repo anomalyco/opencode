@@ -1,3 +1,4 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
 import { createMemo, createSignal, For, Match, Show, Switch } from "solid-js"
 import { RGBA } from "@opentui/core"
 import { useRenderer, type JSX } from "@opentui/solid"
@@ -16,7 +17,7 @@ import { resolvePart } from "./rows"
 import { generateThinkingSyntax } from "./thinking-syntax"
 
 type Renderers = {
-  message: (messageID: string) => SessionMessageInfo | undefined
+  message: (messageID: SessionMessage.ID) => SessionMessageInfo | undefined
   entry: (entry: SessionEntry, images?: boolean) => JSX.Element
   images: (parts: readonly SessionMessageAssistantTool[]) => JSX.Element
 }

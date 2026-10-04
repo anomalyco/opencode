@@ -1,3 +1,4 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
@@ -13,8 +14,8 @@ export function createSessionTimelineInteraction(session: SessionModel) {
   const location = useLocation()
   const timeline = createTimelineModel({ session })
   const [state, setState] = createStore({
-    messageID: undefined as string | undefined,
-    pendingMessage: undefined as string | undefined,
+    messageID: undefined as SessionMessage.ID | undefined,
+    pendingMessage: undefined as SessionMessage.ID | undefined,
     scroll: {
       overflow: false,
       jump: false,

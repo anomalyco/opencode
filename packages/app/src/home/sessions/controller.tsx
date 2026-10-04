@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { SessionInfo } from "@opencode/client/promise"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Button } from "@opencode/ui/button"
@@ -283,7 +284,7 @@ export function createHomeSessionsController(home: HomeController) {
       showProjectName: () => !home.project.selected(),
       server: () => home.selection.value().server,
       canCreate: () => !!home.project.newSession(),
-      lookup: async (sessionID: string) => {
+      lookup: async (sessionID: SessionID) => {
         const ctx = home.server.focusedContext()
         if (!ctx) return
         const result = await ctx.sdk.api.session.get({ sessionID })

@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import { Button } from "@opencode/ui/button"
 import { createMemo, Show } from "solid-js"
 import { ErrorPage } from "@/shell/errors/error"
@@ -8,7 +9,11 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { isLocalSessionNotFoundError, isSessionNotFoundError } from "@/runtime/server/errors"
 import { IncompatibleServerPanel } from "./incompatible-server-panel"
 
-export function SessionErrorFallback(props: { error: unknown; sessionID?: string; serverKey?: ServerConnection.Key }) {
+export function SessionErrorFallback(props: {
+  error: unknown
+  sessionID?: SessionID
+  serverKey?: ServerConnection.Key
+}) {
   const language = useLanguage()
   const activeServer = useServer()
   const server = useServers()
@@ -67,7 +72,7 @@ export function SessionErrorFallback(props: { error: unknown; sessionID?: string
   )
 }
 
-function isCurrentSessionNotFoundError(error: unknown, sessionID: string | undefined) {
+function isCurrentSessionNotFoundError(error: unknown, sessionID: SessionID | undefined) {
   if (!sessionID) return false
   return isSessionNotFoundError(error, sessionID) || isLocalSessionNotFoundError(error, sessionID)
 }

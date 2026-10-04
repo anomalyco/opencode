@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import { createData } from "@opencode/client/solid"
 import type { LocationRef } from "@opencode/client"
 import type { Plugin } from "@opencode/plugin/tui"
@@ -19,7 +20,7 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       directory: props.directory,
     })
     data satisfies Plugin.Context["data"]
-    const [generatingTitles, setGeneratingTitles] = createStore<Record<string, boolean | undefined>>({})
+    const [generatingTitles, setGeneratingTitles] = createStore<Record<Session.ID, boolean | undefined>>({})
     return {
       ...data,
       location: {
@@ -32,8 +33,8 @@ export const { use: useData, provider: DataProvider } = createSimpleContext({
       session: {
         ...data.session,
         title: {
-          pending: (sessionID: string) => generatingTitles[sessionID] === true,
-          async generate(sessionID: string) {
+          pending: (sessionID: Session.ID) => generatingTitles[sessionID] === true,
+          async generate(sessionID: Session.ID) {
             if (generatingTitles[sessionID]) return
             setGeneratingTitles(sessionID, true)
             await client.api.session

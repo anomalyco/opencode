@@ -1,3 +1,5 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { describe, expect, test } from "bun:test"
 import { createStore } from "solid-js/store"
 import { Skill } from "@opencode/schema/skill"
@@ -20,7 +22,11 @@ function createPromptStore() {
         },
       ],
       cursor: 3,
-      model: { providerID: "anthropic", modelID: "claude-sonnet", variant: null },
+      model: {
+        providerID: Provider.ID.make("anthropic", { disableChecks: true }),
+        modelID: Model.ID.make("claude-sonnet", { disableChecks: true }),
+        variant: null,
+      },
       context: { items: [context] },
     }),
   )

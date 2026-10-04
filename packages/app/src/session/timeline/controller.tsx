@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { DialogFooter, DialogHeader, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { Button } from "@opencode/ui/button"
@@ -25,7 +26,7 @@ import { getSessionMessageHandoff } from "@/session/handoff"
 import type { ReasoningMode } from "@opencode/session-ui/timeline/projection"
 
 const emptyMessages: SessionMessageInfo[] = []
-const taskDescription = (message: SessionMessageInfo, sessionID: string): string | undefined => {
+const taskDescription = (message: SessionMessageInfo, sessionID: SessionID): string | undefined => {
   if (message.type !== "assistant") return
   const tool = message.content.findLast((item) => {
     if (item.type !== "tool" || (item.name !== "task" && item.name !== "subagent")) return false
@@ -161,14 +162,14 @@ export function createTimelineController(input: { session: TimelineSessionSource
     if (current) data.session.remember({ ...current, title: next })
     return true
   }
-  const href = (id: string) => sessionHref(server.key, id)
-  const navigateAfterRemoval = (id: string, parent?: string, next?: string) => {
+  const href = (id: SessionID) => sessionHref(server.key, id)
+  const navigateAfterRemoval = (id: SessionID, parent?: SessionID, next?: SessionID) => {
     if (input.session.identity.params.id !== id) return
     if (parent) return navigate(href(parent))
     if (next) return navigate(href(next))
     return tabs.newDraft({ server: server.key, directory: sdk().directory })
   }
-  const exportSession = async (id: string) => {
+  const exportSession = async (id: SessionID) => {
     try {
       const data = await fetchSessionExport({ sessionID: id, api: serverSDK.api })
       const filename = sessionExportFilename(data.info)
@@ -187,7 +188,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
       })
     }
   }
-  const remove = async (id: string) => {
+  const remove = async (id: SessionID) => {
     const session = data.session.get(id)
     if (!session) return false
     const sessions = data.session.list().filter((item) => !item.parentID && !item.time?.archived)
@@ -207,7 +208,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
     return true
   }
 
-  function DeleteDialog(props: { sessionID: string }) {
+  function DeleteDialog(props: { sessionID: SessionID }) {
     const name = createMemo(
       () => sessionTitle(data.session.get(props.sessionID)?.title) ?? language.t("session.tab.session"),
     )
@@ -269,7 +270,7 @@ export function createTimelineController(input: { session: TimelineSessionSource
     action: {
       rename,
       export: exportSession,
-      showDelete: (id: string) => dialog.show(() => <DeleteDialog sessionID={id} />),
+      showDelete: (id: SessionID) => dialog.show(() => <DeleteDialog sessionID={id} />),
       navigateParent: () => {
         const id = input.session.data.parentID()
         if (id) navigate(href(id))

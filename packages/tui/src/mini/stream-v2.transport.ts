@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import type {
   EventSubscribeOutput,
   FormInfo,
@@ -45,7 +46,7 @@ type StreamInput = {
   onClient?: (sdk: OpenCodeClient) => void
   readTextFile?: (url: string) => Promise<string>
   location?: LocationRef
-  sessionID: string
+  sessionID: Session.ID
   thinking: boolean
   tools?: boolean
   replay?: boolean
@@ -60,9 +61,9 @@ type StreamInput = {
 }
 
 export type SessionTurnInput = {
-  agent: string | undefined
+  agent: RunInput["agent"]
   model: RunInput["model"]
-  variant: string | undefined
+  variant: RunInput["variant"]
   prompt: RunPrompt
   files: RunFilePart[]
   includeFiles: boolean
@@ -79,15 +80,15 @@ export type SessionTransport = {
   admitPromptTurn(input: SessionTurnInput, delivery: RunDelivery): Promise<void>
   waitForIdle(): Promise<void>
   interruptActiveTurn(): Promise<void>
-  selectSubagent(sessionID: string | undefined): void
+  selectSubagent(sessionID: Session.ID | undefined): void
   replayOnResize(input: SessionResizeReplayInput): Promise<boolean>
   close(): Promise<void>
   settleForm?(sessionID: string, formID: string): void
 }
 
 type Wait = {
-  messageID: string
-  failureMessageID: string
+  messageID: SessionMessage.ID
+  failureMessageID: SessionMessage.ID
   promoted: boolean
   promotionObserved: boolean
   interrupted: boolean
@@ -100,7 +101,7 @@ type Wait = {
 // abort cancels the blocking request when the user interrupts the turn.
 type ShellWait = {
   eventID: string
-  messageID: string
+  messageID: SessionMessage.ID
   id?: string
   resolve: () => void
   abort: () => void
@@ -134,17 +135,17 @@ type State = {
   forms: MiniFormRequest[]
   globalForms: MiniFormRequest[]
   view: FooterView
-  messageIDs: Set<string>
+  messageIDs: Set<SessionMessage.ID>
   // Delivery can arrive before the admission response supplies the user content.
-  promotedMessages: Set<string>
+  promotedMessages: Set<SessionMessage.ID>
   imageIDs: Set<string>
   fragments: FragmentReconciler
   tools: Map<string, ToolState>
   toolSources: Map<string, SessionMessageAssistantTool>
   finishedTools: Set<string>
-  toolMessages: Set<string>
-  quietText: Map<string, Array<{ partID: string; text: string }>>
-  skillMessages: Set<string>
+  toolMessages: Set<SessionMessage.ID>
+  quietText: Map<SessionMessage.ID, Array<{ partID: string; text: string }>>
+  skillMessages: Set<SessionMessage.ID>
   shellCommands: Map<string, string>
   shellStarted: Set<string>
   shellEnded: Set<string>
@@ -158,10 +159,10 @@ type State = {
   executionEpoch: number
   buffered?: ReplayBuffer
   errors: Set<string>
-  pending: Map<string, PendingPrompt>
-  admitted: Set<string>
+  pending: Map<SessionMessage.ID, PendingPrompt>
+  admitted: Set<SessionMessage.ID>
   stepModel: RunInput["model"]
-  activeCompaction?: string
+  activeCompaction?: SessionMessage.ID
 }
 
 export function formatUnknownError(error: unknown): string {
@@ -178,7 +179,9 @@ export function formatUnknownError(error: unknown): string {
 
 function sessionID(event: RunV2Event) {
   if (event.type === "form.created") return event.data.form.sessionID
-  return "sessionID" in event.data && typeof event.data.sessionID === "string" ? event.data.sessionID : undefined
+  return "sessionID" in event.data && typeof event.data.sessionID === "string"
+    ? Session.ID.make(event.data.sessionID, { disableChecks: true })
+    : undefined
 }
 
 function sameLocation(left: LocationRef | undefined, right: LocationRef | undefined) {
@@ -320,17 +323,19 @@ function promptSkills(next: SessionTurnInput) {
   )
 }
 
-function streamPartKey(messageID: string, partID: string) {
+function streamPartKey(messageID: SessionMessage.ID, partID: string) {
   return `${messageID}\u0000${partID}`
 }
 
-function permissionSourceKey(messageID: string, id: string) {
+function permissionSourceKey(messageID: SessionMessage.ID, id: string) {
   return streamPartKey(messageID, id)
 }
 
 function permissionTool(request: PermissionRequest, tools: Map<string, SessionMessageAssistantTool>) {
   if (request.source?.type !== "tool") return request
-  const tool = tools.get(permissionSourceKey(request.source.messageID, request.source.id))
+  const tool = tools.get(
+    permissionSourceKey(SessionMessage.ID.make(request.source.messageID, { disableChecks: true }), request.source.id),
+  )
   return tool ? { ...request, tool } : request
 }
 
@@ -396,7 +401,7 @@ const catalogEvents = new Set([
 // briefly so the output commit renders inside it.
 const SHELL_OUTPUT_GRACE_MS = 1500
 
-function skillCommit(messageID: string, name: string, skillID = messageID): StreamCommit {
+function skillCommit(messageID: SessionMessage.ID, name: string, skillID: string = messageID): StreamCommit {
   return {
     kind: "system",
     source: "system",
@@ -407,13 +412,13 @@ function skillCommit(messageID: string, name: string, skillID = messageID): Stre
   }
 }
 
-function skillCommits(messageID: string, skills: FooterQueuedPrompt["skills"] = []) {
+function skillCommits(messageID: SessionMessage.ID, skills: FooterQueuedPrompt["skills"] = []) {
   return Array.from(new Map(skills.map((skill) => [skill.id, skill])).values(), (skill) =>
     skillCommit(messageID, skill.name, skill.id),
   )
 }
 
-function compactionCommit(messageID: string): StreamCommit {
+function compactionCommit(messageID: SessionMessage.ID): StreamCommit {
   return {
     kind: "system",
     source: "system",
@@ -425,7 +430,7 @@ function compactionCommit(messageID: string): StreamCommit {
   }
 }
 
-function compactionSummary(messageID: string, text: string, phase: "progress" | "final"): StreamCommit {
+function compactionSummary(messageID: SessionMessage.ID, text: string, phase: "progress" | "final"): StreamCommit {
   return {
     kind: "assistant",
     source: "assistant",
@@ -436,7 +441,7 @@ function compactionSummary(messageID: string, text: string, phase: "progress" | 
   }
 }
 
-function compactionError(messageID: string, text: string): StreamCommit {
+function compactionError(messageID: SessionMessage.ID, text: string): StreamCommit {
   return {
     kind: "error",
     source: "system",
@@ -598,7 +603,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     })
 
   const renderUser = (
-    messageID: string,
+    messageID: SessionMessage.ID,
     text: string,
     files: SessionMessageUser["files"],
     skills: FooterQueuedPrompt["skills"],
@@ -670,7 +675,11 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   const sourcePending = (key: string) =>
     state.permissions.some(
       (request) =>
-        request.source?.type === "tool" && permissionSourceKey(request.source.messageID, request.source.id) === key,
+        request.source?.type === "tool" &&
+        permissionSourceKey(
+          SessionMessage.ID.make(request.source.messageID, { disableChecks: true }),
+          request.source.id,
+        ) === key,
     )
 
   const pruneToolSources = () => {
@@ -681,12 +690,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   const showTools = () => input.tools !== false
 
-  const rememberToolMessage = (messageID: string) => {
+  const rememberToolMessage = (messageID: SessionMessage.ID) => {
     state.toolMessages.add(messageID)
     state.quietText.delete(messageID)
   }
 
-  const bufferQuietText = (messageID: string, partID: string, text: string, replace: boolean) => {
+  const bufferQuietText = (messageID: SessionMessage.ID, partID: string, text: string, replace: boolean) => {
     if (!text || state.toolMessages.has(messageID)) return
     const parts = state.quietText.get(messageID) ?? []
     const current = parts.find((part) => part.partID === partID)
@@ -698,7 +707,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     state.quietText.set(messageID, parts)
   }
 
-  const flushQuietText = (messageID: string) => {
+  const flushQuietText = (messageID: SessionMessage.ID) => {
     const parts = state.quietText.get(messageID)
     state.quietText.delete(messageID)
     if (!parts || state.toolMessages.has(messageID)) return
@@ -716,7 +725,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     )
   }
 
-  const renderTool = (messageID: string, item: SessionMessageAssistantTool, render = true) => {
+  const renderTool = (messageID: SessionMessage.ID, item: SessionMessageAssistantTool, render = true) => {
     if (!showTools()) {
       rememberToolMessage(messageID)
       render = false
@@ -920,15 +929,27 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   ) => {
     const pending = new Set(
       permissions.flatMap((request) =>
-        request.source?.type === "tool" ? [permissionSourceKey(request.source.messageID, request.source.id)] : [],
+        request.source?.type === "tool"
+          ? [
+              permissionSourceKey(
+                SessionMessage.ID.make(request.source.messageID, { disableChecks: true }),
+                request.source.id,
+              ),
+            ]
+          : [],
       ),
     )
     const messageIDs = [
       ...new Set(
         permissions.flatMap((request) => {
           if (request.source?.type !== "tool") return []
-          const key = permissionSourceKey(request.source.messageID, request.source.id)
-          return state.toolSources.has(key) ? [] : [request.source.messageID]
+          const key = permissionSourceKey(
+            SessionMessage.ID.make(request.source.messageID, { disableChecks: true }),
+            request.source.id,
+          )
+          return state.toolSources.has(key)
+            ? []
+            : [SessionMessage.ID.make(request.source.messageID, { disableChecks: true })]
         }),
       ),
     ]
@@ -1028,7 +1049,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       return
     }
     if (source !== input.sessionID) {
-      if (source) subagents.foreign(client, source, event, attempt.signal)
+      if (source) subagents.foreign(client, Session.ID.make(source, { disableChecks: true }), event, attempt.signal)
       return
     }
     input.trace?.write("recv.event", event)
@@ -1599,7 +1620,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
   // lifecycle events remain presentation and best-effort outcome metadata.
   const runTurnWait = async (
     next: SessionTurnInput,
-    messageID: string,
+    messageID: SessionMessage.ID,
     client: OpenCodeClient,
     send: () => Promise<SessionInboxInfo | void>,
     onAdmitted?: () => void,
@@ -1874,7 +1895,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     settleForm(sessionID, formID) {
       if (sessionID === input.sessionID) state.forms = state.forms.filter((item) => item.id !== formID)
       else if (sessionID === "global") state.globalForms = state.globalForms.filter((item) => item.id !== formID)
-      else subagents.settleForm(sessionID, formID)
+      else subagents.settleForm(Session.ID.make(sessionID, { disableChecks: true }), formID)
       syncBlockers()
     },
     replayOnResize,

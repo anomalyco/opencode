@@ -1,3 +1,5 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { expect, test } from "bun:test"
 import path from "node:path"
 import { createModelPreferenceRepository, decodeModelPreference } from "../src/model-preference"
@@ -7,13 +9,25 @@ test("repairs known model preferences and preserves unrelated fields", () => {
   expect(
     decodeModelPreference({
       unrelated: { keep: true },
-      recent: [{ providerID: "openai", modelID: "gpt-5", ignored: true }, null],
+      recent: [
+        {
+          providerID: Provider.ID.make("openai", { disableChecks: true }),
+          modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+          ignored: true,
+        },
+        null,
+      ],
       favorite: "malformed",
       variant: { "openai/gpt-5": "high", default: "default", invalid: 42 },
     }),
   ).toEqual({
     unrelated: { keep: true },
-    recent: [{ providerID: "openai", modelID: "gpt-5" }],
+    recent: [
+      {
+        providerID: Provider.ID.make("openai", { disableChecks: true }),
+        modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+      },
+    ],
     favorite: [],
     variant: { "openai/gpt-5": "high", default: "default" },
   })
@@ -24,8 +38,14 @@ test("atomically serializes model preference updates", async () => {
   const file = path.join(tmp.path, "model.json")
   await Bun.write(file, JSON.stringify({ unrelated: "keep", favorite: [], variant: {} }))
   const repository = createModelPreferenceRepository(file)
-  const openai = { providerID: "openai", modelID: "org/gpt-5" }
-  const anthropic = { providerID: "anthropic", modelID: "claude/sonnet" }
+  const openai = {
+    providerID: Provider.ID.make("openai", { disableChecks: true }),
+    modelID: Model.ID.make("org/gpt-5", { disableChecks: true }),
+  }
+  const anthropic = {
+    providerID: Provider.ID.make("anthropic", { disableChecks: true }),
+    modelID: Model.ID.make("claude/sonnet", { disableChecks: true }),
+  }
 
   await Promise.all([
     repository.addRecent(openai),

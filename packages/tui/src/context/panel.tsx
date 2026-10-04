@@ -1,10 +1,11 @@
+import type { Session } from "@opencode/schema/session"
 import type { PanelPresentation } from "@opencode/plugin/tui/context"
 import { batch, createContext, createMemo, createSignal, useContext, type ParentProps } from "solid-js"
 
 export type PanelTarget = {
   readonly plugin: string
   readonly name: string
-  readonly sessionID: string
+  readonly sessionID: Session.ID
 }
 
 export function createPanelState() {

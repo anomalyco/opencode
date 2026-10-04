@@ -1,3 +1,4 @@
+import type { Pty } from "@opencode/schema/pty"
 import { batch, createEffect, createMemo, createRoot, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ServerRef, SessionView, Sessions, Storage } from "../sdk"
@@ -147,7 +148,7 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
     return !ui.focus.id || ui.focus.id === id
   }
 
-  const consumeFocus = (id: string) => {
+  const consumeFocus = (id: Pty.ID) => {
     if (!focusRequested(id)) return
     setUi("focus", undefined)
   }
@@ -186,7 +187,7 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
     )
   }
 
-  const removeExited = (id: string) => {
+  const removeExited = (id: Pty.ID) => {
     const all = store.all
     const index = all.findIndex((x) => x.id === id)
     if (index === -1) return
@@ -207,7 +208,7 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
     ),
   )
 
-  const update = (pty: Partial<LocalPTY> & { id: string }) => {
+  const update = (pty: Partial<LocalPTY> & { id: Pty.ID }) => {
     const index = store.all.findIndex((x) => x.id === pty.id)
     const previous = index >= 0 ? store.all[index] : undefined
     if (index >= 0) {
@@ -230,7 +231,7 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
     })
   }
 
-  const clone = async (id: string) => {
+  const clone = async (id: Pty.ID) => {
     const index = store.all.findIndex((x) => x.id === id)
     const pty = store.all[index]
     if (!pty) return
@@ -311,7 +312,7 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
         })
     },
     update,
-    trim(id: string) {
+    trim(id: Pty.ID) {
       const index = store.all.findIndex((x) => x.id === id)
       if (index === -1) return
       setStore((draft) => trimTerminal(draft.all[index]))
@@ -320,7 +321,7 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
       setStore((draft) => draft.all.forEach(trimTerminal))
     },
     clone,
-    open(id: string) {
+    open(id: Pty.ID) {
       setStore((draft) => {
         draft.active = id
       })
@@ -333,7 +334,7 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
     cancelFocus() {
       cancelFocus()
     },
-    async close(id: string) {
+    async close(id: Pty.ID) {
       const index = store.all.findIndex((f) => f.id === id)
       if (index !== -1) {
         setStore((draft) => {
@@ -348,7 +349,7 @@ function createWorkspace(input: { storage: Storage; server: ServerRef; directory
         console.error("Failed to close terminal", error)
       })
     },
-    move(id: string, to: number) {
+    move(id: Pty.ID, to: number) {
       const index = store.all.findIndex((f) => f.id === id)
       if (index === -1) return
       setStore((draft) => {

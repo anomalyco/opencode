@@ -1,3 +1,4 @@
+import type { Pty } from "@opencode/schema/pty"
 import { withAlpha } from "@opencode/ui/theme/color"
 import { useTheme } from "@opencode/ui/theme/context"
 import { resolveThemeVariant } from "@opencode/ui/theme/resolve"
@@ -29,7 +30,7 @@ export interface TerminalProps extends ComponentProps<"div"> {
   autoFocus?: boolean
   onAutoFocus?: () => void
   onSubmit?: () => void
-  onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
+  onCleanup?: (pty: Partial<LocalPTY> & { id: Pty.ID }) => void
   onConnect?: () => void
   onConnectError?: (error: unknown) => void
 }
@@ -137,8 +138,8 @@ const persistTerminal = (input: {
   term: Term | undefined
   addon: SerializeAddon | undefined
   cursor: number
-  id: string
-  onCleanup?: (pty: Partial<LocalPTY> & { id: string }) => void
+  id: Pty.ID
+  onCleanup?: (pty: Partial<LocalPTY> & { id: Pty.ID }) => void
 }) => {
   if (!input.addon || !input.onCleanup || !input.term) return
   const buffer = (() => {

@@ -1,3 +1,8 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import { createAppFixture } from "./fixture/app"
 import { directory, json } from "./fixture/tui-client"
@@ -5,12 +10,15 @@ import { tmpdir } from "./fixture/fixture"
 
 const location = { directory, project: { id: "project", directory, canonical: directory } }
 const session = {
-  id: "ses_clear",
+  id: Session.ID.make("ses_clear", { disableChecks: true }),
   title: "Session to clear",
-  projectID: "project",
+  projectID: Project.ID.make("project", { disableChecks: true }),
   location: { directory },
-  agent: "build",
-  model: { providerID: "provider", id: "model" },
+  agent: Agent.ID.make("build", { disableChecks: true }),
+  model: {
+    providerID: Provider.ID.make("provider", { disableChecks: true }),
+    id: Model.ID.make("model", { disableChecks: true }),
+  },
   cost: 0,
   tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
   time: { created: 0, updated: 0 },
@@ -19,7 +27,7 @@ const session = {
 function render(state: string) {
   return createAppFixture({
     state,
-    args: { sessionID: session.id },
+    args: { sessionID: Session.ID.make(session.id, { disableChecks: true }) },
     config: { animations: false, tabs: { mode: "on" } },
     fetch: (url) => {
       if (url.pathname === "/api/fs/list") return json({ location, data: [] })
@@ -34,7 +42,14 @@ function render(state: string) {
       if (url.pathname === "/api/model")
         return json({
           location,
-          data: [{ id: "model", providerID: "provider", name: "Model", variants: [] }],
+          data: [
+            {
+              id: "model",
+              providerID: Provider.ID.make("provider", { disableChecks: true }),
+              name: "Model",
+              variants: [],
+            },
+          ],
         })
     },
   })

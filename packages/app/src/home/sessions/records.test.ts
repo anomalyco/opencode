@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import { describe, expect, test } from "bun:test"
 import type { SessionInfo } from "@opencode/client/promise"
 import type { LocalProject } from "@/shell/state/layout"
@@ -23,7 +24,10 @@ describe("buildHomeSessionRecords", () => {
       projects: () => [opened],
     })
 
-    expect(records.map((record) => record.session.id)).toEqual(["a", "b"])
+    expect(records.map((record) => record.session.id)).toEqual([
+      SessionID.make("a", { disableChecks: true }),
+      SessionID.make("b", { disableChecks: true }),
+    ])
     expect(records[1]?.project).toMatchObject({ id: "project-b", worktree: "/repo/b", expanded: false })
   })
 
@@ -34,7 +38,7 @@ describe("buildHomeSessionRecords", () => {
       projects: () => [opened],
     })
 
-    expect(records.map((record) => record.session.id)).toEqual(["a"])
+    expect(records.map((record) => record.session.id)).toEqual([SessionID.make("a", { disableChecks: true })])
   })
 
   test("labels a worktree session with its project before that project's inventory has loaded", () => {
@@ -70,7 +74,11 @@ describe("buildHomeSessionRecords", () => {
       projects: () => [opened],
     })
 
-    expect(records.map((record) => record.session.id)).toEqual(["ses_a", "ses_z", "ses_old"])
+    expect(records.map((record) => record.session.id)).toEqual([
+      SessionID.make("ses_a", { disableChecks: true }),
+      SessionID.make("ses_z", { disableChecks: true }),
+      SessionID.make("ses_old", { disableChecks: true }),
+    ])
   })
 })
 

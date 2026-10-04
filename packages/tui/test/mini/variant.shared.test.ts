@@ -1,16 +1,18 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { describe, expect, test } from "bun:test"
 import { cycleVariant, formatModelLabel, pickVariant, resolveVariant } from "../../src/mini/variant.shared"
 import type { RunSession } from "../../src/mini/session.shared"
 import type { RunProvider } from "../../src/mini/types"
 
 const model = {
-  providerID: "openai",
-  modelID: "gpt-5",
+  providerID: Provider.ID.make("openai", { disableChecks: true }),
+  modelID: Model.ID.make("gpt-5", { disableChecks: true }),
 }
 
 const providers: RunProvider[] = [
   {
-    id: "openai",
+    id: Provider.ID.make("openai", { disableChecks: true }),
     name: "OpenAI",
     models: {
       "gpt-5": {
@@ -22,16 +24,22 @@ const providers: RunProvider[] = [
 
 describe("run variant shared", () => {
   test("prefers cli then session then saved variants", () => {
-    expect(resolveVariant("max", "high", "low", ["low", "high"])).toBe("max")
+    expect(resolveVariant("max", "high", "low", ["low", "high"])).toBe(
+      Model.VariantID.make("max", { disableChecks: true }),
+    )
     expect(resolveVariant("default", "high", "low", ["low", "high"])).toBeUndefined()
-    expect(resolveVariant(undefined, "high", "low", ["low", "high"])).toBe("high")
-    expect(resolveVariant(undefined, "missing", "low", ["low", "high"])).toBe("low")
+    expect(resolveVariant(undefined, "high", "low", ["low", "high"])).toBe(
+      Model.VariantID.make("high", { disableChecks: true }),
+    )
+    expect(resolveVariant(undefined, "missing", "low", ["low", "high"])).toBe(
+      Model.VariantID.make("low", { disableChecks: true }),
+    )
   })
 
   test("cycles through variants and back to default", () => {
-    expect(cycleVariant(undefined, ["low", "high"])).toBe("low")
-    expect(cycleVariant("default", ["low", "high"])).toBe("low")
-    expect(cycleVariant("low", ["low", "high"])).toBe("high")
+    expect(cycleVariant(undefined, ["low", "high"])).toBe(Model.VariantID.make("low", { disableChecks: true }))
+    expect(cycleVariant("default", ["low", "high"])).toBe(Model.VariantID.make("low", { disableChecks: true }))
+    expect(cycleVariant("low", ["low", "high"])).toBe(Model.VariantID.make("high", { disableChecks: true }))
     expect(cycleVariant("high", ["low", "high"])).toBeUndefined()
     expect(cycleVariant(undefined, [])).toBeUndefined()
   })

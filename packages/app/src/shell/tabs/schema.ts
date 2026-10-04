@@ -9,9 +9,10 @@ export { ServerKey }
 export const Session = Persistence.struct({
   type: Schema.Literal("session"),
   server: ServerKey,
-  sessionId: Schema.String,
-  routeSessionId: Persistence.optional(Schema.String),
-  routeParentId: Persistence.optional(Schema.String),
+  // Keep accepting existing persisted tab tokens; route/server validation owns their format.
+  sessionId: Schema.String.pipe(Schema.brand("SessionID")),
+  routeSessionId: Persistence.optional(Schema.String.pipe(Schema.brand("SessionID"))),
+  routeParentId: Persistence.optional(Schema.String.pipe(Schema.brand("SessionID"))),
 })
 
 export const Draft = Persistence.struct({

@@ -1,11 +1,13 @@
+import { Provider } from "@opencode/schema/provider"
+import { Model } from "@opencode/schema/model"
 import { Button } from "@opencode/ui/button"
 import { createSignal } from "solid-js"
 import type { ModelSelection } from "./selection"
 import { ModelSelectorPopoverView } from "./select-dialog"
 
 const chatgpt = {
-  id: "gpt-5.6-sol",
-  providerID: "openai",
+  id: Model.ID.make("gpt-5.6-sol", { disableChecks: true }),
+  providerID: Provider.ID.make("openai", { disableChecks: true }),
   api: { id: "gpt-5.6-sol", url: "https://api.openai.com/v1", npm: "@opencode/ai/providers/openai" },
   name: "GPT-5.6 Sol",
   family: "gpt",
@@ -26,7 +28,7 @@ const chatgpt = {
   release_date: "2026-09-01",
   variants: {},
   provider: {
-    id: "openai",
+    id: Provider.ID.make("openai", { disableChecks: true }),
     name: "OpenAI",
     source: "custom",
     env: [],
@@ -40,8 +42,8 @@ const models = [
   chatgpt,
   {
     ...chatgpt,
-    id: "gpt-5.6-terra",
-    api: { ...chatgpt.api, id: "gpt-5.6-terra" },
+    id: Model.ID.make("gpt-5.6-terra"),
+    api: { ...chatgpt.api, id: Model.ID.make("gpt-5.6-terra") },
     name: "GPT-5.6 Terra",
     latest: false,
   },

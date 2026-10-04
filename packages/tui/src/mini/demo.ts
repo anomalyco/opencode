@@ -1,3 +1,7 @@
+import { Permission } from "@opencode/schema/permission"
+import { Form } from "@opencode/schema/form"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Session } from "@opencode/schema/session"
 // Demo mode for testing direct interactive mode without a real SDK.
 //
 // Enabled with `--demo`. Intercepts prompt submissions and drives the same
@@ -111,7 +115,7 @@ const SAMPLE_TABLE = [
 ].join("\n")
 
 type Ref = {
-  msg: string
+  msg: SessionMessage.ID
   call: string
   tool: string
   input: Record<string, JsonValue>
@@ -142,7 +146,7 @@ type Permit = {
 }
 
 type State = {
-  id: string
+  id: Session.ID
   thinking: boolean
   footer: FooterApi
   msg: number
@@ -157,7 +161,7 @@ type State = {
 }
 
 type Input = {
-  sessionID: string
+  sessionID: Session.ID
   thinking: boolean
   footer: FooterApi
 }
@@ -186,7 +190,7 @@ function clearSubagent(footer: FooterApi): void {
 function showSubagent(
   state: State,
   input: {
-    sessionID: string
+    sessionID: Session.ID
     label: string
     description: string
     status: "running" | "completed" | "cancelled" | "error"
@@ -289,8 +293,8 @@ function clearBlocker(state: State): void {
   )
 }
 
-function open(state: State): string {
-  return take(state, "msg", "msg")
+function open(state: State): SessionMessage.ID {
+  return SessionMessage.ID.make(take(state, "msg", "msg"), { disableChecks: true })
 }
 
 async function emitText(state: State, body: string, signal?: AbortSignal): Promise<void> {
@@ -360,7 +364,7 @@ function startTool(state: State, ref: Ref, metadata: Record<string, JsonValue> =
 function askPermission(state: State, item: Permit): void {
   const tool = startTool(state, item.ref)
 
-  const id = take(state, "perm", "perm")
+  const id = Permission.ID.make(take(state, "perm", "perm"), { disableChecks: true })
   state.perms.set(id, {
     ref: item.ref,
     done: item.done,
@@ -532,7 +536,7 @@ function emitTask(state: State): void {
     time: { created: Date.now(), ran: Date.now() },
   } satisfies SessionMessageAssistantTool
   showSubagent(state, {
-    sessionID: "ses_demo_child",
+    sessionID: Session.ID.make("ses_demo_child", { disableChecks: true }),
     label: "Explore",
     description: "Scan run/* for reducer touchpoints",
     status: "completed",
@@ -549,16 +553,16 @@ function emitTask(state: State): void {
         text: "Thinking: tracing reducer and footer boundaries",
         phase: "progress",
         source: "reasoning",
-        messageID: "sub_demo_msg_reasoning",
+        messageID: SessionMessage.ID.make("sub_demo_msg_reasoning", { disableChecks: true }),
         partID: "sub_demo_reasoning_1",
       },
-      toolCommit(part, "sub_demo_msg_tool", "start"),
+      toolCommit(part, SessionMessage.ID.make("sub_demo_msg_tool", { disableChecks: true }), "start"),
       {
         kind: "assistant",
         text: "Footer updates flow through stream.ts into RunFooter",
         phase: "progress",
         source: "assistant",
-        messageID: "sub_demo_msg_text",
+        messageID: SessionMessage.ID.make("sub_demo_msg_text", { disableChecks: true }),
         partID: "sub_demo_text_1",
       },
     ],
@@ -802,7 +806,7 @@ function emitForm(state: State, kind: FormKind = "question"): void {
   startTool(state, ref)
   state.form++
   const request: MiniFormRequest = {
-    id: `frm_demo_${state.form}`,
+    id: Form.ID.make(`frm_demo_${state.form}`, { disableChecks: true }),
     sessionID: state.id,
     title: form.title,
     metadata:

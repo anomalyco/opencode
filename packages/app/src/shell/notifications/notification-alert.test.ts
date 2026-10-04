@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import { afterAll, beforeAll, expect, mock, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -53,7 +54,7 @@ test.each([
   ["session.execution.failed", "notification.session.error.title"],
 ] as const)("system alert for %s requires an open session tab", async (type, title) => {
   alerts.length = 0
-  tabs.store = [{ type: "session", server, sessionId: "another-session" }]
+  tabs.store = [{ type: "session", server, sessionId: SessionID.make("another-session", { disableChecks: true }) }]
   let listener: ((event: unknown) => void) | undefined
   const dispose = createRoot((dispose) => {
     const state = createServerNotificationState({
@@ -82,7 +83,7 @@ test.each([
   expect(dispose.state.session.all(session.id)).toHaveLength(1)
   expect(alerts).toEqual([])
 
-  tabs.store = [{ type: "session", server, sessionId: session.id }]
+  tabs.store = [{ type: "session", server, sessionId: SessionID.make(session.id, { disableChecks: true }) }]
   listener?.({
     type,
     id: "event-2",

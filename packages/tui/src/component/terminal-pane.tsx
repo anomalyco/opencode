@@ -1,3 +1,4 @@
+import type { Pty } from "@opencode/schema/pty"
 import { EmbeddedTerminalRenderable, type RGBA } from "@opentui/core"
 import { rgbToOklch, type ResolvedThemeTokens } from "@opencode/theme/tui"
 import { extend, useRenderer } from "@opentui/solid"
@@ -22,7 +23,7 @@ type StreamItem =
   | { type: "ready" }
 
 export function TerminalPane(props: {
-  ptyID: string
+  ptyID: Pty.ID
   resizing?: boolean
   autoFocus?: boolean
   onAutoFocus?: () => void

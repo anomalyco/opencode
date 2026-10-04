@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import { getFilename } from "@opencode/util/path"
 import type { Project } from "@/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
@@ -27,7 +28,7 @@ export type CommandPaletteEntry = {
   option?: CommandOption
   path?: string
   directory?: string
-  sessionID?: string
+  sessionID?: SessionID
   server?: ServerConnection.Key
   project?: LocalProject
   archived?: number
@@ -203,7 +204,7 @@ export function createServerSessionEntries(props: {
   opened: () => LocalProject[]
   stored: () => Project[]
   load: (search: string, signal: AbortSignal) => Promise<{ data: SessionInfo[] }>
-  get: (sessionID: string, signal: AbortSignal) => Promise<SessionInfo>
+  get: (sessionID: SessionID, signal: AbortSignal) => Promise<SessionInfo>
   untitled: () => string
   category: () => string
 }) {

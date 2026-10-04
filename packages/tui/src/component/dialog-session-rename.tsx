@@ -1,10 +1,11 @@
+import type { Session } from "@opencode/schema/session"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { type DialogContext, useDialog } from "../ui/dialog"
 import { useClient } from "../context/client"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 
-export function DialogSessionRename(props: { sessionID: string; currentTitle?: string }) {
+export function DialogSessionRename(props: { sessionID: Session.ID; currentTitle?: string }) {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
@@ -33,5 +34,5 @@ export function DialogSessionRename(props: { sessionID: string; currentTitle?: s
   )
 }
 
-DialogSessionRename.show = (dialog: DialogContext, sessionID: string, currentTitle?: string) =>
+DialogSessionRename.show = (dialog: DialogContext, sessionID: Session.ID, currentTitle?: string) =>
   dialog.replace(() => <DialogSessionRename sessionID={sessionID} currentTitle={currentTitle} />)

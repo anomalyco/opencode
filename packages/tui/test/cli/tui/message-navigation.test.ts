@@ -1,11 +1,15 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { findMessageBoundary, messageNavigationSlack } from "../../../src/routes/session/message-navigation"
 
 const messages: SessionMessageInfo[] = [
-  { type: "user", id: "user-1", text: "First", time: { created: 0 } },
+  { type: "user", id: SessionMessage.ID.make("user-1", { disableChecks: true }), text: "First", time: { created: 0 } },
   assistant("assistant-1", "Response"),
-  { type: "user", id: "user-2", text: "Second", time: { created: 2 } },
+  { type: "user", id: SessionMessage.ID.make("user-2", { disableChecks: true }), text: "Second", time: { created: 2 } },
 ]
 const children = [
   { id: "user-1", y: 0 },
@@ -28,7 +32,7 @@ test("finds the next user message without stopping at an assistant message", () 
       viewportY: 0,
       userOnly: true,
     }),
-  ).toEqual({ id: "user-2", y: 40, top: 40 })
+  ).toEqual({ id: SessionMessage.ID.make("user-2", { disableChecks: true }), y: 40, top: 40 })
 })
 
 test("finds the previous user message without stopping at an assistant message", () => {
@@ -41,7 +45,7 @@ test("finds the previous user message without stopping at an assistant message",
       viewportY: 0,
       userOnly: true,
     }),
-  ).toEqual({ id: "user-1", y: 0, top: 0 })
+  ).toEqual({ id: SessionMessage.ID.make("user-1", { disableChecks: true }), y: 0, top: 0 })
 })
 
 test("preserves navigation across both user and assistant messages", () => {
@@ -53,7 +57,7 @@ test("preserves navigation across both user and assistant messages", () => {
       scrollTop: 0,
       viewportY: 0,
     }),
-  ).toEqual({ id: "assistant-1", y: 20, top: 19 })
+  ).toEqual({ id: SessionMessage.ID.make("assistant-1", { disableChecks: true }), y: 20, top: 19 })
   expect(
     findMessageBoundary({
       direction: "prev",
@@ -62,7 +66,7 @@ test("preserves navigation across both user and assistant messages", () => {
       scrollTop: 35,
       viewportY: 0,
     }),
-  ).toEqual({ id: "assistant-1", y: 20, top: 19 })
+  ).toEqual({ id: SessionMessage.ID.make("assistant-1", { disableChecks: true }), y: 20, top: 19 })
 })
 
 test("uses the selected message when the viewport is too tall to scroll", () => {
@@ -76,7 +80,7 @@ test("uses the selected message when the viewport is too tall to scroll", () => 
       currentID: "user-1",
       userOnly: true,
     }),
-  ).toEqual({ id: "user-2", y: 40, top: 40 })
+  ).toEqual({ id: SessionMessage.ID.make("user-2", { disableChecks: true }), y: 40, top: 40 })
   expect(
     findMessageBoundary({
       direction: "prev",
@@ -87,7 +91,7 @@ test("uses the selected message when the viewport is too tall to scroll", () => 
       currentID: "user-2",
       userOnly: true,
     }),
-  ).toEqual({ id: "user-1", y: 0, top: 0 })
+  ).toEqual({ id: SessionMessage.ID.make("user-1", { disableChecks: true }), y: 0, top: 0 })
 })
 
 test("stops at the first and last selected user message", () => {
@@ -155,9 +159,12 @@ test("stops at the first and last message", () => {
 function assistant(id: string, text: string): SessionMessageAssistant {
   return {
     type: "assistant",
-    id,
-    agent: "build",
-    model: { providerID: "test", id: "test" },
+    id: SessionMessage.ID.make(id, { disableChecks: true }),
+    agent: Agent.ID.make("build", { disableChecks: true }),
+    model: {
+      providerID: Provider.ID.make("test", { disableChecks: true }),
+      id: Model.ID.make("test", { disableChecks: true }),
+    },
     content: [{ type: "text", text }],
     time: { created: 1, completed: 1 },
   }

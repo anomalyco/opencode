@@ -1,9 +1,10 @@
+import { Session } from "@opencode/schema/session"
 import { Plugin } from "@opencode/plugin/tui"
 import type { AttentionSoundName } from "@opencode/plugin/tui/context"
 
 function notify(
   context: Plugin.Context,
-  sessionID: string | undefined,
+  sessionID: Session.ID | undefined,
   message: string,
   sound: AttentionSoundName,
   title?: string,
@@ -26,11 +27,11 @@ export default Plugin.define({
     const forms = new Set<string>()
     const permissions = new Set<string>()
 
-    const started = (sessionID: string) => {
+    const started = (sessionID: Session.ID) => {
       errored.delete(sessionID)
       terminal.delete(sessionID)
     }
-    const ended = (sessionID: string) => {
+    const ended = (sessionID: Session.ID) => {
       if (terminal.has(sessionID)) return
       terminal.add(sessionID)
       if (errored.has(sessionID)) {
@@ -45,7 +46,15 @@ export default Plugin.define({
       context.data.on("form.created", (event) => {
         if (forms.has(event.data.form.id)) return
         forms.add(event.data.form.id)
-        notify(context, event.data.form.sessionID, "Input needs response", "question", event.data.form.title)
+        notify(
+          context,
+          event.data.form.sessionID === "global"
+            ? undefined
+            : Session.ID.make(event.data.form.sessionID, { disableChecks: true }),
+          "Input needs response",
+          "question",
+          event.data.form.title,
+        )
       }),
       context.data.on("form.replied", (event) => forms.delete(event.data.id)),
       context.data.on("form.cancelled", (event) => forms.delete(event.data.id)),

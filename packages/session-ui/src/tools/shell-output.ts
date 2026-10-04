@@ -1,3 +1,4 @@
+import type { Shell } from "@opencode/schema/shell"
 import { isShellNotFoundError, type ShellOutputInput, type ShellOutputOutput } from "@opencode/client/promise"
 
 // Same page size as the TUI shell output viewer; only this much recent output is retained and rendered.
@@ -9,9 +10,9 @@ type Progress = { cursor: number; output: string; state: "partial" | "complete" 
 // Virtualized timelines remount shell tools frequently. Progress is remembered per shell so a
 // remount resumes from its cursor instead of re-reading from zero, and so a shell the server no
 // longer knows is never requested again.
-const progress = new Map<string, Progress>()
+const progress = new Map<Shell.ID, Progress>()
 
-function remember(id: string, entry: Progress) {
+function remember(id: Shell.ID, entry: Progress) {
   progress.delete(id)
   progress.set(id, entry)
   if (progress.size <= PROGRESS_LIMIT) return
@@ -20,7 +21,7 @@ function remember(id: string, entry: Progress) {
 }
 
 export function followShellOutput(input: {
-  id: string
+  id: Shell.ID
   directory: string
   running: boolean
   load: (input: ShellOutputInput) => Promise<ShellOutputOutput>

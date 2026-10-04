@@ -1,3 +1,4 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
 // Prompt composer and its state machine for direct interactive mode.
 //
 // createPromptState() wires keymap command layers, history navigation, and
@@ -129,7 +130,7 @@ type PromptInput = {
   clipboard?: Pick<ClipboardService, "read">
   history?: Accessor<RunPrompt[]>
   queuedPrompts: Accessor<FooterQueuedPrompt[]>
-  onQueuedPromptSteer: (inboxID: string) => Promise<boolean>
+  onQueuedPromptSteer: (inboxID: SessionMessage.ID) => Promise<boolean>
   onSubmit: (input: RunPrompt) => boolean | Promise<boolean>
   onCycle: () => void
   onInterrupt: () => boolean

@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import type { BoxRenderable, TextareaRenderable, ScrollBoxRenderable } from "@opentui/core"
 import { pathToFileURL } from "node:url"
 import fuzzysort from "fuzzysort"
@@ -58,7 +59,7 @@ type AutocompleteResults = {
 
 export function Autocomplete(props: {
   value: string
-  sessionID?: string
+  sessionID?: Session.ID
   argumentAutocomplete?: (command: KeymapCommand) => "directory" | undefined
   directoryOptions?: (query: string) => AutocompleteOption[]
   setPrompt: (input: (prompt: PromptInfo) => void) => void

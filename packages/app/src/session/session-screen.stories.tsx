@@ -1,3 +1,4 @@
+import { Form } from "@opencode/schema/form"
 import {
   activePermissionRequest,
   activeQuestionRequest,
@@ -147,7 +148,7 @@ export const WebSearchRequest = {
       request={{
         type: "websearch",
         value: {
-          id: "frm_websearch_preview",
+          id: Form.ID.make("frm_websearch_preview", { disableChecks: true }),
           sessionID: "ses_websearch_preview",
           title: "Web Search",
           metadata: { kind: "websearch.provider" },

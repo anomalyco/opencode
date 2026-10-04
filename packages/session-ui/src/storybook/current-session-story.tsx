@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import type { SessionDocument } from "../document"
 import { File } from "../components/file"
 import { DataProvider } from "../context/data"
@@ -38,27 +39,27 @@ export function CurrentSessionProviders(props: { document: SessionDocument; chil
         },
         session: [
           {
-            id: CURRENT_SESSION_ID,
+            id: SessionID.make(CURRENT_SESSION_ID, { disableChecks: true }),
             title: "Current Session UI",
             time: { created: STORY_TIME, updated: STORY_TIME + 300_000 },
           },
           {
-            id: "session_child_review",
-            parentID: CURRENT_SESSION_ID,
+            id: SessionID.make("session_child_review", { disableChecks: true }),
+            parentID: SessionID.make(CURRENT_SESSION_ID, { disableChecks: true }),
             title: "Review current Session fixtures",
             time: { created: STORY_TIME + 71_000, updated: STORY_TIME + 72_000 },
           },
           {
-            id: "session_child_tests",
-            parentID: CURRENT_SESSION_ID,
+            id: SessionID.make("session_child_tests", { disableChecks: true }),
+            parentID: SessionID.make(CURRENT_SESSION_ID, { disableChecks: true }),
             title: "Check the Storybook scenarios",
             time: { created: STORY_TIME + 73_000, updated: STORY_TIME + 74_000 },
           },
         ],
         session_status: {
           [CURRENT_SESSION_ID]: props.document.status,
-          session_child_review: { type: "idle" },
-          session_child_tests: { type: "busy" },
+          [SessionID.make("session_child_review", { disableChecks: true })]: { type: "idle" },
+          [SessionID.make("session_child_tests", { disableChecks: true })]: { type: "busy" },
         },
         session_diff: { [CURRENT_SESSION_ID]: props.document.diffs },
       }}

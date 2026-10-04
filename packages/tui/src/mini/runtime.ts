@@ -1,3 +1,6 @@
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
+import { Session } from "@opencode/schema/session"
 // Top-level orchestrator for `opencode mini`.
 //
 // Wires the boot sequence, lifecycle (renderer + footer), stream transport,
@@ -41,9 +44,9 @@ type BootContext = Pick<RunInput, "sdk" | "agent" | "model" | "variant"> & {
 
 type CreateSessionInput = {
   location: LocationRef
-  agent: string | undefined
+  agent: RunInput["agent"]
   model: RunInput["model"]
-  variant: string | undefined
+  variant: RunInput["variant"]
 }
 
 type CreateSession = (sdk: RunInput["sdk"], input: CreateSessionInput, signal?: AbortSignal) => Promise<ResolvedSession>
@@ -105,12 +108,12 @@ type RunDemo = ReturnType<(typeof import("./demo"))["createRunDemo"]>
 
 type ResolvedSession = {
   sdk?: RunInput["sdk"]
-  sessionID: string
+  sessionID: Session.ID
   sessionTitle?: string
   location: RunInput["location"]
   model: RunInput["model"]
-  variant: string | undefined
-  agent?: string | undefined
+  variant: RunInput["variant"]
+  agent?: RunInput["agent"]
   resume?: boolean
 }
 
@@ -121,16 +124,16 @@ type RuntimeState = {
   defaultModel: RunInput["model"]
   providers: RunProvider[]
   variants: string[]
-  activeVariant: string | undefined
-  sessionID: string
+  activeVariant: RunInput["variant"]
+  sessionID: Session.ID
   history: RunPrompt[]
   localRows: LocalReplayRow[]
   sessionTitle?: string
-  agent: string | undefined
+  agent: RunInput["agent"]
   location: LocationRef
   switching?: Promise<void>
   demo?: RunDemo
-  selectSubagent?: (sessionID: string | undefined) => void
+  selectSubagent?: (sessionID: Session.ID | undefined) => void
   session?: Promise<void>
   stream?: Promise<StreamState>
 }
@@ -218,7 +221,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
     providers: [],
     variants: [],
     activeVariant: resolveVariant(ctx.variant, session.variant, savedVariant, []),
-    sessionID: "",
+    sessionID: Session.ID.make("", { disableChecks: true }),
     history: [...session.history],
     localRows: [],
     agent: ctx.agent,
@@ -310,7 +313,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
     },
     onAgentSelect: (agent) => {
-      state.agent = agent
+      state.agent = Agent.ID.make(agent)
     },
     onModelSelect: async (model) => {
       if (state.model?.providerID === model.providerID && state.model.modelID === model.modelID) {
@@ -361,7 +364,7 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       }
 
       if (!state.model) state.model = model
-      state.activeVariant = variant
+      state.activeVariant = variant === undefined ? undefined : Model.VariantID.make(variant)
       void input.host.preferences.saveVariant(model, state.activeVariant)
       return {
         status: state.activeVariant ? `variant ${state.activeVariant}` : "variant default",
@@ -627,7 +630,9 @@ async function runInteractiveRuntime(input: RunRuntimeInput, deps: RunRuntimeDep
       ? resolveVariant(ctx.variant, current, saved, state.variants)
       : current && !state.variants.includes(current)
         ? undefined
-        : current
+        : current === undefined
+          ? undefined
+          : Model.VariantID.make(current)
     if (footer.isClosed) return
     footer.event({ type: "models", providers: info.providers })
     footer.event({ type: "variants", variants: state.variants, current: state.activeVariant })

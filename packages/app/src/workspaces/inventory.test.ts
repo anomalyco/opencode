@@ -1,3 +1,4 @@
+import { ProjectID } from "@opencode/schema/project-id"
 import { describe, expect, test } from "bun:test"
 import { QueryClient } from "@tanstack/solid-query"
 import type { WorktreeDirectory } from "@opencode/client/promise"
@@ -39,26 +40,26 @@ describe("createWorktreeInventory", () => {
       await gate.promise
       return [{ directory }, { directory: `${directory}/feature`, strategy: "git" }]
     })
-    const first = setupResult.inventory.list("/repo")
-    const second = setupResult.inventory.list("/repo")
+    const first = setupResult.inventory.list(ProjectID.make("/repo", { disableChecks: true }))
+    const second = setupResult.inventory.list(ProjectID.make("/repo", { disableChecks: true }))
     expect(setupResult.calls).toEqual(["/repo"])
     gate.resolve()
     expect(await first).toHaveLength(2)
     expect(await second).toHaveLength(2)
-    await setupResult.inventory.list("/repo")
+    await setupResult.inventory.list(ProjectID.make("/repo", { disableChecks: true }))
     expect(setupResult.calls).toEqual(["/repo", "/repo"])
     expect(setupResult.updates).toEqual([
       ["/repo", [{ directory: "/repo" }, { directory: "/repo/feature", strategy: "git" }]],
       ["/repo", [{ directory: "/repo" }, { directory: "/repo/feature", strategy: "git" }]],
     ])
-    expect(setupResult.inventory.cached("/repo")).toHaveLength(2)
+    expect(setupResult.inventory.cached(ProjectID.make("/repo", { disableChecks: true }))).toHaveLength(2)
     expect(setupResult.refreshes).toEqual([])
     setupResult.client.clear()
   })
 
   test("list reads saved inventory without discovery", async () => {
     const setupResult = setup(async (directory) => [{ directory }])
-    await setupResult.inventory.list("/opened")
+    await setupResult.inventory.list(ProjectID.make("/opened", { disableChecks: true }))
     expect(setupResult.calls).toEqual(["/opened"])
     expect(setupResult.refreshes).toEqual([])
     setupResult.client.clear()
@@ -70,41 +71,47 @@ describe("createWorktreeInventory", () => {
       if (fail) throw new Error("Location unavailable")
       return [{ directory }]
     })
-    expect(await setupResult.inventory.list("/repo")).toBeUndefined()
-    expect(setupResult.inventory.cached("/repo")).toBeUndefined()
+    expect(await setupResult.inventory.list(ProjectID.make("/repo", { disableChecks: true }))).toBeUndefined()
+    expect(setupResult.inventory.cached(ProjectID.make("/repo", { disableChecks: true }))).toBeUndefined()
     fail = false
-    expect(await setupResult.inventory.list("/repo")).toEqual([{ directory: "/repo" }])
+    expect(await setupResult.inventory.list(ProjectID.make("/repo", { disableChecks: true }))).toEqual([
+      { directory: "/repo" },
+    ])
     expect(setupResult.calls).toEqual(["/repo", "/repo"])
     setupResult.client.clear()
   })
 
   test("keys are partitioned by server and use opaque project IDs", () => {
     const remote = "https://remote.example" as typeof ServerScope.local
-    expect(worktreeInventoryKey(ServerScope.local, "project")).not.toEqual(
-      worktreeInventoryKey(ServerScope.local, "project/"),
+    expect(worktreeInventoryKey(ServerScope.local, ProjectID.make("project", { disableChecks: true }))).not.toEqual(
+      worktreeInventoryKey(ServerScope.local, ProjectID.make("project/", { disableChecks: true })),
     )
-    expect(worktreeInventoryKey(ServerScope.local, "/repo")).not.toEqual(worktreeInventoryKey(remote, "/repo"))
+    expect(worktreeInventoryKey(ServerScope.local, ProjectID.make("/repo", { disableChecks: true }))).not.toEqual(
+      worktreeInventoryKey(remote, ProjectID.make("/repo", { disableChecks: true })),
+    )
   })
 
   test("refresh discovers without changing cached inventory until the next list", async () => {
     const rows = [{ directory: "/repo" }]
     const result = setup(async () => [...rows])
-    expect(await result.inventory.list("project")).toEqual(rows)
-    const pending = result.inventory.refresh("project")
+    expect(await result.inventory.list(ProjectID.make("project", { disableChecks: true }))).toEqual(rows)
+    const pending = result.inventory.refresh(ProjectID.make("project", { disableChecks: true }))
     rows.push({ directory: "/external" })
-    expect(result.inventory.cached("project")).toEqual([{ directory: "/repo" }])
+    expect(result.inventory.cached(ProjectID.make("project", { disableChecks: true }))).toEqual([
+      { directory: "/repo" },
+    ])
     result.refreshed.resolve()
     expect(await pending).toBeUndefined()
     expect(result.calls).toEqual(["project"])
     expect(result.refreshes).toEqual(["project"])
-    expect(await result.inventory.list("project")).toEqual(rows)
+    expect(await result.inventory.list(ProjectID.make("project", { disableChecks: true }))).toEqual(rows)
     result.client.clear()
   })
 })
 
 describe("withWorktreeInventory", () => {
   const metadata = {
-    id: "project",
+    id: ProjectID.make("project", { disableChecks: true }),
     canonical: "/repo",
     name: "Before",
     time: { created: 1, updated: 1, active: 1 },

@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { Data } from "@opencode/client/solid"
 import type { LocationRef, OpenCodeClient, ProjectListOutput, WorktreeDirectory } from "@opencode/client/promise"
 import type { Schema } from "effect"
@@ -26,7 +27,7 @@ export interface ServerRef {
 /** A session owned by an open shell tab, mounted or not. */
 export interface SessionRef {
   readonly key: string
-  readonly id: string
+  readonly id: SessionID
   readonly tab: string
   readonly server: ServerRef
   readonly pending: boolean
@@ -175,12 +176,9 @@ export interface Composer {
   detach(id: string): void
 }
 
-export interface BackgroundTask {
-  id: string
-  type: "shell" | "subagent"
-  label: string
-  agent?: string
-}
+export type BackgroundTask =
+  | { id: SessionID; type: "subagent"; label: string; agent?: string }
+  | { id: string; type: "shell"; label: string }
 
 /** A mounted session route. Slot inputs and panel renders receive this. */
 export interface SessionView extends SessionRef {

@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import {
   CliRenderEvents,
   RGBA,
@@ -26,7 +27,7 @@ import { useToast } from "../ui/toast"
 import { TerminalPane } from "./terminal-pane"
 import { PanelHost } from "./panel-host"
 
-export function SessionFrame(props: { sessionID: string; verticalTabsWidth: number }) {
+export function SessionFrame(props: { sessionID: SessionID; verticalTabsWidth: number }) {
   const sessions = useSessionTerminals()
   const prompt = usePromptRef()
   const config = useConfig()

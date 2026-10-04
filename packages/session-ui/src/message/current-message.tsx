@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { SessionMessageAssistant, SessionMessageAssistantTool, SessionMessageUser } from "@opencode/client/promise"
 import { Match, Switch, type ComponentProps } from "solid-js"
 import type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
@@ -15,7 +16,7 @@ export { SessionShellMessage } from "../tools/tool-renderer"
 export { currentContentDefaultOpen } from "./current-tool-state"
 
 export function SessionUserMessage(props: {
-  sessionID: string
+  sessionID: SessionID
   message: SessionMessageUser
   displayText?: string
   comments?: SessionUserComment[]

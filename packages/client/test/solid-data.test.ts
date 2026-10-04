@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
 import { createRoot } from "solid-js"
@@ -974,6 +975,18 @@ test.each(["success", "failure", "cancel", "cancel-retry", "cancel-page", "join-
     }
   },
 )
+
+test("preserves wire activity keys without adding ID validation", async () => {
+  const id = SessionID.make("legacy-child", { disableChecks: true })
+  const setup = activityFixture(() => Response.json({ data: { [id]: { type: "running" } } }))
+  try {
+    setup.emit({ type: "server.connected", data: {} })
+    await wait(() => setup.data.session.status(id) === "running")
+    expect(setup.data.session.status(id)).toBe("running")
+  } finally {
+    setup.dispose()
+  }
+})
 
 test.each([
   "session.execution.succeeded",

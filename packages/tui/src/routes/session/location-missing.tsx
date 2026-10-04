@@ -1,3 +1,5 @@
+import type { Project } from "@opencode/schema/project"
+import type { Session } from "@opencode/schema/session"
 import { createMemo } from "solid-js"
 import { useTuiPaths } from "../../context/runtime"
 import { useTheme } from "../../context/theme"
@@ -11,7 +13,7 @@ import { errorMessage } from "../../util/error"
 import { DialogWorkspaces, type WorkspaceSelection } from "../../component/dialog-workspaces"
 import { useData } from "../../context/data"
 
-export function SessionLocationMissing(props: { directory: string; projectID: string; sessionID: string }) {
+export function SessionLocationMissing(props: { directory: string; projectID: Project.ID; sessionID: Session.ID }) {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()

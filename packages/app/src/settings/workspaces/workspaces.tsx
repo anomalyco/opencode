@@ -1,3 +1,4 @@
+import type { ProjectID } from "@opencode/schema/project-id"
 import type { Component } from "solid-js"
 import { For, Show, createEffect, createMemo, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -48,7 +49,7 @@ type Workspace = {
 export const SettingsWorkspaces: Component<{
   activeDirectory?: string
   resetProjectFilter?: () => number
-  projectID?: string
+  projectID?: ProjectID
 }> = (props) => {
   const dialog = useDialog()
   const language = useLanguage()

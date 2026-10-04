@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import { createEffect, createMemo, createSignal, For, onCleanup, Show, type ComponentProps, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useData } from "../context"
@@ -204,7 +205,7 @@ function UserMessageComments(props: { comments: SessionUserComment[]; bounded: b
 }
 
 export function CurrentUserMessageDisplay(props: {
-  sessionID: string
+  sessionID: SessionID
   message: SessionMessageUser
   text: string
   agent: string

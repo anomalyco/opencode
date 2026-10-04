@@ -1,3 +1,4 @@
+import type { ProjectID } from "@opencode/schema/project-id"
 import type { QueryClient } from "@tanstack/solid-query"
 import type { WorktreeDirectory } from "@opencode/client/promise"
 import type { ServerApi } from "@/runtime/server/api"
@@ -5,11 +6,11 @@ import type { ServerScope } from "@/runtime/server/scope"
 import type { Project } from "@/runtime/server/types"
 import { sameDirectory } from "@opencode/util/path"
 
-export function worktreeInventoryKey(scope: ServerScope, projectID: string) {
+export function worktreeInventoryKey(scope: ServerScope, projectID: ProjectID) {
   return [scope, "worktree", projectID] as const
 }
 
-export function worktreeInventoryViewKey(scope: ServerScope, projectID?: string) {
+export function worktreeInventoryViewKey(scope: ServerScope, projectID?: ProjectID) {
   return [scope, "settings-workspace-inventory", projectID ?? null] as const
 }
 
@@ -30,9 +31,9 @@ export function createWorktreeInventory(input: {
   scope: ServerScope
   queryClient: QueryClient
   api: () => Pick<ServerApi["worktree"], "list" | "refresh">
-  updated: (projectID: string, worktrees: WorktreeDirectory[]) => void
+  updated: (projectID: ProjectID, worktrees: WorktreeDirectory[]) => void
 }) {
-  const options = (projectID: string) => ({
+  const options = (projectID: ProjectID) => ({
     queryKey: worktreeInventoryKey(input.scope, projectID),
     queryFn: () =>
       input
@@ -48,11 +49,11 @@ export function createWorktreeInventory(input: {
     retry: false,
   })
   return {
-    cached: (projectID: string) =>
+    cached: (projectID: ProjectID) =>
       input.queryClient.getQueryData<WorktreeDirectory[]>(worktreeInventoryKey(input.scope, projectID)),
-    list: (projectID: string) =>
+    list: (projectID: ProjectID) =>
       input.queryClient.fetchQuery({ ...options(projectID), staleTime: 0 }).catch(() => undefined),
-    refresh: (projectID: string) =>
+    refresh: (projectID: ProjectID) =>
       input
         .api()
         .refresh({ projectID })

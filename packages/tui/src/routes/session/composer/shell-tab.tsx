@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import { createMemo, For, Show, createEffect, onMount, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes, ScrollBoxRenderable } from "@opentui/core"
@@ -9,7 +10,7 @@ import { useComposerTab } from "./context"
 import { useDialog } from "../../../ui/dialog"
 import { DialogShellOutput } from "../../../component/dialog-shell-output"
 
-export function ShellTab(props: { sessionID: string }) {
+export function ShellTab(props: { sessionID: Session.ID }) {
   const data = useData()
   const client = useClient()
   const theme = useTheme()

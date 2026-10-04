@@ -18,6 +18,9 @@ import { Model } from "@opencode/schema/model"
 import { Permission } from "@opencode/schema/permission"
 import { PermissionSaved } from "@opencode/schema/permission-saved"
 import { Plugin } from "@opencode/schema/plugin"
+import { ProjectID } from "@opencode/schema/project-id"
+import { WorkspaceID } from "@opencode/schema/workspace-id"
+import { Tool } from "@opencode/schema/tool"
 import { Project } from "@opencode/schema/project"
 import { Worktree } from "@opencode/schema/worktree"
 import { AgentAttachment, FileAttachment, Prompt, PromptMention } from "@opencode/schema/prompt"
@@ -89,6 +92,18 @@ await Effect.runPromise(
       write(
         emitPromise(promiseContract, {
           mutableOutputs: true,
+          brandReferences: [
+            ...effectTypeReferences.filter(
+              (reference) =>
+                reference.name.endsWith("ID") &&
+                !reference.name.startsWith("Project.") &&
+                !reference.name.startsWith("Pty."),
+            ),
+            typeReference("ProjectID", "@opencode/schema/project-id", ProjectID),
+            typeReference("WorkspaceID", "@opencode/schema/workspace-id", WorkspaceID),
+            typeReference("ID", "@opencode/schema/pty", Pty.ID),
+            typeReference("Tool.CallID", "@opencode/schema/tool", Tool.CallID),
+          ],
         }),
         fileURLToPath(new URL("../src/promise/generated", import.meta.url)),
       ),

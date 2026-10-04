@@ -1,3 +1,5 @@
+import type { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 import { batch, createEffect, createMemo, createResource, createSignal, onCleanup, Show } from "solid-js"
 import type { OpenCodeEvent, SessionInfo } from "@opencode/client"
 import path from "path"
@@ -28,10 +30,10 @@ const RECENT_LIMIT = 8
 export const DialogOpenKey = Symbol("DialogOpen")
 
 type OpenTarget =
-  | { type: "session"; sessionID: string }
-  | { type: "project"; directory: string; projectID?: string }
+  | { type: "session"; sessionID: Session.ID }
+  | { type: "project"; directory: string; projectID?: Project.ID }
 
-type OpenView = { type: "projects" } | { type: "worktrees"; projectID: string }
+type OpenView = { type: "projects" } | { type: "worktrees"; projectID: Project.ID }
 
 type OpenSelection = { view: OpenView; filter: string; selected?: OpenTarget }
 
@@ -141,7 +143,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   const [matched] = createResource(
     () => {
       const value = filter().trim()
-      return /^ses_[0-9A-Za-z]{26}$/.test(value) ? value : undefined
+      return /^ses_[0-9A-Za-z]{26}$/.test(value) ? Session.ID.make(value) : undefined
     },
     (sessionID) =>
       client.api.session

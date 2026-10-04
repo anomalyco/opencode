@@ -1,3 +1,5 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { describe, expect, test } from "bun:test"
 import { Schema } from "effect"
 import { ModelState, serverState } from "./persistence"
@@ -138,11 +140,25 @@ describe("model persistence schema", () => {
     })
     expect(state).toEqual({
       user: [
-        { providerID: "provider", modelID: "model", visibility: "show", favorite: true },
-        { providerID: "provider", modelID: "hidden", visibility: "hide" },
+        {
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+          modelID: Model.ID.make("model", { disableChecks: true }),
+          visibility: "show",
+          favorite: true,
+        },
+        {
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+          modelID: Model.ID.make("hidden", { disableChecks: true }),
+          visibility: "hide",
+        },
       ],
-      recent: [{ providerID: "provider", modelID: "model" }],
-      variant: { model: "high" },
+      recent: [
+        {
+          providerID: Provider.ID.make("provider", { disableChecks: true }),
+          modelID: Model.ID.make("model", { disableChecks: true }),
+        },
+      ],
+      variant: { model: Model.VariantID.make("high", { disableChecks: true }) },
     })
     expect(Schema.encodeSync(ModelState)(state)).toEqual(state)
   })

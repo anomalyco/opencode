@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import { expect, test } from "bun:test"
 import { SESSION_TABS_REMOVED_EVENT, readSessionTabsRemovedDetail } from "@/shell/titlebar/session-events"
 import { archiveHomeSession } from "./archive"
@@ -18,7 +19,7 @@ test("archiving a Home session removes its open titlebar tab", async () => {
 
   await archiveHomeSession({
     server: remote,
-    session: { id: "ses_1", location: { directory: "/workspace" } },
+    session: { id: SessionID.make("ses_1", { disableChecks: true }), location: { directory: "/workspace" } },
     archive: async () => undefined,
     remove: () => {
       removed = true
@@ -36,7 +37,7 @@ test("reports archive failures without removing the session", async () => {
 
   await archiveHomeSession({
     server: remote,
-    session: { id: "ses_1", location: { directory: "/workspace" } },
+    session: { id: SessionID.make("ses_1", { disableChecks: true }), location: { directory: "/workspace" } },
     archive: async () => Promise.reject(failure),
     remove: () => {
       removed = true

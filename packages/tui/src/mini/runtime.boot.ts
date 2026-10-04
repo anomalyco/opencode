@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 // Boot-time resolution for direct interactive mode.
 //
 // These functions run concurrently at startup to gather everything the runtime
@@ -60,7 +61,7 @@ export function resolveModelInfoStrict(sdk: RunInput["sdk"], location: LocationR
 // Fetches session messages to determine if this is the first turn and build prompt history.
 export async function resolveSessionInfo(
   sdk: RunInput["sdk"],
-  sessionID: string,
+  sessionID: Session.ID,
   model: RunInput["model"],
   signal?: AbortSignal,
 ): Promise<SessionInfo> {

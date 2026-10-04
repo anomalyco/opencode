@@ -1,3 +1,4 @@
+import { ProjectID } from "@opencode/schema/project-id"
 import { describe, expect, test } from "bun:test"
 import { ServerConnection } from "@/runtime/server/registry"
 import type { ExtensionServer } from "@/runtime/extension/servers"
@@ -22,7 +23,7 @@ const connection: ServerConnection.Extension = {
 
 test("settings project inventory reads metadata without acquiring directory stores", () => {
   const projects = Array.from({ length: 40 }, (_, index) => ({
-    id: `project-${index}`,
+    id: ProjectID.make(`project-${index}`, { disableChecks: true }),
     worktree: `/projects/${index}`,
     name: `Project ${index}`,
     icon: { color: "orange" },

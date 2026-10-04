@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { createStore, reconcile } from "solid-js/store"
 import type { LocationRef } from "@opencode/client"
 import { createSimpleContext } from "./helper"
@@ -13,7 +14,7 @@ export type HomeRoute = {
 
 export type SessionRoute = {
   type: "session"
-  sessionID: string
+  sessionID: Session.ID
   prompt?: PromptInfo
 }
 
@@ -49,7 +50,7 @@ function initialRoute(value: unknown): Route | undefined {
   if (!value || typeof value !== "object" || !("type" in value)) return
   if (value.type === "home") return { type: "home" }
   if (value.type === "session" && "sessionID" in value && typeof value.sessionID === "string") {
-    return { type: "session", sessionID: value.sessionID }
+    return { type: "session", sessionID: Session.ID.make(value.sessionID, { disableChecks: true }) }
   }
   if (
     value.type === "plugin" &&

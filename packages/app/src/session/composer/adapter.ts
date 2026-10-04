@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { Accessor } from "solid-js"
 import type { ActiveComposerAdapter, ComposerControls } from "@/composer/adapter"
 import { useComposerState } from "@/composer/persistence"
@@ -6,7 +7,7 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useWorkspaceLocation } from "@/workspaces/location"
 
 export function createActiveComposerAdapter(input: {
-  sessionID: string
+  sessionID: SessionID
   controls: Accessor<ComposerControls>
   submitted: () => void
   setEditor: (element: HTMLDivElement) => void

@@ -1,3 +1,9 @@
+import { Project } from "@opencode/schema/project"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Session } from "@opencode/schema/session"
+import { Skill } from "@opencode/schema/skill"
 import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
 import { OpenCode, type SessionMessageUser } from "@opencode/client/promise"
 import {
@@ -10,8 +16,8 @@ import {
 } from "../../src/mini/session.shared"
 
 const model = {
-  providerID: "openai",
-  modelID: "gpt-5",
+  providerID: Provider.ID.make("openai", { disableChecks: true }),
+  modelID: Model.ID.make("gpt-5", { disableChecks: true }),
 }
 
 afterEach(() => {
@@ -20,7 +26,7 @@ afterEach(() => {
 
 function userMessage(id: string, text: string, input: Partial<SessionMessageUser> = {}): SessionMessageUser {
   return {
-    id,
+    id: SessionMessage.ID.make(id, { disableChecks: true }),
     type: "user",
     text,
     time: { created: 1 },
@@ -118,9 +124,24 @@ describe("run session shared", () => {
     const session: RunSession = {
       first: false,
       turns: [
-        { prompt: { text: "one", parts }, provider: "openai", model: "gpt-5", variant: "high" },
-        { prompt: { text: "one", parts: structuredClone(parts) }, provider: "openai", model: "gpt-5", variant: "high" },
-        { prompt: { text: "   ", parts: [] }, provider: "openai", model: "gpt-5", variant: "high" },
+        {
+          prompt: { text: "one", parts },
+          provider: "openai",
+          model: "gpt-5",
+          variant: Model.VariantID.make("high", { disableChecks: true }),
+        },
+        {
+          prompt: { text: "one", parts: structuredClone(parts) },
+          provider: "openai",
+          model: "gpt-5",
+          variant: Model.VariantID.make("high", { disableChecks: true }),
+        },
+        {
+          prompt: { text: "   ", parts: [] },
+          provider: "openai",
+          model: "gpt-5",
+          variant: Model.VariantID.make("high", { disableChecks: true }),
+        },
         { prompt: { text: "two", parts: [] }, provider: "openai", model: "gpt-5", variant: undefined },
       ],
     }
@@ -134,7 +155,7 @@ describe("run session shared", () => {
   })
 
   test("keeps image-only history and preserves inline attachment metadata and skills", () => {
-    const message = userMessage("msg_image", "", {
+    const message = userMessage(SessionMessage.ID.make("msg_image", { disableChecks: true }), "", {
       files: [
         {
           data: "cG5n",
@@ -149,7 +170,13 @@ describe("run session shared", () => {
           source: { type: "uri", uri: "file:///remote/image.png" },
         },
       ],
-      skills: [{ id: "effect", name: "Effect", mention: { text: "@effect", start: 0, end: 7 } }],
+      skills: [
+        {
+          id: Skill.ID.make("effect", { disableChecks: true }),
+          name: "Effect",
+          mention: { text: "@effect", start: 0, end: 7 },
+        },
+      ],
     })
 
     expect(sessionHistory(createSession([message]))).toEqual([
@@ -171,7 +198,11 @@ describe("run session shared", () => {
             filename: undefined,
             source: undefined,
           },
-          { type: "skill", id: "effect", source: { value: "@effect", start: 0, end: 7 } },
+          {
+            type: "skill",
+            id: Skill.ID.make("effect", { disableChecks: true }),
+            source: { value: "@effect", start: 0, end: 7 },
+          },
         ],
       },
     ])
@@ -181,7 +212,12 @@ describe("run session shared", () => {
     const session: RunSession = {
       first: false,
       turns: [
-        { prompt: { text: "one", parts: [] }, provider: "openai", model: "gpt-5", variant: "high" },
+        {
+          prompt: { text: "one", parts: [] },
+          provider: "openai",
+          model: "gpt-5",
+          variant: Model.VariantID.make("high", { disableChecks: true }),
+        },
         { prompt: { text: "two", parts: [] }, provider: "anthropic", model: "sonnet", variant: "max" },
         { prompt: { text: "three", parts: [] }, provider: "openai", model: "gpt-5", variant: undefined },
       ],
@@ -205,7 +241,7 @@ describe("run session shared", () => {
       Promise.resolve({
         data: [
           {
-            id: "msg_prompt",
+            id: SessionMessage.ID.make("msg_prompt", { disableChecks: true }),
             type: "user",
             text: "Review @note.ts",
             files: [
@@ -226,21 +262,32 @@ describe("run session shared", () => {
     )
     spyOn(client.session, "get").mockImplementation(() =>
       Promise.resolve({
-        id: "ses_1",
+        id: Session.ID.make("ses_1", { disableChecks: true }),
         title: "Session",
-        projectID: "proj_1",
+        projectID: Project.ID.make("proj_1", { disableChecks: true }),
         location: { directory: "/tmp" },
         time: { created: 1, updated: 1 },
         cost: 0,
         tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
-        model: { providerID: "openai", id: "gpt-5", variant: "high" },
+        model: {
+          providerID: Provider.ID.make("openai", { disableChecks: true }),
+          id: Model.ID.make("gpt-5", { disableChecks: true }),
+          variant: Model.VariantID.make("high", { disableChecks: true }),
+        },
       }),
     )
 
     const controller = new AbortController()
-    const out = await resolveCurrentSession(client, "ses_1", controller.signal)
+    const out = await resolveCurrentSession(
+      client,
+      Session.ID.make("ses_1", { disableChecks: true }),
+      controller.signal,
+    )
 
-    expect(out.model).toEqual({ providerID: "openai", modelID: "gpt-5" })
+    expect(out.model).toEqual({
+      providerID: Provider.ID.make("openai", { disableChecks: true }),
+      modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+    })
     expect(out.variant).toBe("high")
     expect(out.turns[0]?.prompt).toEqual({
       text: "Review @note.ts",

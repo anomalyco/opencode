@@ -1,3 +1,4 @@
+import type { Project } from "@opencode/schema/project"
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
 import { createEffect, createMemo, createResource, createSignal, onCleanup, onMount, Show } from "solid-js"
@@ -26,7 +27,7 @@ export type WorkspaceSelection =
 type ProjectDirectory = WorktreeListOutput[number]
 
 type DialogWorkspacesProps = {
-  projectID: string
+  projectID: Project.ID
   location?: { directory: string }
   current?: WorkspaceSelection
   onSelect: (selection: WorkspaceSelection) => void

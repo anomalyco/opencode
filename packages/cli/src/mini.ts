@@ -1,3 +1,5 @@
+import { Agent } from "@opencode/schema/agent"
+import type { ModelRef } from "@opencode/client"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { ClientError, OpenCode, type OpenCodeClient } from "@opencode/client/promise"
 import type { MiniFrontendInput } from "@opencode/tui/mini"
@@ -56,7 +58,7 @@ export async function runMini(input: MiniCommandInput) {
               session: input.session,
               fork: input.fork,
               model: requested,
-              agent: input.agent,
+              agent: input.agent === undefined ? undefined : Agent.ID.make(input.agent),
               environment,
               prepare,
               signal,
@@ -82,9 +84,9 @@ export async function runMini(input: MiniCommandInput) {
         client: OpenCodeClient,
         next: {
           location: { directory: string }
-          agent: string | undefined
+          agent: Agent.ID | undefined
           model: Model
-          variant: string | undefined
+          variant: ModelRef["variant"]
         },
         signal?: AbortSignal,
       ) =>
@@ -115,7 +117,7 @@ export async function runMini(input: MiniCommandInput) {
         target: resolveTarget,
         reconnect: connection.reconnect,
         createSession: create,
-        agent: input.agent,
+        agent: input.agent === undefined ? undefined : Agent.ID.make(input.agent),
         model,
         variant: requested?.variant,
         files: [],
@@ -218,7 +220,10 @@ function parseModel(value?: string) {
 }
 
 function prepareTarget(requestedAgent?: string): SessionTargetPreparation {
-  return async (input) => ({ model: input.model, agent: requestedAgent ?? input.agent })
+  return async (input) => ({
+    model: input.model,
+    agent: requestedAgent === undefined ? input.agent : Agent.ID.make(requestedAgent),
+  })
 }
 
 function fail(message: string): never {

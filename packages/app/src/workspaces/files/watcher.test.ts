@@ -1,3 +1,4 @@
+import { Event } from "@opencode/schema/event"
 import { describe, expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode/client/promise"
 import { invalidateFromWatcher } from "./watcher"
@@ -5,7 +6,7 @@ import { invalidateFromWatcher } from "./watcher"
 type FilesystemEvent = Extract<OpenCodeEvent, { type: "filesystem.changed" }>
 
 const filesystemEvent = (file: string, event: FilesystemEvent["data"]["event"]): FilesystemEvent => ({
-  id: `evt_${file}`,
+  id: Event.ID.make(`evt_${file}`, { disableChecks: true }),
   created: 1,
   type: "filesystem.changed",
   data: { file, event },

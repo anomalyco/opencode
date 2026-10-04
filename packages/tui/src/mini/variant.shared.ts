@@ -1,3 +1,4 @@
+import { Model } from "@opencode/schema/model"
 // Model variant resolution and persistence.
 //
 // Variants are provider-specific reasoning effort levels (e.g., "high", "max").
@@ -28,17 +29,20 @@ export function formatModelLabel(
   return `${names.model} · ${names.provider}${label}`
 }
 
-export function cycleVariant(current: string | undefined, variants: string[]): string | undefined {
-  return cycleModelVariant(current, variants)
+export function cycleVariant(current: string | undefined, variants: string[]): Model.VariantID | undefined {
+  const variant = cycleModelVariant(current, variants)
+  return variant === undefined ? undefined : Model.VariantID.make(variant)
 }
 
 export function pickVariant(model: RunInput["model"], input: RunSession | SessionMessages): string | undefined {
   return sessionVariant(Array.isArray(input) ? createSession(input) : input, model)
 }
 
-function fitVariant(value: string | undefined, variants: string[]): string | undefined {
+function fitVariant(value: string | undefined, variants: string[]): Model.VariantID | undefined {
   const normalized = normalizeModelVariant(value)
-  return normalized && (variants.length === 0 || variants.includes(normalized)) ? normalized : undefined
+  return normalized && (variants.length === 0 || variants.includes(normalized))
+    ? Model.VariantID.make(normalized)
+    : undefined
 }
 
 // Picks the active variant. CLI flag wins, then valid session history, then the
@@ -49,9 +53,10 @@ export function resolveVariant(
   session: string | undefined,
   saved: string | undefined,
   variants: string[],
-): string | undefined {
+): Model.VariantID | undefined {
   if (input !== undefined) {
-    return normalizeModelVariant(input)
+    const variant = normalizeModelVariant(input)
+    return variant === undefined ? undefined : Model.VariantID.make(variant)
   }
 
   return fitVariant(session, variants) ?? fitVariant(saved, variants)

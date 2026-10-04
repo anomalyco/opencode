@@ -1,3 +1,4 @@
+import type { ProjectID } from "@opencode/schema/project-id"
 import { queryOptions, useQueryClient, type QueryClient } from "@tanstack/solid-query"
 import type { Accessor } from "solid-js"
 import type { ServerSDK } from "@/runtime/server/client"
@@ -17,7 +18,7 @@ function workspaceProjectsQuery(sdk: ServerSDK) {
 export function workspaceInventoryQuery(
   context: ServerCtx,
   client: QueryClient,
-  projectID?: string,
+  projectID?: ProjectID,
   shouldRefresh = projectID !== undefined,
 ) {
   return queryOptions({
@@ -41,7 +42,7 @@ export function workspaceInventoryQuery(
 
 export function useWorkspacesPrefetch(
   server: Accessor<ServerConnection.Any | undefined>,
-  projectID?: Accessor<string | undefined>,
+  projectID?: Accessor<ProjectID | undefined>,
 ) {
   const client = useQueryClient()
   const context = useServerCtx(server)

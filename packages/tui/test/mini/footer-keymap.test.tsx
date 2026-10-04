@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { Keymap } from "../../src/context/keymap"
@@ -23,7 +24,7 @@ async function renderSubagent(interrupt: "ctrl+i" | "none") {
   const [subagents] = createSignal<FooterSubagentState>({
     tabs: [
       {
-        sessionID: "subagent-1",
+        sessionID: Session.ID.make("subagent-1", { disableChecks: true }),
         label: "Explore",
         description: "Inspect the keymap",
         status: "running",

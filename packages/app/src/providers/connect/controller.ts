@@ -1,3 +1,4 @@
+import { Integration } from "@opencode/schema/integration"
 import type {
   FormAnswer,
   IntegrationInfo,
@@ -16,11 +17,11 @@ type Authorization = IntegrationOauthConnectOutput["data"]
 
 // OpenCode Go and OpenCode Zen both bill through the OpenCode Console, so the
 // Console sign-in is the connection method for both providers.
-export const CONSOLE_INTEGRATION = "opencode"
+export const CONSOLE_INTEGRATION = Integration.ID.make("opencode")
 export const CONSOLE_PROVIDERS = new Set(["opencode", "opencode-go"])
 
 export function consoleIntegration(provider: string) {
-  return CONSOLE_PROVIDERS.has(provider) ? CONSOLE_INTEGRATION : provider
+  return CONSOLE_PROVIDERS.has(provider) ? CONSOLE_INTEGRATION : Integration.ID.make(provider)
 }
 
 export function providerFormDefaults(fields: ProviderConnectMethod["form"]) {
@@ -72,7 +73,7 @@ export function createProviderConnectionController(options: {
       (input) => {
         setIntegration({ loading: true, latest: undefined })
         serverSDK.api.integration
-          .get({ integrationID: input.provider, location: location() })
+          .get({ integrationID: Integration.ID.make(input.provider), location: location() })
           .then((result) => result.data)
           .catch(() => undefined)
           .then((latest) => {
@@ -179,7 +180,11 @@ export function createProviderConnectionController(options: {
     polling.attempt = undefined
     if (!attempt) return
     void serverSDK.api.integration.oauth
-      .cancel({ integrationID: options.provider(), attemptID: attempt.attemptID, location: location() })
+      .cancel({
+        integrationID: Integration.ID.make(options.provider()),
+        attemptID: attempt.attemptID,
+        location: location(),
+      })
       .catch(() => undefined)
   }
   const cancelPolling = () => {
@@ -218,7 +223,7 @@ export function createProviderConnectionController(options: {
   const poll = async (authorization: Authorization, generation: number) => {
     const result = await serverSDK.api.integration.oauth
       .status({
-        integrationID: options.provider(),
+        integrationID: Integration.ID.make(options.provider()),
         attemptID: authorization.attemptID,
         location: location(),
       })
@@ -299,7 +304,7 @@ export function createProviderConnectionController(options: {
     dispatch({ type: "auth.pending" })
     const result = await serverSDK.api.integration.oauth
       .connect({
-        integrationID: options.provider(),
+        integrationID: Integration.ID.make(options.provider()),
         methodID: selected.id,
         ...(Object.keys(merged).length ? { answer: merged } : {}),
         location: location(),
@@ -319,7 +324,7 @@ export function createProviderConnectionController(options: {
       if (result.ok)
         void serverSDK.api.integration.oauth
           .cancel({
-            integrationID: options.provider(),
+            integrationID: Integration.ID.make(options.provider()),
             attemptID: result.authorization.attemptID,
             location: location(),
           })
@@ -359,7 +364,7 @@ export function createProviderConnectionController(options: {
   }
   const connectKey = async (key: string) => {
     await serverSDK.api.integration.connect.key({
-      integrationID: options.keyProvider?.() ?? options.provider(),
+      integrationID: Integration.ID.make(options.keyProvider?.() ?? options.provider()),
       location: location(),
       key,
       ...(store.formAnswer ? { answer: store.formAnswer } : {}),
@@ -371,7 +376,7 @@ export function createProviderConnectionController(options: {
     if (!authorization) return language.t("provider.connect.oauth.code.invalid")
     const result = await serverSDK.api.integration.oauth
       .complete({
-        integrationID: options.provider(),
+        integrationID: Integration.ID.make(options.provider()),
         attemptID: authorization.attemptID,
         location: location(),
         code,

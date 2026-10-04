@@ -1,13 +1,26 @@
+import { SessionID } from "@opencode/schema/session-id"
+import { Provider } from "@opencode/schema/provider"
+import { Model } from "@opencode/schema/model"
+import { Agent } from "@opencode/schema/agent"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import { enrichLeadingTurn, loadOlderTimeline } from "./model"
 
-const user = (id: string): SessionMessageUser => ({ id, type: "user", text: id, time: { created: 1 } })
+const user = (id: string): SessionMessageUser => ({
+  id: SessionMessage.ID.make(id, { disableChecks: true }),
+  type: "user",
+  text: id,
+  time: { created: 1 },
+})
 const assistant = (id: string): SessionMessageAssistant => ({
-  id,
+  id: SessionMessage.ID.make(id, { disableChecks: true }),
   type: "assistant",
-  agent: "build",
-  model: { id: "model", providerID: "provider" },
+  agent: Agent.ID.make("build", { disableChecks: true }),
+  model: {
+    id: Model.ID.make("model", { disableChecks: true }),
+    providerID: Provider.ID.make("provider", { disableChecks: true }),
+  },
   content: [],
   time: { created: 1 },
 })
@@ -22,7 +35,7 @@ describe("timeline model", () => {
     const calls: Array<string | boolean> = []
 
     await loadOlderTimeline({
-      sessionID: () => sessionID,
+      sessionID: () => SessionID.make(sessionID, { disableChecks: true }),
       more: () => true,
       loading: () => false,
       loadMore: async () => {

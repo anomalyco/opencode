@@ -1,3 +1,5 @@
+import { SessionMessage } from "@opencode/schema/session-message"
+import type { Session } from "@opencode/schema/session"
 import type { SessionInboxEnqueued, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { createEffect, on, onCleanup, type Accessor } from "solid-js"
 import { createStore, produce, reconcile } from "solid-js/store"
@@ -44,7 +46,7 @@ export async function completeGroupBoundary(input: {
   }
 }
 
-export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
+export function createSessionRows(sessionID: Accessor<Session.ID>, onSynced?: (sessionID: Session.ID) => void) {
   const data = useData()
   const client = useClient()
   const config = useConfig()
@@ -185,7 +187,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
 
   createEffect(on([turnTokens, verbosity], rebuild, { defer: true }))
 
-  const appendMessage = (messageID: string) =>
+  const appendMessage = (messageID: SessionMessage.ID) =>
     setRows(
       produce((draft) => {
         if (draft.some((row) => row.type === "message" && row.messageID === messageID)) return
@@ -216,7 +218,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       }),
     )
 
-  const appendFooter = (messageID: string) =>
+  const appendFooter = (messageID: SessionMessage.ID) =>
     setRows(
       produce((draft) => {
         if (draft.some((row) => row.type === "assistant-footer" && row.messageID === messageID)) return
@@ -226,7 +228,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       }),
     )
 
-  const removeFooter = (messageID: string) =>
+  const removeFooter = (messageID: SessionMessage.ID) =>
     setRows(
       produce((draft) => {
         const index = draft.findIndex((row) => row.type === "assistant-footer" && row.messageID === messageID)
@@ -234,7 +236,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
       }),
     )
 
-  const isPending = (messageID: string) => {
+  const isPending = (messageID: SessionMessage.ID) => {
     const message = data.session.message.get(sessionID(), messageID)
     if (message?.type === "user" || message?.type === "synthetic") return data.session.input.has(sessionID(), messageID)
     return message?.type === "compaction" && message.status === "running"
@@ -247,8 +249,9 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
     return index === -1 ? rows.length : index
   }
 
-  const message = (event: { id: string; data: { sessionID: string } }) => {
-    if (event.data.sessionID === sessionID()) appendMessage(event.id.replace(/^evt_/, "msg_"))
+  const message = (event: { id: string; data: { sessionID: Session.ID } }) => {
+    if (event.data.sessionID === sessionID())
+      appendMessage(SessionMessage.ID.make(event.id.replace(/^evt_/, "msg_"), { disableChecks: true }))
   }
   const input = (event: SessionInboxEnqueued) => {
     if (
@@ -261,12 +264,15 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
   const subscriptions = [
     data.on("session.inbox.enqueued", input),
     data.on("session.compaction.started", (event) => {
-      if (event.data.sessionID === sessionID()) appendMessage(event.data.inputID ?? event.id.replace(/^evt_/, "msg_"))
+      if (event.data.sessionID === sessionID())
+        appendMessage(
+          event.data.inputID ?? SessionMessage.ID.make(event.id.replace(/^evt_/, "msg_"), { disableChecks: true }),
+        )
     }),
     data.on("session.instructions.updated", message),
     data.on("session.synthetic", (event) => {
       if (event.data.sessionID === sessionID() && event.data.description?.trim())
-        appendMessage(event.id.replace(/^evt_/, "msg_"))
+        appendMessage(SessionMessage.ID.make(event.id.replace(/^evt_/, "msg_"), { disableChecks: true }))
     }),
     data.on("session.shell.started", message),
     data.on("session.agent.selected", message),

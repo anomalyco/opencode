@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import { render, useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { registerOpencodeSpinner } from "./component/register-spinner"
 import { Effect, Latch } from "effect"
@@ -371,7 +372,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                               input.args.continue
                                                 ? {
                                                     type: "session",
-                                                    sessionID: "dummy",
+                                                    sessionID: SessionID.make("dummy", { disableChecks: true }),
                                                   }
                                                 : undefined
                                             }

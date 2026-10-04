@@ -32,7 +32,8 @@ function array<S extends Schema.ConstraintCodec<unknown, unknown>>(schema: S) {
 }
 
 const PTY = struct({
-  id: Schema.NonEmptyString,
+  // Stored IDs predate prefix validation; retain their existing non-empty-string contract.
+  id: Schema.NonEmptyString.pipe(Schema.brand("PtyID")),
   title: fallback(Schema.String, () => ""),
   titleNumber: fallback(Schema.Finite, () => 0),
   rows: optional(Schema.Finite),
@@ -50,12 +51,14 @@ export function numberFromTitle(title: string) {
   return titleNumber(title, MAX_TERMINAL_SESSIONS)
 }
 
-const State = struct({
+const StoredState = struct({
   active: optional(Schema.String),
   all: array(PTY),
 })
 
-export const TerminalState = State.pipe(
+const State = struct({ ...StoredState.fields, active: optional(Schema.String.pipe(Schema.brand("PtyID"))) })
+
+export const TerminalState = StoredState.pipe(
   Schema.decodeTo(Schema.toType(State), {
     decode: SchemaGetter.transform((value) => {
       const seen = new Set<string>()
@@ -65,7 +68,7 @@ export const TerminalState = State.pipe(
         return [{ ...pty, titleNumber: pty.titleNumber > 0 ? pty.titleNumber : (numberFromTitle(pty.title) ?? 0) }]
       })
       return {
-        active: value.active && seen.has(value.active) ? value.active : all[0]?.id,
+        active: all.find((pty) => pty.id === value.active)?.id ?? all[0]?.id,
         all,
       }
     }),

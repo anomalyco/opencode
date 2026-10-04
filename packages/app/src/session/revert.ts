@@ -1,3 +1,4 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { useComposerState } from "@/composer/persistence"
 import { useData } from "@/runtime/server/current"
@@ -73,7 +74,7 @@ export function createSessionRevert(input: {
     owner.run(() => input.setActiveMessage(previous))
   }
 
-  const to = async (messageID: string) => {
+  const to = async (messageID: SessionMessage.ID) => {
     const messages = input.session.history.userMessages()
     const index = messages.findIndex((message) => message.id === messageID)
     const message = messages[index]

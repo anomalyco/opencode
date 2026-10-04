@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
 import { TextAttributes } from "@opentui/core"
 import { Keymap } from "../../../context/keymap"
@@ -6,7 +7,7 @@ import { useTheme } from "../../../context/theme"
 import { useToast } from "../../../ui/toast"
 import { useComposerTab } from "./context"
 
-export function TerminalsTab(props: { sessionID: string; visibleTerminalID?: string }) {
+export function TerminalsTab(props: { sessionID: Session.ID; visibleTerminalID?: string }) {
   const composer = useComposerTab()
   const terminals = useSessionTerminals()
   const theme = useTheme()

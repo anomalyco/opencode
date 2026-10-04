@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import { logo } from "../logo"
 
 const reset = "\x1b[0m"
@@ -23,7 +24,7 @@ function wordmark(pad = "") {
   })
 }
 
-export function sessionEpilogue(input: { title: string; sessionID?: string }) {
+export function sessionEpilogue(input: { title: string; sessionID?: Session.ID }) {
   const weak = (text: string) => `${dim}${text.padEnd(10, " ")}${reset}`
   return [
     ...wordmark("  "),

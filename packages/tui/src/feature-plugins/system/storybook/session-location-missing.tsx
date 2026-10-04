@@ -1,3 +1,4 @@
+import { Project } from "@opencode/schema/project"
 import type { Plugin } from "@opencode/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { TextAttributes } from "@opentui/core"
@@ -16,7 +17,7 @@ function SessionLocationMissingStory(props: { context: Plugin.Context }) {
   const open = () =>
     props.context.ui.dialog.show(() => (
       <DialogWorkspaces
-        projectID="fixture-project"
+        projectID={Project.ID.make("fixture-project", { disableChecks: true })}
         initialDirectories={[
           { directory: "/Users/kit/code/open-source/opencode" },
           {

@@ -1,3 +1,4 @@
+import { SessionID } from "@opencode/schema/session-id"
 import { createEffect, onCleanup } from "solid-js"
 import type { PermissionRequest } from "@opencode/client/promise"
 import type { Data } from "@opencode/client/solid"
@@ -80,7 +81,7 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   // one case that stays uncovered.
   async function sweepLocations() {
     const active = await input.sdk.api.session.active().catch(() => undefined)
-    const ids = Object.keys(active ?? {})
+    const ids = Object.keys(active ?? {}).map((id) => SessionID.make(id, { disableChecks: true }))
     // Resync every active session rather than trusting cached info: another
     // client may have moved one while this client was disconnected, and the
     // cached location would list permissions from the old location. A failed

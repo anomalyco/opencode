@@ -1,3 +1,6 @@
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Session } from "@opencode/schema/session"
+import { Project } from "@opencode/schema/project"
 import { expect, test } from "bun:test"
 import type { OpenCodeEvent } from "@opencode/client"
 import { createData } from "@opencode/client/solid"
@@ -15,7 +18,14 @@ function setup(options: { keep?: string[]; current?: string; limit?: number } = 
       createFetch((url) => {
         if (url.pathname.endsWith("/message"))
           return json({
-            data: [{ id: "msg_test", type: "user", text: "Transcript", time: { created: 1 } }],
+            data: [
+              {
+                id: SessionMessage.ID.make("msg_test", { disableChecks: true }),
+                type: "user",
+                text: "Transcript",
+                time: { created: 1 },
+              },
+            ],
             cursor: {},
           })
         if (url.pathname.endsWith("/inbox")) return json({ data: [] })
@@ -23,8 +33,10 @@ function setup(options: { keep?: string[]; current?: string; limit?: number } = 
       }).fetch,
     )
     const data = createData({ api: () => api, event: events, directory })
-    const [current, setCurrent] = createSignal(options.current)
-    const [keep, setKeep] = createSignal(options.keep ?? [])
+    const [current, setCurrent] = createSignal(
+      options.current === undefined ? undefined : Session.ID.make(options.current, { disableChecks: true }),
+    )
+    const [keep, setKeep] = createSignal((options.keep ?? []).map((id) => Session.ID.make(id, { disableChecks: true })))
     const evictions: string[] = []
     createSessionRetention({
       session: {
@@ -47,9 +59,9 @@ function setup(options: { keep?: string[]; current?: string; limit?: number } = 
       setKeep,
       remember(id: string, parentID?: string, updated = 0) {
         data.session.remember({
-          id,
-          parentID,
-          projectID: "project",
+          id: Session.ID.make(id, { disableChecks: true }),
+          parentID: parentID === undefined ? undefined : Session.ID.make(parentID, { disableChecks: true }),
+          projectID: Project.ID.make("project", { disableChecks: true }),
           location: { directory },
           cost: 0,
           tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -57,10 +69,10 @@ function setup(options: { keep?: string[]; current?: string; limit?: number } = 
         })
       },
       async view(id: string) {
-        setCurrent(id)
-        await data.session.message.sync(id)
+        setCurrent(Session.ID.make(id, { disableChecks: true }))
+        await data.session.message.sync(Session.ID.make(id, { disableChecks: true }))
       },
-      cached: (id: string) => data.session.message.list(id).length > 0,
+      cached: (id: string) => data.session.message.list(Session.ID.make(id, { disableChecks: true })).length > 0,
     }
   })
 }
@@ -87,7 +99,11 @@ test("retains three recently viewed families and child views touch their root", 
     await scope.view("c")
     expect(["a", "child", "grandchild"].some(scope.cached)).toBe(false)
     expect(["c", "d", "e"].every(scope.cached)).toBe(true)
-    expect(scope.data.session.family("a").toSorted()).toEqual(["a", "child", "grandchild"])
+    expect(scope.data.session.family(Session.ID.make("a", { disableChecks: true })).toSorted()).toEqual([
+      Session.ID.make("a", { disableChecks: true }),
+      Session.ID.make("child", { disableChecks: true }),
+      Session.ID.make("grandchild", { disableChecks: true }),
+    ])
   } finally {
     scope.dispose()
   }
@@ -103,10 +119,14 @@ test("explicitly kept families are exempt from the recent-family budget", async 
     expect(["a", "b", "c", "d", "f", "g", "h"].every(scope.cached)).toBe(true)
     expect(scope.cached("e")).toBe(false)
 
-    scope.setKeep(["b", "c", "d"])
+    scope.setKeep([
+      Session.ID.make("b", { disableChecks: true }),
+      Session.ID.make("c", { disableChecks: true }),
+      Session.ID.make("d", { disableChecks: true }),
+    ])
     expect(scope.cached("a")).toBe(false)
     await scope.view("b")
-    scope.setKeep(["c", "d"])
+    scope.setKeep([Session.ID.make("c", { disableChecks: true }), Session.ID.make("d", { disableChecks: true })])
     expect(scope.cached("b")).toBe(true)
     expect(scope.cached("f")).toBe(false)
     scope.setKeep([])
@@ -141,18 +161,18 @@ test("background metadata changes do not refresh view recency or repeat eviction
 test("unviewed families and newly discovered descendants are evicted", async () => {
   const scope = setup({ current: "current" })
   try {
-    await scope.data.session.message.sync("background")
+    await scope.data.session.message.sync(Session.ID.make("background", { disableChecks: true }))
     expect(scope.cached("background")).toBe(true)
     scope.remember("background")
     expect(scope.cached("background")).toBe(false)
-    await scope.data.session.message.sync("child")
+    await scope.data.session.message.sync(Session.ID.make("child", { disableChecks: true }))
     scope.remember("child", "background")
     expect(scope.cached("child")).toBe(false)
     expect(scope.evictions.filter((id) => id === "background")).toHaveLength(2)
 
     scope.remember("current")
     scope.remember("kept-child", "current")
-    await scope.data.session.message.sync("kept-child")
+    await scope.data.session.message.sync(Session.ID.make("kept-child", { disableChecks: true }))
     scope.remember("kept-child", "current", 10)
     expect(scope.cached("kept-child")).toBe(true)
     expect(
@@ -160,7 +180,12 @@ test("unviewed families and newly discovered descendants are evicted", async () 
         .list()
         .map((session) => session.id)
         .toSorted(),
-    ).toEqual(["background", "child", "current", "kept-child"])
+    ).toEqual([
+      Session.ID.make("background", { disableChecks: true }),
+      Session.ID.make("child", { disableChecks: true }),
+      Session.ID.make("current", { disableChecks: true }),
+      Session.ID.make("kept-child", { disableChecks: true }),
+    ])
   } finally {
     scope.dispose()
   }
@@ -170,7 +195,7 @@ test("current child protects late-arriving ancestry and reopening restores an ev
   const scope = setup({ current: "child" })
   try {
     scope.remember("root")
-    await scope.data.session.message.sync("child")
+    await scope.data.session.message.sync(Session.ID.make("child", { disableChecks: true }))
     scope.remember("child", "parent")
     scope.remember("parent", "root")
     scope.remember("root")

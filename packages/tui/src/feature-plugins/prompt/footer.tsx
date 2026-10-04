@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
 import { contextUsage, formatContextUsage } from "../../util/session"
@@ -11,7 +12,7 @@ const money = new Intl.NumberFormat("en-US", {
 
 export function PromptFooter(props: {
   context: Plugin.Context
-  sessionID?: string
+  sessionID?: Session.ID
   mode: "normal" | "shell"
   showDetails: boolean
 }) {

@@ -1,3 +1,10 @@
+import { Model } from "@opencode/schema/model"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { Project } from "@opencode/schema/project"
+import { Event } from "@opencode/schema/event"
+import { Session } from "@opencode/schema/session"
 import { expect, test } from "bun:test"
 import { type Renderable, ScrollBoxRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
@@ -29,9 +36,9 @@ test.each([
   const setup = await createTestRenderer({ width: 100, height: 30, useThread: false, kittyKeyboard: true })
   setup.renderer.start()
   const session = {
-    id: "ses_test",
+    id: Session.ID.make("ses_test", { disableChecks: true }),
     title: "Long history",
-    projectID: "project",
+    projectID: Project.ID.make("project", { disableChecks: true }),
     location: { directory },
     cost: 0,
     tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
@@ -42,8 +49,11 @@ test.each([
       ? {
           id: `message-${index}`,
           type: "assistant",
-          agent: "build",
-          model: { providerID: "demo", id: "demo-model" },
+          agent: Agent.ID.make("build", { disableChecks: true }),
+          model: {
+            providerID: Provider.ID.make("demo", { disableChecks: true }),
+            id: Model.ID.make("demo-model", { disableChecks: true }),
+          },
           content: [{ type: "text", text: `History message ${String(index).padStart(4, "0")}` }],
           finish: "stop",
           time: { created: index, completed: index + 1 },
@@ -105,7 +115,7 @@ test.each([
       },
       packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
-      args: { sessionID: "ses_test" },
+      args: { sessionID: Session.ID.make("ses_test", { disableChecks: true }) },
       log: () => {},
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
   )
@@ -276,13 +286,13 @@ test.each([
       finish.resolve()
       await setup.waitForFrame((frame) => !frame.includes("Loading session history"))
       events.emit({
-        id: "evt_live",
+        id: Event.ID.make("evt_live", { disableChecks: true }),
         created: 400,
         type: "session.inbox.enqueued",
-        durable: { aggregateID: "ses_test", seq: 1, version: 1 },
+        durable: { aggregateID: Session.ID.make("ses_test", { disableChecks: true }), seq: 1, version: 1 },
         data: {
-          sessionID: "ses_test",
-          inboxID: "message-live",
+          sessionID: Session.ID.make("ses_test", { disableChecks: true }),
+          inboxID: SessionMessage.ID.make("message-live", { disableChecks: true }),
           item: { type: "user", payload: { text: "Live message after failure" }, delivery: "steer" },
         },
       })

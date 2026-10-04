@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import type { FileDiffInfo, LocationRef } from "@opencode/client"
 import type { Vcs } from "@opencode/schema/vcs"
@@ -93,7 +94,7 @@ function DiffViewer(props: { context: Plugin.Context }) {
     return (route.type === "plugin" ? route.data : undefined) as
       | {
           mode?: DiffMode
-          sessionID?: string
+          sessionID?: Session.ID
           returnRoute?: Route
         }
       | undefined

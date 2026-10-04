@@ -1,4 +1,10 @@
-import type { ProjectListOutput, WorktreeDirectory } from "@opencode/client/promise"
+import type {
+  AgentListOutput,
+  ModelListOutput,
+  ProviderListOutput,
+  ProjectListOutput,
+  WorktreeDirectory,
+} from "@opencode/client/promise"
 
 export type Project = Omit<ProjectListOutput[number], "canonical"> & {
   worktree: string
@@ -49,7 +55,7 @@ export type VcsInfo = { branch?: string; default_branch?: string }
 export type LspStatus = { id: string; name: string; root: string; status: "connected" | "error" }
 
 export type Agent = {
-  name: string
+  name: AgentListOutput["data"][number]["id"]
   description?: string
   mode: "subagent" | "primary" | "all"
   native?: boolean
@@ -58,16 +64,16 @@ export type Agent = {
   temperature?: number
   color?: string
   permission: Array<{ permission: string; pattern: string; action: "allow" | "deny" | "ask" }>
-  model?: { modelID: string; providerID: string }
-  variant?: string
+  model?: { modelID: ModelListOutput["data"][number]["id"]; providerID: ModelListOutput["data"][number]["providerID"] }
+  variant?: ModelListOutput["data"][number]["variants"][number]["id"]
   prompt?: string
   options: Record<string, unknown>
   steps?: number
 }
 
 export type Model = {
-  id: string
-  providerID: string
+  id: ModelListOutput["data"][number]["id"]
+  providerID: ModelListOutput["data"][number]["providerID"]
   api: {
     id: string
     url: string
@@ -128,7 +134,7 @@ export type Model = {
 }
 
 export type Provider = {
-  id: string
+  id: ProviderListOutput["data"][number]["id"]
   canonical?: string
   /** Integration that connects this provider; differs from `id` for Console-managed providers. */
   integrationID?: string

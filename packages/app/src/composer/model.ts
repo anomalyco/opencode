@@ -1,3 +1,4 @@
+import { Model } from "@opencode/schema/model"
 import { ImagePreview } from "@opencode/ui/image-preview"
 import { useDialog } from "@opencode/ui/context/dialog"
 import type { ReferenceInfo } from "@opencode/client/promise"
@@ -359,7 +360,12 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       variant: {
         options: () => variants().map((value) => ({ id: value, label: value })),
         current: () => adapter.controls().model.selection.variant.current() ?? "default",
-        onSelect: (value) => adapter.controls().model.selection.variant.set(value === "default" ? undefined : value),
+        onSelect: (value) =>
+          adapter
+            .controls()
+            .model.selection.variant.set(
+              value === "default" || value === undefined ? undefined : Model.VariantID.make(value),
+            ),
         keybind: () => command.keybindParts("model.variant.cycle"),
       },
       submit: {

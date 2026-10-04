@@ -1,3 +1,4 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
 import type { Renderable } from "@opentui/core"
 import type { PartRef, SessionEntry, SessionNode } from "./grouping/session"
 
@@ -68,7 +69,7 @@ export function createTimelineAnchors() {
       const anchor = entries.get(anchorKey(target))
       return anchor && !anchor.node.isDestroyed && anchor.node.height > 0 ? anchor : undefined
     },
-    forMessage(messageID: string) {
+    forMessage(messageID: SessionMessage.ID) {
       return list().find((anchor) => anchor.target.type === "part" && anchor.target.ref.messageID === messageID)
     },
     messagePositions() {

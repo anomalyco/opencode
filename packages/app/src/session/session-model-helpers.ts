@@ -1,20 +1,23 @@
-type ModelSelection = {
+type ModelSelection<P extends string, M extends string, V extends string> = {
   model: {
-    current(): { id: string; provider: { id: string } } | undefined
+    current(): { id: M; provider: { id: P } } | undefined
     variant: {
-      current(): string | undefined
+      current(): V | undefined
     }
   }
 }
 
-type PromptState = {
+type PromptState<P extends string, M extends string, V extends string> = {
   model: {
-    current(): { providerID: string; modelID: string; variant?: string | null } | undefined
-    set(model: { providerID: string; modelID: string; variant?: string | null }): void
+    current(): { providerID: P; modelID: M; variant?: V | null } | undefined
+    set(model: { providerID: P; modelID: M; variant?: V | null }): void
   }
 }
 
-export const syncPromptModel = (local: ModelSelection, prompt: PromptState) => {
+export const syncPromptModel = <P extends string, M extends string, V extends string>(
+  local: ModelSelection<P, M, V>,
+  prompt: PromptState<P, M, V>,
+) => {
   const model = local.model.current()
   if (!model) return
   const next = {

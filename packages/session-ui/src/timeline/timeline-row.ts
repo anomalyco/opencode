@@ -1,7 +1,8 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
 import { Data, Equal } from "effect"
 
 export type PartRef = {
-  messageID: string
+  messageID: SessionMessage.ID
   partID: string
 }
 
@@ -24,46 +25,46 @@ export type PartGroup =
 
 export namespace TimelineRow {
   export class TurnGap extends Data.TaggedClass("TurnGap")<{
-    userMessageID: string
+    userMessageID: SessionMessage.ID
   }> {}
 
   export class UserMessage extends Data.TaggedClass("UserMessage")<{
-    userMessageID: string
+    userMessageID: SessionMessage.ID
   }> {}
 
   export class Shell extends Data.TaggedClass("Shell")<{
-    userMessageID: string
-    messageID: string
+    userMessageID: SessionMessage.ID
+    messageID: SessionMessage.ID
   }> {}
 
   export class Notice extends Data.TaggedClass("Notice")<{
-    userMessageID: string
-    messageID: string
+    userMessageID: SessionMessage.ID
+    messageID: SessionMessage.ID
   }> {}
 
   export class TurnDivider extends Data.TaggedClass("TurnDivider")<{
-    userMessageID: string
+    userMessageID: SessionMessage.ID
   }> {}
 
   export class AssistantPart extends Data.TaggedClass("AssistantPart")<{
-    userMessageID: string
+    userMessageID: SessionMessage.ID
     group: PartGroup
     previousAssistantPart: boolean
     spacing?: "tool" | "content"
   }> {}
 
   export class Thinking extends Data.TaggedClass("Thinking")<{
-    userMessageID: string
+    userMessageID: SessionMessage.ID
     ref: PartRef
   }> {}
 
   export class Error extends Data.TaggedClass("Error")<{
-    userMessageID: string
+    userMessageID: SessionMessage.ID
     text: string
   }> {}
 
   export class Retry extends Data.TaggedClass("Retry")<{
-    userMessageID: string
+    userMessageID: SessionMessage.ID
   }> {}
 
   export type TimelineRow =
@@ -110,18 +111,18 @@ export namespace TimelineRow {
 }
 
 export type TimelineRowMap = {
-  TurnGap: { userMessageID: string }
-  UserMessage: { userMessageID: string }
-  Shell: { userMessageID: string; messageID: string }
-  Notice: { userMessageID: string; messageID: string }
-  TurnDivider: { userMessageID: string }
+  TurnGap: { userMessageID: SessionMessage.ID }
+  UserMessage: { userMessageID: SessionMessage.ID }
+  Shell: { userMessageID: SessionMessage.ID; messageID: SessionMessage.ID }
+  Notice: { userMessageID: SessionMessage.ID; messageID: SessionMessage.ID }
+  TurnDivider: { userMessageID: SessionMessage.ID }
   AssistantPart: {
-    userMessageID: string
+    userMessageID: SessionMessage.ID
     group: PartGroup
     previousAssistantPart: boolean
     spacing?: "tool" | "content"
   }
-  Thinking: { userMessageID: string; ref: PartRef }
-  Retry: { userMessageID: string }
-  Error: { userMessageID: string; text: string }
+  Thinking: { userMessageID: SessionMessage.ID; ref: PartRef }
+  Retry: { userMessageID: SessionMessage.ID }
+  Error: { userMessageID: SessionMessage.ID; text: string }
 }

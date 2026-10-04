@@ -1,3 +1,4 @@
+import { Model } from "@opencode/schema/model"
 import { batch, createEffect, createMemo, on } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ComposerControls } from "./adapter"
@@ -39,7 +40,7 @@ export function createComposerControls(input: { model?: ModelSelection } = {}) {
 }
 
 export function createComposerModelSelection(input: {
-  agent: () => { name: string; model?: ModelKey; variant?: string } | undefined
+  agent: () => { name: string; model?: ModelKey; variant?: Model.VariantID } | undefined
 }) {
   const sdk = useWorkspaceLocation()
   const models = useModels()
@@ -150,9 +151,9 @@ export function createComposerModelSelection(input: {
         })
       },
       list() {
-        return Object.keys(current()?.variants ?? {})
+        return Object.keys(current()?.variants ?? {}).map((id) => Model.VariantID.make(id))
       },
-      set(value: string | undefined) {
+      set(value: Model.VariantID | undefined) {
         batch(() => {
           const model = current()
           if (!model) return

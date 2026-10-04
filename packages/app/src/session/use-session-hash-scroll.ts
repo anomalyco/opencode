@@ -1,3 +1,5 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { SessionID } from "@opencode/schema/session-id"
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { useLocation, useNavigate } from "@solidjs/router"
 import { createEffect, createMemo, onCleanup, onMount } from "solid-js"
@@ -5,22 +7,22 @@ import { messageIdFromHash } from "./message-id-from-hash"
 
 export const useSessionHashScroll = (input: {
   sessionKey: () => string
-  sessionID: () => string | undefined
+  sessionID: () => SessionID | undefined
   messagesReady: () => boolean
   visibleUserMessages: () => SessionMessageUser[]
   historyMore: () => boolean
   historyLoading: () => boolean
-  loadMore: (sessionID: string) => Promise<void>
-  currentMessageId: () => string | undefined
-  pendingMessage: () => string | undefined
-  setPendingMessage: (value: string | undefined) => void
+  loadMore: (sessionID: SessionID) => Promise<void>
+  currentMessageId: () => SessionMessage.ID | undefined
+  pendingMessage: () => SessionMessage.ID | undefined
+  setPendingMessage: (value: SessionMessage.ID | undefined) => void
   setActiveMessage: (message: SessionMessageUser | undefined) => void
   follow: { unpin: () => void; toBottom: () => void }
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
   revealMessage?: (id: string) => void
   scheduleScrollState: (el: HTMLDivElement) => void
-  consumePendingMessage: (key: string) => string | undefined
+  consumePendingMessage: (key: string) => SessionMessage.ID | undefined
 }) => {
   const visibleUserMessages = createMemo(() => input.visibleUserMessages())
   const messageById = createMemo(() => new Map(visibleUserMessages().map((m) => [m.id, m])))

@@ -1,3 +1,5 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
 import { describe, expect, test } from "bun:test"
 import { ClientError, type SessionStatsInfo } from "@opencode/client"
 import { Effect } from "effect"
@@ -26,7 +28,10 @@ const stats: SessionStatsInfo = {
   ],
   models: [
     {
-      model: { providerID: "anthropic", id: "sonnet" },
+      model: {
+        providerID: Provider.ID.make("anthropic", { disableChecks: true }),
+        id: Model.ID.make("sonnet", { disableChecks: true }),
+      },
       steps: 6,
       tokens: { input: 10_000, output: 2_000, reasoning: 1_000, cache: { read: 5_000, write: 500 } },
       cost: 12.34,
@@ -81,7 +86,10 @@ describe("stats rendering", () => {
         models: [
           ...stats.models,
           {
-            model: { providerID: "anthropic", id: "haiku" },
+            model: {
+              providerID: Provider.ID.make("anthropic", { disableChecks: true }),
+              id: Model.ID.make("haiku", { disableChecks: true }),
+            },
             steps: 2,
             tokens: { input: 2_000, output: 500, reasoning: 0, cache: { read: 1_000, write: 0 } },
             cost: 1.25,

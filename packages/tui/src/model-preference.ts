@@ -1,3 +1,5 @@
+import { Provider } from "@opencode/schema/provider"
+import { Model } from "@opencode/schema/model"
 import { readJson, writeJsonAtomic } from "./util/persistence"
 import { isRecord } from "./util/record"
 import { Flock } from "@opencode/util/flock"
@@ -5,8 +7,8 @@ import { watch } from "node:fs"
 import path from "node:path"
 
 export type ModelPreferenceModel = {
-  providerID: string
-  modelID: string
+  providerID: Provider.ID
+  modelID: Model.ID
 }
 
 export type ModelPreference = {
@@ -23,7 +25,7 @@ function models(value: unknown) {
     if (!isRecord(item)) return []
     if (typeof item.providerID !== "string" || item.providerID.length === 0) return []
     if (typeof item.modelID !== "string" || item.modelID.length === 0) return []
-    return [{ providerID: item.providerID, modelID: item.modelID }]
+    return [{ providerID: Provider.ID.make(item.providerID), modelID: Model.ID.make(item.modelID) }]
   })
 }
 

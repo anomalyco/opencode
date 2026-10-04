@@ -1,3 +1,11 @@
+import { Agent } from "@opencode/schema/agent"
+import { SessionID } from "@opencode/schema/session-id"
+import { Permission } from "@opencode/schema/permission"
+import { Form } from "@opencode/schema/form"
+import { Shell } from "@opencode/schema/shell"
+import { SessionMessage } from "@opencode/schema/session-message"
+import { Provider } from "@opencode/schema/provider"
+import { Model } from "@opencode/schema/model"
 import type {
   FileDiffInfo,
   FormInfo,
@@ -13,18 +21,18 @@ import type {
 import type { SessionDocument } from "../document"
 import type { SessionUserPresentation } from "../timeline/session-timeline"
 
-export const CURRENT_SESSION_ID = "session_current_story"
+export const CURRENT_SESSION_ID = SessionID.make("session_current_story", { disableChecks: true })
 export const STORY_TIME = 1_735_689_600_000
 
 export const STORY_MODEL = {
-  id: "claude-sonnet-4",
-  providerID: "anthropic",
-  variant: "balanced",
+  id: Model.ID.make("claude-sonnet-4", { disableChecks: true }),
+  providerID: Provider.ID.make("anthropic", { disableChecks: true }),
+  variant: Model.VariantID.make("balanced", { disableChecks: true }),
 } satisfies ModelRef
 
 function user(id: string, text: string, offset: number): SessionMessageUser {
   return {
-    id,
+    id: SessionMessage.ID.make(id, { disableChecks: true }),
     type: "user",
     text,
     time: { created: STORY_TIME + offset },
@@ -42,9 +50,9 @@ function assistant(input: {
   agent?: string
 }): SessionMessageAssistant {
   return {
-    id: input.id,
+    id: SessionMessage.ID.make(input.id, { disableChecks: true }),
     type: "assistant",
-    agent: input.agent ?? "build",
+    agent: Agent.ID.make(input.agent ?? "build"),
     model: STORY_MODEL,
     content: input.content,
     error: input.error,
@@ -147,7 +155,7 @@ function failedTool(input: {
 
 function document(messages: SessionMessageInfo[], status: SessionStatus = { type: "idle" }): SessionDocument {
   return {
-    sessionID: CURRENT_SESSION_ID,
+    sessionID: SessionID.make(CURRENT_SESSION_ID, { disableChecks: true }),
     messages,
     status,
     diffs: [],
@@ -155,7 +163,7 @@ function document(messages: SessionMessageInfo[], status: SessionStatus = { type
 }
 
 export const emptySessionDocument = {
-  sessionID: CURRENT_SESSION_ID,
+  sessionID: SessionID.make(CURRENT_SESSION_ID, { disableChecks: true }),
   messages: [],
   status: { type: "idle" },
   diffs: [],
@@ -316,9 +324,9 @@ export const editThenTestDocument = {
 export const standaloneShellRunningDocument = document(
   [
     {
-      id: "msg_shell_running",
+      id: SessionMessage.ID.make("msg_shell_running", { disableChecks: true }),
       type: "shell",
-      shellID: "shell_running",
+      shellID: Shell.ID.make("shell_running", { disableChecks: true }),
       command: "bun run storybook --ci",
       status: "running",
       output: {
@@ -335,9 +343,9 @@ export const standaloneShellRunningDocument = document(
 
 export const standaloneShellCompletedDocument = document([
   {
-    id: "msg_shell_completed",
+    id: SessionMessage.ID.make("msg_shell_completed", { disableChecks: true }),
     type: "shell",
-    shellID: "shell_completed",
+    shellID: Shell.ID.make("shell_completed", { disableChecks: true }),
     command: "git status --short",
     status: "exited",
     exit: 0,
@@ -835,7 +843,7 @@ export const instructionsUpdatedSingleDocument = document([
     ],
   }),
   {
-    id: "msg_instructions_updated_single",
+    id: SessionMessage.ID.make("msg_instructions_updated_single", { disableChecks: true }),
     type: "system",
     text: "Updated instructions for api/v2-demo",
     description: "Instructions updated: api/v2-demo",
@@ -857,7 +865,7 @@ export const instructionsUpdatedMultipleDocument = document([
     ],
   }),
   {
-    id: "msg_instructions_updated_multi",
+    id: SessionMessage.ID.make("msg_instructions_updated_multi", { disableChecks: true }),
     type: "system",
     text: "Updated instructions for api/v2-demo and api/session",
     description: "Instructions updated: api/v2-demo, api/session",
@@ -915,7 +923,7 @@ export const questionPendingDocument = document(
 )
 
 export const activeQuestionRequest = {
-  id: "form_session_layout",
+  id: Form.ID.make("form_session_layout", { disableChecks: true }),
   sessionID: CURRENT_SESSION_ID,
   title: "Session layout",
   metadata: { kind: "question" },
@@ -977,7 +985,7 @@ export const compactionRunningDocument = document(
   [
     ...compactionPrelude,
     {
-      id: "msg_compaction_running",
+      id: SessionMessage.ID.make("msg_compaction_running", { disableChecks: true }),
       type: "compaction",
       status: "running",
       reason: "auto",
@@ -992,7 +1000,7 @@ export const compactionRunningDocument = document(
 export const compactionDocument = document([
   ...compactionPrelude,
   {
-    id: "msg_compaction_complete",
+    id: SessionMessage.ID.make("msg_compaction_complete", { disableChecks: true }),
     type: "compaction",
     status: "completed",
     reason: "auto",
@@ -1013,7 +1021,7 @@ export const compactionDocument = document([
 export const compactionFailedDocument = document([
   ...compactionPrelude,
   {
-    id: "msg_compaction_failed",
+    id: SessionMessage.ID.make("msg_compaction_failed", { disableChecks: true }),
     type: "compaction",
     status: "failed",
     reason: "auto",
@@ -1025,7 +1033,7 @@ export const compactionFailedDocument = document([
 export const compactionCancelledDocument = document([
   ...compactionPrelude,
   {
-    id: "msg_compaction_cancelled",
+    id: SessionMessage.ID.make("msg_compaction_cancelled", { disableChecks: true }),
     type: "compaction",
     status: "failed",
     reason: "manual",
@@ -1168,7 +1176,7 @@ const largeMessages = Array.from({ length: 16 }, (_, index) => {
 }).flat()
 
 export const largeCompletedDocument = {
-  sessionID: CURRENT_SESSION_ID,
+  sessionID: SessionID.make(CURRENT_SESSION_ID, { disableChecks: true }),
   messages: largeMessages,
   status: { type: "idle" },
   diffs: [
@@ -1183,8 +1191,8 @@ export const largeCompletedDocument = {
 } satisfies SessionDocument
 
 export const activePermissionRequest = {
-  id: "permission_publish_canary",
-  sessionID: CURRENT_SESSION_ID,
+  id: Permission.ID.make("permission_publish_canary", { disableChecks: true }),
+  sessionID: SessionID.make(CURRENT_SESSION_ID, { disableChecks: true }),
   action: "shell",
   resources: ["npm publish --tag canary"],
   save: ["npm publish *"],

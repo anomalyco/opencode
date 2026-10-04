@@ -1,3 +1,10 @@
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Session } from "@opencode/schema/session"
+import { Permission } from "@opencode/schema/permission"
+import { Form } from "@opencode/schema/form"
+import { SessionMessage } from "@opencode/schema/session-message"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import {
@@ -104,7 +111,7 @@ function model(input: {
 
 function provider() {
   return {
-    id: "opencode",
+    id: Provider.ID.make("opencode", { disableChecks: true }),
     name: "opencode",
     models: {
       "gpt-5": model({ id: "gpt-5", name: "GPT-5", variants: { high: {}, minimal: {} } }),
@@ -121,7 +128,7 @@ function subagent(input: {
   status?: FooterSubagentTab["status"]
 }) {
   return {
-    sessionID: input.sessionID,
+    sessionID: Session.ID.make(input.sessionID, { disableChecks: true }),
     label: input.label,
     description: input.description,
     status: input.status ?? "running",
@@ -530,7 +537,10 @@ test("direct footer leads with the active agent and default model", async () => 
 test("direct footer describes commands and context and shows the model provider", async () => {
   const app = await renderFooter({
     providers: [provider()],
-    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    currentModel: {
+      providerID: Provider.ID.make("opencode", { disableChecks: true }),
+      modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+    },
     state: { first: true },
   })
   try {
@@ -547,10 +557,19 @@ test.each([56, 160])("exit confirmation replaces routine footer details at %i co
     width,
     currentAgent: "Build",
     providers: [provider()],
-    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    currentModel: {
+      providerID: Provider.ID.make("opencode", { disableChecks: true }),
+      modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+    },
     currentVariant: "high",
     state: { usage: { tokens: 12000, percent: 10 } },
-    queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
+    queuedPrompts: [
+      {
+        messageID: SessionMessage.ID.make("queued", { disableChecks: true }),
+        prompt: { text: "later", parts: [] },
+        delivery: "queue",
+      },
+    ],
   })
   try {
     await app.renderOnce()
@@ -573,8 +592,8 @@ test.each([56, 160])("exit confirmation replaces routine footer details at %i co
 
 test("direct footer preserves a partial multi-field form draft across permission preemption", async () => {
   const request: FormInfo = {
-    id: "frm_preempted",
-    sessionID: "ses_child",
+    id: Form.ID.make("frm_preempted", { disableChecks: true }),
+    sessionID: Session.ID.make("ses_child", { disableChecks: true }),
     title: "Deployment",
     fields: [
       { key: "service", type: "string", title: "Service", required: true },
@@ -597,8 +616,8 @@ test("direct footer preserves a partial multi-field form draft across permission
     app.setView({
       type: "permission",
       request: {
-        id: "per_preempting",
-        sessionID: "ses_child",
+        id: Permission.ID.make("per_preempting", { disableChecks: true }),
+        sessionID: Session.ID.make("ses_child", { disableChecks: true }),
         action: "read",
         resources: ["src/index.ts"],
       },
@@ -686,7 +705,7 @@ test("run entry content updates when live commit text changes", async () => {
     text: "I",
     phase: "progress",
     source: "tool",
-    messageID: "msg-1",
+    messageID: SessionMessage.ID.make("msg-1", { disableChecks: true }),
     partID: "part-1",
     tool: "shell",
   })
@@ -712,7 +731,7 @@ test("run entry content updates when live commit text changes", async () => {
       text: "I need to inspect the codebase",
       phase: "progress",
       source: "tool",
-      messageID: "msg-1",
+      messageID: SessionMessage.ID.make("msg-1", { disableChecks: true }),
       partID: "part-1",
       tool: "shell",
     })
@@ -730,7 +749,7 @@ test("run entry content preserves monochrome markdown grammar", async () => {
     text: "• literal\n\n———\n\narrow →",
     phase: "progress",
     source: "assistant",
-    messageID: "msg-1",
+    messageID: SessionMessage.ID.make("msg-1", { disableChecks: true }),
     partID: "part-1",
   })
   const app = await testRender(
@@ -782,7 +801,7 @@ test("run entry content toggles unchanged live markdown between color and monoch
     text: "Active Café → …",
     phase: "progress",
     source: "assistant",
-    messageID: "msg-1",
+    messageID: SessionMessage.ID.make("msg-1", { disableChecks: true }),
     partID: "part-1",
   }
   const app = await testRender(
@@ -1057,7 +1076,13 @@ test.each([false, true])("settings change preferences and preview the work spinn
 
 test("direct command panel shows subagent entry when available", async () => {
   const [commands] = createSignal<RunCommand[] | undefined>([])
-  const [subagents] = createSignal([subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })])
+  const [subagents] = createSignal([
+    subagent({
+      sessionID: Session.ID.make("s-1", { disableChecks: true }),
+      label: "Explore",
+      description: "Inspect auth flow",
+    }),
+  ])
   const [variants] = createSignal<string[]>([])
 
   const app = await testRender(
@@ -1106,7 +1131,12 @@ test("direct command panel shows subagent entry when available", async () => {
 test("direct command panel keeps completed subagents available", async () => {
   const [commands] = createSignal<RunCommand[] | undefined>([])
   const [subagents] = createSignal([
-    subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow", status: "completed" }),
+    subagent({
+      sessionID: Session.ID.make("s-1", { disableChecks: true }),
+      label: "Explore",
+      description: "Inspect auth flow",
+      status: "completed",
+    }),
   ])
   const [variants] = createSignal<string[]>([])
 
@@ -1155,8 +1185,17 @@ test("direct command panel keeps completed subagents available", async () => {
 
 test("direct subagent panel toggles between active and inactive subagents", async () => {
   const [tabs] = createSignal([
-    subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" }),
-    subagent({ sessionID: "s-2", label: "General", description: "Write migration plan", status: "completed" }),
+    subagent({
+      sessionID: Session.ID.make("s-1", { disableChecks: true }),
+      label: "Explore",
+      description: "Inspect auth flow",
+    }),
+    subagent({
+      sessionID: Session.ID.make("s-2", { disableChecks: true }),
+      label: "General",
+      description: "Write migration plan",
+      status: "completed",
+    }),
   ])
   const [current] = createSignal<string | undefined>("s-1")
   let rows = 0
@@ -1212,8 +1251,16 @@ test("direct subagent panel toggles between active and inactive subagents", asyn
 
 test("direct subagent panel closes when moving up from the first item", async () => {
   const [tabs] = createSignal([
-    subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" }),
-    subagent({ sessionID: "s-2", label: "General", description: "Write migration plan" }),
+    subagent({
+      sessionID: Session.ID.make("s-1", { disableChecks: true }),
+      label: "Explore",
+      description: "Inspect auth flow",
+    }),
+    subagent({
+      sessionID: Session.ID.make("s-2", { disableChecks: true }),
+      label: "General",
+      description: "Write migration plan",
+    }),
   ])
   const [current] = createSignal<string | undefined>()
   let closed = 0
@@ -1251,7 +1298,13 @@ test.each(["queue", "steer"] as const)("direct footer toggles and deletes pendin
   const app = await renderFooter({
     height: RUN_SUBAGENT_PANEL_ROWS,
     state: { phase: "running" },
-    queuedPrompts: [{ messageID: "m-1", prompt: { text: "follow up", parts: [] }, delivery }],
+    queuedPrompts: [
+      {
+        messageID: SessionMessage.ID.make("m-1", { disableChecks: true }),
+        prompt: { text: "follow up", parts: [] },
+        delivery,
+      },
+    ],
     onQueuedPromptAction: async (action, inboxID) => {
       actions.push(`${action}:${inboxID}`)
       app.setQueuedPrompts((prompts) =>
@@ -1305,9 +1358,9 @@ test("undo appends a pending prompt to the draft", async () => {
   const actions: string[] = []
   const submitted: RunPrompt[] = []
   const queued: FooterQueuedPrompt = {
-    messageID: "m-1",
+    messageID: SessionMessage.ID.make("m-1", { disableChecks: true }),
     prompt: {
-      messageID: "m-1",
+      messageID: SessionMessage.ID.make("m-1", { disableChecks: true }),
       text: "look at main.ts",
       parts: [],
     },
@@ -1351,7 +1404,13 @@ test("undo appends a pending prompt to the draft", async () => {
 test("undo leaves the queue and input alone when cancellation fails", async () => {
   const statuses: string[] = []
   const app = await renderFooter({
-    queuedPrompts: [{ messageID: "m-1", prompt: { text: "still queued", parts: [] }, delivery: "queue" }],
+    queuedPrompts: [
+      {
+        messageID: SessionMessage.ID.make("m-1", { disableChecks: true }),
+        prompt: { text: "still queued", parts: [] },
+        delivery: "queue",
+      },
+    ],
     onStatus: (status) => statuses.push(status),
     onQueuedPromptAction: async () => {
       throw new Error("cancel failed")
@@ -1380,10 +1439,10 @@ test("undo retains mentioned files when the prompt is sent again", async () => {
   const app = await renderFooter({
     queuedPrompts: [
       {
-        messageID: "m-1",
+        messageID: SessionMessage.ID.make("m-1", { disableChecks: true }),
         delivery: "queue",
         prompt: {
-          messageID: "m-1",
+          messageID: SessionMessage.ID.make("m-1", { disableChecks: true }),
           text: "inspect @src/main.ts please",
           parts: [
             {
@@ -1428,9 +1487,21 @@ test("direct footer steers the oldest queued prompt from an empty composer", asy
   const steered: string[] = []
   const app = await renderFooter({
     queuedPrompts: [
-      { messageID: "m-steering", prompt: { text: "already steering", parts: [] }, delivery: "steer" },
-      { messageID: "m-1", prompt: { text: "first", parts: [] }, delivery: "queue" },
-      { messageID: "m-2", prompt: { text: "second", parts: [] }, delivery: "queue" },
+      {
+        messageID: SessionMessage.ID.make("m-steering", { disableChecks: true }),
+        prompt: { text: "already steering", parts: [] },
+        delivery: "steer",
+      },
+      {
+        messageID: SessionMessage.ID.make("m-1", { disableChecks: true }),
+        prompt: { text: "first", parts: [] },
+        delivery: "queue",
+      },
+      {
+        messageID: SessionMessage.ID.make("m-2", { disableChecks: true }),
+        prompt: { text: "second", parts: [] },
+        delivery: "queue",
+      },
     ],
     onQueuedPromptAction: async (action, inboxID) => {
       if (action === "steer") steered.push(inboxID)
@@ -1487,7 +1558,13 @@ test("direct footer does not steer queued work on a double submit", async () => 
   const submitted: RunPrompt[] = []
   const steered: string[] = []
   const app = await renderFooter({
-    queuedPrompts: [{ messageID: "m-1", prompt: { text: "queued", parts: [] }, delivery: "queue" }],
+    queuedPrompts: [
+      {
+        messageID: SessionMessage.ID.make("m-1", { disableChecks: true }),
+        prompt: { text: "queued", parts: [] },
+        delivery: "queue",
+      },
+    ],
     onSubmit: async (prompt) => {
       submitted.push(prompt)
       await Bun.sleep(10)
@@ -1694,16 +1771,33 @@ test("direct footer counts queued and steering work while running", async () => 
   const app = await renderFooter({
     width: 160,
     state: { phase: "running" },
-    currentModel: { providerID: "opencode", modelID: "a-model-name-long-enough-to-force-responsive-truncation" },
+    currentModel: {
+      providerID: Provider.ID.make("opencode", { disableChecks: true }),
+      modelID: Model.ID.make("a-model-name-long-enough-to-force-responsive-truncation", { disableChecks: true }),
+    },
     subagents: {
-      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
+      tabs: [
+        subagent({
+          sessionID: Session.ID.make("s-1", { disableChecks: true }),
+          label: "Explore",
+          description: "Inspect auth flow",
+        }),
+      ],
       details: {},
       permissions: [],
       forms: [],
     },
     queuedPrompts: [
-      { messageID: "m-queued", prompt: { text: "follow up", parts: [] }, delivery: "queue" },
-      { messageID: "m-steering", prompt: { text: "steer now", parts: [] }, delivery: "steer" },
+      {
+        messageID: SessionMessage.ID.make("m-queued", { disableChecks: true }),
+        prompt: { text: "follow up", parts: [] },
+        delivery: "queue",
+      },
+      {
+        messageID: SessionMessage.ID.make("m-steering", { disableChecks: true }),
+        prompt: { text: "steer now", parts: [] },
+        delivery: "steer",
+      },
     ],
   })
 
@@ -1755,9 +1849,18 @@ test.each([16, 20, 24, 32])("status takeovers retain complete instructions at %i
       mono,
       currentVariant: "high",
       providers: [provider()],
-      currentModel: { providerID: "opencode", modelID: "gpt-5" },
+      currentModel: {
+        providerID: Provider.ID.make("opencode", { disableChecks: true }),
+        modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+      },
       state: { exit: 1, usage: { tokens: 12000, percent: 10 } },
-      queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
+      queuedPrompts: [
+        {
+          messageID: SessionMessage.ID.make("queued", { disableChecks: true }),
+          prompt: { text: "later", parts: [] },
+          delivery: "queue",
+        },
+      ],
     })
     try {
       for (const state of [
@@ -1804,7 +1907,10 @@ test.each([
     width: 80,
     currentAgent: field === "agent" ? long : "Build",
     currentVariant: "high",
-    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    currentModel: {
+      providerID: Provider.ID.make("opencode", { disableChecks: true }),
+      modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+    },
     providers: [
       {
         ...provider(),
@@ -1830,9 +1936,9 @@ test.each([8, 12])("production footer grows for wrapped instructions in %i rows"
   const footer = new RunFooter(app.renderer, {
     directory: () => "/project",
     findFiles: async () => [],
-    agents: [{ id: "build", name: "Build", mode: "primary", hidden: false }],
+    agents: [{ id: Agent.ID.make("build", { disableChecks: true }), name: "Build", mode: "primary", hidden: false }],
     references: [],
-    agent: "build",
+    agent: Agent.ID.make("build", { disableChecks: true }),
     modelLabel: "GPT-5",
     model: undefined,
     variant: undefined,
@@ -1883,9 +1989,21 @@ test("an oversized queue shortcut prevents backfilling shorter work and identity
   const app = await renderFooter({
     width: 32,
     tuiConfig: createTuiResolvedConfig({ keybinds: { "session.queued_prompts": "ctrl+shift+alt+q" } }),
-    queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
+    queuedPrompts: [
+      {
+        messageID: SessionMessage.ID.make("queued", { disableChecks: true }),
+        prompt: { text: "later", parts: [] },
+        delivery: "queue",
+      },
+    ],
     subagents: {
-      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect" })],
+      tabs: [
+        subagent({
+          sessionID: Session.ID.make("s-1", { disableChecks: true }),
+          label: "Explore",
+          description: "Inspect",
+        }),
+      ],
       details: {},
       permissions: [],
       forms: [],
@@ -1946,9 +2064,21 @@ test.each(["ctrl+g", "none"])("context actions use only configured bindings (%s)
         "command.palette.show": "ctrl+y",
       },
     }),
-    queuedPrompts: [{ messageID: "queued", prompt: { text: "later", parts: [] }, delivery: "queue" }],
+    queuedPrompts: [
+      {
+        messageID: SessionMessage.ID.make("queued", { disableChecks: true }),
+        prompt: { text: "later", parts: [] },
+        delivery: "queue",
+      },
+    ],
     subagents: {
-      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect" })],
+      tabs: [
+        subagent({
+          sessionID: Session.ID.make("s-1", { disableChecks: true }),
+          label: "Explore",
+          description: "Inspect",
+        }),
+      ],
       details: {},
       permissions: [],
       forms: [],
@@ -1973,7 +2103,10 @@ test("identity and context precede the provider and a non-fitting provider block
   const app = await renderFooter({
     width: 56,
     providers: [{ ...provider(), name: "Long provider display name" }],
-    currentModel: { providerID: "opencode", modelID: "gpt-5" },
+    currentModel: {
+      providerID: Provider.ID.make("opencode", { disableChecks: true }),
+      modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+    },
     currentVariant: "high",
     state: { usage: { tokens: 12000, percent: 10 } },
   })
@@ -1990,7 +2123,13 @@ test("direct footer keeps compact work, model detail, and context ahead of cost 
   const app = await renderFooter({
     currentAgent: "Plan",
     subagents: {
-      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
+      tabs: [
+        subagent({
+          sessionID: Session.ID.make("s-1", { disableChecks: true }),
+          label: "Explore",
+          description: "Inspect auth flow",
+        }),
+      ],
       details: {},
       permissions: [],
       forms: [],
@@ -2055,8 +2194,8 @@ test.each(["Build", "Plan"])("working marker matches the %s label and prompt rai
   const app = await renderFooter({
     currentAgent: agent,
     agents: [
-      { id: "build", name: "Build", mode: "primary", hidden: false },
-      { id: "plan", name: "Plan", mode: "primary", hidden: false },
+      { id: Agent.ID.make("build", { disableChecks: true }), name: "Build", mode: "primary", hidden: false },
+      { id: Agent.ID.make("plan", { disableChecks: true }), name: "Plan", mode: "primary", hidden: false },
     ],
     theme,
     tuiConfig: createTuiResolvedConfig({ animations: false }),
@@ -2125,7 +2264,13 @@ test("direct footer reserves the working indicator beside complete status text",
 test("direct footer always offers backgrounding for a foreground subagent", async () => {
   const app = await renderFooter({
     subagents: {
-      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow" })],
+      tabs: [
+        subagent({
+          sessionID: Session.ID.make("s-1", { disableChecks: true }),
+          label: "Explore",
+          description: "Inspect auth flow",
+        }),
+      ],
       details: {},
       permissions: [],
       forms: [],
@@ -2147,7 +2292,14 @@ test("direct footer always offers backgrounding for a foreground subagent", asyn
 test("direct footer hides the subagent hint when only completed subagents remain", async () => {
   const app = await renderFooter({
     subagents: {
-      tabs: [subagent({ sessionID: "s-1", label: "Explore", description: "Inspect auth flow", status: "completed" })],
+      tabs: [
+        subagent({
+          sessionID: Session.ID.make("s-1", { disableChecks: true }),
+          label: "Explore",
+          description: "Inspect auth flow",
+          status: "completed",
+        }),
+      ],
       details: {},
       permissions: [],
       forms: [],
@@ -2326,9 +2478,16 @@ test("direct model panel keeps native V2 light search and options readable on a 
   const background = RGBA.fromHex("#ffffff")
   const [providers] = createSignal<RunProvider[] | undefined>([
     provider(),
-    { id: "openai", name: "OpenAI", models: { "gpt-5": model({ id: "gpt-5", name: "GPT-5" }) } },
+    {
+      id: Provider.ID.make("openai", { disableChecks: true }),
+      name: "OpenAI",
+      models: { "gpt-5": model({ id: "gpt-5", name: "GPT-5" }) },
+    },
   ])
-  const [current] = createSignal<RunInput["model"]>({ providerID: "opencode", modelID: "gpt-5" })
+  const [current] = createSignal<RunInput["model"]>({
+    providerID: Provider.ID.make("opencode", { disableChecks: true }),
+    modelID: Model.ID.make("gpt-5", { disableChecks: true }),
+  })
 
   const app = await testRender(
     () => (
@@ -2405,7 +2564,12 @@ test("direct permission buttons use secondary text over the native V2 light pane
     height: 16,
     view: {
       type: "permission",
-      request: { id: "per_light", sessionID: "ses_light", action: "read", resources: ["src/index.ts"] },
+      request: {
+        id: Permission.ID.make("per_light", { disableChecks: true }),
+        sessionID: Session.ID.make("ses_light", { disableChecks: true }),
+        action: "read",
+        resources: ["src/index.ts"],
+      },
     },
   })
   try {
@@ -2426,10 +2590,22 @@ test("direct permission buttons use secondary text over the native V2 light pane
 test("direct agent panel shows eligible agents and marks the current agent", async () => {
   const theme = await nativeLightTheme()
   const [agents] = createSignal<RunAgent[]>([
-    { id: "build", name: "Build", description: "Build software", mode: "all", hidden: false },
-    { id: "review", name: "Review", description: "Review changes", mode: "primary", hidden: false },
-    { id: "explore", name: "Explore", mode: "subagent", hidden: false },
-    { id: "secret", name: "Secret", mode: "all", hidden: true },
+    {
+      id: Agent.ID.make("build", { disableChecks: true }),
+      name: "Build",
+      description: "Build software",
+      mode: "all",
+      hidden: false,
+    },
+    {
+      id: Agent.ID.make("review", { disableChecks: true }),
+      name: "Review",
+      description: "Review changes",
+      mode: "primary",
+      hidden: false,
+    },
+    { id: Agent.ID.make("explore", { disableChecks: true }), name: "Explore", mode: "subagent", hidden: false },
+    { id: Agent.ID.make("secret", { disableChecks: true }), name: "Secret", mode: "all", hidden: true },
   ])
   const [current] = createSignal("review")
   let selected: string | undefined

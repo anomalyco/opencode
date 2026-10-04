@@ -1,3 +1,6 @@
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import { Model } from "@opencode/schema/model"
 import { Show, createMemo, onMount, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { ModelSelection } from "@/providers/models/selection"
@@ -87,7 +90,10 @@ function ComposerStory(props: {
       configured: () => STORY_MODEL.variant,
       selected: () => story.variant,
       current: () => story.variant,
-      list: () => ["balanced", "high"],
+      list: () => [
+        Model.VariantID.make("balanced", { disableChecks: true }),
+        Model.VariantID.make("high", { disableChecks: true }),
+      ],
       set: (variant: string | undefined) => setStory("variant", variant ?? "balanced"),
       cycle() {},
     },
@@ -533,7 +539,12 @@ function SelectionPrecedenceDemo() {
   const [store, setStore] = createStore({ durable: true })
   const selection = createMemo(() =>
     resolveSessionComposerSelection(
-      store.durable ? { agent: "build", model: { id: "claude-sonnet-4", providerID: "anthropic" } } : undefined,
+      store.durable
+        ? {
+            agent: Agent.ID.make("build"),
+            model: { id: Model.ID.make("claude-sonnet-4"), providerID: Provider.ID.make("anthropic") },
+          }
+        : undefined,
       { agent: "review", model: { modelID: "gpt-5", providerID: "openai" } },
     ),
   )

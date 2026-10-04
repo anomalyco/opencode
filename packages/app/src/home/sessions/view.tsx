@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { SessionInfo } from "@opencode/client/promise"
 import { Key } from "@solid-primitives/keyed"
 import { createMemo, For, Index, onCleanup, Show } from "solid-js"
@@ -95,7 +96,7 @@ type HomeSessionRowUI = {
 
 export function HomeSessionsView(props: HomeSessionsViewProps) {
   const [rowUI, setRowUI] = createStore<HomeSessionRowUI>({ menu: undefined, editor: undefined })
-  const [hover, setHover] = createStore<{ sessionID: string | undefined }>({ sessionID: undefined })
+  const [hover, setHover] = createStore<{ sessionID: SessionID | undefined }>({ sessionID: undefined })
   const showLocations = createAltHold(props.desktop, props.onRevealLocations)
   return (
     <section
@@ -246,7 +247,7 @@ function HomeSessionSearch(
   props: HomeSessionsViewProps & {
     showLocations: boolean
     hoveredSession: string | undefined
-    onHoverSession: (sessionID: string | undefined) => void
+    onHoverSession: (sessionID: SessionID | undefined) => void
   },
 ) {
   return (
@@ -393,7 +394,7 @@ function HomeSessionSearchResultRow(
     selected: boolean
     showLocations: boolean
     hoveredSession: string | undefined
-    onHoverSession: (sessionID: string | undefined) => void
+    onHoverSession: (sessionID: SessionID | undefined) => void
   },
 ) {
   const title = createMemo(() => sessionLabel(props.record.session))
@@ -486,7 +487,7 @@ function HomeSessionRow(
     setRowUI: SetStoreFunction<HomeSessionRowUI>
     showLocations: boolean
     hoveredSession: string | undefined
-    onHoverSession: (sessionID: string | undefined) => void
+    onHoverSession: (sessionID: SessionID | undefined) => void
   },
 ) {
   const title = createMemo(() => sessionLabel(props.record.session))

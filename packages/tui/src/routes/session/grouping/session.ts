@@ -1,8 +1,9 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { groupEntries, mergeGroups, splitGroups, type GroupNode } from "./tree"
 
 export type PartRef = {
-  messageID: string
+  messageID: SessionMessage.ID
   partID: string
 }
 
@@ -12,11 +13,11 @@ export type CacheUsage = {
 }
 
 export type SessionEntry =
-  | { type: "message"; messageID: string }
-  | { type: "compaction-queued"; inboxID: string }
+  | { type: "message"; messageID: SessionMessage.ID }
+  | { type: "compaction-queued"; inboxID: SessionMessage.ID }
   | { type: "part"; ref: PartRef }
-  | { type: "assistant-footer"; messageID: string }
-  | { type: "turn-usage"; messageIDs: string[]; previousCache?: CacheUsage }
+  | { type: "assistant-footer"; messageID: SessionMessage.ID }
+  | { type: "turn-usage"; messageIDs: SessionMessage.ID[]; previousCache?: CacheUsage }
 
 export type GroupKind = "activity" | "reasoning" | "exploration" | "instructions"
 export type SessionNode = GroupNode<SessionEntry, GroupKind>

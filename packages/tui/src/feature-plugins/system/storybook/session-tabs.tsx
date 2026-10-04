@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 import { Plugin } from "@opencode/plugin/tui"
 import { useTerminalDimensions } from "@opentui/solid"
 import { batch, createSignal, For, Show } from "solid-js"
@@ -42,7 +43,7 @@ const FIXTURE_TABS = [
   { sessionID: "fixture-10", title: "Handle permission", project: "opencode-slack" },
   { sessionID: "fixture-11", title: "Run focused tests", project: "opencode" },
   { sessionID: "fixture-12", title: "Prepare review", project: "opencode-drive" },
-]
+].map((tab) => ({ ...tab, sessionID: Session.ID.make(tab.sessionID, { disableChecks: true }) }))
 
 const FIXTURE_STATUSES: Record<string, FixtureStatus> = {
   "fixture-2": { ...EMPTY_SESSION_TAB_STATUS, busy: true },
@@ -68,13 +69,15 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
   const theme = props.context.theme
   const dialog = useDialog()
   // A keyed store mirrors production: retitles mutate rows in place instead of remounting them.
-  const [tabStore, setTabStore] = createStore<{ items: { sessionID: string; title?: string }[] }>({
+  const [tabStore, setTabStore] = createStore<{ items: { sessionID: Session.ID; title?: string }[] }>({
     items: FIXTURE_TABS.slice(0, 6).map((tab) => ({ ...tab })),
   })
   const tabs = () => tabStore.items
-  const setItems = (next: { sessionID: string; title?: string }[]) =>
+  const setItems = (next: { sessionID: Session.ID; title?: string }[]) =>
     setTabStore("items", reconcile(next, { key: "sessionID" }))
-  const [active, setActive] = createSignal<string | undefined>("fixture-1")
+  const [active, setActive] = createSignal<Session.ID | undefined>(
+    Session.ID.make("fixture-1", { disableChecks: true }),
+  )
   const [lastEvent, setLastEvent] = createSignal("idle / working / question / permission / complete / error")
   const [statuses, setStatuses] = createSignal<Record<string, FixtureStatus>>(FIXTURE_STATUSES)
   const [orientation, setOrientation] = createSignal<"horizontal" | "vertical">("vertical")
@@ -97,9 +100,9 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
   const [animations, setAnimations] = createSignal(true)
   // Unread clears on select, so the transcript remembers how each session's last run ended.
   const [outcomes, setOutcomes] = createSignal<Record<string, "completed" | "failed">>(FIXTURE_OUTCOMES)
-  const number = (sessionID: string) => tabs().findIndex((tab) => tab.sessionID === sessionID) + 1
+  const number = (sessionID: Session.ID) => tabs().findIndex((tab) => tab.sessionID === sessionID) + 1
 
-  function finishRun(sessionID: string, failed = Math.random() >= 0.75) {
+  function finishRun(sessionID: Session.ID, failed = Math.random() >= 0.75) {
     if (!tabs().some((item) => item.sessionID === sessionID)) return
     const unread = active() === sessionID ? undefined : failed ? ("error" as const) : ("activity" as const)
     batch(() => {
@@ -118,7 +121,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     )
   }
 
-  const select = (sessionID: string) => {
+  const select = (sessionID: Session.ID) => {
     const status = statuses()[sessionID]
     batch(() => {
       setActive(sessionID)
@@ -164,7 +167,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       return statuses()[sessionID] ?? EMPTY_SESSION_TAB_STATUS
     },
     select,
-    rename(sessionID: string) {
+    rename(sessionID: Session.ID) {
       dialog.replace(() => (
         <DialogPrompt
           title="Rename fixture tab"
@@ -177,12 +180,12 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
         />
       ))
     },
-    move(sessionID: string, index: number) {
+    move(sessionID: Session.ID, index: number) {
       const next = moveSessionTab(tabs(), sessionID, index)
       if (next === tabs()) return
       setItems(next.map((tab) => ({ ...tab })))
     },
-    close(sessionID?: string) {
+    close(sessionID?: Session.ID) {
       const target = sessionID ?? active()
       if (!target) return
       const result = closeSessionTab(tabs(), target)
@@ -204,7 +207,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     const tab = cycleSessionTab(tabs(), active(), direction)
     if (tab) select(tab.sessionID)
   }
-  const startRun = (sessionID: string) => {
+  const startRun = (sessionID: Session.ID) => {
     setStatuses((current) => ({
       ...current,
       [sessionID]: {
@@ -221,7 +224,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     })
     setLastEvent(`tab ${number(sessionID)} running`)
   }
-  const prompt = (sessionID: string) => {
+  const prompt = (sessionID: Session.ID) => {
     const wasBusy = controller.status(sessionID).busy
     setStatuses((current) => {
       const status = current[sessionID] ?? EMPTY_SESSION_TAB_STATUS
@@ -306,9 +309,12 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
     const running = values.filter((status) => status.busy && !status.attention).length
     const waiting = values.filter((status) => status.attention).length
     const unread = values.filter((status) => status.unread !== undefined).length
-    return [`selected ${number(active() ?? "")}`, `${running} running`, `${waiting} waiting`, `${unread} unread`].join(
-      "  ·  ",
-    )
+    return [
+      `selected ${number(active() ?? Session.ID.make("", { disableChecks: true }))}`,
+      `${running} running`,
+      `${waiting} waiting`,
+      `${unread} unread`,
+    ].join("  ·  ")
   }
 
   const reset = (showcase = false) => {
@@ -316,7 +322,7 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
       setItems(FIXTURE_TABS.slice(0, 6).map((tab) => ({ ...tab })))
       setStatuses(showcase ? FIXTURE_STATUSES : {})
       setOutcomes(showcase ? FIXTURE_OUTCOMES : {})
-      setActive("fixture-1")
+      setActive(Session.ID.make("fixture-1", { disableChecks: true }))
       setSpinner("dots")
       setMarker("small-dot")
       setAnimations(true)
@@ -472,7 +478,8 @@ function SessionTabsStory(props: { context: Plugin.Context }) {
         run() {
           const count = tabs().length < 6 ? 6 : tabs().length < 12 ? 12 : 3
           setItems(FIXTURE_TABS.slice(0, count).map((tab) => ({ ...tab })))
-          if (!tabs().some((tab) => tab.sessionID === active())) setActive("fixture-1")
+          if (!tabs().some((tab) => tab.sessionID === active()))
+            setActive(Session.ID.make("fixture-1", { disableChecks: true }))
         },
       },
       {

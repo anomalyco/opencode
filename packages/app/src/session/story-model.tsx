@@ -1,3 +1,4 @@
+import { Form } from "@opencode/schema/form"
 import type { ModelSelection } from "@/providers/models/selection"
 import { Composer } from "@/composer/composer"
 import type { ComposerModel } from "@/composer/model"
@@ -99,7 +100,10 @@ export function SessionPreview(props: SessionPreviewProps) {
                 props.request?.type === "question"
                   ? {
                       type: "question",
-                      value: { ...props.request.value, id: `${props.request.value.id}:${revision}` },
+                      value: {
+                        ...props.request.value,
+                        id: Form.ID.make(`${props.request.value.id}:${revision}`, { disableChecks: true }),
+                      },
                     }
                   : props.request
               }

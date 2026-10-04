@@ -18,7 +18,7 @@ export function BackgroundWorkSummary(props: { tasks: readonly BackgroundTask[];
   })
   const taskType = (task: BackgroundTask) => {
     if (task.type === "shell") return ctx.t("ui.tool.shell")
-    if (!task.agent) return ctx.t("ui.tool.agent.default")
+    if (task.type !== "subagent" || !task.agent) return ctx.t("ui.tool.agent.default")
     return task.agent.slice(0, 1).toUpperCase() + task.agent.slice(1)
   }
 

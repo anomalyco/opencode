@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import { notifySessionTabsRemoved } from "@/shell/titlebar/session-events"
 import type { ServerConnection } from "@/runtime/server/registry"
 import type { SessionInfo } from "@opencode/client/promise"
@@ -7,7 +8,7 @@ type HomeSession = Pick<SessionInfo, "id" | "location">
 export async function archiveHomeSession(input: {
   server: ServerConnection.Key
   session: HomeSession
-  archive: (sessionID: string) => Promise<unknown>
+  archive: (sessionID: SessionID) => Promise<unknown>
   remove: () => void
   onError?: (error: unknown) => void
 }) {

@@ -1,6 +1,10 @@
+import { useSessionParams } from "@/shell/routes/session"
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Agent } from "@opencode/schema/agent"
+import type { SessionID } from "@opencode/schema/session-id"
 import { createSimpleContext } from "@opencode/ui/context"
 import { base64Encode } from "@opencode/util/encode"
-import { useParams } from "@solidjs/router"
 import { batch, createEffect, createMemo, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { Schema, SchemaGetter } from "effect"
@@ -19,19 +23,19 @@ import { ScopedKey, type ServerScope } from "@/runtime/server/scope"
 import { useConfiguredModel } from "./configured"
 
 const ModelKeySchema = Schema.Struct({
-  providerID: Schema.String,
-  modelID: Schema.String,
-  variant: Schema.optional(Schema.String),
+  providerID: Provider.ID,
+  modelID: Model.ID,
+  variant: Schema.optional(Model.VariantID),
 })
 export type ModelKey = typeof ModelKeySchema.Type
 
 const ChoiceSchema = Schema.Struct({
   model: Persistence.optional(ModelKeySchema),
-  variant: Persistence.optional(Schema.NullOr(Schema.String)),
+  variant: Persistence.optional(Schema.NullOr(Model.VariantID)),
 })
 const StateSchema = Schema.Struct({
   ...ChoiceSchema.fields,
-  agent: Persistence.optional(Schema.String),
+  agent: Persistence.optional(Agent.ID),
   choices: Persistence.optional(Schema.Record(Schema.String, ChoiceSchema)),
 })
 type State = typeof StateSchema.Type
@@ -76,7 +80,7 @@ const clone = (value: State | undefined) => {
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
   init: () => {
-    const params = useParams()
+    const params = useSessionParams()
     const sdk = useWorkspaceLocation()
     const data = useData()
     const serverSDK = useServerSDK()
@@ -306,7 +310,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       a.model?.modelID === b.model?.modelID &&
       (a.variant ?? "default") === (b.variant ?? "default")
 
-    const reconcile = (sessionID: string) => {
+    const reconcile = (sessionID: SessionID) => {
       const expected = pending.get(sessionID)
       const session = data.session.get(sessionID)
       if (!expected || !session?.model) return
@@ -337,7 +341,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       current,
       recent,
       list: models.list,
-      trackSessionCommit(sessionID: string, selection: { agent: string; model: ModelKey; variant?: string }) {
+      trackSessionCommit(
+        sessionID: SessionID,
+        selection: { agent: Agent.ID; model: ModelKey; variant?: Model.VariantID },
+      ) {
         pending.set(sessionID, selection)
         reconcile(sessionID)
         return () => {
@@ -393,9 +400,9 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         list() {
           const item = current()
           if (!item?.variants) return []
-          return Object.keys(item.variants)
+          return Object.keys(item.variants).map((id) => Model.VariantID.make(id))
         },
-        set(value: string | undefined) {
+        set(value: Model.VariantID | undefined) {
           batch(() => {
             const model = current()
             if (!model) return
@@ -426,7 +433,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         reset() {
           setStore({ draft: undefined, promoting: undefined })
         },
-        promote(dir: string, session: string, state?: State) {
+        promote(dir: string, session: SessionID, state?: State) {
           const next = clone(state ?? snapshot())
           if (!next) return
           // Creation already owns the active selection; keep only agent memory once it is in the read model.
@@ -452,7 +459,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           setStore("promoting", committed)
           setStore("draft", undefined)
         },
-        restore(msg: { sessionID: string; agent: string; model: ModelKey }) {
+        restore(msg: { sessionID: SessionID; agent: Agent.ID; model: ModelKey }) {
           const session = id()
           if (!session) return
           if (msg.sessionID !== session) return

@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { LocalProject } from "@/shell/state/layout"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
@@ -13,7 +14,7 @@ import { Show } from "solid-js"
 export function SessionTabAvatar(props: {
   project?: LocalProject
   directory: string
-  sessionId: string
+  sessionId: SessionID
   server: ServerConnection.Key
 }) {
   const state = useSessionTabAvatarState(

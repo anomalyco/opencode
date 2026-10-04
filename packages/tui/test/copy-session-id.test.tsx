@@ -1,3 +1,5 @@
+import { Project } from "@opencode/schema/project"
+import { Session } from "@opencode/schema/session"
 import { expect, spyOn, test } from "bun:test"
 import { InputRenderable, TextareaRenderable } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
@@ -12,14 +14,14 @@ test.each(["success", "failure", "home"])("Copy session ID from Ctrl+P (%s)", as
   setup.renderer.start()
   Object.defineProperty(setup.renderer, "capabilities", { get: () => null })
   const copy = spyOn(setup.renderer, "copyToClipboardOSC52").mockReturnValue(mode === "success")
-  const sessionID = "ses_copy_id"
+  const sessionID = Session.ID.make("ses_copy_id", { disableChecks: true })
   const events = createEventStream()
   const calls = createFetch((url) => {
     if (url.pathname === `/api/session/${sessionID}`)
       return json({
         data: {
           id: sessionID,
-          projectID: "proj_test",
+          projectID: Project.ID.make("proj_test", { disableChecks: true }),
           title: "Copy ID fixture",
           location: { directory },
           cost: 0,
@@ -41,7 +43,7 @@ test.each(["success", "failure", "home"])("Copy session ID from Ctrl+P (%s)", as
       config: { get: async () => ({ animations: false }), update: async () => ({}) },
       packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
-      args: mode === "home" ? {} : { sessionID },
+      args: mode === "home" ? {} : { sessionID: Session.ID.make(sessionID, { disableChecks: true }) },
       log: () => {},
     }).pipe(Effect.provide(Global.layerWith({ state: state.path })), Effect.provide(FileSystem.layerNoop({}))),
   )

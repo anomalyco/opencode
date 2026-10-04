@@ -1,3 +1,4 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
 import { createMemo, For, Show } from "solid-js"
 import { DragDropProvider, PointerSensor } from "@dnd-kit/solid"
 import { isSortable, useSortable } from "@dnd-kit/solid/sortable"
@@ -82,7 +83,7 @@ export function SessionQueuePanel(props: { queue: SessionQueueView }) {
   )
 }
 
-function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: number }) {
+function SessionQueueRow(props: { queue: SessionQueueView; id: SessionMessage.ID; index: number }) {
   const language = useLanguage()
   const row = createMemo(() => props.queue.rows().find((entry) => entry.id === props.id))
   const editing = () => props.queue.editing() === props.id

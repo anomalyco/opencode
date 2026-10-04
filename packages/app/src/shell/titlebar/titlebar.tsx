@@ -195,7 +195,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               const cached = conn ? global.ensureServerCtx(conn).data.session.get(route.sessionId) : undefined
               if (cached) return cached
               const resolved = resolvedSession()
-              return resolved?.info.id === route.sessionId ? resolved.info : undefined
+              return resolved && resolved.info.id === route.sessionId ? resolved.info : undefined
             })
 
             const matchRoute = (route: LayoutRoute) => {

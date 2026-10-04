@@ -381,7 +381,7 @@ function MessageTimelineView(
                   <Show when={parentID()}>
                     {(id) => (
                       <SessionAncestorTrail
-                        sessionID={sessionID() ?? ""}
+                        sessionID={sessionID()!}
                         parentID={id()}
                         parentTitle={parentTitle()}
                         trailing={!!(childTitle() || title.editing)}

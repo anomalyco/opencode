@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import { createEffect, createMemo, For, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextAttributes } from "@opentui/core"
@@ -12,7 +13,7 @@ import { ComposerContext, type ComposerTab } from "./context"
 export { useComposerTab, type ComposerHint } from "./context"
 
 export type ComposerProps = {
-  sessionID: string
+  sessionID: Session.ID
   open: boolean
   defaultTab?: string
   onClose?: () => void

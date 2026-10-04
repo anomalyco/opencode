@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { ServerConnection } from "@/runtime/server/registry"
 
 export type ServerScope = string & { readonly __brand: "ServerScope" }
@@ -27,7 +28,7 @@ export const ServerScope = {
 }
 
 export const SessionRouteKey = {
-  fromRoute(dir: string | undefined, sessionID?: string) {
+  fromRoute(dir: string | undefined, sessionID?: SessionID) {
     return fragment("Session route", `${dir ?? ""}${sessionID ? "/" + sessionID : ""}`) as SessionRouteKey
   },
 }

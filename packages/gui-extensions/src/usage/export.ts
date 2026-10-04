@@ -1,7 +1,8 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import type { OpenCodeClient } from "@opencode/client/promise"
 
 export async function fetchSessionExport(input: {
-  sessionID: string
+  sessionID: SessionID
   api: Pick<OpenCodeClient, "session" | "message">
 }) {
   const [info, first] = await Promise.all([

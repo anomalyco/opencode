@@ -1,3 +1,5 @@
+import type { Permission } from "@opencode/schema/permission"
+import type { Session } from "@opencode/schema/session"
 import type { MiniPermissionRequest, PermissionReply } from "./types"
 import { permissionAlwaysLines, permissionOptionLabel, permissionPresentation } from "../util/permission"
 import { toolPath } from "./tool"
@@ -7,8 +9,8 @@ export type PermissionStage = "permission" | "always" | "reject"
 export type PermissionOption = "once" | "always" | "reject" | "confirm" | "cancel"
 
 export type PermissionBodyState = {
-  requestID: string
-  sessionID: string
+  requestID: Permission.ID
+  sessionID: Session.ID
   stage: PermissionStage
   selected: PermissionOption
   message: string
@@ -77,8 +79,8 @@ export function permissionLabel(option: PermissionOption): string {
 export { permissionAlwaysLines }
 
 function permissionReply(
-  sessionID: string,
-  requestID: string,
+  sessionID: Session.ID,
+  requestID: Permission.ID,
   decision: PermissionReply["decision"],
   message?: string,
 ): PermissionReply {
@@ -114,7 +116,11 @@ export function permissionHover(state: PermissionBodyState, option: PermissionOp
   }
 }
 
-export function permissionRun(state: PermissionBodyState, requestID: string, option: PermissionOption): PermissionStep {
+export function permissionRun(
+  state: PermissionBodyState,
+  requestID: Permission.ID,
+  option: PermissionOption,
+): PermissionStep {
   if (state.submitting) {
     return { state }
   }
@@ -166,7 +172,7 @@ export function permissionRun(state: PermissionBodyState, requestID: string, opt
   }
 }
 
-export function permissionReject(state: PermissionBodyState, requestID: string): PermissionReply | undefined {
+export function permissionReject(state: PermissionBodyState, requestID: Permission.ID): PermissionReply | undefined {
   if (state.submitting) {
     return undefined
   }

@@ -1,3 +1,4 @@
+import type { Session } from "@opencode/schema/session"
 import type { ModelInfo, SessionMessageAssistant, SessionMessageInfo } from "@opencode/client"
 import { Locale } from "./locale"
 
@@ -6,7 +7,7 @@ type SessionNode = {
   parentID?: string | null
 }
 
-export function sessionFamily<T extends SessionNode>(sessions: readonly T[], sessionID: string) {
+export function sessionFamily<T extends SessionNode>(sessions: readonly T[], sessionID: Session.ID) {
   const byID = new Map(sessions.map((session) => [session.id, session]))
   const current = byID.get(sessionID)
   if (!current) return []

@@ -1,8 +1,9 @@
+import type { Session } from "@opencode/schema/session"
 import { Plugin } from "@opencode/plugin/tui"
 import { createMemo, For, Match, Show, Switch } from "solid-js"
 import { DialogMcp } from "../../component/dialog-mcp"
 
-export function SidebarMcp(props: { context: Plugin.Context; sessionID: string }) {
+export function SidebarMcp(props: { context: Plugin.Context; sessionID: Session.ID }) {
   const [view, updateView] = props.context.storage.store("view", { initial: { open: true } })
   const theme = props.context.theme
   const session = createMemo(() => props.context.data.session.get(props.sessionID))

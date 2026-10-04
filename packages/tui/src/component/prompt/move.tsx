@@ -1,3 +1,5 @@
+import type { Project } from "@opencode/schema/project"
+import type { Session } from "@opencode/schema/session"
 import { createEffect, createMemo, createSignal, onCleanup } from "solid-js"
 import { useTuiPaths } from "../../context/runtime"
 import { errorMessage } from "../../util/error"
@@ -9,7 +11,10 @@ import { useData } from "../../context/data"
 import { useLocation } from "../../context/location"
 import { useRoute } from "../../context/route"
 
-export function usePromptMove(input: { projectID: () => string | undefined; sessionID: () => string | undefined }) {
+export function usePromptMove(input: {
+  projectID: () => Project.ID | undefined
+  sessionID: () => Session.ID | undefined
+}) {
   const dialog = useDialog()
   const client = useClient()
   const toast = useToast()
@@ -124,7 +129,7 @@ export function usePromptMove(input: { projectID: () => string | undefined; sess
       .catch(() => undefined)
   }
 
-  async function resolveSession(sessionID: string) {
+  async function resolveSession(sessionID: Session.ID) {
     const session = data.session.get(sessionID)
     if (session) return session
     await data.session.sync(sessionID).catch(() => undefined)

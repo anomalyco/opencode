@@ -1,3 +1,4 @@
+import type { WorkspaceID } from "@opencode/schema/workspace-id"
 import { createSimpleContext } from "@opencode/ui/context"
 import type { LocationGetOutput, LocationRef } from "@opencode/client/promise"
 import { retry } from "@opencode/util/retry"
@@ -13,7 +14,10 @@ export type WorkspaceLocation = LocationContext & {
 
 const context = createSimpleContext({
   name: "Location",
-  init: (props: { directory: string | Accessor<string>; workspaceID?: string | Accessor<string | undefined> }) => {
+  init: (props: {
+    directory: string | Accessor<string>
+    workspaceID?: WorkspaceID | Accessor<WorkspaceID | undefined>
+  }) => {
     const serverSDK = useServerSDK()
     const server = useServer()
     const data = useData()

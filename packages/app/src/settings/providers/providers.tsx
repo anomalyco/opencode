@@ -1,3 +1,4 @@
+import { Integration } from "@opencode/schema/integration"
 import { Button } from "@opencode/ui/button"
 import { Badge } from "@opencode/ui/badge"
 import { useDialog } from "@opencode/ui/context/dialog"
@@ -122,7 +123,7 @@ export const SettingsProviders: Component<{
   })
 
   createEffect(() => {
-    const ids = new Set(available().map((item) => item.id))
+    const ids = new Set<string>(available().map((item) => item.id))
     Object.entries(state.disconnecting).forEach(([id, status]) => {
       if ((status === "removing" || status === "removed") && !ids.has(id)) {
         setState("disconnecting", id, "absent")
@@ -144,7 +145,7 @@ export const SettingsProviders: Component<{
   })
 
   const popular = createMemo(() => {
-    const connectedIDs = new Set(connected().map((p) => p.id))
+    const connectedIDs = new Set<string>(connected().map((p) => p.id))
     // The Console account (integration `opencode`) shares its id with the Zen provider. A stored API
     // key, including one imported from a v1 auth.json, makes Zen "connected" without any account, so
     // the Popular list keeps the sign-in row until the active credential is an OAuth grant. Until the
@@ -204,7 +205,7 @@ export const SettingsProviders: Component<{
     updateDisconnecting(ids, "removing")
     const location = props.directory ? { directory: props.directory } : undefined
     await serverSdk.api.integration
-      .get({ integrationID: item.integrationID ?? item.id, location })
+      .get({ integrationID: Integration.ID.make(item.integrationID ?? item.id), location })
       .then(async (integration) => {
         const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
         if (credentials.length === 0) {

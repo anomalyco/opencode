@@ -1,3 +1,4 @@
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { testRender } from "@opentui/solid"
 import { MouseButton } from "@opentui/core"
@@ -31,14 +32,14 @@ for (const orientation of ["horizontal", "vertical"] as const) {
   test(`${orientation} tabs replace ordinals with status without moving titles and keep context menu actions`, async () => {
     await using temporary = await tmpdir()
     const [status, setStatus] = createSignal<SessionTabsStatus>(EMPTY_SESSION_TAB_STATUS)
-    const [active, setActive] = createSignal("second")
+    const [active, setActive] = createSignal(Session.ID.make("second", { disableChecks: true }))
     const [newTab, setNewTab] = createSignal(false)
     const settings: Info = { tabs: { mode: "on" } }
     const copied: string[] = []
     const reopened: string[] = []
     const [closed, setClosed] = createSignal([
-      { sessionID: "closed-new", title: "Most recently closed" },
-      { sessionID: "closed-old", title: "Earlier session" },
+      { sessionID: Session.ID.make("closed-new", { disableChecks: true }), title: "Most recently closed" },
+      { sessionID: Session.ID.make("closed-old", { disableChecks: true }), title: "Earlier session" },
     ])
     let config!: ReturnType<typeof useConfig>
     let theme!: ReturnType<typeof useTheme>
@@ -49,12 +50,12 @@ for (const orientation of ["horizontal", "vertical"] as const) {
     }
     const controller = {
       tabs: () => [
-        { sessionID: "first", title: "First" },
-        { sessionID: "second", title: "Second" },
+        { sessionID: Session.ID.make("first", { disableChecks: true }), title: "First" },
+        { sessionID: Session.ID.make("second", { disableChecks: true }), title: "Second" },
       ],
       current: active,
       newTab,
-      select(sessionID: string) {
+      select(sessionID: Session.ID) {
         batch(() => {
           setActive(sessionID)
           if (sessionID === "first") setStatus((current) => ({ ...current, unread: undefined }))
@@ -146,7 +147,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       }
 
       for (const attention of ["question", "permission"] as const) {
-        setActive("second")
+        setActive(Session.ID.make("second", { disableChecks: true }))
         setStatus({ ...EMPTY_SESSION_TAB_STATUS, busy: true, attention })
         await app.renderOnce()
         const indicatorColor = () =>
@@ -169,7 +170,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         }
         const full = glow()
         expect(full).toBeGreaterThan(0)
-        setActive("first")
+        setActive(Session.ID.make("first", { disableChecks: true }))
         await app.renderOnce()
         expect(indicatorColor()?.toInts()).toEqual(theme.hue.accent[200].toInts())
         const dim = glow()
@@ -179,7 +180,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
 
       const glyph = "\u2022"
       for (const unread of ["activity", "error"] as const) {
-        setActive("second")
+        setActive(Session.ID.make("second", { disableChecks: true }))
         setStatus({ ...EMPTY_SESSION_TAB_STATUS, unread })
         await app.renderOnce()
         const color = app
@@ -191,7 +192,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         )
         await app.mockMouse.click(1, orientation === "vertical" ? 1 : 0)
         await app.renderOnce()
-        expect(active()).toBe("first")
+        expect(active()).toBe(Session.ID.make("first", { disableChecks: true }))
         expect(status().unread).toBeUndefined()
         expect(app.captureCharFrame()).toContain("   First")
         expect(app.captureCharFrame()).not.toContain(`${glyph} First`)
@@ -209,7 +210,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       await app.waitForFrame((frame) => frame.includes(`${SPINNER_FRAMES[0]} First`))
 
       setStatus(EMPTY_SESSION_TAB_STATUS)
-      setActive("second")
+      setActive(Session.ID.make("second", { disableChecks: true }))
       await app.renderOnce()
       const rows = app.captureCharFrame().split("\n")
       const row = rows.findIndex((line) => line.includes("First"))
@@ -220,7 +221,7 @@ for (const orientation of ["horizontal", "vertical"] as const) {
       expect(app.captureCharFrame()).toContain("Copy session ID")
       expect(app.captureCharFrame()).toContain("Close")
       expect(app.captureCharFrame()).not.toContain("Keep open")
-      expect(active()).toBe("second")
+      expect(active()).toBe(Session.ID.make("second", { disableChecks: true }))
       await app.mockMouse.click(column + 1, row + 3)
       expect(copied).toEqual(["first"])
       await app.waitForFrame((frame) => !frame.includes("Rename"))
@@ -243,12 +244,17 @@ for (const orientation of ["horizontal", "vertical"] as const) {
         expect(reopened.at(-1)).toBe("closed-old")
         await app.waitForFrame((frame) => !frame.includes("Recently closed tabs"))
         setClosed([
-          { sessionID: "closed-new", title: "Most recently closed" },
-          { sessionID: "closed-old", title: "Earlier session" },
+          { sessionID: Session.ID.make("closed-new", { disableChecks: true }), title: "Most recently closed" },
+          { sessionID: Session.ID.make("closed-old", { disableChecks: true }), title: "Earlier session" },
         ])
       }
       app.renderer.resize(60, 20)
-      setClosed(Array.from({ length: 11 }, (_, index) => ({ sessionID: `closed-${index}`, title: `History ${index + 1}` })))
+      setClosed(
+        Array.from({ length: 11 }, (_, index) => ({
+          sessionID: Session.ID.make(`closed-${index}`, { disableChecks: true }),
+          title: `History ${index + 1}`,
+        })),
+      )
       await app.renderOnce()
       const historyRows = app.captureCharFrame().split("\n")
       const newRow = historyRows.findIndex((line) => line.includes("+ New session"))

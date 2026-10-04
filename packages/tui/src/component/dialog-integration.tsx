@@ -1,3 +1,5 @@
+import type { Credential } from "@opencode/schema/credential"
+import type { Provider } from "@opencode/schema/provider"
 import { TextAttributes } from "@opentui/core"
 import type {
   ConnectionInfo,
@@ -39,7 +41,7 @@ const INTEGRATION_PRIORITY: Record<string, number> = {
 type ConnectMethod = Exclude<IntegrationInfo["methods"][number], { type: "env" }>
 type IntegrationAttempt = IntegrationOauthConnectOutput["data"]
 type CommandAttempt = IntegrationCommandConnectOutput["data"]
-type OnIntegrationConnected = (providerID?: string) => void
+type OnIntegrationConnected = (providerID?: Provider.ID) => void
 const CANCELLED = Symbol("cancelled")
 const CUSTOM = Symbol("custom")
 const OPEN = Symbol("open")
@@ -159,13 +161,15 @@ function manageConnections(
     const theme = useTheme().surface("dialog")
     const shortcuts = Keymap.useShortcuts()
     const [deleting, setDeleting] = createSignal<string>()
-    const [selected, setSelected] = createSignal(methods.length ? "add" : credentialConnections(integration)[0]?.id)
+    const [selected, setSelected] = createSignal<Credential.ID | "add" | undefined>(
+      methods.length ? "add" : credentialConnections(integration)[0]?.id,
+    )
     const current = createMemo(() =>
       data.location.integration.list(location)?.find((item) => item.id === integration.id),
     )
 
     return (
-      <DialogSelect
+      <DialogSelect<Credential.ID | "add">
         title={integration.name}
         current={credentialConnections(current() ?? integration)[0]?.id}
         focusCurrent={false}
@@ -179,7 +183,7 @@ function manageConnections(
             ? [
                 {
                   title: "Add account",
-                  value: "add",
+                  value: "add" as const,
                   onSelect: () => selectMethod(current() ?? integration, methods, location, dialog, onConnected),
                 },
               ]
@@ -215,6 +219,7 @@ function manageConnections(
             hidden: selected() === "add",
             disabled: (option) => !option || option.value === "add",
             onTrigger: (option) => {
+              if (option.value === "add") return
               dialog.replace(() => (
                 <DialogPrompt
                   title="Rename account"
@@ -223,6 +228,7 @@ function manageConnections(
                     credentialConnections(current() ?? integration).find((item) => item.id === option.value)?.label
                   }
                   onConfirm={(value) => {
+                    if (option.value === "add") return
                     const label = value.trim()
                     if (!label) return
                     void client.api.credential
@@ -240,6 +246,7 @@ function manageConnections(
             hidden: selected() === "add",
             disabled: (option) => !option || option.value === "add",
             onTrigger: (option) => {
+              if (option.value === "add") return
               if (deleting() !== option.value) return setDeleting(option.value)
               const final = credentialConnections(current() ?? integration).length === 1
               void client.api.credential

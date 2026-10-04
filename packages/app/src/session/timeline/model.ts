@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import { createMemo, createResource, type Accessor } from "solid-js"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { useData } from "@/runtime/server/current"
@@ -90,10 +91,10 @@ function leadingTurnNeedsParent(messages: SessionMessageInfo[]) {
 }
 
 export async function loadOlderTimeline(input: {
-  sessionID: Accessor<string | undefined>
+  sessionID: Accessor<SessionID | undefined>
   more: Accessor<boolean>
   loading: Accessor<boolean>
-  loadMore: (sessionID: string) => Promise<void>
+  loadMore: (sessionID: SessionID) => Promise<void>
   before?: () => void
   after?: (done: boolean) => void
 }) {

@@ -1,3 +1,6 @@
+import { Form } from "@opencode/schema/form"
+import { Permission } from "@opencode/schema/permission"
+import { SessionID } from "@opencode/schema/session-id"
 import { describe, expect, test } from "bun:test"
 import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode/client/promise"
 import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
@@ -16,7 +19,7 @@ const permission = (id: string, sessionID: string) =>
 
 const question = (id: string, sessionID: string) =>
   ({
-    id,
+    id: Form.ID.make(id, { disableChecks: true }),
     sessionID,
     title: "Questions",
     metadata: { kind: "question" },
@@ -33,8 +36,16 @@ describe("sessionTreeIDs", () => {
       session({ id: "other" }),
     ]
 
-    expect(sessionTreeIDs(sessions, "child")).toEqual(["child", "grand"])
-    expect(sessionTreeIDs(sessions, "root")).toEqual(["root", "child", "sibling", "grand"])
+    expect(sessionTreeIDs(sessions, SessionID.make("child", { disableChecks: true }))).toEqual([
+      SessionID.make("child", { disableChecks: true }),
+      SessionID.make("grand", { disableChecks: true }),
+    ])
+    expect(sessionTreeIDs(sessions, SessionID.make("root", { disableChecks: true }))).toEqual([
+      SessionID.make("root", { disableChecks: true }),
+      SessionID.make("child", { disableChecks: true }),
+      SessionID.make("sibling", { disableChecks: true }),
+      SessionID.make("grand", { disableChecks: true }),
+    ])
     expect(sessionTreeIDs(sessions)).toEqual([])
   })
 })
@@ -75,7 +86,9 @@ describe("sessionPermissionRequest", () => {
     ],
     ["returns undefined when all tree permissions are filtered out", both, () => false, undefined],
   ])("%s", (_name, permissions, include, id) => {
-    expect(sessionPermissionRequest(tree, permissions, "root", include)?.id).toBe(id)
+    expect(
+      sessionPermissionRequest(tree, permissions, SessionID.make("root", { disableChecks: true }), include)?.id,
+    ).toBe(id ? Permission.ID.make(id, { disableChecks: true }) : undefined)
   })
 })
 
@@ -105,6 +118,8 @@ describe("sessionFormRequest", () => {
       "search",
     ],
   ])("%s", (_name, forms, id) => {
-    expect(sessionFormRequest(tree, forms, "root")?.id).toBe(id)
+    expect(sessionFormRequest(tree, forms, SessionID.make("root", { disableChecks: true }))?.id).toBe(
+      id ? Form.ID.make(id, { disableChecks: true }) : undefined,
+    )
   })
 })

@@ -1,18 +1,19 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import { createMemo, createRenderEffect, createSignal, on, onCleanup } from "solid-js"
 import { sessionNotFoundError } from "@/runtime/server/errors"
 
 type SessionStore<T> = {
-  get: (id: string) => T | undefined
-  sync: (id: string, options?: { children?: boolean }) => Promise<unknown>
+  get: (id: SessionID) => T | undefined
+  sync: (id: SessionID, options?: { children?: boolean }) => Promise<unknown>
   message: {
-    sync: (id: string) => Promise<unknown>
+    sync: (id: SessionID) => Promise<unknown>
   }
   pending: {
-    sync: (id: string) => Promise<unknown>
+    sync: (id: SessionID) => Promise<unknown>
   }
 }
 
-type Resolution<T> = { id: string; store: SessionStore<T> } & (
+type Resolution<T> = { id: SessionID; store: SessionStore<T> } & (
   | { state: "pending" }
   | { state: "settled" }
   | { state: "failed"; failure: unknown }
@@ -35,7 +36,7 @@ type Resolution<T> = { id: string; store: SessionStore<T> } & (
 // session that simply has not resolved yet. Resolve failures rethrow on read so
 // the enclosing SessionRouteErrorBoundary renders the scoped session error.
 export function createSessionResolution<T>(
-  sessionID: () => string | undefined,
+  sessionID: () => SessionID | undefined,
   sessions: () => SessionStore<T>,
   options?: { children?: boolean; connected?: () => boolean },
 ) {

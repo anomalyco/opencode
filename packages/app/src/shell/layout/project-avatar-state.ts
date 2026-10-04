@@ -1,3 +1,4 @@
+import type { SessionID } from "@opencode/schema/session-id"
 import { createMemo, type Accessor } from "solid-js"
 import { useGlobal, useServerCtx } from "@/runtime/server/runtime"
 import { sessionPermissionRequest, sessionFormRequest } from "@/session/requests/session-request-tree"
@@ -6,7 +7,7 @@ import { useSettings } from "@/settings/model"
 
 export function useSessionTabAvatarState(
   server: Accessor<ServerConnection.Key>,
-  sessionId: Accessor<string>,
+  sessionId: Accessor<SessionID>,
   root?: Accessor<boolean>,
 ) {
   const global = useGlobal()

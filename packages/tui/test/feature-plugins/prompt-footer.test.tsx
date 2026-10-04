@@ -1,3 +1,6 @@
+import { Model } from "@opencode/schema/model"
+import { Provider } from "@opencode/schema/provider"
+import { Session } from "@opencode/schema/session"
 /** @jsxImportSource @opentui/solid */
 import { expect, test } from "bun:test"
 import { RGBA, TextRenderable } from "@opentui/core"
@@ -32,7 +35,7 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
         message: { list: () => [] },
       },
       shell: {
-        list: () => [{ metadata: { sessionID: "session" } }],
+        list: () => [{ metadata: { sessionID: Session.ID.make("session", { disableChecks: true }) } }],
       },
       location: {
         model: { list: () => [] },
@@ -40,7 +43,14 @@ test("prompt footer separates simultaneous subagent, shell, and usage status", a
     },
   } as unknown as Context
   const app = await testRender(
-    () => <PromptFooter context={context} sessionID="session" mode="normal" showDetails={true} />,
+    () => (
+      <PromptFooter
+        context={context}
+        sessionID={Session.ID.make("session", { disableChecks: true })}
+        mode="normal"
+        showDetails={true}
+      />
+    ),
     {
       width: 80,
       height: 2,
@@ -92,7 +102,10 @@ test("prompt footer can hide details", async () => {
             {
               id: "message",
               type: "assistant",
-              model: { providerID: "provider", id: "model" },
+              model: {
+                providerID: Provider.ID.make("provider", { disableChecks: true }),
+                id: Model.ID.make("model", { disableChecks: true }),
+              },
               tokens: { input: 1_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
             },
           ],
@@ -100,12 +113,22 @@ test("prompt footer can hide details", async () => {
       },
       shell: { list: () => [] },
       location: {
-        model: { list: () => [{ providerID: "provider", id: "model", limit: { context: 10_000 } }] },
+        model: {
+          list: () => [
+            {
+              providerID: Provider.ID.make("provider", { disableChecks: true }),
+              id: "model",
+              limit: { context: 10_000 },
+            },
+          ],
+        },
       },
     },
   } as unknown as Context
   const [showDetails, setShowDetails] = createSignal(true)
-  const [sessionID, setSessionID] = createSignal<string | undefined>("session")
+  const [sessionID, setSessionID] = createSignal<Session.ID | undefined>(
+    Session.ID.make("session", { disableChecks: true }),
+  )
   const app = await testRender(
     () => (
       <box width="100%" flexDirection="row" justifyContent="space-between" gap={2}>

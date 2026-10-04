@@ -1,3 +1,5 @@
+import type { SessionMessage } from "@opencode/schema/session-message"
+import type { Session } from "@opencode/schema/session"
 // Footer layout
 //
 // Renders the footer region as a compact vertical stack:
@@ -110,7 +112,7 @@ type RunFooterViewProps = {
   onCycle: () => void
   onInterrupt: () => boolean
   onBackground?: () => void
-  onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: string) => Promise<void>
+  onQueuedPromptAction?: (action: QueuedPromptAction, inboxID: SessionMessage.ID) => Promise<void>
   onEditorOpen: (input: { value: string }) => Promise<string | undefined>
   onInputClear: () => void
   onExitRequest?: () => boolean
@@ -123,8 +125,8 @@ type RunFooterViewProps = {
   onLayout: (input: { route: FooterPromptRoute; subagentRows: number }) => void
   onStatus: (text: string) => void
   onMiniSettingChange: (change: MiniSettingChange) => void | Promise<void>
-  onSubagentSelect?: (sessionID: string | undefined) => void
-  onSubagentInterrupt?: (sessionID: string) => void
+  onSubagentSelect?: (sessionID: Session.ID | undefined) => void
+  onSubagentInterrupt?: (sessionID: Session.ID) => void
 }
 
 export function RunFooterView(props: RunFooterViewProps) {
@@ -322,7 +324,7 @@ export function RunFooterView(props: RunFooterViewProps) {
   }
 
   const runQueuedAction = createSingleFlight<string>()
-  const queuedPromptAction = async (action: QueuedPromptAction, inboxID: string, failureLabel?: string) => {
+  const queuedPromptAction = async (action: QueuedPromptAction, inboxID: SessionMessage.ID, failureLabel?: string) => {
     const run = props.onQueuedPromptAction
     if (!run) return false
     const result = await runQueuedAction(inboxID, async () => {
@@ -339,7 +341,7 @@ export function RunFooterView(props: RunFooterViewProps) {
     return result ?? false
   }
 
-  const openTab = (sessionID: string) => {
+  const openTab = (sessionID: Session.ID) => {
     setRoute({ type: "subagent", sessionID })
     props.onSubagentSelect?.(sessionID)
   }
