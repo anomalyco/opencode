@@ -1302,14 +1302,14 @@ const gateway = VercelAIGateway.configure({
 
 gateway.model("anthropic/claude-sonnet-5.5") // Messages
 gateway.model("openai/gpt-6-luna") // Responses
-gateway.model("meta/muse-spark-1.3") // Responses
+gateway.model("meta/muse-spark-1.3") // Chat
 gateway.model("spacexai/grok-4.7") // Responses
 gateway.chat("anthropic/claude-sonnet-5.5") // Explicit Chat override
 gateway.responses("google/gemini-3.8-flash") // Explicit Responses override
 gateway.messages("openai/gpt-6-luna") // Explicit Messages override
 ```
 
-Default routing sends `openai/gpt-*`, `meta/muse-*`, and `spacexai/grok-*` to Responses; everything else uses Messages. Full Gateway model IDs stay unchanged. Package entrypoints are also available at `@opencode/ai/providers/vercel-ai-gateway/{messages,responses,chat}` with flat `model(id, settings)` inputs.
+Default routing picks the API whose Gateway translation carries each family's reasoning across turns: `openai/gpt-*` and `spacexai/grok-*` use Responses, `meta/muse-*` uses Chat, and everything else uses Messages. Full Gateway model IDs stay unchanged. Package entrypoints are also available at `@opencode/ai/providers/vercel-ai-gateway/{messages,responses,chat}` with flat `model(id, settings)` inputs.
 
 Set `providerOptions.reasoningEffort` for named effort. Messages lowers it to `thinking` plus `output_config.effort`, Responses to `reasoning.effort`, and Chat to `reasoning_effort`.
 

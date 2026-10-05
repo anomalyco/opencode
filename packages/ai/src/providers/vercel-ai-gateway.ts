@@ -188,8 +188,12 @@ export const configure = (input: Options = {}) => {
     chatRoute
       .with(configured)
       .model<ProviderOptionsInput>({ id: modelID, compatibility: { reasoningField: "reasoning" } })
-  const model = (modelID: string | ModelID) =>
-    /^(openai\/gpt-|meta\/muse-|spacexai\/grok-)/.test(modelID) ? responses(modelID) : messages(modelID)
+  // Each family uses the API whose Gateway translation carries its reasoning state across turns.
+  const model = (modelID: string | ModelID) => {
+    if (/^(openai\/gpt-|spacexai\/grok-)/.test(modelID)) return responses(modelID)
+    if (modelID.startsWith("meta/muse-")) return chat(modelID)
+    return messages(modelID)
+  }
   const evaluation = (modelID: string | ModelID) =>
     EvaluationModel.make<EvaluationOptions>({
       id: modelID,

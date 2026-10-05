@@ -13,13 +13,14 @@ it.effect("Gateway defaults preserve full model IDs and select the requested fam
     const gateway = VercelAIGateway.configure({ apiKey: "fixture" })
     for (const [id, path] of [
       ["openai/gpt-6.1", "/responses"],
-      ["meta/muse-spark-1.3", "/responses"],
+      ["meta/muse-spark-1.3", "/chat/completions"],
       ["spacexai/grok-4.7", "/responses"],
       ["meta/llama-4", "/messages"],
       ["openai/gpt-oss-120b", "/responses"],
       ["anthropic/claude-sonnet-5.5", "/messages"],
       ["google/gemini-3.8-flash", "/messages"],
       ["moonshotai/kimi-k3", "/messages"],
+      ["deepseek/deepseek-v4.1-flash", "/messages"],
     ]) {
       const model = gateway.model(id)
       expect(model.id).toBe(id)

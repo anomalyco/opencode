@@ -33,9 +33,15 @@ for (const item of [
     reasoning: false,
   },
   {
-    name: "responses Muse",
+    name: "chat Muse",
     model: gateway.model("meta/muse-spark-1.3"),
     options: { reasoningEffort: "low" },
+    reasoning: false,
+  },
+  {
+    name: "messages DeepSeek",
+    model: gateway.model("deepseek/deepseek-v4.1-flash"),
+    options: { reasoningEffort: "high" },
     reasoning: true,
   },
   {
