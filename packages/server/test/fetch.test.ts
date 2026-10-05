@@ -320,7 +320,7 @@ it.live(
       expect(yield* Effect.promise(() => response.json())).toEqual({
         _tag: "InvalidRequestError",
         message:
-          "OpenAI browser login needs local port 1455 or 1457, but both are already in use. Stop the processes using those ports or choose ChatGPT Pro/Plus (headless), then try again.",
+          "OpenAI browser login needs local port 1455 or 1457, but both are already in use. Stop the processes using those ports or choose ChatGPT device code (legacy), then try again.",
         kind: "integration_authorization",
       })
     }),

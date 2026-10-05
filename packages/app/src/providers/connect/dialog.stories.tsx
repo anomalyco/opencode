@@ -66,8 +66,9 @@ export const OpenCodeZen = {
 
 export const LoginMethods = {
   render: renderConnection("openai", [
-    { type: "oauth", label: "ChatGPT Pro/Plus (browser)" },
-    { type: "oauth", label: "ChatGPT Pro/Plus (headless)" },
+    { type: "oauth", label: "Sign in with ChatGPT" },
+    { type: "oauth", label: "ChatGPT browser (legacy)" },
+    { type: "oauth", label: "ChatGPT device code (legacy)" },
     { type: "key", label: "API key" },
   ]),
 }
