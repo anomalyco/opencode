@@ -16,6 +16,12 @@ describe("sessionExportFilename", () => {
   test("falls back to id when title and slug are empty", () => {
     expect(sessionExportFilename({ id: "ses_123" })).toBe("ses_123.json")
   })
+
+  test("caps long titles within the filesystem filename limit", () => {
+    const filename = sessionExportFilename({ id: "ses_123", title: "a".repeat(300) })
+    expect(filename).toBe(`${"a".repeat(250)}.json`)
+    expect(filename.length).toBeLessThanOrEqual(255)
+  })
 })
 
 describe("fetchSessionExport", () => {
