@@ -137,9 +137,14 @@ test.each([undefined, "inherited"])(
       const info = await waitForInfo(registration)
       const url = new URL("/api/mcp", info.url)
       url.searchParams.set("location[directory]", root)
-      const response = await fetch(url, {
-        headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
-      })
+      const response = await Effect.runPromise(
+        Effect.promise(() =>
+          fetch(url, { headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) } }),
+        ).pipe(
+          Effect.repeat({ while: (response) => response.status === 503, schedule: Schedule.spaced("25 millis") }),
+          Effect.timeout("5 seconds"),
+        ),
+      )
       expect(response.status).toBe(200)
       await Effect.runPromise(
         Effect.promise(() => Bun.file(output).exists()).pipe(
@@ -161,6 +166,92 @@ test.each([undefined, "inherited"])(
   },
   30_000,
 )
+
+test("managed service uses saved API keys for custom providers", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-provider-env-"))
+  const registration = path.join(root, "state", "opencode", ServiceConfig.filename())
+  const authorization: (string | null)[] = []
+  const provider = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      authorization.push(request.headers.get("authorization"))
+      if (request.headers.get("authorization") !== "Bearer service-test-key")
+        return Response.json({ error: { message: "Missing API key" } }, { status: 401 })
+      return new Response(
+        `data: ${JSON.stringify({
+          id: "completion",
+          object: "chat.completion.chunk",
+          created: 1,
+          model: "chat",
+          choices: [{ index: 0, delta: { content: "OK" }, finish_reason: "stop" }],
+        })}\n\ndata: [DONE]\n\n`,
+        { headers: { "content-type": "text/event-stream" } },
+      )
+    },
+  })
+  await fs.mkdir(path.join(root, "config"), { recursive: true })
+  await fs.writeFile(
+    path.join(root, "config", ServiceConfig.filename()),
+    JSON.stringify({ env: { OPENCODE_SERVICE_PROVIDER_API_KEY: "service-test-key" } }),
+  )
+  await fs.writeFile(
+    path.join(root, "config", "opencode.json"),
+    JSON.stringify({
+      providers: {
+        "env-test": {
+          package: "@opencode/ai/providers/openai-compatible",
+          env: ["OPENCODE_SERVICE_PROVIDER_API_KEY"],
+          settings: { baseURL: provider.url.href },
+          models: { chat: {} },
+        },
+      },
+    }),
+  )
+  const owner = Bun.spawn(
+    [process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service", "--port", "0"],
+    {
+      env: isolatedEnv(root, { OPENCODE_SERVICE_PROVIDER_API_KEY: undefined }),
+      stderr: "pipe",
+      stdout: "ignore",
+    },
+  )
+  try {
+    const info = await waitForInfo(registration)
+    const models = new URL("/api/model", info.url)
+    models.searchParams.set("location[directory]", path.join(root, "config"))
+    await Effect.runPromise(
+      Effect.promise(async () => {
+        const response = await fetch(models, {
+          headers: { authorization: "Basic " + btoa(`opencode:${info.password}`) },
+        })
+        const body = await response.json()
+        return body.data?.some(
+          (model: { providerID: string; id: string }) => model.providerID === "env-test" && model.id === "chat",
+        )
+      }).pipe(
+        Effect.repeat({ while: (ready) => !ready, schedule: Schedule.spaced("25 millis") }),
+        Effect.timeout("5 seconds"),
+      ),
+    )
+    const response = await fetch(new URL("/api/experimental/generate", info.url), {
+      method: "POST",
+      headers: {
+        authorization: "Basic " + btoa(`opencode:${info.password}`),
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ prompt: "Return OK", model: { providerID: "env-test", id: "chat" } }),
+    })
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ data: { text: "OK" } })
+    expect(authorization).toEqual(["Bearer service-test-key"])
+  } finally {
+    owner.kill("SIGTERM")
+    await owner.exited
+    provider.stop(true)
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 30_000)
 
 test("service filenames share release channels and identify preview channels", () => {
   expect(ServiceConfig.filename("latest")).toBe("service.json")
@@ -350,6 +441,7 @@ test("concurrent service processes elect one server", async () => {
       urls: [info.url],
       // The server reports the canonical tmp directory; Windows os.tmpdir() can be an 8.3 short name.
       paths: { tmp: await fs.realpath(path.join(os.tmpdir(), "opencode")) },
+      capabilities: { persistentPty: process.platform !== "win32" },
     })
     const contender = Bun.spawn(command, { env, stderr: "pipe", stdout: "ignore" })
     try {
@@ -468,6 +560,77 @@ test("unrelated managed port occupancy reports an actionable conflict", async ()
     await fs.rm(root, { recursive: true, force: true })
   }
 }, 30_000)
+
+test("the original managed service contender binds when the occupied port is released", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-bind-retry-"))
+  const recognizing = Promise.withResolvers<void>()
+  const requests: string[] = []
+  using listener = Bun.serve({
+    hostname: "127.0.0.1",
+    port: 0,
+    fetch(request) {
+      requests.push(new URL(request.url).pathname)
+      if (requests.length === 2) recognizing.resolve()
+      return Response.json({ unrelated: true })
+    },
+  })
+  const port = listener.port
+  if (port === undefined) throw new Error("Server did not bind a port")
+  const registration = path.join(root, "state", "opencode", "service-local.json")
+  await fs.mkdir(path.join(root, "config"), { recursive: true })
+  await fs.mkdir(path.dirname(registration), { recursive: true })
+  await fs.writeFile(path.join(root, "config", "service-local.json"), JSON.stringify({ port }))
+  await fs.writeFile(
+    registration,
+    JSON.stringify({
+      id: "stale",
+      version: OPENCODE_VERSION,
+      url: "http://127.0.0.1:1",
+      pid: 2_147_483_647,
+      password: "stale",
+    }),
+  )
+  const contender = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
+    env: isolatedEnv(root),
+    stderr: "pipe",
+    stdout: "ignore",
+  })
+  const stderr = new Response(contender.stderr).text()
+  try {
+    // The first probe is preflight; the second only happens after start() fails to bind.
+    expect(await Promise.race([recognizing.promise.then(() => true), Bun.sleep(20_000).then(() => false)])).toBe(true)
+    expect(requests).toEqual(["/api/info", "/api/info"])
+    await listener.stop(true)
+
+    const info = await Promise.race([
+      waitForInfo(registration, (info) => info.pid === contender.pid),
+      contender.exited.then(() => undefined),
+    ])
+    expect(info?.pid, contender.exitCode === null ? undefined : await stderr).toBe(contender.pid)
+    const endpoint = await Effect.runPromise(
+      Service.discover({ file: registration }).pipe(
+        Effect.filterOrFail((value) => value !== undefined),
+        Effect.retry({ times: 400, schedule: Schedule.spaced("50 millis") }),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+    expect(new URL(endpoint.url).port).toBe(String(port))
+    expect(
+      await fetch(new URL("/api/info", endpoint.url), { headers: Service.headers(endpoint) }).then((response) =>
+        response.json(),
+      ),
+    ).toMatchObject({ pid: contender.pid, version: OPENCODE_VERSION, urls: [endpoint.url] })
+    expect(contender.exitCode).toBe(null)
+    await Effect.runPromise(Service.stop({ file: registration }).pipe(Effect.provide(NodeFileSystem.layer)))
+    expect(await waitForExit(contender)).toBe(true)
+    expect(await Bun.file(registration).exists()).toBe(false)
+    await expectPortAvailable(port)
+  } finally {
+    contender.kill("SIGTERM")
+    await contender.exited
+    await fs.rm(root, { recursive: true, force: true })
+  }
+}, 45_000)
 
 test("unresponsive managed port occupancy reports a bounded conflict", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-unresponsive-conflict-"))

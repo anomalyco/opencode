@@ -1,5 +1,5 @@
 import { NodeSocketServer } from "@effect/platform-node"
-import { Deferred, Effect, Fiber, Schema, Semaphore } from "effect"
+import { Deferred, Effect, Fiber, Predicate, Schema, Semaphore } from "effect"
 import { randomUUID } from "node:crypto"
 import { SshFailure } from "./command"
 
@@ -16,24 +16,31 @@ export const createAskpass = Effect.fn("Ssh.askpass")(function* (input: {
   const pending = new Map<string, Deferred.Deferred<string>>()
   const prompts = yield* Semaphore.make(1)
   const server = yield* NodeSocketServer.make({ host: "127.0.0.1", port: 0 }).pipe(Effect.mapError(SshFailure.from))
-  if (server.address._tag !== "TcpAddress") return yield* Effect.fail(new SshFailure("connection"))
+
+  if (!Predicate.isTagged(server.address, "TcpAddress")) return yield* Effect.fail(new SshFailure("connection"))
 
   const serving = yield* server
     .run((socket) =>
       Effect.gen(function* () {
         const request = yield* Deferred.make<string, SshFailure>()
         const state = { buffer: "", received: false }
+
         const reader = yield* socket
           .runString((chunk) => {
             if (state.received) return Effect.fail(new SshFailure("connection"))
             state.buffer += chunk
+
             if (state.buffer.length > 16_384) return Effect.fail(new SshFailure("connection"))
+
             if (!state.buffer.includes("\n")) return Effect.void
             state.received = true
+
             return Deferred.succeed(request, state.buffer.trim())
           })
           .pipe(Effect.ensuring(Deferred.fail(request, new SshFailure("connection"))), Effect.forkScoped)
+
         const message = yield* Deferred.await(request).pipe(Effect.flatMap(Schema.decodeUnknownEffect(Request)))
+
         if (message.token !== token) return
 
         // One scoped waiter per helper invocation. Disconnecting a helper or closing
@@ -75,6 +82,7 @@ export const createAskpass = Effect.fn("Ssh.askpass")(function* (input: {
     closed: Fiber.join(serving),
     respond: Effect.fn("Ssh.askpass.respond")(function* (id: string, value: string) {
       const response = pending.get(id)
+
       if (response) yield* Deferred.succeed(response, value)
     }),
   }

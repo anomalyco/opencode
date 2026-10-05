@@ -251,10 +251,7 @@ class StringSerializeHandler extends BaseSerializeHandler {
   private _nullCellCount: number = 0
   private _cursorStyle: IBufferCell
   private _firstRow: number = 0
-  private _lastCursorRow: number = 0
-  private _lastCursorCol: number = 0
   private _lastContentCursorRow: number = 0
-  private _lastContentCursorCol: number = 0
 
   constructor(
     buffer: IBuffer,
@@ -274,7 +271,6 @@ class StringSerializeHandler extends BaseSerializeHandler {
     this._cursorStyle = this._buffer.getNullCell()
 
     this._lastContentCursorRow = start
-    this._lastCursorRow = start
     this._firstRow = start
   }
 
@@ -292,8 +288,6 @@ class StringSerializeHandler extends BaseSerializeHandler {
 
     if (!isLastRow && !wrapped) {
       rowSeparator = "\r\n"
-      this._lastCursorRow = row + 1
-      this._lastCursorCol = 0
     }
 
     this._allRows[this._rowIndex] = this._currentRow
@@ -437,8 +431,7 @@ class StringSerializeHandler extends BaseSerializeHandler {
         this._nullCellCount = 0
       }
 
-      this._lastContentCursorRow = this._lastCursorRow = row
-      this._lastContentCursorCol = this._lastCursorCol = col
+      this._lastContentCursorRow = row
 
       this._currentRow += `\u001b[${sgrSeq.join(";")}m`
 
@@ -456,8 +449,7 @@ class StringSerializeHandler extends BaseSerializeHandler {
 
       this._currentRow += cell.getChars()
 
-      this._lastContentCursorRow = this._lastCursorRow = row
-      this._lastContentCursorCol = this._lastCursorCol = col + cell.getWidth()
+      this._lastContentCursorRow = row
     }
   }
 
@@ -466,8 +458,6 @@ class StringSerializeHandler extends BaseSerializeHandler {
 
     if (this._buffer.length - this._firstRow <= this._terminal.rows) {
       rowEnd = this._lastContentCursorRow + 1 - this._firstRow
-      this._lastCursorCol = this._lastContentCursorCol
-      this._lastCursorRow = this._lastContentCursorRow
     }
 
     let content = ""

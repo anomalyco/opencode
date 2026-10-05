@@ -5,10 +5,11 @@ import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type
 import { findSessionTab, sessionIDHasOpenTab, tabHref, tabKey, type SessionTab, type Tab } from "./tabs"
 import { Schema } from "effect"
 import { TabStorage } from "./schema"
-import type { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection } from "@/runtime/server/registry"
 import { Persistence } from "@/runtime/persistence/schema"
 
-const server = "local\nhttp://localhost:4096" as ServerConnection.Key
+const server = ServerConnection.Key.make("local\nhttp://localhost:4096")
+
 const decodeTabs = Schema.decodeUnknownSync(Persistence.withInitial(TabStorage.Tabs, []))
 
 function sessionTab(sessionId: string): SessionTab {
@@ -18,12 +19,14 @@ function sessionTab(sessionId: string): SessionTab {
 describe("tab migration", () => {
   test("round trips draft MCP choices without changing older drafts", () => {
     const legacy: Tab = { type: "draft", draftID: "legacy-draft", server, directory: "/project" }
+
     const draft: Tab = {
       ...legacy,
       draftID: "mcp-draft",
       worktree: "create",
       mcp: { target: "new-worktree", states: { first: true, second: false } },
     }
+
     const restored = decodeTabs([legacy, draft])
     expect(restored).toEqual([legacy, draft])
     expect(decodeTabs(Schema.encodeSync(TabStorage.Tabs)(restored))).toEqual([legacy, draft])
@@ -56,10 +59,12 @@ describe("tab migration", () => {
 
   test("encodes only canonical tabs and preserves drafts", () => {
     const draft: Tab = { type: "draft", server, draftID: "draft", directory: "/project", branch: "main" }
+
     const tabs = decodeTabs([
       { ...sessionTab("root"), routeSessionId: "root", routeParentId: "stale", legacy: true },
       draft,
     ])
+
     expect(tabs).toEqual([sessionTab("root"), draft])
     expect(Schema.encodeSync(TabStorage.Tabs)(tabs)).toEqual(tabs)
     expect(decodeTabs(Schema.encodeSync(TabStorage.Tabs)(tabs))).toEqual(tabs)
@@ -81,14 +86,14 @@ describe("tab migration", () => {
       Schema.decodeUnknownSync(Persistence.withInitial(TabStorage.Recent, { key: undefined }))({ key: 1 }),
     ).toEqual({ key: undefined })
     expect(Schema.decodeUnknownSync(TabStorage.Infos)({})).toEqual({})
-    expect(Schema.decodeUnknownSync(TabStorage.Panes)({})).toEqual({})
+    expect(Schema.decodeUnknownSync(TabStorage.Regions)({})).toEqual({})
     expect(Schema.decodeUnknownSync(TabStorage.Infos)({ tab: { title: "Title", directory: "/project" } })).toEqual({
       tab: { title: "Title", directory: "/project" },
     })
-    const panes = Schema.decodeUnknownSync(TabStorage.Panes)({ tab: { terminal: true, terminalHeight: 300 } })
-    expect(panes).toEqual({ tab: { dock: true, dockHeight: 300 } })
-    expect(Schema.encodeSync(TabStorage.Panes)(panes)).toEqual({ tab: { terminal: true, terminalHeight: 300 } })
-    expect(() => Schema.decodeUnknownSync(TabStorage.Panes)({ tab: { terminal: "yes" } })).toThrow()
+    const regions = Schema.decodeUnknownSync(TabStorage.Regions)({ tab: { terminal: true, terminalHeight: 300 } })
+    expect(regions).toEqual({ tab: { dock: true, dockHeight: 300 } })
+    expect(Schema.encodeSync(TabStorage.Regions)(regions)).toEqual({ tab: { terminal: true, terminalHeight: 300 } })
+    expect(() => Schema.decodeUnknownSync(TabStorage.Regions)({ tab: { terminal: "yes" } })).toThrow()
   })
 })
 
@@ -110,7 +115,7 @@ test("finds open root and routed session tabs", () => {
   expect(sessionIDHasOpenTab(tabs, server, "root")).toBe(true)
   expect(sessionIDHasOpenTab(tabs, server, "child")).toBe(true)
   expect(sessionIDHasOpenTab(tabs, server, "closed")).toBe(false)
-  expect(sessionIDHasOpenTab(tabs, "other" as ServerConnection.Key, "root")).toBe(false)
+  expect(sessionIDHasOpenTab(tabs, ServerConnection.Key.make("other"), "root")).toBe(false)
 })
 
 describe("tab memory", () => {
@@ -118,8 +123,10 @@ describe("tab memory", () => {
     createRoot((dispose) => {
       const memory = createTabMemory(getOwner())
       let disposed = 0
+
       const first = memory.ensure("tab", "prompt", () => {
         onCleanup(() => disposed++)
+
         return { value: "prompt" }
       })
 

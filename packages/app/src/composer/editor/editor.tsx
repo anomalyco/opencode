@@ -29,13 +29,16 @@ import { ProgressCircle } from "@opencode/ui/progress-circle"
 import type { Upload } from "../attachments/uploads"
 import { CommentCard } from "@opencode/session-ui/comment-card"
 import { typeLabel } from "@opencode/session-ui/message-file"
+import { getFilename } from "@opencode/util/path"
 import { Skill } from "@opencode/schema/skill"
 import type {
+  ComposerAgentPart,
   ComposerAttachment,
   ComposerComment,
+  ComposerFilePart,
   ComposerOption,
-  ComposerPersistedState,
   ComposerPrompt,
+  ComposerSkillPart,
   ComposerSuggestion,
 } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
@@ -52,11 +55,17 @@ export type {
 } from "../types"
 
 export type ComposerMode = "normal" | "shell"
+
 const COMPOSER_SUGGESTION_MAX_HEIGHT = 320
+
 const COMPOSER_SUGGESTION_ROW_HEIGHT = 28
+
 const COMPOSER_SUGGESTION_ROW_PEEK = 18
+
 const COMPOSER_SUGGESTION_TOP_PADDING = 8
+
 const COMPOSER_SUGGESTION_SEARCH_HEIGHT = 28
+
 const COMPOSER_SUGGESTION_CONTEXT_RESERVE = 80
 
 export type ComposerEditorProps = {
@@ -83,6 +92,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
   let controlsViewport!: HTMLDivElement
   let controlsContent!: HTMLDivElement
   const [overflow, setOverflow] = createStore({ start: false, end: false })
+
   const updateOverflow = () => {
     const offset = Math.abs(controlsViewport.scrollLeft)
     setOverflow({
@@ -90,6 +100,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
       end: controlsViewport.scrollWidth - controlsViewport.clientWidth - offset > 1,
     })
   }
+
   onMount(() => {
     const observer = new ResizeObserver(updateOverflow)
     observer.observe(controlsViewport)
@@ -98,11 +109,14 @@ export function ComposerEditor(props: ComposerEditorProps) {
     onCleanup(() => observer.disconnect())
   })
   let localInput = false
+
   const updateCursor = () => {
     if (!editor || !window.getSelection()?.isCollapsed) return
     props.controller.onCursor(composerCursor(editor))
   }
+
   const mode = createMemo(() => state.mode)
+
   const buttons = createMemo(() => ({
     opacity: mode() === "normal" ? 1 : 0,
     "pointer-events": mode() === "normal" ? ("auto" as const) : ("none" as const),
@@ -111,13 +125,30 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
   createEffect(() => {
     const parts = props.controller.parts()
+
     if (!editor) return
+
     if (localInput) {
       localInput = false
+
       return
     }
+
     renderComposerEditor(editor, parts)
   })
+
+  // Kept out of JSX: an inline ternary prop compiles to a memo created on every read, and the popover reads
+  // search from a ResizeObserver callback, where that memo has no owner and is never disposed.
+  const search = () =>
+    state.popover.type === "command-menu"
+      ? {
+          value: state.popover.query,
+          label: i18n.t("ui.promptInput.commands"),
+          placeholder: "/",
+          onValueChange: props.controller.setQuery,
+          onKeyDown: props.controller.onKeyDown,
+        }
+      : undefined
 
   return (
     <div class={`relative size-full flex flex-col gap-0 ${props.class ?? ""}`}>
@@ -128,6 +159,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
         class="hidden"
         onChange={(event) => {
           const list = event.currentTarget.files
+
           if (list) props.controller.addAttachments(Array.from(list))
           event.currentTarget.value = ""
         }}
@@ -138,17 +170,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
           items={props.controller.suggestions()}
           boundary={props.suggestionBoundary}
           activeID={state.popover.type === "closed" ? undefined : state.popover.activeID}
-          search={
-            state.popover.type === "command-menu"
-              ? {
-                  value: state.popover.query,
-                  label: i18n.t("ui.promptInput.commands"),
-                  placeholder: "/",
-                  onValueChange: props.controller.setQuery,
-                  onKeyDown: props.controller.onKeyDown,
-                }
-              : undefined
-          }
+          search={search()}
           onActiveChange={(item) => props.controller.dispatch({ type: "popover.active", id: item.id })}
           onSelect={(item) => props.controller.dispatch({ type: "popover.select", item })}
         />
@@ -162,6 +184,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
         }}
         onSubmit={(event) => {
           event.preventDefault()
+
           if (!props.disabled) props.controller.submit()
         }}
         onDragEnter={props.controller.onDragEnter}
@@ -174,6 +197,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             attachments={props.controller.attachments()}
             uploads={props.controller.uploads()}
             comments={props.controller.comments()}
+            files={props.controller.files()}
             activeCommentID={state.activeContextID}
             removeLabel={i18n.t("ui.promptInput.removeAttachment")}
             onAttachmentClick={props.controller.openAttachment}
@@ -181,6 +205,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             onUploadCancel={(upload) => props.controller.cancelUpload(upload.id)}
             onCommentClick={(comment) => props.controller.toggleContext(comment.key)}
             onCommentRemove={(comment) => props.controller.removeContext(comment.key)}
+            onFileRemove={(file) => props.controller.removeContext(file.key)}
           />
         </Show>
 
@@ -224,12 +249,16 @@ export function ComposerEditor(props: ComposerEditorProps) {
             onKeyDown={(event) => {
               if (!view.draftOnly && props.controller.onKeyDown(event)) return
               const mod = event.metaKey || event.ctrlKey
+
               if (mod && event.key === "ArrowUp" && !event.shiftKey && !event.altKey) {
                 if (view.submit.queue?.editFirst()) event.preventDefault()
+
                 return
               }
+
               if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
                 event.preventDefault()
+
                 if (event.repeat) return
                 props.controller.submit(mod ? { alternate: true } : undefined)
               }
@@ -241,12 +270,17 @@ export function ComposerEditor(props: ComposerEditorProps) {
               // Programmatic multiline insertion does not reliably reveal the caret.
               requestAnimationFrame(() => {
                 const selection = window.getSelection()
+
                 if (!editor || !viewport || !selection?.isCollapsed || !selection.rangeCount) return
+
                 if (!editor.contains(selection.anchorNode)) return
                 const caret = selection.getRangeAt(0).getBoundingClientRect()
+
                 if (!caret.height) return
                 const bounds = viewport.getBoundingClientRect()
+
                 if (caret.bottom > bounds.bottom - 8) viewport.scrollTop += caret.bottom - bounds.bottom + 8
+
                 if (caret.top < bounds.top + 8) viewport.scrollTop += caret.top - bounds.top - 8
               })
             }}
@@ -375,6 +409,7 @@ function renderComposerEditor(editor: HTMLDivElement, prompt: ComposerPrompt) {
   editor.replaceChildren(
     ...prompt.flatMap<Node>((part) => {
       if (isAttachment(part)) return []
+
       if (part.type === "text") return [document.createTextNode(part.content)]
       const mention = document.createElement("span")
       mentionParts.set(mention, part)
@@ -384,19 +419,26 @@ function renderComposerEditor(editor: HTMLDivElement, prompt: ComposerPrompt) {
       mention.style.unicodeBidi = "isolate"
       mention.dataset.mention =
         part.type === "file" && part.mime === "application/x-directory" ? "reference" : part.type
+
       if (part.type === "agent") mention.dataset.name = part.name
+
       if (part.type === "skill") {
         mention.dataset.id = part.id
         mention.dataset.name = part.name
       }
+
       if (part.type === "file") {
         mention.dataset.path = part.path
+
         if (part.mime) mention.dataset.mime = part.mime
+
         if (part.filename) mention.dataset.filename = part.filename
       }
+
       return [mention]
     }),
   )
+
   if (!active) return
   const selection = window.getSelection()
   const range = document.createRange()
@@ -417,85 +459,111 @@ function parseComposerEditor(editor: HTMLDivElement) {
     position += buffer.length
     buffer = ""
   }
+
   const mention = (element: HTMLElement) => {
     flush()
     const content = element.textContent ?? ""
     const original = mentionParts.get(element)
+
     if (element.dataset.mention === "agent") {
-      parts.push({
-        ...(original?.type === "agent" ? original : {}),
+      const agent: ComposerAgentPart = {
         type: "agent",
         name: element.dataset.name ?? content.slice(1),
         content,
         start: position,
         end: position + content.length,
-      })
+      }
+
+      parts.push(original?.type === "agent" ? { ...original, ...agent } : agent)
       position += content.length
+
       return
     }
+
     if (element.dataset.mention === "skill") {
-      parts.push({
-        ...(original?.type === "skill" ? original : {}),
+      const skill: ComposerSkillPart = {
         type: "skill",
         id: Skill.ID.make(element.dataset.id ?? content.slice(1)),
         name: Skill.Name.make(element.dataset.name ?? content.slice(1)),
         content,
         start: position,
         end: position + content.length,
-      })
+      }
+
+      parts.push(original?.type === "skill" ? { ...original, ...skill } : skill)
       position += content.length
+
       return
     }
-    parts.push({
-      ...(original?.type === "file" ? original : {}),
+
+    const parsed: ComposerFilePart = {
       type: "file",
       path: element.dataset.path ?? content.slice(1),
       content,
       start: position,
       end: position + content.length,
-      ...(element.dataset.mime ? { mime: element.dataset.mime } : {}),
-      ...(element.dataset.filename ? { filename: element.dataset.filename } : {}),
-    })
+    }
+
+    const file: ComposerFilePart = original?.type === "file" ? { ...original, ...parsed } : parsed
+
+    if (element.dataset.mime) file.mime = element.dataset.mime
+
+    if (element.dataset.filename) file.filename = element.dataset.filename
+    parts.push(file)
     position += content.length
   }
+
   const visit = (node: Node) => {
     if (node.nodeType === Node.TEXT_NODE) {
       buffer += node.textContent ?? ""
+
       return
     }
+
     if (!(node instanceof HTMLElement)) return
+
     if (node.dataset.mention) {
       mention(node)
+
       return
     }
+
     if (node.tagName === "BR") {
       buffer += "\n"
+
       return
     }
+
     Array.from(node.childNodes).forEach(visit)
   }
 
   Array.from(editor.childNodes).forEach((node, index, nodes) => {
     visit(node)
+
     if (node instanceof HTMLElement && ["DIV", "P"].includes(node.tagName) && index < nodes.length - 1) buffer += "\n"
   })
   flush()
+
   if (
     parts.every((part) => part.type === "text") &&
     parts.every((part) => part.content.replace(/[\n\u200B]/g, "") === "")
   ) {
     return [{ type: "text" as const, content: "", start: 0, end: 0 }]
   }
+
   if (parts.length > 0) return parts
+
   return [{ type: "text" as const, content: "", start: 0, end: 0 }]
 }
 
 function composerCursor(editor: HTMLDivElement) {
   const selection = window.getSelection()
+
   if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return editor.textContent?.length ?? 0
   const range = selection.getRangeAt(0).cloneRange()
   range.selectNodeContents(editor)
   range.setEnd(selection.anchorNode!, selection.anchorOffset)
+
   return range.toString().length
 }
 
@@ -503,6 +571,8 @@ export function ComposerAttachments(props: {
   attachments: ComposerAttachment[]
   uploads?: Upload[]
   comments?: ComposerComment[]
+  // Files attached without a mention, such as one restored from a prompt another client sent.
+  files?: Extract<ComposerComment, { type: "file" }>[]
   activeCommentID?: string
   removeLabel: string
   onAttachmentClick?: (attachment: ComposerAttachment) => void
@@ -510,11 +580,20 @@ export function ComposerAttachments(props: {
   onUploadCancel?: (upload: Upload) => void
   onCommentClick?: (comment: ComposerComment) => void
   onCommentRemove?: (comment: ComposerComment) => void
+  onFileRemove?: (file: Extract<ComposerComment, { type: "file" }>) => void
 }) {
   const i18n = useI18n()
   const percent = (upload: Upload) => (upload.size === 0 ? 100 : Math.floor((upload.loaded / upload.size) * 100))
+
   return (
-    <Show when={props.attachments.length > 0 || (props.uploads?.length ?? 0) > 0 || (props.comments?.length ?? 0) > 0}>
+    <Show
+      when={
+        props.attachments.length > 0 ||
+        (props.uploads?.length ?? 0) > 0 ||
+        (props.comments?.length ?? 0) > 0 ||
+        (props.files?.length ?? 0) > 0
+      }
+    >
       <div data-component="composer-attachments" data-slot="composer-attachments" class="relative">
         <div
           data-slot="composer-attachments-scroll"
@@ -551,6 +630,35 @@ export function ComposerAttachments(props: {
               </div>
             )}
           </For>
+          <For each={props.files ?? []}>
+            {(file) => (
+              <div class="relative group shrink-0" data-slot="composer-context-file">
+                <Tooltip value={file.path} placement="top" contentClass="break-all">
+                  <AttachmentCard title={file.name ?? getFilename(file.path)} surface="base">
+                    <FileIcon node={{ path: file.path, type: "file" }} />
+                    <span>
+                      {typeLabel(file.name ?? file.path, "text/plain", i18n.t("ui.common.file"))}
+                      <Show when={file.selection}>
+                        {(selection) =>
+                          selection().startLine === selection().endLine
+                            ? `:${selection().startLine}`
+                            : `:${selection().startLine}-${selection().endLine}`
+                        }
+                      </Show>
+                    </span>
+                  </AttachmentCard>
+                </Tooltip>
+                <button
+                  type="button"
+                  onClick={() => props.onFileRemove?.(file)}
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
+                  aria-label={props.removeLabel}
+                >
+                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                </button>
+              </div>
+            )}
+          </For>
           <For each={props.attachments}>
             {(attachment) => (
               <div class="relative group shrink-0">
@@ -570,6 +678,7 @@ export function ComposerAttachments(props: {
                     {(image) => {
                       // Restored drafts and history carry image ids only; bytes load when shown.
                       const [url] = createResource(() => image().blob, resolveBlobUrl)
+
                       return (
                         <>
                           {/* Keep loading local; the route boundary would detach the screen and drop editor focus. */}
@@ -703,6 +812,7 @@ function ComposerEditorConfiguredSelect(props: {
 }) {
   const current = () => props.control.current()
   const providerID = () => props.control.options().find((option) => option.id === current())?.providerID
+
   return (
     <ComposerEditorSelect
       title={props.title}
@@ -790,13 +900,17 @@ export function ComposerEditorPopover(props: {
   onSelect: (item: ComposerSuggestion) => void
 }) {
   const [store, setStore] = createStore({ maxHeight: COMPOSER_SUGGESTION_MAX_HEIGHT })
+
   const resize = (height: number) =>
     setStore("maxHeight", composerSuggestionMaxHeight(height, props.search !== undefined))
+
   // A detached boundary (e.g. the previous session's timeline while the next one loads) measures 0px.
   const boundary = () => {
     const element = props.boundary?.()
+
     return element?.isConnected ? element : undefined
   }
+
   createEffect(() => resize(boundary()?.clientHeight ?? COMPOSER_SUGGESTION_MAX_HEIGHT * 2))
   createResizeObserver(boundary, (rect) => resize(rect.height))
 
@@ -862,7 +976,9 @@ function composerSuggestionMaxHeight(boundaryHeight: number, search: boolean) {
   const reserve = Math.min(COMPOSER_SUGGESTION_CONTEXT_RESERVE, boundaryHeight / 4)
   const limit = Math.min(COMPOSER_SUGGESTION_MAX_HEIGHT, boundaryHeight - reserve)
   const chrome = COMPOSER_SUGGESTION_TOP_PADDING + (search ? COMPOSER_SUGGESTION_SEARCH_HEIGHT : 0)
+
   if (limit < chrome + COMPOSER_SUGGESTION_ROW_HEIGHT + COMPOSER_SUGGESTION_ROW_PEEK) return limit
+
   return (
     chrome +
     Math.floor((limit - chrome - COMPOSER_SUGGESTION_ROW_PEEK) / COMPOSER_SUGGESTION_ROW_HEIGHT) *
@@ -878,14 +994,20 @@ function composerSuggestionMaxHeight(boundaryHeight: number, search: boolean) {
 function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorModel; keybind: string[] }) {
   const i18n = useI18n()
   const view = props.controller.view
+
   const action = createMemo(() => {
     const queue = view.submit.queue
+
     if (!queue || !props.controller.canSubmit()) return undefined
+
     if (queue.editing()) return "steer" as const
+
     return queue.alternate()
   })
+
   const [button, setButton] = createSignal<HTMLButtonElement>()
   const presence = createAnimatedPresence(action, () => button() ?? null)
+
   return (
     <Show when={presence.present() && presence.value()} keyed>
       {(delivery) => (
@@ -941,10 +1063,13 @@ export function ComposerEditorSubmitButton(props: {
         onClick={(event) => {
           event.preventDefault()
           event.stopPropagation()
+
           if (props.stopping) {
             props.onStop()
+
             return
           }
+
           props.onSubmit()
         }}
       />
@@ -954,8 +1079,11 @@ export function ComposerEditorSubmitButton(props: {
 
 function ComposerSuggestionIcon(props: { item: ComposerSuggestion }) {
   if (props.item.kind === "agent") return <Icon name="brain" size="small" class="shrink-0 text-icon-info-active" />
+
   if (props.item.kind === "skill") return <Icon name="post-skill" size="small" class="shrink-0" />
+
   if (props.item.kind === "command") return null
+
   return (
     <FileIcon
       node={{ path: props.item.path ?? props.item.label, type: props.item.kind === "reference" ? "directory" : "file" }}

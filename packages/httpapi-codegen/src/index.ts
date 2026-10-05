@@ -1919,7 +1919,6 @@ function renderSchemas(slots: ReadonlyArray<Slot>) {
       tagged.fields.map(([name, schema]) => ({ name: `Class${classIndex}${name}`, schema })),
     ),
   ]
-  const [first, ...rest] = expanded
   const document = SchemaRepresentation.toCodeDocument(
     SchemaRepresentation.toRepresentations(
       codegenAsts(expanded.map((slot) => slot.schema.ast)) as [SchemaAST.AST, ...Array<SchemaAST.AST>],

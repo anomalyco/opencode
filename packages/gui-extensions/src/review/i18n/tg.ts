@@ -10,4 +10,6 @@ export default {
   "git.description": "Тағиротро дар ин лоиҳа пайгирӣ кунед, баррасӣ кунед ва бекор кунед",
   loadingChanges: "Тағйирот бор карда мешавад…",
   noChanges: "Тағйирот нест",
+  "settings.wrapLines.title": "Сатрҳоро печонед",
+  "settings.wrapLines.description": "Сатрҳои дарозро дар diff-ҳои мобилӣ ба ҷойи ҳаракати уфуқӣ печонед",
 }

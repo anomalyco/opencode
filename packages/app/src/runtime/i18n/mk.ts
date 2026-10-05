@@ -297,10 +297,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Изберете {{color}} боја",
   "dialog.project.edit.worktree.startup": "Скрипта за стартување на работен простор",
   "dialog.project.edit.worktree.startup.placeholder": "на пр. bun install",
-  "dialog.releaseNotes.action.getStarted": "Започнете",
-  "dialog.releaseNotes.action.next": "Следно",
-  "dialog.releaseNotes.action.hideFuture": "Не ги прикажувајте овие во иднина",
-  "dialog.releaseNotes.media.alt": "Преглед на издавање",
   "toast.permissions.autoaccept.on.title": "Автоматско прифаќање дозволи",
   "toast.permissions.autoaccept.on.description": "Барањата за дозвола ќе бидат автоматски одобрени",
   "toast.permissions.autoaccept.off.title": "Го прекина автоматското прифаќање дозволи",
@@ -716,7 +712,6 @@ export const dict = {
   "session.view.select": "Преглед на сесија",
   "session.background.moveRunning": "Премести во позадина",
   "session.timeline.working": "Работи",
-  "session.review.wrapLines": "Пренесување на редови",
   "session.websearch.title": "Веб-пребарување од трета страна",
   "session.websearch.description":
     "Изберете ги агентите на давателот на пребарување што ги користат за пребарување на интернет",
@@ -778,8 +773,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Субагенси",
   "settings.timeline.category.notices": "Известувања",
   "settings.timeline.category.tools": "Други алатки",
-  "settings.general.row.mobileDiffWrap.description":
-    "Завиткајте долги линии во мобилни разлики наместо хоризонтално лизгање",
   "provider.connect.error.unsupportedFields": "Овој образец за автентикација содржи неподдржани полиња",
   "settings.about.writtenByNames": "Напишано од {{names}}",
   "settings.about.illustratedByNames": "Илустрирано од {{names}}",

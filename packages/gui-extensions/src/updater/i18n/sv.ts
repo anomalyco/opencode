@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Uppdateringen är klar",
   "dialog.restart": "Starta om",
   "dialog.later": "Senare",
+  "releaseNotes.action.getStarted": "Kom igång",
+  "releaseNotes.action.next": "Nästa",
+  "releaseNotes.action.hideFuture": "Visa inte dessa i framtiden",
+  "releaseNotes.media.alt": "Förhandsvisning av version",
 }

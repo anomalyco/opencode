@@ -1,13 +1,14 @@
 import { createMemo, type JSX } from "solid-js"
 import { Button } from "@opencode/ui/button"
 import { Switch } from "@opencode/ui/switch"
-import { Preferences, useExtension } from "../sdk"
+import { useExtension } from "../sdk"
 import { updaterAction } from "./action"
 import type { UpdaterState } from "./contract"
+import type definition from "./index"
 
 export default function UpdatesSection(props: { state: () => UpdaterState | undefined; run: () => void }) {
-  const ctx = useExtension()
-  const preferences = ctx.use(Preferences)
+  const ctx = useExtension<typeof definition>()
+  const releaseNotes = ctx.stores.releaseNotes
   const action = createMemo(() => updaterAction(props.state()))
 
   return (
@@ -17,7 +18,14 @@ export default function UpdatesSection(props: { state: () => UpdaterState | unde
       <div data-component="settings-list">
         <Row title={ctx.t("releaseNotes.title")} description={ctx.t("releaseNotes.description")}>
           <div data-action="settings-release-notes">
-            <Switch checked={preferences.releaseNotes()} onChange={(checked) => preferences.setReleaseNotes(checked)} />
+            <Switch
+              checked={releaseNotes.value.enabled}
+              onChange={(checked) =>
+                releaseNotes.update((draft) => {
+                  draft.enabled = checked
+                })
+              }
+            />
           </div>
         </Row>
 

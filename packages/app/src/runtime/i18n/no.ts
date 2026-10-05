@@ -1,4 +1,5 @@
 import en from "./en"
+
 type Keys = keyof typeof en
 
 export const dict = {
@@ -122,7 +123,6 @@ export const dict = {
   "session.view.select": "Øktvisning",
   "session.background.moveRunning": "Flytt til bakgrunnen",
   "session.timeline.working": "Arbeider",
-  "session.review.wrapLines": "Bryt linjer",
   "session.websearch.title": "Nettsøk fra tredjepart",
   "session.websearch.description": "Velg søkeleverandøren agentene bruker til nettsøk",
   "session.websearch.provider": "Søkeleverandør",
@@ -180,7 +180,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Underagenter",
   "settings.timeline.category.notices": "Merknader",
   "settings.timeline.category.tools": "Andre verktøy",
-  "settings.general.row.mobileDiffWrap.description": "Bryt lange linjer i mobile differ i stedet for å rulle vannrett",
   "toast.migration.progress.clearingOldEvents": "Fjerner gamle hendelser",
   "toast.migration.progress.migratingSessions": "Migrerer økter",
   "session.new.workspace.existingLabel": "Worktree",
@@ -773,10 +772,6 @@ export const dict = {
   "workspace.delete.confirm": 'Slette arbeidsområdet "{{name}}"?',
   "workspace.delete.button": "Slett arbeidsområde",
   "common.open": "Åpne",
-  "dialog.releaseNotes.action.getStarted": "Kom i gang",
-  "dialog.releaseNotes.action.next": "Neste",
-  "dialog.releaseNotes.action.hideFuture": "Ikke vis disse igjen",
-  "dialog.releaseNotes.media.alt": "Forhåndsvisning av utgivelse",
   "toast.project.reloadFailed.title": "Kunne ikke laste inn {{project}} på nytt",
   "error.server.invalidConfiguration": "Ugyldig konfigurasjon",
   "common.moreCountSuffix": " (+{{count}} mer)",

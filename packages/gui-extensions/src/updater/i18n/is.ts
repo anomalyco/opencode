@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Uppfærsla tilbúin",
   "dialog.restart": "Endurræsa",
   "dialog.later": "Seinna",
+  "releaseNotes.action.getStarted": "Byrjaðu",
+  "releaseNotes.action.next": "Næst",
+  "releaseNotes.action.hideFuture": "Ekki sýna þetta í framtíðinni",
+  "releaseNotes.media.alt": "Gefa út forskoðun",
 }

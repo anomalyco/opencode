@@ -11,7 +11,7 @@ interface State {
   readonly responseID?: string
 }
 
-const onOutputItem = Effect.fn("ResponsesCheckpoint.onOutputItem")(function* (
+const onOutputItem = Effect.fnUntraced(function* (
   state: State,
   input: OpenResponses.Event,
 ) {
@@ -63,7 +63,7 @@ export const make = <Body>(body: RouteBody<Body>): TriggerCompactOperation =>
           checkpoints: {},
         }),
         terminal: OpenResponses.terminal,
-        step: Effect.fn("ResponsesCheckpoint.step")(function* (state: State, event: OpenResponses.Event) {
+        step: Effect.fnUntraced(function* (state: State, event: OpenResponses.Event) {
           if (event.response?.id && state.responseID && event.response.id !== state.responseID)
             return yield* ProviderShared.eventError(source.id, "Compaction response ID changed during execution")
           if (event.type === "response.created") return [{ ...state, responseID: event.response?.id }, []] as const

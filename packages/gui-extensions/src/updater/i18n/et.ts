@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Värskendus valmis",
   "dialog.restart": "Taaskäivitage",
   "dialog.later": "Hiljem",
+  "releaseNotes.action.getStarted": "Alustage",
+  "releaseNotes.action.next": "Edasi",
+  "releaseNotes.action.hideFuture": "Ärge näidake neid tulevikus",
+  "releaseNotes.media.alt": "Väljalase eelvaade",
 }

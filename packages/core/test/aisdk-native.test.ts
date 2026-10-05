@@ -165,6 +165,31 @@ describe("AISDKNative", () => {
     })
   })
 
+  test("maps both models.dev Cohere packages to native routes", () => {
+    expect(
+      map(
+        "@ai-sdk/cohere",
+        { apiKey: "secret", thinking: { type: "enabled", tokenBudget: 1024 } },
+        "command-a-reasoning-08-2025",
+        "cohere",
+      ),
+    ).toEqual({
+      package: "@opencode/ai/providers/cohere",
+      settings: { apiKey: "secret", thinking: { type: "enabled", tokenBudget: 1024 } },
+    })
+    expect(
+      map(
+        "@ai-sdk/openai-compatible",
+        { baseURL: "https://api.cohere.ai/compatibility/v1", reasoningEffort: "high" },
+        "north-mini-code-1-0",
+        "cohere",
+      ),
+    ).toEqual({
+      package: "@opencode/ai/providers/cohere/chat",
+      settings: { baseURL: "https://api.cohere.ai/compatibility/v1", reasoningEffort: "high" },
+    })
+  })
+
   test("maps both models.dev Bedrock packages to native providers", () => {
     expect(map("@ai-sdk/amazon-bedrock", { region: "us-east-1" })).toEqual({
       package: "@opencode/ai/providers/amazon-bedrock",

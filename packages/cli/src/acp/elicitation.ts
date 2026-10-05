@@ -4,79 +4,53 @@ import type {
   ElicitationSchema,
   EnumOption,
 } from "@agentclientprotocol/sdk"
-import { isFormAlreadySettledError, isFormNotFoundError, type OpenCodeClient } from "@opencode/client/promise"
+import type { OpenCodeClient } from "@opencode/client/effect"
 import { Form } from "@opencode/schema/form"
-import { Cause, Effect, Option, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
+import type { Capabilities } from "./capabilities"
+import { ACPChild } from "./child"
+import { ACPClient } from "./client"
 import type { ACPConnection } from "./connection"
-import type { ACPService } from "./service"
 
-/** A form as the event stream carries it, with an unbranded ID. */
 export type AskedForm = Omit<Form.Info, "id"> & { readonly id: string }
 type InputField = Exclude<Form.Field, Form.ExternalField>
 type SelectField = Form.StringField | Form.MultiselectField
 
-// Form mode must not collect secrets, so only forms from flows known not to ask for credentials are elicited.
-const ElicitedKind = Schema.Struct({ kind: Schema.Literals(["question", "websearch.provider"]) })
-const Credential = /password|passphrase|secret|token|api[_-]?key|credential|private[_-]?key/i
+const QuestionKind = "question"
+// Form mode must not collect secrets; elicit only flows known to be credential-free.
+const ElicitedKind = Schema.Struct({ kind: Schema.Literals([QuestionKind, "websearch.provider"]) })
+const Credential = /password|passphrase|secret|token|api[_ -]?key|credential|private[_ -]?key/i
 const ToolSource = Schema.Struct({ tool: Schema.Struct({ id: Schema.String }) })
 
 type Input = {
   readonly client: OpenCodeClient
   readonly connection: ACPConnection.Interface
-  readonly form: AskedForm
+  readonly form: Form.Info
   readonly requestedSchema: ElicitationSchema
   readonly clientSessionID: string
-  readonly child?: { readonly id: string; readonly title?: string }
-  /** Whether the asking tool call reached the client as a `session/update` tool call. */
+  readonly child?: ACPChild.Session
   readonly toolCallSent: boolean
-  /** Completes once the form is answered or cancelled elsewhere. */
-  readonly settled: Effect.Effect<void>
 }
 
-type Outcome = Form.Answer | "cancel" | "settled"
+export const UnshownQuestionMessage =
+  "The question couldn't be shown to the user in this client. Continue without an answer: make reasonable assumptions and state them, or ask the user in your reply if you can't proceed."
 
-/**
- * Asks the client, then resolves the form on the server. Once `cancelled` completes, the client's request is
- * cancelled or never sent, and the form is cancelled. Once `settled` completes, the client's request is cancelled and
- * the server is left alone. Resolving on the server is uninterruptible.
- */
-export const reply = Effect.fn("cli.acp.elicitation.reply")(function* (input: Input, cancelled: Effect.Effect<void>) {
-  yield* Effect.uninterruptibleMask((restore) =>
-    // The race starts racers in order and stops once one is done, so an earlier cancel never starts the ask.
-    restore(
-      cancelled.pipe(
-        Effect.as("cancel" as const),
-        Effect.raceFirst(input.settled.pipe(Effect.as("settled" as const))),
-        Effect.raceFirst(ask(input)),
-      ),
-    ).pipe(
-      Effect.tapCauseIf(Cause.hasDies, (cause) => Effect.logWarning("ACP elicitation failed", cause)),
-      Effect.catchCause(() => Effect.succeed("cancel" as const)),
-      Effect.flatMap((outcome) => respond(input, outcome)),
-    ),
-  )
-})
-
-/** Cancels a form, interrupting its session when the server can't cancel it. */
-export function cancel(client: OpenCodeClient, form: AskedForm) {
-  return settle(() => client.session.form.cancel({ sessionID: form.sessionID, formID: form.id })).pipe(
+function cancel(client: OpenCodeClient, form: Form.Info, message?: string) {
+  return client.session.form.cancel({ sessionID: form.sessionID, formID: form.id, message }).pipe(
+    Effect.catchTag(["FormAlreadySettledError", "FormNotFoundError"], () => Effect.void),
     Effect.catch(() =>
-      Effect.tryPromise(() => client.session.interrupt({ sessionID: form.sessionID })).pipe(Effect.ignore),
+      ACPClient.decodeSessionID(form.sessionID).pipe(
+        Effect.flatMap((sessionID) => client.session.interrupt({ sessionID })),
+        Effect.ignore,
+      ),
     ),
   )
 }
 
-/**
- * The form-mode schema for a form, or undefined when the form is cancelled instead: the client lacks form
- * elicitation, the form is not from an allowed flow or has a field that looks like a credential, or ACP can't
- * represent it faithfully. Unrepresentable forms have `external` fields, `when` conditions, a hidden required field
- * without a default, a default outside a field's options, or a free-text answer alongside options that must also
- * satisfy `required` or item bounds across both inputs. Hidden fields are not asked and answer with their default.
- */
-export function requestedSchema(form: AskedForm, capabilities: ACPService.Capabilities): ElicitationSchema | undefined {
+export function requestedSchema(form: AskedForm, capabilities: Capabilities): ElicitationSchema | undefined {
   if (!capabilities.formElicitation) return undefined
   if (Option.isNone(Schema.decodeUnknownOption(ElicitedKind)(form.metadata))) return undefined
-  if (form.fields.some((field) => Credential.test(field.key) || Credential.test(field.title ?? ""))) return undefined
+  if (form.fields.some(credentialLike)) return undefined
   const fields = form.fields.filter((field): field is InputField => field.type !== "external")
   if (fields.length !== form.fields.length || fields.some((field) => field.when?.length)) return undefined
   if (fields.some((field) => field.hidden && field.required && field.default === undefined)) return undefined
@@ -90,8 +64,14 @@ export function requestedSchema(form: AskedForm, capabilities: ACPService.Capabi
   }
 }
 
-/** The answer for an accepted response, or undefined when the user declined, cancelled, or sent invalid content. */
-export function answer(form: AskedForm, response: CreateElicitationResponse): Form.Answer | undefined {
+// The question tool returns the message to the model, so the turn continues instead of ending as interrupted.
+export function cancelUnshown(client: OpenCodeClient, form: Form.Info) {
+  return cancel(client, form, form.metadata?.kind === QuestionKind ? UnshownQuestionMessage : undefined).pipe(
+    Effect.uninterruptible,
+  )
+}
+
+function answer(form: AskedForm, response: CreateElicitationResponse): Form.Answer | undefined {
   if (response.action !== "accept") return undefined
   const content = Schema.decodeUnknownOption(Form.Answer)(response.content ?? {})
   if (Option.isNone(content)) return undefined
@@ -103,37 +83,36 @@ export function answer(form: AskedForm, response: CreateElicitationResponse): Fo
   )
 }
 
-const ask = Effect.fnUntraced(function* (input: Input) {
+export const ask = Effect.fnUntraced(function* (input: Input) {
   const source = input.toolCallSent ? Schema.decodeUnknownOption(ToolSource)(input.form.metadata) : Option.none()
   const toolCallID = Option.getOrUndefined(Option.map(source, (metadata) => metadata.tool.id))
   const response = yield* input.connection.createElicitation({
     mode: "form",
     sessionId: input.clientSessionID,
-    ...(toolCallID ? { toolCallId: input.child ? `${input.child.id}:${toolCallID}` : toolCallID } : {}),
-    message: input.child?.title ? `${input.child.title}: ${input.form.title}` : input.form.title,
+    ...(toolCallID ? { toolCallId: ACPChild.toolCallID(input.child, toolCallID) } : {}),
+    message: ACPChild.prefixTitle(input.child, input.form.title),
     requestedSchema: input.requestedSchema,
   })
   return answer(input.form, response) ?? "cancel"
 })
 
-function respond(input: Input, outcome: Outcome) {
-  if (outcome === "settled") return Effect.void
+export function respond(input: Input, outcome: Form.Answer | "cancel") {
   if (outcome === "cancel") return cancel(input.client, input.form)
-  return settle(() =>
-    input.client.session.form.reply({ sessionID: input.form.sessionID, formID: input.form.id, answer: outcome }),
-  ).pipe(
-    Effect.catch((cause) =>
-      Effect.logWarning("ACP form reply failed", cause).pipe(Effect.andThen(cancel(input.client, input.form))),
-    ),
-  )
+  return input.client.session.form
+    .reply({ sessionID: input.form.sessionID, formID: input.form.id, answer: outcome })
+    .pipe(
+      Effect.catchTag(["FormAlreadySettledError", "FormNotFoundError"], () => Effect.void),
+      Effect.catch((cause) =>
+        Effect.logWarning("ACP form reply failed", cause).pipe(Effect.andThen(cancel(input.client, input.form))),
+      ),
+    )
 }
 
-// A form already answered or cancelled elsewhere needs nothing more.
-function settle(evaluate: () => Promise<void>) {
-  return Effect.tryPromise({ try: evaluate, catch: (cause) => cause }).pipe(
-    Effect.catch((cause) =>
-      isFormAlreadySettledError(cause) || isFormNotFoundError(cause) ? Effect.void : Effect.fail(cause),
-    ),
+function credentialLike(field: Form.Field) {
+  const labels =
+    field.type === "string" || field.type === "multiselect" ? (field.options ?? []).map((option) => option.label) : []
+  return [field.key, field.title, field.description, ...labels].some(
+    (text) => text !== undefined && Credential.test(text),
   )
 }
 
@@ -153,7 +132,8 @@ function properties(field: InputField): Array<[string, ElicitationPropertySchema
   const base = { title: field.title, description: field.description }
   switch (field.type) {
     case "string": {
-      if (!hasOptions(field)) return [[field.key, { type: "string", ...base, ...text(field), default: field.default }]]
+      if (!hasOptions(field))
+        return [[field.key, { type: "string", ...base, ...stringConstraints(field), default: field.default }]]
       const select: ElicitationPropertySchema = {
         type: "string",
         ...base,
@@ -186,7 +166,6 @@ function properties(field: InputField): Array<[string, ElicitationPropertySchema
   }
 }
 
-// A free-text answer next to a field's options is a separate optional property that wins over the selection.
 function other(field: SelectField, description: string): [string, ElicitationPropertySchema] {
   return [
     customKey(field),
@@ -194,13 +173,13 @@ function other(field: SelectField, description: string): [string, ElicitationPro
       type: "string",
       title: `${field.title ?? field.key} (other)`,
       description,
-      ...(field.type === "string" ? text(field) : {}),
+      ...(field.type === "string" ? stringConstraints(field) : {}),
     },
   ]
 }
 
-// Core rejects an empty string for a required field, so the client is told it needs at least one character.
-function text(field: Form.StringField) {
+// Core rejects an empty string for a required field.
+function stringConstraints(field: Form.StringField) {
   return {
     format: field.format,
     minLength: field.required ? Math.max(field.minLength ?? 0, 1) : field.minLength,

@@ -171,6 +171,7 @@ describe("web UI", () => {
           expect(yield* Effect.promise(() => fallback.text())).toContain("embedded")
           expect(fallback.headers.get("content-security-policy")).toContain("default-src 'self'")
           expect(fallback.headers.get("content-security-policy")).toContain("connect-src * data: blob:")
+          expect(fallback.headers.get("content-security-policy")).toContain("worker-src 'self' blob:")
 
           const dotted = yield* Effect.promise(() => fetch(`${origin}/workspace/example.js`))
           expect(dotted.status).toBe(200)

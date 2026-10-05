@@ -14,10 +14,12 @@ export type SettingsRootTab =
   | "about"
 
 declare const extensionTab: unique symbol
-/** A root page a GUI extension contributes; the value is its Setting id. */
+
+/** A root page a GUI extension contributes; the value is its SettingsPage id. */
 export type SettingsExtensionTab = string & { readonly [extensionTab]: true }
 
 export type SettingsServerTab = "general" | "projects" | "workspaces" | "providers" | "models" | "extensions"
+
 export type SettingsProjectTab = "general" | "workspaces" | "extensions"
 
 type SettingsViewState = {
@@ -59,6 +61,7 @@ const rootTabs: Record<SettingsRootTab, true> = {
   "gui-extensions": true,
   about: true,
 }
+
 const serverTabs: Record<SettingsServerTab, true> = {
   general: true,
   projects: true,
@@ -67,11 +70,13 @@ const serverTabs: Record<SettingsServerTab, true> = {
   models: true,
   extensions: true,
 }
+
 const projectTabs: Record<SettingsProjectTab, true> = {
   general: true,
   workspaces: true,
   extensions: true,
 }
+
 const subtabs: Record<NonNullable<SettingsView["subtab"]>, true> = {
   mcps: true,
   plugins: true,
@@ -103,22 +108,31 @@ export function parseSettingsView(
       ...transient,
     }
   }
+
   if (!project && server && isServerTab(tab))
     return { type: "server", server, tab, subtab: nested === "lsps" ? undefined : nested, ...transient }
+
   if (!project && !server && isRootTab(tab))
     return { type: "root", tab, subtab: nested === "lsps" ? undefined : nested, ...transient }
+
   if (!project && !server && extensionTabs && isExtensionTab(tab, extensionTabs))
     return { type: "root", tab, subtab: undefined, ...transient }
+
   return { type: "root", tab: "general", ...transient }
 }
 
 export function settingsViewUrl(view: SettingsView) {
   const params = new URLSearchParams()
+
   if (view.type !== "root") params.set("server", view.server)
+
   if (view.type === "project") params.set("project", view.project)
+
   if (view.tab !== "general") params.set("tab", view.tab)
+
   if (view.tab === "extensions" && view.subtab) params.set("subtab", view.subtab)
   const search = params.toString()
+
   return search ? `/settings?${search}` : "/settings"
 }
 
@@ -132,11 +146,15 @@ export function settingsViewRedirect(input: {
   servers: readonly RedirectServer[]
 }): { type: "back" } | { type: "server"; server: string } | { type: "root"; tab: SettingsRootTab } | undefined {
   const view = input.view
+
   if (view.type === "root" || !input.loaded) return
   const server = input.servers.find((item) => item.key === view.server)
+
   if (!server) return { type: "back" }
+
   // A starting WSL or SSH server connects shortly; only an unavailable one leaves the project page.
   if (view.type === "project" && !server.connected && !server.starting) return { type: "server", server: server.key }
+
   if (view.type === "server" && input.servers.length === 1)
     return { type: "root", tab: view.tab === "general" ? "servers" : view.tab }
 }

@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "އަޕްޑޭޓް ރެޑީ",
   "dialog.restart": "އަލުން ފަށާށެވެ",
   "dialog.later": "ފަހުން",
+  "releaseNotes.action.getStarted": "ފަށާށެވެ",
+  "releaseNotes.action.next": "ދެން",
+  "releaseNotes.action.hideFuture": "ކުރިއަށް އޮތްތަނުގައި މިކަންކަން ނުދައްކާށެވެ",
+  "releaseNotes.media.alt": "ރިލީޒް ޕްރިވިއު",
 }

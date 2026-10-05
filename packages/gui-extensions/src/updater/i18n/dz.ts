@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "དུས་མཐུན་བཟོ་ནི་གྲ་སྒྲིག།",
   "dialog.restart": "ལོག་འགོ་བཙུགས།",
   "dialog.later": "ཤུལ་ལས",
+  "releaseNotes.action.getStarted": "འགོ་བཙུགས།",
+  "releaseNotes.action.next": "ཤུལ༌མའི",
+  "releaseNotes.action.hideFuture": "མ་འོངས་པར་འདི་དག་མ་སྟོན།",
+  "releaseNotes.media.alt": "སྔོན་ལྟ་གསར་བཏོན་འབད།",
 }

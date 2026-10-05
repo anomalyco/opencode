@@ -210,7 +210,10 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
     catch: (cause) => new Error(`Portable shell scanner failed to load: ${cause}`, { cause }),
   })
   const powershell = ShellSelect.ps(shell)
-  const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
+  const name = ShellSelect.name(shell)
+  const result = powershell
+    ? ShellScan.scanPowerShell(command)
+    : ShellScan.scan(command, name === "bash" || name === "zsh" ? name : "posix")
   if (result.kind === "opaque")
     return yield* Effect.fail(new Error(`Portable shell scanner cannot analyze command: ${result.reason}`))
 
@@ -225,15 +228,21 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
     if (CWD.has(name)) {
       output.directories.push(
         ...directoryArgs(
-          words.flatMap((text): Part[] => {
-            const parameter = powershell ? /^(-(?:literalpath|path)):(.*)$/i.exec(text) : undefined
-            if (parameter)
-              return [
-                { type: "command_parameter", text: parameter[1] },
-                { type: "word", text: parameter[2] },
-              ]
-            return [{ type: powershell && text.startsWith("-") ? "command_parameter" : "word", text }]
-          }),
+          powershell
+            ? words.flatMap((text): Part[] => {
+                const parameter = /^(-(?:literalpath|path)):(.*)$/i.exec(text)
+                if (parameter)
+                  return [
+                    { type: "command_parameter", text: parameter[1] },
+                    { type: "word", text: parameter[2] },
+                  ]
+                return [{ type: text.startsWith("-") ? "command_parameter" : "word", text }]
+              })
+            : item.rawWords.map((text, index) => ({
+                type: "word",
+                // Only literal quoting resolves to a static directory.
+                text: text.startsWith("$'") || (!/[$`~\\]/.test(text) && /['"]/.test(text)) ? item.words[index] : text,
+              })),
           powershell,
           cwd,
           shell,

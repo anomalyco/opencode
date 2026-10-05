@@ -30,8 +30,9 @@ export default Runtime.handler(
         ...(links[0]
           ? [
               "",
+              // uqr separates rows with "\n" on every platform, so splitting on EOL ("\r\n" on Windows) indents only the first row.
               renderUnicodeCompact(links[0], { border: 2 })
-                .split(EOL)
+                .split("\n")
                 .map((line) => "  " + line)
                 .join(EOL),
             ]

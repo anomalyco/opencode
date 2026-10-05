@@ -10,4 +10,6 @@ export default {
   "git.description": "Änderungen in diesem Projekt verfolgen, überprüfen und rückgängig machen",
   loadingChanges: "Änderungen werden geladen…",
   noChanges: "Keine Änderungen",
+  "settings.wrapLines.title": "Zeilen umbrechen",
+  "settings.wrapLines.description": "Lange Zeilen in mobilen Diffs umbrechen, statt horizontal zu scrollen",
 }

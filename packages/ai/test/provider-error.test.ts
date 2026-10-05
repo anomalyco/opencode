@@ -39,9 +39,7 @@ describe("provider error classification", () => {
     ]
 
     expect(failures).toEqual(
-      failures.map((failure) =>
-        expect.objectContaining({ _tag: "InvalidRequest", classification: "payload-too-large" }),
-      ),
+      failures.map(() => expect.objectContaining({ _tag: "InvalidRequest", classification: "payload-too-large" })),
     )
   })
 
@@ -460,6 +458,27 @@ describe("provider error rawBody classification", () => {
       }),
     })
     expect(reason._tag === "InvalidRequest" ? reason.classification : reason._tag).toBe("context-overflow")
+  })
+
+  test("separates Cohere prompt overflow from output limit rejections", () => {
+    const classify = (message: string) => {
+      const reason = classifyProviderFailure({
+        message,
+        status: 400,
+        rawBody: JSON.stringify({ error_type: "TOO_MANY_TOKENS", message }),
+      })
+      return reason._tag === "InvalidRequest" ? reason.classification : reason._tag
+    }
+    expect(
+      classify(
+        "too many tokens: size limit exceeded by 168512 tokens. Try using shorter or fewer inputs. The limit for this model is 132000 tokens.",
+      ),
+    ).toBe("context-overflow")
+    expect(
+      classify(
+        "too many tokens: max tokens must be less than or equal to 4096, the maximum output length for this model - received 1000000.",
+      ),
+    ).toBeUndefined()
   })
 
   test("classifies invalid API keys reported as HTTP 400 as authentication failures", () => {

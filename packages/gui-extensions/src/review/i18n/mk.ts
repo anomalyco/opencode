@@ -10,4 +10,6 @@ export default {
   "git.description": "Следете, прегледувајте и поништете ги промените во овој проект",
   loadingChanges: "Се вчитуваат промените…",
   noChanges: "Нема промени",
+  "settings.wrapLines.title": "Пренесување на редови",
+  "settings.wrapLines.description": "Завиткајте долги линии во мобилни разлики наместо хоризонтално лизгање",
 }

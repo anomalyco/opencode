@@ -24,7 +24,7 @@ import { SessionIdentityHeader } from "./session-identity-header"
 import { IncompatibleServerPanel } from "./incompatible-server-panel"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionResolution } from "./session-resolution"
-import { SessionScreen } from "./screen"
+import { SessionScreenView } from "./screen"
 import { PreparingComposer } from "./preparing-composer"
 
 export function TargetSessionRouteContent() {
@@ -52,6 +52,7 @@ export function TargetSessionRouteContent() {
 function PreparingSession(props: { sessionID: string; pending: PendingSession }) {
   const language = useLanguage()
   const providers = useProviders(() => props.pending.draft.directory)
+
   return (
     <SessionStatePanel>
       <DataProvider
@@ -93,6 +94,7 @@ function PreparingSession(props: { sessionID: string; pending: PendingSession })
 
 function TargetSessionSettingsCommand() {
   useSettingsCommand()
+
   return null
 }
 
@@ -115,11 +117,13 @@ function ResolvedTargetSessionRoute() {
   const server = useServer()
   const tabs = useTabs()
   const data = useData()
+
   const current = createSessionResolution(
     () => params.id,
     () => data.session,
     { children: true, connected: () => server.ctx.sdk.connection.status() === "connected" },
   )
+
   const directory = createMemo(() => current()?.location.directory)
 
   return (
@@ -135,7 +139,7 @@ function ResolvedTargetSessionRoute() {
     >
       <Show when={directory()} fallback={<PendingSessionState sessionID={params.id} />}>
         {(value) => (
-          <LocationProvider directory={value}>
+          <LocationProvider directory={value()}>
             <SessionUIProvider directory={value()} server={server.key}>
               <TargetSessionPage />
             </SessionUIProvider>
@@ -178,16 +182,20 @@ function TargetSessionPage() {
 
 function SessionPage() {
   const session = useSessionModel()
-  return <SessionScreen session={session} />
+
+  return <SessionScreenView session={session} />
 }
 
 function MarkSessionNotificationsViewed(props: { sessionID: () => string | undefined }) {
   const notification = useNotification()
   createEffect(() => {
     const sessionID = props.sessionID()
+
     if (!notification.ready() || !sessionID) return
+
     if (notification.session.unseenCount(sessionID) === 0) return
     notification.session.markViewed(sessionID)
   })
+
   return null
 }

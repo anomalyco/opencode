@@ -42,12 +42,40 @@ describe("ShellScan adversarial corpus", () => {
     expect(result.commands.map((command) => command.words[0])).toEqual([...names])
   })
 
+  // Only shell sinks evaluate subscripts; ordinary arguments, heredoc bodies, and bound data without a sink are safe.
+  test.each([
+    "bun -e 'f(`a[${x}]`)'",
+    "rg 'a[$(x)]'",
+    "cat <<'EOF'\na[$(x)]\nEOF",
+    "echo 'a[$(x)]'",
+    'BODY="- [x] Fix \\`scan.ts\\`"; gh pr create --title "fix" --body "$BODY"',
+    "MSG='[feat] Fix `foo`'; git commit -m \"$MSG\"",
+    "PATTERN='a[${b}]'; rg \"$PATTERN\"",
+    "export REGEX='[0-9]+${foo}'",
+    "cat <<< 'const a = arr[0]; const b = `${a}`'",
+  ])("scans subscript-shaped text outside shell sinks: %s", (input) => {
+    expect(ShellScan.scan(input).kind).toBe("scanned")
+  })
+
   test.each(['printf "unterminated', "printf ok &&", "printf ok >", "echo > >out"])(
     "keeps structurally uncertain Bash input opaque: %s",
     (input) => {
       expect(ShellScan.scan(input).kind).toBe("opaque")
     },
   )
+
+  test.each([
+    ["repeated assignment value operators", "x[a]" + "=]".repeat(32_000)],
+    ["unclosed assignment subscripts", "a[\n".repeat(21_000)],
+    ["case patterns with substitutions", "case x in " + "[$(:)".repeat(10_000)],
+    ["nested groups with bracket words", "{ ".repeat(31) + "echo " + "a[] ".repeat(15_000) + "; }".repeat(31)],
+    ["continued heredoc lines", "cat <<E\n" + "x\\\n".repeat(20_000) + "E\n"],
+    ["heredoc backslash runs", "cat <<E\n" + "\\".repeat(60_000) + "x\nE\n"],
+  ])("scans adversarial Bash input in bounded time: %s", (_, input) => {
+    const start = performance.now()
+    ShellScan.scan(input)
+    expect(performance.now() - start).toBeLessThan(500)
+  })
 
   test.each([
     ['pwsh --command "Remove-Item victim.txt"', ["pwsh"]],

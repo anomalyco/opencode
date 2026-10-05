@@ -7,7 +7,9 @@ import type { DraftStore } from "@/runtime/persistence/drafts"
 import type { Bridge } from "@opencode/gui-extensions/sdk/bridge"
 
 type PickerPaths = string | string[] | null
+
 type OpenDirectoryPickerOptions = { title?: string; multiple?: boolean }
+
 type OpenAttachmentPickerOptions = {
   title?: string
   multiple?: boolean
@@ -15,8 +17,11 @@ type OpenAttachmentPickerOptions = {
   extensions?: string[]
   defaultPath?: string
 }
+
 type SaveFilePickerOptions = { title?: string; defaultPath?: string }
+
 type PlatformName = "web" | "desktop"
+
 type DesktopOS = "macos" | "windows" | "linux"
 
 export type FatalRendererErrorLog = {
@@ -53,9 +58,9 @@ type PlatformBase = {
   notify(title: string, description?: string, onClick?: () => void): Promise<void>
 
   /** Open a native attachment picker and read selected files sequentially (desktop only) */
-  openAttachmentPickerDialog?(
+  openAttachmentPickerDialog?<Value>(
     opts: OpenAttachmentPickerOptions,
-    onFile: (file: File) => Promise<unknown>,
+    onFile: (file: File) => Promise<Value>,
   ): Promise<void>
 
   /** Resolve the native source path for a desktop File. */

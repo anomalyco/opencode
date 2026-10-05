@@ -17435,6 +17435,29 @@
             },
             "required": ["tmp"],
             "additionalProperties": false
+          },
+          "capabilities": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "persistentPty": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "additionalProperties": false
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": ["version", "pid", "urls", "paths"],

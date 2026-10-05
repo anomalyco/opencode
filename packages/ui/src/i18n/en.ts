@@ -108,6 +108,7 @@ const source = {
   "ui.messagePart.questions.dismissed": "Questions dismissed",
   "ui.messagePart.compaction": "Session compacted",
   "ui.messagePart.compaction.started": "Session compaction started",
+  "ui.messagePart.compaction.queued": "Session compaction queued",
   "ui.messagePart.compaction.running": "Compacting",
   "ui.messagePart.compaction.failed": "Session compaction failed",
   "ui.messagePart.compaction.cancelled": "Session compaction cancelled",
@@ -242,12 +243,15 @@ const source = {
   "ui.message.copyMessage": "Copy message",
   "ui.message.forkMessage": "Fork to new session",
   "ui.message.revertMessage": "Revert message",
+  "ui.message.moveToQueue": "Move to queue",
+  "ui.message.deletePending": "Delete",
   "ui.message.copyResponse": "Copy response",
   "ui.message.copied": "Copied",
   "ui.message.thought": "Thought",
   "ui.message.duration.seconds": "{{count}}s",
   "ui.message.duration.minutesSeconds": "{{minutes}}m {{seconds}}s",
   "ui.message.interrupted": "Interrupted",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
   "ui.sessionTimeline.notice.model": "Model",
   "ui.sessionTimeline.notice.modelSwitched": "Switched to {{model}}",
   "ui.sessionTimeline.notice.agentChanged": "Agent changed",
@@ -275,10 +279,15 @@ const source = {
 } satisfies Record<string, string>
 
 export type Key = keyof typeof source
+
 export type PluralCategory = "zero" | "one" | "two" | "few" | "many" | "other"
+
 export type PluralKey = {
   [Entry in Key]: Entry extends `${infer Base}.other` ? (`${Base}.one` extends Key ? Base : never) : never
 }[Key]
+
 export type PluralLookupKey = `${PluralKey}.${PluralCategory}`
+
 export type LocaleKey = Key | PluralLookupKey
+
 export const dict: typeof source & Record<string, string> = source
