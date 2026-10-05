@@ -22,21 +22,6 @@ interface ParserState<Inner> {
   readonly gateway?: Record<string, unknown>
 }
 
-function readGatewayMetadata(
-  current: Record<string, unknown> | undefined,
-  frame: string,
-): Record<string, unknown> | undefined {
-  if (!frame.includes("provider_metadata")) return current
-  const decoded = decodeWireMetadata(frame)
-  if (decoded._tag === "None") return current
-  return mergeJsonRecords(
-    current,
-    decoded.value.provider_metadata?.gateway,
-    decoded.value.response?.provider_metadata?.gateway,
-    ...(decoded.value.choices ?? []).map((choice) => choice.delta?.provider_metadata?.gateway),
-  )
-}
-
 function attachGatewayMetadata(
   events: ReadonlyArray<LLMEvent>,
   gateway: Record<string, unknown> | undefined,
@@ -81,7 +66,16 @@ export function gatewayProtocol<Body, Event, State>(
         const event = yield* decodeEvent(frame).pipe(
           Effect.mapError((cause) => ProviderShared.eventError(input.id, "Invalid gateway event", frame, cause)),
         )
-        const gateway = readGatewayMetadata(state.gateway, frame)
+        const decoded = frame.includes("provider_metadata") ? decodeWireMetadata(frame) : undefined
+        const gateway =
+          decoded === undefined || decoded._tag === "None"
+            ? state.gateway
+            : mergeJsonRecords(
+                state.gateway,
+                decoded.value.provider_metadata?.gateway,
+                decoded.value.response?.provider_metadata?.gateway,
+                ...(decoded.value.choices ?? []).map((choice) => choice.delta?.provider_metadata?.gateway),
+              )
         const [inner, events] = yield* protocol.stream.step(state.inner, event)
         return [{ inner, gateway }, attachGatewayMetadata(events, gateway)] as const
       }),
