@@ -305,4 +305,69 @@ describe("PowerShell scanner safety", () => {
     expect(ShellScan.scanPowerShell("% { ".repeat(33) + "Get-Item x" + " }".repeat(33)).kind).toBe("opaque")
     expect(ShellScan.scanPowerShell(`Write-Output ${"x".repeat(64 * 1024)}`).kind).toBe("opaque")
   })
+
+  test("scans compound subexpressions with expression-mode comments inside expandable strings", () => {
+    const result = ShellScan.scanPowerShell(
+      '$x = "$(switch ${x}#)\n{ default { Invoke-ProbeA; Set-Location /outside } })"',
+    )
+    expect(result).toMatchObject({
+      kind: "scanned",
+      commands: [
+        { resource: "Invoke-ProbeA", words: ["Invoke-ProbeA"] },
+        { resource: "Set-Location /outside", words: ["Set-Location", "/outside"] },
+      ],
+    })
+  })
+
+  test.each([
+    "${x}<# comment #>; Invoke-ProbeA; Set-Location /outside",
+    "$(1)<# comment #>; Invoke-ProbeA; Set-Location /outside",
+    "@(1)<# comment #>; Invoke-ProbeA; Set-Location /outside",
+    "@{a=1}<# comment #>; Invoke-ProbeA; Set-Location /outside",
+    "[int]<# comment #>$x = 1; Invoke-ProbeA; Set-Location /outside",
+    "$x<# comment #>; Invoke-ProbeA; Set-Location /outside",
+    "1<# comment #>; Invoke-ProbeA; Set-Location /outside",
+  ])("recognizes block comments immediately after expression tokens: %s", (source) => {
+    expect(ShellScan.scanPowerShell(source)).toMatchObject({
+      kind: "scanned",
+      commands: [
+        { resource: "Invoke-ProbeA", words: ["Invoke-ProbeA"] },
+        { resource: "Set-Location /outside", words: ["Set-Location", "/outside"] },
+      ],
+    })
+  })
+
+  test("rejects mid-token here-string openers and preserves subsequent commands", () => {
+    expect(ShellScan.scanPowerShell("$x@'\n'; Invoke-ProbeA; Set-Location /outside; '\n'@").kind).toBe("opaque")
+    expect(
+      ShellScan.scanPowerShell("Write-Output $x@'\n'; Invoke-ProbeA; Set-Location /outside; #\n'@'"),
+    ).toMatchObject({
+      kind: "scanned",
+      commands: [
+        { words: ["Write-Output", "$x@\n"] },
+        { resource: "Invoke-ProbeA", words: ["Invoke-ProbeA"] },
+        { resource: "Set-Location /outside", words: ["Set-Location", "/outside"] },
+      ],
+    })
+  })
+
+  test.each([
+    "Write-Output [a; Invoke-ProbeA; Set-Location /outside; Write-Output ]",
+    'Write-Output "${x"\'}"#"\nInvoke-ProbeA; Set-Location /outside\n# "\'',
+    "Write-Output ${a`}'}; Invoke-ProbeA; Set-Location /outside; #'",
+    ".'Write-Output'# '\nInvoke-ProbeA; Set-Location /outside\n# '",
+    "$x > $null#'\n'; Invoke-ProbeA; Set-Location /outside; #'",
+    "$x>$null#'\n'; Invoke-ProbeA; Set-Location /outside; #'",
+    "Write-Output --% arg && Invoke-ProbeA; Set-Location /outside",
+    "Write-Output > --% out.txt; Invoke-ProbeA; Set-Location /outside",
+    "Write-Output `t#'\n'; Invoke-ProbeA; Set-Location /outside; #'",
+    "[CmdletBinding()] param($x) Invoke-ProbeA; Set-Location /outside",
+    "function f#a { Invoke-ProbeA; Set-Location /outside }; f#a",
+  ])("does not hide commands across lexical mode boundaries: %s", (source) => {
+    const result = ShellScan.scanPowerShell(source)
+    expect(result.kind).toBe("scanned")
+    if (result.kind === "opaque") return
+    expect(result.commands.map((command) => command.words[0])).toContain("Invoke-ProbeA")
+    expect(result.commands.map((command) => command.words)).toContainEqual(["Set-Location", "/outside"])
+  })
 })

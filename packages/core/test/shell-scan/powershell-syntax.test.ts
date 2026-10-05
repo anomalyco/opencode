@@ -52,6 +52,11 @@ describe("PowerShell practical syntax", () => {
     ["Write-Output '--%' ; git status", ["Write-Output '--%'", "git status"]],
     ["Write-Output prefix--% literal; git status", ["Write-Output prefix--% literal", "git status"]],
     ["git status |\n\n# comment\nOut-String", ["git status", "Out-String"]],
+    ["ssh user@'host'", ["ssh user@'host'"]],
+    ["git clone git@'github.com':org/repo", ["git clone git@'github.com':org/repo"]],
+    ["switch ($x) { default { git status } }", ["git status"]],
+    ["class C { [int]$x = (git status); [void] M() { git diff } }", ["git status", "git diff"]],
+    ["enum Color { Red; Green = 2 }; git status", ["git status"]],
   ] as const)("extracts command resources from %s", (source, resources) => {
     const result = ShellScan.scanPowerShell(source)
     expect(result.kind).toBe("scanned")
