@@ -302,8 +302,6 @@ export interface Interface {
 interface State {
   current: string | undefined
   root: Git.Base | undefined
-  ahead: number | undefined
-  behind: number | undefined
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Vcs") {}
@@ -318,27 +316,16 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
     const state = yield* InstanceState.make<State>(
       Effect.fn("Vcs.state")(function* (ctx) {
         if (ctx.project.vcs !== "git") {
-          return { current: undefined, root: undefined, ahead: undefined, behind: undefined }
+          return { current: undefined, root: undefined }
         }
 
         const get = Effect.fnUntraced(function* () {
           return yield* git.branch(ctx.directory)
         })
-        const getTracking = Effect.fnUntraced(function* () {
-          const result = yield* git.run(["rev-list", "--left-right", "--count", "@{upstream}...HEAD"], {
-            cwd: ctx.directory,
-          })
-          if (result.exitCode !== 0) return { ahead: undefined, behind: undefined }
-          // `--left-right --count upstream...HEAD` prints "behind<TAB>ahead".
-          const [behind, ahead] = result.text().trim().split(/\s+/).map(Number)
-          if (!Number.isFinite(ahead) || !Number.isFinite(behind)) return { ahead: undefined, behind: undefined }
-          return { ahead, behind }
+        const [current, root] = yield* Effect.all([git.branch(ctx.directory), git.defaultBranch(ctx.directory)], {
+          concurrency: 2,
         })
-        const [current, root, tracking] = yield* Effect.all(
-          [git.branch(ctx.directory), git.defaultBranch(ctx.directory), getTracking()],
-          { concurrency: 3 },
-        )
-        const value = { current, root, ahead: tracking.ahead, behind: tracking.behind }
+        const value = { current, root }
 
         const unsubscribe = yield* events.listen((event) => {
           if (event.type !== Watcher.Event.Updated.type || event.location?.directory !== ctx.directory)
@@ -346,9 +333,7 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
           const data = event.data as EventV2.Data<typeof Watcher.Event.Updated>
           if (!data.file.endsWith("HEAD")) return Effect.void
           return Effect.gen(function* () {
-            const [next, nextTracking] = yield* Effect.all([get(), getTracking()], { concurrency: 2 })
-            value.ahead = nextTracking.ahead
-            value.behind = nextTracking.behind
+            const next = yield* get()
             if (next !== value.current) {
               value.current = next
               yield* events.publish(Event.BranchUpdated, { branch: next })
@@ -372,7 +357,16 @@ const layer: Layer.Layer<Service, never, Git.Service | EventV2Bridge.Service> = 
         return yield* InstanceState.use(state, (x) => x.root?.name)
       }),
       tracking: Effect.fn("Vcs.tracking")(function* () {
-        return yield* InstanceState.use(state, (x) => ({ ahead: x.ahead, behind: x.behind }))
+        const ctx = yield* InstanceState.context
+        if (ctx.project.vcs !== "git") return { ahead: undefined, behind: undefined }
+        const result = yield* git.run(["rev-list", "--left-right", "--count", "@{upstream}...HEAD"], {
+          cwd: ctx.directory,
+        })
+        if (result.exitCode !== 0) return { ahead: undefined, behind: undefined }
+        // `--left-right --count upstream...HEAD` prints "behind<TAB>ahead".
+        const [behind, ahead] = result.text().trim().split(/\s+/).map(Number)
+        if (!Number.isFinite(ahead) || !Number.isFinite(behind)) return { ahead: undefined, behind: undefined }
+        return { ahead, behind }
       }),
       status: Effect.fn("Vcs.status")(function* () {
         const ctx = yield* InstanceState.context
