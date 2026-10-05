@@ -142,27 +142,25 @@ const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(Gat
 const prepare = (api: "messages" | "responses" | "chat") =>
   Effect.fnUntraced(function* (request: LLMRequest) {
     const options = yield* decodeOptions(request.providerOptions ?? {})
-    const providerOptions =
-      options.upstream || options.gateway
-        ? { ...options.upstream, ...(options.gateway ? { gateway: options.gateway } : {}) }
-        : undefined
+    const providerOptions = (() => {
+      if (!options.upstream && !options.gateway) return undefined
+      if (!options.gateway) return options.upstream
+      return { ...options.upstream, gateway: options.gateway }
+    })()
     switch (api) {
       case "messages": {
         const effort = options.reasoningEffort
-        const enabled = effort !== undefined && effort !== "none"
-        return {
-          request:
-            effort === undefined
-              ? request
-              : LLMRequest.update(request, {
-                  providerOptions: {
-                    ...request.providerOptions,
-                    effort: enabled ? effort : undefined,
-                    thinking: request.providerOptions?.thinking ?? { type: enabled ? "adaptive" : "disabled" },
-                  },
-                }),
-          body: { providerOptions },
-        }
+        if (effort === undefined) return { request, body: { providerOptions } }
+        const enabled = effort !== "none"
+        const thinking = request.providerOptions?.thinking ?? { type: enabled ? "adaptive" : "disabled" }
+        const next = LLMRequest.update(request, {
+          providerOptions: {
+            ...request.providerOptions,
+            effort: enabled ? effort : undefined,
+            thinking,
+          },
+        })
+        return { request: next, body: { providerOptions } }
       }
       case "responses":
         return {
@@ -173,19 +171,14 @@ const prepare = (api: "messages" | "responses" | "chat") =>
             cache_anchor_items: options.cacheAnchorItems,
           },
         }
-      case "chat":
-        return {
-          request,
-          body: {
-            providerOptions,
-            reasoning: options.thinking
-              ? {
-                  enabled: options.thinking.type !== "disabled",
-                  max_tokens: options.thinking.budgetTokens ?? options.thinking.budget_tokens,
-                }
-              : undefined,
-          },
+      case "chat": {
+        if (!options.thinking) return { request, body: { providerOptions } }
+        const reasoning = {
+          enabled: options.thinking.type !== "disabled",
+          max_tokens: options.thinking.budgetTokens ?? options.thinking.budget_tokens,
         }
+        return { request, body: { providerOptions, reasoning } }
+      }
     }
   })
 
@@ -336,21 +329,20 @@ export const configure = (input: Options = {}) => {
                 fail("Vercel AI Gateway returned an invalid evaluation response", cause, text),
               ),
             )
+            const inputTokens = data.usage?.inputTokens ?? undefined
+            const outputTokens = data.usage?.outputTokens ?? undefined
+            const usage = data.usage
+              ? new Usage({
+                  inputTokens,
+                  outputTokens,
+                  totalTokens: ProviderShared.totalTokens(inputTokens, outputTokens, undefined),
+                  providerMetadata: { gateway: data.usage },
+                })
+              : undefined
             return new EvaluationResponse({
               model: ModelID.make(data.model ?? req.model.id),
               answers: data.answers,
-              usage: data.usage
-                ? new Usage({
-                    inputTokens: data.usage.inputTokens ?? undefined,
-                    outputTokens: data.usage.outputTokens ?? undefined,
-                    totalTokens: ProviderShared.totalTokens(
-                      data.usage.inputTokens ?? undefined,
-                      data.usage.outputTokens ?? undefined,
-                      undefined,
-                    ),
-                    providerMetadata: { gateway: data.usage },
-                  })
-                : undefined,
+              usage,
               rounding: data.rounding ?? undefined,
               providerMetadata: data.providerMetadata ?? undefined,
             })
