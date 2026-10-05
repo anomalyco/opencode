@@ -103,10 +103,19 @@ export function parseRemote(input: string): RemoteReference {
 }
 
 export function validateBranch(branch: string): void {
-  if (/^[A-Za-z0-9/_.-]+$/.test(branch) && !branch.startsWith("-") && !branch.includes("..")) return
+  const parts = branch.split("/")
+  if (
+    /^[A-Za-z0-9/_.-]+$/.test(branch) &&
+    !branch.startsWith("-") &&
+    !branch.includes("..") &&
+    !branch.endsWith(".") &&
+    parts.every((part) => part.length > 0 && !part.endsWith(".lock"))
+  )
+    return
   throw new InvalidBranchError({
     branch,
-    message: "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with - or contain ..",
+    message:
+      "Branch must contain only alphanumeric characters, /, _, ., and -, and cannot start with -, contain .., end with / or ., contain empty path components, or include a component ending in .lock",
   })
 }
 

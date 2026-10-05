@@ -62,6 +62,15 @@ describe("Repository", () => {
     expect(() => Repository.validateBranch("bad branch")).toThrow(Repository.InvalidBranchError)
   })
 
+  test("rejects structurally invalid git branch names", () => {
+    for (const branch of ["topic/", "topic.", "topic//child", "topic.lock", "a.lock/b", "/topic"]) {
+      expect(() => Repository.validateBranch(branch)).toThrow(Repository.InvalidBranchError)
+    }
+    for (const branch of ["topic", "main", "feature/x", "v1.2.3", "trailing-", "feature/docs.v1"]) {
+      expect(() => Repository.validateBranch(branch)).not.toThrow()
+    }
+  })
+
   test("compares cache identity independent of input spelling", () => {
     const shorthand = Repository.parseRemote("owner/repo")
 
