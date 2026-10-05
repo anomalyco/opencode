@@ -25,6 +25,7 @@ export const Options = Schema.Struct({
   cacheTTL: Schema.optional(Schema.String),
   cacheAnchorItems: Schema.optional(Schema.Number),
 })
+export type Options = typeof Options.Type
 
 export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
   AnthropicMessages.OptionsInput & {

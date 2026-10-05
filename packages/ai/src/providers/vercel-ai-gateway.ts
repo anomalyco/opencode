@@ -61,7 +61,37 @@ const ChatThinking = Schema.Union([
   Schema.Struct({ type: Schema.Literals(["adaptive", "disabled"]) }),
   Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Number }),
 ])
+type ChatThinking = typeof ChatThinking.Type
 const decodeChatThinking = ProviderShared.validateWith(Schema.decodeUnknownEffect(ChatThinking))
+
+function messagesRequest(request: LLMRequest, effort: VercelAIGatewayOptions.Options["reasoningEffort"]) {
+  if (effort === undefined) return request
+  const enabled = effort !== "none"
+  const thinking = request.providerOptions?.thinking ?? { type: enabled ? "adaptive" : "disabled" }
+  return LLMRequest.update(request, {
+    providerOptions: {
+      ...request.providerOptions,
+      effort: enabled ? effort : undefined,
+      thinking,
+    },
+  })
+}
+
+function chatReasoning(thinking: ChatThinking | undefined) {
+  if (!thinking) return undefined
+  return {
+    enabled: thinking.type !== "disabled",
+    max_tokens: thinking.type === "enabled" ? thinking.budgetTokens : undefined,
+  }
+}
+
+function gatewayProviderOptions(request: LLMRequest, options: VercelAIGatewayOptions.Options) {
+  const defaultGateway = request.cache === "none" ? undefined : { caching: "auto" as const }
+  return {
+    ...options.upstream,
+    gateway: { ...defaultGateway, ...options.gateway },
+  }
+}
 
 const prepare = (api: "messages" | "responses" | "chat") =>
   Effect.fnUntraced(function* (request: LLMRequest) {
@@ -70,34 +100,14 @@ const prepare = (api: "messages" | "responses" | "chat") =>
       api === "chat" && request.providerOptions?.thinking !== undefined
         ? yield* decodeChatThinking(request.providerOptions.thinking)
         : undefined
-    const effort = options.reasoningEffort
-    const providerOptions =
-      api === "messages" && effort !== undefined
-        ? {
-            ...request.providerOptions,
-            effort: effort === "none" ? undefined : effort,
-            thinking: request.providerOptions?.thinking ?? { type: effort === "none" ? "disabled" : "adaptive" },
-          }
-        : request.providerOptions
+    const reasoning = chatReasoning(thinking)
     return {
-      request: providerOptions === request.providerOptions ? request : LLMRequest.update(request, { providerOptions }),
+      request: api === "messages" ? messagesRequest(request, options.reasoningEffort) : request,
       body: {
-        ...(thinking === undefined
-          ? {}
-          : {
-              reasoning: {
-                enabled: thinking.type !== "disabled",
-                ...(thinking.type === "enabled" ? { max_tokens: thinking.budgetTokens } : {}),
-              },
-            }),
-        providerOptions: {
-          ...options.upstream,
-          gateway: { ...(request.cache === "none" ? {} : { caching: "auto" }), ...options.gateway },
-        },
-        ...(api === "responses" && options.cacheTTL !== undefined ? { cache_ttl: options.cacheTTL } : {}),
-        ...(api === "responses" && options.cacheAnchorItems !== undefined
-          ? { cache_anchor_items: options.cacheAnchorItems }
-          : {}),
+        ...(reasoning ? { reasoning } : {}),
+        providerOptions: gatewayProviderOptions(request, options),
+        cache_ttl: api === "responses" ? options.cacheTTL : undefined,
+        cache_anchor_items: api === "responses" ? options.cacheAnchorItems : undefined,
       },
     }
   })
