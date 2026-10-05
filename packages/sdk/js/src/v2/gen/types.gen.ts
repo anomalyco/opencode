@@ -9926,6 +9926,10 @@ export type SessionMessageResponse = SessionMessageResponses[keyof SessionMessag
 export type SessionForkData = {
   body?: {
     messageID?: string
+    /**
+     * Existing local directory in the same project for the forked session. The source session is unchanged.
+     */
+    targetDirectory?: string
   }
   path: {
     sessionID: string

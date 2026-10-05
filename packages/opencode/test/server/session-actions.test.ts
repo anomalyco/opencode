@@ -5,6 +5,9 @@ import { Session as SessionNs } from "@/session/session"
 import { disposeAllInstances, TestInstance } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { httpApiLayer, requestInDirectory } from "./httpapi-layer"
+import fs from "node:fs/promises"
+import path from "node:path"
+import { $ } from "bun"
 
 const it = testEffect(Layer.mergeAll(LayerNode.compile(SessionNs.node), httpApiLayer))
 
@@ -14,6 +17,59 @@ afterEach(async () => {
 })
 
 describe("session action routes", () => {
+  it.instance(
+    "fork targetDirectory persists a real worktree location and preserves the source",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const source = yield* Effect.acquireRelease(SessionNs.use.create({ title: "source" }), (created) =>
+          SessionNs.use.remove(created.id).pipe(Effect.ignore),
+        )
+        const target = path.join(test.directory, "..", `fork-${source.id}`)
+        yield* Effect.promise(() =>
+          $`git worktree add -b ${`fork-${source.id}`} ${target} HEAD`.cwd(test.directory).quiet(),
+        )
+        yield* Effect.addFinalizer(() =>
+          Effect.promise(() => $`git worktree remove --force ${target}`.cwd(test.directory).quiet()).pipe(
+            Effect.ignore,
+          ),
+        )
+        const response = yield* requestInDirectory(`/session/${source.id}/fork`, test.directory, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetDirectory: target }),
+        })
+        expect(response.status).toBe(200)
+        const fork = (yield* response.json) as SessionNs.Info
+        yield* Effect.addFinalizer(() => SessionNs.use.remove(fork.id).pipe(Effect.ignore))
+        expect(fork.directory).toBe(yield* Effect.promise(() => fs.realpath(target)))
+        expect((yield* SessionNs.use.get(fork.id)).directory).toBe(fork.directory)
+        expect((yield* SessionNs.use.get(source.id)).directory).toBe(source.directory)
+        const fetched = yield* requestInDirectory(`/session/${fork.id}`, test.directory)
+        expect(((yield* fetched.json) as SessionNs.Info).directory).toBe(fork.directory)
+      }),
+    { git: true },
+  )
+
+  it.instance(
+    "an unavailable fork target fails before creating a new session",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        const source = yield* Effect.acquireRelease(SessionNs.use.create({}), (created) =>
+          SessionNs.use.remove(created.id).pipe(Effect.ignore),
+        )
+        const before = yield* SessionNs.use.list()
+        const response = yield* requestInDirectory(`/session/${source.id}/fork`, test.directory, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ targetDirectory: path.join(test.directory, "missing") }),
+        })
+        expect(response.status).toBe(400)
+        expect((yield* SessionNs.use.list()).length).toBe(before.length)
+      }),
+    { git: true },
+  )
   it.instance(
     "session routes expose metadata on create, update, get, and fork",
     () =>

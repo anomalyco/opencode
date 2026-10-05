@@ -19,6 +19,8 @@ import { NamedError } from "@opencode-ai/core/util/error"
 import { Cause, Effect, Option, Schema, Scope } from "effect"
 import * as Stream from "effect/Stream"
 import { InstanceState } from "@/effect/instance-state"
+import { InstanceStore } from "@/project/instance-store"
+import fs from "node:fs/promises"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiError, HttpApiSchema } from "effect/unstable/httpapi"
 import { InstanceHttpApi } from "../api"
@@ -59,6 +61,7 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
     const todoSvc = yield* Todo.Service
     const summary = yield* SessionSummary.Service
     const events = yield* EventV2Bridge.Service
+    const instances = yield* InstanceStore.Service
     const scope = yield* Scope.Scope
 
     const list = Effect.fn("SessionHttpApi.list")(function* (ctx: { query: typeof ListQuery.Type }) {
@@ -207,12 +210,28 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       params: { sessionID: SessionID }
       payload?: typeof ForkPayload.Type
     }) {
-      return yield* SessionError.mapStorageNotFound(
-        session.fork({
-          sessionID: ctx.params.sessionID,
-          messageID: ctx.payload?.messageID,
-        }),
-      )
+      const operation = session.fork({
+        sessionID: ctx.params.sessionID,
+        messageID: ctx.payload?.messageID,
+      })
+      const targetDirectory = ctx.payload?.targetDirectory
+      if (!targetDirectory) return yield* SessionError.mapStorageNotFound(operation)
+      const original = yield* requireSession(ctx.params.sessionID)
+      // Local directory selection is explicit. Workspace-adapter sessions keep
+      // their own routing contract rather than inheriting a conflicting target.
+      if (original.workspaceID) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+      const directory = yield* Effect.tryPromise({
+        try: () => fs.realpath(targetDirectory),
+        catch: () => new HttpApiError.BadRequest({}),
+      })
+      const stat = yield* Effect.tryPromise({
+        try: () => fs.stat(directory),
+        catch: () => new HttpApiError.BadRequest({}),
+      })
+      if (!stat.isDirectory()) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+      const target = yield* instances.load({ directory })
+      if (target.project.id !== original.projectID) return yield* Effect.fail(new HttpApiError.BadRequest({}))
+      return yield* SessionError.mapStorageNotFound(instances.provide({ directory }, operation))
     })
 
     const forkRaw = Effect.fn("SessionHttpApi.forkRaw")(function* (ctx: {

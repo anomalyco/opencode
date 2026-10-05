@@ -1,4 +1,5 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 import { Permission } from "@/permission"
 import { SessionV1 } from "@opencode-ai/core/v1/session"
 
@@ -56,7 +57,15 @@ export const UpdatePayload = Schema.Struct({
     }),
   ),
 })
-export const ForkPayload = Schema.Struct(Struct.omit(Session.ForkInput.fields, ["sessionID"]))
+export const ForkPayload = Schema.Struct({
+  ...Struct.omit(Session.ForkInput.fields, ["sessionID"]),
+  targetDirectory: Schema.optional(
+    AbsolutePath.annotate({
+      description:
+        "Existing local directory in the same project for the forked session. The source session is unchanged.",
+    }),
+  ),
+})
 export const InitPayload = Schema.Struct({
   modelID: ModelV2.ID,
   providerID: ProviderV2.ID,
