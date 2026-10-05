@@ -412,6 +412,7 @@ export const dict = {
     "تم الوصول إلى حد الاستخدام الشهري. تتم إعادة التعيين خلال {{retryIn}}. لمواصلة استخدام هذا النموذج الآن، فعّل الاستخدام من رصيدك المتاح: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "لا توجد طريقة دفع. أضف طريقة دفع هنا: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "رصيد غير كاف. إدارة فواتيرك هنا: {{billingUrl}}",
+  "zen.api.error.goSubscriptionRequired": "يلزم اشتراك نشط في OpenCode Go. أدره من هنا: {{consoleGoUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
     "وصلت مساحة العمل الخاصة بك إلى حد الإنفاق الشهري البالغ ${{amount}}. إدارة حدودك هنا: {{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached":

@@ -419,6 +419,8 @@ export const dict = {
     "Månedlig forbrugsgrænse er nået. Nulstilles om {{retryIn}}. For at fortsætte med at bruge denne model nu, aktivér forbrug fra din tilgængelige saldo: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Ingen betalingsmetode. Tilføj en betalingsmetode her: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Utilstrækkelig saldo. Administrer din fakturering her: {{billingUrl}}",
+  "zen.api.error.goSubscriptionRequired":
+    "Et aktivt OpenCode Go-abonnement er påkrævet. Administrer det her: {{consoleGoUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
     "Dit workspace har nået sin månedlige forbrugsgrænse på ${{amount}}. Administrer dine grænser her: {{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached":

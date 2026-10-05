@@ -420,6 +420,8 @@ export const dict = {
     "Månedlig bruksgrense nådd. Tilbakestilles om {{retryIn}}. For å fortsette å bruke denne modellen nå, aktiver bruk fra din tilgjengelige saldo: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Ingen betalingsmetode. Legg til en betalingsmetode her: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Utilstrekkelig saldo. Administrer faktureringen din her: {{billingUrl}}",
+  "zen.api.error.goSubscriptionRequired":
+    "Et aktivt OpenCode Go-abonnement kreves. Administrer det her: {{consoleGoUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
     "Arbeidsområdet ditt har nådd sin månedlige utgiftsgrense på ${{amount}}. Administrer grensene dine her: {{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached":

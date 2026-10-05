@@ -419,6 +419,8 @@ export const dict = {
     "月間の利用上限に達しました。{{retryIn}} 後にリセットされます。今すぐこのモデルの利用を続けるには、利用可能な残高からの利用を有効化してください: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "お支払い方法がありません。こちらからお支払い方法を追加してください: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "残高が不足しています。こちらから請求を管理してください: {{billingUrl}}",
+  "zen.api.error.goSubscriptionRequired":
+    "有効な OpenCode Go サブスクリプションが必要です。こちらから管理してください: {{consoleGoUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
     "ワークスペースが月額の利用上限 ${{amount}} に達しました。こちらから上限を管理してください: {{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached":

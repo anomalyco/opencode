@@ -416,6 +416,8 @@ export const dict = {
     "ถึงขีดจำกัดการใช้งานรายเดือนแล้ว จะรีเซ็ตในอีก {{retryIn}} หากต้องการใช้โมเดลนี้ต่อทันที ให้เปิดใช้งานจากยอดเงินคงเหลือของคุณ: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "ไม่มีวิธีการชำระเงิน เพิ่มวิธีการชำระเงินที่นี่: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "ยอดเงินคงเหลือไม่เพียงพอ จัดการการเรียกเก็บเงินของคุณที่นี่: {{billingUrl}}",
+  "zen.api.error.goSubscriptionRequired":
+    "ต้องมีการสมัครสมาชิก OpenCode Go ที่ใช้งานอยู่ จัดการได้ที่นี่: {{consoleGoUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
     "Workspace ของคุณถึงขีดจำกัดการใช้จ่ายรายเดือนที่ ${{amount}} แล้ว จัดการขีดจำกัดของคุณที่นี่: {{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached":

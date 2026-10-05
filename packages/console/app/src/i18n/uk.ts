@@ -418,6 +418,7 @@ export const dict = {
     "Досягнуто місячного ліміту використання. Скидається через {{retryIn}}. Щоб продовжити, увімкніть використання з доступного балансу: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Немає способу оплати. Додайте метод оплати: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Недостатньо коштів. Керуйте оплатою: {{billingUrl}}",
+  "zen.api.error.goSubscriptionRequired": "Потрібна активна підписка OpenCode Go. Керуйте нею тут: {{consoleGoUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
     "Ваш робочий простір досяг місячного ліміту витрат ${{amount}}. Керуйте лімітами: {{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached":

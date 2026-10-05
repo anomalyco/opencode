@@ -51,6 +51,7 @@ import { countryFromRequest, isModelCountryRestricted } from "~/lib/request-coun
 import { isPeakPricing } from "./pricing"
 import { prepareRequestBody } from "./requestBody"
 import { requiresGoTrainingConsent } from "./trainingConsent"
+import { allowsGoBalanceFallback } from "./goBalanceFallback"
 import { inferenceUnavailable, proxyInference } from "~/lib/inference-proxy"
 
 type ZenData = Awaited<ReturnType<typeof ZenData.list>>
@@ -964,6 +965,13 @@ export async function handler(
         if (!authInfo.billing.lite.useBalance) throw e
       }
     }
+
+    if (opts.modelList === "lite" && !allowsGoBalanceFallback(authInfo.billing.lite))
+      throw new CreditsError(
+        t("zen.api.error.goSubscriptionRequired", {
+          consoleGoUrl: `https://opencode.ai/workspace/${authInfo.workspaceID}/go`,
+        }),
+      )
 
     // Validate pay as you go billing
     const billing = authInfo.billing

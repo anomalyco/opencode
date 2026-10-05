@@ -412,6 +412,7 @@ export const dict = {
     "월간 사용 한도에 도달했습니다. {{retryIn}} 후 초기화됩니다. 이 모델을 지금 계속 사용하려면 사용 가능한 잔액에서 사용을 활성화하세요: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "결제 수단이 없습니다. 결제 수단을 추가하세요: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "잔액이 부족합니다. 결제 관리를 여기서 하세요: {{billingUrl}}",
+  "zen.api.error.goSubscriptionRequired": "활성 OpenCode Go 구독이 필요합니다. 여기에서 관리하세요: {{consoleGoUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
     "워크스페이스의 월간 지출 한도인 ${{amount}}에 도달했습니다. 한도 관리를 여기서 하세요: {{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached":

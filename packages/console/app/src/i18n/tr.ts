@@ -423,6 +423,8 @@ export const dict = {
     "Aylık kullanım limitine ulaşıldı. {{retryIn}} içinde sıfırlanır. Bu modeli şimdi kullanmaya devam etmek için kullanılabilir bakiyenizden kullanımı etkinleştirin: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Ödeme yöntemi bulunamadı. Buradan bir ödeme yöntemi ekleyin: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Yetersiz bakiye. Faturalandırmanızı buradan yönetin: {{billingUrl}}",
+  "zen.api.error.goSubscriptionRequired":
+    "Aktif bir OpenCode Go aboneliği gereklidir. Buradan yönetin: {{consoleGoUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
     "Çalışma alanınız aylık ${{amount}} harcama limitine ulaştı. Limitlerinizi buradan yönetin: {{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached":

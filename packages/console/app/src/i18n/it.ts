@@ -420,6 +420,8 @@ export const dict = {
     "Limite di utilizzo mensile raggiunto. Si reimposta tra {{retryIn}}. Per continuare a usare questo modello ora, abilita l'utilizzo dal tuo saldo disponibile: {{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "Nessun metodo di pagamento. Aggiungi un metodo di pagamento qui: {{billingUrl}}",
   "zen.api.error.insufficientBalance": "Saldo insufficiente. Gestisci la tua fatturazione qui: {{billingUrl}}",
+  "zen.api.error.goSubscriptionRequired":
+    "È richiesto un abbonamento OpenCode Go attivo. Gestiscilo qui: {{consoleGoUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
     "La tua area di lavoro ha raggiunto il limite di spesa mensile di ${{amount}}. Gestisci i tuoi limiti qui: {{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached":

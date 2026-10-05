@@ -398,6 +398,7 @@ export const dict = {
     "已达到每月使用限额。将在 {{retryIn}} 后重置。如需立即继续使用该模型，请启用从可用余额扣费：{{consoleGoUrl}}",
   "zen.api.error.noPaymentMethod": "没有付款方式。请在此处添加付款方式：{{billingUrl}}",
   "zen.api.error.insufficientBalance": "余额不足。请在此处管理您的计费：{{billingUrl}}",
+  "zen.api.error.goSubscriptionRequired": "需要有效的 OpenCode Go 订阅。请在此处管理：{{consoleGoUrl}}",
   "zen.api.error.workspaceMonthlyLimitReached":
     "您的工作区已达到每月支出限额 ${{amount}}。请在此处管理您的限额：{{billingUrl}}",
   "zen.api.error.userMonthlyLimitReached": "您已达到每月支出限额 ${{amount}}。请在此处管理您的限额：{{membersUrl}}",
