@@ -32,3 +32,17 @@ export interface FileTree {
 }
 
 export const FileTree = Contract.define<FileTree, "file.tree">("file.tree")
+
+export interface OpenInAppProps {
+  /** The session screen whose workspace opens. */
+  readonly screen: SessionScreen
+  readonly session: MountedSession
+}
+
+/** The desktop "Open in" button, for a panel header that shows it in place of the tab strip's. */
+export interface OpenInApp {
+  /** Renders nothing on the web or for a remote server. While it is mounted, the tab strip leaves out its own. */
+  Button(props: OpenInAppProps): JSX.Element
+}
+
+export const OpenInApp = Contract.define<OpenInApp, "file.openInApp">("file.openInApp")

@@ -1,4 +1,16 @@
-import { batch, createMemo, lazy, on, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
+import {
+  batch,
+  createMemo,
+  createSignal,
+  lazy,
+  on,
+  onCleanup,
+  Show,
+  Suspense,
+  type ParentProps,
+  type Signal,
+} from "solid-js"
+import { createStore } from "solid-js/store"
 import { Icon } from "@opencode/ui/icon"
 import { encodeFilePath, getFilename } from "@opencode/util/path"
 import {
@@ -22,7 +34,8 @@ import {
 import { artifactKind } from "@opencode/util/artifact"
 import { resolveArtifactPath } from "./artifact"
 import { FileContext, type FileShared } from "./context"
-import { FileTree } from "./contract"
+import type { OpenApp } from "./apps"
+import { FileTree, OpenInApp } from "./contract"
 import type File from "./index"
 import { FileVisual } from "./label"
 import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
@@ -48,6 +61,7 @@ const setup: Setup<typeof File> = (ctx) => {
   const tree = ctx.stores.tree
   const [handoff, setHandoff] = storage.memory<Handoff>("handoff", { initial: { sessions: {} } })
   const preference = desktop ? ctx.stores.app : undefined
+  const [request, setRequest] = createStore<{ app?: OpenApp }>({})
 
   // Tab objects per session screen, which stays while it routes another session, reused so neither strip updates nor a
   // session switch rebuild a trigger. `close` prunes them.
@@ -104,6 +118,10 @@ const setup: Setup<typeof File> = (ctx) => {
         preference.update((draft) => {
           draft.app = app
         }),
+    },
+    request: {
+      app: () => request.app,
+      set: (app) => setRequest("app", app),
     },
     handoff: {
       get: (session, path) => handoff.sessions[session]?.[path],
@@ -166,7 +184,6 @@ const setup: Setup<typeof File> = (ctx) => {
     draggable: false,
     closable: "hover",
     transient: true,
-    sidebar: "locked",
     group: GROUP,
     dom: { panel: TABPANEL },
   }
@@ -286,21 +303,57 @@ const setup: Setup<typeof File> = (ctx) => {
     },
   })
 
-  if (desktop) {
-    const OpenInAppButton = lazy(() => import("./open-in-app"))
+  const OpenInAppButton = lazy(() => import("./open-in-app"))
 
+  // How many "Open in" buttons each screen's panel headers show; the tab strip shows its own only while none do.
+  const headers = new WeakMap<SessionScreen, Signal<number>>()
+
+  const headerButtons = (screen: SessionScreen) => {
+    const existing = headers.get(screen)
+
+    if (existing) return existing
+
+    const created = createSignal(0)
+
+    headers.set(screen, created)
+
+    return created
+  }
+
+  if (desktop) {
     onCleanup(onIdle(() => void OpenInAppButton.preload()))
     ctx.add(Slot, {
       at: "session.panel.end",
       render: (input) => (
-        <FileProvider>
-          <Suspense>
-            <OpenInAppButton session={input.session} screen={input.screen} />
-          </Suspense>
-        </FileProvider>
+        <Show when={headerButtons(input.screen)[0]() === 0}>
+          <FileProvider>
+            <Suspense>
+              <OpenInAppButton session={input.session} screen={input.screen} />
+            </Suspense>
+          </FileProvider>
+        </Show>
       ),
     })
   }
+
+  ctx.provide(OpenInApp, {
+    Button: bindExtension((props) => {
+      const count = headerButtons(props.screen)
+
+      count[1]((value) => value + 1)
+      onCleanup(() => count[1]((value) => value - 1))
+
+      return (
+        <Show when={desktop}>
+          <FileProvider>
+            <Suspense>
+              <OpenInAppButton session={props.session} screen={props.screen} />
+            </Suspense>
+          </FileProvider>
+        </Show>
+      )
+    }),
+  })
 
   ctx.add(Slot, {
     at: "session.panel.sidebar",

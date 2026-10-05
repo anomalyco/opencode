@@ -6,6 +6,7 @@ import {
   SESSION_REVIEW_V2_SIDEBAR_WIDTH_MIN,
   SessionReviewV2,
   SessionReviewV2Sidebar,
+  SessionReviewV2SidebarToggle,
   type SessionReviewExpandMode,
 } from "@opencode/session-ui/v2/session-review-v2"
 import { SessionReviewFilePreviewV2 } from "@opencode/session-ui/v2/session-review-file-preview-v2"
@@ -111,6 +112,14 @@ export default function ReviewPanelContent(props: {
 }
 
 function ReviewPanel(props: ReviewPanelProps) {
+  const ctx = useExtension<typeof Review>()
+
+  const openIn = () => {
+    const live = ctx.uses.openIn()
+
+    return live.status === "active" ? live.value : undefined
+  }
+
   const readFile = async (path: string) =>
     props.session.server.client.file
       .read({ path, location: { directory: props.screen.file.root } })
@@ -188,6 +197,14 @@ function ReviewPanel(props: ReviewPanelProps) {
       stats={<DiffChanges changes={diffs()} />}
       empty={props.empty}
       sidebarOpen={props.state.sidebar.opened()}
+      sidebarToggle={
+        <SessionReviewV2SidebarToggle opened={props.state.sidebar.opened()} onToggle={props.state.sidebar.toggle} />
+      }
+      toolbarAction={
+        <Show when={openIn()}>
+          {(openIn) => <Dynamic component={openIn().Button} screen={props.screen} session={props.session} />}
+        </Show>
+      }
       sidebar={
         // Always mounted: the sidebar header hosts the changes-mode dropdown,
         // which must stay reachable when the current mode has zero diffs.
