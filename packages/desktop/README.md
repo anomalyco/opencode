@@ -40,17 +40,6 @@ CLI preparation uses these channel rules:
 default. `bun dev --download-server <version>` instead downloads that CLI version for local development. Neither path
 requires `OPENCODE_CLI_DIST` or runs the production prebuild.
 
-To run a worktree alongside another dev instance, give it a separate profile and unused server/debug ports:
-
-```bash
-OPENCODE_DESKTOP_TEST_ROOT="$HOME/.local/share/opencode/desktop-worktrees/my-worktree" \
-OPENCODE_DESKTOP_SERVER_PORT=3085 \
-OPENCODE_DESKTOP_REMOTE_DEBUGGING_PORT=9223 bun dev
-```
-
-The profile isolates desktop state, server data, configuration, and service registration. The renderer dev server
-automatically selects an available port. Without the server port override, isolated dev servers use port `3084`.
-
 ## Startup benchmark
 
 `bun run bench:startup` measures a **packaged** build from process spawn to the restored tab being ready and the
