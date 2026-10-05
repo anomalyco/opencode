@@ -13,6 +13,14 @@ describe("file path helpers", () => {
     expect(path.pathFromTab("other://src/app.ts")).toBeUndefined()
   })
 
+  test("strips file protocol case-insensitively without changing path casing", () => {
+    const path = createPathHelpers(() => "/tmp")
+    expect(path.normalize("file:///tmp/a.ts")).toBe("a.ts")
+    expect(path.normalize("FILE:///tmp/a.ts")).toBe("a.ts")
+    expect(path.normalize("File:///tmp/a.ts")).toBe("a.ts")
+    expect(path.normalize("other:///tmp/a.ts")).toBe("other:///tmp/a.ts")
+  })
+
   test("normalizes Windows absolute paths with mixed separators", () => {
     const path = createPathHelpers(() => "C:\\repo")
     expect(path.normalize("C:\\repo\\src\\app.ts")).toBe("src\\app.ts")
