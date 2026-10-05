@@ -35,6 +35,8 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
     // Seed latest so even the first fetch does not enter Suspense.
     { initialValue: [] },
   )
+  const otherWorktrees = () =>
+    worktrees.latest.filter((item) => item.strategy && !sameDirectory(item.directory, props.directory))
 
   let button: HTMLButtonElement | undefined
 
@@ -111,14 +113,10 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
                   <Icon name="workspace-new" />
                   {language.t("workspace.new")}
                 </Menu.Item>
-                <Show when={worktrees.loading}>
+                <Show when={worktrees.loading && otherWorktrees().length === 0}>
                   <Menu.Item disabled>{language.t("common.loading")}</Menu.Item>
                 </Show>
-                <For
-                  each={worktrees.latest.filter(
-                    (item) => item.strategy && !sameDirectory(item.directory, props.directory),
-                  )}
-                >
+                <For each={otherWorktrees()}>
                   {(worktree) => (
                     <Menu.Item
                       title={worktree.directory}

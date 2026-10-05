@@ -76,7 +76,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
   )
   const home = createMemo(() => sync.data.path.home || "")
   const location = createMemo(() => {
-    const current = props.location ?? fallbackPath()
+    const current = props.location ?? fallbackPath.latest
     return current ? { directory: current.directory } : undefined
   })
   const start = createMemo(
@@ -85,7 +85,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       sync.data.path.home ||
       props.location?.directory ||
       sync.data.path.directory ||
-      fallbackPath()?.directory,
+      fallbackPath.latest?.directory,
   )
   const search = createDirectorySearch({ sdk, home, location, base: () => root() || start() })
   const [suggestions] = createResource(input, async (value) => {
@@ -117,7 +117,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       items: Array.from(new Map(results.map((result) => [result.absolute, result])).values()).slice(0, 8),
     }
   })
-  const currentSuggestions = createMemo(() => currentPickerSuggestions(suggestions(), input()))
+  const currentSuggestions = createMemo(() => currentPickerSuggestions(suggestions.latest, input()))
 
   async function load(path: string, generation: number, eager = false) {
     const key = path.replace(/\/+$/, "")
