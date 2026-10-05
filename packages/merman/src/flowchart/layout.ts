@@ -381,6 +381,7 @@ function layoutRankedNodes(
     nodes.push(node)
     ranksByIndex.set(normalizedRank, nodes)
   }
+  reduceRankCrossings(diagram, ranks, normalizedRanks, ranksByIndex)
 
   const spaciousNodeGap = Math.max(minNodeGap, DEFAULT_MIN_BRANCH_LABEL_GAP)
   const widestUnlabeledRank = Math.max(
@@ -521,6 +522,103 @@ function layoutRankedNodes(
   }
 
   return { bounds, wrapped }
+}
+
+const CROSSING_SWEEPS = 8
+
+// Barycenter ordering within ranks. Source order is kept unless a sweep strictly reduces crossings, so
+// crossing-free diagrams render exactly as authored.
+function reduceRankCrossings(
+  diagram: FlowchartDiagram,
+  ranks: ReadonlyMap<string, number>,
+  normalizedRanks: ReadonlyMap<string, number>,
+  ranksByIndex: Map<number, FlowchartNode[]>,
+): void {
+  // Reordering could interleave members of different subgraphs and break their frames.
+  if (diagram.subgraphs?.length) return
+  const rankKeys = [...ranksByIndex.keys()].sort((a, b) => a - b)
+  const layerByRank = new Map(rankKeys.map((rank, index) => [rank, index]))
+  // Feedback edges route around the diagram, so only forward edges between adjacent ranks can cross.
+  const links = diagram.edges.flatMap((edge) => {
+    const fromRank = ranks.get(edge.from)
+    const toRank = ranks.get(edge.to)
+    if (edge.orderOnly || fromRank === undefined || toRank === undefined || toRank !== fromRank + 1) return []
+    const from = normalizedRanks.get(edge.from)!
+    const to = normalizedRanks.get(edge.to)!
+    if (Math.abs(from - to) !== 1) return []
+    return [
+      from < to
+        ? { layer: layerByRank.get(from)!, upper: edge.from, lower: edge.to }
+        : { layer: layerByRank.get(to)!, upper: edge.to, lower: edge.from },
+    ]
+  })
+  const original = rankKeys.map((rank) => ranksByIndex.get(rank)!.map((node) => node.id))
+  const initialCrossings = layerCrossings(original, links)
+  if (initialCrossings === 0) return
+
+  const best = Array.from({ length: CROSSING_SWEEPS }).reduce(
+    (state: { current: string[][]; best: string[][]; crossings: number }, _, sweep) => {
+      const current = sweepLayers(state.current, links, sweep % 2 === 0)
+      const crossings = layerCrossings(current, links)
+      return crossings < state.crossings ? { current, best: current, crossings } : { ...state, current }
+    },
+    { current: original, best: original, crossings: initialCrossings },
+  ).best
+  if (best === original) return
+
+  const nodeById = new Map(diagram.nodes.map((node) => [node.id, node]))
+  for (const [index, rank] of rankKeys.entries()) {
+    ranksByIndex.set(
+      rank,
+      best[index]!.map((id) => nodeById.get(id)!),
+    )
+  }
+}
+
+function sweepLayers(
+  layers: readonly string[][],
+  links: readonly { layer: number; upper: string; lower: string }[],
+  down: boolean,
+): string[][] {
+  const next = layers.map((layer) => [...layer])
+  const indices = next.map((_, index) => index)
+  for (const index of down ? indices.slice(1) : indices.slice(0, -1).reverse()) {
+    const fixed = next[down ? index - 1 : index + 1]!
+    const keys = new Map(
+      next[index]!.map((id, position) => {
+        const neighbors = links.flatMap((link) => {
+          if (down && link.layer === index - 1 && link.lower === id) return [fixed.indexOf(link.upper)]
+          if (!down && link.layer === index && link.upper === id) return [fixed.indexOf(link.lower)]
+          return []
+        })
+        if (neighbors.length === 0) return [id, position]
+        return [id, neighbors.reduce((total, neighbor) => total + neighbor, 0) / neighbors.length]
+      }),
+    )
+    next[index] = next[index]!.toSorted((a, b) => keys.get(a)! - keys.get(b)!)
+  }
+  return next
+}
+
+function layerCrossings(
+  layers: readonly string[][],
+  links: readonly { layer: number; upper: string; lower: string }[],
+): number {
+  const position = new Map(layers.flatMap((layer) => layer.map((id, index) => [id, index] as const)))
+  return links.reduce(
+    (total, link, index) =>
+      total +
+      links
+        .slice(index + 1)
+        .filter(
+          (other) =>
+            other.layer === link.layer &&
+            (position.get(link.upper)! - position.get(other.upper)!) *
+              (position.get(link.lower)! - position.get(other.lower)!) <
+              0,
+        ).length,
+    0,
+  )
 }
 
 function layoutLocalSubgraphDirections(
