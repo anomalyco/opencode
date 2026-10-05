@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "音频：{{filename}}",
+  videoLabel: "视频：{{filename}}",
   "tree.all": "所有文件",
   "tree.empty": "无文件",
   "tree.changes.one": "{{count}} 个文件已更改",
@@ -28,4 +30,14 @@ export default {
   "open.fileExplorer": "文件资源管理器",
   "open.fileManager": "文件管理器",
   "command.open": "打开文件",
+  "view.preview": "预览",
+  "view.source": "源代码",
+  "view.openInBrowser": "在浏览器中打开",
+  "view.binary": "二进制文件 · {{size}}",
+  "view.table.rows.one": "{{count}} 行",
+  "view.table.rows.other": "{{count}} 行",
+  "view.table.columns.one": "{{count}} 列",
+  "view.table.columns.other": "{{count}} 列",
+  "view.table.truncated": "正在显示共 {{total}} 行中的前 {{shown}} 行。",
+  "view.fontSample": "视野无极限，窗外有蓝天。",
 }

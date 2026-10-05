@@ -28,6 +28,7 @@ export default {
     "होस्टको पहिचान प्रमाणित गर्न सकिएन। आफ्नो SSH ज्ञात होस्टहरू अद्यावधिक गर्नु अघि यसको फिंगरप्रिन्ट प्रमाणित गर्नुहोस्।",
   "error.ssh-missing":
     "OpenSSH फेला परेन। एउटा OpenSSH क्लाइन्ट स्थापना गर्नुहोस् र PATH मा ssh उपलब्ध छ भनी सुनिश्चित गर्नुहोस्।",
+  "error.unavailable": "SSH उपलब्ध छैन",
   "action.authenticate": "प्रमाणीकरण गर्नुहोस्",
   "stage.connecting": "SSH मा जडान गर्दै…",
   "stage.authentication": "प्रमाणीकरण आवश्यक छ",

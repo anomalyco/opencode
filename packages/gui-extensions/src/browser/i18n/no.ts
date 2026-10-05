@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL-en kan ikke nås",
   "failed.description": "Kontroller URL-en og tilkoblingen, og prøv på nytt.",
   "action.reload": "Last inn på nytt",
+  "command.inspect": "Velg et element på nettlesersiden",
+  inspect: "Velg et element å kommentere",
+  "inspect.active": "Klikk på et element på siden for å kommentere det. Trykk på Escape for å avbryte.",
+  "inspect.pageShortcut": "Mens siden har fokus",
 }

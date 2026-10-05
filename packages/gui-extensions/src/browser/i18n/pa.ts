@@ -1,9 +1,13 @@
 export default {
   "command.open": "براؤزر کھولیں۔",
   "command.reload": "براؤزر دا صفحہ دوبارہ لوڈ کرو۔",
+  "command.inspect": "براؤزر صفحے وچ اک عنصر چُنو",
   "tab.title": "براؤزر",
   "address.label": "براؤزر دا پتہ",
   "address.placeholder": "درج کرو URL",
+  inspect: "تبصرہ کرن لئی اک عنصر چُنو",
+  "inspect.active": "تبصرہ کرن لئی صفحے دے اک عنصر تے کلک کرو۔ منسوخ کرن لئی Escape دباؤ۔",
+  "inspect.pageShortcut": "جدوں صفحے تے فوکس ہووے",
   "action.stop": "روکو",
   replaced: "براؤزر کنٹرول کو دوسری ڈیسک ٹاپ ونڈو میں منتقل کر دیا گیا۔",
   unsupported: "یہ ڈیسک ٹاپ ایپ براؤزر پین کو سپورٹ نئیں کرتی اے۔",

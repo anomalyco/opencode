@@ -1,9 +1,8 @@
 export default {
   "tab.title": "Xem lại",
+  "mobile.title": "Thay đổi",
   "tab.count.one": "{{count}} tệp đã thay đổi",
   "tab.count.other": "{{count}} tệp đã thay đổi",
-  "mobile.title.one": "Thay đổi",
-  "mobile.title.other": "Thay đổi",
   "empty.git": "Chưa có thay đổi nào chưa commit",
   "empty.branch": "Chưa có thay đổi nhánh",
   "git.title": "Tạo kho lưu trữ Git",

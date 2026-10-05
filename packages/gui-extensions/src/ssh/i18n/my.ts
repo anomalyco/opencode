@@ -40,4 +40,5 @@ export default {
   "menu.default": "မူရင်းအဖြစ် သတ်မှတ်ပါ။",
   "menu.defaultRemove": "မူရင်းကို ဖယ်ရှားပါ။",
   "menu.delete": "ဖျက်ပါ",
+  "error.unavailable": "SSH ကို အသုံးမပြုနိုင်ပါ",
 }

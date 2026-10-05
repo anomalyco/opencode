@@ -1,9 +1,8 @@
 export default {
   "tab.title": "Review",
+  "mobile.title": "Changes",
   "tab.count.one": "Files Changed {{count}}",
   "tab.count.other": "Files Changed {{count}}",
-  "mobile.title.one": "Change",
-  "mobile.title.other": "Changes",
   "empty.git": "No uncommitted changes yet",
   "empty.branch": "No branch changes yet",
   "git.title": "Create a Git repository",

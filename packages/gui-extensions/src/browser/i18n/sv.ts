@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL:en kan inte nås",
   "failed.description": "Kontrollera URL:en och anslutningen och försök igen.",
   "action.reload": "Läs in igen",
+  "command.inspect": "Välj ett element på webbläsarsidan",
+  inspect: "Välj ett element att kommentera",
+  "inspect.active": "Klicka på ett element på sidan för att kommentera det. Tryck på Escape för att avbryta.",
+  "inspect.pageShortcut": "Medan sidan har fokus",
 }

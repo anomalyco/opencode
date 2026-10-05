@@ -40,4 +40,5 @@ export default {
   "menu.default": "Nustatyti kaip numatytąjį",
   "menu.defaultRemove": "Pašalinti numatytąjį",
   "menu.delete": "Ištrinti",
+  "error.unavailable": "SSH nepasiekiamas",
 }

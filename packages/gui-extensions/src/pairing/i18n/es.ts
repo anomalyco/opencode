@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Emparejar dispositivo",
+  "title": "Emparejamiento",
+  "connection": "Red local",
+  "local.description": "Consulta los detalles de conexión y un código QR para conectar un dispositivo a la misma red.",
+  "local.open": "Mostrar detalles",
+  "screenActive.title": "Mantener la pantalla activa",
+  "screenActive.description": "Evita que la pantalla de este equipo entre en reposo mientras se ejecuta OpenCode.",
+  "screenActive.error": "No se ha podido actualizar la configuración de actividad de la pantalla. Inténtalo de nuevo.",
+  "description": "Conecta otro dispositivo al servidor OpenCode de este equipo.",
+  "qr": "Código QR de emparejamiento",
+  "copy": "Copiar detalles",
+  "copy.error": "No se han podido copiar los detalles del emparejamiento. Inténtalo de nuevo.",
+  "error": "No se han podido actualizar los detalles del emparejamiento. Inténtalo de nuevo.",
+}

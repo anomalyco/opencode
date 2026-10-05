@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Zastavi stransko vprašanje",
+  "title": "Seznanjanje",
+  "connection": "Krajevno omrežje",
+  "local.description": "Oglejte si podrobnosti povezave in kodo QR za povezavo naprave v istem omrežju.",
+  "local.open": "Prikaži podrobnosti",
+  "screenActive.title": "Ohrani zaslon dejaven",
+  "screenActive.description": "Prepreči prehod zaslona tega računalnika v stanje pripravljenosti, ko se izvaja OpenCode.",
+  "screenActive.error": "Nastavitve dejavnosti zaslona ni bilo mogoče posodobiti. Poskusite znova.",
+  "description": "Povežite drugo napravo s strežnikom OpenCode v tem računalniku.",
+  "qr": "Koda QR za seznanjanje",
+  "copy": "Kopiraj odgovor",
+  "copy.error": "Podrobnosti seznanjanja ni bilo mogoče kopirati. Poskusite znova.",
+  "error": "Na to vprašanje ni bilo mogoče odgovoriti",
+}

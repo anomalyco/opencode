@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Gerät koppeln",
+  "title": "Kopplung",
+  "connection": "Lokales Netzwerk",
+  "local.description": "Verbindungsdetails und einen QR-Code anzeigen, um ein Gerät im selben Netzwerk zu verbinden.",
+  "local.open": "Details anzeigen",
+  "screenActive.title": "Bildschirm aktiv halten",
+  "screenActive.description": "Verhindern, dass sich der Bildschirm dieses Computers ausschaltet, während OpenCode ausgeführt wird.",
+  "screenActive.error": "Die Einstellung für die Bildschirmaktivität konnte nicht aktualisiert werden. Erneut versuchen.",
+  "description": "Ein weiteres Gerät mit dem OpenCode-Server dieses Computers verbinden.",
+  "qr": "QR-Code zur Kopplung",
+  "copy": "Details kopieren",
+  "copy.error": "Die Kopplungsdetails konnten nicht kopiert werden. Erneut versuchen.",
+  "error": "Die Kopplungsdetails konnten nicht aktualisiert werden. Erneut versuchen.",
+}

@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL-ja nuk mund të arrihet",
   "failed.description": "Kontrollo URL-në dhe lidhjen, pastaj provo përsëri.",
   "action.reload": "Ringarko",
+  "command.inspect": "Përzgjidhni një element në faqen e shfletuesit",
+  inspect: "Përzgjidhni një element për ta komentuar",
+  "inspect.active": "Klikoni një element në faqe për ta komentuar. Shtypni Escape për ta anuluar.",
+  "inspect.pageShortcut": "Ndërkohë që faqja ka fokusin",
 }

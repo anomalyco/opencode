@@ -13,4 +13,8 @@ export default {
   "failed.title": "Impossibile raggiungere l’URL",
   "failed.description": "Controlla l’URL e la connessione, quindi riprova.",
   "action.reload": "Ricarica",
+  "command.inspect": "Seleziona un elemento nella pagina del browser",
+  inspect: "Seleziona un elemento da commentare",
+  "inspect.active": "Fai clic su un elemento della pagina per commentarlo. Premi Escape per annullare.",
+  "inspect.pageShortcut": "Quando la pagina è attiva",
 }

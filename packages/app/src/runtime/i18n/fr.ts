@@ -197,8 +197,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Sous-agents",
   "settings.timeline.category.notices": "Avis",
   "settings.timeline.category.tools": "Autres outils",
-  "session.background.shell.many": "{{count}} shells",
-  "session.background.subagent.many": "{{count}} sous-agents",
   "settings.about.otherContributor.many": "{{count}} autres",
   "toast.migration.progress.clearingOldEvents": "Suppression des anciens événements",
   "toast.migration.progress.migratingSessions": "Migration des sessions",
@@ -404,9 +402,7 @@ export const dict = {
   "provider.connect.toast.connected.description": "Les modèles {{provider}} sont maintenant disponibles.",
   "provider.custom.title": "Fournisseur personnalisé",
   "provider.custom.unavailable": "Les fournisseurs personnalisés ne sont pas disponibles sur ce serveur",
-  "provider.custom.description.prefix": "Configurez un fournisseur compatible avec OpenAI. Consultez la ",
   "provider.custom.description.link": "documentation sur la configuration des fournisseurs",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "ID du fournisseur",
   "provider.custom.field.providerID.placeholder": "monfournisseur",
   "provider.custom.field.providerID.description":
@@ -555,7 +551,6 @@ export const dict = {
   "error.page.action.checking": "Vérification…",
   "error.page.action.checkUpdates": "Vérifier les mises à jour",
   "error.page.action.updateTo": "Mettre à jour vers {{version}}",
-  "error.page.report.prefix": "Veuillez signaler cette erreur à l'équipe OpenCode",
   "error.page.report.discord": "sur Discord",
   "error.page.version": "Version : {{version}}",
   "error.dev.rootNotFound":
@@ -616,7 +611,6 @@ export const dict = {
   "session.messages.jumpToLatest": "Aller au message le plus récent",
   "session.question.minimize": "Réduire la question",
   "session.question.restore": "Restaurer la question",
-  "session.question.pending.many": "{{count}} de questions en attente",
   "session.new.project.new": "Nouveau projet",
   "session.new.project.search": "Rechercher des projets",
   "session.new.project.add": "Ajouter un projet",
@@ -925,7 +919,6 @@ export const dict = {
   "session.error.incompatible.description":
     "{{server}} exécute OpenCode {{version}}, qui n'est pas compatible avec cette application. Mettez le serveur à niveau vers OpenCode V2 pour continuer.",
   "session.background.moveInline": "Appuyez sur {{keybind}} pour placer la tâche en cours en arrière-plan",
-  "session.background.runningCount.many": "{{count}} de tâches en cours d'exécution en arrière-plan",
   "settings.general.row.terminalPlacement.title": "Position du terminal",
   "settings.general.row.terminalPlacement.description": "Choisissez où le terminal s'ouvre dans les sessions",
   "settings.general.row.terminalPlacement.side": "Côté",
@@ -936,4 +929,109 @@ export const dict = {
   "prompt.toast.uploading.percent": "{{percent}} %",
   "prompt.toast.uploading.cancelFile": "Annuler le téléversement de {{filename}}",
   "prompt.toast.uploadFailed.title": "Échec du téléversement",
+  "command.provider.connect.description":
+    "Connectez-vous à OpenCode Go, OpenCode Console ou à un autre fournisseur de modèles",
+  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.freeName": "OpenCode Free",
+  "provider.connect.console.title": "Connexion à OpenCode Console",
+  "provider.connect.console.instructions":
+    "Continuez dans votre navigateur. Confirmez que le code affiché correspond à celui ci-dessous.",
+  "provider.connect.console.deviceCode": "Code appareil",
+  "provider.connect.console.deviceCode.label": "Code de l'appareil : {{code}}",
+  "provider.connect.console.waiting": "En attente de confirmation…",
+  "provider.connect.console.browserHint": "Le navigateur ne s'est pas ouvert ?",
+  "provider.connect.console.copyLink": "Copier le lien de connexion",
+  "provider.connect.console.linkCopied": "Lien de connexion copié",
+  "provider.connect.console.copyFailed":
+    "Impossible de copier le lien de connexion. Ouvrez à nouveau la console pour continuer.",
+  "provider.connect.console.openAgain": "Ouvrir à nouveau la console",
+  "provider.connect.console.browserFailed":
+    "Nous n'avons pas pu ouvrir votre navigateur. Réessayez ou copiez le lien de connexion pour continuer.",
+  "provider.connect.console.expired":
+    "Cette demande de connexion a expiré. Recommencez pour obtenir un nouveau code d'appareil.",
+  "provider.connect.console.denied":
+    "L'accès a été refusé dans la console. Réessayez lorsque vous êtes prêt à vous connecter.",
+  "provider.connect.console.statusFailed":
+    "Impossible de vérifier l'autorisation. Vérifiez votre connexion au serveur et réessayez.",
+  "provider.connect.console.startFailed":
+    "Impossible de démarrer la connexion. Vérifiez votre connexion au serveur et réessayez.",
+  "provider.connect.models.title": "Connecté à {{provider}}",
+  "provider.connect.models.description":
+    "Choisissez un modèle pour commencer. Vous pouvez changer de modèle à tout moment.",
+  "provider.connect.models.available": "Modèles disponibles",
+  "provider.connect.models.list": "Modèles disponibles chez {{provider}}",
+  "provider.connect.console.refreshFailed":
+    "Votre compte est connecté, mais nous n'avons pas pu charger vos modèles. Essayez à nouveau de les actualiser.",
+  "provider.connect.console.connected": "OpenCode connecté",
+  "provider.connect.console.noModels":
+    "Votre compte est connecté, mais cet espace de travail de la console n'a aucun modèle disponible. Vérifiez sa configuration dans la console, puis actualisez.",
+  "provider.connect.console.modelsLoading":
+    "Vos modèles sont toujours en cours de chargement. Actualisez pour vérifier à nouveau.",
+  "provider.connect.console.refresh": "Actualiser les modèles",
+  "provider.connect.console.openingBrowser": "Ouverture du navigateur…",
+  "provider.connect.console.serviceAccount": "Compte de service ?",
+  "provider.connect.console.useApiKey": "Utiliser la clé API",
+  "provider.connect.remote.title": "Connexion sur « {{server}} »",
+  "provider.connect.remote.description":
+    "Vos informations d'identification OpenCode seront stockées sur ce serveur. Les modèles seront disponibles via ce serveur.",
+  "provider.connect.oauth.auto.confirmationCode.description":
+    "Vérifiez que votre navigateur affiche le même code avant d'autoriser.",
+  "provider.connect.oauth.auto.description":
+    "Votre navigateur s'ouvre pour que vous puissiez vous connecter à {{provider}}. Revenez ici lorsque vous aurez terminé.",
+  "provider.connect.oauth.code.description":
+    "Votre navigateur s'ouvre pour que vous puissiez vous connecter à {{provider}}. Collez le code d'autorisation qu'il vous donne ci-dessous.",
+  "provider.connect.oauth.openBrowser": "Ouvrir le navigateur",
+  "provider.connect.oauth.expired": "Autorisation expirée",
+  "provider.connect.console.apiKey.description":
+    "Collez une clé API pour un compte de service. Vous créez des comptes de service dans OpenCode Console sous Clés.",
+  "provider.connect.console.apiKey.link": "Ouvrir la console",
+  "common.retry": "Réessayez",
+  "server.connect.link.expired":
+    "Ce lien d’appairage a expiré ou a déjà été utilisé. Exécutez opencode pair pour en obtenir un nouveau.",
+  "home.project.missing.title": "Dossier de projet introuvable",
+  "home.project.missing.description": "Le dossier {{name}} n'existe plus.",
+  "session.queue.undo": "Annuler",
+  "session.queue.undoShell": "Quittez le mode shell avant d'annuler une invite en file d'attente",
+  "session.queue.undoUnavailable":
+    "Modifiez cette invite dans la file d'attente pour conserver son contexte de fichier",
+  "settings.projects.empty.title": "Aucun projet pour l'instant",
+  "settings.projects.empty.description": "Ajouter un projet pour commencer",
+  "settings.providers.account.manage": "Gérer les comptes {{provider}}",
+  "settings.providers.account.group": "Comptes",
+  "settings.providers.account.add": "Ajouter un compte",
+  "settings.providers.account.remove": "Supprimer le compte…",
+  "settings.providers.account.active": "Actif",
+  "settings.providers.account.switched.title": "changement de compte {{provider}}",
+  "settings.providers.account.switched.description": "Utilisation désormais de {{account}}.",
+  "settings.providers.account.removed.title": "{{account}} supprimé",
+  "settings.providers.account.removed.description": "{{provider}} n’utilisera plus ce compte.",
+  "settings.providers.console.available.one": "Fournisseur {{count}} disponible",
+  "settings.providers.console.available.other": "Fournisseurs {{count}} disponibles",
+  "settings.providers.tag.account": "Compte",
+  "settings.models.enableAll": "Activer tous les modèles",
+  "settings.models.disableAll": "Désactiver tous les modèles",
+  "dialog.model.chatgptPlan": "Utilisation de l’abonnement ChatGPT",
+  "dialog.model.chatgptManageUsage": "Gérer l’utilisation",
+  "provider.connect.chatgptWelcome.title": "ChatGPT connecté",
+  "provider.connect.chatgptWelcome.description":
+    "Les requêtes admissibles dans OpenCode peuvent utiliser votre abonnement ChatGPT.",
+  "provider.connect.chatgptWelcome.usage": "Gérer l’utilisation dans les paramètres de ChatGPT",
+  "provider.connect.chatgptWelcome.confirm": "Compris",
+  "provider.connect.chatgptUsageLimit.title": "Limite d’utilisation de ChatGPT atteinte",
+  "provider.connect.chatgptUsageLimit.description":
+    "Consultez votre utilisation et vos limites dans les paramètres de ChatGPT.",
+  "provider.connect.chatgptUsageLimit.manage": "Gérer l’utilisation",
+  "provider.connect.chatgptUsageLimit.close": "Fermer",
+  "settings.guiExtensions.title": "Extensions",
+  "settings.guiExtensions.description":
+    "Extensions d’interface graphique intégrées à cette fenêtre. Versions de développement uniquement.",
+  "settings.guiExtensions.reload": "Recharger",
+  "settings.guiExtensions.status.loading": "Chargement",
+  "settings.guiExtensions.status.active": "Active",
+  "settings.guiExtensions.status.failed": "Échec",
+  "settings.guiExtensions.status.disabled": "Désactivée",
+  "settings.guiExtensions.status.blocked": "Bloquée",
+  "settings.providers.console.available.many": "Fournisseurs {{count}} disponibles",
+  "provider.custom.description": "Configurez un fournisseur compatible avec OpenAI. Consultez {{link}}.",
+  "error.page.report": "Veuillez signaler cette erreur à l’équipe OpenCode {{link}}",
 }

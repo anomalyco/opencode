@@ -1,9 +1,13 @@
 export default {
   "command.open": "باز کردن مرورگر",
   "command.reload": "بارگیری دوبارهٔ صفحهٔ مرورگر",
+  "command.inspect": "انتخاب یک عنصر در صفحهٔ مرورگر",
   "tab.title": "مرورگر",
   "address.label": "نشانی مرورگر",
   "address.placeholder": "نشانی وب را وارد کنید",
+  inspect: "یک عنصر را برای نظر دادن انتخاب کنید",
+  "inspect.active": "برای نظر دادن روی عنصری در صفحه کلیک کنید. برای لغو Escape را فشار دهید.",
+  "inspect.pageShortcut": "وقتی صفحه در کانون است",
   "action.stop": "توقف کنید",
   replaced: "کنترل مرورگر به پنجرهٔ دسکتاپ دیگری منتقل شد.",
   unsupported: "این برنامهٔ دسکتاپ از پنل مرورگر پشتیبانی نمی‌کند.",

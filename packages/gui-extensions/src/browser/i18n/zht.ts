@@ -13,4 +13,8 @@ export default {
   "failed.title": "無法連上 URL",
   "failed.description": "請檢查 URL 和網路連線，然後再試一次。",
   "action.reload": "重新載入",
+  "command.inspect": "在瀏覽器頁面中選取元素",
+  inspect: "選取要留言的元素",
+  "inspect.active": "按一下頁面中的元素以留言。按 Escape 取消。",
+  "inspect.pageShortcut": "當頁面取得焦點時",
 }

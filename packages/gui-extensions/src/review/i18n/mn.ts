@@ -1,9 +1,8 @@
 export default {
   "tab.title": "Хяналт",
+  "mobile.title": "Өөрчлөлтүүд",
   "tab.count.one": "{{count}} файл өөрчлөгдсөн",
   "tab.count.other": "{{count}} файл өөрчлөгдсөн",
-  "mobile.title.one": "Өөрчлөх",
-  "mobile.title.other": "Өөрчлөлтүүд",
   "empty.git": "Одоохондоо шийдэгдээгүй өөрчлөлт байхгүй байна",
   "empty.branch": "Одоогоор салбар өөрчлөлт ороогүй байна",
   "git.title": "Git репозитор үүсгэх",

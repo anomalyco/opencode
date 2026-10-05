@@ -40,4 +40,5 @@ export default {
   "menu.default": "Määra vaikeväärtuseks",
   "menu.defaultRemove": "Eemalda vaikeseade",
   "menu.delete": "Kustuta",
+  "error.unavailable": "SSH pole saadaval",
 }

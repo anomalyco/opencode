@@ -42,4 +42,5 @@ export default {
   "menu.default": "Cakto si parazgjedhje",
   "menu.defaultRemove": "Hiq parazgjedhjen",
   "menu.delete": "Fshi",
+  "error.unavailable": "SSH-ja nuk është e disponueshme",
 }

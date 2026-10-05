@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "เสียง: {{filename}}",
+  videoLabel: "วิดีโอ: {{filename}}",
   "tree.all": "ไฟล์ทั้งหมด",
   "tree.empty": "ไม่มีไฟล์",
   "tree.changes.one": "มีการเปลี่ยนแปลงไฟล์ {{count}} ไฟล์",
@@ -28,4 +30,14 @@ export default {
   "open.fileExplorer": "File Explorer",
   "open.fileManager": "File Manager",
   "command.open": "เปิดไฟล์",
+  "view.preview": "แสดงตัวอย่าง",
+  "view.source": "ต้นฉบับ",
+  "view.openInBrowser": "เปิดในเบราว์เซอร์",
+  "view.binary": "ไฟล์ไบนารี · {{size}}",
+  "view.table.rows.one": "{{count}} แถว",
+  "view.table.rows.other": "{{count}} แถว",
+  "view.table.columns.one": "{{count}} คอลัมน์",
+  "view.table.columns.other": "{{count}} คอลัมน์",
+  "view.table.truncated": "กำลังแสดง {{shown}} แถวแรกจากทั้งหมด {{total}} แถว",
+  "view.fontSample": "เป็นมนุษย์สุดประเสริฐเลิศคุณค่า",
 }

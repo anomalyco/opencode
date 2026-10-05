@@ -32,6 +32,7 @@ export default {
     "Identitet hosta nije bilo moguće potvrditi. Provjerite njegov otisak prije ažuriranja poznatih SSH hostova.",
   "error.ssh-missing":
     "OpenSSH nije pronađen. Instalirajte OpenSSH klijent i provjerite je li ssh dostupan u varijabli PATH.",
+  "error.unavailable": "SSH nije dostupan",
   "action.authenticate": "Autentificiraj",
   "stage.connecting": "Povezivanje putem SSH-a…",
   "stage.authentication": "Potrebna je autentifikacija",

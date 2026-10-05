@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Apparaat koppelen",
+  "title": "Koppelen",
+  "connection": "Lokaal netwerk",
+  "local.description": "Bekijk verbindingsgegevens en een QR-code om een apparaat met hetzelfde netwerk te verbinden.",
+  "local.open": "Details tonen",
+  "screenActive.title": "Scherm actief houden",
+  "screenActive.description": "Voorkom dat het beeldscherm van deze computer in de slaapstand gaat terwijl OpenCode actief is.",
+  "screenActive.error": "De instelling voor schermactiviteit kon niet worden bijgewerkt. Probeer het opnieuw.",
+  "description": "Verbind een ander apparaat met de OpenCode-server van deze computer.",
+  "qr": "QR-code voor koppelen",
+  "copy": "Details kopiëren",
+  "copy.error": "De koppelingsgegevens konden niet worden gekopieerd. Probeer het opnieuw.",
+  "error": "De koppelingsgegevens konden niet worden bijgewerkt. Probeer het opnieuw.",
+}

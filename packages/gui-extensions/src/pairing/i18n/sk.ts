@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Položiť doplňujúcu otázku",
+  "title": "Párovanie",
+  "connection": "Lokálna sieť",
+  "local.description": "Zobrazte údaje o pripojení a QR kód na pripojenie zariadenia v rovnakej sieti.",
+  "local.open": "Zobraziť podrobnosti",
+  "screenActive.title": "Ponechať obrazovku aktívnu",
+  "screenActive.description": "Zabráni uspatiu displeja tohto počítača, kým je spustený OpenCode.",
+  "screenActive.error": "Nastavenie aktivity obrazovky sa nepodarilo aktualizovať. Skúste to znova.",
+  "description": "Pripojte ďalšie zariadenie k serveru OpenCode v tomto počítači.",
+  "qr": "QR kód na párovanie",
+  "copy": "Kopírovať odpoveď",
+  "copy.error": "Údaje na párovanie sa nepodarilo skopírovať. Skúste to znova.",
+  "error": "Na túto otázku sa nepodarilo odpovedať",
+}

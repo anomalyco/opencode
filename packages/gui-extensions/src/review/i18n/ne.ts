@@ -1,9 +1,8 @@
 export default {
   "tab.title": "समीक्षा गर्नुहोस्",
+  "mobile.title": "परिवर्तनहरू",
   "tab.count.one": "{{count}} फाइल परिवर्तन भयो",
   "tab.count.other": "{{count}} फाइलहरू परिवर्तन भए",
-  "mobile.title.one": "परिवर्तन गर्नुहोस्",
-  "mobile.title.other": "परिवर्तनहरू",
   "empty.git": "अहिलेसम्म कुनै पनि असीमित परिवर्तनहरू छैनन्",
   "empty.branch": "अझै शाखा परिवर्तन भएको छैन",
   "git.title": "एउटा Git भण्डार सिर्जना गर्नुहोस्",

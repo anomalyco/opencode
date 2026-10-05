@@ -39,4 +39,5 @@ export default {
   "menu.default": "기본값으로 설정",
   "menu.defaultRemove": "기본값 제거",
   "menu.delete": "삭제",
+  "error.unavailable": "SSH를 사용할 수 없음",
 }

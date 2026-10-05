@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Eszköz párosítása",
+  "title": "Párosítás",
+  "connection": "Helyi hálózat",
+  "local.description": "Tekintse meg a kapcsolódási adatokat és a QR-kódot, amellyel egy eszközt csatlakoztathat ugyanahhoz a hálózathoz.",
+  "local.open": "Részletek megjelenítése",
+  "screenActive.title": "Képernyő aktívan tartása",
+  "screenActive.description": "Ne kapcsoljon ki a számítógép kijelzője, amíg az OpenCode fut.",
+  "screenActive.error": "Nem sikerült frissíteni a képernyő aktivitási beállítását. Próbálja újra.",
+  "description": "Csatlakoztasson egy másik eszközt a számítógép OpenCode-kiszolgálójához.",
+  "qr": "Párosítási QR-kód",
+  "copy": "Részletek másolása",
+  "copy.error": "Nem sikerült másolni a párosítás részleteit. Próbálja újra.",
+  "error": "Nem sikerült frissíteni a párosítás részleteit. Próbálja újra.",
+}

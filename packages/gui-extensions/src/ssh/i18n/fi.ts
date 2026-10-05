@@ -39,4 +39,5 @@ export default {
   "menu.default": "Aseta oletukseksi",
   "menu.defaultRemove": "Poista oletuspalvelin",
   "menu.delete": "Poista",
+  "error.unavailable": "SSH ei ole käytettävissä",
 }

@@ -39,4 +39,5 @@ export default {
   "menu.default": "Tetapkan sebagai lalai",
   "menu.defaultRemove": "Buang lalai",
   "menu.delete": "Padam",
+  "error.unavailable": "SSH tidak tersedia",
 }

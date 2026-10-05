@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Seo seade",
+  "title": "Sidumine",
+  "connection": "Kohalik võrk",
+  "local.description": "Vaata ühenduse üksikasju ja QR-koodi, et ühendada seade samasse võrku.",
+  "local.open": "Kuva üksikasjad",
+  "screenActive.title": "Hoia ekraan aktiivsena",
+  "screenActive.description": "Takista selle arvuti ekraanil unerežiimi minemast, kui OpenCode töötab.",
+  "screenActive.error": "Ekraani aktiivsuse seadet ei saanud värskendada. Proovi uuesti.",
+  "description": "Ühenda teine seade selle arvuti OpenCode’i serveriga.",
+  "qr": "Sidumise QR-kood",
+  "copy": "Kopeeri üksikasjad",
+  "copy.error": "Sidumise üksikasju ei saanud kopeerida. Proovi uuesti.",
+  "error": "Sidumise üksikasju ei saanud värskendada. Proovi uuesti.",
+}

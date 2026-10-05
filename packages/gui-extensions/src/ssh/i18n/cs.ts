@@ -32,6 +32,7 @@ export default {
     "Identitu hostitele se nepodařilo ověřit. Před aktualizací známých hostitelů SSH ověřte jeho otisk.",
   "error.ssh-missing":
     "OpenSSH nebylo nalezeno. Nainstalujte klienta OpenSSH a ověřte, že je ssh dostupné v proměnné PATH.",
+  "error.unavailable": "SSH není k dispozici",
   "action.authenticate": "Ověřit",
   "stage.connecting": "Připojování přes SSH…",
   "stage.authentication": "Je vyžadováno ověření",

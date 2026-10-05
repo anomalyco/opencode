@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Muodosta laitepari",
+  "title": "Laiteparin muodostaminen",
+  "connection": "Paikallisverkko",
+  "local.description": "Näytä yhteystiedot ja QR-koodi, joilla voit yhdistää laitteen samaan verkkoon.",
+  "local.open": "Näytä tiedot",
+  "screenActive.title": "Pidä näyttö aktiivisena",
+  "screenActive.description": "Estä tämän tietokoneen näytön siirtyminen lepotilaan OpenCoden käytön aikana.",
+  "screenActive.error": "Näytön aktiivisuusasetusta ei voitu päivittää. Yritä uudelleen.",
+  "description": "Yhdistä toinen laite tämän tietokoneen OpenCode-palvelimeen.",
+  "qr": "Laiteparin QR-koodi",
+  "copy": "Kopioi tiedot",
+  "copy.error": "Laiteparin tietoja ei voitu kopioida. Yritä uudelleen.",
+  "error": "Laiteparin tietoja ei voitu päivittää. Yritä uudelleen.",
+}

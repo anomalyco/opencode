@@ -38,4 +38,5 @@ export default {
   "menu.default": "ຕັ້ງເປັນຄ່າເລີ່ມຕົ້ນ",
   "menu.defaultRemove": "ເອົາຄ່າເລີ່ມຕົ້ນ",
   "menu.delete": "ລຶບ",
+  "error.unavailable": "ບໍ່ສາມາດໃຊ້ SSH ໄດ້",
 }

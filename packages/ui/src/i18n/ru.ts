@@ -44,10 +44,6 @@ export const dict = {
   "ui.fileMedia.binary.title": "Двоичный файл",
   "ui.fileMedia.binary.description.path": "Невозможно отобразить {{path}}, так как это двоичный файл.",
   "ui.fileMedia.binary.description.default": "Невозможно отобразить этот файл, так как он двоичный.",
-  "ui.lineComment.label.prefix": "Комментарий к ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Комментирование: ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Добавить комментарий",
   "ui.lineComment.contextPlaceholder": "Добавить контекст для этого изменения",
   "ui.lineComment.submit": "Добавить комментарий",
@@ -117,8 +113,6 @@ export const dict = {
   "ui.list.loading": "Загрузка",
   "ui.list.empty": "Нет результатов",
   "ui.list.clearFilter": "Очистить фильтр",
-  "ui.list.emptyWithFilter.prefix": "Нет результатов для",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Новое сообщение",
 
@@ -165,8 +159,6 @@ export const dict = {
 
   "ui.common.file.one": "файл",
   "ui.common.file.other": "файлов",
-  "ui.common.question.one": "вопрос",
-  "ui.common.question.other": "вопросов",
 
   "ui.common.add": "Добавить",
   "ui.common.back": "Назад",
@@ -201,7 +193,6 @@ export const dict = {
   "ui.patch.action.moved": "Перемещено",
   "ui.patch.action.patched": "Изменено",
 
-  "ui.question.subtitle.answered": "Получено ответов: {{count}}",
   "ui.question.answer.none": "(нет ответа)",
   "ui.question.review.notAnswered": "(не отвечено)",
   "ui.question.multiHint": "Выберите все подходящие",
@@ -255,8 +246,6 @@ export const dict = {
   "ui.sessionTimeline.notice.modelSwitched": "Выбрана модель {{model}}",
   "ui.common.file.few": "файла",
   "ui.common.file.many": "файлов",
-  "ui.common.question.few": "вопроса",
-  "ui.common.question.many": "вопросов",
   "ui.sessionTurn.retry.attemptLabel": "Попытка {{attempt}}",
   "ui.sessionTurn.retry.attemptRetrying": "Попытка {{attempt}} - {{line}}",
   "ui.messagePart.context.notice.one": "{{count}} уведомление",
@@ -296,4 +285,17 @@ export const dict = {
   "ui.messagePart.context.updates": "Обновления",
   "ui.promptInput.cancelUpload": "Отменить загрузку",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.fileMedia.audioLabel": "Аудио: {{filename}}",
+  "ui.lineComment.label": "Комментарий к {{selection}}",
+  "ui.lineComment.editorLabel": "Комментирование: {{selection}}",
+  "ui.list.emptyWithFilter": "Нет результатов для {{query}}",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.common.questionCount.one": "{{count}} вопрос",
+  "ui.question.subtitle.answeredCount.one": "Получено ответов: {{count}}",
+  "ui.common.questionCount.other": "{{count}} вопроса",
+  "ui.question.subtitle.answeredCount.other": "Получено ответов: {{count}}",
+  "ui.common.questionCount.few": "{{count}} вопроса",
+  "ui.question.subtitle.answeredCount.few": "Получено ответов: {{count}}",
+  "ui.common.questionCount.many": "{{count}} вопросов",
+  "ui.question.subtitle.answeredCount.many": "Получено ответов: {{count}}",
 }

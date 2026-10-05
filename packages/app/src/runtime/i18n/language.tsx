@@ -231,7 +231,15 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       initialValue: dicts.get(initial) ?? base,
     })
 
-    const t = translator(() => dictionary() ?? base, resolveTemplate) as <
+    const translate = translator(() => dictionary() ?? base, resolveTemplate) as (
+      key: string,
+      params?: Record<string, string | number | boolean>,
+    ) => string | undefined
+    const translateEnglish = translator(() => base, resolveTemplate) as (
+      key: string,
+      params?: Record<string, string | number | boolean>,
+    ) => string | undefined
+    const t = ((key, params) => translate(key, params) ?? translateEnglish(key, params) ?? key) as <
       Key extends Extract<keyof Dictionary, string>,
     >(
       key: TranslationKey<Key>,
@@ -244,9 +252,13 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       params?: Record<string, string | number | boolean>,
     ) => {
       const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
+      const english = base as Record<string, string>
       const candidate = `${key}.${category}`
       const fallback = `${key}.other`
-      return resolveTemplate(current[candidate] ?? current[fallback] ?? fallback, params)
+      return resolveTemplate(
+        current[candidate] ?? current[fallback] ?? english[candidate] ?? english[fallback] ?? fallback,
+        params,
+      )
     }
     const plural = (key: PluralKey, count: number, params?: Record<string, string | number | boolean>) =>
       pluralForm(key, pluralCategory(intl(), count), { ...params, count })
@@ -262,7 +274,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       params: Record<string, JSX.Element>,
     ) => {
       const current = (dictionary.loading ? base : (dictionary() ?? base)) as Record<string, string>
-      return richTemplateParts(current[key] ?? key, params)
+      return richTemplateParts(current[key] ?? (base as Record<string, string>)[key] ?? key, params)
     }
     const list = (items: readonly JSX.Element[]) => localizedListParts(intl(), items)
 
@@ -319,6 +331,7 @@ export function UiI18nBridge(props: { children?: JSX.Element }) {
         t: language.t as UiI18n["t"],
         plural: language.plural,
         pluralForm: language.pluralForm,
+        rich: language.rich as UiI18n["rich"],
       }}
     >
       {props.children}

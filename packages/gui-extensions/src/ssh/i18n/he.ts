@@ -26,6 +26,7 @@ export default {
   "error.service": "חיבור SSH הצליח, אך שרת OpenCode לא נעשה מוכן.",
   "error.host-key": "לא ניתן לאמת את זהות המארח. יש לאמת את טביעת האצבע שלו לפני עדכון המארחים המוכרים של SSH.",
   "error.ssh-missing": "OpenSSH לא נמצא. יש להתקין לקוח OpenSSH ולוודא ש-ssh זמין ב-PATH.",
+  "error.unavailable": "SSH אינו זמין",
   "action.authenticate": "אימות",
   "stage.connecting": "מתחבר באמצעות SSH…",
   "stage.authentication": "נדרש אימות",

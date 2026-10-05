@@ -13,4 +13,8 @@ export default {
   "failed.title": "L’URL est inaccessible",
   "failed.description": "Vérifiez l’URL et votre connexion, puis réessayez.",
   "action.reload": "Recharger",
+  "command.inspect": "Sélectionner un élément de la page du navigateur",
+  inspect: "Sélectionner un élément à commenter",
+  "inspect.active": "Cliquez sur un élément de la page pour le commenter. Appuyez sur Échap pour annuler.",
+  "inspect.pageShortcut": "Lorsque la page a le focus",
 }

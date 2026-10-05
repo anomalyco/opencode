@@ -32,6 +32,7 @@ export default {
     "Шахсияти мизбонро тасдиқ кардан муяссар нашуд. Пеш аз навсозии ҳостҳои маълуми SSH-и худ изи ангушти онро тафтиш кунед.",
   "error.ssh-missing":
     "OpenSSH ёфт нашуд. Мизоҷи OpenSSH насб кунед ва боварӣ ҳосил кунед, ки ssh дар PATH дастрас аст.",
+  "error.unavailable": "SSH дастнорас аст",
   "action.authenticate": "Тасдиқ кардан",
   "stage.connecting": "Пайвастшавӣ тавассути SSH…",
   "stage.authentication": "Аутентификатсия талаб карда мешавад",

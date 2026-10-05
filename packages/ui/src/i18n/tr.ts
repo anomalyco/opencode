@@ -50,10 +50,6 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "{{path}} ikili dosyadır.",
   "ui.fileMedia.binary.description.default": "İkili içerik",
 
-  "ui.lineComment.label.prefix": "Yorum: ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Yorum yapılıyor: ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Yorum ekle",
   "ui.lineComment.contextPlaceholder": "Bu değişiklik için bağlam ekle",
   "ui.lineComment.submit": "Yorum yap",
@@ -118,8 +114,6 @@ export const dict = {
   "ui.list.loading": "Yükleniyor",
   "ui.list.empty": "Sonuç bulunamadı",
   "ui.list.clearFilter": "Filtreyi temizle",
-  "ui.list.emptyWithFilter.prefix": "Sonuç bulunamadı:",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Yeni mesaj",
 
@@ -170,8 +164,6 @@ export const dict = {
 
   "ui.common.file.one": "dosya",
   "ui.common.file.other": "dosya",
-  "ui.common.question.one": "soru",
-  "ui.common.question.other": "soru",
 
   "ui.common.add": "Ekle",
   "ui.common.clear": "Temizle",
@@ -216,7 +208,6 @@ export const dict = {
   "ui.patch.action.moved": "Taşındı",
   "ui.patch.action.patched": "Yamalandı",
 
-  "ui.question.subtitle.answered": "{{count}} yanıtlandı",
   "ui.question.answer.none": "(yanıt yok)",
   "ui.question.review.notAnswered": "(yanıtlanmadı)",
   "ui.question.multiHint": "Uygun olan tüm yanıtları seçin",
@@ -275,4 +266,13 @@ export const dict = {
   "ui.messagePart.context.updates": "Güncellemeler",
   "ui.promptInput.cancelUpload": "Yüklemeyi iptal et",
   "ui.promptInput.uploading": "%{{percent}}",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.fileMedia.audioLabel": "Ses: {{filename}}",
+  "ui.lineComment.label": "Yorum: {{selection}}",
+  "ui.lineComment.editorLabel": "Yorum yapılıyor: {{selection}}",
+  "ui.list.emptyWithFilter": "Sonuç bulunamadı: {{query}}",
+  "ui.common.questionCount.one": "{{count}} soru",
+  "ui.question.subtitle.answeredCount.one": "{{count}} yanıtlandı",
+  "ui.common.questionCount.other": "{{count}} soru",
+  "ui.question.subtitle.answeredCount.other": "{{count}} yanıtlandı",
 } satisfies Partial<Record<Keys, string>>

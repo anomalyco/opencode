@@ -30,6 +30,7 @@ export default {
     "ධාරකයාගේ අනන්‍යතාවය සත්‍යාපනය කළ නොහැක. ඔබගේ SSH දන්නා ධාරක යාවත්කාලීන කිරීමට පෙර එහි ඇඟිලි සලකුණ තහවුරු කරන්න.",
   "error.ssh-missing":
     "OpenSSH සොයා ගත නොහැකි විය. OpenSSH සේවාලාභියෙකු ස්ථාපනය කර PATH හි ssh තිබෙන බව සහතික කර ගන්න.",
+  "error.unavailable": "SSH ලබා ගත නොහැක",
   "action.authenticate": "සත්‍යාපනය කරන්න",
   "stage.connecting": "SSH හරහා සම්බන්ධ වෙමින්…",
   "stage.authentication": "සත්‍යාපනය අවශ්‍යයි",

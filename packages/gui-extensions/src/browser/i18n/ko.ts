@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL에 연결할 수 없음",
   "failed.description": "URL과 연결을 확인한 후 다시 시도하세요.",
   "action.reload": "다시 로드",
+  "command.inspect": "브라우저 페이지에서 요소 선택",
+  inspect: "댓글을 달 요소 선택",
+  "inspect.active": "댓글을 달 페이지 요소를 클릭하세요. 취소하려면 Escape 키를 누르세요.",
+  "inspect.pageShortcut": "페이지에 포커스가 있을 때",
 }

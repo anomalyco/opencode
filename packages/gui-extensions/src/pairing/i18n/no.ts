@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Koble sammen enhet",
+  "title": "Sammenkobling",
+  "connection": "Lokalt nettverk",
+  "local.description": "Vis tilkoblingsdetaljer og en QR-kode for å koble til en enhet på samme nettverk.",
+  "local.open": "Vis detaljer",
+  "screenActive.title": "Hold skjermen aktiv",
+  "screenActive.description": "Hindre at datamaskinens skjerm går i hvilemodus mens OpenCode kjører.",
+  "screenActive.error": "Kunne ikke oppdatere innstillingen for skjermaktivitet. Prøv igjen.",
+  "description": "Koble en annen enhet til OpenCode-serveren på denne datamaskinen.",
+  "qr": "QR-kode for sammenkobling",
+  "copy": "Kopier detaljer",
+  "copy.error": "Kunne ikke kopiere sammenkoblingsdetaljene. Prøv igjen.",
+  "error": "Kunne ikke oppdatere sammenkoblingsdetaljene. Prøv igjen.",
+}

@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "Audio: {{filename}}",
+  videoLabel: "Video: {{filename}}",
   "tree.all": "Semua fail",
   "tree.empty": "Tiada fail",
   "tree.changes.one": "{{count}} fail ditukar",
@@ -28,4 +30,14 @@ export default {
   "open.fileExplorer": "Penjelajah Fail",
   "open.fileManager": "Pengurus Fail",
   "command.open": "Buka fail",
+  "view.preview": "Pratonton",
+  "view.source": "Sumber",
+  "view.openInBrowser": "Buka dalam pelayar",
+  "view.binary": "Fail perduaan · {{size}}",
+  "view.table.rows.one": "{{count}} baris",
+  "view.table.rows.other": "{{count}} baris",
+  "view.table.columns.one": "{{count}} lajur",
+  "view.table.columns.other": "{{count}} lajur",
+  "view.table.truncated": "Menunjukkan {{shown}} baris pertama daripada {{total}} baris.",
+  "view.fontSample": "Sfinks kuarza hitam, nilailah ikrarku.",
 }

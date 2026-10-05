@@ -183,9 +183,7 @@ export const dict = {
   "provider.connect.toast.connected.description": "{{provider}} དཔེ་ཚད་ཚུ་ད་ལག་ལེན་འཐབ་བཏུབ་ཨིན།",
   "provider.custom.title": "སྲོལ་སྒྲིག་བྱིན་མི།",
   "provider.custom.unavailable": "སྲོལ་སྒྲིག་བྱིན་མི་ཚུ་ སར་བར་འདི་གུ་འཐོབ་མི་ཚུགས།",
-  "provider.custom.description.prefix": "OpenAI-མཐུན་འགྱུར་ཅན་གྱི་བྱིན་མི་ཅིག་རིམ་སྒྲིག་འབད། བལྟ།",
   "provider.custom.description.link": "བྱིན་མི་རིམ་སྒྲིག་ཡིག་ཆ།",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "བྱིན་མི་ཨའི་ཌི།",
   "provider.custom.field.providerID.placeholder": "ངེ་གི་བྱིན་མི།",
   "provider.custom.field.providerID.description": "ཆུང་ཡིག་གི་ཡི་གུ་ ཨང་གྲངས་ སྦྲེལ་རྟགས་ ཡང་ན་ འོག་ཐིག་ཚུ།",
@@ -333,7 +331,6 @@ export const dict = {
   "error.page.action.checkUpdates": "དུས་མཐུན་ཚུ་ཞིབ་དཔྱད་འབད།",
   "error.page.action.updateTo": "{{version}} ལུ་དུས་མཐུན་བཟོ།",
   "error.page.circular": "[སྒོར་ཐིག་] .",
-  "error.page.report.prefix": "འཛོལ་བ་འདི་OpenCodeསྡེ་ཚན་ལུ་སྙན་ཞུ་འབད་གནང་།",
   "error.page.report.discord": "on Discordལུ།",
   "error.page.version": "ཐོན་རིམ: {{version}}",
   "error.dev.rootNotFound":
@@ -913,4 +910,107 @@ export const dict = {
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}} སྐྱེལ་བཙུགས་འབད་ནི་ཆ་མེད་བཏང་།",
   "prompt.toast.uploadFailed.title": "སྐྱེལ་བཙུགས་འཐུས་ཤོར།",
+  "command.provider.connect.description":
+    "OpenCode Go, OpenCode Console, ཡང་ན་ དཔེ་ཚད་བྱིན་མི་གཞན་ཅིག་ལུ་ནང་བསྐྱོད་འབད།",
+  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.freeName": "OpenCode Free",
+  "provider.connect.console.title": "OpenCode Console ལུ་མཐུད་དོ།",
+  "provider.connect.console.instructions":
+    "ཁྱོད་རའི་བརའུ་ཟར་ནང་འཕྲོ་མཐུད། དེ་ཁར་སྟོན་ཡོད་པའི་ཨང་རྟགས་འདི་འོག་ལུ་ཡོད་མི་དང་མཐུན་སྒྲིག་ཡོདཔ་ངེས་གཏན་བཟོ།",
+  "provider.connect.console.deviceCode": "ཐབས་འཕྲུལ་ཨང་རྟགས།",
+  "provider.connect.console.deviceCode.label": "ཐབས་འཕྲུལ་གྱི་ཨང་རྟགས།: {{code}}",
+  "provider.connect.console.waiting": "བདེན་དཔང་ལུ་སྒུག་སྡོདཔ་ཨིན།",
+  "provider.connect.console.browserHint": "བརྡ་འཚོལ་ཁ་ཕྱེ་མ་ཚུགས་ག?",
+  "provider.connect.console.copyLink": "ནང་བསྐྱོད་འབྲེལ་ལམ་འདྲ་བཤུས།",
+  "provider.connect.console.linkCopied": "ནང་བསྐྱོད་འབྲེལ་ལམ་འདྲ་བཤུས་འབད་ཡོདཔ།",
+  "provider.connect.console.copyFailed":
+    "ནང་བསྐྱོད་འབྲེལ་ལམ་འདྲ་བཤུས་རྐྱབ་མ་ཚུགས། འཕྲོ་མཐུད་ནིའི་དོན་ལུ་ ཀོན་སོལ་ལོག་སྟེ་ཁ་ཕྱེ།",
+  "provider.connect.console.openAgain": "ཀོན་སོལ་ལོག་སྟེ་ཁ་ཕྱེ།",
+  "provider.connect.console.browserFailed":
+    "ང་བཅས་ཀྱིས་ ཁྱོད་ཀྱི་བརའུ་ཟར་ཁ་ཕྱེ་མ་ཚུགས། འཕྲོ་མཐུད་ནིའི་དོན་ལུ་ ནང་བསྐྱོད་འབྲེལ་ལམ་འདི་ ལོག་འབད་རྩོལ་བསྐྱེད་ ཡང་ན་ འདྲ་བཤུས་རྐྱབས།",
+  "provider.connect.console.expired":
+    "ནང་བསྐྱོད་ཞུ་བ་འདི་དུས་ཡུན་ཚང་ཡོད། ཐབས་འཕྲུལ་ཨང་རྟགས་གསརཔ་ཅིག་ཐོབ་ནིའི་དོན་ལུ་ ལོག་སྟེ་འགོ་བཙུགས།",
+  "provider.connect.console.denied":
+    "ཀོན་སོལ་ནང་འཛུལ་སྤྱོད་བཀག་ཆ་འབད་ཡོདཔ། མཐུད་ནི་ལུ་གྲ་སྒྲིག་ཡོད་པའི་སྐབས་ ལོག་སྟེ་འབད་རྩོལ་བསྐྱེད།",
+  "provider.connect.console.statusFailed":
+    "དབང་སྤྲོད་ཞིབ་དཔྱད་འབད་མ་ཚུགས། ཁྱོད་རའི་སར་བར་མཐུད་ལམ་ཞིབ་དཔྱད་འབད་ཞིནམ་ལས་ ལོག་སྟེ་འབད་རྩོལ་བསྐྱེད།",
+  "provider.connect.console.startFailed":
+    "ནང་བསྐྱོད་འགོ་བཙུགས་མ་ཚུགས། ཁྱོད་རའི་སར་བར་མཐུད་ལམ་ཞིབ་དཔྱད་འབད་ཞིནམ་ལས་ ལོག་སྟེ་འབད་རྩོལ་བསྐྱེད།",
+  "provider.connect.models.title": "{{provider}} ལུ་མཐུད་ཡོདཔ།",
+  "provider.connect.models.description":
+    "འགོ་བཙུགས་ནི་ལུ་དཔེ་ཚད་གདམ་ཁ་རྐྱབས། ཁྱོད་ཀྱིས་དཔེ་ཚད་ཚུ་ག་དུས་འབད་རུང་སོར་བསྒྱུར་འབད་ཚུགས།",
+  "provider.connect.models.available": "འཐོབ་ཚུགས་པའི་དཔེ་ཚད་ཚུ།",
+  "provider.connect.models.list": "དཔེ་ཚད་ཚུ་ {{provider}} ལས་ཐོབ་ཚུགས།",
+  "provider.connect.console.refreshFailed":
+    "ཁྱོད་ཀྱི་རྩིས་ཐོ་འདི་མཐུད་དེ་ཡོད་རུང་ ང་བཅས་ཀྱིས་ཁྱོད་ཀྱི་དཔེ་ཚད་ཚུ་མངོན་གསལ་འབད་མ་ཚུགས། དེ་ཚུ་གསརཔ་བཟོ་ནི་ལུ་ལོག་འབད་རྩོལ་བསྐྱེད།",
+  "provider.connect.console.connected": "OpenCode མཐུད་ཡོདཔ།",
+  "provider.connect.console.noModels":
+    "ཁྱོད་ཀྱི་རྩིས་ཐོ་འདི་མཐུད་དེ་ཡོད་ དེ་འབདཝ་ད་ ཀོན་སོལ་ལཱ་གི་ས་སྒོ་འདི་ལུ་ འཐོབ་ཚུགས་པའི་དཔེ་ཚད་ཚུ་མེད། ཀོན་སོལ་ནང་ལུ་ དེ་གི་གཞི་སྒྲིག་ཞིབ་དཔྱད་འབད་ཞིནམ་ལས་ གསར་བསྐྲུན་འབད།",
+  "provider.connect.console.modelsLoading":
+    "ཁྱོད་ཀྱི་དཔེ་ཚད་ཚུ་ད་ལྟོ་ཡང་མངོན་གསལ་འབད་དོ། ལོག་སྟེ་ཞིབ་དཔྱད་འབད་ནི་ལུ་ གསར་བསྐྲུན་འབད།",
+  "provider.connect.console.refresh": "དཔེ་ཚད་ཚུ་གསར་བསྐྲུན་འབད།",
+  "provider.connect.console.openingBrowser": "བརྡ་འཚོལ་ཁ་ཕྱེ་དོ།...",
+  "provider.connect.console.serviceAccount": "ཞབས་ཏོག་རྩིས་ཁྲ་?",
+  "provider.connect.console.useApiKey": "API ལྡེ་མིག་ལག་ལེན་འཐབ།",
+  "provider.connect.remote.title": "“{{server}}” གུ་མཐུད་དོ།",
+  "provider.connect.remote.description":
+    "ཁྱོད་ཀྱི་ OpenCode ངོས་འཛིན་ཡིག་ཆ་ཚུ་ སར་བར་འདི་གུ་གསོག་འཇོག་འབད་འོང་། དཔེ་ཚད་ཚུ་ སར་བར་འདི་བརྒྱུད་དེ་ཐོབ་ཚུགས།",
+  "provider.connect.oauth.auto.confirmationCode.description":
+    "ཁྱོད་ཀྱིས་གནང་བ་མ་བྱིན་པའི་ཧེ་མ་ ཁྱོད་རའི་བརའུ་ཟར་གྱིས་ གསང་ཡིག་གཅིགཔོ་སྟོནམ་ཨིན་ན་ ཞིབ་དཔྱད་འབད།",
+  "provider.connect.oauth.auto.description":
+    "ཁྱོད་ཀྱི་བརྡ་འཚོལ་འདི་ཁ་ཕྱེ་སྟེ་ ཁྱོད་ཀྱིས་ {{provider}} ལུ་ནང་བསྐྱོད་འབད་ཚུགས། ཁྱོད་ཀྱིས་འབད་ཚརཝ་ད་ ནཱ་ལུ་ལོག་ཤོག།",
+  "provider.connect.oauth.code.description":
+    "ཁྱོད་ཀྱི་བརྡ་འཚོལ་འདི་ཁ་ཕྱེ་སྟེ་ ཁྱོད་ཀྱིས་ {{provider}} ལུ་ནང་བསྐྱོད་འབད་ཚུགས། འོག་ལུ་བྱིན་མི་གནང་བ་ཨང་རྟགས་འདི་སྦྱར།",
+  "provider.connect.oauth.openBrowser": "བརའུ་ཟར་ཁ་ཕྱེ།",
+  "provider.connect.oauth.expired": "དབང་སྤྲོད་དུས་ཚོད་ཡོལ་ཡོདཔ།",
+  "provider.connect.console.apiKey.description":
+    "ཞབས་ཏོག་རྩིས་ཐོ་ཅིག་གི་དོན་ལུ་ API ལྡེ་མིག་ཅིག་སྦྱར། ཁྱོད་ཀྱིས་ ལྡེ་མིག་ཚུ་གི་འོག་ལུ་ OpenCode Console ནང་ལུ་ ཞབས་ཏོག་རྩིས་ཐོ་ཚུ་གསར་བསྐྲུན་འབདཝ་ཨིན།",
+  "provider.connect.console.apiKey.link": "ཀོན་སོལ་ཁ་ཕྱེ།",
+  "common.retry": "ཡང་བསྐྱར་འབད་རྩོལ་བསྐྱེད།",
+  "server.connect.link.expired":
+    "ཟུང་འབྲེལ་འབྲེལ་ལམ་འདི་ དུས་ཡོལ་ཡོདཔ ཡང་ན་ ཧེ་མ་ལས་རང་ལག་ལེན་འཐབ་ཡོདཔ་ཨིན། གསརཔ་ཅིག་ཐོབ་ནིའི་དོན་ལུ་ opencode pair གཡོག་བཀོལ།",
+  "home.project.missing.title": "ལས་འགུལ་གྱི་སྣོད་འཛིན་འཚོལ་མ་ཐོབ།",
+  "home.project.missing.description": "{{name}} གི་དོན་ལུ་སྣོད་འཛིན་འདི་ད་ལས་ཕར་མེདཔ་ཨིན།",
+  "session.queue.undo": "ཕྱིར་འཐེན་འབད།",
+  "session.queue.undoShell": "གྲལ་ཐིག་འབད་ཡོད་པའི་བརྡ་བཀོད་ཅིག་འབད་བཤོལ་མ་འབད་བའི་ཧེ་མ་ ཤེལ་ཐབས་ལམ་འདི་བཞག",
+  "session.queue.undoUnavailable":
+    "འདི་གི་ཡིག་སྣོད་སྐབས་དོན་ཉམས་སྲུང་འབད་ནི་ལུ་ བང་རིམ་ནང་ལུ་ བརྡ་སྟོན་འདི་ཞུན་དག་འབད།",
+  "settings.projects.empty.title": "ད་དུང་ལས་གཞི་མེད།",
+  "settings.projects.empty.description": "འགོ་བཙུགས་ནིའི་དོན་ལུ་ལས་འགུལ་ཁ་སྐོང་བརྐྱབ།",
+  "settings.providers.account.manage": "{{provider}} རྩིས་ཐོ་ཚུ་འཛིན་སྐྱོང་འཐབ།",
+  "settings.providers.account.group": "རྩིས་ཁྲ།",
+  "settings.providers.account.add": "རྩིས་ཐོ་ཁ་སྣོན།",
+  "settings.providers.account.remove": "རྩིས་ཐོ་རྩ་བསྐྲད་གཏང་...",
+  "settings.providers.account.active": "ཤུགས་ལྡན་",
+  "settings.providers.account.switched.title": "{{provider}} རྩིས་ཐོ་སོར་བསྒྱུར་འབད་ཡོདཔ།",
+  "settings.providers.account.switched.description": "ད་ལྟོ་ {{account}} ལག་ལེན་འཐབ་དོ།",
+  "settings.providers.account.removed.title": "{{account}} རྩ་བསྐྲད་གཏང་ཡོདཔ།",
+  "settings.providers.account.removed.description": "{{provider}} གིས་ ད་ལས་ཕར་ རྩིས་ཐོ་འདི་ལག་ལེན་འཐབ་མི་བཏུབ།",
+  "settings.providers.console.available.one": "{{count}} བྱིན་མི་འཐོབ་ཚུགས།",
+  "settings.providers.console.available.other": "{{count}} བྱིན་མི་ཚུ་འཐོབ་ཚུགས།",
+  "settings.providers.tag.account": "རྩིས་ཐོ།",
+  "settings.models.enableAll": "དཔེ་གཞི་ཆ་མཉམ་ལྕོགས་ཅན་བཟོ།",
+  "settings.models.disableAll": "དཔེ་གཞི་ཆ་མཉམ་ལྕོགས་མིན་བཟོ།",
+  "dialog.model.chatgptPlan": "ChatGPT འཆར་གཞི་ལག་ལེན་འཐབ་དོ།",
+  "dialog.model.chatgptManageUsage": "ལག་ལེན་འཛིན་སྐྱོང་འཐབ།",
+  "provider.connect.chatgptWelcome.title": "ChatGPT མཐུད་ཡོད།",
+  "provider.connect.chatgptWelcome.description":
+    "OpenCode ནང་གི་ཆ་འཇོག་ཡོད་པའི་ཞུ་བ་ཚུ་གིས་ ཁྱེད་ཀྱི་ ChatGPT འཆར་གཞི་ལག་ལེན་འཐབ་ཚུགས།",
+  "provider.connect.chatgptWelcome.usage": "ChatGPT སྒྲིག་སྟངས་ནང་ལག་ལེན་འཛིན་སྐྱོང་འཐབ།",
+  "provider.connect.chatgptWelcome.confirm": "ཧ་གོ་ཡི།",
+  "provider.connect.chatgptUsageLimit.title": "ChatGPT ལག་ལེན་ཚད་ལུ་ལྷོད་ནུག",
+  "provider.connect.chatgptUsageLimit.description": "ཁྱེད་ཀྱི་ལག་ལེན་དང་ཚད་ཚུ་ ChatGPT སྒྲིག་སྟངས་ནང་ཞིབ་དཔྱད་འབད།",
+  "provider.connect.chatgptUsageLimit.manage": "ལག་ལེན་འཛིན་སྐྱོང་འཐབ།",
+  "provider.connect.chatgptUsageLimit.close": "སྒོ་བསྡམ",
+  "settings.guiExtensions.title": "རྒྱ་བསྐྱེད་ཚུ།",
+  "settings.guiExtensions.description":
+    "སྒོ་སྒྲིག་འདི་ནང་གི་ནང་སྒྲིག་ GUI རྒྱ་བསྐྱེད་ཚུ། གོང་འཕེལ་བཟོ་བསྐྲུན་རྐྱངམ་ཅིག",
+  "settings.guiExtensions.reload": "ལོག་མངོན་གསལ་འབད།",
+  "settings.guiExtensions.status.loading": "མངོན་གསལ་འབད་དོ།",
+  "settings.guiExtensions.status.active": "ཤུགས་ལྡན།",
+  "settings.guiExtensions.status.failed": "མཐར་མ་འཁྱོལ་བ།",
+  "settings.guiExtensions.status.disabled": "ལས་མེད།",
+  "settings.guiExtensions.status.blocked": "བཀག་ཡོད།",
+  "provider.custom.description": "OpenAI-མཐུན་འགྱུར་ཅན་གྱི་བྱིན་མི་ཅིག་རིམ་སྒྲིག་འབད། {{link}} ལུ་བལྟ།",
+  "error.page.report": "འཛོལ་བ་འདི་ OpenCode སྡེ་ཚན་ལུ་ {{link}} སྙན་ཞུ་འབད་གནང་།",
 } satisfies Partial<Record<Keys, string>>

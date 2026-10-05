@@ -30,6 +30,7 @@ export function FileSearchBar(props: {
         <input
           ref={props.setInput}
           placeholder={i18n.t("ui.fileSearch.placeholder")}
+          aria-label={i18n.t("ui.fileSearch.placeholder")}
           value={props.query}
           class="w-40 bg-transparent outline-none text-14-regular text-text-strong placeholder:text-text-weak"
           onInput={(e) => props.onInput(e.currentTarget.value)}

@@ -13,4 +13,8 @@ export default {
   "failed.title": "Adresa URL nu poate fi accesată",
   "failed.description": "Verifică adresa URL și conexiunea, apoi încearcă din nou.",
   "action.reload": "Reîncarcă",
+  "command.inspect": "Selectați un element din pagina navigatorului",
+  inspect: "Selectați un element pentru a-l comenta",
+  "inspect.active": "Faceți clic pe un element din pagină pentru a-l comenta. Apăsați Escape pentru a anula.",
+  "inspect.pageShortcut": "Cât timp pagina este focalizată",
 }

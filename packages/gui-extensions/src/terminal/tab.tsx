@@ -155,6 +155,7 @@ export function SortableTerminalTab(props: {
                 ref={input}
                 type="text"
                 value={store.title}
+                aria-label={extension.t("common.rename")}
                 onInput={(e) => setStore("title", e.currentTarget.value)}
                 onBlur={save}
                 onKeyDown={keydown}

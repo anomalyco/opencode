@@ -41,4 +41,5 @@ export default {
   "menu.default": "Tetapkan sebagai bawaan",
   "menu.defaultRemove": "Hapus bawaan",
   "menu.delete": "Hapus",
+  "error.unavailable": "SSH tidak tersedia",
 }

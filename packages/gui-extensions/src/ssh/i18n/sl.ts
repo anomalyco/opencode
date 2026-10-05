@@ -30,6 +30,7 @@ export default {
   "error.host-key":
     "Osebnosti gostitelja ni bilo mogoče preveriti. Pred posodobitvijo znanih gostiteljev SSH preverite njegov prstni odtis.",
   "error.ssh-missing": "OpenSSH ni bilo najdeno. Namestite OpenSSH odjemalec in zagotovite, da je ssh na PATH.",
+  "error.unavailable": "SSH ni na voljo",
   "action.authenticate": "Overi",
   "stage.connecting": "Povezovanje preko SSH…",
   "stage.authentication": "Zahtevano overjanje",

@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Pasangkan perangkat",
+  title: "Pemasangan",
+  connection: "Jaringan Lokal",
+  "local.description": "Lihat detail koneksi dan kode QR untuk menghubungkan perangkat di jaringan yang sama.",
+  "local.open": "Tampilkan detail",
+  "screenActive.title": "Jaga layar tetap aktif",
+  "screenActive.description": "Cegah layar komputer ini masuk mode tidur selama OpenCode berjalan.",
+  "screenActive.error": "Tidak dapat memperbarui pengaturan aktivitas layar. Coba lagi.",
+  description: "Hubungkan perangkat lain ke server OpenCode di mesin ini.",
+  qr: "Kode QR pemasangan",
+  copy: "Salin detail",
+  "copy.error": "Tidak dapat menyalin detail pemasangan. Coba lagi.",
+  error: "Tidak dapat memperbarui detail pemasangan. Coba lagi.",
+}

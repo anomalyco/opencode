@@ -13,4 +13,8 @@ export default {
   "failed.title": "ເຂົ້າເຖິງ URL ບໍ່ໄດ້",
   "failed.description": "ກວດສອບ URL ແລະການເຊື່ອມຕໍ່ ແລ້ວລອງໃໝ່.",
   "action.reload": "ໂຫຼດຄືນໃໝ່",
+  "command.inspect": "ເລືອກອົງປະກອບໃນໜ້າເບຣາວເຊີ",
+  inspect: "ເລືອກອົງປະກອບເພື່ອຂຽນຄຳເຫັນ",
+  "inspect.active": "ຄລິກອົງປະກອບໃນໜ້າເພື່ອຂຽນຄຳເຫັນ. ກົດ Escape ເພື່ອຍົກເລີກ.",
+  "inspect.pageShortcut": "ໃນຂະນະທີ່ໂຟກັສຢູ່ທີ່ໜ້າ",
 }

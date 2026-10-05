@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "Audio: {{filename}}",
+  videoLabel: "Video: {{filename}}",
   "tree.all": "Semua berkas",
   "tree.empty": "Tidak ada berkas",
   "tree.changes.one": "{{count}} file diubah",
@@ -28,4 +30,14 @@ export default {
   "open.fileExplorer": "File Explorer",
   "open.fileManager": "File Manager",
   "command.open": "Buka berkas",
+  "view.preview": "Pratinjau",
+  "view.source": "Sumber",
+  "view.openInBrowser": "Buka di peramban",
+  "view.binary": "File biner · {{size}}",
+  "view.table.rows.one": "{{count}} baris",
+  "view.table.rows.other": "{{count}} baris",
+  "view.table.columns.one": "{{count}} kolom",
+  "view.table.columns.other": "{{count}} kolom",
+  "view.table.truncated": "Menampilkan {{shown}} baris pertama dari {{total}} baris.",
+  "view.fontSample": "Sfinks kuarsa hitam, nilailah sumpahku.",
 }

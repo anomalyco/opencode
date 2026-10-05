@@ -31,6 +31,7 @@ export default {
   "error.host-key":
     "Identitu hosta sa nepodarilo overiť. Overte jeho fingerprint pred aktualizáciou známych hostiteľov SSH.",
   "error.ssh-missing": "OpenSSH sa nenašiel. Nainštalujte OpenSSH klienta a uistite sa, že ssh je dostupný v PATH.",
+  "error.unavailable": "SSH nie je k dispozícii",
   "action.authenticate": "Overiť",
   "stage.connecting": "Pripájanie cez SSH…",
   "stage.authentication": "Vyžaduje sa autentifikácia",

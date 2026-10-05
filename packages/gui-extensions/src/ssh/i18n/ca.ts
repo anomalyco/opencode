@@ -42,4 +42,5 @@ export default {
   "menu.default": "Estableix com a predeterminat",
   "menu.defaultRemove": "Elimina el valor predeterminat",
   "menu.delete": "Suprimeix",
+  "error.unavailable": "SSH no està disponible",
 }

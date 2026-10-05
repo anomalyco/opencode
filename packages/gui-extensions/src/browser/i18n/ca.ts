@@ -13,4 +13,8 @@ export default {
   "failed.title": "No es pot accedir a l’URL",
   "failed.description": "Comproveu l’URL i la connexió i torneu-ho a provar.",
   "action.reload": "Torna a carregar",
+  "command.inspect": "Selecciona un element de la pàgina del navegador",
+  inspect: "Selecciona un element per comentar-lo",
+  "inspect.active": "Fes clic en un element de la pàgina per comentar-lo. Prem Escape per cancel·lar.",
+  "inspect.pageShortcut": "Mentre la pàgina té el focus",
 }

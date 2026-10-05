@@ -32,6 +32,7 @@ export default {
     "Serverin kimliyi təsdiqlənə bilmədi. SSH məlum hostlarını yeniləməzdən əvvəl onun barmaq izini təsdiqləyin.",
   "error.ssh-missing":
     "OpenSSH tapılmadı. OpenSSH müştərisini quraşdırın və ssh-nin PATH-də mövcud olduğundan əmin olun.",
+  "error.unavailable": "SSH əlçatan deyil",
   "action.authenticate": "Autentifikasiya et",
   "stage.connecting": "SSH üzərindən qoşulur…",
   "stage.authentication": "Doğrulama tələb olunur",

@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Associer un appareil",
+  "title": "Association",
+  "connection": "Réseau local",
+  "local.description": "Affichez les détails de connexion et un code QR pour connecter un appareil au même réseau.",
+  "local.open": "Afficher les détails",
+  "screenActive.title": "Maintenir l’écran actif",
+  "screenActive.description": "Empêchez l’écran de cet ordinateur de se mettre en veille pendant l’exécution d’OpenCode.",
+  "screenActive.error": "Impossible de modifier le réglage d’activité de l’écran. Réessayez.",
+  "description": "Connectez un autre appareil au serveur OpenCode de cet ordinateur.",
+  "qr": "Code QR d’association",
+  "copy": "Copier les détails",
+  "copy.error": "Impossible de copier les détails de l’association. Réessayez.",
+  "error": "Impossible de mettre à jour les détails de l’association. Réessayez.",
+}

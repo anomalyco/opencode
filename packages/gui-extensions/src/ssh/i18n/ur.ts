@@ -29,6 +29,7 @@ export default {
   "error.host-key":
     "میزبان کی شناخت کی تصدیق نہیں ہو سکی۔ اپنے SSH معروف میزبانوں کو اپ ڈیٹ کرنے سے پہلے اس کے فنگر پرنٹ کی تصدیق کریں۔",
   "error.ssh-missing": "OpenSSH نہیں ملا۔ ایک OpenSSH کلائنٹ انسٹال کریں اور یقینی بنائیں کہ PATH پر ssh دستیاب ہے۔",
+  "error.unavailable": "SSH دستیاب نہیں ہے",
   "action.authenticate": "تصدیق کریں۔",
   "stage.connecting": "SSH پر منسلک ہو رہا ہے…",
   "stage.authentication": "توثیق درکار ہے۔",

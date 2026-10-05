@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "오디오: {{filename}}",
+  videoLabel: "동영상: {{filename}}",
   "tree.all": "모든 파일",
   "tree.empty": "파일 없음",
   "tree.changes.one": "{{count}}개의 파일이 변경되었습니다.",
@@ -28,4 +30,14 @@ export default {
   "open.fileExplorer": "파일 탐색기",
   "open.fileManager": "파일 관리자",
   "command.open": "파일 열기",
+  "view.preview": "미리 보기",
+  "view.source": "소스",
+  "view.openInBrowser": "브라우저에서 열기",
+  "view.binary": "바이너리 파일 · {{size}}",
+  "view.table.rows.one": "{{count}}개 행",
+  "view.table.rows.other": "{{count}}개 행",
+  "view.table.columns.one": "{{count}}개 열",
+  "view.table.columns.other": "{{count}}개 열",
+  "view.table.truncated": "전체 {{total}}개 행 중 처음 {{shown}}개를 표시합니다.",
+  "view.fontSample": "키스의 고유 조건은 입술끼리 만나야 한다.",
 }

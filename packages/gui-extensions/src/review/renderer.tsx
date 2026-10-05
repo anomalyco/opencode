@@ -146,7 +146,7 @@ const setup: Setup<typeof Review> = (ctx) => {
     legacy: { review: TAB },
     mobile: {
       get title() {
-        return ctx.plural("mobile.title", 0)
+        return ctx.t("mobile.title")
       },
       order: 10,
       kind: "tab",

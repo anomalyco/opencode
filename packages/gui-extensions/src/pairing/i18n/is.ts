@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Para tæki",
+  "title": "Pörun",
+  "connection": "Staðarnet",
+  "local.description": "Skoðaðu upplýsingar um tengingu og QR-kóða til að tengja tæki á sama neti.",
+  "local.open": "Sýna upplýsingar",
+  "screenActive.title": "Halda skjánum virkum",
+  "screenActive.description": "Koma í veg fyrir að skjár tölvunnar fari í dvala meðan OpenCode er í gangi.",
+  "screenActive.error": "Ekki tókst að uppfæra stillingu skjávirkni. Reyndu aftur.",
+  "description": "Tengdu annað tæki við OpenCode-þjón þessarar tölvu.",
+  "qr": "QR-kóði fyrir pörun",
+  "copy": "Afrita upplýsingar",
+  "copy.error": "Ekki tókst að afrita upplýsingar um pörun. Reyndu aftur.",
+  "error": "Ekki tókst að uppfæra upplýsingar um pörun. Reyndu aftur.",
+}

@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Goşmaça sorag ber",
+  "title": "Jübütlemek",
+  "connection": "Ýerli tor",
+  "local.description": "Şol bir tordaky enjamy birikdirmek üçin birikme jikme-jikliklerini we QR koduny görüň.",
+  "local.open": "Jikme-jiklikleri görkez",
+  "screenActive.title": "Ekrany işjeň sakla",
+  "screenActive.description": "OpenCode işleýärkä bu kompýuteriň ekranynyň uklamagynyň öňüni alýar.",
+  "screenActive.error": "Ekranyň işjeňlik sazlamasyny täzelemek başartmady. Gaýtadan synanyşyň.",
+  "description": "Başga enjamy bu kompýuteriň OpenCode serwerine birikdiriň.",
+  "qr": "Jübütleme QR kody",
+  "copy": "Jogaby göçür",
+  "copy.error": "Jübütleme jikme-jikliklerini göçürmek başartmady. Gaýtadan synanyşyň.",
+  "error": "Bu soraga jogap bermek başartmady",
+}

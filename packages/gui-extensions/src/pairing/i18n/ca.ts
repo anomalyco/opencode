@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Enllaça el dispositiu",
+  "title": "Enllaçament",
+  "connection": "Xarxa local",
+  "local.description": "Consulta els detalls de la connexió i un codi QR per connectar un dispositiu a la mateixa xarxa.",
+  "local.open": "Mostra els detalls",
+  "screenActive.title": "Mantén la pantalla activa",
+  "screenActive.description": "Evita que la pantalla d’aquest ordinador s’apagui mentre OpenCode està en execució.",
+  "screenActive.error": "No s’ha pogut actualitzar la configuració d’activitat de la pantalla. Torna-ho a provar.",
+  "description": "Connecta un altre dispositiu al servidor OpenCode d’aquest ordinador.",
+  "qr": "Codi QR d’enllaçament",
+  "copy": "Copia els detalls",
+  "copy.error": "No s’han pogut copiar els detalls de l’enllaçament. Torna-ho a provar.",
+  "error": "No s’han pogut actualitzar els detalls de l’enllaçament. Torna-ho a provar.",
+}

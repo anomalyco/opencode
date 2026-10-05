@@ -40,4 +40,5 @@ export default {
   "menu.default": "Set sum forsett",
   "menu.defaultRemove": "Strika forsett",
   "menu.delete": "Strika",
+  "error.unavailable": "SSH er ikki tøkt",
 }

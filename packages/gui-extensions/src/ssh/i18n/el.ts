@@ -44,4 +44,5 @@ export default {
   "menu.default": "Ορισμός ως προεπιλογή",
   "menu.defaultRemove": "Κατάργηση προεπιλογής",
   "menu.delete": "Διαγραφή",
+  "error.unavailable": "Το SSH δεν είναι διαθέσιμο",
 }

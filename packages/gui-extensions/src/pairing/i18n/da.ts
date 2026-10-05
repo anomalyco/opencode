@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Par enhed",
+  "title": "Parring",
+  "connection": "Lokalt netværk",
+  "local.description": "Se forbindelsesoplysninger og en QR-kode for at forbinde en enhed på det samme netværk.",
+  "local.open": "Vis detaljer",
+  "screenActive.title": "Hold skærmen aktiv",
+  "screenActive.description": "Undgå, at computerens skærm går i dvale, mens OpenCode kører.",
+  "screenActive.error": "Skærmaktivitetsindstillingen kunne ikke opdateres. Prøv igen.",
+  "description": "Forbind en anden enhed til denne computers OpenCode-server.",
+  "qr": "QR-kode til parring",
+  "copy": "Kopiér oplysninger",
+  "copy.error": "Parringsoplysningerne kunne ikke kopieres. Prøv igen.",
+  "error": "Parringsoplysningerne kunne ikke opdateres. Prøv igen.",
+}

@@ -172,9 +172,7 @@ export const dict = {
   "provider.connect.toast.connected.description": "{{provider}} модела вече са налични за използване.",
   "provider.custom.title": "Персонализиран доставчик",
   "provider.custom.unavailable": "Персонализираните доставчици не са достъпни на този сървър",
-  "provider.custom.description.prefix": "Конфигурирайте OpenAI-съвместим доставчик. Вижте",
   "provider.custom.description.link": "документи за конфигурация на доставчика",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "ID на доставчика",
   "provider.custom.field.providerID.placeholder": "myprovider",
   "provider.custom.field.providerID.description": "Малки букви, цифри, тирета или долни черти",
@@ -322,7 +320,6 @@ export const dict = {
   "error.page.action.checkUpdates": "Проверете за актуализации",
   "error.page.action.updateTo": "Актуализиране до {{version}}",
   "error.page.circular": "[Кръгло]",
-  "error.page.report.prefix": "Моля, докладвайте тази грешка на екипа на OpenCode",
   "error.page.report.discord": "на Discord",
   "error.page.version": "Версия: {{version}}",
   "error.dev.rootNotFound":
@@ -900,4 +897,105 @@ export const dict = {
   "prompt.toast.uploading.cancelFile": "Отказ от качването на {{filename}}",
   "prompt.toast.uploadFailed.title": "Качването е неуспешно",
   "prompt.toast.uploading.percent": "{{percent}}%",
+  "command.provider.connect.description": "Влезте в OpenCode Go, OpenCode Console или друг доставчик на модели",
+  "dialog.model.chatgptPlan": "Използване на план ChatGPT",
+  "dialog.model.chatgptManageUsage": "Управление на използването",
+  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.freeName": "OpenCode Free",
+  "provider.connect.console.title": "Свързване към OpenCode Console",
+  "provider.connect.console.instructions":
+    "Продължете във вашия браузър. Потвърдете, че кодът, показан там, съвпада с този по-долу.",
+  "provider.connect.console.deviceCode": "Код на устройството",
+  "provider.connect.console.deviceCode.label": "Код на устройството: {{code}}",
+  "provider.connect.console.waiting": "Изчаква се потвърждение...",
+  "provider.connect.console.browserHint": "Браузърът не се отвори?",
+  "provider.connect.console.copyLink": "Копиране на връзката за вход",
+  "provider.connect.console.linkCopied": "Връзката за влизане е копирана",
+  "provider.connect.console.copyFailed":
+    "Връзката за влизане не можа да се копира. Отворете отново Console, за да продължите.",
+  "provider.connect.console.openAgain": "Отворете отново Console",
+  "provider.connect.console.browserFailed":
+    "Не можахме да отворим браузъра ви. Опитайте отново или копирайте връзката за влизане, за да продължите.",
+  "provider.connect.console.expired":
+    "Тази заявка за влизане е изтекла. Започнете отново, за да получите нов код на устройството.",
+  "provider.connect.console.denied":
+    "Достъпът беше отказан в Console. Опитайте отново, когато сте готови да се свържете.",
+  "provider.connect.console.statusFailed":
+    "Не можах да проверя оторизацията. Проверете връзката със сървъра и опитайте отново.",
+  "provider.connect.console.startFailed":
+    "Входът не можа да започне. Проверете връзката със сървъра и опитайте отново.",
+  "provider.connect.models.title": "Свързан с {{provider}}",
+  "provider.connect.models.description":
+    "Изберете модел, с който да започнете. Можете да смените моделите по всяко време.",
+  "provider.connect.models.available": "Налични модели",
+  "provider.connect.chatgptWelcome.title": "ChatGPT свързан",
+  "provider.connect.chatgptWelcome.description":
+    "Отговарящите на условията заявки в OpenCode могат да използват вашия план ChatGPT.",
+  "provider.connect.chatgptWelcome.usage": "Управлявайте използването в настройките на ChatGPT",
+  "provider.connect.chatgptWelcome.confirm": "разбрах",
+  "provider.connect.models.list": "Налични модели от {{provider}}",
+  "provider.connect.chatgptUsageLimit.title": "Лимитът за използване на ChatGPT е достигнат",
+  "provider.connect.chatgptUsageLimit.description":
+    "Проверете вашето използване и ограничения в настройките на ChatGPT.",
+  "provider.connect.chatgptUsageLimit.manage": "Управление на използването",
+  "provider.connect.chatgptUsageLimit.close": "затвори",
+  "provider.connect.console.refreshFailed":
+    "Вашият акаунт е свързан, но не можахме да заредим моделите ви. Опитайте отново да ги опресните.",
+  "provider.connect.console.connected": "OpenCode свързан",
+  "provider.connect.console.noModels":
+    "Вашият акаунт е свързан, но това работно пространство на Console няма налични модели. Проверете настройките му в Console, след което опреснете.",
+  "provider.connect.console.modelsLoading": "Вашите модели все още се зареждат. Опреснете, за да проверите отново.",
+  "provider.connect.console.refresh": "Обновете моделите",
+  "provider.connect.console.openingBrowser": "Браузърът се отваря...",
+  "provider.connect.console.serviceAccount": "Сервизен акаунт?",
+  "provider.connect.console.useApiKey": "Използвайте ключ API",
+  "provider.connect.remote.title": "Свързване на „{{server}}“",
+  "provider.connect.remote.description":
+    "Вашите OpenCode идентификационни данни ще се съхраняват на този сървър. Моделите ще бъдат достъпни през този сървър.",
+  "provider.connect.oauth.auto.confirmationCode.description":
+    "Проверете дали вашият браузър показва същия код, преди да разрешите.",
+  "provider.connect.oauth.auto.description":
+    "Вашият браузър се отваря, за да можете да влезете в {{provider}}. Върнете се тук, когато приключите.",
+  "provider.connect.oauth.code.description":
+    "Вашият браузър се отваря, за да можете да влезете в {{provider}}. Поставете кода за оторизация, който ви дава по-долу.",
+  "provider.connect.oauth.openBrowser": "Отворете браузъра",
+  "provider.connect.oauth.expired": "Разрешението е изтекло",
+  "provider.connect.console.apiKey.description":
+    "Поставете API ключ за сервизен акаунт. Създавате акаунти за услуги в OpenCode Console под Ключове.",
+  "provider.connect.console.apiKey.link": "Отворете Console",
+  "common.retry": "Опитайте отново",
+  "server.connect.link.expired":
+    "Тази връзка за сдвояване е изтекла или вече е била използвана. Стартирайте opencode pair, за да получите нов.",
+  "home.project.missing.title": "Папката на проекта не е намерена",
+  "home.project.missing.description": "Папката за {{name}} вече не съществува.",
+  "session.queue.undo": "Отмяна",
+  "session.queue.undoShell": "Излезте от режим на обвивка, преди да отмените подкана в опашка",
+  "session.queue.undoUnavailable": "Редактирайте тази подкана в опашката, за да запазите нейния файлов контекст",
+  "settings.guiExtensions.title": "Разширения",
+  "settings.guiExtensions.description": "Вградени GUI разширения в този прозорец. Налични са само в развойни версии.",
+  "settings.guiExtensions.reload": "Презареди",
+  "settings.guiExtensions.status.loading": "Зарежда се",
+  "settings.guiExtensions.status.active": "Активен",
+  "settings.guiExtensions.status.failed": "Неуспешно",
+  "settings.guiExtensions.status.disabled": "Забранено",
+  "settings.guiExtensions.status.blocked": "блокиран",
+  "settings.projects.empty.title": "Все още няма проекти",
+  "settings.projects.empty.description": "Добавете проект, за да започнете",
+  "settings.providers.account.manage": "Управление на {{provider}} акаунти",
+  "settings.providers.account.group": "Сметки",
+  "settings.providers.account.add": "Добавете акаунт",
+  "settings.providers.account.remove": "Премахване на акаунт...",
+  "settings.providers.account.active": "Активен",
+  "settings.providers.account.switched.title": "{{provider}} сменен акаунт",
+  "settings.providers.account.switched.description": "Сега използвам {{account}}.",
+  "settings.providers.account.removed.title": "{{account}} премахнат",
+  "settings.providers.account.removed.description": "{{provider}} повече няма да използва този акаунт.",
+  "settings.providers.console.available.one": "{{count}} доставчик е наличен",
+  "settings.providers.console.available.other": "{{count}} доставчика са налични",
+  "settings.providers.tag.account": "акаунт",
+  "settings.models.enableAll": "Активиране на всички модели",
+  "settings.models.disableAll": "Деактивирайте всички модели",
+  "provider.custom.description": "Конфигурирайте OpenAI-съвместим доставчик. Вижте{{link}}.",
+
+  "error.page.report": "Моля, докладвайте тази грешка на екипа на OpenCode {{link}}",
 }

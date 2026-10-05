@@ -30,6 +30,7 @@ export default {
     "হোস্টের পরিচয় যাচাই করা যায়নি। আপনার SSHটি পরিচিত হোস্ট আপডেট করার আগে এটির আঙ্গুলের ছাপ যাচাই করুন৷",
   "error.ssh-missing":
     "OpenSSH পাওয়া যায়নি। একটি OpenSSH ক্লায়েন্ট ইনস্টল করুন এবং নিশ্চিত করুন যে PATH-এ ssh উপলব্ধ রয়েছে৷",
+  "error.unavailable": "SSH উপলভ্য নয়",
   "action.authenticate": "প্রমাণীকরণ",
   "stage.connecting": "সংযোগ করা হচ্ছে SSH…",
   "stage.authentication": "প্রমাণীকরণ প্রয়োজন",

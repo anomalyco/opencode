@@ -13,4 +13,8 @@ export default {
   "failed.title": "Ekki næst í vefslóðina",
   "failed.description": "Athugaðu vefslóðina og tenginguna og reyndu aftur.",
   "action.reload": "Endurhlaða",
+  "command.inspect": "Velja atriði á vafrasíðunni",
+  inspect: "Velja atriði til að gera athugasemd við",
+  "inspect.active": "Smelltu á atriði á síðunni til að gera athugasemd við það. Ýttu á Escape til að hætta við.",
+  "inspect.pageShortcut": "Á meðan síðan er í fókus",
 }

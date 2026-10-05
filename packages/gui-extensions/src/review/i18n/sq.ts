@@ -1,9 +1,8 @@
 export default {
+  "mobile.title": "Ndryshime",
   "tab.title": "Rishikimi",
   "tab.count.one": "{{count}} skedar u ndryshua",
   "tab.count.other": "{{count}} skedarë u ndryshuan",
-  "mobile.title.one": "Ndryshimi",
-  "mobile.title.other": "Ndryshimet",
   "empty.git": "Ende nuk ka ndryshime të pazgjedhura",
   "empty.branch": "Ende nuk ka ndryshime në degë",
   "git.title": "Krijoni një depo Git",

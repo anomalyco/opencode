@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Para eindat",
+  "title": "Paring",
+  "connection": "Lokalt net",
+  "local.description": "Sí sambindingarupplýsingar og eina QR-kotu fyri at sambinda eina eind á sama neti.",
+  "local.open": "Vís upplýsingar",
+  "screenActive.title": "Halt skíggjan virknan",
+  "screenActive.description": "Forða skíggjanum á hesi teldu frá at fara í dvala, meðan OpenCode koyrir.",
+  "screenActive.error": "Tað bar ikki til at dagføra skíggjavirknið. Royn aftur.",
+  "description": "Sambind eina aðra eind við OpenCode-ambætaran á hesi teldu.",
+  "qr": "QR-kota til paring",
+  "copy": "Avrita upplýsingar",
+  "copy.error": "Tað bar ikki til at avrita paringarupplýsingar. Royn aftur.",
+  "error": "Tað bar ikki til at dagføra paringarupplýsingar. Royn aftur.",
+}

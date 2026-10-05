@@ -30,6 +30,7 @@ export default {
   "error.host-key":
     "Идентитет хоста није могао бити потврђен. Проверите отисак кључа пре него што ажурирате познате хостове SSH-а.",
   "error.ssh-missing": "OpenSSH није пронађен. Инсталирајте OpenSSH клијент и осигурајте да је ссх доступан у PATH-у.",
+  "error.unavailable": "SSH није доступан",
   "action.authenticate": "Аутентификуј се",
   "stage.connecting": "Повезивање преко SSH…",
   "stage.authentication": "Потребна аутентификација",

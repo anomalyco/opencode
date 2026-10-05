@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL-ile ei pääse juurde",
   "failed.description": "Kontrolli URL-i ja ühendust ning proovi uuesti.",
   "action.reload": "Laadi uuesti",
+  "command.inspect": "Vali brauseri lehel element",
+  inspect: "Vali element, mida kommenteerida",
+  "inspect.active": "Klõpsa lehel elemendil, et seda kommenteerida. Tühistamiseks vajuta Escape.",
+  "inspect.pageShortcut": "Kui lehel on fookus",
 }

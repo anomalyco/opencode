@@ -13,4 +13,8 @@ export default {
   "failed.title": "无法访问 URL",
   "failed.description": "请检查 URL 和网络连接，然后重试。",
   "action.reload": "重新加载",
+  "command.inspect": "在浏览器页面中选择元素",
+  inspect: "选择要评论的元素",
+  "inspect.active": "点击页面中的元素以添加评论。按 Escape 取消。",
+  "inspect.pageShortcut": "当页面获得焦点时",
 }

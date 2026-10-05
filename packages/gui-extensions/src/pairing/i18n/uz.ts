@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Qo‘shimcha savol berish",
+  "title": "Juftlash",
+  "connection": "Mahalliy tarmoq",
+  "local.description": "Shu tarmoqdagi qurilmani ulash uchun ulanish tafsilotlari va QR kodini ko‘ring.",
+  "local.open": "Tafsilotlarni ko‘rsatish",
+  "screenActive.title": "Ekranni faol saqlash",
+  "screenActive.description": "OpenCode ishlayotganida ushbu kompyuter displeyining uyqu rejimiga o‘tishiga yo‘l qo‘ymaydi.",
+  "screenActive.error": "Ekran faolligi sozlamasini yangilab bo‘lmadi. Qayta urinib ko‘ring.",
+  "description": "Boshqa qurilmani ushbu kompyuterning OpenCode serveriga ulang.",
+  "qr": "Juftlash QR kodi",
+  "copy": "Javobni nusxalash",
+  "copy.error": "Juftlash tafsilotlarini nusxalab bo‘lmadi. Qayta urinib ko‘ring.",
+  "error": "Bu savolga javob berib bo‘lmadi",
+}

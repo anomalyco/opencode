@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "音声：{{filename}}",
+  videoLabel: "動画：{{filename}}",
   "tree.all": "すべてのファイル",
   "tree.empty": "ファイルなし",
   "tree.changes.one": "{{count}} ファイルが変更されました",
@@ -28,4 +30,14 @@ export default {
   "open.fileExplorer": "エクスプローラー",
   "open.fileManager": "ファイルマネージャー",
   "command.open": "ファイルを開く",
+  "view.preview": "プレビュー",
+  "view.source": "ソース",
+  "view.openInBrowser": "ブラウザーで開く",
+  "view.binary": "バイナリファイル · {{size}}",
+  "view.table.rows.one": "{{count}} 行",
+  "view.table.rows.other": "{{count}} 行",
+  "view.table.columns.one": "{{count}} 列",
+  "view.table.columns.other": "{{count}} 列",
+  "view.table.truncated": "全 {{total}} 行のうち先頭 {{shown}} 行を表示しています。",
+  "view.fontSample": "いろはにほへと ちりぬるを。",
 }

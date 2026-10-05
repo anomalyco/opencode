@@ -172,9 +172,7 @@ export const dict = {
   "provider.connect.toast.connected.description": "{{provider}} μοντέλα είναι πλέον διαθέσιμα για χρήση.",
   "provider.custom.title": "Προσαρμοσμένος πάροχος",
   "provider.custom.unavailable": "Οι προσαρμοσμένοι πάροχοι δεν είναι διαθέσιμοι σε αυτόν τον διακομιστή",
-  "provider.custom.description.prefix": "Διαμορφώστε έναν πάροχο συμβατό με OpenAI. Δείτε το ",
   "provider.custom.description.link": "έγγραφα διαμόρφωσης παρόχου",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "Αναγνωριστικό παρόχου",
   "provider.custom.field.providerID.placeholder": "myprovider",
   "provider.custom.field.providerID.description": "Πεζά γράμματα, αριθμοί, παύλες ή κάτω παύλες",
@@ -323,7 +321,6 @@ export const dict = {
   "error.page.action.checkUpdates": "Έλεγχος για ενημερώσεις",
   "error.page.action.updateTo": "Ενημέρωση σε {{version}}",
   "error.page.circular": "[Circular]",
-  "error.page.report.prefix": "Αναφέρετε αυτό το σφάλμα στην ομάδα OpenCode",
   "error.page.report.discord": "στο Discord",
   "error.page.version": "Έκδοση: {{version}}",
   "error.dev.rootNotFound":
@@ -916,4 +913,105 @@ export const dict = {
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "Ακύρωση μεταφόρτωσης του {{filename}}",
   "prompt.toast.uploadFailed.title": "Η μεταφόρτωση απέτυχε",
+  "command.provider.connect.description": "Συνδεθείτε σε OpenCode Go, OpenCode Console ή σε άλλο πάροχο μοντέλου",
+  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.freeName": "OpenCode Free",
+  "provider.connect.console.title": "Σύνδεση στο OpenCode Console",
+  "provider.connect.console.instructions":
+    "Συνέχεια στο πρόγραμμα περιήγησής σας. Επιβεβαιώστε ότι ο κωδικός που εμφανίζεται εκεί ταιριάζει με τον παρακάτω.",
+  "provider.connect.console.deviceCode": "Κωδικός συσκευής",
+  "provider.connect.console.deviceCode.label": "Κωδικός συσκευής: {{code}}",
+  "provider.connect.console.waiting": "Αναμονή για επιβεβαίωση…",
+  "provider.connect.console.browserHint": "Το πρόγραμμα περιήγησης δεν άνοιξε;",
+  "provider.connect.console.copyLink": "Αντιγραφή συνδέσμου σύνδεσης",
+  "provider.connect.console.linkCopied": "Αντιγράφηκε ο σύνδεσμος σύνδεσης",
+  "provider.connect.console.copyFailed":
+    "Δεν ήταν δυνατή η αντιγραφή του συνδέσμου σύνδεσης. Ανοίξτε ξανά την Κονσόλα για να συνεχίσετε.",
+  "provider.connect.console.openAgain": "Ανοίξτε ξανά την Κονσόλα",
+  "provider.connect.console.browserFailed":
+    "Δεν μπορέσαμε να ανοίξουμε το πρόγραμμα περιήγησής σας. Δοκιμάστε ξανά ή αντιγράψτε τον σύνδεσμο σύνδεσης για να συνεχίσετε.",
+  "provider.connect.console.expired":
+    "Αυτό το αίτημα σύνδεσης έχει λήξει. Ξεκινήστε ξανά για να λάβετε έναν νέο κωδικό συσκευής.",
+  "provider.connect.console.denied":
+    "Απαγορεύτηκε η πρόσβαση στην Κονσόλα. Δοκιμάστε ξανά όταν είστε έτοιμοι να συνδεθείτε.",
+  "provider.connect.console.statusFailed":
+    "Δεν ήταν δυνατός ο έλεγχος της εξουσιοδότησης. Ελέγξτε τη σύνδεση του διακομιστή σας και δοκιμάστε ξανά.",
+  "provider.connect.console.startFailed":
+    "Δεν ήταν δυνατή η έναρξη της σύνδεσης. Ελέγξτε τη σύνδεση του διακομιστή σας και δοκιμάστε ξανά.",
+  "provider.connect.models.title": "Συνδεδεμένο στο {{provider}}",
+  "provider.connect.models.description":
+    "Επιλέξτε ένα μοντέλο για να ξεκινήσετε. Μπορείτε να αλλάξετε μοντέλα ανά πάσα στιγμή.",
+  "provider.connect.models.available": "Διαθέσιμα μοντέλα",
+  "provider.connect.models.list": "Μοντέλα διαθέσιμα από την {{provider}}",
+  "provider.connect.console.refreshFailed":
+    "Ο λογαριασμός σας είναι συνδεδεμένος, αλλά δεν μπορέσαμε να φορτώσουμε τα μοντέλα σας. Δοκιμάστε ξανά να τα ανανεώσετε.",
+  "provider.connect.console.connected": "Συνδέθηκε το OpenCode",
+  "provider.connect.console.noModels":
+    "Ο λογαριασμός σας είναι συνδεδεμένος, αλλά αυτός ο χώρος εργασίας της Κονσόλας δεν έχει διαθέσιμα μοντέλα. Ελέγξτε τη ρύθμισή του στην Κονσόλα και, στη συνέχεια, κάντε ανανέωση.",
+  "provider.connect.console.modelsLoading": "Τα μοντέλα σας φορτώνουν ακόμα. Κάντε ανανέωση για να ελέγξετε ξανά.",
+  "provider.connect.console.refresh": "Ανανέωση μοντέλων",
+  "provider.connect.console.openingBrowser": "Άνοιγμα προγράμματος περιήγησης…",
+  "provider.connect.console.serviceAccount": "Λογαριασμός υπηρεσίας;",
+  "provider.connect.console.useApiKey": "Χρησιμοποιήστε το κλειδί API",
+  "provider.connect.remote.title": 'Σύνδεση στο "{{server}}"',
+  "provider.connect.remote.description":
+    "Τα διαπιστευτήριά σας OpenCode θα αποθηκευτούν σε αυτόν τον διακομιστή. Τα μοντέλα θα είναι διαθέσιμα μέσω αυτού του διακομιστή.",
+  "provider.connect.oauth.auto.confirmationCode.description":
+    "Βεβαιωθείτε ότι το πρόγραμμα περιήγησής σας εμφανίζει τον ίδιο κωδικό πριν εξουσιοδοτήσετε.",
+  "provider.connect.oauth.auto.description":
+    "Ανοίγει το πρόγραμμα περιήγησής σας για να μπορείτε να συνδεθείτε στο {{provider}}. Επιστρέψτε εδώ όταν τελειώσετε.",
+  "provider.connect.oauth.code.description":
+    "Ανοίγει το πρόγραμμα περιήγησής σας για να μπορείτε να συνδεθείτε στο {{provider}}. Επικολλήστε τον κωδικό εξουσιοδότησης που σας δίνει παρακάτω.",
+  "provider.connect.oauth.openBrowser": "Ανοίξτε το πρόγραμμα περιήγησης",
+  "provider.connect.oauth.expired": "Η εξουσιοδότηση έληξε",
+  "provider.connect.console.apiKey.description":
+    "Επικολλήστε ένα κλειδί API για λογαριασμό υπηρεσίας. Μπορείτε να δημιουργήσετε λογαριασμούς υπηρεσίας στο OpenCode Console στην περιοχή Κλειδιά.",
+  "provider.connect.console.apiKey.link": "Ανοίξτε την Κονσόλα",
+  "common.retry": "Προσπαθήστε ξανά",
+  "server.connect.link.expired":
+    "Αυτός ο σύνδεσμος σύζευξης έληξε ή χρησιμοποιήθηκε ήδη. Εκτελέστε το opencode pair για να αποκτήσετε ένα νέο.",
+  "home.project.missing.title": "Ο φάκελος του έργου δεν βρέθηκε",
+  "home.project.missing.description": "Ο φάκελος για το {{name}} δεν υπάρχει πλέον.",
+  "session.queue.undo": "Αναίρεση",
+  "session.queue.undoShell": "Έξοδος από τη λειτουργία κελύφους προτού αναιρέσετε μια προτροπή στην ουρά",
+  "session.queue.undoUnavailable":
+    "Επεξεργαστείτε αυτήν την προτροπή στην ουρά για να διατηρήσετε το περιβάλλον του αρχείου",
+  "settings.projects.empty.title": "Δεν υπάρχουν ακόμη έργα",
+  "settings.projects.empty.description": "Προσθέστε ένα έργο για να ξεκινήσετε",
+  "settings.providers.account.manage": "Διαχείριση λογαριασμών {{provider}}",
+  "settings.providers.account.group": "Λογαριασμοί",
+  "settings.providers.account.add": "Προσθήκη λογαριασμού",
+  "settings.providers.account.remove": "Κατάργηση λογαριασμού…",
+  "settings.providers.account.active": "Ενεργός",
+  "settings.providers.account.switched.title": "Αλλαγή λογαριασμού {{provider}}",
+  "settings.providers.account.switched.description": "Τώρα χρησιμοποιείται το {{account}}.",
+  "settings.providers.account.removed.title": "Το {{account}} αφαιρέθηκε",
+  "settings.providers.account.removed.description": "Ο {{provider}} δεν θα χρησιμοποιεί πλέον αυτόν τον λογαριασμό.",
+  "settings.providers.console.available.one": "Διαθέσιμος πάροχος {{count}}",
+  "settings.providers.console.available.other": "Διαθέσιμοι πάροχοι {{count}}",
+  "settings.providers.tag.account": "Λογαριασμός",
+  "settings.models.enableAll": "Ενεργοποίηση όλων των μοντέλων",
+  "settings.models.disableAll": "Απενεργοποιήστε όλα τα μοντέλα",
+  "dialog.model.chatgptPlan": "Χρήση προγράμματος ChatGPT",
+  "dialog.model.chatgptManageUsage": "Διαχείριση χρήσης",
+  "provider.connect.chatgptWelcome.title": "Το ChatGPT συνδέθηκε",
+  "provider.connect.chatgptWelcome.description":
+    "Τα επιλέξιμα αιτήματα στο OpenCode μπορούν να χρησιμοποιούν το πρόγραμμά σας στο ChatGPT.",
+  "provider.connect.chatgptWelcome.usage": "Διαχείριση χρήσης στις ρυθμίσεις του ChatGPT",
+  "provider.connect.chatgptWelcome.confirm": "Εντάξει",
+  "provider.connect.chatgptUsageLimit.title": "Συμπληρώθηκε το όριο χρήσης του ChatGPT",
+  "provider.connect.chatgptUsageLimit.description": "Ελέγξτε τη χρήση και τα όριά σας στις ρυθμίσεις του ChatGPT.",
+  "provider.connect.chatgptUsageLimit.manage": "Διαχείριση χρήσης",
+  "provider.connect.chatgptUsageLimit.close": "Κλείσιμο",
+  "settings.guiExtensions.title": "Επεκτάσεις",
+  "settings.guiExtensions.description":
+    "Ενσωματωμένες επεκτάσεις GUI σε αυτό το παράθυρο. Μόνο για εκδόσεις ανάπτυξης.",
+  "settings.guiExtensions.reload": "Επαναφόρτωση",
+  "settings.guiExtensions.status.loading": "Φόρτωση",
+  "settings.guiExtensions.status.active": "Ενεργή",
+  "settings.guiExtensions.status.failed": "Απέτυχε",
+  "settings.guiExtensions.status.disabled": "Απενεργοποιημένη",
+  "settings.guiExtensions.status.blocked": "Αποκλεισμένη",
+  "provider.custom.description": "Διαμορφώστε έναν πάροχο συμβατό με OpenAI. Δείτε {{link}}.",
+  "error.page.report": "Αναφέρετε αυτό το σφάλμα στην ομάδα του OpenCode {{link}}",
 }

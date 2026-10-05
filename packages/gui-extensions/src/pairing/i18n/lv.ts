@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Savienot pārī ierīci",
+  "title": "Savienošana pārī",
+  "connection": "Lokālais tīkls",
+  "local.description": "Skatiet savienojuma informāciju un QR kodu, lai pievienotu ierīci tam pašam tīklam.",
+  "local.open": "Rādīt informāciju",
+  "screenActive.title": "Neļaut ekrānam izslēgties",
+  "screenActive.description": "Neļaujiet šī datora ekrānam pāriet miega režīmā, kamēr darbojas OpenCode.",
+  "screenActive.error": "Neizdevās atjaunināt ekrāna aktivitātes iestatījumu. Mēģiniet vēlreiz.",
+  "description": "Pievienojiet citu ierīci šī datora OpenCode serverim.",
+  "qr": "Pārī savienošanas QR kods",
+  "copy": "Kopēt informāciju",
+  "copy.error": "Neizdevās nokopēt pārī savienošanas informāciju. Mēģiniet vēlreiz.",
+  "error": "Neizdevās atjaunināt pārī savienošanas informāciju. Mēģiniet vēlreiz.",
+}

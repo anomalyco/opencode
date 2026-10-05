@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Parear dispositivo",
+  "title": "Pareamento",
+  "connection": "Rede local",
+  "local.description": "Veja os detalhes da conexão e um código QR para conectar um dispositivo à mesma rede.",
+  "local.open": "Mostrar detalhes",
+  "screenActive.title": "Manter a tela ativa",
+  "screenActive.description": "Impeça que a tela deste computador entre em suspensão enquanto o OpenCode estiver em execução.",
+  "screenActive.error": "Não foi possível atualizar a configuração de atividade da tela. Tente novamente.",
+  "description": "Conecte outro dispositivo ao servidor OpenCode deste computador.",
+  "qr": "Código QR de pareamento",
+  "copy": "Copiar detalhes",
+  "copy.error": "Não foi possível copiar os detalhes do pareamento. Tente novamente.",
+  "error": "Não foi possível atualizar os detalhes do pareamento. Tente novamente.",
+}

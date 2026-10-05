@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Parkoppla enhet",
+  "title": "Parkoppling",
+  "connection": "Lokalt nätverk",
+  "local.description": "Visa anslutningsinformation och en QR-kod för att ansluta en enhet till samma nätverk.",
+  "local.open": "Visa information",
+  "screenActive.title": "Håll skärmen aktiv",
+  "screenActive.description": "Förhindra att datorns bildskärm försätts i viloläge medan OpenCode körs.",
+  "screenActive.error": "Det gick inte att uppdatera inställningen för skärmaktivitet. Försök igen.",
+  "description": "Anslut en annan enhet till OpenCode-servern på den här datorn.",
+  "qr": "QR-kod för parkoppling",
+  "copy": "Kopiera information",
+  "copy.error": "Det gick inte att kopiera parkopplingsinformationen. Försök igen.",
+  "error": "Det gick inte att uppdatera parkopplingsinformationen. Försök igen.",
+}

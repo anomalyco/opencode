@@ -32,6 +32,7 @@ export default {
     "Идентификацијата на домаќинот не може да се потврди. Потврдете го неговиот отпечаток пред да ги ажурирате познатите SSH домаќини.",
   "error.ssh-missing":
     "OpenSSH не е пронајден. Инсталирајте OpenSSH клиент и осигурајте се дека ssh е достапен во PATH.",
+  "error.unavailable": "SSH не е достапен",
   "action.authenticate": "Автентицирај се",
   "stage.connecting": "Се поврзува преку SSH…",
   "stage.authentication": "Потребна е автентикација",

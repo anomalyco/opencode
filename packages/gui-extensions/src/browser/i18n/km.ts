@@ -13,4 +13,8 @@ export default {
   "failed.title": "មិនអាចចូលដល់ URL បានទេ",
   "failed.description": "ពិនិត្យ URL និងការតភ្ជាប់របស់អ្នក រួចសាកល្បងម្តងទៀត។",
   "action.reload": "ផ្ទុកឡើងវិញ",
+  "command.inspect": "ជ្រើសធាតុមួយក្នុងទំព័រកម្មវិធីរុករក",
+  inspect: "ជ្រើសធាតុមួយដើម្បីផ្ដល់មតិ",
+  "inspect.active": "ចុចធាតុមួយក្នុងទំព័រដើម្បីផ្ដល់មតិលើវា។ ចុច Escape ដើម្បីបោះបង់។",
+  "inspect.pageShortcut": "នៅពេលផ្ដោតលើទំព័រ",
 }

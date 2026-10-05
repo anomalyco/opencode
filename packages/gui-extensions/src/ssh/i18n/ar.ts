@@ -27,6 +27,7 @@ export default {
   "error.service": "اتصل SSH، لكن خادم OpenCode لم يصبح جاهزًا.",
   "error.host-key": "تعذر التحقق من هوية المضيف. تحقق من بصمته قبل تحديث قائمة مضيفي SSH المعروفين.",
   "error.ssh-missing": "لم يُعثر على OpenSSH. ثبّت عميل OpenSSH وتأكد من توفر ssh في PATH.",
+  "error.unavailable": "SSH غير متاح",
   "action.authenticate": "مصادقة",
   "stage.connecting": "جارٍ الاتصال عبر SSH…",
   "stage.authentication": "المصادقة مطلوبة",

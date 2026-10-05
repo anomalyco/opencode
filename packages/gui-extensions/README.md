@@ -35,16 +35,16 @@ Unit tests of logic that carries a contract sit beside the code as `*.test.ts`, 
 
 `Extension.define` is the manifest. The host reads it before any entry loads.
 
-| Field      | What it declares                                                              | In the context                                    |
-| ---------- | ----------------------------------------------------------------------------- | ------------------------------------------------- |
-| `id`       | Prefix of every id: commands, panel keys, stored keys, contract and Ipc ids   | `ctx.id`                                          |
+| Field      | What it declares                                                                   | In the context                                    |
+| ---------- | ---------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `id`       | Prefix of every id: commands, panel keys, stored keys, contract and Ipc ids        | `ctx.id`                                          |
 | `legacy`   | Earlier extension ids, newest first; preserves desktop enable state after a rename |                                                   |
-| `os`       | The operating systems it runs on; omit it to run everywhere, the web included |                                                   |
-| `provides` | Contracts from the window entry, Ipcs from the main entry                     | `ctx.provide(token, impl)`, and `ctx.uses.name()` |
-| `uses`     | Optional dependencies other extensions provide; it works while one is missing | `ctx.uses.name()` is `Live<T>`                    |
-| `requires` | Hard dependencies; setup runs only while all are active                       | `ctx.requires.name` is `T`                        |
-| `stores`   | State the host stores: window stores load before they are read, main's always | `ctx.stores.name`, each process its own           |
-| `i18n`     | The extension's copy                                                          | `ctx.t`, `ctx.plural`                             |
+| `os`       | The operating systems it runs on; omit it to run everywhere, the web included      |                                                   |
+| `provides` | Contracts from the window entry, Ipcs from the main entry                          | `ctx.provide(token, impl)`, and `ctx.uses.name()` |
+| `uses`     | Optional dependencies other extensions provide; it works while one is missing      | `ctx.uses.name()` is `Live<T>`                    |
+| `requires` | Hard dependencies; setup runs only while all are active                            | `ctx.requires.name` is `T`                        |
+| `stores`   | State the host stores: window stores load before they are read, main's always      | `ctx.stores.name`, each process its own           |
+| `i18n`     | The extension's copy                                                               | `ctx.t`, `ctx.plural`                             |
 
 - [`src/renderer.ts`](src/renderer.ts) and [`src/main.ts`](src/main.ts) list the built-ins, each through `Extension.compose`. These are the only files that name extensions.
 - Another extension imports only your `contract.ts`.
@@ -480,7 +480,71 @@ export default Extension.define({
     // Whether main keeps the display awake; stored before in the desktop's own settings namespace.
     keepScreenActive: Store.main(Schema.Boolean, false, { state: ["opencode.settings", "keepScreenActive"] }),
   },
-  i18n: { en },
+  i18n: {
+    en,
+    am: () => import("./i18n/am"),
+    ar: () => import("./i18n/ar"),
+    az: () => import("./i18n/az"),
+    bg: () => import("./i18n/bg"),
+    bn: () => import("./i18n/bn"),
+    br: () => import("./i18n/br"),
+    bs: () => import("./i18n/bs"),
+    ca: () => import("./i18n/ca"),
+    cs: () => import("./i18n/cs"),
+    da: () => import("./i18n/da"),
+    de: () => import("./i18n/de"),
+    dv: () => import("./i18n/dv"),
+    dz: () => import("./i18n/dz"),
+    el: () => import("./i18n/el"),
+    es: () => import("./i18n/es"),
+    et: () => import("./i18n/et"),
+    fa: () => import("./i18n/fa"),
+    fi: () => import("./i18n/fi"),
+    fo: () => import("./i18n/fo"),
+    fr: () => import("./i18n/fr"),
+    he: () => import("./i18n/he"),
+    hi: () => import("./i18n/hi"),
+    hr: () => import("./i18n/hr"),
+    hu: () => import("./i18n/hu"),
+    hy: () => import("./i18n/hy"),
+    id: () => import("./i18n/id"),
+    is: () => import("./i18n/is"),
+    it: () => import("./i18n/it"),
+    ja: () => import("./i18n/ja"),
+    ka: () => import("./i18n/ka"),
+    km: () => import("./i18n/km"),
+    ko: () => import("./i18n/ko"),
+    lo: () => import("./i18n/lo"),
+    lt: () => import("./i18n/lt"),
+    lv: () => import("./i18n/lv"),
+    mk: () => import("./i18n/mk"),
+    mn: () => import("./i18n/mn"),
+    ms: () => import("./i18n/ms"),
+    my: () => import("./i18n/my"),
+    ne: () => import("./i18n/ne"),
+    nl: () => import("./i18n/nl"),
+    no: () => import("./i18n/no"),
+    pa: () => import("./i18n/pa"),
+    pl: () => import("./i18n/pl"),
+    ro: () => import("./i18n/ro"),
+    ru: () => import("./i18n/ru"),
+    si: () => import("./i18n/si"),
+    sk: () => import("./i18n/sk"),
+    sl: () => import("./i18n/sl"),
+    sq: () => import("./i18n/sq"),
+    sr: () => import("./i18n/sr"),
+    sv: () => import("./i18n/sv"),
+    tg: () => import("./i18n/tg"),
+    th: () => import("./i18n/th"),
+    tk: () => import("./i18n/tk"),
+    tr: () => import("./i18n/tr"),
+    uk: () => import("./i18n/uk"),
+    ur: () => import("./i18n/ur"),
+    uz: () => import("./i18n/uz"),
+    vi: () => import("./i18n/vi"),
+    zh: () => import("./i18n/zh"),
+    zht: () => import("./i18n/zht"),
+  },
 })
 ```
 

@@ -30,6 +30,7 @@ export default {
   "error.host-key":
     "Зочны танилт баталгаажсангүй. SSH-т танигдсан хостыг шинэчлэхээсээ өмнө түүний хурууны хээг баталгаажуулна уу.",
   "error.ssh-missing": "OpenSSH олдсонгүй. OpenSSH клиент суулгаж, ssh PATH-д байгаа эсэхийг шалгана уу.",
+  "error.unavailable": "SSH боломжгүй",
   "action.authenticate": "Баталгаажуулах",
   "stage.connecting": "SSH-р холбож байна…",
   "stage.authentication": "Нэвтрэх хэрэгтэй",

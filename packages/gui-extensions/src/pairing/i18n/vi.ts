@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Ghép đôi thiết bị",
+  title: "Ghép đôi",
+  connection: "Mạng cục bộ",
+  "local.description": "Xem thông tin kết nối và mã QR để kết nối một thiết bị trên cùng mạng.",
+  "local.open": "Hiện chi tiết",
+  "screenActive.title": "Giữ màn hình luôn bật",
+  "screenActive.description": "Ngăn màn hình của máy tính này chuyển sang chế độ ngủ trong khi OpenCode đang chạy.",
+  "screenActive.error": "Không thể cập nhật cài đặt hoạt động của màn hình. Hãy thử lại.",
+  description: "Kết nối một thiết bị khác với máy chủ OpenCode trên máy này.",
+  qr: "Mã QR ghép đôi",
+  copy: "Sao chép chi tiết",
+  "copy.error": "Không thể sao chép thông tin ghép đôi. Hãy thử lại.",
+  error: "Không thể cập nhật thông tin ghép đôi. Hãy thử lại.",
+}

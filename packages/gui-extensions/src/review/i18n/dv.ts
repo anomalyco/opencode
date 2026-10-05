@@ -1,9 +1,8 @@
 export default {
   "tab.title": "ރިވިއު",
+  "mobile.title": "ބަދަލުތައް",
   "tab.count.one": "⁨{{count}}⁩ ފައިލް ބަދަލުވެއްޖެއެވެ",
   "tab.count.other": "⁨{{count}}⁩ ފައިލްތައް ބަދަލުވެއްޖެއެވެ",
-  "mobile.title.one": "ބަދަލު",
-  "mobile.title.other": "ބަދަލުތައް",
   "empty.git": "އަދި ކޮމިޓް ނުކުރާ ބަދަލެއް ނާދެއެވެ",
   "empty.branch": "އަދި އެއްވެސް ބްރާންޗަކަށް ބަދަލެއް ނާދެއެވެ",
   "git.title": "Git ރިޕޮޒިޓަރީއެއް އުފެއްދުން",

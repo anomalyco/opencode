@@ -88,10 +88,6 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "Não é possível exibir {{path}} porque é um arquivo binário.",
   "ui.fileMedia.binary.description.default": "Não é possível exibir o arquivo porque ele é binário.",
 
-  "ui.lineComment.label.prefix": "Comentar em ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Comentando em ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Adicionar comentário",
   "ui.lineComment.contextPlaceholder": "Adicionar contexto para esta alteração",
   "ui.lineComment.submit": "Comentar",
@@ -158,8 +154,6 @@ export const dict = {
   "ui.list.loading": "Carregando",
   "ui.list.empty": "Nenhum resultado",
   "ui.list.clearFilter": "Limpar filtro",
-  "ui.list.emptyWithFilter.prefix": "Nenhum resultado para",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Nova mensagem",
 
@@ -207,9 +201,6 @@ export const dict = {
   "ui.common.file.one": "arquivo",
   "ui.common.file.many": "arquivos",
   "ui.common.file.other": "arquivos",
-  "ui.common.question.one": "pergunta",
-  "ui.common.question.many": "perguntas",
-  "ui.common.question.other": "perguntas",
 
   "ui.common.add": "Adicionar",
   "ui.common.clear": "Limpar",
@@ -244,7 +235,6 @@ export const dict = {
   "ui.patch.action.moved": "Movido",
   "ui.patch.action.patched": "Patch aplicado",
 
-  "ui.question.subtitle.answered": "{{count}} respondidas",
   "ui.question.answer.none": "(sem resposta)",
   "ui.question.review.notAnswered": "(não respondida)",
   "ui.question.multiHint": "Selecione todas que se aplicam",
@@ -285,4 +275,15 @@ export const dict = {
   "ui.messagePart.context.updates": "Atualizações",
   "ui.promptInput.cancelUpload": "Cancelar envio",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.fileMedia.audioLabel": "Áudio: {{filename}}",
+  "ui.lineComment.label": "Comentar em {{selection}}",
+  "ui.lineComment.editorLabel": "Comentando em {{selection}}",
+  "ui.list.emptyWithFilter": "Nenhum resultado para {{query}}",
+  "ui.common.questionCount.one": "{{count}} pergunta",
+  "ui.question.subtitle.answeredCount.one": "{{count}} respondida",
+  "ui.common.questionCount.many": "{{count}} perguntas",
+  "ui.question.subtitle.answeredCount.many": "{{count}} respondidas",
+  "ui.common.questionCount.other": "{{count}} perguntas",
+  "ui.question.subtitle.answeredCount.other": "{{count}} respondidas",
 }

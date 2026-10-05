@@ -29,6 +29,7 @@ export default {
   "error.host-key":
     "मेज़बान की पहचान सत्यापित नहीं की जा सकी. अपने ज्ञात होस्ट को अपडेट करने से पहले उसके फ़िंगरप्रिंट को सत्यापित करें।",
   "error.ssh-missing": "OpenSSH नहीं मिला. एक OpenSSH क्लाइंट स्थापित करें और सुनिश्चित करें कि ssh PATH पर उपलब्ध है।",
+  "error.unavailable": "SSH उपलब्ध नहीं है",
   "action.authenticate": "प्रमाणित",
   "stage.connecting": "SSH से कनेक्ट हो रहा है…",
   "stage.authentication": "प्रमाणित करना",

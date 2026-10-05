@@ -28,6 +28,7 @@ export default {
   "error.service": "SSH متصل شد، اما سرور OpenCode آماده نشد.",
   "error.host-key": "هویت میزبان تأیید نشد. پیش از به‌روزرسانی میزبان‌های شناخته‌شدهٔ SSH، اثر انگشت آن را تأیید کنید.",
   "error.ssh-missing": "OpenSSH پیدا نشد. یک کارخواه OpenSSH نصب کنید و مطمئن شوید ssh در PATH در دسترس است.",
+  "error.unavailable": "SSH در دسترس نیست",
   "action.authenticate": "احراز هویت",
   "stage.connecting": "در حال اتصال از طریق SSH…",
   "stage.authentication": "احراز هویت الزامی است",

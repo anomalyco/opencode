@@ -37,4 +37,5 @@ export default {
   "menu.default": "ตั้งเป็นค่าเริ่มต้น",
   "menu.defaultRemove": "เอาค่าเริ่มต้นออก",
   "menu.delete": "ลบ",
+  "error.unavailable": "ไม่สามารถใช้ SSH ได้",
 }

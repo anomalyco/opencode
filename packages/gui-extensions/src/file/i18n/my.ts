@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "အသံ: {{filename}}",
+  videoLabel: "ဗီဒီယို: {{filename}}",
   "tree.all": "ဖိုင်အားလုံး",
   "tree.empty": "ဖိုင်မရှိပါ။",
   "tree.changes.one": "ဖိုင် {{count}} ဖိုင်ကို ပြောင်းထားသည်။",
@@ -28,4 +30,14 @@ export default {
   "open.fileExplorer": "File Explorer",
   "open.fileManager": "ဖိုင်မန်နေဂျာ",
   "command.open": "ဖိုင်ကိုဖွင့်ပါ။",
+  "view.preview": "အစမ်းကြည့်ရန်",
+  "view.source": "ရင်းမြစ်",
+  "view.openInBrowser": "ဘရောက်ဇာတွင် ဖွင့်ရန်",
+  "view.binary": "ဘိုင်နရီဖိုင် · {{size}}",
+  "view.table.rows.one": "အတန်း {{count}} တန်း",
+  "view.table.rows.other": "အတန်း {{count}} တန်း",
+  "view.table.columns.one": "ကော်လံ {{count}} ခု",
+  "view.table.columns.other": "ကော်လံ {{count}} ခု",
+  "view.table.truncated": "စုစုပေါင်း အတန်း {{total}} တန်းအနက် ပထမ {{shown}} တန်းကို ပြသထားသည်။",
+  "view.fontSample": "အနက်ရောင် သလင်းကျောက်စဖင့်ခ်၊ ကျွန်ုပ်၏ သစ္စာကို စီရင်ပါ။",
 }

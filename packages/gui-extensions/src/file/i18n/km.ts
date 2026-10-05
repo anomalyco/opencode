@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "អូឌីយ៉ូ៖ {{filename}}",
+  videoLabel: "វីដេអូ៖ {{filename}}",
   "tree.all": "ឯកសារទាំងអស់។",
   "tree.empty": "គ្មានឯកសារទេ។",
   "tree.changes.one": "ឯកសារ {{count}} បានផ្លាស់ប្តូរ",
@@ -28,4 +30,14 @@ export default {
   "open.fileExplorer": "កម្មវិធីរុករកឯកសារ",
   "open.fileManager": "កម្មវិធីគ្រប់គ្រងឯកសារ",
   "command.open": "បើកឯកសារ",
+  "view.preview": "មើលជាមុន",
+  "view.source": "ប្រភព",
+  "view.openInBrowser": "បើកក្នុងកម្មវិធីរុករក",
+  "view.binary": "ឯកសារប្រព័ន្ធគោលពីរ · {{size}}",
+  "view.table.rows.one": "{{count}} ជួរដេក",
+  "view.table.rows.other": "{{count}} ជួរដេក",
+  "view.table.columns.one": "{{count}} ជួរឈរ",
+  "view.table.columns.other": "{{count}} ជួរឈរ",
+  "view.table.truncated": "កំពុងបង្ហាញ {{shown}} ជួរដេកដំបូងក្នុងចំណោម {{total}} ជួរដេក។",
+  "view.fontSample": "ស្ហ្វីងថ្មខៀវខ្មៅ សូមវិនិច្ឆ័យពាក្យសម្បថរបស់ខ្ញុំ។",
 }

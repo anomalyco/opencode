@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL nav sasniedzams",
   "failed.description": "Pārbaudiet URL un savienojumu un mēģiniet vēlreiz.",
   "action.reload": "Ielādēt atkārtoti",
+  "command.inspect": "Atlasīt elementu pārlūkprogrammas lapā",
+  inspect: "Atlasīt komentējamo elementu",
+  "inspect.active": "Noklikšķiniet uz lapas elementa, lai to komentētu. Lai atceltu, nospiediet Escape.",
+  "inspect.pageShortcut": "Kamēr lapa ir fokusā",
 }

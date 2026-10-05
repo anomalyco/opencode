@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL’ye erişilemiyor",
   "failed.description": "URL’yi ve bağlantınızı kontrol edip yeniden deneyin.",
   "action.reload": "Yeniden yükle",
+  "command.inspect": "Tarayıcı sayfasında bir öğe seç",
+  inspect: "Yorum yapmak için bir öğe seç",
+  "inspect.active": "Yorum yapmak için sayfadaki bir öğeye tıklayın. İptal etmek için Escape tuşuna basın.",
+  "inspect.pageShortcut": "Sayfa odaktayken",
 }

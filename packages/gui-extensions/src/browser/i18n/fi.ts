@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL-osoitetta ei tavoiteta",
   "failed.description": "Tarkista URL-osoite ja yhteys ja yritä uudelleen.",
   "action.reload": "Lataa uudelleen",
+  "command.inspect": "Valitse selainikkunasta elementti",
+  inspect: "Valitse kommentoitava elementti",
+  "inspect.active": "Kommentoi sivun elementti napsauttamalla sitä. Peruuta painamalla Escape-näppäintä.",
+  "inspect.pageShortcut": "Kun sivu on kohdistettuna",
 }

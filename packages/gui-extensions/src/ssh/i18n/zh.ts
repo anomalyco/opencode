@@ -35,4 +35,5 @@ export default {
   "menu.default": "设为默认",
   "menu.defaultRemove": "取消默认",
   "menu.delete": "删除",
+  "error.unavailable": "SSH 不可用",
 }

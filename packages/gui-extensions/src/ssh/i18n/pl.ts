@@ -31,6 +31,7 @@ export default {
   "error.host-key":
     "Tożsamość hosta nie mogła zostać zweryfikowana. Zweryfikuj jego odcisk palca przed aktualizacją znanych hostów SSH.",
   "error.ssh-missing": "Nie znaleziono OpenSSH. Zainstaluj klienta OpenSSH i upewnij się, że ssh jest dostępne w PATH.",
+  "error.unavailable": "SSH jest niedostępne",
   "action.authenticate": "Uwierzytelnij się",
   "stage.connecting": "Łączenie przez SSH…",
   "stage.authentication": "Wymagane uwierzytelnienie",

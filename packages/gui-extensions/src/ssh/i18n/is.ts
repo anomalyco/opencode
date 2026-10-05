@@ -39,4 +39,5 @@ export default {
   "menu.default": "Stillt sem sjálfgefið",
   "menu.defaultRemove": "Fjarlægja sjálfgefið",
   "menu.delete": "Eyða",
+  "error.unavailable": "SSH er ekki tiltækt",
 }

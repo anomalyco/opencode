@@ -1,9 +1,8 @@
 export default {
   "tab.title": "レビュー",
+  "mobile.title": "変更",
   "tab.count.one": "{{count}} ファイルが変更されました",
   "tab.count.other": "{{count}} 個のファイルが変更されました",
-  "mobile.title.one": "変更",
-  "mobile.title.other": "変更",
   "empty.git": "コミットされていない変更はまだありません",
   "empty.branch": "ブランチの変更はまだありません",
   "git.title": "Git リポジトリを作成",

@@ -1,9 +1,8 @@
 export default {
   "tab.title": "Барраси",
+  "mobile.title": "Тағйирот",
   "tab.count.one": "{{count}} файл тағйир ёфт",
   "tab.count.other": "{{count}} файл тағйир ёфтанд",
-  "mobile.title.one": "Тағйир",
-  "mobile.title.other": "Тағйирот",
   "empty.git": "Ҳанӯз ягон тағйироти беэътиборнашуда",
   "empty.branch": "То ҳол ягон филиал тағир наёфтааст",
   "git.title": "Анбори Git эҷод кунед",

@@ -13,4 +13,9 @@ export default {
   "failed.title": "URL is niet bereikbaar",
   "failed.description": "Controleer de URL en je verbinding en probeer het opnieuw.",
   "action.reload": "Opnieuw laden",
+  "command.inspect": "Een element op de browserpagina selecteren",
+  inspect: "Een element selecteren om er commentaar bij te plaatsen",
+  "inspect.active":
+    "Klik op een element op de pagina om er commentaar bij te plaatsen. Druk op Escape om te annuleren.",
+  "inspect.pageShortcut": "Terwijl de pagina focus heeft",
 }

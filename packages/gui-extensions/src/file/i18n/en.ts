@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "Audio: {{filename}}",
+  videoLabel: "Video: {{filename}}",
   "tree.all": "All files",
   "tree.empty": "No files",
   "tree.changes.one": "Files Changed {{count}}",

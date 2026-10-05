@@ -309,6 +309,7 @@ export function PromptProjectSelector(props: {
                 ref={(el) => props.controller.setSearchRef(el)}
                 value={props.controller.search()}
                 placeholder={props.controller.labels.search()}
+                aria-label={props.controller.labels.search()}
                 aria-autocomplete="list"
                 aria-controls="prompt-project-menu"
                 aria-activedescendant={props.controller.active() || undefined}

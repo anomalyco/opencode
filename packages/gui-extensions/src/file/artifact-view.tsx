@@ -324,6 +324,7 @@ function ArtifactImage(props: MediaProps) {
 }
 
 function ArtifactVideo(props: MediaProps) {
+  const ctx = useExtension()
   const url = createBlobUrl(() => props.content)
 
   return (
@@ -333,6 +334,7 @@ function ArtifactVideo(props: MediaProps) {
           data-slot="artifact-media"
           class="w-full bg-black"
           controls
+          aria-label={ctx.t("videoLabel", { filename: getFilename(props.path) })}
           preload="metadata"
           playsinline
           onError={() => props.onError()}
@@ -348,6 +350,7 @@ function ArtifactVideo(props: MediaProps) {
 }
 
 function ArtifactAudio(props: MediaProps) {
+  const ctx = useExtension()
   const url = createBlobUrl(() => props.content)
 
   return (
@@ -362,6 +365,7 @@ function ArtifactAudio(props: MediaProps) {
             class="w-full"
             onError={() => props.onError()}
             controls
+            aria-label={ctx.t("audioLabel", { filename: getFilename(props.path) })}
             preload="metadata"
             src={url()}
             onLoadedMetadata={(event) => props.onInfo({ duration: event.currentTarget.duration })}

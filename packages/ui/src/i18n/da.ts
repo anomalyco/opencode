@@ -81,10 +81,6 @@ export const dict = {
   "ui.fileMedia.binary.title": "Binær fil",
   "ui.fileMedia.binary.description.path": "{{path}} kan ikke vises, fordi det er en binær fil.",
   "ui.fileMedia.binary.description.default": "Denne fil kan ikke vises, fordi det er en binær fil.",
-  "ui.lineComment.label.prefix": "Skriv en kommentar til ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Skriver en kommentar til ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Tilføj kommentar",
   "ui.lineComment.submit": "Kommenter",
   "ui.lineComment.cancel": "Annuller",
@@ -145,8 +141,6 @@ export const dict = {
   "ui.list.loading": "Indlæser",
   "ui.list.empty": "Ingen resultater",
   "ui.list.clearFilter": "Ryd filter",
-  "ui.list.emptyWithFilter.prefix": "Ingen resultater for",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Ny besked",
 
@@ -174,8 +168,6 @@ export const dict = {
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",
-  "ui.common.question.one": "spørgsmål",
-  "ui.common.question.other": "spørgsmål",
 
   "ui.common.add": "Tilføj",
   "ui.common.clear": "Ryd",
@@ -210,7 +202,6 @@ export const dict = {
   "ui.patch.action.moved": "Flyttet",
   "ui.patch.action.patched": "Patchet",
 
-  "ui.question.subtitle.answered": "{{count}} besvaret",
   "ui.question.answer.none": "(intet svar)",
   "ui.question.review.notAnswered": "(ikke besvaret)",
   "ui.question.multiHint": "Vælg alle der gælder",
@@ -269,4 +260,13 @@ export const dict = {
   "ui.messagePart.context.updates": "Opdateringer",
   "ui.promptInput.cancelUpload": "Annuller upload",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.fileMedia.audioLabel": "Lyd: {{filename}}",
+  "ui.lineComment.label": "Skriv en kommentar til {{selection}}",
+  "ui.lineComment.editorLabel": "Skriver en kommentar til {{selection}}",
+  "ui.list.emptyWithFilter": "Ingen resultater for {{query}}",
+  "ui.common.questionCount.one": "{{count}} spørgsmål",
+  "ui.question.subtitle.answeredCount.one": "{{count}} besvaret",
+  "ui.common.questionCount.other": "{{count}} spørgsmål",
+  "ui.question.subtitle.answeredCount.other": "{{count}} besvaret",
 }

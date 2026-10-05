@@ -1,0 +1,15 @@
+export default {
+  "command.title": "기기 페어링",
+  title: "페어링",
+  connection: "로컬 네트워크",
+  "local.description": "연결 정보와 QR 코드를 확인하여 같은 네트워크에 있는 기기를 연결하세요.",
+  "local.open": "세부 정보 표시",
+  "screenActive.title": "화면 켜짐 유지",
+  "screenActive.description": "OpenCode가 실행되는 동안 이 컴퓨터의 디스플레이가 절전 모드로 전환되지 않도록 합니다.",
+  "screenActive.error": "화면 활성 상태 설정을 업데이트할 수 없습니다. 다시 시도하세요.",
+  description: "다른 기기를 이 컴퓨터의 OpenCode 서버에 연결합니다.",
+  qr: "페어링 QR 코드",
+  copy: "세부 정보 복사",
+  "copy.error": "페어링 정보를 복사할 수 없습니다. 다시 시도하세요.",
+  error: "페어링 정보를 업데이트할 수 없습니다. 다시 시도하세요.",
+}

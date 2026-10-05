@@ -240,7 +240,13 @@ export function FileMedia(props: { media?: FileMediaOptions; fallback: () => JSX
 
             return (
               <div class="flex justify-center bg-background-stronger px-6 py-4">
-                <audio class="w-full max-w-xl" controls preload="metadata" onLoadedMetadata={onLoad}>
+                <audio
+                  class="w-full max-w-xl"
+                  controls
+                  preload="metadata"
+                  aria-label={i18n.t("ui.fileMedia.audioLabel", { filename: cfg()?.path ?? "" })}
+                  onLoadedMetadata={onLoad}
+                >
                   <source src={value()} type={audioMime()} />
                 </audio>
               </div>

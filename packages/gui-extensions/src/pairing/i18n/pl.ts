@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Zadaj pytanie poboczne",
+  "title": "Parowanie",
+  "connection": "Sieć lokalna",
+  "local.description": "Wyświetl szczegóły połączenia i kod QR, aby połączyć urządzenie w tej samej sieci.",
+  "local.open": "Pokaż szczegóły",
+  "screenActive.title": "Utrzymuj aktywny ekran",
+  "screenActive.description": "Zapobiega usypianiu ekranu tego komputera podczas działania OpenCode.",
+  "screenActive.error": "Nie udało się zaktualizować ustawienia aktywności ekranu. Spróbuj ponownie.",
+  "description": "Połącz inne urządzenie z serwerem OpenCode na tym komputerze.",
+  "qr": "Kod QR parowania",
+  "copy": "Kopiuj odpowiedź",
+  "copy.error": "Nie udało się skopiować szczegółów parowania. Spróbuj ponownie.",
+  "error": "Nie udało się odpowiedzieć na to pytanie",
+}

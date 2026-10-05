@@ -1153,7 +1153,7 @@ function FileTool(props: ToolProps & { title: string; count: number; children?: 
       rail={false}
       trigger={{
         title: props.title,
-        subtitle: props.count > 0 ? `${props.count} ${i18n.plural("ui.common.file", props.count)}` : "",
+        subtitle: props.count > 0 ? i18n.plural("ui.common.fileCount", props.count) : "",
       }}
     >
       {props.children}
@@ -1394,12 +1394,12 @@ function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
       Array.isArray(props.metadata.files) ? props.metadata.files.filter(changedFileDiff).map((file) => file.file) : [],
     ).size
     if (count === 0) return undefined
-    return `${count} ${i18n.plural("ui.common.file", count)}`
+    return i18n.plural("ui.common.fileCount", count)
   }
   if (props.tool === "question") {
     const count = Array.isArray(props.input.questions) ? props.input.questions.filter(questionInfo).length : 0
     if (count === 0) return undefined
-    return `${count} ${i18n.plural("ui.common.question", count)}`
+    return i18n.plural("ui.common.questionCount", count)
   }
   return undefined
 }
@@ -2247,8 +2247,8 @@ ToolRegistry.register({
     const subtitle = createMemo(() => {
       const count = questions().length
       if (count === 0) return ""
-      if (completed()) return i18n.t("ui.question.subtitle.answered", { count })
-      return `${count} ${i18n.plural("ui.common.question", count)}`
+      if (completed()) return i18n.plural("ui.question.subtitle.answeredCount", count)
+      return i18n.plural("ui.common.questionCount", count)
     })
 
     return (

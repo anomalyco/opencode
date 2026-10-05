@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL nepasiekiamas",
   "failed.description": "Patikrinkite URL bei ryšį ir bandykite dar kartą.",
   "action.reload": "Įkelti iš naujo",
+  "command.inspect": "Pasirinkti elementą naršyklės puslapyje",
+  inspect: "Pasirinkti komentuotiną elementą",
+  "inspect.active": "Spustelėkite puslapio elementą, kad jį pakomentuotumėte. Norėdami atšaukti, paspauskite Escape.",
+  "inspect.pageShortcut": "Kol puslapis aktyvus",
 }

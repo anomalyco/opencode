@@ -13,4 +13,8 @@ export default {
   "failed.title": "Không thể truy cập URL",
   "failed.description": "Kiểm tra URL và kết nối, rồi thử lại.",
   "action.reload": "Tải lại",
+  "command.inspect": "Chọn một phần tử trong trang trình duyệt",
+  inspect: "Chọn phần tử để nhận xét",
+  "inspect.active": "Nhấp vào một phần tử trên trang để nhận xét. Nhấn Escape để hủy.",
+  "inspect.pageShortcut": "Khi trang đang được lấy nét",
 }

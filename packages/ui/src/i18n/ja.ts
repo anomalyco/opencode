@@ -44,10 +44,6 @@ export const dict = {
   "ui.fileMedia.binary.title": "バイナリファイル",
   "ui.fileMedia.binary.description.path": "{{path}} はバイナリファイルのため表示できません。",
   "ui.fileMedia.binary.description.default": "このファイルはバイナリファイルのため表示できません。",
-  "ui.lineComment.label.prefix": "",
-  "ui.lineComment.label.suffix": "へのコメント",
-  "ui.lineComment.editorLabel.prefix": "",
-  "ui.lineComment.editorLabel.suffix": "へのコメントを作成中",
   "ui.lineComment.placeholder": "コメントを追加",
   "ui.lineComment.contextPlaceholder": "この変更に関するコンテキストを追加",
   "ui.lineComment.submit": "コメント",
@@ -111,8 +107,6 @@ export const dict = {
   "ui.list.loading": "読み込み中",
   "ui.list.empty": "結果なし",
   "ui.list.clearFilter": "フィルターをクリア",
-  "ui.list.emptyWithFilter.prefix": "次の検索結果はありません: ",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "新しいメッセージ",
 
@@ -162,8 +156,6 @@ export const dict = {
 
   "ui.common.file.one": "ファイル",
   "ui.common.file.other": "ファイル",
-  "ui.common.question.one": "質問",
-  "ui.common.question.other": "質問",
 
   "ui.common.add": "追加",
   "ui.common.clear": "消去",
@@ -198,7 +190,6 @@ export const dict = {
   "ui.patch.action.moved": "移動済み",
   "ui.patch.action.patched": "パッチ適用済み",
 
-  "ui.question.subtitle.answered": "{{count}}件回答済み",
   "ui.question.answer.none": "(回答なし)",
   "ui.question.review.notAnswered": "(未回答)",
   "ui.question.multiHint": "該当するものをすべて選択",
@@ -269,4 +260,13 @@ export const dict = {
   "ui.tool.browser": "ブラウザー",
   "ui.common.fileCount.one": "{{count}} ファイル",
   "ui.common.fileCount.other": "{{count}} ファイル",
+  "ui.fileMedia.audioLabel": "オーディオ： {{filename}}",
+  "ui.lineComment.label": "{{selection}}へのコメント",
+  "ui.lineComment.editorLabel": "{{selection}}へのコメント",
+  "ui.list.emptyWithFilter": "{{query}}の検索結果はありません",
+  "ui.common.questionCount.one": "{{count}}質問",
+  "ui.common.questionCount.other": "{{count}}質問",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.question.subtitle.answeredCount.one": "{{count}}回答済み",
+  "ui.question.subtitle.answeredCount.other": "{{count}}回答済み",
 }

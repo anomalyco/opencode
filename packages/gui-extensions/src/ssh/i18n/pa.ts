@@ -29,6 +29,7 @@ export default {
   "error.host-key":
     "میزبان دی شناخت دی تصدیق نئیں ہو سکی۔ اپنے SSH معروف میزبانوں کو اپ ڈیٹ کرنے سے پہلے اس دے فنگر پرنٹ دی تصدیق کرو۔",
   "error.ssh-missing": "OpenSSH نئیں ملا۔ ایک OpenSSH کلائنٹ انسٹال کرو اور یقینی بنائیں کہ PATH پر ssh دستیاب اے۔",
+  "error.unavailable": "SSH دستیاب نئیں اے",
   "action.authenticate": "تصدیق کرو",
   "stage.connecting": "SSH تے جڑنا...",
   "stage.authentication": "توثیق درکار اے۔",

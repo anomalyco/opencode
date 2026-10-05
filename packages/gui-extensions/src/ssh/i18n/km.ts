@@ -40,4 +40,5 @@ export default {
   "menu.default": "កំណត់ជាលំនាំដើម",
   "menu.defaultRemove": "លុបលំនាំដើមចេញ",
   "menu.delete": "លុប",
+  "error.unavailable": "មិនអាចប្រើ SSH បានទេ",
 }

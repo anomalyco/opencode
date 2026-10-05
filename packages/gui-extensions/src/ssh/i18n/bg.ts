@@ -31,6 +31,7 @@ export default {
   "error.host-key":
     "Самоличността на хоста не можа да бъде потвърдена. Проверете отпечатъка му, преди да актуализирате познатите SSH хостове.",
   "error.ssh-missing": "OpenSSH не е намерен. Инсталирайте OpenSSH клиент и се уверете, че ssh е наличен в PATH.",
+  "error.unavailable": "SSH не е наличен",
   "action.authenticate": "Удостоверяване",
   "stage.connecting": "Свързване чрез SSH…",
   "stage.authentication": "Изисква се удостоверяване",

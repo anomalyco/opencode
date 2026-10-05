@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "Âm thanh: {{filename}}",
+  videoLabel: "Video: {{filename}}",
   "tree.all": "Tất cả tệp",
   "tree.empty": "Không có tệp",
   "tree.changes.one": "{{count}} tệp đã thay đổi",
@@ -28,4 +30,14 @@ export default {
   "open.fileExplorer": "File Explorer",
   "open.fileManager": "Trình quản lý tệp",
   "command.open": "Mở tệp",
+  "view.preview": "Xem trước",
+  "view.source": "Nguồn",
+  "view.openInBrowser": "Mở trong trình duyệt",
+  "view.binary": "Tệp nhị phân · {{size}}",
+  "view.table.rows.one": "{{count}} hàng",
+  "view.table.rows.other": "{{count}} hàng",
+  "view.table.columns.one": "{{count}} cột",
+  "view.table.columns.other": "{{count}} cột",
+  "view.table.truncated": "Đang hiển thị {{shown}} hàng đầu tiên trong tổng số {{total}} hàng.",
+  "view.fontSample": "Nhân sư thạch anh đen, hãy phán xét lời thề của tôi.",
 }

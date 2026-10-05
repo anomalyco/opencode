@@ -42,4 +42,5 @@ export default {
   "menu.default": "Definir como padrão",
   "menu.defaultRemove": "Remover padrão",
   "menu.delete": "Excluir",
+  "error.unavailable": "SSH não está disponível",
 }

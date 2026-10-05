@@ -41,4 +41,5 @@ export default {
   "menu.default": "Đặt làm mặc định",
   "menu.defaultRemove": "Xóa mặc định",
   "menu.delete": "Xóa",
+  "error.unavailable": "SSH không khả dụng",
 }

@@ -172,9 +172,7 @@ export const dict = {
   "provider.connect.toast.connected.description": "{{provider}} моделҳо ҳоло барои истифода дастрасанд.",
   "provider.custom.title": "Провайдери фармоишӣ",
   "provider.custom.unavailable": "Провайдерҳои фармоишӣ дар ин сервер дастрас нестанд",
-  "provider.custom.description.prefix": "Провайдери OpenAI-мувофиқро танзим кунед. нигаред",
   "provider.custom.description.link": "ҳуҷҷатҳои конфигуратсияи провайдер",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "ID провайдер",
   "provider.custom.field.providerID.placeholder": "провайдери ман",
   "provider.custom.field.providerID.description": "Ҳарфҳои хурд, рақамҳо, дефис ё зерхат",
@@ -322,7 +320,6 @@ export const dict = {
   "error.page.action.checkUpdates": "Барои навсозиҳо санҷед",
   "error.page.action.updateTo": "Навсозӣ ба {{version}}",
   "error.page.circular": "[Даврача]",
-  "error.page.report.prefix": "Лутфан дар бораи ин хато ба дастаи OpenCode хабар диҳед",
   "error.page.report.discord": "дар Discord",
   "error.page.version": "Версия: {{version}}",
   "error.dev.rootNotFound":
@@ -904,4 +901,105 @@ export const dict = {
   "prompt.toast.uploading.cancelFile": "Боркунии файли {{filename}}-ро бекор кунед",
   "prompt.toast.uploadFailed.title": "Боркунӣ ноком шуд",
   "prompt.toast.uploading.percent": "{{percent}}%",
+  "command.provider.connect.description": "Ба OpenCode Go, OpenCode Console ё таъмикунандаи дигари модел ворид шавед",
+  "dialog.model.chatgptPlan": "Истифодаи нақшаи ChatGPT",
+  "dialog.model.chatgptManageUsage": "Идоракунии истифода",
+  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.freeName": "OpenCode Free",
+  "provider.connect.console.title": "Пайвастшавӣ ба OpenCode Console",
+  "provider.connect.console.instructions":
+    "Дар браузери худ идома диҳед. Тасдиқ кунед, ки рамзи дар он ҷо нишондодашуда ба рамзи дар поён мувофиқат мекунад.",
+  "provider.connect.console.deviceCode": "Рамзи дастгоҳ",
+  "provider.connect.console.deviceCode.label": "Рамзи дастгоҳ: {{code}}",
+  "provider.connect.console.waiting": "Интизори тасдиқ…",
+  "provider.connect.console.browserHint": "Браузер кушода нашуд?",
+  "provider.connect.console.copyLink": "Истиноди воридшавиро нусхабардорӣ кунед",
+  "provider.connect.console.linkCopied": "Истиноди воридшавӣ нусхабардорӣ карда шуд",
+  "provider.connect.console.copyFailed":
+    "Истиноди воридшавӣ нусхабардорӣ карда нашуд. Барои идома додан Console боз кушоед.",
+  "provider.connect.console.openAgain": "Console боз кушоед",
+  "provider.connect.console.browserFailed":
+    "Мо браузери шуморо кушода натавонистем. Барои идома додан дубора кӯшиш кунед ё истиноди вурудро нусхабардорӣ кунед.",
+  "provider.connect.console.expired":
+    "Мӯҳлати ин дархост барои ворид шудан ба охир расидааст. Барои гирифтани рамзи нави дастгоҳ аз нав оғоз кунед.",
+  "provider.connect.console.denied":
+    "Дастрасӣ дар Console рад карда шуд. Вақте ки шумо барои пайваст шудан омодаед, бори дигар кӯшиш кунед.",
+  "provider.connect.console.statusFailed":
+    "Иҷозатномаро тафтиш карда натавонист. Пайвасти сервери худро санҷед ва дубора кӯшиш кунед.",
+  "provider.connect.console.startFailed":
+    "Воридшавӣ оғоз карда нашуд. Пайвасти сервери худро санҷед ва дубора кӯшиш кунед.",
+  "provider.connect.models.title": "Ба {{provider}} пайваст шудааст",
+  "provider.connect.models.description":
+    "Барои оғоз кардани он моделеро интихоб кунед. Шумо метавонед моделҳоро дар вақти дилхоҳ иваз кунед.",
+  "provider.connect.models.available": "Моделҳои дастрас",
+  "provider.connect.chatgptWelcome.title": "ChatGPT пайваст",
+  "provider.connect.chatgptWelcome.description":
+    "Дархостҳои мувофиқ дар OpenCode метавонанд нақшаи ChatGPT-и шуморо истифода баранд.",
+  "provider.connect.chatgptWelcome.usage": "Истифодаро дар танзимоти ChatGPT идора кунед",
+  "provider.connect.chatgptWelcome.confirm": "Гир онро",
+  "provider.connect.models.list": "Моделҳо аз {{provider}} дастрасанд",
+  "provider.connect.chatgptUsageLimit.title": "Ҳадди истифодаи ChatGPT расид",
+  "provider.connect.chatgptUsageLimit.description": "Истифода ва маҳдудиятҳои худро дар танзимоти ChatGPT санҷед.",
+  "provider.connect.chatgptUsageLimit.manage": "Идоракунии истифода",
+  "provider.connect.chatgptUsageLimit.close": "Пӯшед",
+  "provider.connect.console.refreshFailed":
+    "Ҳисоби шумо пайваст аст, аммо мо моделҳои шуморо бор карда натавонистем. Бори дигар кӯшиш кунед, ки онҳоро тароват диҳед.",
+  "provider.connect.console.connected": "OpenCode пайваст",
+  "provider.connect.console.noModels":
+    "Ҳисоби шумо пайваст аст, аммо ин фазои кории Console моделҳои дастрас надорад. Танзимоти онро дар Console тафтиш кунед ва сипас навсозӣ кунед.",
+  "provider.connect.console.modelsLoading": "Моделҳои шумо ҳоло ҳам бор карда мешаванд. Барои бори дигар тафтиш кунед.",
+  "provider.connect.console.refresh": "Моделҳоро навсозӣ кунед",
+  "provider.connect.console.openingBrowser": "Кушодани браузер…",
+  "provider.connect.console.serviceAccount": "Ҳисоби хидмат?",
+  "provider.connect.console.useApiKey": "Калиди API-ро истифода баред",
+  "provider.connect.remote.title": 'Пайвастшавӣ дар "{{server}}"',
+  "provider.connect.remote.description":
+    "Маълумотномаҳои OpenCode-и шумо дар ин сервер нигоҳ дошта мешаванд. Моделҳо тавассути ин сервер дастрас хоҳанд шуд.",
+  "provider.connect.oauth.auto.confirmationCode.description":
+    "Тафтиш кунед, ки браузери шумо ҳамон кодро пеш аз иҷозат доданатон нишон медиҳад.",
+  "provider.connect.oauth.auto.description":
+    "Браузери шумо кушода мешавад, то шумо метавонед ба {{provider}} ворид шавед. Вақте ки шумо тамом мекунед, ба ин ҷо баргардед.",
+  "provider.connect.oauth.code.description":
+    "Браузери шумо кушода мешавад, то шумо метавонед ба {{provider}} ворид шавед. Рамзи иҷозатро, ки дар поён ба шумо медиҳад, часбонед.",
+  "provider.connect.oauth.openBrowser": "Браузерро кушоед",
+  "provider.connect.oauth.expired": "Иҷозатнома ба охир расид",
+  "provider.connect.console.apiKey.description":
+    "Калиди API-ро барои ҳисоби хидмат гузоред. Шумо дар OpenCode Console зери Калидҳо ҳисобҳои хидматӣ эҷод мекунед.",
+  "provider.connect.console.apiKey.link": "Console кушоед",
+  "common.retry": "Як бори дигар санҷед",
+  "server.connect.link.expired":
+    "Ин пайванди ҷуфткунӣ гузаштааст ё аллакай истифода шудааст. opencode pair-ро иҷро кунед, то навашро гиред.",
+  "home.project.missing.title": "Папкаи лоиҳа ёфт нашуд",
+  "home.project.missing.description": "Папкаи {{name}} дигар вуҷуд надорад.",
+  "session.queue.undo": "Бекор кардан",
+  "session.queue.undoShell": "Пеш аз бекор кардани промпти навбатдор, аз реҷаи ҷабҳа хориҷ шавед",
+  "session.queue.undoUnavailable": "Ин промптро дар навбат таҳрир кунед, то контексти файли он нигоҳ дошта шавад",
+  "settings.guiExtensions.title": "Васеъшавӣ",
+  "settings.guiExtensions.description":
+    "Васеъкуниҳои дарунсохти GUI дар ин равзана. Танҳо дар нусхаҳои таҳия дастрасанд.",
+  "settings.guiExtensions.reload": "Аз нав бор кунед",
+  "settings.guiExtensions.status.loading": "Бор карда мешавад",
+  "settings.guiExtensions.status.active": "Фаъол",
+  "settings.guiExtensions.status.failed": "Муваффақ шуд",
+  "settings.guiExtensions.status.disabled": "Маъюб",
+  "settings.guiExtensions.status.blocked": "Бастан",
+  "settings.projects.empty.title": "Ҳоло ягон лоиҳа нест",
+  "settings.projects.empty.description": "Барои оғоз кардани лоиҳа лоиҳа илова кунед",
+  "settings.providers.account.manage": "Ҳисобҳои {{provider}} -ро идора кунед",
+  "settings.providers.account.group": "Ҳисобҳо",
+  "settings.providers.account.add": "Илова кардани ҳисоб",
+  "settings.providers.account.remove": "Ҳисобро нест кунед…",
+  "settings.providers.account.active": "Фаъол",
+  "settings.providers.account.switched.title": "Ҳисоби {{provider}} иваз карда шуд",
+  "settings.providers.account.switched.description": "Ҳоло бо истифода аз {{account}}.",
+  "settings.providers.account.removed.title": "{{account}} хориҷ карда шуд",
+  "settings.providers.account.removed.description": "{{provider}} дигар ин ҳисобро истифода намебарад.",
+  "settings.providers.console.available.one": "{{count}} таъминкунанда дастрас аст",
+  "settings.providers.console.available.other": "{{count}} таъминкунанда дастрас аст",
+  "settings.providers.tag.account": "Ҳисоб",
+  "settings.models.enableAll": "Ҳама моделҳоро фаъол созед",
+  "settings.models.disableAll": "Ҳама моделҳоро хомӯш кунед",
+  "provider.custom.description": "Провайдери OpenAI-мувофиқро танзим кунед. нигаред{{link}}.",
+
+  "error.page.report": "Лутфан дар бораи ин хато ба дастаи OpenCode хабар диҳед {{link}}",
 }

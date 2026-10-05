@@ -176,9 +176,7 @@ export const dict = {
   "provider.connect.toast.connected.description": "\u2068{{provider}}\u2069 މޮޑެލްތައް މިހާރު ބޭނުންކުރެވޭނެ އެވެ.",
   "provider.custom.title": "ކަސްޓަމް ޕްރޮވައިޑަރެވެ",
   "provider.custom.unavailable": "މި ސަރވަރގައި ކަސްޓަމް ޕްރޮވައިޑަރުން ނުލިބެއެވެ",
-  "provider.custom.description.prefix": "OpenAI އާއި އެއްގޮތްވާ ޕްރޮވައިޑަރެއް ކޮންފިގްރޭޓްކުރުން. ބަލާށެވެ ",
   "provider.custom.description.link": "ޕްރޮވައިޑަރ ކޮންފިގް ޑޮކްސް",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "ޕްރޮވައިޑަރ ID",
   "provider.custom.field.providerID.placeholder": "myprovider އެވެ",
   "provider.custom.field.providerID.description": "ކުދި އަކުރުތަކާއި، ނަންބަރުތަކާއި، ހައިފެން ނުވަތަ އަންޑަރސްކޯރސް",
@@ -327,7 +325,6 @@ export const dict = {
   "error.page.action.checkUpdates": "އަޕްޑޭޓްތައް ހުރިތޯ ބަލާށެވެ",
   "error.page.action.updateTo": "\u2068{{version}}\u2069 އަށް އަޕްޑޭޓް ކުރާށެވެ",
   "error.page.circular": "[ސާކިއުލާ]",
-  "error.page.report.prefix": "މި އެރަރ OpenCode ޓީމަށް ރިޕޯޓް ކުރައްވާށެވެ",
   "error.page.report.discord": "Discord ގައި",
   "error.page.version": "ވަރޝަން: \u2068{{version}}\u2069",
   "error.dev.rootNotFound":
@@ -925,4 +922,110 @@ export const dict = {
   "prompt.toast.uploading.percent": "\u2068{{percent}}\u2069%",
   "prompt.toast.uploading.cancelFile": "\u2068{{filename}}\u2069 ގެ އަޕްލޯޑް ކެންސަލް ކުރަން",
   "prompt.toast.uploadFailed.title": "އަޕްލޯޑް ފޭލްވެއްޖެ",
+
+  "command.provider.connect.description":
+    "OpenCode ގޯ، OpenCode Console، ނުވަތަ އެހެން މޮޑެލް ޕްރޮވައިޑަރަކަށް ސައިން އިން ވާނެއެވެ",
+  "dialog.model.chatgptPlan": "ChatGPT ޕްލޭން ބޭނުންކޮށްގެން",
+  "dialog.model.chatgptManageUsage": "ބޭނުންކުރުން މެނޭޖްކުރުން",
+  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.freeName": "OpenCode Free",
+  "provider.connect.console.title": "OpenCode Console އާއި ގުޅުން",
+  "provider.connect.console.instructions":
+    "ބްރައުޒާގައި ކުރިއަށް ގެންދާށެވެ. އެތަނުގައި ދައްކާފައިވާ ކޯޑް ތިރީގައިވާ ކޯޑާ އެއްގޮތްވާކަން ކަށަވަރުކުރުން. ",
+  "provider.connect.console.deviceCode": "ޑިވައިސް ކޯޑް",
+  "provider.connect.console.deviceCode.label": "ޑިވައިސް ކޯޑް: \u2068{{code}}\u2069 އެވެ",
+  "provider.connect.console.waiting": "ކޮންފަރމަންސް އަށް އިންތިޒާރު ކުރަމުން... ",
+  "provider.connect.console.browserHint": "ބްރައުޒާ ނުހުޅުވީތަ؟",
+  "provider.connect.console.copyLink": "ކޮޕީ ސައިން-އިން ލިންކް",
+  "provider.connect.console.linkCopied": "ސައިން-އިން ލިންކް ކޮޕީކޮށްފިއެވެ",
+  "provider.connect.console.copyFailed":
+    "ސައިން-އިން ލިންކް ކޮޕީ ނުކުރެވުނެވެ. ކުރިއަށް ދިއުމަށް އަނެއްކާވެސް ކޮންސޯލް ހުޅުވާލާށެވެ. ",
+  "provider.connect.console.openAgain": "އަނެއްކާވެސް ކޮންސޯލް ހުޅުވާލާށެވެ",
+  "provider.connect.console.browserFailed":
+    "އަޅުގަނޑުމެންނަށް ތިޔަބޭފުޅުންގެ ބްރައުޒާ ހުޅުވޭ ގޮތެއް ނުވިއެވެ. އަލުން މަސައްކަތް ކުރާށެވެ ނުވަތަ ކުރިއަށް ދިއުމަށް ސައިން-އިން ލިންކް ކޮޕީ ކުރާށެވެ. ",
+  "provider.connect.console.expired":
+    "މި ސައިން-އިން ރިކުއެސްޓްގެ މުއްދަތު ހަމަވެއްޖެއެވެ. އާ ޑިވައިސް ކޯޑެއް ހޯދުމަށް އަލުން ފަށާށެވެ. ",
+  "provider.connect.console.denied":
+    "ކޮންސޯލްގައި އެކްސެސް އަށް އިންކާރު ކުރި އެވެ. ގުޅެން ތައްޔާރުވުމުން އަނެއްކާވެސް މަސައްކަތް ކުރާށެވެ. ",
+  "provider.connect.console.statusFailed":
+    "ހުއްދަ ޗެކް ނުކުރެވުނެވެ. ސަރވަރ ކަނެކްޝަން ޗެކްކޮށް އަލުން މަސައްކަތް ކުރާށެވެ. ",
+  "provider.connect.console.startFailed":
+    "ސައިން-އިން ފަށަން ނުކެރުނެވެ. ސަރވަރ ކަނެކްޝަން ޗެކްކޮށް އަލުން މަސައްކަތް ކުރާށެވެ. ",
+  "provider.connect.models.title": "\u2068{{provider}}\u2069 އާއި ގުޅިފައިވެއެވެ",
+  "provider.connect.models.description":
+    "ފަށަން މޮޑެލްއެއް ހޮވާށެވެ. ކޮންމެ ވަގުތަކު ވެސް މޮޑެލް ބަދަލު ކުރެވޭނެ އެވެ. ",
+  "provider.connect.models.available": "ލިބެން ހުރި މޮޑެލްތަކެވެ",
+  "provider.connect.chatgptWelcome.title": "ChatGPT ގުޅިއްޖެއެވެ",
+  "provider.connect.chatgptWelcome.description":
+    "OpenCodeގައި ޝަރުތު ހަމަވާ ރިކުއެސްޓްތަކަށް ތިބާގެ ChatGPT ޕްލޭން ބޭނުންކުރެވޭނެއެވެ. ",
+  "provider.connect.chatgptWelcome.usage": "ChatGPT ސެޓިންގްސްގައި ބޭނުންކުރުން މެނޭޖްކުރުން",
+  "provider.connect.chatgptWelcome.confirm": "ލިބިއްޖެ",
+  "provider.connect.models.list": "\u2068{{provider}}\u2069 އިން ލިބެން ހުރި މޮޑެލްތަކެވެ",
+  "provider.connect.chatgptUsageLimit.title": "ChatGPT ބޭނުންކުރުމުގެ ލިމިޓަށް ވާސިލްވެއްޖެއެވެ",
+  "provider.connect.chatgptUsageLimit.description":
+    "ChatGPT ސެޓިންގްސްގައި ތިބާގެ ބޭނުންކުރުމާއި ލިމިޓްތައް ޗެކްކުރުން. ",
+  "provider.connect.chatgptUsageLimit.manage": "ބޭނުންކުރުން މެނޭޖްކުރުން",
+  "provider.connect.chatgptUsageLimit.close": "ލެއްޕުން",
+  "provider.connect.console.refreshFailed":
+    "ތިޔަބޭފުޅުންގެ އެކައުންޓް ގުޅިފައި އޮތް ނަމަވެސް އަޅުގަނޑުމެންނަށް ތިޔަބޭފުޅުންގެ މޮޑެލްތައް ލޯޑް ނުކުރެވުނެވެ. އެމީހުން ތާޒާ ކުރަން އަނެއްކާވެސް މަސައްކަތް ކުރާށެވެ. ",
+  "provider.connect.console.connected": "OpenCode ގުޅިއްޖެއެވެ",
+  "provider.connect.console.noModels":
+    "ތިބާގެ އެކައުންޓް ގުޅިފައި އޮތް ނަމަވެސް މި ކޮންސޯލް ވޯކްސްޕޭސްގައި ލިބެން ހުރި މޮޑެލްތަކެއް ނެތެވެ. ކޮންސޯލްގައި އޭގެ ސެޓަޕް ޗެކްކޮށްލުމަށްފަހު ރިފްރެޝް ކުރާށެވެ. ",
+  "provider.connect.console.modelsLoading":
+    "ތިޔަބޭފުޅުންގެ މޮޑެލްތައް އަދިވެސް ލޯޑް ކުރަނީ. އަލުން ޗެކް ކުރަން ރިފްރެޝް ކުރާށެވެ. ",
+  "provider.connect.console.refresh": "މޮޑެލްތައް ރިފްރެޝް ކުރާށެވެ",
+  "provider.connect.console.openingBrowser": "ބްރައުޒާ ހުޅުވަނީ... ",
+  "provider.connect.console.serviceAccount": "ސާވިސް އެކައުންޓް؟",
+  "provider.connect.console.useApiKey": "API ކީ ބޭނުން ކުރާށެވެ",
+  "provider.connect.remote.title": "“\u2068{{server}}\u2069” ގައި ގުޅެމުން",
+  "provider.connect.remote.description":
+    "ތިބާގެ OpenCode ކްރެޑެންޝިއަލްސް މި ސަރވަރގައި ރައްކާކުރެވޭނެއެވެ. މި ސަރވަރ މެދުވެރިކޮށް މޮޑެލްތައް ލިބެން ހުންނާނެއެވެ. ",
+  "provider.connect.oauth.auto.confirmationCode.description":
+    "ހުއްދަ ދިނުމުގެ ކުރިން ބްރައުޒާއިން ހަމަ އެ ކޯޑެއް ފެންނަތޯ ބަލާށެވެ. ",
+  "provider.connect.oauth.auto.description":
+    "ބްރައުޒާ ހުޅުވޭތީ \u2068{{provider}}\u2069 އަށް ސައިން އިން ކުރެވޭނެއެވެ. ނިމުނީމަ އެނބުރި މިތަނަށް އަންނާށެވެ. ",
+  "provider.connect.oauth.code.description":
+    "ބްރައުޒާ ހުޅުވޭތީ \u2068{{provider}}\u2069 އަށް ސައިން އިން ކުރެވޭނެއެވެ. އެއިން ލިބޭ އޮތޯރައިޒޭޝަން ކޯޑް ތިރީގައި ޕޭސްޓް ކުރާށެވެ. ",
+  "provider.connect.oauth.openBrowser": "ބްރައުޒާ ހުޅުވާލާށެވެ",
+  "provider.connect.oauth.expired": "ހުއްދަގެ މުއްދަތު ހަމަވެއްޖެއެވެ",
+  "provider.connect.console.apiKey.description":
+    "ސާވިސް އެކައުންޓަކަށް API ކީއެއް ޕޭސްޓްކުރުން. ކީސްގެ ދަށުން OpenCode Consoleގައި ސާވިސް އެކައުންޓްތައް އުފައްދައެވެ. ",
+  "provider.connect.console.apiKey.link": "ކޮންސޯލް ހުޅުވާލާށެވެ",
+  "provider.custom.description":
+    "OpenAI އާއި އެއްގޮތްވާ ޕްރޮވައިޑަރެއް ކޮންފިގްރޭޓް ކުރުން. \u2068{{link}}\u2069 ބައްލަވާށެވެ. ",
+  "common.retry": "އަނެއްކާވެސް މަސައްކަތް ކުރާށެވެ",
+  "server.connect.link.expired":
+    "މި ޕެއަރިންގ ލިންކް މުއްދަތު ހަމަވެފައި ނުވަތަ ކުރިން ބޭނުންކޮށްފައި ވެއެވެ. އާ ލިންކެއް ހޯދުމަށް `opencode pair` ދުއްވާށެވެ. ",
+  "error.page.report": "މި އެރަރ OpenCode ޓީމް \u2068{{link}}\u2069 އަށް ރިޕޯޓް ކުރައްވާށެވެ",
+  "home.project.missing.title": "ޕްރޮޖެކްޓް ފޯލްޑަރ ނުފެނެއެވެ",
+  "home.project.missing.description": "\u2068{{name}}\u2069 އަށް ބޭނުންވާ ފޯލްޑަރ މިހާރު ނެތެވެ. ",
+  "session.queue.undo": "އަންޑޯ",
+  "session.queue.undoShell": "ކިއު ކޮށްފައިވާ ޕްރޮމްޕްޓެއް އަންޑޯ ކުރުމުގެ ކުރިން ޝެލް މޯޑު ދޫކޮށްލާށެވެ",
+  "session.queue.undoUnavailable": "މި ޕްރޮމްޕްޓް ކިއުގައި އެޑިޓްކޮށް އޭގެ ފައިލް ކޮންޓެކްސްޓް ރައްކާތެރިކުރުން",
+  "settings.guiExtensions.title": "އިތުރުކުރުން",
+  "settings.guiExtensions.description":
+    "މި ވިންޑޯގައިވާ ބިލްޓް-އިން GUI އެކްސްޓެންޝަންތައް. ޑިވެލޮޕްމަންޓް ބިލްޑްތަކަށް އެކަނި.",
+  "settings.guiExtensions.reload": "ރީލޯޑް",
+  "settings.guiExtensions.status.loading": "ލޯޑިންގ",
+  "settings.guiExtensions.status.active": "ހިންގަމުންދާ",
+  "settings.guiExtensions.status.failed": "ފޭލްވެއްޖެ",
+  "settings.guiExtensions.status.disabled": "ބޭނުންނުކުރެވޭ ގޮތަށް ހަދާފައި",
+  "settings.guiExtensions.status.blocked": "ބްލޮކްކޮށްފަ",
+  "settings.projects.empty.title": "އަދި އެއްވެސް މަޝްރޫއެއް ނުހިނގާ",
+  "settings.projects.empty.description": "ފަށަން ޕްރޮޖެކްޓެއް އިތުރުކުރުން",
+  "settings.providers.account.manage": "\u2068{{provider}}\u2069 އެކައުންޓްތައް މެނޭޖްކުރުން",
+  "settings.providers.account.group": "އެކައުންޓުތައް",
+  "settings.providers.account.add": "އެހެނިހެންAdd Account",
+  "settings.providers.account.remove": "އެކައުންޓް ނައްތާލުން... ",
+  "settings.providers.account.active": "ހިންގަމުންދާ",
+  "settings.providers.account.switched.title": "\u2068{{provider}}\u2069 އެކައުންޓް ބަދަލުވެއްޖެއެވެ",
+  "settings.providers.account.switched.description": "މިހާރު ބޭނުންކުރަނީ \u2068{{account}}\u2069 އެވެ. ",
+  "settings.providers.account.removed.title": "\u2068{{account}}\u2069 ނައްތާލާފައިވެއެވެ",
+  "settings.providers.account.removed.description":
+    "\u2068{{provider}}\u2069 އިން މި އެކައުންޓް ދެން ބޭނުން ނުކުރާނެއެވެ. ",
+  "settings.providers.console.available.one": "\u2068{{count}}\u2069 ޕްރޮވައިޑަރ ލިބެން ހުރެއެވެ",
+  "settings.providers.console.available.other": "\u2068{{count}}\u2069 ޕްރޮވައިޑަރުން ލިބެން ހުރެއެވެ",
+  "settings.providers.tag.account": "އެކައުންޓް",
+  "settings.models.enableAll": "ހުރިހާ މޮޑެލްތަކެއް އެނެބަލް ކުރުން",
+  "settings.models.disableAll": "ހުރިހާ މޮޑެލްއެއް ޑިސެބިލް ކުރާށެވެ",
 }

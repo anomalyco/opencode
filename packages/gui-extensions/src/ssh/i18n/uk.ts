@@ -29,6 +29,7 @@ export default {
   "error.host-key":
     "Не вдалося перевірити ідентичність хоста. Перевірте його відбиток перед оновленням відомих хостів SSH.",
   "error.ssh-missing": "OpenSSH не знайдено. Встановіть клієнт OpenSSH і переконайтеся, що ssh доступний у PATH.",
+  "error.unavailable": "SSH недоступний",
   "action.authenticate": "Автентифікуватися",
   "stage.connecting": "Підключення через SSH…",
   "stage.authentication": "Потрібна автентифікація",

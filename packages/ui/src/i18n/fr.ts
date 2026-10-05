@@ -88,10 +88,6 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "Impossible d'afficher {{path}} car il s'agit d'un fichier binaire.",
   "ui.fileMedia.binary.description.default": "Impossible d'afficher ce fichier car il s'agit d'un fichier binaire.",
 
-  "ui.lineComment.label.prefix": "Commenter ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Commentaire concernant ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Ajouter un commentaire",
   "ui.lineComment.contextPlaceholder": "Ajouter du contexte à cette modification",
   "ui.lineComment.submit": "Commenter",
@@ -158,8 +154,6 @@ export const dict = {
   "ui.list.loading": "Chargement",
   "ui.list.empty": "Aucun résultat",
   "ui.list.clearFilter": "Effacer le filtre",
-  "ui.list.emptyWithFilter.prefix": "Aucun résultat pour",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Nouveau message",
 
@@ -208,9 +202,6 @@ export const dict = {
   "ui.common.file.one": "fichier",
   "ui.common.file.many": "fichiers",
   "ui.common.file.other": "fichiers",
-  "ui.common.question.one": "question",
-  "ui.common.question.many": "questions",
-  "ui.common.question.other": "questions",
 
   "ui.common.add": "Ajouter",
   "ui.common.clear": "Effacer",
@@ -245,7 +236,6 @@ export const dict = {
   "ui.patch.action.moved": "Déplacé",
   "ui.patch.action.patched": "Correctif appliqué",
 
-  "ui.question.subtitle.answered": "Réponses : {{count}}",
   "ui.question.answer.none": "(pas de réponse)",
   "ui.question.review.notAnswered": "(non répondu)",
   "ui.question.multiHint": "Sélectionnez tout ce qui s'applique",
@@ -286,4 +276,15 @@ export const dict = {
   "ui.messagePart.context.updates": "Mises à jour",
   "ui.promptInput.cancelUpload": "Annuler le téléversement",
   "ui.promptInput.uploading": "{{percent}} %",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.fileMedia.audioLabel": "Audio : {{filename}}",
+  "ui.lineComment.label": "Commenter {{selection}}",
+  "ui.lineComment.editorLabel": "Commentaire concernant {{selection}}",
+  "ui.list.emptyWithFilter": "Aucun résultat pour {{query}}",
+  "ui.common.questionCount.one": "{{count}} question",
+  "ui.question.subtitle.answeredCount.one": "{{count}} réponse",
+  "ui.common.questionCount.many": "{{count}} questions",
+  "ui.question.subtitle.answeredCount.many": "{{count}} réponses",
+  "ui.common.questionCount.other": "{{count}} questions",
+  "ui.question.subtitle.answeredCount.other": "{{count}} réponses",
 }

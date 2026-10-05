@@ -1,9 +1,13 @@
 export default {
   "command.open": "פתיחת דפדפן",
   "command.reload": "טעינה מחדש של דף הדפדפן",
+  "command.inspect": "בחירת רכיב בדף הדפדפן",
   "tab.title": "דפדפן",
   "address.label": "כתובת הדפדפן",
   "address.placeholder": "הזנת URL",
+  inspect: "בחירת רכיב להוספת הערה",
+  "inspect.active": "יש ללחוץ על רכיב בדף כדי להוסיף עליו הערה. לביטול יש ללחוץ על Escape.",
+  "inspect.pageShortcut": "כאשר הדף ממוקד",
   "action.stop": "עצור",
   replaced: "השליטה בדפדפן הועברה לחלון שולחן עבודה אחר.",
   unsupported: "יישום שולחן העבודה הזה אינו תומך בחלונית הדפדפן.",

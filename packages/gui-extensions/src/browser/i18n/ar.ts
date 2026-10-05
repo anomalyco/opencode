@@ -1,9 +1,13 @@
 export default {
   "command.open": "فتح المتصفح",
   "command.reload": "إعادة تحميل صفحة المتصفح",
+  "command.inspect": "تحديد عنصر في صفحة المتصفح",
   "tab.title": "المتصفح",
   "address.label": "عنوان المتصفح",
   "address.placeholder": "أدخل URL",
+  inspect: "تحديد عنصر للتعليق عليه",
+  "inspect.active": "انقر على عنصر في الصفحة للتعليق عليه. اضغط على Escape للإلغاء.",
+  "inspect.pageShortcut": "عندما يكون التركيز على الصفحة",
   "action.stop": "إيقاف",
   replaced: "انتقل التحكم بالمتصفح إلى نافذة سطح مكتب أخرى.",
   unsupported: "لا يدعم تطبيق سطح المكتب هذا لوحة المتصفح.",

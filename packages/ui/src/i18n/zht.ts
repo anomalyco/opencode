@@ -48,10 +48,6 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "無法顯示 {{path}}，因為它是二進位檔案。",
   "ui.fileMedia.binary.description.default": "無法顯示此檔案，因為它是二進位檔案。",
 
-  "ui.lineComment.label.prefix": "留言於 ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "正在留言於 ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "新增留言",
   "ui.lineComment.contextPlaceholder": "新增此變更的相關資訊",
   "ui.lineComment.submit": "留言",
@@ -112,8 +108,6 @@ export const dict = {
   "ui.list.loading": "載入中",
   "ui.list.empty": "無結果",
   "ui.list.clearFilter": "清除篩選",
-  "ui.list.emptyWithFilter.prefix": "沒有關於",
-  "ui.list.emptyWithFilter.suffix": "的結果",
 
   "ui.messageNav.newMessage": "新訊息",
 
@@ -162,8 +156,6 @@ export const dict = {
 
   "ui.common.file.one": "個檔案",
   "ui.common.file.other": "個檔案",
-  "ui.common.question.one": "個問題",
-  "ui.common.question.other": "個問題",
 
   "ui.common.add": "新增",
   "ui.common.clear": "清除",
@@ -198,7 +190,6 @@ export const dict = {
   "ui.patch.action.moved": "已移動",
   "ui.patch.action.patched": "已套用修補",
 
-  "ui.question.subtitle.answered": "已回答 {{count}} 題",
   "ui.question.answer.none": "（無答案）",
   "ui.question.review.notAnswered": "（未回答）",
   "ui.question.multiHint": "可多選",
@@ -272,4 +263,13 @@ export const dict = {
   "ui.tool.browser": "瀏覽器",
   "ui.common.fileCount.one": "{{count}} 個檔案",
   "ui.common.fileCount.other": "{{count}} 個檔案",
+  "ui.fileMedia.audioLabel": "音訊: {{filename}}",
+  "ui.lineComment.label": "對{{selection}}的評論",
+  "ui.lineComment.editorLabel": "關於{{selection}}的評論",
+  "ui.list.emptyWithFilter": "{{query}}無結果",
+  "ui.common.questionCount.one": "{{count}}問題",
+  "ui.common.questionCount.other": "{{count}}問題",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.question.subtitle.answeredCount.one": "{{count}}回答",
+  "ui.question.subtitle.answeredCount.other": "{{count}}回答",
 } satisfies Partial<Record<Keys, string>>

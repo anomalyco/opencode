@@ -1,0 +1,15 @@
+export default {
+  "command.title": "የጎን ጥያቄ ጠይቅ",
+  "title": "ማጣመር",
+  "connection": "አካባቢያዊ አውታረ መረብ",
+  "local.description": "በተመሳሳይ አውታረ መረብ ላይ መሣሪያ ለማገናኘት የግንኙነት ዝርዝሮችን እና QR ኮድን ይመልከቱ።",
+  "local.open": "ዝርዝሮችን አሳይ",
+  "screenActive.title": "ማያ ገጹን ንቁ አድርግ",
+  "screenActive.description": "OpenCode እየሰራ ሳለ የዚህ ኮምፒውተር ማሳያ እንዳይተኛ ይከላከላል።",
+  "screenActive.error": "የማያ ገጽ እንቅስቃሴ ቅንብሩን ማዘመን አልተቻለም። እንደገና ይሞክሩ።",
+  "description": "ሌላ መሣሪያ ከዚህ ማሽን OpenCode አገልጋይ ጋር ያገናኙ።",
+  "qr": "የማጣመር QR ኮድ",
+  "copy": "መልሱን ቅዳ",
+  "copy.error": "የማጣመር ዝርዝሮችን መቅዳት አልተቻለም። እንደገና ይሞክሩ።",
+  "error": "ለዚያ ጥያቄ መልስ መስጠት አልተቻለም",
+}

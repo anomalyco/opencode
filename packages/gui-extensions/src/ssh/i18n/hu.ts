@@ -42,4 +42,5 @@ export default {
   "menu.default": "Beállítás alapértelmezettként",
   "menu.defaultRemove": "Alapértelmezés eltávolítása",
   "menu.delete": "Törlés",
+  "error.unavailable": "Az SSH nem érhető el",
 }

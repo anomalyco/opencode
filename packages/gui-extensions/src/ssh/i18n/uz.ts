@@ -32,6 +32,7 @@ export default {
     "Uy egasining shaxsini tekshirib bo‘lmadi. SSH ma'lum xostlarini yangilashdan oldin uning barmoq izini tekshiring.",
   "error.ssh-missing":
     "OpenSSH topilmadi. OpenSSH mijozini o'rnating va PATH da ssh mavjudligiga ishonch hosil qiling.",
+  "error.unavailable": "SSH mavjud emas",
   "action.authenticate": "Autentifikatsiya qilish",
   "stage.connecting": "SSH orqali ulanmoqda…",
   "stage.authentication": "Autentifikatsiya talab qilinadi",

@@ -19,8 +19,6 @@ export const dict: Record<string, string> = {
   "ui.tool.loadedSkills.many": "Завантажено навичок {{name}}",
   "ui.common.file.few": "файли",
   "ui.common.file.many": "файлів",
-  "ui.common.question.few": "запитання",
-  "ui.common.question.many": "запитань",
   "ui.messagePart.context.notice.few": "{{count}} примітки",
   "ui.messagePart.context.notice.many": "{{count}} приміток",
   "ui.messagePart.context.thought.few": "думки",
@@ -74,10 +72,6 @@ export const dict: Record<string, string> = {
   "ui.fileMedia.binary.description.path": "Неможливо відобразити {{path}}, оскільки це двійковий файл.",
   "ui.fileMedia.binary.description.default": "Неможливо відобразити цей файл, оскільки він двійковий.",
 
-  "ui.lineComment.label.prefix": "Коментар до ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Коментування: ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Додати коментар",
   "ui.lineComment.contextPlaceholder": "Додати контекст для цієї зміни",
   "ui.lineComment.submit": "Коментувати",
@@ -140,8 +134,6 @@ export const dict: Record<string, string> = {
   "ui.list.loading": "Завантаження",
   "ui.list.empty": "Немає результатів",
   "ui.list.clearFilter": "Очистити фільтр",
-  "ui.list.emptyWithFilter.prefix": "Немає результатів для",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.fileSearch.placeholder": "Знайти",
   "ui.fileSearch.previousMatch": "Попередній збіг",
@@ -199,8 +191,6 @@ export const dict: Record<string, string> = {
 
   "ui.common.file.one": "файл",
   "ui.common.file.other": "файлів",
-  "ui.common.question.one": "запитання",
-  "ui.common.question.other": "запитань",
 
   "ui.common.add": "Додати",
   "ui.common.clear": "Очистити",
@@ -237,7 +227,6 @@ export const dict: Record<string, string> = {
   "ui.patch.action.moved": "Переміщено",
   "ui.patch.action.patched": "Застосовано патч",
 
-  "ui.question.subtitle.answered": "{{count}} відповідей",
   "ui.question.answer.none": "(немає відповіді)",
   "ui.question.review.notAnswered": "(не відповіли)",
   "ui.question.multiHint": "Виберіть усі відповідні варіанти",
@@ -300,4 +289,17 @@ export const dict: Record<string, string> = {
   "ui.messagePart.context.updates": "Оновлення",
   "ui.promptInput.cancelUpload": "Скасувати завантаження",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.fileMedia.audioLabel": "Аудіо: {{filename}}",
+  "ui.lineComment.label": "Коментар до {{selection}}",
+  "ui.lineComment.editorLabel": "Коментування: {{selection}}",
+  "ui.list.emptyWithFilter": "Немає результатів для {{query}}",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.common.questionCount.one": "{{count}} запитання",
+  "ui.question.subtitle.answeredCount.one": "{{count}} відповідей",
+  "ui.common.questionCount.other": "{{count}} запитання",
+  "ui.question.subtitle.answeredCount.other": "{{count}} відповідей",
+  "ui.common.questionCount.few": "{{count}} запитання",
+  "ui.question.subtitle.answeredCount.few": "{{count}} відповідей",
+  "ui.common.questionCount.many": "{{count}} запитань",
+  "ui.question.subtitle.answeredCount.many": "{{count}} відповідей",
 }

@@ -42,4 +42,5 @@ export default {
   "menu.default": "Als standaard instellen",
   "menu.defaultRemove": "Standaard verwijderen",
   "menu.delete": "Verwijderen",
+  "error.unavailable": "SSH is niet beschikbaar",
 }

@@ -66,10 +66,6 @@ export const dict: Record<Keys, string> = {
   "ui.fileMedia.binary.description.path": "{{path}} kan ikke vises fordi det er en binærfil.",
   "ui.fileMedia.binary.description.default": "Denne filen kan ikke vises fordi det er en binærfil.",
 
-  "ui.lineComment.label.prefix": "Legg inn kommentar til ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Kommentar til ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Legg til kommentar",
   "ui.lineComment.contextPlaceholder": "Legg til kontekst for denne endringen",
   "ui.lineComment.submit": "Kommenter",
@@ -126,8 +122,6 @@ export const dict: Record<Keys, string> = {
   "ui.list.loading": "Laster",
   "ui.list.empty": "Ingen resultater",
   "ui.list.clearFilter": "Tøm filter",
-  "ui.list.emptyWithFilter.prefix": "Ingen resultater for",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Ny melding",
 
@@ -174,8 +168,6 @@ export const dict: Record<Keys, string> = {
 
   "ui.common.file.one": "fil",
   "ui.common.file.other": "filer",
-  "ui.common.question.one": "spørsmål",
-  "ui.common.question.other": "spørsmål",
 
   "ui.common.add": "Legg til",
   "ui.common.back": "Tilbake",
@@ -210,7 +202,6 @@ export const dict: Record<Keys, string> = {
   "ui.patch.action.moved": "Flyttet",
   "ui.patch.action.patched": "Oppdatert",
 
-  "ui.question.subtitle.answered": "{{count}} besvart",
   "ui.question.answer.none": "(ingen svar)",
   "ui.question.review.notAnswered": "(ikke besvart)",
   "ui.question.multiHint": "Velg alle som gjelder",
@@ -274,4 +265,13 @@ export const dict: Record<Keys, string> = {
   "ui.messagePart.context.updates": "Oppdateringer",
   "ui.promptInput.cancelUpload": "Avbryt opplasting",
   "ui.promptInput.uploading": "{{percent}} %",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.fileMedia.audioLabel": "Lyd: {{filename}}",
+  "ui.lineComment.label": "Legg inn kommentar til {{selection}}",
+  "ui.lineComment.editorLabel": "Kommentar til {{selection}}",
+  "ui.list.emptyWithFilter": "Ingen resultater for {{query}}",
+  "ui.common.questionCount.one": "{{count}} spørsmål",
+  "ui.question.subtitle.answeredCount.one": "{{count}} besvart",
+  "ui.common.questionCount.other": "{{count}} spørsmål",
+  "ui.question.subtitle.answeredCount.other": "{{count}} besvart",
 }

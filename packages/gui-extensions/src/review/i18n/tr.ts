@@ -1,9 +1,8 @@
 export default {
+  "mobile.title": "Değişiklikler",
   "tab.title": "İnceleme",
   "tab.count.one": "{{count}} dosya değiştirildi",
   "tab.count.other": "{{count}} dosya değiştirildi",
-  "mobile.title.one": "Değişiklik",
-  "mobile.title.other": "Değişiklik",
   "empty.git": "Henüz işlenmemiş değişiklik yok",
   "empty.branch": "Henüz dal değişikliği yok",
   "git.title": "Git deposu oluştur",

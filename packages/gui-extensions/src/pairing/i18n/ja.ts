@@ -1,0 +1,15 @@
+export default {
+  "command.title": "デバイスをペアリング",
+  title: "ペアリング",
+  connection: "ローカルネットワーク",
+  "local.description": "接続情報と QR コードを表示し、同じネットワーク上のデバイスを接続します。",
+  "local.open": "詳細を表示",
+  "screenActive.title": "画面をオンのままにする",
+  "screenActive.description": "OpenCode の実行中に、このコンピューターのディスプレイがスリープしないようにします。",
+  "screenActive.error": "画面の動作設定を更新できませんでした。もう一度お試しください。",
+  description: "別のデバイスをこのマシンの OpenCode サーバーに接続します。",
+  qr: "ペアリング用 QR コード",
+  copy: "詳細をコピー",
+  "copy.error": "ペアリング情報をコピーできませんでした。もう一度お試しください。",
+  error: "ペアリング情報を更新できませんでした。もう一度お試しください。",
+}

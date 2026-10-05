@@ -41,4 +41,5 @@ export default {
   "menu.default": "Iestatīt kā noklusējumu",
   "menu.defaultRemove": "Noņemt noklusējumu",
   "menu.delete": "Dzēst",
+  "error.unavailable": "SSH nav pieejams",
 }

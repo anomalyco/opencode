@@ -1,11 +1,9 @@
 export default {
+  "mobile.title": "Izmaiņas",
   "tab.title": "Pārskats",
   "tab.count.zero": "Mainīti {{count}} failu",
   "tab.count.one": "{{count}} fails mainīts",
   "tab.count.other": "Mainīti {{count}} faili",
-  "mobile.title.zero": "Izmaiņu",
-  "mobile.title.one": "Izmaiņa",
-  "mobile.title.other": "Izmaiņas",
   "empty.git": "Vēl nav neapstiprinātu izmaiņu",
   "empty.branch": "Vēl nav zara izmaiņu",
   "git.title": "Izveidot Git repozitoriju",

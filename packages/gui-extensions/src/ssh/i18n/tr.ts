@@ -41,4 +41,5 @@ export default {
   "menu.default": "Varsayılan olarak ayarla",
   "menu.defaultRemove": "Varsayılanı kaldır",
   "menu.delete": "Sil",
+  "error.unavailable": "SSH kullanılamıyor",
 }

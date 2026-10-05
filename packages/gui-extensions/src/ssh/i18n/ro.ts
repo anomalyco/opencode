@@ -43,4 +43,5 @@ export default {
   "menu.default": "Setează ca implicit",
   "menu.defaultRemove": "Elimină implicitul",
   "menu.delete": "Șterge",
+  "error.unavailable": "SSH nu este disponibil",
 }

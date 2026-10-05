@@ -1,9 +1,8 @@
 export default {
   "tab.title": "သုံးသပ်ချက်",
+  "mobile.title": "ပြောင်းလဲမှုများ",
   "tab.count.one": "ဖိုင် {{count}} ဖိုင်ကို ပြောင်းထားသည်။",
   "tab.count.other": "ဖိုင် {{count}} ဖိုင်ကို ပြောင်းထားသည်။",
-  "mobile.title.one": "ပြောင်းလဲခြင်း။",
-  "mobile.title.other": "ပြောင်းလဲမှုများ",
   "empty.git": "ကတိကဝတ်မပြုထားသော အပြောင်းအလဲများ မရှိသေးပါ။",
   "empty.branch": "ဌာနခွဲပြောင်းလဲမှုမရှိသေးပါ။",
   "git.title": "Git repository တစ်ခုဖန်တီးပါ။",

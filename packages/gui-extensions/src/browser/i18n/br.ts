@@ -13,4 +13,8 @@ export default {
   "failed.title": "Não foi possível acessar a URL",
   "failed.description": "Verifique a URL e sua conexão e tente novamente.",
   "action.reload": "Recarregar",
+  "command.inspect": "Selecionar um elemento na página do navegador",
+  inspect: "Selecionar um elemento para comentar",
+  "inspect.active": "Clique em um elemento da página para comentá-lo. Pressione Escape para cancelar.",
+  "inspect.pageShortcut": "Enquanto a página estiver em foco",
 }

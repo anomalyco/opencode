@@ -48,10 +48,6 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "{{path}} je binarna datoteka.",
   "ui.fileMedia.binary.description.default": "Binarni sadržaj",
 
-  "ui.lineComment.label.prefix": "Komentar na ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Komentarišeš ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Dodaj komentar",
   "ui.lineComment.contextPlaceholder": "Dodaj kontekst za ovu izmjenu",
   "ui.lineComment.submit": "Komentariši",
@@ -118,8 +114,6 @@ export const dict = {
   "ui.list.loading": "Učitavanje",
   "ui.list.empty": "Nema rezultata",
   "ui.list.clearFilter": "Očisti filter",
-  "ui.list.emptyWithFilter.prefix": "Nema rezultata za",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Nova poruka",
 
@@ -166,8 +160,6 @@ export const dict = {
 
   "ui.common.file.one": "datoteka",
   "ui.common.file.other": "datoteke",
-  "ui.common.question.one": "pitanje",
-  "ui.common.question.other": "pitanja",
 
   "ui.common.add": "Dodaj",
   "ui.common.clear": "Očisti",
@@ -202,7 +194,6 @@ export const dict = {
   "ui.patch.action.moved": "Premješteno",
   "ui.patch.action.patched": "Primijenjeno",
 
-  "ui.question.subtitle.answered": "Odgovoreno: {{count}}",
   "ui.question.answer.none": "(nema odgovora)",
   "ui.question.review.notAnswered": "(nije odgovoreno)",
   "ui.question.multiHint": "Odaberi sve primjenjive odgovore",
@@ -252,7 +243,6 @@ export const dict = {
   "ui.message.thought": "Misao",
   "ui.sessionTimeline.notice.modelSwitched": "Prebačeno na {{model}}",
   "ui.common.file.few": "datoteke",
-  "ui.common.question.few": "pitanja",
   "ui.sessionTurn.retry.attemptLabel": "Pokušaj {{attempt}}",
   "ui.sessionTurn.retry.attemptRetrying": "Pokušaj {{attempt}} - {{line}}",
   "ui.messagePart.context.notice.one": "{{count}} obavijest",
@@ -287,4 +277,15 @@ export const dict = {
   "ui.messagePart.context.updates": "Ažuriranja",
   "ui.promptInput.cancelUpload": "Otkaži otpremanje",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.fileMedia.audioLabel": "Audio: {{filename}}",
+  "ui.lineComment.label": "Komentar na {{selection}}",
+  "ui.lineComment.editorLabel": "Komentarišeš {{selection}}",
+  "ui.list.emptyWithFilter": "Nema rezultata za {{query}}",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.common.questionCount.one": "{{count}} pitanje",
+  "ui.question.subtitle.answeredCount.one": "Odgovoreno: {{count}}",
+  "ui.common.questionCount.other": "{{count}} pitanja",
+  "ui.question.subtitle.answeredCount.other": "Odgovoreno: {{count}}",
+  "ui.common.questionCount.few": "{{count}} pitanja",
+  "ui.question.subtitle.answeredCount.few": "Odgovoreno: {{count}}",
 } satisfies Partial<Record<Keys, string>>

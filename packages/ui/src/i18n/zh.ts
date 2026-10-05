@@ -48,10 +48,6 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "无法显示 {{path}}，因为它是二进制文件。",
   "ui.fileMedia.binary.description.default": "无法显示此文件，因为它是二进制文件。",
 
-  "ui.lineComment.label.prefix": "评论",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "正在评论",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "添加评论",
   "ui.lineComment.contextPlaceholder": "添加此更改的上下文",
   "ui.lineComment.submit": "发布评论",
@@ -112,8 +108,6 @@ export const dict = {
   "ui.list.loading": "加载中",
   "ui.list.empty": "无结果",
   "ui.list.clearFilter": "清除筛选",
-  "ui.list.emptyWithFilter.prefix": "没有关于",
-  "ui.list.emptyWithFilter.suffix": "的结果",
 
   "ui.messageNav.newMessage": "新消息",
 
@@ -162,8 +156,6 @@ export const dict = {
 
   "ui.common.file.one": "个文件",
   "ui.common.file.other": "个文件",
-  "ui.common.question.one": "个问题",
-  "ui.common.question.other": "个问题",
 
   "ui.common.add": "添加",
   "ui.common.clear": "清除",
@@ -198,7 +190,6 @@ export const dict = {
   "ui.patch.action.moved": "已移动",
   "ui.patch.action.patched": "已应用补丁",
 
-  "ui.question.subtitle.answered": "已回答 {{count}} 个",
   "ui.question.answer.none": "（无答案）",
   "ui.question.review.notAnswered": "（未回答）",
   "ui.question.multiHint": "选择所有适用的答案",
@@ -272,4 +263,13 @@ export const dict = {
   "ui.tool.browser": "浏览器",
   "ui.common.fileCount.one": "{{count}} 个文件",
   "ui.common.fileCount.other": "{{count}} 个文件",
+  "ui.fileMedia.audioLabel": "音频: {{filename}}",
+  "ui.lineComment.label": "对{{selection}}的评论",
+  "ui.lineComment.editorLabel": "关于{{selection}}的评论",
+  "ui.list.emptyWithFilter": "{{query}}无结果",
+  "ui.common.questionCount.one": "{{count}}问题",
+  "ui.common.questionCount.other": "{{count}}问题",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.question.subtitle.answeredCount.one": "{{count}}回答",
+  "ui.question.subtitle.answeredCount.other": "{{count}}回答",
 } satisfies Partial<Record<Keys, string>>

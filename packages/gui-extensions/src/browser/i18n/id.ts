@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL tidak dapat dijangkau",
   "failed.description": "Periksa URL dan koneksi Anda, lalu coba lagi.",
   "action.reload": "Muat ulang",
+  "command.inspect": "Pilih elemen di halaman peramban",
+  inspect: "Pilih elemen untuk diberi komentar",
+  "inspect.active": "Klik elemen di halaman untuk mengomentarinya. Tekan Escape untuk membatalkan.",
+  "inspect.pageShortcut": "Saat halaman memiliki fokus",
 }

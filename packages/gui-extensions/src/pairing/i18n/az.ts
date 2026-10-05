@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Əlavə sual ver",
+  "title": "Qoşalaşdırma",
+  "connection": "Yerli şəbəkə",
+  "local.description": "Eyni şəbəkədəki cihazı qoşmaq üçün bağlantı təfərrüatlarına və QR koda baxın.",
+  "local.open": "Təfərrüatları göstər",
+  "screenActive.title": "Ekranı aktiv saxla",
+  "screenActive.description": "OpenCode işləyərkən bu kompüterin ekranının yuxu rejiminə keçməsinin qarşısını alın.",
+  "screenActive.error": "Ekran aktivliyi ayarını yeniləmək mümkün olmadı. Yenidən cəhd edin.",
+  "description": "Başqa cihazı bu kompüterin OpenCode serverinə qoşun.",
+  "qr": "Qoşalaşdırma QR kodu",
+  "copy": "Cavabı kopyala",
+  "copy.error": "Qoşalaşdırma təfərrüatlarını kopyalamaq mümkün olmadı. Yenidən cəhd edin.",
+  "error": "Bu suala cavab vermək mümkün olmadı",
+}

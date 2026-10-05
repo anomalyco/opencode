@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Asociază dispozitivul",
+  "title": "Asociere",
+  "connection": "Rețea locală",
+  "local.description": "Vedeți detaliile conexiunii și un cod QR pentru a conecta un dispozitiv la aceeași rețea.",
+  "local.open": "Afișează detaliile",
+  "screenActive.title": "Menține ecranul activ",
+  "screenActive.description": "Împiedică intrarea în repaus a ecranului acestui computer cât timp rulează OpenCode.",
+  "screenActive.error": "Setarea pentru activitatea ecranului nu a putut fi actualizată. Încercați din nou.",
+  "description": "Conectați alt dispozitiv la serverul OpenCode al acestui computer.",
+  "qr": "Cod QR de asociere",
+  "copy": "Copiază detaliile",
+  "copy.error": "Detaliile asocierii nu au putut fi copiate. Încercați din nou.",
+  "error": "Detaliile asocierii nu au putut fi actualizate. Încercați din nou.",
+}

@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Abbina dispositivo",
+  "title": "Abbinamento",
+  "connection": "Rete locale",
+  "local.description": "Visualizza i dettagli della connessione e un codice QR per connettere un dispositivo alla stessa rete.",
+  "local.open": "Mostra dettagli",
+  "screenActive.title": "Mantieni attivo lo schermo",
+  "screenActive.description": "Impedisci la sospensione dello schermo del computer mentre OpenCode è in esecuzione.",
+  "screenActive.error": "Impossibile aggiornare l’impostazione di attività dello schermo. Riprova.",
+  "description": "Connetti un altro dispositivo al server OpenCode di questo computer.",
+  "qr": "Codice QR di abbinamento",
+  "copy": "Copia dettagli",
+  "copy.error": "Impossibile copiare i dettagli dell’abbinamento. Riprova.",
+  "error": "Impossibile aggiornare i dettagli dell’abbinamento. Riprova.",
+}

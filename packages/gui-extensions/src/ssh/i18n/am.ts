@@ -26,6 +26,7 @@ export default {
   "error.service": "SSH ተገናኝቷል፣ ነገር ግን የOpenCode አገልጋዩ ዝግጁ አልሆነም።",
   "error.host-key": "የአስተናጋጁ ማንነት ሊረጋገጥ አልቻለም። የSSH የታወቁ አስተናጋጆችዎን ከማዘመንዎ በፊት የጣት አሻራውን ያረጋግጡ።",
   "error.ssh-missing": "OpenSSH አልተገኘም። የOpenSSH ደንበኛን ይጫኑ እና ssh በPATH ላይ መገኘቱን ያረጋግጡ።",
+  "error.unavailable": "SSH አይገኝም",
   "action.authenticate": "ያረጋግጡ",
   "stage.connecting": "በSSH በመገናኘት ላይ...",
   "stage.authentication": "ማረጋገጫ ያስፈልጋል",

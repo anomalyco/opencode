@@ -1,9 +1,8 @@
 export default {
+  "mobile.title": "Módosítások",
   "tab.title": "Tekintse át",
   "tab.count.one": "{{count}} fájl megváltozott",
   "tab.count.other": "{{count}} fájl megváltozott",
-  "mobile.title.one": "Változás",
-  "mobile.title.other": "Változások",
   "empty.git": "Még nincsenek végrehajtatlan változtatások",
   "empty.branch": "A fióktelep még nem változott",
   "git.title": "Hozzon létre egy Git tárolót",

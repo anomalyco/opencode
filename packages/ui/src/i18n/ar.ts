@@ -44,10 +44,6 @@ export const dict = {
   "ui.fileMedia.binary.description.path": "{{path}} عبارة عن ملف ثنائي ولا يمكن عرضه.",
   "ui.fileMedia.binary.description.default": "هذا ملف ثنائي ولا يمكن عرضه.",
 
-  "ui.lineComment.label.prefix": "تعليق على ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "جارٍ التعليق على ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "أضف تعليقًا",
   "ui.lineComment.contextPlaceholder": "أضف سياقًا لهذا التغيير",
   "ui.lineComment.submit": "تعليق",
@@ -126,8 +122,6 @@ export const dict = {
   "ui.list.loading": "جارٍ التحميل",
   "ui.list.empty": "لا توجد نتائج",
   "ui.list.clearFilter": "مسح عامل التصفية",
-  "ui.list.emptyWithFilter.prefix": "لا توجد نتائج لـ",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "رسالة جديدة",
 
@@ -174,8 +168,6 @@ export const dict = {
 
   "ui.common.file.one": "ملف",
   "ui.common.file.other": "ملفات",
-  "ui.common.question.one": "سؤال",
-  "ui.common.question.other": "أسئلة",
 
   "ui.common.add": "إضافة",
   "ui.common.clear": "مسح",
@@ -210,7 +202,6 @@ export const dict = {
   "ui.patch.action.moved": "منقول",
   "ui.patch.action.patched": "تم تطبيق رقعة",
 
-  "ui.question.subtitle.answered": "تمت الإجابة عن {{count}}",
   "ui.question.answer.none": "(لا توجد إجابة)",
   "ui.question.review.notAnswered": "(لم تتم الإجابة)",
   "ui.question.multiHint": "حدد كل ما ينطبق",
@@ -278,10 +269,6 @@ export const dict = {
   "ui.common.fileCount.few": "\u2068{{count}}\u2069 ملفات",
   "ui.common.fileCount.many": "\u2068{{count}}\u2069 ملفًا",
   "ui.common.fileCount.other": "\u2068{{count}}\u2069 ملف",
-  "ui.common.question.zero": "أسئلة",
-  "ui.common.question.two": "سؤالان",
-  "ui.common.question.few": "أسئلة",
-  "ui.common.question.many": "سؤالًا",
   "ui.sessionTurn.retry.attemptLabel": "المحاولة {{attempt}}",
   "ui.sessionTurn.retry.attemptRetrying": "المحاولة {{attempt}} - \u2068{{line}}\u2069",
   "ui.messagePart.context.notice.zero": "{{count}} إشعار",
@@ -326,4 +313,22 @@ export const dict = {
   "ui.messagePart.context.updates": "التحديثات",
   "ui.promptInput.cancelUpload": "إلغاء الرفع",
   "ui.promptInput.uploading": "\u2068{{percent}}\u2069%",
+
+  "ui.fileMedia.audioLabel": "الصوت: \u2068{{filename}}\u2069",
+  "ui.lineComment.label": "تعليق على \u2068{{selection}}\u2069",
+  "ui.lineComment.editorLabel": "التعليق على \u2068{{selection}}\u2069",
+  "ui.list.emptyWithFilter": "لا توجد نتائج لـ \u2068{{query}}\u2069",
+  "ui.common.questionCount.one": "\u2068{{count}}\u2069 سؤال",
+  "ui.common.questionCount.other": "\u2068{{count}}\u2069 سؤال",
+  "ui.common.questionCount.zero": "\u2068{{count}}\u2069 سؤال",
+  "ui.common.questionCount.two": "\u2068{{count}}\u2069 سؤالان",
+  "ui.common.questionCount.few": "\u2068{{count}}\u2069 أسئلة",
+  "ui.common.questionCount.many": "\u2068{{count}}\u2069 سؤالًا",
+  "ui.message.modelVariant": "\u2068{{model}}\u2069 (\u2068{{variant}}\u2069)",
+  "ui.question.subtitle.answeredCount.one": "تمت الإجابة عن \u2068{{count}}\u2069",
+  "ui.question.subtitle.answeredCount.other": "تمت الإجابة عن \u2068{{count}}\u2069",
+  "ui.question.subtitle.answeredCount.zero": "تمت الإجابة عن \u2068{{count}}\u2069",
+  "ui.question.subtitle.answeredCount.two": "تمت الإجابة عن \u2068{{count}}\u2069",
+  "ui.question.subtitle.answeredCount.few": "تمت الإجابة عن \u2068{{count}}\u2069 أسئلة",
+  "ui.question.subtitle.answeredCount.many": "تمت الإجابة عن \u2068{{count}}\u2069 سؤالًا",
 }

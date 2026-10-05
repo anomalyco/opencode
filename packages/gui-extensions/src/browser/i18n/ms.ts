@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL tidak dapat dicapai",
   "failed.description": "Semak URL dan sambungan anda, kemudian cuba lagi.",
   "action.reload": "Muat semula",
+  "command.inspect": "Pilih unsur dalam halaman pelayar",
+  inspect: "Pilih unsur untuk diulas",
+  "inspect.active": "Klik unsur dalam halaman untuk mengulasnya. Tekan Escape untuk membatalkan.",
+  "inspect.pageShortcut": "Semasa halaman difokuskan",
 }

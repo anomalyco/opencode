@@ -1,0 +1,15 @@
+export default {
+  "command.title": "配對裝置",
+  title: "配對",
+  connection: "區域網路",
+  "local.description": "檢視連線詳細資料和 QR 碼，以連接相同網路中的裝置。",
+  "local.open": "顯示詳細資料",
+  "screenActive.title": "讓螢幕保持開啟",
+  "screenActive.description": "在 OpenCode 執行時，防止此電腦的顯示器進入睡眠狀態。",
+  "screenActive.error": "無法更新螢幕活動設定。請再試一次。",
+  description: "將另一台裝置連接到此電腦上的 OpenCode 伺服器。",
+  qr: "配對 QR 碼",
+  copy: "複製詳細資料",
+  "copy.error": "無法複製配對詳細資料。請再試一次。",
+  error: "無法更新配對詳細資料。請再試一次。",
+}

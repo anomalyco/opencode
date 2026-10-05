@@ -42,4 +42,5 @@ export default {
   "menu.default": "デフォルトに設定",
   "menu.defaultRemove": "デフォルト設定を解除",
   "menu.delete": "削除",
+  "error.unavailable": "SSH は利用できません",
 }

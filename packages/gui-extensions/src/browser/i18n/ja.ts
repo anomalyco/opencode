@@ -13,4 +13,8 @@ export default {
   "failed.title": "URLにアクセスできません",
   "failed.description": "URLと接続を確認して、もう一度お試しください。",
   "action.reload": "再読み込み",
+  "command.inspect": "ブラウザーページ内の要素を選択",
+  inspect: "コメントする要素を選択",
+  "inspect.active": "ページ内の要素をクリックしてコメントします。キャンセルするには Escape キーを押してください。",
+  "inspect.pageShortcut": "ページにフォーカスがあるとき",
 }

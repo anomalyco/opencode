@@ -1,0 +1,15 @@
+export default {
+  "command.title": "צימוד מכשיר",
+  "title": "צימוד",
+  "connection": "רשת מקומית",
+  "local.description": "הצגת פרטי החיבור וקוד QR כדי לחבר מכשיר באותה רשת.",
+  "local.open": "הצגת פרטים",
+  "screenActive.title": "השארת המסך פעיל",
+  "screenActive.description": "מניעת מעבר התצוגה של מחשב זה למצב שינה בזמן ש-OpenCode פועל.",
+  "screenActive.error": "לא ניתן לעדכן את הגדרת פעילות המסך. יש לנסות שוב.",
+  "description": "חיבור מכשיר נוסף לשרת OpenCode במחשב זה.",
+  "qr": "קוד QR לצימוד",
+  "copy": "העתקת פרטים",
+  "copy.error": "לא ניתן להעתיק את פרטי הצימוד. יש לנסות שוב.",
+  "error": "לא ניתן לעדכן את פרטי הצימוד. יש לנסות שוב.",
+}

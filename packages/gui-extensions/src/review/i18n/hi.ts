@@ -1,9 +1,8 @@
 export default {
   "tab.title": "समीक्षा",
+  "mobile.title": "परिवर्तन",
   "tab.count.one": "{{count}} फ़ाइल बदली गई",
   "tab.count.other": "{{count}} फ़ाइलें बदली गईं",
-  "mobile.title.one": "परिवर्तन",
-  "mobile.title.other": "परिवर्तन",
   "empty.git": "अभी तक कोई अप्रतिबद्ध परिवर्तन नहीं",
   "empty.branch": "अभी तक शाखा में कोई परिवर्तन नहीं",
   "git.title": "एक Git रिपॉजिटरी बनाएं",

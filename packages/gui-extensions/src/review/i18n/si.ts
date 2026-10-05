@@ -1,9 +1,8 @@
 export default {
   "tab.title": "සමාලෝචනය කරන්න",
+  "mobile.title": "වෙනස්කම්",
   "tab.count.one": "ගොනුව {{count}}ක් වෙනස් විය",
   "tab.count.other": "ගොනු {{count}}ක් වෙනස් විය",
-  "mobile.title.one": "වෙනස් කරන්න",
-  "mobile.title.other": "වෙනස්කම්",
   "empty.git": "තවමත් කැප නොකළ වෙනස්කම් නොමැත",
   "empty.branch": "තවම ශාඛාවේ වෙනසක් නැත",
   "git.title": "Git ගබඩාවක් සාදන්න",

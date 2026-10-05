@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "ສຽງ: {{filename}}",
+  videoLabel: "ວິດີໂອ: {{filename}}",
   "tree.all": "ໄຟລ໌ທັງໝົດ",
   "tree.empty": "ບໍ່ມີໄຟລ໌",
   "tree.changes.one": "ປ່ຽນໄຟລ໌ {{count}} ແລ້ວ",
@@ -28,4 +30,14 @@ export default {
   "open.fileExplorer": "File Explorer",
   "open.fileManager": "ຜູ້ຈັດການໄຟລ໌",
   "command.open": "ເປີດໄຟລ໌",
+  "view.preview": "ສະແດງຕົວຢ່າງ",
+  "view.source": "ແຫຼ່ງທີ່ມາ",
+  "view.openInBrowser": "ເປີດໃນເບຣາວເຊີ",
+  "view.binary": "ໄຟລ໌ໄບນາຣີ · {{size}}",
+  "view.table.rows.one": "{{count}} ແຖວ",
+  "view.table.rows.other": "{{count}} ແຖວ",
+  "view.table.columns.one": "{{count}} ຖັນ",
+  "view.table.columns.other": "{{count}} ຖັນ",
+  "view.table.truncated": "ກຳລັງສະແດງ {{shown}} ແຖວທຳອິດຈາກທັງໝົດ {{total}} ແຖວ.",
+  "view.fontSample": "ສະຟິງຫີນຄວອດສີດຳ ຈົ່ງຕັດສິນຄຳສາບານຂອງຂ້ອຍ.",
 }

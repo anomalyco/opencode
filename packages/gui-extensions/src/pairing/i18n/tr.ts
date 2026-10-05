@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Cihazı eşleştir",
+  "title": "Eşleştirme",
+  "connection": "Yerel ağ",
+  "local.description": "Aynı ağdaki bir cihazı bağlamak için bağlantı ayrıntılarını ve QR kodunu görüntüleyin.",
+  "local.open": "Ayrıntıları göster",
+  "screenActive.title": "Ekranı etkin tut",
+  "screenActive.description": "OpenCode çalışırken bu bilgisayarın ekranının uyku moduna geçmesini engelleyin.",
+  "screenActive.error": "Ekran etkinliği ayarı güncellenemedi. Yeniden deneyin.",
+  "description": "Başka bir cihazı bu bilgisayarın OpenCode sunucusuna bağlayın.",
+  "qr": "Eşleştirme QR kodu",
+  "copy": "Ayrıntıları kopyala",
+  "copy.error": "Eşleştirme ayrıntıları kopyalanamadı. Yeniden deneyin.",
+  "error": "Eşleştirme ayrıntıları güncellenemedi. Yeniden deneyin.",
+}

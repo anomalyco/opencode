@@ -332,9 +332,7 @@ export const dict = {
   "provider.connect.toast.connected.description": "{{provider}}-Modelle sind jetzt verfügbar.",
   "provider.custom.title": "Benutzerdefinierter Anbieter",
   "provider.custom.unavailable": "Benutzerdefinierte Anbieter sind auf diesem Server nicht verfügbar",
-  "provider.custom.description.prefix": "Konfigurieren Sie einen OpenAI-kompatiblen Anbieter. Siehe die ",
   "provider.custom.description.link": "Dokumentation zur Anbieterkonfiguration",
-  "provider.custom.description.suffix": ".",
   "provider.custom.field.providerID.label": "Anbieter-ID",
   "provider.custom.field.providerID.placeholder": "myprovider",
   "provider.custom.field.providerID.description": "Kleinbuchstaben, Zahlen, Bindestriche oder Unterstriche",
@@ -482,7 +480,6 @@ export const dict = {
   "error.page.action.checking": "Prüfen…",
   "error.page.action.checkUpdates": "Nach Updates suchen",
   "error.page.action.updateTo": "Auf {{version}} aktualisieren",
-  "error.page.report.prefix": "Bitte melden Sie diesen Fehler dem OpenCode-Team",
   "error.page.report.discord": "auf Discord",
   "error.page.version": "Version: {{version}}",
   "error.dev.rootNotFound":
@@ -922,4 +919,107 @@ export const dict = {
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "Upload von {{filename}} abbrechen",
   "prompt.toast.uploadFailed.title": "Upload fehlgeschlagen",
+  "command.provider.connect.description":
+    "Melden Sie sich bei OpenCode Go, OpenCode Console oder einem anderen Modellanbieter an",
+  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.freeName": "OpenCode Free",
+  "provider.connect.console.title": "Verbindung mit OpenCode Console wird hergestellt",
+  "provider.connect.console.instructions":
+    "Fahren Sie in Ihrem Browser fort. Bestätigen Sie, dass der dort angezeigte Code mit dem unten angezeigten übereinstimmt.",
+  "provider.connect.console.deviceCode": "Gerätecode",
+  "provider.connect.console.deviceCode.label": "Gerätecode: {{code}}",
+  "provider.connect.console.waiting": "Warten auf Bestätigung…",
+  "provider.connect.console.browserHint": "Browser wurde nicht geöffnet?",
+  "provider.connect.console.copyLink": "Anmeldelink kopieren",
+  "provider.connect.console.linkCopied": "Anmeldelink kopiert",
+  "provider.connect.console.copyFailed":
+    "Der Anmeldelink konnte nicht kopiert werden. Öffnen Sie die Konsole erneut, um fortzufahren.",
+  "provider.connect.console.openAgain": "Konsole erneut öffnen",
+  "provider.connect.console.browserFailed":
+    "Wir konnten Ihren Browser nicht öffnen. Versuchen Sie es erneut oder kopieren Sie den Anmeldelink, um fortzufahren.",
+  "provider.connect.console.expired":
+    "Diese Anmeldeanforderung ist abgelaufen. Beginnen Sie erneut, um einen neuen Gerätecode zu erhalten.",
+  "provider.connect.console.denied":
+    "Der Zugriff in der Konsole wurde verweigert. Versuchen Sie es erneut, wenn Sie bereit sind, eine Verbindung herzustellen.",
+  "provider.connect.console.statusFailed":
+    "Autorisierung konnte nicht überprüft werden. Überprüfen Sie Ihre Serververbindung und versuchen Sie es erneut.",
+  "provider.connect.console.startFailed":
+    "Die Anmeldung konnte nicht gestartet werden. Überprüfen Sie Ihre Serververbindung und versuchen Sie es erneut.",
+  "provider.connect.models.title": "Verbunden mit {{provider}}",
+  "provider.connect.models.description": "Wählen Sie zunächst ein Modell. Sie können jederzeit das Modell wechseln.",
+  "provider.connect.models.available": "Verfügbare Modelle",
+  "provider.connect.models.list": "Von {{provider}} verfügbare Modelle",
+  "provider.connect.console.refreshFailed":
+    "Ihr Konto ist verbunden, aber wir konnten Ihre Modelle nicht laden. Versuchen Sie erneut, sie zu aktualisieren.",
+  "provider.connect.console.connected": "OpenCode verbunden",
+  "provider.connect.console.noModels":
+    "Ihr Konto ist verbunden, aber in diesem Konsolenarbeitsbereich sind keine Modelle verfügbar. Überprüfen Sie die Einrichtung in der Konsole und aktualisieren Sie sie dann.",
+  "provider.connect.console.modelsLoading": "Ihre Modelle werden noch geladen. Aktualisieren Sie, um erneut zu prüfen.",
+  "provider.connect.console.refresh": "Modelle aktualisieren",
+  "provider.connect.console.openingBrowser": "Browser wird geöffnet…",
+  "provider.connect.console.serviceAccount": "Dienstkonto?",
+  "provider.connect.console.useApiKey": "API-Schlüssel verwenden",
+  "provider.connect.remote.title": "Verbindung über „{{server}}“",
+  "provider.connect.remote.description":
+    "Ihre OpenCode-Anmeldeinformationen werden auf diesem Server gespeichert. Modelle werden über diesen Server verfügbar sein.",
+  "provider.connect.oauth.auto.confirmationCode.description":
+    "Überprüfen Sie vor der Autorisierung, ob Ihr Browser denselben Code anzeigt.",
+  "provider.connect.oauth.auto.description":
+    "Ihr Browser wird geöffnet, sodass Sie sich bei {{provider}} anmelden können. Kommen Sie hierher zurück, wenn Sie fertig sind.",
+  "provider.connect.oauth.code.description":
+    "Ihr Browser wird geöffnet, sodass Sie sich bei {{provider}} anmelden können. Fügen Sie den Autorisierungscode ein, den Sie unten erhalten.",
+  "provider.connect.oauth.openBrowser": "Browser öffnen",
+  "provider.connect.oauth.expired": "Autorisierung abgelaufen",
+  "provider.connect.console.apiKey.description":
+    "Fügen Sie einen API-Schlüssel für ein Dienstkonto ein. Dienstkonten erstellen Sie im OpenCode Console unter Schlüssel.",
+  "provider.connect.console.apiKey.link": "Öffnen Sie die Konsole",
+  "common.retry": "Versuchen Sie es erneut",
+  "server.connect.link.expired":
+    "Dieser Pairing-Link ist abgelaufen oder wurde bereits verwendet. Führen Sie opencode pair aus, um ein neues zu erhalten.",
+  "home.project.missing.title": "Projektordner nicht gefunden",
+  "home.project.missing.description": "Der Ordner für {{name}} existiert nicht mehr.",
+  "session.queue.undo": "Rückgängig machen",
+  "session.queue.undoShell":
+    "Verlassen Sie den Shell-Modus, bevor Sie eine Eingabeaufforderung in der Warteschlange rückgängig machen",
+  "session.queue.undoUnavailable":
+    "Bearbeiten Sie diese Eingabeaufforderung in der Warteschlange, um ihren Dateikontext beizubehalten",
+  "settings.projects.empty.title": "Noch keine Projekte",
+  "settings.projects.empty.description": "Fügen Sie ein Projekt hinzu, um loszulegen",
+  "settings.providers.account.manage": "{{provider}}-Konten verwalten",
+  "settings.providers.account.group": "Konten",
+  "settings.providers.account.add": "Konto hinzufügen",
+  "settings.providers.account.remove": "Konto entfernen…",
+  "settings.providers.account.active": "Aktiv",
+  "settings.providers.account.switched.title": "{{provider}}-Konto gewechselt",
+  "settings.providers.account.switched.description": "Jetzt mit {{account}}.",
+  "settings.providers.account.removed.title": "{{account}} entfernt",
+  "settings.providers.account.removed.description": "{{provider}} wird dieses Konto nicht mehr verwenden.",
+  "settings.providers.console.available.one": "{{count}} Anbieter verfügbar",
+  "settings.providers.console.available.other": "{{count}}-Anbieter verfügbar",
+  "settings.providers.tag.account": "Konto",
+  "settings.models.enableAll": "Alle Modelle aktivieren",
+  "settings.models.disableAll": "Alle Modelle deaktivieren",
+  "dialog.model.chatgptPlan": "ChatGPT-Tarif wird verwendet",
+  "dialog.model.chatgptManageUsage": "Nutzung verwalten",
+  "provider.connect.chatgptWelcome.title": "ChatGPT verbunden",
+  "provider.connect.chatgptWelcome.description":
+    "Berechtigte Anfragen in OpenCode können Ihren ChatGPT-Tarif verwenden.",
+  "provider.connect.chatgptWelcome.usage": "Nutzung in den ChatGPT-Einstellungen verwalten",
+  "provider.connect.chatgptWelcome.confirm": "Verstanden",
+  "provider.connect.chatgptUsageLimit.title": "ChatGPT-Nutzungslimit erreicht",
+  "provider.connect.chatgptUsageLimit.description":
+    "Überprüfen Sie Ihre Nutzung und Limits in den ChatGPT-Einstellungen.",
+  "provider.connect.chatgptUsageLimit.manage": "Nutzung verwalten",
+  "provider.connect.chatgptUsageLimit.close": "Schließen",
+  "settings.guiExtensions.title": "Erweiterungen",
+  "settings.guiExtensions.description": "Integrierte GUI-Erweiterungen in diesem Fenster. Nur Entwicklungs-Builds.",
+  "settings.guiExtensions.reload": "Neu laden",
+  "settings.guiExtensions.status.loading": "Wird geladen",
+  "settings.guiExtensions.status.active": "Aktiv",
+  "settings.guiExtensions.status.failed": "Fehlgeschlagen",
+  "settings.guiExtensions.status.disabled": "Deaktiviert",
+  "settings.guiExtensions.status.blocked": "Blockiert",
+  "provider.custom.description":
+    "Konfigurieren Sie einen OpenAI-kompatiblen Anbieter. Weitere Informationen finden Sie unter {{link}}.",
+  "error.page.report": "Melden Sie diesen Fehler dem OpenCode-Team {{link}}",
 } satisfies Partial<Record<Keys, string>>

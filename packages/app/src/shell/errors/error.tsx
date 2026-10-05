@@ -409,15 +409,18 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
         </Show>
         <div class="flex flex-col items-center gap-2 text-xs text-center">
           <div class="flex flex-wrap items-center justify-center gap-1">
-            {language.t("error.page.report.prefix")}
-            <button
-              type="button"
-              class="flex items-center text-text-interactive-base gap-1"
-              onClick={() => platform.openExternal("https://opencode.ai/desktop-feedback")}
-            >
-              <div>{language.t("error.page.report.discord")}</div>
-              <Icon name="discord" class="text-text-interactive-base" />
-            </button>
+            {language.rich("error.page.report", {
+              link: (
+                <button
+                  type="button"
+                  class="flex items-center text-text-interactive-base gap-1"
+                  onClick={() => platform.openExternal("https://opencode.ai/desktop-feedback")}
+                >
+                  <div>{language.t("error.page.report.discord")}</div>
+                  <Icon name="discord" class="text-text-interactive-base" />
+                </button>
+              ),
+            })}
           </div>
           <Show when={platform.version}>
             {(version) => (

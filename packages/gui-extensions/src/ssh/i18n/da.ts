@@ -42,4 +42,5 @@ export default {
   "menu.default": "Sæt som standard",
   "menu.defaultRemove": "Fjern som standard",
   "menu.delete": "Slet",
+  "error.unavailable": "SSH er ikke tilgængelig",
 }

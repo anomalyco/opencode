@@ -30,6 +30,7 @@ export default {
   "error.host-key":
     "Հյուրընկալողի ինքնությունը չի հաջողվել հաստատել։ Վերահսկեք նրա մատնահանդեսը նախքան ձեր SSH հայտնի հյուրընկալողների թարմացումը։",
   "error.ssh-missing": "OpenSSH չի գտնվել։ Տեղադրեք OpenSSH կլիանտ և համոզվեք, որ ssh հասանելի է PATH-ում։",
+  "error.unavailable": "SSH-ն անհասանելի է",
   "action.authenticate": "Հաստատել",
   "stage.connecting": "Կապ հաստատում SSH-ի միջոցով…",
   "stage.authentication": "Պայմանավորվածություն պահանջվում է",

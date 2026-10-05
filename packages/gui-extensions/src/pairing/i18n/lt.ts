@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Susieti įrenginį",
+  "title": "Susiejimas",
+  "connection": "Vietinis tinklas",
+  "local.description": "Peržiūrėkite ryšio informaciją ir QR kodą, kad prijungtumėte įrenginį prie to paties tinklo.",
+  "local.open": "Rodyti išsamią informaciją",
+  "screenActive.title": "Neleisti ekranui užmigti",
+  "screenActive.description": "Neleiskite šio kompiuterio ekranui užmigti, kol veikia „OpenCode“.",
+  "screenActive.error": "Nepavyko atnaujinti ekrano aktyvumo nuostatos. Bandykite dar kartą.",
+  "description": "Prijunkite kitą įrenginį prie šio kompiuterio „OpenCode“ serverio.",
+  "qr": "Susiejimo QR kodas",
+  "copy": "Kopijuoti išsamią informaciją",
+  "copy.error": "Nepavyko nukopijuoti susiejimo informacijos. Bandykite dar kartą.",
+  "error": "Nepavyko atnaujinti susiejimo informacijos. Bandykite dar kartą.",
+}

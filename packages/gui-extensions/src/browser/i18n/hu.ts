@@ -13,4 +13,9 @@ export default {
   "failed.title": "Az URL-cím nem érhető el",
   "failed.description": "Ellenőrizze az URL-címet és a kapcsolatot, majd próbálja újra.",
   "action.reload": "Újratöltés",
+  "command.inspect": "Elem kijelölése a böngészőoldalon",
+  inspect: "Kommentálandó elem kijelölése",
+  "inspect.active":
+    "Kattintson az oldal egyik elemére a megjegyzéshez. A megszakításhoz nyomja meg az Escape billentyűt.",
+  "inspect.pageShortcut": "Amíg az oldal fókuszban van",
 }

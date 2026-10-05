@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Çifto pajisjen",
+  "title": "Çiftimi",
+  "connection": "Rrjeti lokal",
+  "local.description": "Shikoni hollësitë e lidhjes dhe një kod QR për të lidhur një pajisje në të njëjtin rrjet.",
+  "local.open": "Shfaq hollësitë",
+  "screenActive.title": "Mbaje ekranin aktiv",
+  "screenActive.description": "Mos e lejo ekranin e këtij kompjuteri të kalojë në gjumë ndërkohë që OpenCode është në punë.",
+  "screenActive.error": "S’u përditësua dot cilësimi i aktivitetit të ekranit. Provoni përsëri.",
+  "description": "Lidhni një pajisje tjetër me shërbyesin OpenCode të këtij kompjuteri.",
+  "qr": "Kodi QR i çiftimit",
+  "copy": "Kopjo hollësitë",
+  "copy.error": "S’u kopjuan dot hollësitë e çiftimit. Provoni përsëri.",
+  "error": "S’u përditësuan dot hollësitë e çiftimit. Provoni përsëri.",
+}

@@ -13,4 +13,8 @@ export default {
   "failed.title": "URL-adressan kann ikki røkkast",
   "failed.description": "Kanna URL-adressuna og sambandið og royn aftur.",
   "action.reload": "Les inn aftur",
+  "command.inspect": "Vel eitt element á kaga-síðuni",
+  inspect: "Vel eitt element at gera viðmerking til",
+  "inspect.active": "Trýst á eitt element á síðuni fyri at gera viðmerking til tað. Trýst á Escape fyri at angra.",
+  "inspect.pageShortcut": "Meðan síðan er í fokusi",
 }

@@ -42,4 +42,5 @@ export default {
   "menu.default": "Ställ in som standard",
   "menu.defaultRemove": "Ta bort standard",
   "menu.delete": "Radera",
+  "error.unavailable": "SSH är inte tillgängligt",
 }

@@ -1,9 +1,8 @@
 export default {
+  "mobile.title": "Breytingar",
   "tab.title": "Upprifjun",
   "tab.count.one": "{{count}} skrá breytt",
   "tab.count.other": "{{count}} skrám breytt",
-  "mobile.title.one": "Breyta",
-  "mobile.title.other": "Breytingar",
   "empty.git": "Engar óbundnar breytingar ennþá",
   "empty.branch": "Engar greinarbreytingar ennþá",
   "git.title": "Búðu til Git geymslu",

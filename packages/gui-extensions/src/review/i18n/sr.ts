@@ -1,11 +1,9 @@
 export default {
   "tab.title": "Преглед",
+  "mobile.title": "Промене",
   "tab.count.one": "{{count}} датотека је измењена",
   "tab.count.few": "{{count}} датотеке су измењене",
   "tab.count.other": "{{count}} датотека је измењено",
-  "mobile.title.one": "Промена",
-  "mobile.title.few": "Промене",
-  "mobile.title.other": "Промене",
   "empty.git": "Још увек нема неизвршених промена",
   "empty.branch": "Још нема промена гране",
   "git.title": "Направите Git спремиште",

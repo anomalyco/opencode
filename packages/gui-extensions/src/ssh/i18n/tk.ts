@@ -30,6 +30,7 @@ export default {
   "error.host-key":
     "Öý eýesiniň şahsyýetini tassyklap bolmady SSH belli öý eýeleriňizi täzelemezden ozal barmak yzyny barlaň.",
   "error.ssh-missing": "OpenSSH tapylmady OpenSSH müşderisini guruň we ssh-iň PATH-da elýeterlidigine göz ýetiriň.",
+  "error.unavailable": "SSH elýeterli däl",
   "action.authenticate": "Hakyky tassyklamak",
   "stage.connecting": "SSH-e birikmek…",
   "stage.authentication": "Hakyky tassyklamak zerur",

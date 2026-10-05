@@ -1,4 +1,6 @@
 export default {
+  audioLabel: "音訊：{{filename}}",
+  videoLabel: "影片：{{filename}}",
   "tree.all": "所有檔案",
   "tree.empty": "沒有檔案",
   "tree.changes.one": "{{count}} 個檔案已變更",
@@ -28,4 +30,14 @@ export default {
   "open.fileExplorer": "檔案總管",
   "open.fileManager": "檔案管理員",
   "command.open": "開啟檔案",
+  "view.preview": "預覽",
+  "view.source": "原始碼",
+  "view.openInBrowser": "在瀏覽器中開啟",
+  "view.binary": "二進位檔案 · {{size}}",
+  "view.table.rows.one": "{{count}} 列",
+  "view.table.rows.other": "{{count}} 列",
+  "view.table.columns.one": "{{count}} 欄",
+  "view.table.columns.other": "{{count}} 欄",
+  "view.table.truncated": "正在顯示共 {{total}} 列中的前 {{shown}} 列。",
+  "view.fontSample": "視野無限廣，窗外有藍天。",
 }

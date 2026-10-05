@@ -190,9 +190,8 @@ export const dict = {
 
   "provider.custom.title": "Custom provider",
   "provider.custom.unavailable": "Custom providers are unavailable on this server",
-  "provider.custom.description.prefix": "Configure an OpenAI-compatible provider. See the ",
   "provider.custom.description.link": "provider config docs",
-  "provider.custom.description.suffix": ".",
+  "provider.custom.description": "Configure an OpenAI-compatible provider. See the {{link}}.",
   "provider.custom.field.providerID.label": "Provider ID",
   "provider.custom.field.providerID.placeholder": "myprovider",
   "provider.custom.field.providerID.description": "Lowercase letters, numbers, hyphens, or underscores",
@@ -418,8 +417,8 @@ export const dict = {
   "error.page.action.checkUpdates": "Check for updates",
   "error.page.action.updateTo": "Update to {{version}}",
   "error.page.circular": "[Circular]",
-  "error.page.report.prefix": "Please report this error to the OpenCode team",
   "error.page.report.discord": "on Discord",
+  "error.page.report": "Please report this error to the OpenCode team {{link}}",
   "error.page.version": "Version: {{version}}",
 
   "error.dev.rootNotFound":

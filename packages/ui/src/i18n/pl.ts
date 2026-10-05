@@ -44,10 +44,6 @@ export const dict = {
   "ui.fileMedia.binary.title": "Plik binarny",
   "ui.fileMedia.binary.description.path": "Nie można wyświetlić pliku {{path}}, ponieważ jest to plik binarny.",
   "ui.fileMedia.binary.description.default": "Nie można wyświetlić tego pliku, ponieważ jest to plik binarny.",
-  "ui.lineComment.label.prefix": "Komentarz do ",
-  "ui.lineComment.label.suffix": "",
-  "ui.lineComment.editorLabel.prefix": "Komentowanie: ",
-  "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Dodaj komentarz",
   "ui.lineComment.contextPlaceholder": "Dodaj kontekst tej zmiany",
   "ui.lineComment.submit": "Skomentuj",
@@ -117,8 +113,6 @@ export const dict = {
   "ui.list.loading": "Ładowanie",
   "ui.list.empty": "Brak wyników",
   "ui.list.clearFilter": "Wyczyść filtr",
-  "ui.list.emptyWithFilter.prefix": "Brak wyników dla",
-  "ui.list.emptyWithFilter.suffix": "",
 
   "ui.messageNav.newMessage": "Nowa wiadomość",
 
@@ -166,8 +160,6 @@ export const dict = {
 
   "ui.common.file.one": "plik",
   "ui.common.file.other": "pliki",
-  "ui.common.question.one": "pytanie",
-  "ui.common.question.other": "pytania",
 
   "ui.common.add": "Dodaj",
   "ui.common.back": "Wstecz",
@@ -202,7 +194,6 @@ export const dict = {
   "ui.patch.action.moved": "Przeniesiono",
   "ui.patch.action.patched": "Załatano",
 
-  "ui.question.subtitle.answered": "Liczba odpowiedzi: {{count}}",
   "ui.question.answer.none": "(brak odpowiedzi)",
   "ui.question.review.notAnswered": "(bez odpowiedzi)",
   "ui.question.multiHint": "Zaznacz wszystkie pasujące",
@@ -256,8 +247,6 @@ export const dict = {
   "ui.sessionTimeline.notice.modelSwitched": "Przełączono na {{model}}",
   "ui.common.file.few": "pliki",
   "ui.common.file.many": "plików",
-  "ui.common.question.few": "pytania",
-  "ui.common.question.many": "pytań",
   "ui.sessionTurn.retry.attemptLabel": "Próba {{attempt}}",
   "ui.sessionTurn.retry.attemptRetrying": "Próba {{attempt}} - {{line}}",
   "ui.messagePart.context.notice.one": "{{count}} powiadomienie",
@@ -297,4 +286,17 @@ export const dict = {
   "ui.messagePart.context.updates": "Aktualizacje",
   "ui.promptInput.cancelUpload": "Anuluj przesyłanie",
   "ui.promptInput.uploading": "{{percent}}%",
+  "ui.fileMedia.audioLabel": "Dźwięk: {{filename}}",
+  "ui.lineComment.label": "Komentarz do {{selection}}",
+  "ui.lineComment.editorLabel": "Komentowanie: {{selection}}",
+  "ui.list.emptyWithFilter": "Brak wyników dla {{query}}",
+  "ui.message.modelVariant": "{{model}} ({{variant}})",
+  "ui.common.questionCount.one": "{{count}} pytanie",
+  "ui.question.subtitle.answeredCount.one": "Liczba odpowiedzi: {{count}}",
+  "ui.common.questionCount.other": "{{count}} pytania",
+  "ui.question.subtitle.answeredCount.other": "Liczba odpowiedzi: {{count}}",
+  "ui.common.questionCount.few": "{{count}} pytania",
+  "ui.question.subtitle.answeredCount.few": "Liczba odpowiedzi: {{count}}",
+  "ui.common.questionCount.many": "{{count}} pytań",
+  "ui.question.subtitle.answeredCount.many": "Liczba odpowiedzi: {{count}}",
 }

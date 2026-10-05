@@ -1,9 +1,8 @@
 export default {
+  "mobile.title": "Ændringer",
   "tab.title": "Gennemgang",
   "tab.count.one": "{{count}} fil ændret",
   "tab.count.other": "{{count}} filer ændret",
-  "mobile.title.one": "Ændring",
-  "mobile.title.other": "Ændringer",
   "empty.git": "Ingen ændringer uden commit endnu",
   "empty.branch": "Ingen grenændringer endnu",
   "git.title": "Opret et Git-repository",

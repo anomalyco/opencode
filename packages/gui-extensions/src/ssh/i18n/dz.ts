@@ -42,4 +42,5 @@ export default {
   "menu.default": "སྔོན་སྒྲིག་སྦེ་གཞི་སྒྲིག་འབད།",
   "menu.defaultRemove": "སྔོན་སྒྲིག་རྩ་བསྐྲད་གཏང་།",
   "menu.delete": "བཏོན༌གཏང༌བ",
+  "error.unavailable": "SSH འཐོབ་མི་ཚུགས།",
 }

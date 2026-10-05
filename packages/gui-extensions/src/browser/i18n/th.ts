@@ -13,4 +13,8 @@ export default {
   "failed.title": "เข้าถึง URL ไม่ได้",
   "failed.description": "ตรวจสอบ URL และการเชื่อมต่อ แล้วลองอีกครั้ง",
   "action.reload": "โหลดใหม่",
+  "command.inspect": "เลือกองค์ประกอบในหน้าเบราว์เซอร์",
+  inspect: "เลือกองค์ประกอบเพื่อแสดงความคิดเห็น",
+  "inspect.active": "คลิกองค์ประกอบในหน้าเพื่อแสดงความคิดเห็น กด Escape เพื่อยกเลิก",
+  "inspect.pageShortcut": "ขณะที่โฟกัสอยู่ที่หน้า",
 }

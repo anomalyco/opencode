@@ -51,6 +51,7 @@ export function MessageNav(
                     data-active={message.id === local.current?.id || undefined}
                     role="button"
                     tabindex={0}
+                    aria-label={local.getLabel?.(message) ?? i18n.t("ui.messageNav.newMessage")}
                     onClick={handleClick}
                     onKeyDown={handleKeyPress}
                   >

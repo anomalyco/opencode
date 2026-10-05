@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Pasangkan peranti",
+  title: "Pemasangan",
+  connection: "Rangkaian Setempat",
+  "local.description": "Lihat butiran sambungan dan kod QR untuk menyambungkan peranti pada rangkaian yang sama.",
+  "local.open": "Tunjukkan butiran",
+  "screenActive.title": "Kekalkan skrin aktif",
+  "screenActive.description": "Cegah paparan komputer ini daripada tidur semasa OpenCode berjalan.",
+  "screenActive.error": "Tidak dapat mengemas kini tetapan aktiviti skrin. Cuba lagi.",
+  description: "Sambungkan peranti lain ke pelayan OpenCode pada mesin ini.",
+  qr: "Kod QR pemasangan",
+  copy: "Salin butiran",
+  "copy.error": "Tidak dapat menyalin butiran pemasangan. Cuba lagi.",
+  error: "Tidak dapat mengemas kini butiran pemasangan. Cuba lagi.",
+}

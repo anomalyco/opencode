@@ -1,0 +1,15 @@
+export default {
+  "command.title": "Postavi usputno pitanje",
+  "title": "Uparivanje",
+  "connection": "Lokalna mreža",
+  "local.description": "Pogledajte pojedinosti veze i QR kod za povezivanje uređaja na istoj mreži.",
+  "local.open": "Prikaži pojedinosti",
+  "screenActive.title": "Održi zaslon aktivnim",
+  "screenActive.description": "Sprječava prelazak zaslona ovog računala u stanje mirovanja dok je OpenCode pokrenut.",
+  "screenActive.error": "Postavku aktivnosti zaslona nije moguće ažurirati. Pokušajte ponovno.",
+  "description": "Povežite drugi uređaj s OpenCode poslužiteljem na ovom računalu.",
+  "qr": "QR kod za uparivanje",
+  "copy": "Kopiraj odgovor",
+  "copy.error": "Pojedinosti uparivanja nije moguće kopirati. Pokušajte ponovno.",
+  "error": "Nije moguće odgovoriti na to pitanje",
+}

@@ -24,7 +24,12 @@ import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./search"
 import { SettingsList } from "@/settings/list"
-import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelIcon, ProviderModelSections } from "@/providers/models/provider-group"
+import {
+  CONSOLE_GROUP_KEY,
+  consoleModelGroup,
+  ProviderModelIcon,
+  ProviderModelSections,
+} from "@/providers/models/provider-group"
 import "@/settings/settings.css"
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
@@ -232,8 +237,7 @@ export function ModelSelectorPopover(props: {
     if (!controller.current()?.startsWith("openai:")) return false
     const connection = data.location.integration
       .list(location().ref)
-      ?.find((integration) => integration.id === "openai")
-      ?.connections[0]
+      ?.find((integration) => integration.id === "openai")?.connections[0]
     return connection?.type === "credential" && connection.method === "oauth"
   }
 
@@ -396,6 +400,7 @@ export function ModelSelectorPopoverView(props: {
                 ref={(el) => (searchRef = el)}
                 value={store.search}
                 placeholder={language.t("dialog.model.search.placeholder")}
+                aria-label={language.t("dialog.model.search.placeholder")}
                 class="h-7 min-w-0 flex-1 border-0 bg-transparent text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none placeholder:text-v2-text-text-faint"
                 spellcheck={false}
                 autocorrect="off"
