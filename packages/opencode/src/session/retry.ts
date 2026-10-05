@@ -97,13 +97,16 @@ export function retryable(error: Err, provider: string) {
     )
       return undefined
     if (error.data.responseBody?.includes("FreeUsageLimitError")) {
+      const reset = resetText(error.data.responseHeaders?.["retry-after"])
+      const message = reset ? `${GO_UPSELL_MESSAGE}. It will reset in ${reset}` : GO_UPSELL_MESSAGE
+      const detail = "Subscribe to OpenCode Go for reliable access to the best open-source models for $10/month."
       return {
-        message: GO_UPSELL_MESSAGE,
+        message,
         action: {
           reason: "free_tier_limit",
           provider,
           title: "Free limit reached",
-          message: "Subscribe to OpenCode Go for reliable access to the best open-source models for $10/month.",
+          message: reset ? `${detail} Free usage will reset in ${reset}.` : detail,
           label: "subscribe",
           link: GO_UPSELL_URL,
         },
@@ -113,19 +116,7 @@ export function retryable(error: Err, provider: string) {
       const body = parseJSON(error.data.responseBody)
       const workspace = str(body?.metadata?.workspace)
       const limitName = str(body?.metadata?.limitName)
-      const retryAfter = num(error.data.responseHeaders?.["retry-after"])
-      const resetIn = iife(() => {
-        if (retryAfter === undefined) return ""
-        const seconds = Math.max(0, Math.ceil(retryAfter))
-        const days = Math.floor(seconds / 86_400)
-        const hours = Math.floor((seconds % 86_400) / 3_600)
-        const minutes = Math.ceil((seconds % 3_600) / 60)
-        const unit = (value: number, name: string) => `${value} ${name}${value === 1 ? "" : "s"}`
-
-        if (days > 0) return hours > 0 ? `${unit(days, "day")} ${unit(hours, "hour")}` : unit(days, "day")
-        if (hours > 0) return minutes > 0 ? `${unit(hours, "hour")} ${unit(minutes, "minute")}` : unit(hours, "hour")
-        return minutes > 0 ? unit(minutes, "minute") : "less than a minute"
-      })
+      const resetIn = resetText(error.data.responseHeaders?.["retry-after"])
 
       const message = `${limitName ? `${limitName} usage limit` : "Usage limit"} reached. It will reset in ${resetIn}. To continue using this model now, enable usage from your available balance`
 
@@ -156,6 +147,19 @@ export function retryable(error: Err, provider: string) {
 
 function matchesRetryableMessage(value: unknown) {
   return typeof value === "string" && RETRYABLE_MESSAGE_PATTERNS.some((pattern) => pattern.test(value))
+}
+
+function resetText(value: unknown) {
+  const retryAfter = num(value)
+  if (retryAfter === undefined) return ""
+  const seconds = Math.max(0, Math.ceil(retryAfter))
+  const days = Math.floor(seconds / 86_400)
+  const hours = Math.floor((seconds % 86_400) / 3_600)
+  const minutes = Math.ceil((seconds % 3_600) / 60)
+  const unit = (count: number, name: string) => `${count} ${name}${count === 1 ? "" : "s"}`
+  if (days > 0) return hours > 0 ? `${unit(days, "day")} ${unit(hours, "hour")}` : unit(days, "day")
+  if (hours > 0) return minutes > 0 ? `${unit(hours, "hour")} ${unit(minutes, "minute")}` : unit(hours, "hour")
+  return minutes > 0 ? unit(minutes, "minute") : "less than a minute"
 }
 
 function str(value: unknown) {
