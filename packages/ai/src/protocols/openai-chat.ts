@@ -855,7 +855,7 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
 // Streaming parsers are small state machines: every event returns a new state
 // plus the common `LLMEvent`s produced by that event. Tool calls are accumulated
 // because OpenAI streams JSON arguments across multiple deltas.
-const mapFinishReason = Effect.fn("OpenAIChat.mapFinishReason")(function* (event: OpenAIChatEvent, reason: string) {
+const mapFinishReason = Effect.fnUntraced(function* (event: OpenAIChatEvent, reason: string) {
   switch (reason) {
     case "error":
       return yield* new AIError({
@@ -1214,7 +1214,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     ] as const
   })
 
-const finishEvents = Effect.fn("OpenAIChat.finishEvents")(function* (state: ParserState) {
+const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
   if (state.finishReason === undefined && state.requireFinishReason)
     return yield* new AIError({
       reason: new InvalidProviderOutputError({

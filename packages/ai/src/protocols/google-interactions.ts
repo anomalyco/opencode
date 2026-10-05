@@ -364,7 +364,7 @@ const mapUsage = (usage: RawUsage | undefined, key: string) => {
   })
 }
 
-const onStart = Effect.fn("GoogleInteractions.onStart")(function* (
+const onStart = Effect.fnUntraced(function* (
   state: ParserState,
   index: number,
   step: OutputStep,
@@ -402,7 +402,7 @@ const onStart = Effect.fn("GoogleInteractions.onStart")(function* (
   return [{ ...state, lifecycle, tools, steps: { ...state.steps, [index]: step } }, events] satisfies StepResult
 })
 
-const onDelta = Effect.fn("GoogleInteractions.onDelta")(function* (
+const onDelta = Effect.fnUntraced(function* (
   state: ParserState,
   index: number,
   delta: typeof Delta.Type,
@@ -447,7 +447,7 @@ const onDelta = Effect.fn("GoogleInteractions.onDelta")(function* (
   return yield* ProviderShared.eventError(ADAPTER, `Unsupported Interactions delta: ${delta.type}`, encodeJson(delta))
 })
 
-const onStop = Effect.fn("GoogleInteractions.onStop")(function* (state: ParserState, index: number) {
+const onStop = Effect.fnUntraced(function* (state: ParserState, index: number) {
   const step = state.steps[index]
   if (!step) return yield* ProviderShared.eventError(ADAPTER, "Interactions step.stop without step.start")
   const events: LLMEvent[] = []
@@ -465,7 +465,7 @@ const onStop = Effect.fn("GoogleInteractions.onStop")(function* (state: ParserSt
   return [{ ...state, tools: result.tools }, result.events ?? []] satisfies StepResult
 })
 
-const step = Effect.fn("GoogleInteractions.step")(function* (state: ParserState, event: Event) {
+const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
   switch (event.event_type) {
     case "step.start":
       return yield* onStart(state, event.index, event.step)

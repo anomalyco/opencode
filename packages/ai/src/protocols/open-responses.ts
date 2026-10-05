@@ -1143,7 +1143,7 @@ const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResul
   ]
 }
 
-const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgumentsDelta")(function* (
+const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (
   state: ParserState,
   event: Event,
 ) {
@@ -1174,7 +1174,7 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
-const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
+const onOutputItemDone = Effect.fnUntraced(function* (
   state: ParserState,
   item: NormalizedEvent["item"],
 ) {
@@ -1310,7 +1310,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (state: ParserState, event: Event) {
+const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event: Event) {
   let current = state
   const events: LLMEvent[] = []
   if (event.type === "response.completed") {

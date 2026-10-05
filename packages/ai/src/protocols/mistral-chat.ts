@@ -596,7 +596,7 @@ const toolText = (tool: MistralToolDelta) => {
   return value === null || value === undefined ? "" : ProviderShared.encodeJson(value)
 }
 
-const appendTools = Effect.fn("MistralChat.appendTools")(function* (
+const appendTools = Effect.fnUntraced(function* (
   initial: ParserState,
   events: LLMEvent[],
   deltas: ReadonlyArray<MistralToolDelta>,
@@ -662,7 +662,7 @@ const hasLateContent = (event: MistralEvent) => {
   )
 }
 
-const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event: MistralEvent) {
+const step = Effect.fnUntraced(function* (state: ParserState, event: MistralEvent) {
   if (event.error) {
     const body = ProviderShared.encodeJson(event)
     return yield* new AIError({
@@ -726,7 +726,7 @@ const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event:
   ] as const
 })
 
-const finishEvents = Effect.fn("MistralChat.finishEvents")(function* (state: ParserState) {
+const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
   if (!state.finishReason)
     return yield* new AIError({
       reason: new InvalidProviderOutputError({

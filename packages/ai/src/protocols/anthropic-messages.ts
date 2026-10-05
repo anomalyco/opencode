@@ -1300,7 +1300,7 @@ const onContentBlockStart = (
   return [{ ...state, lifecycle: Lifecycle.stepStart(state.lifecycle, events) }, [...events, result]]
 }
 
-const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(function* (
+const onContentBlockDelta = Effect.fnUntraced(function* (
   state: ParserState,
   event: AnthropicEvent & { readonly delta: AnthropicStreamDelta },
 ) {
@@ -1368,7 +1368,7 @@ const onContentBlockDelta = Effect.fn("AnthropicMessages.onContentBlockDelta")(f
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onContentBlockStop = Effect.fn("AnthropicMessages.onContentBlockStop")(function* (
+const onContentBlockStop = Effect.fnUntraced(function* (
   state: ParserState,
   event: AnthropicEvent,
 ) {
@@ -1439,7 +1439,7 @@ const onMessageDelta = (
   ]
 }
 
-const onMessageStop = Effect.fn("AnthropicMessages.onMessageStop")(function* (state: ParserState) {
+const onMessageStop = Effect.fnUntraced(function* (state: ParserState) {
   if (Object.keys(state.compactions).length)
     return yield* ProviderShared.eventError(ADAPTER, "Response ended with an incomplete compaction block")
   const result = yield* ToolStream.finishAll(ADAPTER, state.tools)
