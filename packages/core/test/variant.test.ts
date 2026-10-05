@@ -126,6 +126,46 @@ test("spells Cloudflare AI Gateway variants for their upstream routes", () => {
   ])
 })
 
+test("spells Vercel AI Gateway variants for their selected routes", () => {
+  const pkg = "@opencode/ai/providers/vercel-ai-gateway"
+  expect(resolve(model(pkg, "openai/gpt-5.4"), [{ type: "effort", values: ["low", "xhigh"] }])).toEqual([
+    {
+      id: "low",
+      settings: { reasoningEffort: "low", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    },
+    {
+      id: "xhigh",
+      settings: { reasoningEffort: "xhigh", reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    },
+  ])
+  expect(resolve(model(pkg, "spacexai/grok-4.7"), [{ type: "effort" }]).map((item) => item.id)).toEqual([
+    "low",
+    "medium",
+    "high",
+  ])
+  expect(
+    resolve(model(pkg, "anthropic/claude-sonnet-4.6"), [{ type: "effort", values: ["none", "low", "high"] }]),
+  ).toEqual([
+    { id: "none", settings: { thinking: { type: "disabled" } } },
+    { id: "low", settings: { effort: "low", thinking: { type: "adaptive", display: "summarized" } } },
+    { id: "high", settings: { effort: "high", thinking: { type: "adaptive", display: "summarized" } } },
+  ])
+  expect(resolve(model(pkg, "meta/muse-spark-1.3"), [{ type: "effort", values: ["low", "high"] }])).toEqual([
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+  expect(
+    resolve(model(`${pkg}/chat`, "alibaba/qwen-3-32b", 38_912), [
+      { type: "toggle" },
+      { type: "budget_tokens", min: 1, max: 38_912 },
+    ]),
+  ).toEqual([
+    { id: "none", settings: { thinking: { type: "disabled" } } },
+    { id: "high", settings: { thinking: { type: "enabled", budgetTokens: 19_456 } } },
+    { id: "max", settings: { thinking: { type: "enabled", budgetTokens: 38_911 } } },
+  ])
+})
+
 test("spells xAI Responses variants with catalog effort levels", () => {
   const supports: Variant.Support[] = [{ type: "effort", values: ["low", "medium", "high", "xhigh"] }]
   expect(resolve(model("@opencode/ai/providers/xai", "grok-4.6"), supports)).toEqual(

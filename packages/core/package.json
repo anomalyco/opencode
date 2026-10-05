@@ -96,7 +96,6 @@
   },
   "dependencies": {
     "@ai-sdk/cohere": "3.0.27",
-    "@ai-sdk/gateway": "3.0.104",
     "@ai-sdk/perplexity": "3.0.26",
     "@ai-sdk/provider": "3.0.8",
     "@ai-sdk/provider-utils": "4.0.23",

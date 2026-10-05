@@ -73,6 +73,7 @@ const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/openai-compatible": "@opencode/ai/providers/openai-compatible",
   "@ai-sdk/togetherai": "@opencode/ai/providers/togetherai",
   "@ai-sdk/xai": "@opencode/ai/providers/xai",
+  "@ai-sdk/gateway": "@opencode/ai/providers/vercel-ai-gateway",
   "@openrouter/ai-sdk-provider": "@opencode/ai/providers/openrouter",
   "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
   "venice-ai-sdk-provider": "@opencode/ai/providers/venice",
@@ -112,6 +113,8 @@ const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "minimax-cn-coding-plan": protocols("minimax"),
   moonshotai: protocols("moonshot"),
   "moonshotai-cn": protocols("moonshot"),
+  vercel: protocols("vercel-ai-gateway"),
+  "vercel-ai-gateway": protocols("vercel-ai-gateway"),
   zai: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/zai/chat" },
   "zai-coding-plan": protocols("zai-coding-plan"),
   zhipuai: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/zai/chat" },
@@ -148,8 +151,7 @@ function resolve(specifier: string, context: Context & { readonly settings?: Pro
   if (Provider.isAISDK(specifier) || npm in PACKAGES || npm in (HOSTS[context.providerID] ?? {}))
     return native(npm, context)
   if (npm === "@opencode/ai/providers/amazon-bedrock/mantle") return mantle(context.modelID)
-  if (npm === "@opencode/ai/providers/azure/responses" && azureChat(context))
-    return "@opencode/ai/providers/azure/chat"
+  if (npm === "@opencode/ai/providers/azure/responses" && azureChat(context)) return "@opencode/ai/providers/azure/chat"
   return NATIVE.has(npm) ? npm : undefined
 }
 

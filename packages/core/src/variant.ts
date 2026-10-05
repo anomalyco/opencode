@@ -300,10 +300,12 @@ const anthropicMessages: Protocol = (model, support) => {
       const thinking = opus45 ? manualThinking(model) : { settings: { thinking: ADAPTIVE_THINKING } }
       if (!thinking) return []
       const defaults = info.major === 4 && info.minor === 6 ? [...EFFORTS, "max"] : [...EFFORTS, "xhigh", "max"]
-      const values = support.values ?? defaults
-      return efforts(values, (effort) => ({
-        settings: { ...thinking.settings, effort },
-      }))
+      const values = (support.values ?? defaults).filter((effort) => !info.always || effort !== "none")
+      return efforts(values, (effort) =>
+        effort === "none"
+          ? { settings: { thinking: { type: "disabled" } } }
+          : { settings: { ...thinking.settings, effort } },
+      )
     }
     case "toggle": {
       if (info.always) return []
@@ -439,22 +441,6 @@ const bedrockConverse: Protocol = (model, support) => {
   }
 }
 
-const alibabaAISDK: Protocol = (model, support) => {
-  switch (support.type) {
-    case "effort":
-      return []
-    case "toggle":
-      return toggle({ settings: { enableThinking: false } }, { settings: { enableThinking: true } })
-    case "budget_tokens":
-      return budgets(
-        model,
-        support,
-        (tokens) => ({ settings: { enableThinking: true, thinkingBudget: tokens } }),
-        ALIBABA_THINKING_BUDGET_MAX,
-      )
-  }
-}
-
 const cohere: Protocol = (model, support) => {
   switch (support.type) {
     case "effort":
@@ -466,47 +452,48 @@ const cohere: Protocol = (model, support) => {
   }
 }
 
-const bedrockAISDK: Protocol = (model, support) => {
-  const claude = modelID(model).includes("anthropic")
+const vercelMessages: Protocol = (model, support) => {
+  const id = modelID(model)
+  if (id.startsWith("anthropic/")) return anthropicMessages(model, support)
   switch (support.type) {
     case "effort":
-      return efforts(support.values ?? EFFORTS, (effort) => ({
-        settings: claude
-          ? {
-              reasoningConfig: {
-                ...(claudeInfo(model).manual ? {} : ADAPTIVE_THINKING),
-                maxReasoningEffort: effort,
-              },
-            }
-          : { reasoningConfig: { type: "enabled", maxReasoningEffort: effort } },
-      }))
+      return efforts(support.values ?? EFFORTS, (effort) => ({ settings: { reasoningEffort: effort } }))
     case "toggle":
-      return claude
-        ? toggle(
-            { settings: { additionalModelRequestFields: { thinking: { type: "disabled" } } } },
-            { settings: { additionalModelRequestFields: { thinking: ADAPTIVE_THINKING } } },
-          )
-        : toggle(
-            { settings: { additionalModelRequestFields: { reasoningConfig: { type: "disabled" } } } },
-            { settings: { additionalModelRequestFields: { reasoningConfig: { type: "enabled" } } } },
-          )
+      return toggle({ settings: { thinking: { type: "disabled" } } }, { settings: { thinking: { type: "adaptive" } } })
     case "budget_tokens":
       return budgets(
         model,
         support,
-        (tokens) => ({ settings: { reasoningConfig: { type: "enabled", budgetTokens: tokens } } }),
-        claude ? ANTHROPIC_OUTPUT_TOKEN_MAX : model.limit.output,
+        (tokens) => ({ settings: { thinking: { type: "enabled", budgetTokens: tokens } } }),
+        id.startsWith("alibaba/") ? ALIBABA_THINKING_BUDGET_MAX : model.limit.output,
       )
   }
 }
 
+const vercelChat: Protocol = (model, support) => {
+  switch (support.type) {
+    case "effort":
+      return efforts(support.values ?? EFFORTS, (effort) => ({ settings: { reasoningEffort: effort } }))
+    case "toggle":
+      return toggle({ settings: { thinking: { type: "disabled" } } }, { settings: { thinking: { type: "enabled" } } })
+    case "budget_tokens":
+      return budgets(
+        model,
+        support,
+        (tokens) => ({ settings: { thinking: { type: "enabled", budgetTokens: tokens } } }),
+        modelID(model).startsWith("alibaba/") ? ALIBABA_THINKING_BUDGET_MAX : model.limit.output,
+      )
+  }
+}
+
+const vercelResponses: Protocol = (model, support) =>
+  modelID(model).startsWith("spacexai/") ? xaiResponses(model, support) : openaiResponses(model, support)
+
 const vercelGateway: Protocol = (model, support) => {
-  const prefix = modelID(model).split("/")[0]
-  if (prefix === "anthropic") return anthropicMessages(model, support)
-  if (prefix === "google") return gemini(model, support)
-  if (prefix === "amazon") return bedrockAISDK(model, support)
-  if (prefix === "alibaba") return alibabaAISDK(model, support)
-  return support.type === "effort" ? openaiChat(model, support) : openrouter(model, support)
+  const id = modelID(model)
+  if (/^(openai\/gpt-|spacexai\/grok-)/.test(id)) return vercelResponses(model, support)
+  if (id.startsWith("meta/muse-")) return vercelChat(model, support)
+  return vercelMessages(model, support)
 }
 
 const sapAICore: Protocol = (model, support) => {
@@ -614,6 +601,10 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
 
   [Provider.aisdk("venice-ai-sdk-provider")]: veniceChat,
   "@opencode/ai/providers/cloudflare-ai-gateway": cloudflareAIGateway,
+  "@opencode/ai/providers/vercel-ai-gateway": vercelGateway,
+  "@opencode/ai/providers/vercel-ai-gateway/messages": vercelMessages,
+  "@opencode/ai/providers/vercel-ai-gateway/responses": vercelResponses,
+  "@opencode/ai/providers/vercel-ai-gateway/chat": vercelChat,
   [Provider.aisdk("@ai-sdk/gateway")]: vercelGateway,
   [Provider.aisdk("@jerome-benoit/sap-ai-provider-v2")]: sapAICore,
 }

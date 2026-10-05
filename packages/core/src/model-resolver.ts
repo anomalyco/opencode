@@ -288,7 +288,10 @@ function prepareProviderSettings(
   )
 }
 
-function prepareProviderURL(model: RuntimeInfo, baseURL: string): Effect.Effect<string, UnresolvedProviderVariablesError> {
+function prepareProviderURL(
+  model: RuntimeInfo,
+  baseURL: string,
+): Effect.Effect<string, UnresolvedProviderVariablesError> {
   if (!baseURL.includes("${")) return Effect.succeed(baseURL)
   const prepared = baseURL.replace(/\$\{([^}]+)\}/g, (placeholder, name: string) => process.env[name] ?? placeholder)
   const failure = unresolvedProviderVariables(model, prepared)
@@ -459,6 +462,8 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@opencode/ai/providers/groq" ||
     name === "@opencode/ai/providers/mistral" ||
     name === "@opencode/ai/providers/togetherai" ||
+    name === "@opencode/ai/providers/vercel-ai-gateway" ||
+    name?.startsWith("@opencode/ai/providers/vercel-ai-gateway/") === true ||
     name === "@opencode/ai/providers/xai" ||
     name === "@opencode/ai/providers/openrouter" ||
     name === "@opencode/ai/providers/azure" ||
