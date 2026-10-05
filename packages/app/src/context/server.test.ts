@@ -77,6 +77,14 @@ test("treats WSL sidecars as remote server connections", () => {
   expect(ServerConnection.local({ type: "http", http: { url: "https://server.example.test" } })).toBe(false)
 })
 
+test("treats uppercase, userinfo, and IPv6 loopback URLs as local", () => {
+  expect(ServerConnection.local({ type: "http", http: { url: "http://LOCALHOST:4096" } })).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://user@localhost:4096" } })).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://[::1]:4096" } })).toBe(true)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://LOCALHOST.evil.test" } })).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://[::2]:4096" } })).toBe(false)
+})
+
 test("active server removal falls back across built-in and persisted servers", () => {
   const local = { type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } } as const
   const debian = {

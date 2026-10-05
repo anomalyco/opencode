@@ -34,6 +34,14 @@ export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = fals
 }
 
 function isLocalHost(url: string) {
+  try {
+    // URL parsing normalizes the hostname: lowercased, without userinfo,
+    // with IPv6 literals keeping their brackets (e.g. "[::1]").
+    const hostname = new URL(url).hostname
+    if (hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]") return "local"
+  } catch {
+    // Fall through to the legacy prefix check for non-URL inputs.
+  }
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
   if (host === "localhost" || host === "127.0.0.1") return "local"
 }
