@@ -118,14 +118,18 @@ function chatReasoning(thinking: ChatThinking | undefined) {
   }
 }
 
+function gatewayProviderOptions(options: typeof GatewayOptionsSchema.Type) {
+  if (options.upstream === undefined && options.gateway === undefined) return undefined
+  return {
+    ...options.upstream,
+    ...(options.gateway ? { gateway: options.gateway } : {}),
+  }
+}
+
 const prepare = (api: "messages" | "responses" | "chat") =>
   Effect.fnUntraced(function* (request: LLMRequest) {
     const options = yield* decodeOptions(request.providerOptions ?? {})
-    const defaultGateway = request.cache === "none" ? undefined : { caching: "auto" as const }
-    const providerOptions = {
-      ...options.upstream,
-      gateway: { ...defaultGateway, ...options.gateway },
-    }
+    const providerOptions = gatewayProviderOptions(options)
     if (api === "messages") {
       return {
         request: messagesRequest(request, options.reasoningEffort),

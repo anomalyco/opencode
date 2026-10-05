@@ -28,8 +28,35 @@ it.effect("Gateway defaults preserve full model IDs and select the requested fam
       expect(model.route.endpoint.path).toBe(path)
       const compiled = yield* compileRequest(LLM.request({ model, prompt: "Hello" }))
       expect(compiled.body.model).toBe(id)
-      expect(compiled.body.providerOptions).toEqual({ gateway: { caching: "auto" } })
+      expect(compiled.body.providerOptions).toBeUndefined()
     }
+  }),
+)
+
+it.effect("Gateway Messages applies inline cache markers only for Anthropic and Qwen models", () =>
+  Effect.gen(function* () {
+    const gateway = VercelAIGateway.configure({ apiKey: "fixture" })
+    const input = {
+      system: "System prompt",
+      tools: [{ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }],
+      prompt: "Hello",
+    }
+    const claude = yield* compileRequest(
+      LLM.request({ ...input, model: gateway.messages("anthropic/claude-sonnet-5.5") }),
+    )
+    expect(claude.body).toMatchObject({
+      tools: [{ name: "lookup", cache_control: { type: "ephemeral" } }],
+      system: [{ type: "text", text: "System prompt", cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: [{ type: "text", text: "Hello", cache_control: { type: "ephemeral" } }] }],
+    })
+    const qwen = yield* compileRequest(LLM.request({ ...input, model: gateway.messages("alibaba/qwen3.8-max") }))
+    expect(qwen.body).toMatchObject({
+      tools: [{ name: "lookup", cache_control: undefined }],
+      system: [{ type: "text", text: "System prompt", cache_control: { type: "ephemeral" } }],
+      messages: [{ role: "user", content: [{ type: "text", text: "Hello", cache_control: { type: "ephemeral" } }] }],
+    })
+    const gemini = yield* compileRequest(LLM.request({ ...input, model: gateway.messages("google/gemini-3.8-flash") }))
+    expect(JSON.stringify(gemini.body)).not.toContain("cache_control")
   }),
 )
 
@@ -96,7 +123,7 @@ it.effect("Gateway Responses keeps cache-key and cache controls out of upstream 
       }),
     )
     expect(compiled.body).toMatchObject({ prompt_cache_key: "opaque-session", cache_ttl: "1h", cache_anchor_items: 1 })
-    expect(compiled.body.providerOptions).toEqual({ gateway: { caching: "auto" } })
+    expect(compiled.body.providerOptions).toBeUndefined()
   }),
 )
 
