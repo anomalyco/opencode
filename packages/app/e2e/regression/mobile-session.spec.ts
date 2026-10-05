@@ -30,9 +30,11 @@ for (const position of ["top", "bottom"] as const) {
     const navigation = page.locator('[data-slot="session-mobile-view-navigation"]')
     const more = navigation.getByRole("button", { name: "More options", exact: true })
     const picker = tabs.getByRole("tab", { selected: true })
+
     const message = page.locator(
       `[data-timeline-row="UserMessage"][data-message-id="${fixture.expected.targetMessageIDs.at(-1)}"]`,
     )
+
     const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
     await expect(picker).toHaveText("Session")
     await expect(message).toBeVisible()
@@ -40,14 +42,17 @@ for (const position of ["top", "bottom"] as const) {
     await expect(tabs.getByRole("tab")).toHaveText(["Session", "Changes", "Files", "Terminal"])
     await expect(tabs).toHaveCSS("padding-left", "0px")
     await expect(tabs).toHaveCSS("padding-right", "0px")
+
     if (position === "top") {
       const titlebar = page.locator('[data-slot="titlebar-v2"]')
       await expect(titlebar).toHaveCSS("padding-top", "16px")
       await expect(titlebar).toHaveCSS("height", "44px")
     }
+
     await expect
       .poll(async () => {
         const bounds = await navigation.boundingBox()
+
         return !!bounds && bounds.x >= 8 && bounds.x <= 9 && bounds.width >= 372 && bounds.width <= 374
       })
       .toBe(true)
@@ -56,6 +61,7 @@ for (const position of ["top", "bottom"] as const) {
         const bar = await tabs.boundingBox()
         const input = await composer.boundingBox()
         const panel = await page.locator('[data-slot="session-chat-panel"]').boundingBox()
+
         return !!bar && !!input && !!panel && Math.abs(bar.y - panel.y) <= 1 && bar.y + bar.height <= input.y
       })
       .toBe(true)
@@ -154,16 +160,19 @@ for (const position of ["top", "bottom"] as const) {
 
     // The view resets to Session whenever the routed session changes, including through Home.
     const trigger = page.locator('[data-slot="mobile-tabs-trigger"]')
+
     const openTabs = async () => {
       await trigger.click()
       await expect(drawer).not.toHaveAttribute("data-transitioning")
     }
+
     const openTab = async (title: string) => {
       await openTabs()
       await drawer.locator('[data-slot="tab-link"]').filter({ hasText: title }).click()
       await expect(drawer).toBeHidden()
       await expect(trigger).toContainText(title)
     }
+
     await more.click()
     await page.getByRole("menuitem", { name: "Usage", exact: true }).click()
     await expect(page.getByText("Total Cost", { exact: true })).toBeVisible()
@@ -343,6 +352,7 @@ test.describe("touch", () => {
       .poll(async () => {
         const navigation = await settings.getByRole("button", { name: "Models", exact: true }).boundingBox()
         const content = await panel.boundingBox()
+
         return !!navigation && !!content && navigation.y + navigation.height <= content.y
       })
       .toBe(true)
