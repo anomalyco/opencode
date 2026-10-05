@@ -1440,6 +1440,12 @@ export const step = (state: ParserState, event: NormalizedEvent) => {
       ? Effect.succeed(onReasoningSummaryPartDone(state, event))
       : ProviderShared.eventError(state.id, `${event.type} is missing item_id`)
   if (event.type === "response.output_item.added") {
+    if (
+      event.item?.type === "reasoning" &&
+      state.reasoningItems[event.item.id] === undefined &&
+      state.lifecycle.reasoning.size > 0
+    )
+      return ProviderShared.eventError(state.id, `${event.type} started reasoning before the previous item ended`)
     return Effect.succeed(
       onOutputItemAdded(
         event.output_index !== undefined && event.item
