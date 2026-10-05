@@ -6,6 +6,7 @@ import { GeoStatRepo, rowsFromAggregates as geoRowsFromAggregates } from "./doma
 import {
   buildRetentionQueries,
   buildStatsQueries,
+  hiddenStatModels,
   toGeoAggregate,
   toModelAggregate,
   toProviderAggregate,
@@ -148,9 +149,9 @@ export const syncStats: (options?: {
     )
     yield* Effect.all(
       [
-        modelStats.deleteRetiredDimensions(modelRows),
+        modelStats.deleteRetiredDimensions(modelRows, hiddenStatModels()),
         providerStats.deleteRetiredDimensions(providerRows),
-        geoStats.deleteRetiredDimensions(geoRows),
+        geoStats.deleteRetiredDimensions(geoRows, hiddenStatModels()),
       ],
       { concurrency: "unbounded", discard: true },
     )
