@@ -860,6 +860,7 @@ for (const delivery of ["steer", "queue"] as const) {
     await expect(thinking).toHaveCount(0)
 
     const bubble = pending.locator('[data-slot="user-message-text"]')
+
     const colors =
       delivery === "steer"
         ? {
@@ -874,11 +875,14 @@ for (const delivery of ["steer", "queue"] as const) {
               probe.style.backgroundColor = "var(--v2-background-bg-layer-02)"
               probe.style.color = "var(--v2-text-text-base)"
               element.appendChild(probe)
+
               const colors = {
                 background: getComputedStyle(probe).backgroundColor,
                 text: getComputedStyle(probe).color,
               }
+
               probe.remove()
+
               return colors
             }),
           }
@@ -891,7 +895,7 @@ for (const delivery of ["steer", "queue"] as const) {
       await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(
         /^Pending\s*·\s*Build\s*·\s*Queue Model$/,
       )
-      await bubble.evaluate((element) => ((element as HTMLElement).dataset.deliveryMarker = "pending"))
+      await bubble.evaluate((element) => (element.dataset.deliveryMarker = "pending"))
     }
 
     // The next assistant step still belongs to U1: U2 has been admitted, not delivered.
@@ -956,6 +960,7 @@ for (const delivery of ["steer", "queue"] as const) {
     mock.emit("session.inbox.delivered", { sessionID, inboxID })
     await expect(thinking).toHaveCount(0)
     await expect(pending).toHaveCount(1)
+
     if (colors) {
       await expect(bubble).toHaveAttribute("data-delivery-marker", "pending")
       await expect(pending.locator('[data-slot="user-message-meta"]')).toHaveText(/^Build\s*·\s*Queue Model$/)
@@ -966,6 +971,7 @@ for (const delivery of ["steer", "queue"] as const) {
       await page.emulateMedia({ reducedMotion: "reduce" })
       await expect(bubble).toHaveCSS("transition-duration", "0s")
     }
+
     await expect(transcript.locator('[data-timeline-row="UserMessage"]')).toHaveCount(2)
     await expect(transcript.locator('[data-timeline-row="AssistantPart"]').filter({ has: tools })).toHaveAttribute(
       "data-message-id",
