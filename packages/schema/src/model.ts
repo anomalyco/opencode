@@ -1,7 +1,7 @@
 export * as Model from "./model.js"
 
 import { Schema } from "effect"
-import { optional, statics } from "./schema.js"
+import { optional, PositiveInt, statics } from "./schema.js"
 import { Provider } from "./provider.js"
 import { Money } from "./money.js"
 import { ephemeral, inventory } from "./event.js"
@@ -59,6 +59,7 @@ export type MaxTokensField = typeof MaxTokensField.Type
 export const Settings = Schema.StructWithRest(
   Schema.Struct({
     compaction: Provider.Compaction.pipe(optional),
+    outputTokenBudget: PositiveInt.pipe(optional),
   }),
   // Provider packages may define arbitrary model-level options beyond OpenCode's shared compaction policy.
   [Schema.Record(Schema.String, Schema.Any)],
@@ -118,6 +119,12 @@ export const Variant = Schema.Struct({
   ...Overlays,
 }).annotate({ identifier: "Model.Variant" })
 
+export interface RequestDefaults extends Schema.Schema.Type<typeof RequestDefaults> {}
+export const RequestDefaults = Schema.Struct({
+  outputTokenBudget: PositiveInt.pipe(optional),
+  outputTokenBudgetByReasoningEffort: Schema.Record(Schema.String, PositiveInt).pipe(optional),
+}).annotate({ identifier: "Model.RequestDefaults" })
+
 export interface Info extends Schema.Schema.Type<typeof Info> {}
 export const Info = Schema.Struct({
   id: ID,
@@ -129,6 +136,7 @@ export const Info = Schema.Struct({
   compatibility: Compatibility.pipe(optional),
   package: Provider.Package.pipe(optional),
   ...Overlays,
+  requestDefaults: RequestDefaults.pipe(optional),
   capabilities: Capabilities,
   variants: Schema.Array(Variant),
   time: Schema.Struct({

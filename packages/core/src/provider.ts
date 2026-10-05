@@ -138,7 +138,16 @@ export const loadPackage = Effect.fn("Provider.loadPackage")(function* (input: s
 })
 
 /** opencode settings consumed in Core; native packages never receive them. */
-const CORE_KEYS = ["chunkTimeout", "compaction", "fetch", "headerTimeout", "modelDiscovery", "timeout", "transport"] as const
+const CORE_KEYS = [
+  "chunkTimeout",
+  "compaction",
+  "fetch",
+  "headerTimeout",
+  "modelDiscovery",
+  "outputTokenBudget",
+  "timeout",
+  "transport",
+] as const
 const PROVIDER_ONLY_KEYS = ["chunkTimeout", "headerTimeout", "modelDiscovery", "timeout", "transport"] as const
 
 export function nativeSettings(settings: Settings): Settings {

@@ -231,6 +231,11 @@ export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning
 
 export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
 
+export type ModelRequestDefaults = {
+  outputTokenBudget?: number
+  outputTokenBudgetByReasoningEffort?: { [x: string]: number }
+}
+
 export type ModelCapabilities = {
   tools: boolean
   parallelTools?: boolean
@@ -491,9 +496,11 @@ export type V2EventServerConnected = {
   data: {}
 }
 
-export type ModelSettings = { compaction?: ProviderCompaction } & { [x: string]: any }
+export type ModelSettings = { compaction?: ProviderCompaction; outputTokenBudget?: number } & { [x: string]: any }
 
-export type ConfigModelSettings = { compaction?: ProviderCompaction } & { [x: string]: JsonValue | null }
+export type ConfigModelSettings = { compaction?: ProviderCompaction; outputTokenBudget?: number } & {
+  [x: string]: JsonValue | null
+}
 
 export type ProviderSettings = {
   timeout?: number | false
@@ -502,6 +509,7 @@ export type ProviderSettings = {
   compaction?: ProviderCompaction
   transport?: ProviderTransport
   modelDiscovery?: boolean
+  outputTokenBudget?: number
 } & { [x: string]: any }
 
 export type ConfigProviderSettings = {
@@ -511,6 +519,7 @@ export type ConfigProviderSettings = {
   compaction?: ProviderCompaction
   transport?: ProviderTransport
   modelDiscovery?: boolean
+  outputTokenBudget?: number
 } & { [x: string]: JsonValue | null }
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }
@@ -1974,6 +1983,7 @@ export type ModelInfo = {
   settings?: ModelSettings
   headers?: { [x: string]: string }
   body?: { [x: string]: any }
+  requestDefaults?: ModelRequestDefaults
   capabilities: ModelCapabilities
   variants: Array<ModelVariant>
   time: { released: number }
@@ -2183,6 +2193,7 @@ export type ConfigEntry =
                 settings?: ConfigModelSettings
                 headers?: { [x: string]: string }
                 body?: { [x: string]: JsonValue }
+                requestDefaults?: ModelRequestDefaults
                 capabilities?: ConfigModelCapabilities
                 variants?: Array<{
                   id: string

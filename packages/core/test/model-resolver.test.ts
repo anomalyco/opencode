@@ -25,6 +25,7 @@ interface ModelOptions {
   readonly body?: Info["body"]
   readonly variants?: Info["variants"]
   readonly limit?: Info["limit"]
+  readonly requestDefaults?: Info["requestDefaults"]
 }
 
 function model(packageName: string | undefined, options: ModelOptions = {}) {
@@ -46,6 +47,7 @@ function model(packageName: string | undefined, options: ModelOptions = {}) {
     status: "active",
     enabled: true,
     limit: options.limit ?? { context: 100, output: 20 },
+    requestDefaults: options.requestDefaults,
   }
   AISDKNative.rewrite(info, {
     specifier: packageName,
@@ -82,6 +84,57 @@ function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effec
 }
 
 describe("ModelResolver", () => {
+  it.effect("resolves chosen output budgets independently from unknown provider maxima", () =>
+    Effect.gen(function* () {
+      const requestDefaults = {
+        outputTokenBudget: 8192,
+        outputTokenBudgetByReasoningEffort: { low: 65536, high: 65536, xhigh: 65536, max: 131072 },
+      }
+      for (const [effort, budget] of [
+        [undefined, 8192],
+        ["none", 8192],
+        ["low", 65536],
+        ["high", 65536],
+        ["xhigh", 65536],
+        ["max", 131072],
+      ] as const) {
+        const selected = model("@opencode/ai/providers/openai-compatible", {
+          settings: { baseURL: "http://localhost/v1", apiKey: "fixture-key", reasoningEffort: effort },
+          requestDefaults,
+          limit: { context: 262144, output: 0 },
+        })
+        const runtime = yield* ModelResolver.fromCatalogModel(selected)
+        expect(runtime.defaults?.generation?.maxTokens).toBe(budget)
+        const request = yield* compileRequest(LLM.request({ model: runtime, prompt: "Fixture" }))
+        expect(request.body).toMatchObject({ max_completion_tokens: budget })
+        expect(selected.limit.output).toBe(0)
+      }
+      const explicit = yield* ModelResolver.fromCatalogModel(
+        model("@opencode/ai/providers/openai-compatible", {
+          settings: { baseURL: "http://localhost/v1", reasoningEffort: "max", outputTokenBudget: 16384 },
+          requestDefaults,
+        }),
+      )
+      expect(explicit.defaults?.generation?.maxTokens).toBe(16384)
+      expect(explicit.defaults?.providerOptions).not.toHaveProperty("outputTokenBudget")
+      const body = yield* ModelResolver.fromCatalogModel(
+        model("@opencode/ai/providers/openai-compatible", {
+          settings: { baseURL: "http://localhost/v1", reasoningEffort: "low" },
+          body: { reasoning_effort: "max" },
+          requestDefaults,
+        }),
+      )
+      expect(body.defaults?.generation?.maxTokens).toBe(131072)
+      const disabled = yield* ModelResolver.fromCatalogModel(
+        model("@opencode/ai/providers/openai-compatible", {
+          settings: { baseURL: "http://localhost/v1", reasoningEffort: "max" },
+          body: { thinking: { type: "disabled" } },
+          requestDefaults,
+        }),
+      )
+      expect(disabled.defaults?.generation?.maxTokens).toBe(8192)
+    }),
+  )
   it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
     Effect.gen(function* () {
       const responses = yield* ModelResolver.fromCatalogModel(

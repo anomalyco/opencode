@@ -1,6 +1,7 @@
 import { define } from "@opencode/plugin/effect/plugin"
 import type { Entry } from "@opencode/schema/config"
 import { ConfigProvider } from "@opencode/schema/config/provider"
+import { PositiveInt } from "@opencode/schema/schema"
 import { Duration, Effect, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Config } from "../../config.js"
@@ -24,6 +25,12 @@ const RemoteModel = Schema.Struct({
   default_reasoning_effort: optional(Schema.String),
   supported_modalities: optional(Schema.Array(Schema.String)),
   supported_output_modalities: optional(Schema.Array(Schema.String)),
+  request_defaults: optional(
+    Schema.Struct({
+      output_token_budget: optional(PositiveInt),
+      output_token_budget_by_reasoning_effort: optional(Schema.Record(Schema.String, PositiveInt)),
+    }),
+  ),
 })
 const Response = Schema.Struct({ data: Schema.Array(RemoteModel) })
 
@@ -61,6 +68,20 @@ export function make(interval: Duration.Input = "30 seconds") {
                 model.limit.input = Math.max(0, item.max_input_tokens)
               if (item.max_output_tokens !== undefined && item.max_output_tokens !== null)
                 model.limit.output = Math.max(0, item.max_output_tokens)
+              if (item.request_defaults != null)
+                model.requestDefaults = {
+                  ...model.requestDefaults,
+                  ...(item.request_defaults.output_token_budget != null
+                    ? { outputTokenBudget: item.request_defaults.output_token_budget }
+                    : {}),
+                  ...(item.request_defaults.output_token_budget_by_reasoning_effort != null
+                    ? {
+                        outputTokenBudgetByReasoningEffort: {
+                          ...item.request_defaults.output_token_budget_by_reasoning_effort,
+                        },
+                      }
+                    : {}),
+                }
               if (item.supports_function_calling != null) model.capabilities.tools = item.supports_function_calling
               if (item.supports_parallel_function_calling != null)
                 model.capabilities.parallelTools = item.supports_parallel_function_calling

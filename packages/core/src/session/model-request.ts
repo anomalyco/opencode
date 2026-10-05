@@ -90,8 +90,13 @@ export const outputLimit = (
   limit: Model.Info["limit"],
   kind: "primary" | "compaction",
   inputTokens?: Input["inputTokens"],
+  outputTokenBudget?: number,
 ) => {
-  const model = Math.min(limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK, OUTPUT_TOKEN_MAX)
+  const model = Math.min(
+    outputTokenBudget ?? (limit.output > 0 ? limit.output : OUTPUT_TOKEN_FALLBACK),
+    limit.output > 0 ? limit.output : Number.POSITIVE_INFINITY,
+    OUTPUT_TOKEN_MAX,
+  )
   const requested = kind === "compaction" ? Math.min(model, SUMMARY_OUTPUT_MAX) : model
   if (inputTokens === undefined || limit.context <= 0) return requested
   const room = limit.context - inputTokens.measured - Math.ceil(inputTokens.estimated * (1 + ESTIMATE_ERROR))
@@ -242,7 +247,14 @@ export const layer = Layer.effect(
           messages: input.messages,
           options:
             kind === "primary" || kind === "compaction"
-              ? { maxTokens: outputLimit(model.limit, kind, input.inputTokens) }
+              ? {
+                  maxTokens: outputLimit(
+                    model.limit,
+                    kind,
+                    input.inputTokens,
+                    model.model.defaults?.generation?.maxTokens,
+                  ),
+                }
               : {},
         },
         Object.fromEntries(Array.from(given, ([d, t]) => [t.name, d])),
@@ -258,6 +270,10 @@ export const layer = Layer.effect(
       )
       const entries = Object.entries(shaped.options)
       const generation = Object.fromEntries(entries.filter(([k]) => GENERATION_KEYS.has(k))) as GenerationOptionsFields
+      const fitted =
+        generation.maxTokens !== undefined && (kind === "primary" || kind === "compaction")
+          ? { ...generation, maxTokens: outputLimit(model.limit, kind, input.inputTokens, generation.maxTokens) }
+          : generation
       const providerOptions = Object.fromEntries(entries.filter(([k]) => !GENERATION_KEYS.has(k)))
       const affinity = SessionAffinity.get(session)
       const base = LLM.request({
@@ -288,7 +304,7 @@ export const layer = Layer.effect(
               }
             : input.toolChoice
           : undefined,
-        generation: Object.keys(generation).length === 0 ? undefined : generation,
+        generation: Object.keys(fitted).length === 0 ? undefined : fitted,
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
       })
 

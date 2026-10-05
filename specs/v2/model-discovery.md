@@ -40,3 +40,21 @@ Unknown fields may be omitted or null. Empty arrays and `false` values are meani
 OpenCode chooses the Responses interface when advertised, otherwise Chat Completions. An explicit configured provider or model package overrides this choice. A model advertising only unsupported endpoints is disabled. Omitting endpoint metadata preserves the existing package choice.
 
 Reasoning levels become variants of the same model ID; no duplicate context-specific models or special invocation are required. Main agents and subagents resolve their selected model from the same catalog. Automatic compaction respects both the input ceiling and total context after reserving normal output capacity, retaining the existing estimation buffer. Output requests remain fitted to the remaining total context.
+
+Each model may also advertise `request_defaults`, containing a positive `output_token_budget` and a map named `output_token_budget_by_reasoning_effort`. For example:
+
+```json
+{
+  "output_token_budget": 8192,
+  "output_token_budget_by_reasoning_effort": {
+    "low": 65536,
+    "high": 65536,
+    "xhigh": 65536,
+    "max": 131072
+  }
+}
+```
+
+These are gateway-chosen defaults, not assertions about the supplier's maximum output. Unknown `max_output_tokens` remains unknown. The selected effective reasoning effort chooses its mapped budget, falling back to `output_token_budget`. The map does not create unsupported reasoning choices. Explicit provider, model or variant `settings.outputTokenBudget` overrides the advertised default. It is a Core generation policy and is not sent as a provider option.
+
+The resolved budget controls both normal request output and compaction's response reservation. Known provider output limits and available context still constrain requests. Explicit request hooks can change the requested output, which is fitted to those constraints; use `settings.outputTokenBudget` for a choice that must also govern advance compaction decisions. Without advertised defaults or an explicit budget, the existing 32,000-token output fallback applies when the supplier maximum is unknown. Summary requests retain their existing 32,000-token cap.

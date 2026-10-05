@@ -95,6 +95,17 @@ describe("Model.Info", () => {
 })
 
 describe("Model.Settings", () => {
+  test("distinguishes positive request budgets from unknown supplier output limits", () => {
+    const decode = Schema.decodeUnknownSync(Model.RequestDefaults)
+    expect(decode({ outputTokenBudget: 8192, outputTokenBudgetByReasoningEffort: { max: 131072 } })).toEqual({
+      outputTokenBudget: 8192,
+      outputTokenBudgetByReasoningEffort: { max: 131072 },
+    })
+    expect(() => decode({ outputTokenBudget: 0 })).toThrow()
+    expect(() => decode({ outputTokenBudgetByReasoningEffort: { max: -1 } })).toThrow()
+    expect(Schema.encodeSync(Model.RequestDefaults)({ outputTokenBudget: undefined })).toEqual({})
+    expect(Schema.decodeUnknownSync(Model.Settings)({ outputTokenBudget: 16384 })).toEqual({ outputTokenBudget: 16384 })
+  })
   test("preserves provider-specific model options", () => {
     expect(Schema.decodeUnknownSync(Model.Settings)({ providerOption: true })).toEqual({
       providerOption: true,

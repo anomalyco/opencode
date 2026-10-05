@@ -115,6 +115,8 @@ export const Plugin = define({
               model.compatibility = { ...model.compatibility, ...config.compatibility }
             if (config.package !== undefined) model.package = config.package
             if (config.settings !== undefined) model.settings = Provider.mergeOverlay(model.settings, config.settings)
+            if (config.requestDefaults !== undefined)
+              model.requestDefaults = { ...model.requestDefaults, ...config.requestDefaults }
             if (config.headers !== undefined) model.headers = Provider.mergeHeaders(model.headers, config.headers)
             if (config.body !== undefined) model.body = Provider.mergeOverlay(model.body, config.body)
             if (config.capabilities !== undefined)

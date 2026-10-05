@@ -261,6 +261,16 @@ describe("OpenAI-compatible model discovery", () => {
               data: [
                 { id: "unknown", max_input_tokens: 400_000, context_window: null, max_output_tokens: null },
                 {
+                  id: "chosen-budget",
+                  context_window: 262144,
+                  max_output_tokens: null,
+                  supports_reasoning: true,
+                  request_defaults: {
+                    output_token_budget: 8192,
+                    output_token_budget_by_reasoning_effort: { low: 65536, high: 65536, xhigh: 65536, max: 131072 },
+                  },
+                },
+                {
                   ...remote,
                   id: "plain",
                   supported_endpoints: ["/chat/completions"],
@@ -298,6 +308,14 @@ describe("OpenAI-compatible model discovery", () => {
           const models = yield* Model.Service
           expect(yield* models.get(Provider.ID.make("gateway"), Model.ID.make("unknown"))).toMatchObject({
             limit: { context: 0, input: 400_000, output: 0 },
+          })
+          expect(yield* models.get(Provider.ID.make("gateway"), Model.ID.make("chosen-budget"))).toMatchObject({
+            limit: { context: 262144, output: 0 },
+            variants: [],
+            requestDefaults: {
+              outputTokenBudget: 8192,
+              outputTokenBudgetByReasoningEffort: { low: 65536, high: 65536, xhigh: 65536, max: 131072 },
+            },
           })
           expect(yield* models.get(Provider.ID.make("gateway"), Model.ID.make("plain"))).toMatchObject({
             package: "@opencode/ai/providers/openai-compatible",

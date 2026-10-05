@@ -241,6 +241,30 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(yield* due({ ...input(244_800, inputLimited), session: child })).toBe(true)
     expect(yield* due(input(244_800, fullContext))).toBe(false)
 
+    // Chosen request defaults reserve output without pretending the provider has an output maximum.
+    const requestBudget = (tokens: number, budget: number) => {
+      const selected = input(tokens, { context: 262144, output: 0 })
+      return {
+        ...selected,
+        model: {
+          ...selected.model,
+          model: LanguageModel.update(selected.model.model, {
+            defaults: { generation: GenerationOptions.make({ maxTokens: budget }) },
+          }),
+        },
+      }
+    }
+    for (const [budget, ceiling] of [
+      [8192, 235930],
+      [65536, 196608],
+      [131072, 131072],
+    ]) {
+      expect(yield* due(requestBudget(ceiling - 1, budget))).toBe(false)
+      expect(yield* due(requestBudget(ceiling, budget))).toBe(true)
+      expect(yield* due({ ...requestBudget(ceiling - 1, budget), session: child })).toBe(false)
+      expect(yield* due({ ...requestBudget(ceiling, budget), session: child })).toBe(true)
+    }
+
     // An advertised input limit larger than total context must never hide the total-context ceiling.
     const smallerContext = { context: 400_000, input: 1_050_000, output: 128_000 }
     expect(yield* due(input(271_999, smallerContext))).toBe(false)

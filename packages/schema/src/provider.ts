@@ -2,7 +2,7 @@ export * as Provider from "./provider.js"
 
 import { Effect, Schema } from "effect"
 import { Integration } from "./integration.js"
-import { optional, statics } from "./schema.js"
+import { optional, PositiveInt, statics } from "./schema.js"
 import { ephemeral, inventory } from "./event.js"
 
 export const ID = Schema.String.pipe(
@@ -52,6 +52,7 @@ export const Settings = Schema.StructWithRest(
     compaction: Compaction.pipe(optional),
     transport: Transport.pipe(optional),
     modelDiscovery: Schema.Boolean.pipe(optional),
+    outputTokenBudget: PositiveInt.pipe(optional),
   }),
   [Schema.Record(Schema.String, Schema.Any)],
 ).annotate({ identifier: "Provider.Settings" })
