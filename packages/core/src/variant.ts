@@ -300,10 +300,12 @@ const anthropicMessages: Protocol = (model, support) => {
       const thinking = opus45 ? manualThinking(model) : { settings: { thinking: ADAPTIVE_THINKING } }
       if (!thinking) return []
       const defaults = info.major === 4 && info.minor === 6 ? [...EFFORTS, "max"] : [...EFFORTS, "xhigh", "max"]
-      const values = support.values ?? defaults
-      return efforts(values, (effort) => ({
-        settings: { ...thinking.settings, effort },
-      }))
+      const values = (support.values ?? defaults).filter((effort) => !info.always || effort !== "none")
+      return efforts(values, (effort) =>
+        effort === "none"
+          ? { settings: { thinking: { type: "disabled" } } }
+          : { settings: { ...thinking.settings, effort } },
+      )
     }
     case "toggle": {
       if (info.always) return []
