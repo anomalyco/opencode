@@ -16,7 +16,6 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
   const [data] = createResource(
     () => ({ directory: directory(), nonce: nonce() }),
     async (input) => {
-      if (!input.directory) return { files: [], ahead: undefined, behind: undefined }
       const [status, info] = await Promise.all([
         props.api.client.vcs.status({ directory: input.directory }).catch(() => undefined),
         props.api.client.vcs.get({ directory: input.directory }).catch(() => undefined),
@@ -57,10 +56,13 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
     if (behind() > 0) parts.push(`${behind()} to pull`)
     return parts.join(" · ")
   })
+  const visible = createMemo(() => changed() > 0 || sync() !== "")
 
+  // The slot registry drops a plugin that renders nothing on its first pass, so the
+  // section stays mounted and leaves the flex flow instead of unmounting when clean.
   return (
-    <Show when={changed() > 0 || sync() !== ""}>
-      <box>
+    <box position={visible() ? "relative" : "absolute"}>
+      <Show when={visible()}>
         <text fg={theme().text}>
           <b>Git</b>
         </text>
@@ -83,8 +85,8 @@ function View(props: { api: TuiPluginApi; session_id: string }) {
             </Show>
           </box>
         </Show>
-      </box>
-    </Show>
+      </Show>
+    </box>
   )
 }
 
