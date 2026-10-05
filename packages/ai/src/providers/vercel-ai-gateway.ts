@@ -19,6 +19,7 @@ import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { Route, type RouteDefaultsInput } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
+import type { Protocol } from "../route/protocol.js"
 import {
   AIError,
   HttpContext,
@@ -63,7 +64,7 @@ const ChatThinking = Schema.Union([
 const decodeChatThinking = ProviderShared.validateWith(Schema.decodeUnknownEffect(ChatThinking))
 
 const prepare = (api: "messages" | "responses" | "chat") =>
-  Effect.fn("VercelAIGateway.prepare")(function* (request: LLMRequest) {
+  Effect.fnUntraced(function* (request: LLMRequest) {
     const options = yield* decodeOptions(request.providerOptions ?? {})
     const thinking =
       api === "chat" && request.providerOptions?.thinking !== undefined
@@ -79,7 +80,7 @@ const prepare = (api: "messages" | "responses" | "chat") =>
           }
         : request.providerOptions
     return {
-      request: LLMRequest.update(request, { providerOptions }),
+      request: providerOptions === request.providerOptions ? request : LLMRequest.update(request, { providerOptions }),
       body: {
         ...(thinking === undefined
           ? {}
@@ -103,10 +104,10 @@ const prepare = (api: "messages" | "responses" | "chat") =>
 
 const route = <Body, Event, State>(input: {
   readonly id: string
-  readonly protocol: Parameters<typeof gatewayProtocol<Body, Event, State>>[0]
+  readonly protocol: Protocol<Body, string, Event, State>
   readonly api: "messages" | "responses" | "chat"
   readonly path: string
-  readonly framing: typeof Framing.sse | typeof AnthropicMessages.framing | typeof OpenAIChat.framing
+  readonly framing: Framing.Definition<string>
   readonly defaults?: RouteDefaultsInput
 }) =>
   Route.make({
@@ -291,7 +292,13 @@ export const chatModel: ProviderPackage.Definition<Settings, ProviderOptionsInpu
   fromSettings(settings).chat(modelID)
 
 function fromSettings({ apiKey, baseURL, headers, body, ...providerOptions }: Settings) {
-  return configure({ apiKey, baseURL, headers, http: { body }, providerOptions })
+  return configure({
+    apiKey,
+    baseURL,
+    headers,
+    http: body === undefined ? undefined : { body: { ...body } },
+    providerOptions,
+  })
 }
 
 export * as VercelAIGateway from "./vercel-ai-gateway.js"

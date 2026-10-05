@@ -25,14 +25,13 @@ export function gatewayProtocol<Body, Event, State>(
   },
 ) {
   const decodeEvent = Schema.decodeUnknownEffect(protocol.stream.event)
-  const validateBody = ProviderShared.validateWith(Schema.decodeUnknownEffect(protocol.body.schema))
   const initial = (request: LLMRequest) => ({
     inner: protocol.stream.initial(request),
     gateway: undefined as Record<string, unknown> | undefined,
   })
   const onHalt = protocol.stream.onHalt
   const withGateway = (events: ReadonlyArray<LLMEvent>, gateway: Record<string, unknown> | undefined) =>
-    gateway === undefined
+    gateway === undefined || !events.some(LLMEvent.is.finish)
       ? events
       : events.map((event) =>
           LLMEvent.is.finish(event) ? { ...event, providerMetadata: { ...event.providerMetadata, gateway } } : event,
@@ -42,23 +41,24 @@ export function gatewayProtocol<Body, Event, State>(
     id: input.id,
     body: {
       schema: Schema.Record(Schema.String, Schema.Unknown),
-      from: Effect.fn("GatewayProtocol.body")(function* (request: LLMRequest) {
+      from: Effect.fnUntraced(function* (request: LLMRequest) {
         const prepared = yield* input.prepare(request)
-        const body = yield* protocol.body.from(prepared.request).pipe(Effect.flatMap(validateBody))
+        const body = yield* protocol.body.from(prepared.request)
         return { ...body, ...prepared.body }
       }),
     },
+    supportsEffortUpdates: protocol.supportsEffortUpdates,
     sanitizer: protocol.sanitizer,
     stream: {
       event: Schema.String,
       initial,
-      step: Effect.fn("GatewayProtocol.step")(function* (state: ReturnType<typeof initial>, frame: string) {
+      step: Effect.fnUntraced(function* (state: ReturnType<typeof initial>, frame: string) {
         const event = yield* decodeEvent(frame).pipe(
           Effect.mapError((cause) => ProviderShared.eventError(input.id, "Invalid gateway event", frame, cause)),
         )
-        const metadata = decodeMetadata(frame)
+        const metadata = frame.includes("provider_metadata") ? decodeMetadata(frame) : undefined
         const gateway =
-          metadata._tag === "None"
+          metadata === undefined || metadata._tag === "None"
             ? state.gateway
             : mergeJsonRecords(
                 state.gateway,
