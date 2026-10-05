@@ -203,7 +203,7 @@ function modelInfo(
   } = {},
 ): Model.Info {
   const providerID = Provider.ID.make(provider.id)
-  const pkg = model.provider?.npm ? nativePackage(provider, model) : undefined
+  const pkg = nativePackage(provider, model)
   // Per model, so it never merges into a model that overrides to a different package.
   const settings = {
     ...(model.provider?.api ? { baseURL: model.provider.api } : {}),
@@ -216,7 +216,7 @@ function modelInfo(
     name: input.name ?? model.name,
     compatibility: Model.compatibility(model.interleaved),
     family: model.family ? Model.Family.make(model.family) : undefined,
-    package: pkg,
+    package: model.provider?.npm || pkg !== nativePackage(provider) ? pkg : undefined,
     settings: Object.keys(settings).length === 0 ? undefined : settings,
     capabilities: {
       tools: model.tool_call,

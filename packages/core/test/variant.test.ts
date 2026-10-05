@@ -14,6 +14,26 @@ const model = (packageName: string, modelID: string, output?: number, providerID
 const resolve = (input: Model.Info, supports: readonly Variant.Support[]) =>
   Variant.resolve(input, supports).map((item) => ({ ...item, id: String(item.id) }))
 
+test("generates DigitalOcean variants for the selected API", () => {
+  const support = [{ type: "effort", values: ["low", "high"] }] as const
+  for (const pkg of ["@opencode/ai/providers/digitalocean", "@opencode/ai/providers/digitalocean/messages"]) {
+    expect(resolve(model(pkg, "anthropic-claude-sonnet-5.5", undefined, "digitalocean"), support)).toEqual([
+      { id: "low", settings: { effort: "low", thinking: { type: "adaptive", display: "summarized" } } },
+      { id: "high", settings: { effort: "high", thinking: { type: "adaptive", display: "summarized" } } },
+    ])
+  }
+  expect(resolve(model("@opencode/ai/providers/digitalocean/responses", "kimi-k3"), support)).toEqual(
+    ["low", "high"].map((id) => ({
+      id,
+      settings: { reasoningEffort: id, reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    })),
+  )
+  expect(resolve(model("@opencode/ai/providers/digitalocean/chat", "anthropic-claude-sonnet-5.5"), support)).toEqual([
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+})
+
 test("spells Messages variants for each provider", () => {
   expect(
     resolve(model("@opencode/ai/providers/anthropic", "claude-opus-4-5"), [
@@ -326,12 +346,12 @@ test("spells Chat Completions variants for hosting providers", () => {
     resolve(model("@opencode/ai/providers/digitalocean", "openai-gpt-5-nano", undefined, "digitalocean"), [
       { type: "effort", values: ["minimal", "low", "medium", "high"] },
     ]),
-  ).toEqual([
-    { id: "minimal", settings: { reasoningEffort: "minimal" } },
-    { id: "low", settings: { reasoningEffort: "low" } },
-    { id: "medium", settings: { reasoningEffort: "medium" } },
-    { id: "high", settings: { reasoningEffort: "high" } },
-  ])
+  ).toEqual(
+    ["minimal", "low", "medium", "high"].map((id) => ({
+      id,
+      settings: { reasoningEffort: id, reasoningSummary: "auto", include: ["reasoning.encrypted_content"] },
+    })),
+  )
 
   expect(
     resolve(model("@opencode/ai/providers/openai-compatible", "deepseek-ai/deepseek-v4-pro", undefined, "nvidia"), [

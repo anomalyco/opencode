@@ -201,6 +201,10 @@ Native package options include:
 - `@opencode/ai/providers/amazon-bedrock/mantle/chat`
 - `@opencode/ai/providers/amazon-bedrock/mantle/responses`
 - `@opencode/ai/providers/openrouter`
+- `@opencode/ai/providers/digitalocean`
+- `@opencode/ai/providers/digitalocean/chat`
+- `@opencode/ai/providers/digitalocean/messages`
+- `@opencode/ai/providers/digitalocean/responses`
 - `@opencode/ai/providers/xai`
 
 You can also use an npm package such as `@acme/opencode-provider` or an absolute `file://` URL for a local package.
@@ -256,6 +260,32 @@ ID sent to the provider.
 | `disabled` | Removes the model from selection when `true`. |
 
 See [Models](/models) for selection, defaults, capabilities, limits, costs, and variants.
+
+## DigitalOcean
+
+DigitalOcean uses the Messages API for Claude models and the Responses API for other text models by default.
+Generated reasoning variants use the selected API's settings: `effort` and `thinking` for Messages,
+or `reasoningEffort` and `reasoningSummary` for Responses.
+
+Override a model's `package` when you need a specific API. For example, keep one model on Chat Completions:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "providers": {
+    "digitalocean": {
+      "models": {
+        "openai-gpt-5-nano": {
+          "package": "@opencode/ai/providers/digitalocean/chat",
+        },
+      },
+    },
+  },
+}
+```
+
+Responses uses stateless history replay by default. Native chronological effort changes are enabled for
+DigitalOcean's GPT-6 and later Responses models, but not Messages models; Messages falls back to changing top-level effort.
 
 ## Azure
 

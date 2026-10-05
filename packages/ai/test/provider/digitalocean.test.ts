@@ -23,7 +23,7 @@ describe("DigitalOcean", () => {
 
   it.effect("prepares DigitalOcean models with default endpoint and auth", () =>
     Effect.gen(function* () {
-      const model = DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1")
+      const model = DigitalOcean.configure({ apiKey: "test-key" }).chat("anthropic-claude-fable-5.1")
 
       expect(model).toMatchObject({
         id: "anthropic-claude-fable-5.1",
@@ -47,7 +47,7 @@ describe("DigitalOcean", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
-          model: DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1"),
+          model: DigitalOcean.configure({ apiKey: "test-key" }).chat("anthropic-claude-fable-5.1"),
           system: [
             { type: "text", text: "Base agent", cache: new CacheHint({ type: "ephemeral", ttlSeconds: 3_600 }) },
             { type: "text", text: "Project instructions" },
@@ -79,7 +79,7 @@ describe("DigitalOcean", () => {
 
   it.effect("parses DigitalOcean cache usage fields into AI.Usage", () =>
     Effect.gen(function* () {
-      const model = DigitalOcean.configure({ apiKey: "test-key" }).model("anthropic-claude-fable-5.1")
+      const model = DigitalOcean.configure({ apiKey: "test-key" }).chat("anthropic-claude-fable-5.1")
       const response = yield* LLMClient.generate(LLM.request({ model, prompt: "Say OK" })).pipe(
         Effect.provide(
           fixedResponse(

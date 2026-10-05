@@ -17,6 +17,25 @@ const generate = (...events: OpenResponses.Event[]) =>
   LLMClient.generate(request).pipe(Effect.provide(fixedResponse(sseEvents(...events))))
 
 describe("Open Responses completed item text", () => {
+  it.effect("normalizes a gateway's null tool namespace before parsing and replay", () =>
+    Effect.gen(function* () {
+      const item = {
+        type: "function_call",
+        id: "fc_1",
+        call_id: "call_1",
+        name: "lookup",
+        namespace: null,
+        arguments: '{"city":"Paris"}',
+      }
+      const response = yield* generate(
+        { type: "response.output_item.added", output_index: 0, item },
+        { type: "response.output_item.done", output_index: 0, item },
+        completed,
+      )
+      expect(response.toolCalls).toMatchObject([{ id: "call_1", name: "lookup", input: { city: "Paris" } }])
+      expect(response.toolCalls[0]?.namespace).toBeUndefined()
+    }),
+  )
   ;["Draft expanded", "D", "Replacement", ""].forEach((text) => {
     it.effect(`replaces streamed text with completed item text ${JSON.stringify(text)}`, () =>
       Effect.gen(function* () {

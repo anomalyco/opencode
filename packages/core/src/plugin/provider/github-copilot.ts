@@ -13,6 +13,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
 import type { PluginInternal } from "../internal.js"
+import { ModelNames } from "@opencode/ai/model-names"
 
 const clientID = "Ov23li8tweQw6odWQebz"
 const apiVersion = "2026-08-01"
@@ -333,9 +334,9 @@ export const GithubCopilotPlugin = define({
         const id = evt.model.modelID ?? evt.model.id
         // Copilot serves Grok, Gemini, and MAI Code only on /responses; advertised
         // endpoint metadata above wins whenever the live model list provides it.
-        const gpt = /^gpt-(\d+)/.exec(id)
+        const gpt = ModelNames.gptVersion(id)
         const responses =
-          (gpt !== null && Number(gpt[1]) >= 5 && !id.startsWith("gpt-5-mini")) ||
+          (gpt !== undefined && gpt.major >= 5 && !id.startsWith("gpt-5-mini")) ||
           id.startsWith("grok-") ||
           id.startsWith("gemini-") ||
           id.startsWith("mai-code-")

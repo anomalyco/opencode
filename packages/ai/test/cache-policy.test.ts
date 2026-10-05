@@ -122,7 +122,7 @@ describe("applyCachePolicy", () => {
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
-          model: DigitalOcean.configure({ apiKey: "test" }).model("anthropic-claude-fable-5.1"),
+          model: DigitalOcean.configure({ apiKey: "test" }).chat("anthropic-claude-fable-5.1"),
           system: "You are concise.",
           tools: [{ name: "lookup", description: "Look up a value", inputSchema: { type: "object", properties: {} } }],
           prompt: "hi",

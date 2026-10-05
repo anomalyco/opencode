@@ -7,6 +7,7 @@ import { Protocol } from "../route/protocol.js"
 import { HttpTransport } from "../route/transport/index.js"
 import { LLMRequest, type ToolDefinition, type ToolEntry } from "../schema/index.js"
 import { resolveEffortUpdates } from "../effort-updates.js"
+import { ModelNames } from "../model-names.js"
 import { OpenResponses } from "./open-responses.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { JsonObject, optionalArray, optionalNull, ProviderShared } from "./shared.js"
@@ -143,8 +144,7 @@ const supportsEffortUpdates = (request: LLMRequest) => {
   if (Schema.is(Schema.Struct({ mode: Schema.Literal("pro") }))(request.http?.body?.reasoning)) return false
   const override = request.model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
-  const match = /(?:^|\/)gpt-(\d+)(?:\.\d+)?(?:-|$)/i.exec(request.model.id)
-  return match !== null && Number(match[1]) >= 6
+  return (ModelNames.gptVersion(request.model.id)?.major ?? 0) >= 6
 }
 
 const nativeImageToolInput = (tool: ToolDefinition) => {

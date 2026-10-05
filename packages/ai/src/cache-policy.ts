@@ -52,6 +52,7 @@ const RESPECTS_INLINE_HINTS = new Set([
   "bedrock-converse",
   "openrouter",
   "digitalocean",
+  "digitalocean-messages",
 ])
 
 // OpenRouter upstreams other than Anthropic and Alibaba Qwen cache without breakpoints. Gemini uses only the last

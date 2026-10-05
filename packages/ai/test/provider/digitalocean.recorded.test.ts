@@ -25,7 +25,7 @@ for (const item of [
   const model = DigitalOcean.configure({
     apiKey: process.env.DIGITAL_OCEAN_OFFICIAL_API_KEY ?? "fixture",
     providerOptions: item.providerOptions,
-  }).model(item.id)
+  }).chat(item.id)
 
   describe(`DigitalOcean ${item.name} recorded`, () => {
     recorded.effect.with(
