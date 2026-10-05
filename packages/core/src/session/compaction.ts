@@ -10,6 +10,7 @@ import {
   LLMEvent,
   LLMRequest,
   Message,
+  ToolChoice,
   type ToolEntry,
   UnknownProviderError,
   type Usage,
@@ -285,10 +286,14 @@ export const layer = Layer.effect(
       const prepared = yield* prepare(context, split.older, budget)
 
       // Hooks saw the request without the summary prompt, so it is appended here. A reply that ignores the
-      // template gets one reminder before it counts as a failure.
+      // template gets one reminder before it counts as a failure. The tools stay in the request so the history
+      // and prompt cache still match, but the model must answer in text: a tool call leaves the summary empty.
       const send = (request: LLMRequest) =>
         Effect.gen(function* () {
-          const prompted = LLMRequest.update(request, { messages: [...request.messages, Message.user(prompt)] })
+          const prompted = LLMRequest.update(request, {
+            messages: [...request.messages, Message.user(prompt)],
+            toolChoice: ToolChoice.make("none"),
+          })
           const reply = yield* stream(context, prompted, prepared.options)
           if (filled(reply.text)) return { ...reply, recent: split.recent }
 
