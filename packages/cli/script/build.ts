@@ -48,6 +48,8 @@ const allTargets: {
   { os: "win32", arch: "arm64" },
   { os: "win32", arch: "x64" },
   { os: "win32", arch: "x64", avx2: false },
+  { os: "freebsd", arch: "arm64" },
+  { os: "freebsd", arch: "x64" },
 ]
 
 const targets =
@@ -111,10 +113,11 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
   const parcelWatcherPlugin: BunPlugin = {
     name: "parcel-watcher-binding",
     setup(build) {
-      build.onLoad({ filter: /filesystem[/\\]watcher-binding\.ts$/ }, () => ({
-        contents: `export default () => require(${JSON.stringify(parcelWatcherPackage)})`,
-        loader: "js",
-      }))
+      build.onLoad({ filter: /filesystem[/\\]watcher-binding\.ts$/ }, () =>
+        item.os === "freebsd"
+          ? { contents: `export default () => { throw new Error("parcel watcher is unavailable on FreeBSD") }`, loader: "js" }
+          : { contents: `export default () => require(${JSON.stringify(parcelWatcherPackage)})`, loader: "js" },
+      )
     },
   }
   const target = targetName(item)
@@ -128,7 +131,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
     external: ["node-gyp"],
     format: "esm",
     minify: true,
-    bytecode: true,
+    bytecode: item.os !== "freebsd",
     sourcemap: Script.channel === "dev" || Script.channel === "local" ? "inline" : "none",
     splitting: true,
     compile: {
