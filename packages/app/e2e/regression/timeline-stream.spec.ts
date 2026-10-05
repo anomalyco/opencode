@@ -1046,7 +1046,8 @@ test.describe("background shortcut", () => {
 
     expect(gap).toBe(8)
 
-    const before = await header.getByRole("heading").boundingBox()
+    const title = header.getByRole("heading").locator('span[dir="auto"]')
+    const before = await title.boundingBox()
     const exit = await pauseExitAnimations(working)
 
     await timeline.transport.send(status("idle", 1, childID))
@@ -1054,13 +1055,13 @@ test.describe("background shortcut", () => {
     await exit.evaluate((animations) => animations.forEach((animation) => (animation.currentTime = 100)))
     await expect(working).toBeAttached()
 
-    const midway = await header.getByRole("heading").boundingBox()
+    const midway = await title.boundingBox()
 
     expect(midway!.x).toBeLessThan(before!.x)
     await exit.evaluate((animations) => animations.forEach((animation) => animation.finish()))
     await expect(working).toHaveCount(0)
 
-    const after = await header.getByRole("heading").boundingBox()
+    const after = await title.boundingBox()
 
     expect(after!.x).toBeLessThan(midway!.x)
     expect(after!.x).toBeCloseTo(before!.x - 24, 0)
@@ -1109,7 +1110,7 @@ test.describe("background shortcut", () => {
     await expect(menu.getByRole("menuitem", { name: /Restarted task/ })).toBeVisible()
   })
 
-  test("slides the subagent title left when its running switcher disappears", async ({ page }) => {
+  test("keeps the subagent title anchored when its additional count disappears", async ({ page }) => {
     const childID = "ses_collapsing_viewed"
     const otherID = "ses_collapsing_sibling"
     const timeline = await setupTimeline(page, {
@@ -1123,39 +1124,32 @@ test.describe("background shortcut", () => {
     })
 
     const header = page.locator("[data-session-title]")
-    const trigger = header.getByRole("button", { name: "2 working", exact: true })
-
-    await trigger.click()
+    await header.getByRole("button", { name: "2 working", exact: true }).click()
     await page.getByRole("menuitem", { name: /Viewed task/ }).click()
-    await expect(header.getByRole("heading")).toHaveText("Viewed task")
+    await expect(header.getByRole("heading")).toHaveAccessibleName("Viewed task")
+
+    const trigger = header.getByRole("button", { name: "Viewed task +1 working", exact: true })
+    const title = header.getByRole("heading").locator('span[dir="auto"]')
+
     await expect(trigger).toBeEnabled()
 
-    const before = await header.getByRole("heading").boundingBox()
-    const width = await trigger.evaluate((element) => element.parentElement!.getBoundingClientRect().width)
-    const exit = await pauseExitAnimations(trigger.locator(".."))
+    const before = await title.boundingBox()
+    const exit = await pauseExitAnimations(trigger.locator('[data-component="text-shimmer"]').locator(".."))
 
     await timeline.transport.send(status("idle", 1, otherID))
     await expect.poll(() => exit.evaluate((animations) => animations.length)).toBeGreaterThan(0)
-    expect(
-      await exit.evaluate((animations) =>
-        animations.some(
-          (animation) =>
-            animation.effect instanceof KeyframeEffect && animation.effect.getKeyframes().some((frame) => "width" in frame),
-        ),
-      ),
-    ).toBe(true)
     await exit.evaluate((animations) => animations.forEach((animation) => (animation.currentTime = 75)))
 
-    const midway = await header.getByRole("heading").boundingBox()
+    const midway = await title.boundingBox()
 
-    expect(midway!.x).toBeLessThan(before!.x)
+    expect(midway!.x).toBeCloseTo(before!.x, 0)
     await exit.evaluate((animations) => animations.forEach((animation) => animation.finish()))
     await expect(trigger).toHaveCount(0)
 
-    const after = await header.getByRole("heading").boundingBox()
+    const after = await title.boundingBox()
 
-    expect(after!.x).toBeLessThan(midway!.x)
-    expect(after!.x).toBeCloseTo(before!.x - width - 2, 0)
+    expect(after!.x).toBeCloseTo(before!.x, 0)
+    await expect(header.getByRole("button", { name: "Viewed task", exact: true })).toBeDisabled()
     await exit.dispose()
   })
 
@@ -1240,21 +1234,36 @@ test.describe("background shortcut", () => {
     })
 
     const header = page.locator("[data-session-title]")
-    const trigger = header.getByRole("button", { name: "3 running", exact: true })
-    const list = page.getByRole("menu", { name: "3 running", exact: true })
+    const trigger = header.getByRole("button", { name: /(?:^3 running$|\+2 running$)/ })
+    const list = page.getByRole("menu", { name: /(?:^3 running$|\+2 running$)/ })
 
     await trigger.click()
     await list.getByRole("menuitem", { name: /Draft TUI proposal/ }).click()
     await expect(page).toHaveURL(/\/session\/ses_sibling_one$/)
     await expect(list).toHaveCount(0)
-    await expect(header.getByRole("heading")).toHaveText("Draft TUI proposal")
+    await expect(header.getByRole("heading")).toHaveAccessibleName("Draft TUI proposal")
     await expect(trigger.locator('[data-component="text-shimmer"]')).toHaveCSS("font-variant-numeric", "tabular-nums")
 
-    const breadcrumbOrder = await header
-      .locator('[data-slot="session-title-parent"], button[aria-label="3 running"], [data-slot="session-title-child"]')
-      .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-slot") ?? "running"))
+    const countGap = await trigger.evaluate((element) => {
+      const title = document.createRange()
 
-    expect(breadcrumbOrder).toEqual(["session-title-parent", "running", "session-title-child"])
+      title.selectNodeContents(element.querySelector('span[dir="auto"]')!)
+
+      return (
+        element.querySelector('[data-component="text-shimmer"]')!.getBoundingClientRect().left -
+        title.getBoundingClientRect().right
+      )
+    })
+
+    expect(countGap).toBe(8)
+
+    const breadcrumbOrder = await header
+      .locator('[data-slot="session-title-parent"], [data-slot="session-title-child"]')
+      .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-slot")))
+
+    expect(breadcrumbOrder).toEqual(["session-title-parent", "session-title-child"])
+    await expect(header.locator('[data-slot="session-title-separator"]')).toHaveCount(1)
+    await expect(header.getByRole("heading").getByRole("button", { name: "Draft TUI proposal +2 running" })).toBeEnabled()
 
     await trigger.click()
     await expect(list.getByRole("menuitem")).toHaveText([
@@ -1280,7 +1289,7 @@ test.describe("background shortcut", () => {
     await requested.promise
     await Promise.all([
       expect(page).toHaveURL(/\/session\/ses_sibling_two$/),
-      expect(header.getByRole("heading")).toHaveText("Fix context controls"),
+      expect(header.getByRole("heading")).toHaveAccessibleName("Fix context controls"),
       expect(trigger).toBeEnabled(),
     ]).finally(() => release.resolve())
     await expect(list).toHaveCount(0)

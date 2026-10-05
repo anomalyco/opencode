@@ -520,6 +520,10 @@ export const dict = {
   "session.running.working.other": "{{count}} working",
   "session.running.running.one": "{{count}} running",
   "session.running.running.other": "{{count}} running",
+  "session.running.additionalWorking.one": "+{{count}} working",
+  "session.running.additionalWorking.other": "+{{count}} working",
+  "session.running.additionalRunning.one": "+{{count}} running",
+  "session.running.additionalRunning.other": "+{{count}} running",
   "session.running.stop.subagent": "Interrupt subagent",
   "session.running.stop.shell": "Kill shell command",
 

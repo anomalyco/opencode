@@ -4,7 +4,7 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import { createEffect, createMemo, For, on, onCleanup, Show } from "solid-js"
+import { createEffect, createMemo, createUniqueId, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -13,6 +13,7 @@ import { useServer } from "@/runtime/server/current"
 import { useOpenSessionRoute } from "@/session/session-identity-header"
 import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
+import { SessionWorkingIndicator } from "./session-working-indicator"
 
 const neutral = "light-dark(var(--v2-text-text-base), #ffffff)"
 
@@ -32,16 +33,16 @@ export function SessionRunningMenu(props: {
   blocking: readonly { type: "shell" | "subagent"; partID: string; id?: string; label?: string }[]
   tasks: readonly BackgroundTask[]
   onReveal?: (target: string) => void
-  separator?: "before" | "after"
+  title?: string
 }) {
   const language = useLanguage()
   const openRoute = useOpenSessionRoute()
   const server = useServer()
   const sdk = useServerSDK()
+  const id = createUniqueId()
   const [menu, setMenu] = createStore({ open: false })
   const [appearance, setAppearance] = createStore<{
-    group?: HTMLDivElement
-    collapse?: Animation
+    group?: HTMLElement
     entered: boolean
   }>({ entered: false })
   const sessionAgent = (id: string | undefined) => (id ? server.ctx.data.session.get(id)?.agent : undefined)
@@ -72,13 +73,15 @@ export function SessionRunningMenu(props: {
   const viewing = (item: RunningItem) => !!item.sessionID && item.sessionID === props.sessionID
 
   const label = createMemo(() => {
-    const count = items().length
+    const count = props.title ? items().filter((item) => !viewing(item)).length : items().length
 
-    if (!count || (count === 1 && viewing(items()[0]))) return undefined
+    if (!count || (!props.title && count === 1 && viewing(items()[0]))) return undefined
 
-    if (items().some((item) => item.type === "shell")) return language.plural("session.running.running", count)
+    if (items().some((item) => item.type === "shell")) {
+      return language.plural(props.title ? "session.running.additionalRunning" : "session.running.running", count)
+    }
 
-    return language.plural("session.running.working", count)
+    return language.plural(props.title ? "session.running.additionalWorking" : "session.running.working", count)
   })
 
   const presence = createAnimatedPresence(
@@ -94,33 +97,15 @@ export function SessionRunningMenu(props: {
       visible,
       (show) => {
         if (show) {
-          appearance.collapse?.cancel()
-          setAppearance({ collapse: undefined, entered: false })
+          setAppearance("entered", false)
           return
         }
 
         setMenu("open", false)
-
-        const group = appearance.group
-
-        if (!group || props.separator !== "after" || matchMedia("(prefers-reduced-motion: reduce)").matches) return
-
-        setAppearance(
-          "collapse",
-          group.animate(
-            [
-              { width: `${group.getBoundingClientRect().width}px`, marginInlineEnd: "0px" },
-              // Cancel the header's 2px gap so removing the collapsed slot doesn't nudge the title.
-              { width: "0px", marginInlineEnd: "-2px" },
-            ],
-            { duration: 150, easing: "cubic-bezier(0, 0, 0.2, 1)", fill: "forwards" },
-          ),
-        )
       },
       { defer: true },
     ),
   )
-  onCleanup(() => appearance.collapse?.cancel())
 
   const open = (item: RunningItem) => {
     const current = props.sessionID
@@ -157,21 +142,23 @@ export function SessionRunningMenu(props: {
   }
 
   return (
-    <Show when={presence.present()}>
+    <Show when={props.title || presence.present()}>
       <div
-        ref={(element) => setAppearance("group", element)}
-        inert={!presence.show()}
-        class="flex shrink-0 items-center gap-0.5 duration-150 ease-out motion-reduce:animate-none"
+        ref={(element) => {
+          if (!props.title) setAppearance("group", element)
+        }}
+        inert={!props.title && !presence.show()}
+        class="flex min-w-0 shrink-0 items-center gap-0.5 duration-150 ease-out motion-reduce:animate-none"
         classList={{
-          "animate-in fade-in": presence.animate() && presence.show() && !appearance.entered,
-          "animate-out fade-out fill-mode-forwards": presence.animate() && !presence.show(),
-          "overflow-hidden": props.separator === "after" && !presence.show(),
+          "max-w-[45%]": !!props.title,
+          "animate-in fade-in": !props.title && presence.animate() && presence.show() && !appearance.entered,
+          "animate-out fade-out fill-mode-forwards": !props.title && presence.animate() && !presence.show(),
         }}
         onAnimationEnd={(event) => {
           if (event.target === event.currentTarget && presence.show()) setAppearance("entered", true)
         }}
       >
-        <Show when={props.separator !== "after"}>
+        <Show when={!props.title}>
           <span
             aria-hidden="true"
             class="shrink-0 ps-2 pe-1 text-[11px] font-medium leading-text-compact text-v2-text-text-faint"
@@ -185,14 +172,54 @@ export function SessionRunningMenu(props: {
           open={menu.open && presence.show()}
           onOpenChange={(open) => setMenu("open", open)}
         >
-          <Menu.Trigger
-            as="button"
-            type="button"
-            aria-label={presence.value()}
-            class="flex h-7 shrink-0 items-center rounded-[6px] px-2 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] tabular-nums whitespace-nowrap text-v2-text-text-base outline-none hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus data-[expanded]:bg-v2-overlay-simple-overlay-hover"
+          <Show
+            when={props.title}
+            fallback={
+              <Menu.Trigger
+                as="button"
+                type="button"
+                aria-label={presence.value()}
+                class="flex h-7 shrink-0 items-center rounded-[6px] px-2 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] tabular-nums whitespace-nowrap text-v2-text-text-base outline-none hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus data-[expanded]:bg-v2-overlay-simple-overlay-hover"
+              >
+                <TextShimmer text={presence.value() ?? ""} active={presence.show()} />
+              </Menu.Trigger>
+            }
           >
-            <TextShimmer text={presence.value() ?? ""} active={presence.show()} />
-          </Menu.Trigger>
+            <h1
+              data-slot="session-title-child"
+              aria-label={props.title}
+              class="min-w-0 text-[13px] font-[530] leading-text-compact tracking-[-0.04px] text-v2-text-text-base"
+            >
+              <Menu.Trigger
+                as="button"
+                type="button"
+                disabled={!visible()}
+                aria-labelledby={`${id}-title${visible() ? ` ${id}-count` : ""}`}
+                class="flex h-7 max-w-full items-center gap-0.5 rounded-[6px] outline-none enabled:hover:bg-v2-overlay-simple-overlay-hover focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus data-[expanded]:bg-v2-overlay-simple-overlay-hover"
+              >
+                <SessionWorkingIndicator sessionID={props.sessionID} />
+                <span id={`${id}-title`} dir="auto" class="min-w-0 truncate px-1">
+                  {props.title}
+                </span>
+                <Show when={presence.present()}>
+                  <span
+                    id={`${id}-count`}
+                    ref={(element) => setAppearance("group", element)}
+                    class="shrink-0 ps-0.5 pe-1 tabular-nums text-v2-text-text-muted duration-150 ease-out motion-reduce:animate-none"
+                    classList={{
+                      "animate-in fade-in": presence.animate() && presence.show() && !appearance.entered,
+                      "animate-out fade-out fill-mode-forwards": presence.animate() && !presence.show(),
+                    }}
+                    onAnimationEnd={(event) => {
+                      if (event.target === event.currentTarget && presence.show()) setAppearance("entered", true)
+                    }}
+                  >
+                    <TextShimmer text={presence.value() ?? ""} active={presence.show()} />
+                  </span>
+                </Show>
+              </Menu.Trigger>
+            </h1>
+          </Show>
           <Menu.Portal>
             <Menu.Content class="w-60" aria-label={presence.value()}>
               <For each={items()}>
@@ -275,14 +302,6 @@ export function SessionRunningMenu(props: {
             </Menu.Content>
           </Menu.Portal>
         </Menu>
-        <Show when={props.separator === "after"}>
-          <span
-            aria-hidden="true"
-            class="shrink-0 ps-2 pe-1 text-[11px] font-medium leading-text-compact text-v2-text-text-faint"
-          >
-            /
-          </span>
-        </Show>
       </div>
     </Show>
   )

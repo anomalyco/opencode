@@ -27,7 +27,6 @@ import { useCommand } from "@/shell/commands/command"
 import { SessionAncestorTrail, SessionProjectMenu, SessionTitleHeader } from "../session-identity-header"
 import { SessionHeaderSpacer } from "@/session/header/session-header"
 import { SessionRunningMenu } from "@/session/header/session-running-menu"
-import { SessionWorkingIndicator } from "@/session/header/session-working-indicator"
 
 type BlockingTask = { type: "shell" | "subagent"; partID: string; id?: string; label?: string }
 
@@ -392,14 +391,14 @@ function MessageTimelineView(
     })
   })
 
-  const runningMenu = (separator: "before" | "after") => (
+  const runningMenu = (title?: string) => (
     <SessionRunningMenu
       sessionID={sessionID()}
       owner={props.background.running.sessionID()}
       blocking={props.background.running.blocking()}
       tasks={props.background.running.tasks()}
       onReveal={virtualized.revealPart}
-      separator={separator}
+      title={title}
     />
   )
 
@@ -468,9 +467,8 @@ function MessageTimelineView(
                       />
                     )}
                   </Show>
-                  <Show when={parentID()}>{runningMenu("after")}</Show>
-                  <SessionWorkingIndicator sessionID={sessionID()} />
-                  <Show when={childTitle() || title.editing}>
+                  <Show when={parentID()}>{runningMenu(childTitle())}</Show>
+                  <Show when={!parentID() && (childTitle() || title.editing)}>
                     <Show
                       when={title.editing}
                       fallback={
@@ -520,7 +518,7 @@ function MessageTimelineView(
                       />
                     </Show>
                   </Show>
-                  <Show when={!parentID()}>{runningMenu("before")}</Show>
+                  <Show when={!parentID()}>{runningMenu()}</Show>
                   <Show when={!parentID() && sessionID()} keyed>
                     {(id) => (
                       <Menu

@@ -340,7 +340,7 @@ function SessionScreenContent(props: {
                   owner={composer.requests.background.running.sessionID()}
                   blocking={composer.requests.background.running.blocking()}
                   tasks={composer.requests.background.running.tasks()}
-                  separator={session.data.parentID() ? "after" : "before"}
+                  title={session.data.parentID() ? session.data.info()?.title : undefined}
                 />
               </SessionIdentityHeader>
             </Show>

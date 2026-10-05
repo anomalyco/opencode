@@ -395,9 +395,11 @@ export function SessionIdentityHeader(props: ParentProps<{ sessionID: string; se
                   />
                 )}
               </Show>
-              <Show when={parentID()}>{props.children}</Show>
-              <SessionWorkingIndicator sessionID={props.sessionID} />
-              <Show when={title()}>
+              <Show when={parentID() && props.children}>{props.children}</Show>
+              <Show when={!parentID() || !props.children}>
+                <SessionWorkingIndicator sessionID={props.sessionID} />
+              </Show>
+              <Show when={(!parentID() || !props.children) && title()}>
                 {(value) => (
                   <h1
                     data-slot={parentID() ? "session-title-child" : undefined}
