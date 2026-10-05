@@ -79,11 +79,15 @@ export const dict = {
   "chart.leaderboardAria": "Classificação de tokens do modelo",
   "chart.scrollableLeaderboardAria": "Classificação rolável de tokens do modelo",
   "chart.byAuthor": "por {{author}}",
+  "chart.vsPreviousWeek": "vs semana anterior",
+  "chart.date": "Data",
   "home.updated": "Atualizado",
   "home.noRows": "Ainda não há linhas",
   "home.justNow": "agora mesmo",
   "home.heroCopy":
     "Veja quais modelos estão vencendo em uso real, como a combinação está mudando e o que isso significa para o custo.",
+  "home.summary":
+    "Em {{date}}, {{first}} liderou o uso do OpenCode nos últimos 7 dias com {{firstTokens}} tokens, seguido por {{second}} ({{secondTokens}}) e {{third}} ({{thirdTokens}}).",
   "home.loadingTitle": "Carregando dados",
   "home.loadingDescription": "Lendo agregados de modelos.",
   "home.usageTitle": "Uso",
@@ -129,6 +133,8 @@ export const dict = {
   "lab.title": "Uso e ranking de modelos de IA da {{lab}} | OpenCode Data",
   "lab.description":
     "Compare modelos da {{lab}} usados no OpenCode, incluindo uso de tokens, ranking de modelos, janelas de contexto, datas de lançamento, custos e dados específicos de cada modelo.",
+  "lab.summary":
+    "Os modelos da {{lab}} processaram {{tokens}} tokens no OpenCode nos últimos dois meses, {{share}} de todo o uso. {{model}} foi o modelo da {{lab}} mais usado.",
   "lab.loadingTitle": "Laboratório de modelos",
   "lab.loadingDescription": "Lendo disponibilidade de modelos e uso recente do OpenCode.",
   "lab.notFound": "Nenhum modelo correspondeu a este laboratório.",
@@ -156,6 +162,10 @@ export const dict = {
   "model.title": "Uso, custo e posição de {{model}} | OpenCode Data",
   "model.description":
     "Veja dados de uso de {{model}} no OpenCode, incluindo volume de tokens, ranking semanal, combinação de tokens, custos, taxa de cache, sessões, distribuição geográfica e modelos pares.",
+  "model.summary":
+    "{{model}} ficou em #{{rank}} em tokens no OpenCode na semana passada, com {{share}} dos tokens nos últimos dois meses.",
+  "model.summaryUnranked": "{{model}} teve {{share}} dos tokens no OpenCode nos últimos dois meses.",
+  "model.summaryPrice": "{{model}} custa {{input}} por 1M de tokens de entrada e {{output}} por 1M de tokens de saída.",
   "model.loadingTitle": "Dados do modelo",
   "model.loadingDescription": "Lendo agregados de modelos.",
   "model.loadingProfile": "Lendo o perfil do modelo.",
@@ -229,4 +239,20 @@ export const dict = {
   "model.pdf": "PDF",
   "format.users": "usuários",
   "format.tokens": "tokens",
+  "methodology.title": "Metodologia",
+  "methodology.description": "Como estes dados são coletados.",
+  "methodology.updatesLabel": "Atualizações",
+  "methodology.updates": "Dados agregados a cada hora. Dias e semanas usam UTC.",
+  "methodology.tokensLabel": "Tokens",
+  "methodology.tokens": "Tokens de entrada, saída, raciocínio e em cache de cada requisição.",
+  "methodology.usersLabel": "Usuários e sessões",
+  "methodology.users": "Contagens aproximadas de usuários únicos e sessões do OpenCode.",
+  "methodology.costLabel": "Custo",
+  "methodology.cost":
+    "O custo da sessão é o custo médio por sessão do OpenCode. Os preços de tokens são os preços de tabela do catálogo de modelos do OpenCode.",
+  "methodology.retentionLabel": "Retenção",
+  "methodology.retention": "A parcela dos usuários de um modelo em uma semana que voltam a usá-lo na semana seguinte.",
+  "methodology.citeLabel": "Citação",
+  "methodology.cite":
+    "Cite o OpenCode Data (opencode.ai/data) com o horário de atualização mostrado no topo da página.",
 } as const
