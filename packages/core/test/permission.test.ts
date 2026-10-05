@@ -17,6 +17,7 @@ import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { ShellParse } from "@opencode/core/shell/parse"
 import { eq } from "drizzle-orm"
+import path from "path"
 import { location } from "./fixture/location"
 import { testEffect } from "./lib/effect"
 
@@ -98,6 +99,36 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
 }
 
 describe("Permission", () => {
+  for (const action of ["read", "edit"]) {
+    it.effect(`matches absolute ${action} rules against Location-relative resources`, () =>
+      Effect.gen(function* () {
+        yield* setup([
+          { action, resource: "*", effect: "deny" },
+          { action, resource: path.resolve("/project/.opencode/plan/*"), effect: "allow" },
+        ])
+        const service = yield* Permission.Service
+        expect(yield* service.ask(assertion({ action, resources: [".opencode/plan/work.md"] }))).toMatchObject({
+          effect: "allow",
+        })
+        expect(yield* service.ask(assertion({ action, resources: ["source.ts"] }))).toMatchObject({ effect: "deny" })
+      }),
+    )
+  }
+
+  it.effect("keeps last-match-wins order across relative and absolute rules", () =>
+    Effect.gen(function* () {
+      yield* setup([
+        { action: "edit", resource: path.resolve("/project/*"), effect: "allow" },
+        { action: "edit", resource: "src/*", effect: "deny" },
+      ])
+      const service = yield* Permission.Service
+      expect(yield* service.ask(assertion({ action: "edit", resources: ["src/a.ts"] }))).toMatchObject({
+        effect: "deny",
+      })
+      expect(yield* service.ask(assertion({ action: "edit", resources: ["b.ts"] }))).toMatchObject({ effect: "allow" })
+    }),
+  )
+
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])
