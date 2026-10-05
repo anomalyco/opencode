@@ -138,6 +138,51 @@ export const QuestionRequest = {
   ),
 }
 
+export const LongQuestionRequest = {
+  render: () => (
+    <SessionPreview
+      title="Review the mobile question layout"
+      description={description}
+      document={questionPendingDocument}
+      request={{
+        type: "question",
+        value: {
+          ...activeQuestionRequest,
+          id: "frm_long_question_preview",
+          fields: [
+            {
+              key: "approach",
+              type: "string",
+              title: "Approach",
+              description: "Which approach should we use for the mobile layout?",
+              options: Array.from({ length: 12 }, (_, index) => ({
+                value: `approach-${index + 1}`,
+                label: `Approach ${index + 1}: keep all question controls reachable on a narrow screen`,
+                description:
+                  "Allow the question and its options to scroll while keeping navigation and submission available, including when the browser toolbar reduces the available height.",
+              })),
+            },
+            {
+              key: "checks",
+              type: "multiselect",
+              title: "Checks",
+              description: Array.from(
+                { length: 12 },
+                () =>
+                  "Review the question on a narrow mobile screen with the browser toolbar visible. Confirm that every option can be reached and that the selected answers remain available when navigating back.",
+              ).join("\n\n"),
+              options: [
+                { value: "portrait", label: "Portrait" },
+                { value: "landscape", label: "Landscape" },
+              ],
+            },
+          ],
+        },
+      }}
+    />
+  ),
+}
+
 export const WebSearchRequest = {
   render: () => (
     <SessionPreview
