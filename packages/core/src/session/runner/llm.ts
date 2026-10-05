@@ -36,6 +36,7 @@ import { SessionRunnerModel } from "./model"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
+import { ProviderRetry } from "./retry"
 import { Snapshot } from "../../snapshot"
 import { makeLocationNode } from "../../effect/app-node"
 import { llmClient } from "../../effect/app-node-platform"
@@ -52,7 +53,7 @@ import { llmClient } from "../../effect/app-node-platform"
  *   - [ ] Mark busy, retrying, idle, interrupted, or terminal-failure status durably.
  *   - [ ] Honor interruption and reject stale work after runtime attachment replacement.
  *   - [x] Honor optional agent step limits.
- *   - [ ] Bound provider retries and repeated identical tool calls.
+ *   - [x] Bound provider retries and repeated identical tool calls.
  *
  * - Runtime context assembly
  *   - Track V1 runtime-context parity canonically in `specs/v2/session.md`.
@@ -63,7 +64,7 @@ import { llmClient } from "../../effect/app-node-platform"
  *   - [ ] Resolve policy-filtered built-in, MCP, plugin, and structured-output tool definitions.
  *   - [x] Stream exactly one `llm.stream(request)` provider turn.
  *   - [x] Persist assistant text and usage events incrementally as they arrive.
- *   - [ ] Persist snapshots, patches, and retry notices incrementally as they arrive.
+ *   - [x] Persist snapshots, patches, and retry notices incrementally as they arrive.
  *   - [x] Persist reasoning, provider errors, and tool-call events incrementally as they arrive.
  *
  * - Tool settlement and continuation
@@ -377,6 +378,26 @@ const layer = Layer.effect(
 
     const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
       return yield* runTurnAttempt(sessionID, promotion, step, compaction.compactAfterOverflow).pipe(
+        // Phase 11 — Self-Healing: retry transient provider-turn failures (rate
+        // limits, 5xx, transport). Overflow and interrupt paths reach the runner
+        // as defects, so Effect.retry leaves them for catchDefect / compaction.
+        Effect.retry(
+          ProviderRetry.policy({
+            parse: (error) =>
+              error instanceof LLMError
+                ? { llmError: error, retryAfterMs: error.retryAfterMs }
+                : undefined,
+            set: (ctx) =>
+              Effect.gen(function* () {
+                yield* events.publish(SessionEvent.Retried, {
+                  sessionID,
+                  timestamp: yield* DateTime.now,
+                  attempt: ctx.attempt,
+                  error: ProviderRetry.toRetryError(ctx.retryInfo.llmError),
+                })
+              }),
+          }),
+        ),
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)
