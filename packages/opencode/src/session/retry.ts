@@ -29,6 +29,7 @@ export const RETRY_JITTER_FACTOR = 0.25
 export const RETRY_MAX_DELAY_NO_HEADERS = 30_000 // 30 seconds
 export const RETRY_MAX_DELAY = 2_147_483_647 // max 32-bit signed integer for setTimeout
 export const RETRY_MAX_RETRIES = 5
+const MUSE_UPLOAD_MAX_RETRIES = 10
 
 const RETRYABLE_MESSAGE_PATTERNS = [
   /429|500|502|503|504|524/i,
@@ -91,6 +92,7 @@ export function retryable(error: Err, provider: string) {
     // even when the provider SDK doesn't explicitly mark them as retryable.
     if (
       !error.data.isRetryable &&
+      !isMuseUploadRejection(error, provider) &&
       !(status !== undefined && status >= 500) &&
       !matchesRetryableMessage(error.data.message) &&
       !matchesRetryableMessage(error.data.responseBody)
@@ -154,6 +156,17 @@ export function retryable(error: Err, provider: string) {
   return undefined
 }
 
+function isMuseUploadRejection(error: Err, provider: string) {
+  if (!["opencode", "opencode-go", "muse-code"].includes(provider)) return false
+  if (!SessionV1.APIError.isInstance(error) || error.data.statusCode !== 400) return false
+  const body = parseJSON(error.data.responseBody)
+  const pattern =
+    /^(?:Error from provider \(Console\): Upstream request failed:\s*\[invalid_request_error\] )?Invalid upload request\.$/
+  return [error.data.message, body?.error?.message, body?.message].some(
+    (message) => typeof message === "string" && pattern.test(message.trim()),
+  )
+}
+
 function matchesRetryableMessage(value: unknown) {
   return typeof value === "string" && RETRYABLE_MESSAGE_PATTERNS.some((pattern) => pattern.test(value))
 }
@@ -190,9 +203,13 @@ export function policy(opts: {
       const error = opts.parse(meta.input)
       const retry = retryable(error, opts.provider)
       if (!retry) return Cause.done(meta.attempt)
-      if (meta.attempt > RETRY_MAX_RETRIES) return Cause.done(meta.attempt)
+      const upload = isMuseUploadRejection(error, opts.provider)
+      if (meta.attempt > (upload ? MUSE_UPLOAD_MAX_RETRIES : RETRY_MAX_RETRIES)) return Cause.done(meta.attempt)
       return Effect.gen(function* () {
-        const wait = delay(meta.attempt, SessionV1.APIError.isInstance(error) ? error : undefined)
+        const wait = delay(
+          upload ? Math.min(meta.attempt, RETRY_MAX_RETRIES) : meta.attempt,
+          SessionV1.APIError.isInstance(error) ? error : undefined,
+        )
         const now = yield* Clock.currentTimeMillis
         yield* opts.set({
           attempt: meta.attempt,

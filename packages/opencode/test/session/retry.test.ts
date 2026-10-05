@@ -4,7 +4,7 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import type { NamedError } from "@opencode-ai/core/util/error"
 import { APICallError } from "ai"
 import { setTimeout as sleep } from "node:timers/promises"
-import { Effect, Schedule, Schema } from "effect"
+import { Clock, Effect, Schedule, Schema } from "effect"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { SessionRetry } from "../../src/session/retry"
 import { MessageV2 } from "../../src/session/message-v2"
@@ -124,6 +124,36 @@ describe("session.retry.delay", () => {
     }),
   )
 
+  it.effect("policy permits ten Muse upload retries and then stops", () =>
+    Effect.gen(function* () {
+      const attempts: number[] = []
+      const waits: number[] = []
+      const now = yield* Clock.currentTimeMillis
+      const error = new SessionV1.APIError({
+        message: "Invalid upload request.",
+        statusCode: 400,
+        isRetryable: false,
+        responseHeaders: {},
+      }).toObject()
+      const step = yield* Schedule.toStep(
+        SessionRetry.policy({
+          provider: "muse-code",
+          parse: () => error,
+          set: (info) =>
+            Effect.sync(() => {
+              attempts.push(info.attempt)
+              waits.push(info.next - now)
+            }),
+        }),
+      )
+
+      yield* Effect.forEach(Array.from({ length: 11 }), () => Effect.ignore(step(now, error)))
+
+      expect(attempts).toStrictEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+      expect(waits.every((wait) => wait <= 40_000)).toBe(true)
+    }),
+  )
+
   it.instance("policy stops after five retries", () =>
     Effect.gen(function* () {
       const attempts: number[] = []
@@ -149,6 +179,47 @@ describe("session.retry.delay", () => {
 })
 
 describe("session.retry.retryable", () => {
+  test.each(["opencode", "opencode-go", "muse-code"])("retries Muse upload rejections from %s", (provider) => {
+    const error = new SessionV1.APIError({
+      message:
+        "Error from provider (Console): Upstream request failed: [invalid_request_error] Invalid upload request.",
+      isRetryable: false,
+      statusCode: 400,
+    }).toObject()
+
+    expect(SessionRetry.retryable(error, provider)).toEqual({ message: error.data.message })
+  })
+
+  test("retries the exact Muse upload rejection in a response body", () => {
+    const error = new SessionV1.APIError({
+      message: "Bad Request",
+      isRetryable: false,
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message: "Invalid upload request." } }),
+    }).toObject()
+
+    expect(SessionRetry.retryable(error, "muse-code")).toEqual({ message: "Bad Request" })
+  })
+
+  test.each([
+    { provider: "openai", statusCode: 400, message: "Invalid upload request." },
+    { provider: "muse-code", statusCode: 401, message: "Invalid upload request." },
+    { provider: "opencode", statusCode: 400, message: "Invalid upload request. Unsupported file type." },
+    {
+      provider: "opencode-go",
+      statusCode: 400,
+      message: "reasoning_effort max requires an active Muse Code subscription for model muse-spark-1.3-contributor.",
+    },
+  ])("does not retry unrelated upload or subscription errors: $provider $statusCode $message", (input) => {
+    const error = new SessionV1.APIError({
+      message: input.message,
+      isRetryable: false,
+      statusCode: input.statusCode,
+    }).toObject()
+
+    expect(SessionRetry.retryable(error, input.provider)).toBeUndefined()
+  })
+
   test("retries serialized too_many_requests messages", () => {
     const error = wrap(JSON.stringify({ type: "error", error: { type: "too_many_requests" } }))
     expect(SessionRetry.retryable(error, retryProvider)).toEqual({ message: "Too Many Requests" })
