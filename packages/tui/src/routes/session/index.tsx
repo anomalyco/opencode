@@ -44,7 +44,6 @@ import {
   executeCallSummary,
   finiteNumber,
   primitiveInputSummary,
-  readRangeSuffix,
   toolDisplayContent,
   toolDisplayMetadata,
   type ExecuteCall,
@@ -3004,7 +3003,6 @@ function Glob(props: ToolProps) {
 function Read(props: ToolProps) {
   const theme = useTheme()
   const pathFormatter = usePathFormatter()
-  const range = createMemo(() => readRangeSuffix(props.part.state))
   const isRunning = createMemo(() => props.part.state.status === "running")
   const loaded = createMemo(() => {
     if (props.part.state.status !== "completed") return []
@@ -3022,7 +3020,10 @@ function Read(props: ToolProps) {
         part={props.part}
       >
         Read {pathFormatter.format(stringValue(props.input.path))}
-        {range()}
+        <Show when={props.input.offset !== undefined || props.input.limit !== undefined}>
+          :{finiteNumber(props.input.offset) || 1}-
+          {props.input.limit ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1 : ""}
+        </Show>
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (
