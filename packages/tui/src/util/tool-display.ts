@@ -19,6 +19,23 @@ export function primitiveInputSummary(input: Record<string, unknown>, omit: read
   return `[${entries.map(([key, value]) => `${key}=${String(value)}`).join(", ")}]`
 }
 
+export function readRangeSuffix(state: SessionMessageAssistantTool["state"]) {
+  if (state.status === "streaming") return ""
+  const offset = finiteNumber(state.input.offset)
+  const limit = finiteNumber(state.input.limit)
+  if (offset === undefined && limit === undefined) return ""
+
+  if (state.status === "completed") {
+    // The read tool's first content line reports the returned range, including EOF/byte-cap clipping.
+    const summary = state.content.find((content) => content.type === "text")?.text.split("\n", 1)[0]
+    const range = summary?.match(/^Read (?:file .+, lines|directory .+, entries) (\d+)-(\d+)$/)
+    return range ? `:${range[1]}-${range[2]}` : ""
+  }
+  if (state.status === "error") return ""
+  const start = offset || 1
+  return `:${start}-${limit ? start + limit - 1 : ""}`
+}
+
 export type ExecuteCall = { tool: string; status: "running" | "completed" | "error"; input?: Record<string, unknown> }
 
 export function executeCalls(value: unknown): ExecuteCall[] {
