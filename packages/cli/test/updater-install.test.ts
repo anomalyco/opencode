@@ -23,6 +23,7 @@ function fixture(
   failCleanup = false,
   releasePackage = name,
   formula?: string,
+  curl = false,
 ) {
   return Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem
@@ -30,12 +31,18 @@ function fixture(
     const root = yield* fs.makeTempDirectoryScoped({ prefix: "opencode-updater-" })
     const execPath = process.execPath
     const modules = path.join(root, "node_modules")
+    // A plain home plus an alternate spelling of the same home through a symlink (like /u → /home).
+    const home = path.join(root, "u")
+    const realHome = path.join(root, "home")
     const executable = formula
       ? path.join(root, "Cellar", formula, "2.0.20", "bin", "opencode")
-      : path.join(modules, "@opencode", "cli", "bin", "opencode")
+      : curl
+        ? path.join(realHome, ".opencode", "bin", "opencode")
+        : path.join(modules, "@opencode", "cli", "bin", "opencode")
     yield* fs.makeDirectory(path.dirname(executable), { recursive: true })
+    if (curl) yield* fs.symlink(realHome, home)
     yield* fs.writeFileString(executable, "binary")
-    if (!formula)
+    if (!formula && !curl)
       yield* fs.writeFileString(
         path.join(modules, "@opencode", "cli", "package.json"),
         JSON.stringify({ name, bin: { opencode: "bin/opencode" } }),
@@ -59,7 +66,7 @@ function fixture(
       (request) => Effect.sync(() => request.mockRestore()),
     )
     const global = Global.make({
-      home: path.join(root, "home"),
+      home: curl ? home : path.join(root, "home"),
       data: path.join(root, "data"),
       cache: path.join(root, "cache"),
       config: path.join(root, "config"),
@@ -303,6 +310,16 @@ it.live("vp detection ignores no-match output that repeats the package name", ()
       stdout: Buffer.from(command.command === "vp" ? "No global packages matching '@opencode/cli'." : ""),
     }))
     expect(yield* test.updater.method()).toBeUndefined()
+  }),
+)
+
+unix("curl installs are detected when HOME is spelled through a symlink", () =>
+  Effect.gen(function* () {
+    // A standalone curl binary under a symlinked home spelling (e.g. /u → /home) must still be
+    // recognized without probing any package manager.
+    const test = yield* fixture(() => ({}), undefined, undefined, undefined, undefined, true)
+    expect(yield* test.updater.method()).toBe("curl")
+    expect(test.commands).toEqual([])
   }),
 )
 

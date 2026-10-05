@@ -179,6 +179,10 @@ const make = Effect.gen(function* () {
     "bin",
     process.platform === "win32" ? "opencode.exe" : "opencode",
   )
+  // $HOME is frequently spelled through a symlink (e.g. /u → /home), and path.resolve never
+  // follows symlinks. Canonicalize both sides so a curl install reached via PATH matches
+  // regardless of which spelling the shell used to invoke the binary.
+  const curlBinaryResolved = yield* fs.realPath(curlBinary).pipe(Effect.orElseSucceed(() => curlBinary))
 
   // On Windows a bare `bash` may be the WSL launcher, which cannot run the installer against Windows paths.
   const installerBash = Effect.fnUntraced(function* () {
@@ -197,7 +201,7 @@ const make = Effect.gen(function* () {
   })
 
   const method = Effect.fnUntraced(function* () {
-    if (path.resolve(process.execPath) === curlBinary) return "curl"
+    if (executable === curlBinaryResolved) return "curl"
     if (installedFormula) return "brew"
     if (!installedPackage) return
 
@@ -323,7 +327,7 @@ const make = Effect.gen(function* () {
   const retaining = <A, E, R>(method: Method, effect: Effect.Effect<A, E, R>, directory = global.cache) => {
     if (process.platform !== "win32" || method === "brew") return effect
     // Only the installed binary is at stake; source checkouts run inside bun or node.
-    const owned = method === "curl" ? path.resolve(process.execPath) === curlBinary : installedPackage !== undefined
+    const owned = method === "curl" ? executable === curlBinaryResolved : installedPackage !== undefined
     if (!owned) return effect
     return Effect.scoped(RetainedImage.retain(directory, "upgrade").pipe(Effect.andThen(effect))).pipe(
       Effect.provideService(FileSystem.FileSystem, fs),
@@ -485,7 +489,11 @@ const make = Effect.gen(function* () {
   const install = Effect.fnUntraced(function* (version: string) {
     const detected = yield* method()
     if (!detected) {
-      yield* Effect.logWarning("update skipped: installation method not found")
+      yield* Effect.logWarning("update skipped: installation method not found", {
+        execPath: process.execPath,
+        resolved: executable,
+        home: global.home,
+      })
       return false
     }
     const current = yield* Ref.get(installedVersion)
