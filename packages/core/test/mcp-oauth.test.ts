@@ -193,12 +193,6 @@ describe("MCP OAuth", () => {
     expect(result.exit._tag).toBe("Failure")
   })
 
-  test("rejects an empty client secret before opening the browser", async () => {
-    await expect(
-      Effect.runPromise(Effect.scoped(start(authServer, { client_id: "client", client_secret: "" }))),
-    ).rejects.toThrow(/client_secret/)
-  })
-
   test("refreshes tokens loaded from a persisted credential", async () => {
     const tokenRequests: URLSearchParams[] = []
     const server = Bun.serve({

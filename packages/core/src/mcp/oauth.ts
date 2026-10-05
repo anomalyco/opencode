@@ -342,13 +342,6 @@ export const authorize = (input: {
     const fetchFn = yield* loggedFetch({ server: input.name }).pipe(Effect.annotateLogs(fields))
     yield* Effect.logInfo("mcp oauth authorization started", fields)
     const oauth = input.config.oauth || undefined
-    // {env:VAR} substitutes an unset variable with "", which the token endpoint only rejects after the browser step.
-    if (oauth?.client_secret === "")
-      return yield* Effect.fail(
-        new Error(
-          `MCP server "${input.name}" has an empty oauth client_secret; if it references an environment variable, set it in the environment of the OpenCode server process`,
-        ),
-      )
     const store = memoryStore()
     // Reuse the client registered by an earlier login; the SDK discards it if the issuer changed.
     const previous = (yield* credentials.list(input.integrationID)).at(-1)?.value
