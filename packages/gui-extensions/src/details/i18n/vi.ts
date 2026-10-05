@@ -3,8 +3,6 @@ export default {
   tooltip: "Tóm tắt",
   "command.toggle": "Chuyển đổi tóm tắt",
   noBranch: "Không có nhánh",
-  "background.tasksRunning.one": "{{count}} tác vụ nền đang chạy",
-  "background.tasksRunning.other": "{{count}} tác vụ nền đang chạy",
   "move.title": "Chuyển sang không gian làm việc",
   "move.menu": "Chuyển phiên tới",
   "move.failed": "Không chuyển được phiên",

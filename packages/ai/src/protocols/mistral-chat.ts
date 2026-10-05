@@ -226,7 +226,7 @@ const MistralEvent = Schema.StructWithRest(
 type MistralEvent = Schema.Schema.Type<typeof MistralEvent>
 const MistralStreamEvent = Schema.Union([Schema.Literal(DONE), Protocol.jsonEvent(MistralEvent)])
 
-const lowerMedia = Effect.fn("MistralChat.lowerMedia")(function* (part: MediaPart) {
+const lowerMedia = Effect.fnUntraced(function* (part: MediaPart) {
   const mime = part.media.mediaType.toLowerCase()
   const url =
     ProviderShared.mediaUrl(part.media) ??
@@ -236,7 +236,7 @@ const lowerMedia = Effect.fn("MistralChat.lowerMedia")(function* (part: MediaPar
   return yield* ProviderShared.invalidRequest(`Mistral Chat does not support media type ${part.media.mediaType}`)
 })
 
-const lowerUser = Effect.fn("MistralChat.lowerUser")(function* (message: LLMRequest["messages"][number]) {
+const lowerUser = Effect.fnUntraced(function* (message: LLMRequest["messages"][number]) {
   const content: MistralUserContent[] = []
   for (const part of message.content) {
     if (part.type === "text") {
@@ -260,7 +260,7 @@ const lowerToolCall = (part: ToolCallPart, normalizeID: (id: string) => string):
   function: { name: part.name, arguments: ProviderShared.encodeJson(part.input) },
 })
 
-const lowerAssistant = Effect.fn("MistralChat.lowerAssistant")(function* (
+const lowerAssistant = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
   normalizeID: (id: string) => string,
   prefix: boolean,
@@ -298,7 +298,7 @@ const lowerAssistant = Effect.fn("MistralChat.lowerAssistant")(function* (
   }
 })
 
-const lowerToolResults = Effect.fn("MistralChat.lowerToolResults")(function* (
+const lowerToolResults = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
   normalizeID: (id: string) => string,
 ) {
@@ -335,7 +335,7 @@ const lowerToolResults = Effect.fn("MistralChat.lowerToolResults")(function* (
   return output
 })
 
-const lowerMessages = Effect.fn("MistralChat.lowerMessages")(function* (request: LLMRequest) {
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const normalizeID = MistralToolID.normalizer(request)
   const messages: MistralMessage[] =
     request.system.length === 0
@@ -596,7 +596,7 @@ const toolText = (tool: MistralToolDelta) => {
   return value === null || value === undefined ? "" : ProviderShared.encodeJson(value)
 }
 
-const appendTools = Effect.fn("MistralChat.appendTools")(function* (
+const appendTools = Effect.fnUntraced(function* (
   initial: ParserState,
   events: LLMEvent[],
   deltas: ReadonlyArray<MistralToolDelta>,
@@ -662,7 +662,7 @@ const hasLateContent = (event: MistralEvent) => {
   )
 }
 
-const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event: MistralEvent) {
+const step = Effect.fnUntraced(function* (state: ParserState, event: MistralEvent) {
   if (event.error) {
     const body = ProviderShared.encodeJson(event)
     return yield* new AIError({
@@ -726,7 +726,7 @@ const step = Effect.fn("MistralChat.step")(function* (state: ParserState, event:
   ] as const
 })
 
-const finishEvents = Effect.fn("MistralChat.finishEvents")(function* (state: ParserState) {
+const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
   if (!state.finishReason)
     return yield* new AIError({
       reason: new InvalidProviderOutputError({

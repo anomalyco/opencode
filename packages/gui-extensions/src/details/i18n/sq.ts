@@ -3,8 +3,6 @@ export default {
   tooltip: "Përmbledhje",
   "command.toggle": "Ndrysho përmbledhjen",
   noBranch: "Pa degë",
-  "background.tasksRunning.one": "Aktivizimi i detyrës në sfond {{count}}",
-  "background.tasksRunning.other": "Po ekzekutohen detyrat e sfondit {{count}}",
   "move.title": "Zhvendos në hapësirë pune",
   "move.menu": "Zhvendos sesionin te",
   "move.failed": "Zhvendosja e sesionit dështoi",

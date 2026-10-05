@@ -3,8 +3,6 @@ export default {
   tooltip: "সারাংশ",
   "command.toggle": "সারাংশ টগল করুন",
   noBranch: "কোনো ব্রাঞ্চ নেই",
-  "background.tasksRunning.one": "{{count}}টি ব্যাকগ্রাউন্ড কাজ চলছে",
-  "background.tasksRunning.other": "{{count}}টি ব্যাকগ্রাউন্ড কাজ চলছে",
   "move.title": "ওয়ার্কস্পেসে সরান",
   "move.menu": "সেশন এখানে সরান",
   "move.failed": "সেশন সরানো ব্যর্থ হয়েছে",

@@ -29,12 +29,14 @@ for (const direction of ["ltr", "rtl"] as const) {
     await expect(page.locator('[data-slot="titlebar-v2"]').getByRole("button", { name: "Status" })).toHaveCount(0)
     const titleBounds = await header.getByRole("heading").boundingBox()
     expect(titleBounds).not.toBeNull()
+
     for (const editing of [false, true]) {
       if (editing) {
         await header.getByRole("heading").click()
         await expect(header.getByRole("textbox")).toHaveValue(fixture.expected.targetTitle)
         await expect(header.getByRole("textbox")).toBeFocused()
       }
+
       await expect(header.locator('[data-slot="session-title-child"]')).toHaveCSS("padding-left", "4px")
       await expect(header.locator('[data-slot="session-title-child"]')).toHaveCSS("padding-right", "4px")
       await expect
@@ -44,8 +46,11 @@ for (const direction of ["ltr", "rtl"] as const) {
               control.boundingBox(),
             ),
           )
+
           if (!icon || !title || !menu || !sidebar || !summary || !titleBounds) return false
+
           if (Math.abs(title.y - titleBounds.y) > 0.5 || Math.abs(title.height - titleBounds.height) > 0.5) return false
+
           return direction === "ltr"
             ? Math.abs(title.x - icon.x - icon.width - 2) <= 0.5 &&
                 Math.abs(menu.x - title.x - title.width - 2) <= 0.5 &&
@@ -58,6 +63,7 @@ for (const direction of ["ltr", "rtl"] as const) {
         })
         .toBe(true)
     }
+
     await header.getByRole("textbox").press("Escape")
     await expect(header.getByRole("heading")).toHaveText(fixture.expected.targetTitle)
 
@@ -70,6 +76,7 @@ for (const direction of ["ltr", "rtl"] as const) {
     await more.click()
     const options = page.getByRole("menu")
     await expect(options.getByRole("menuitem")).toHaveText(["Rename", "Export…", "Delete…"])
+
     if (direction === "ltr") {
       await expect
         .poll(async () => {
@@ -77,20 +84,24 @@ for (const direction of ["ltr", "rtl"] as const) {
             header.getByRole("button", { name: "More options", exact: true, includeHidden: true }).boundingBox(),
             options.boundingBox(),
           ])
+
           return button && menu ? Math.abs(button.x - menu.x) : Infinity
         })
         .toBeLessThanOrEqual(1)
     }
+
     await expect
       .poll(() =>
         options.evaluate((element) => {
           const menu = element.getBoundingClientRect()
           const rtl = getComputedStyle(element).direction === "rtl"
+
           return Math.min(
             ...Array.from(element.querySelectorAll('[data-slot="menu-v2-item-content"]'), (label) => {
               const range = document.createRange()
               range.selectNodeContents(label)
               const text = range.getBoundingClientRect()
+
               return rtl ? text.left - menu.left : menu.right - text.right
             }),
           )
@@ -103,6 +114,7 @@ for (const direction of ["ltr", "rtl"] as const) {
           const menu = element.getBoundingClientRect()
           const divider = element.querySelector('[data-slot="menu-v2-separator"]')?.getBoundingClientRect()
           const rows = Array.from(element.querySelectorAll('[role="menuitem"]'), (row) => row.getBoundingClientRect())
+
           return (
             !!divider &&
             Math.abs(divider.left - menu.left) <= 0.5 &&
@@ -135,6 +147,7 @@ test.describe("rename", () => {
     renames.length = 0
     page.on("request", (request) => {
       const match = new URL(request.url()).pathname.match(/^\/api\/session\/([^/]+)$/)
+
       if (request.method() === "PATCH" && match) renames.push({ sessionID: match[1]!, body: request.postDataJSON() })
     })
     await mockStressTimeline(page)
@@ -149,8 +162,11 @@ test.describe("rename", () => {
       const input = page.locator('input[data-slot="session-title-child"]')
       await expect(input).toBeFocused()
       await input.fill("Renamed session")
+
       if (commit === "Enter") await input.press("Enter")
+
       if (commit === "blur") await input.press("Tab")
+
       if (commit === "click outside") await page.locator('[data-component="composer-editor"]').click()
       await expect(heading(page, "Renamed session")).toBeVisible()
       await expect(tabs(page).filter({ hasText: "Renamed session" })).toBeVisible()
@@ -252,6 +268,7 @@ test.describe("revert", () => {
     },
     { id: "msg_second", type: "user", text: "Second prompt", time: { created: 4 } },
   ] satisfies SessionMessageInfo[]
+
   const workspace = {
     name: "SessionMessageRevert",
     pageMessages: () => ({ items: messages }),
@@ -260,18 +277,54 @@ test.describe("revert", () => {
   test("reverts directly to the selected user message", async ({ page }) => {
     const staged: { sessionID: string; messageID: string }[] = []
     const { session } = await openSession(page, { ...workspace, onRevertStage: (input) => staged.push(input) })
+    const settles: string[] = []
+    page.on("request", (request) => {
+      const path = new URL(request.url()).pathname
+      const step = ["/interrupt", "/wait", "/revert/stage"].find((suffix) => path.endsWith(`/${session.id}${suffix}`))
+
+      if (step) settles.push(step)
+    })
     const message = page.locator('[data-message-id="msg_second"]')
     await message.hover()
+
     const response = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === `/api/session/${session.id}/revert/stage`,
     )
+
     await message.getByRole("button", { name: "Revert message" }).click()
     expect((await response).ok()).toBe(true)
 
     await expect(page.getByRole("textbox", { name: "Prompt" })).toHaveText("Second prompt")
     expect(staged).toEqual([{ sessionID: session.id, messageID: "msg_second" }])
+    // Interrupt acknowledges before the run settles, and the server refuses to stage while it is active.
+    expect(settles).toEqual(["/interrupt", "/wait", "/revert/stage"])
+  })
+
+  test("redo restores every reverted message at once, as in the TUI", async ({ page }) => {
+    const staged: { sessionID: string; messageID: string }[] = []
+
+    const { editor } = await openSession(page, {
+      ...workspace,
+      sessions: [{ id: "ses_revert_redo", title: "Session message revert", revert: { messageID: "msg_first" } }],
+      onRevertStage: (input) => staged.push(input),
+    })
+
+    const cleared = page.waitForResponse(
+      (response) =>
+        response.request().method() === "DELETE" &&
+        new URL(response.url()).pathname === "/api/session/ses_revert_redo/revert",
+    )
+
+    await editor.pressSequentially("/redo")
+    await expect(
+      page.locator('[data-component="composer-suggestions"] [data-suggestion-id][data-active]'),
+    ).toContainText("/redo")
+    await editor.press("Enter")
+
+    expect((await cleared).ok()).toBe(true)
+    expect(staged).toEqual([])
   })
 
   test("hides revert actions in a child session", async ({ page }) => {

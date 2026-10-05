@@ -74,7 +74,7 @@ function modelLabel(
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy" | "reset"
+    icon: "check" | "copy" | "reset" | "bullet-list" | "outline-trash"
     label: JSX.Element
   },
 ) {
@@ -258,7 +258,8 @@ export function CurrentUserMessageDisplay(props: {
   const data = useData()
   const dialog = useDialog()
   const i18n = useI18n()
-  const [state, setState] = createStore({ copied: false, reverting: false })
+  const [state, setState] = createStore({ copied: false, reverting: false, updating: false })
+  const pending = createMemo(() => !!props.actions?.pending?.steer(props.message.id))
   const attachments = createMemo(() => (props.message.files ?? []).filter(attached))
   const references = createMemo(() => props.references ?? [])
   const inlineFiles = createMemo(() => (props.message.files ?? []).filter((file) => !!file.mention))
@@ -290,6 +291,15 @@ export function CurrentUserMessageDisplay(props: {
     } finally {
       setState("reverting", false)
     }
+  }
+
+  const updatePending = async (action: "queue" | "remove") => {
+    const actions = props.actions?.pending
+
+    if (!actions || state.updating) return
+    setState("updating", true)
+    await actions[action]({ sessionID: props.sessionID, messageID: props.message.id })
+    setState("updating", false)
   }
 
   const renderAttachments = () => (
@@ -358,7 +368,8 @@ export function CurrentUserMessageDisplay(props: {
         </div>
       </Show>
       {renderAttachments()}
-      <Show when={props.text || comments().length > 0}>
+      {/* Like the TUI, a pending steer of only attachments still offers its actions. */}
+      <Show when={props.text || comments().length > 0 || pending()}>
         <div data-slot="user-message-copy-wrapper">
           <span data-slot="user-message-meta-wrap">
             <Show when={metaHead()}>
@@ -375,7 +386,31 @@ export function CurrentUserMessageDisplay(props: {
               {stamp()}
             </span>
           </span>
-          <Show when={props.actions?.revert}>
+          <Show when={pending()}>
+            <MessageActionButton
+              icon="bullet-list"
+              label={i18n.t("ui.message.moveToQueue")}
+              disabled={state.updating}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                void updatePending("queue")
+              }}
+              aria-label={i18n.t("ui.message.moveToQueue")}
+            />
+            <MessageActionButton
+              icon="outline-trash"
+              label={i18n.t("ui.message.deletePending")}
+              disabled={state.updating}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={(event) => {
+                event.stopPropagation()
+                void updatePending("remove")
+              }}
+              aria-label={i18n.t("ui.message.deletePending")}
+            />
+          </Show>
+          <Show when={props.actions?.revert && !pending()}>
             <MessageActionButton
               icon="reset"
               label={i18n.t("ui.message.revertMessage")}
@@ -452,6 +487,25 @@ function CurrentHighlightedText(props: {
 
 type HighlightSegment = { text: string; type?: "file" | "agent" }
 
+/** A compaction the server admitted but has not started, drawn as the divider a started one opens with. */
+export function SessionCompactionQueued() {
+  const i18n = useI18n()
+
+  return (
+    <div data-component="session-compaction-message">
+      <CompactionDivider label={i18n.t("ui.messagePart.compaction.queued")} />
+    </div>
+  )
+}
+
+function CompactionDivider(props: { label: string }) {
+  return (
+    <div class="py-2">
+      <TimelineSeparator label={props.label} />
+    </div>
+  )
+}
+
 export function SessionCompactionMessage(props: { message: SessionMessageCompaction; error: string }) {
   const i18n = useI18n()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
@@ -500,9 +554,7 @@ export function SessionCompactionMessage(props: { message: SessionMessageCompact
 
   return (
     <div data-component="session-compaction-message">
-      <div class="py-2">
-        <TimelineSeparator label={i18n.t("ui.messagePart.compaction.started")} />
-      </div>
+      <CompactionDivider label={i18n.t("ui.messagePart.compaction.started")} />
       <Show when={summary().trim()}>
         <div data-component="text-part" data-timeline-part-id={props.message.id}>
           <div data-slot="text-part-body">
@@ -606,11 +658,7 @@ export function AssistantTextContent(props: {
     <Show when={props.text}>
       <div data-component="text-part" data-timeline-part-id={props.id}>
         <div data-slot="text-part-body">
-          <PacedMarkdown
-            text={props.text}
-            cacheKey={props.id}
-            streaming={props.message.time.completed === undefined}
-          />
+          <PacedMarkdown text={props.text} cacheKey={props.id} streaming={props.message.time.completed === undefined} />
         </div>
         <Show when={props.showCopy}>
           <div data-slot="text-part-copy-wrapper" data-interrupted={interrupted() ? "" : undefined}>

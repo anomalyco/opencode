@@ -252,7 +252,7 @@ const mapUsage = (usage: typeof NativeUsage.Type) =>
   })
 
 // Lifecycle deltas open blocks on demand and ends are no-ops for closed blocks, so content-start needs no handling.
-const step = Effect.fn("CohereChat.step")(function* (state: State, event: Event) {
+const step = Effect.fnUntraced(function* (state: State, event: Event) {
   const events: LLMEvent[] = []
   switch (event.type) {
     case "message-start":

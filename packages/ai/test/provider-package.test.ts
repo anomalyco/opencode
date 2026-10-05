@@ -7,67 +7,6 @@ const configuration = (provider: string, message: string) =>
   expect.objectContaining({ _tag: "ProviderConfiguration", provider, message })
 
 describe("provider package entrypoints", () => {
-  test("semantic API aliases expose the same contract", async () => {
-    const modules = await Promise.all([
-      import("@opencode/ai/providers/openai"),
-      import("@opencode/ai/providers/openai/responses"),
-      import("@opencode/ai/providers/openai/chat"),
-      import("@opencode/ai/providers/anthropic"),
-      import("@opencode/ai/providers/anthropic-compatible"),
-      import("@opencode/ai/providers/openai-compatible"),
-      import("@opencode/ai/providers/openai-compatible/responses"),
-      import("@opencode/ai/providers/amazon-bedrock"),
-      import("@opencode/ai/providers/azure"),
-      import("@opencode/ai/providers/azure/responses"),
-      import("@opencode/ai/providers/azure/chat"),
-      import("@opencode/ai/providers/google"),
-      import("@opencode/ai/providers/google-vertex"),
-      import("@opencode/ai/providers/google-vertex/gemini"),
-      import("@opencode/ai/providers/google-vertex/chat"),
-      import("@opencode/ai/providers/google-vertex/responses"),
-      import("@opencode/ai/providers/google-vertex/messages"),
-      import("@opencode/ai/providers/openrouter"),
-      import("@opencode/ai/providers/xai"),
-      import("@opencode/ai/providers/amazon-bedrock/mantle"),
-      import("@opencode/ai/providers/amazon-bedrock/mantle/chat"),
-      import("@opencode/ai/providers/amazon-bedrock/mantle/responses"),
-      import("@opencode/ai/providers/togetherai"),
-      import("@opencode/ai/providers/cerebras"),
-      import("@opencode/ai/providers/deepinfra"),
-      import("@opencode/ai/providers/groq"),
-      import("@opencode/ai/providers/baseten"),
-      import("@opencode/ai/providers/deepseek"),
-      import("@opencode/ai/providers/fireworks"),
-      import("@opencode/ai/providers/cloudflare-ai-gateway"),
-      import("@opencode/ai/providers/cloudflare-workers-ai"),
-      import("@opencode/ai/providers/minimax"),
-      import("@opencode/ai/providers/minimax/messages"),
-      import("@opencode/ai/providers/minimax/chat"),
-      import("@opencode/ai/providers/minimax/responses"),
-      import("@opencode/ai/providers/moonshot"),
-      import("@opencode/ai/providers/moonshot/chat"),
-      import("@opencode/ai/providers/moonshot/messages"),
-      import("@opencode/ai/providers/moonshot/responses"),
-      import("@opencode/ai/providers/zai"),
-      import("@opencode/ai/providers/zai/chat"),
-      import("@opencode/ai/providers/zai-coding-plan"),
-      import("@opencode/ai/providers/zai-coding-plan/chat"),
-      import("@opencode/ai/providers/zai-coding-plan/messages"),
-      import("@opencode/ai/providers/zai-coding-plan/responses"),
-      import("@opencode/ai/providers/alibaba"),
-      import("@opencode/ai/providers/alibaba/chat"),
-      import("@opencode/ai/providers/alibaba/messages"),
-      import("@opencode/ai/providers/alibaba/responses"),
-    ])
-
-    for (const module of modules) expect(module.model).toBeFunction()
-    expect(modules[0].model).toBe(modules[1].model)
-    expect(modules[8].model).toBe(modules[9].model)
-    expect(modules[12].model).toBe(modules[13].model)
-    expect(modules[19].model).toBe(modules[21].model)
-    expect(modules[19].model).not.toBe(modules[20].model)
-  })
-
   test("maps Alibaba API entrypoints onto explicit regional routes", async () => {
     const modules = await Promise.all([
       import("@opencode/ai/providers/alibaba"),
@@ -75,7 +14,6 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/alibaba/messages"),
       import("@opencode/ai/providers/alibaba/responses"),
     ])
-    expect(modules[0].model).toBe(modules[1].model)
     const settings = {
       region: "eu-central-1",
       workspaceID: "llm-fixture",
@@ -103,7 +41,6 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/moonshot/messages"),
       import("@opencode/ai/providers/moonshot/responses"),
     ])
-    expect(modules[0].model).toBe(modules[1].model)
     const settings = {
       apiKey: "fixture",
       baseURL: "https://gateway.example/v1",
@@ -147,7 +84,6 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/minimax/chat"),
       import("@opencode/ai/providers/minimax/responses"),
     ])
-    expect(modules[0].model).toBe(modules[1].model)
     const settings = {
       apiKey: "fixture",
       baseURL: "https://gateway.example/v1",
@@ -174,8 +110,6 @@ describe("provider package entrypoints", () => {
       import("@opencode/ai/providers/zai-coding-plan/messages"),
       import("@opencode/ai/providers/zai-coding-plan/responses"),
     ])
-    expect(modules[0].model).toBe(modules[1].model)
-    expect(modules[2].model).toBe(modules[3].model)
     const routes = [
       "zai-chat",
       "zai-chat",
@@ -458,7 +392,6 @@ describe("provider package entrypoints", () => {
 
   test("selects Vertex entrypoints with the same model contract", async () => {
     const GoogleVertex = await import("@opencode/ai/providers/google-vertex")
-    const GoogleVertexGemini = await import("@opencode/ai/providers/google-vertex/gemini")
     const GoogleVertexChat = await import("@opencode/ai/providers/google-vertex/chat")
     const GoogleVertexResponses = await import("@opencode/ai/providers/google-vertex/responses")
     const GoogleVertexMessages = await import("@opencode/ai/providers/google-vertex/messages")
@@ -483,7 +416,6 @@ describe("provider package entrypoints", () => {
       project: "vertex-project",
     })
 
-    expect(GoogleVertexGemini.model).toBe(GoogleVertex.model)
     expect(gemini.route.id).toBe("google-vertex-gemini")
     expect(gemini.route.protocol).toBe("gemini")
     expect(gemini.route.endpoint.baseURL).toBe("https://aiplatform.googleapis.com/v1/publishers/google")

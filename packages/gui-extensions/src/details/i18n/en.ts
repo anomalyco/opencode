@@ -3,8 +3,6 @@ export default {
   tooltip: "Summary",
   "command.toggle": "Toggle summary",
   noBranch: "No branch",
-  "background.tasksRunning.one": "{{count}} background task running",
-  "background.tasksRunning.other": "{{count}} background tasks running",
   "move.title": "Move to worktree",
   "move.menu": "Move session to",
   "move.failed": "Failed to move session",

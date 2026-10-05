@@ -3,8 +3,6 @@ export default {
   tooltip: "ບົດສະຫຼຸບ",
   "command.toggle": "ສະຫຼຸບສະຫຼຸບ",
   noBranch: "ບໍ່ມີສາຂາ",
-  "background.tasksRunning.one": "{{count}} ໜ້າວຽກພື້ນຫຼັງກຳລັງເຮັດວຽກຢູ່",
-  "background.tasksRunning.other": "{{count}} ໜ້າວຽກໃນພື້ນຫຼັງກຳລັງເຮັດວຽກຢູ່",
   "move.title": "ຍ້າຍໄປພື້ນທີ່ເຮັດວຽກ",
   "move.menu": "ຍ້າຍເຊດຊັນໄປ",
   "move.failed": "ຍ້າຍເຊດຊັນບໍ່ສຳເລັດ",

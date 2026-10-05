@@ -3,15 +3,14 @@ import type { Agent } from "@opencode/schema/agent"
 import type { Command } from "@opencode/schema/command"
 import type { Model } from "@opencode/schema/model"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Cause, Deferred, Effect, Exit, Schedule, Schema, Semaphore, Stream, SubscriptionRef } from "effect"
-import type { ConfigOptionProvider } from "./config-option"
+import { Cause, Deferred, Effect, Exit, Schedule, Semaphore, Stream, SubscriptionRef } from "effect"
+import { ACPError } from "./error"
 
 export const builtinCommands = new Map([
   ["compact", { description: "Compact the session", start: "compaction" as const }],
 ])
 
 export type Catalog = {
-  readonly providers: ConfigOptionProvider[]
   readonly models: ReadonlyArray<Model.Info>
   readonly defaultModel: Model.Ref
   readonly modes: ReadonlyArray<{ id: Agent.ID; name: string; description?: string }>
@@ -19,24 +18,14 @@ export type Catalog = {
   readonly commands: ReadonlyArray<Command.Info>
 }
 
-class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatalogNotReadyError", {
-  reason: Schema.Literals(["models", "agents"]),
-}) {
-  override get message() {
-    return this.reason === "models" ? "No models are available" : "No primary agents are available"
-  }
+export function findModel(models: ReadonlyArray<Model.Info>, ref: Model.Ref) {
+  return models.find((model) => model.providerID === ref.providerID && model.id === ref.id)
 }
 
-class LoadError extends Schema.TaggedError<LoadError>()("ACPCatalogLoadError", {
-  cause: Schema.Defect(),
-}) {}
-
-export type Error = NotReadyError | LoadError
-
 export interface Interface {
-  readonly get: (cwd: string) => Effect.Effect<Catalog, Error>
-  readonly reload: (cwd: string) => Effect.Effect<void, Error>
-  readonly changes: (cwd: string) => Stream.Stream<Catalog, Error>
+  readonly get: (cwd: string) => Effect.Effect<Catalog, ACPError.CatalogError>
+  readonly reload: (cwd: string) => Effect.Effect<void, ACPError.CatalogError>
+  readonly changes: (cwd: string) => Stream.Stream<Catalog, ACPError.CatalogError>
 }
 
 type Entry = {
@@ -51,7 +40,7 @@ const reloadOn = new Set<OpenCodeEvent["type"]>(["model.updated", "agent.updated
 
 export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
   const scope = yield* Effect.scope
-  const entries = new Map<string, Deferred.Deferred<Entry, Error>>()
+  const entries = new Map<string, Deferred.Deferred<Entry, ACPError.CatalogError>>()
   const connected = yield* Deferred.make<void>()
 
   // Requests queued behind a running load share the next one.
@@ -111,7 +100,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       const key = FSUtil.resolve(cwd)
       const cached = entries.get(key)
       if (cached) return Deferred.await(cached)
-      const loading = Deferred.makeUnsafe<Entry, Error>()
+      const loading = Deferred.makeUnsafe<Entry, ACPError.CatalogError>()
       entries.set(key, loading)
       return create(cwd).pipe(
         Effect.onExit((exit) => {
@@ -155,20 +144,17 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
       client.command.list({ location }),
     ],
     { concurrency: "unbounded" },
-  ).pipe(Effect.mapError((cause) => new LoadError({ cause })))
+  ).pipe(Effect.mapError((cause) => new ACPError.CatalogLoadError({ cause })))
   const models = modelResult.data.filter((model) => model.enabled)
   const preferred = defaultResult.data
   // The parallel default read can name a model missing from this list.
-  const defaultModel = preferred
-    ? models.find((model) => model.providerID === preferred.providerID && model.id === preferred.id)
-    : models[0]
-  if (!defaultModel) return yield* new NotReadyError({ reason: "models" })
+  const defaultModel = preferred ? findModel(models, preferred) : models[0]
+  if (!defaultModel) return yield* new ACPError.CatalogNotReadyError({ reason: "models" })
   const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
   // Core lists its resolved default agent first, the same one a new session runs.
   const defaultAgent = agents[0]
-  if (!defaultAgent) return yield* new NotReadyError({ reason: "agents" })
+  if (!defaultAgent) return yield* new ACPError.CatalogNotReadyError({ reason: "agents" })
   return {
-    providers: providers(models),
     models,
     defaultModel: {
       providerID: defaultModel.providerID,
@@ -180,17 +166,5 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
     commands: commandResult.data.filter((command) => !builtinCommands.has(command.name)),
   } satisfies Catalog
 })
-
-function providers(models: ReadonlyArray<Model.Info>) {
-  return Array.from(new Set(models.map((model) => model.providerID)))
-    .toSorted()
-    .map((providerID) => ({
-      id: providerID,
-      name: providerID,
-      models: models
-        .filter((model) => model.providerID === providerID)
-        .map((model) => ({ id: model.id, name: model.name, variants: model.variants.map((variant) => variant.id) })),
-    }))
-}
 
 export * as ACPCatalog from "./catalog"

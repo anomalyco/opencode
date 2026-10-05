@@ -46,6 +46,7 @@ const it = testEffect(
         }),
       ),
       Config.node.replace(config),
+      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/tmp") })),
     ]),
   ),
 )

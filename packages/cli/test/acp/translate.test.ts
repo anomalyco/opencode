@@ -13,7 +13,6 @@ import {
   durableEvent,
   ephemeralEvent,
   failed,
-  interrupted,
   reasoningDelta,
   stepEnded,
   succeeded,
@@ -26,13 +25,12 @@ import {
 } from "./wire-fixture"
 
 const root = Session.ID.make("ses_root")
-const ctx: ACPTranslate.Context = {
+const ctx: ACPTranslate.TurnContext = {
   sessionID: root,
   cwd: "/workspace",
   start: { type: "input", id: SessionMessage.ID.make("msg_input") },
   childUpdates: false,
   compaction: false,
-  mode: "turn",
 }
 const decodeEvent = Schema.decodeUnknownSync(OpenCodeEvent)
 const decodeMessage = Schema.decodeUnknownSync(SessionMessage.Info)
@@ -71,7 +69,7 @@ const compactionMessage = (input: Record<string, unknown>) => ({
 
 type Row = {
   readonly name: string
-  readonly ctx?: Partial<ACPTranslate.Context>
+  readonly ctx?: Partial<ACPTranslate.TurnContext>
   readonly events?: OpenCodeEventEncoded[]
   readonly messages?: unknown[]
   readonly expected: object
@@ -601,23 +599,6 @@ describe("acp turn translation", () => {
   test.each(rows)("$name", (row) => {
     expect(translate(row)).toMatchObject(row.expected)
   })
-
-  test("ends a background consumer when its last open child settles, without session updates", () => {
-    const turn = run(live(childCreated("ses_a", root, "A"), childCreated("ses_b", root, "B"), succeeded(root)))
-    const background = { ...ctx, mode: "background" as const }
-    const first = run(
-      [textDelta(root, "msg_root", "ignored"), toolStarted("ses_a", "call_1", "read"), succeeded("ses_a")],
-      background,
-      turn.state,
-    )
-    const last = run([childCreated("ses_later", root, "Later"), interrupted("ses_b")], background, first.state)
-
-    expect(turn.terminal).toBe("succeeded")
-    expect(first.outputs).toEqual([])
-    expect(first.terminal).toBeUndefined()
-    expect(last.state.children.has("ses_later")).toBe(false)
-    expect(last.terminal).toBe("interrupted")
-  })
 })
 
 function translate(row: Row) {
@@ -646,21 +627,21 @@ function translate(row: Row) {
   }
 }
 
-function run(events: ReadonlyArray<OpenCodeEventEncoded>, context = ctx, state = ACPTranslate.initial) {
+function run(events: ReadonlyArray<OpenCodeEventEncoded>, context = ctx) {
   return events.reduce<{
     state: ACPTranslate.TurnState
     outputs: ACPTranslate.Output[]
     terminal?: ACPTranslate.Terminal
   }>(
     (acc, event, index) => {
-      const next = ACPTranslate.step(acc.state, decodeEvent({ ...event, id: `evt_${index + 1}` }), context)
+      const next = ACPTranslate.fold(acc.state, decodeEvent({ ...event, id: `evt_${index + 1}` }), context)
       return {
         state: next.state,
         outputs: [...acc.outputs, ...next.outputs],
         ...(next.terminal ? { terminal: next.terminal } : {}),
       }
     },
-    { state, outputs: [] },
+    { state: ACPTranslate.initial, outputs: [] },
   )
 }
 

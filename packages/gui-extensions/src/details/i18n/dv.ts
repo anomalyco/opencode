@@ -3,8 +3,6 @@ export default {
   tooltip: "ޚުލާސާ",
   "command.toggle": "ޓޮގްލް ޚުލާސާ",
   noBranch: "އެއްވެސް ބްރާންޗެއް ނެތެވެ",
-  "background.tasksRunning.one": "⁨{{count}}⁩ ބެކްގްރައުންޑް މަސައްކަތް ހިނގަމުންދެއެވެ",
-  "background.tasksRunning.other": "⁨{{count}}⁩ ބެކްގްރައުންޑް މަސައްކަތްތައް ހިނގަމުންދެއެވެ",
   "move.title": "ވޯކްސްޕޭސަށް ބަދަލުކުރާށެވެ",
   "move.menu": "ސެޝަން ބަދަލުކުރާ ތަން",
   "move.failed": "ސެޝަން ބަދަލު ނުކުރެވުނެވެ",

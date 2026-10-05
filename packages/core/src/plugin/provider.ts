@@ -26,7 +26,6 @@ import { PoePlugin } from "./provider/poe.js"
 import { PromptCacheKeyPlugin } from "./provider/prompt-cache-key.js"
 import { SapAICorePlugin } from "./provider/sap-ai-core.js"
 import { VercelPlugin } from "./provider/vercel.js"
-import { VenicePlugin } from "./provider/venice.js"
 import { VLLMPlugin } from "./provider/vllm.js"
 import { XAIPlugin } from "./provider/xai.js"
 import { ZenmuxPlugin } from "./provider/zenmux.js"
@@ -60,7 +59,6 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   PromptCacheKeyPlugin,
   SapAICorePlugin,
   VercelPlugin,
-  VenicePlugin,
   VLLMPlugin,
   XAIPlugin,
   ZenmuxPlugin,

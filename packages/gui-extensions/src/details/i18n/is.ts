@@ -3,8 +3,6 @@ export default {
   tooltip: "Samantekt",
   "command.toggle": "Skipta yfirliti",
   noBranch: "Engin grein",
-  "background.tasksRunning.one": "{{count}} bakgrunnsverkefni í gangi",
-  "background.tasksRunning.other": "{{count}} bakgrunnsverkefni í gangi",
   "move.title": "Færa á vinnusvæði",
   "move.menu": "Færa setu í",
   "move.failed": "Mistókst að færa setu",

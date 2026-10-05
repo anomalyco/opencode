@@ -3,8 +3,6 @@ export default {
   tooltip: "བཅུད་བསྡུས།",
   "command.toggle": "བཅུད་དོན་སོར་བསྒྱུར་",
   noBranch: "ཡན་ལག་མེད།",
-  "background.tasksRunning.one": "{{count}} རྒྱབ་གཞིའི་ལས་འགན་གཡོག་བཀོལ་དོ།",
-  "background.tasksRunning.other": "{{count}} རྒྱབ་གཞིའི་ལས་འགན་ཚུ་གཡོག་བཀོལ་དོ།",
   "move.title": "ལཱ་གི་ས་སྒོ་ལུ་སྤོ།",
   "move.menu": "ལཱ་ཡུན་སྤོ་ས།",
   "move.failed": "ལཱ་ཡུན་སྤོ་མ་ཚུགས།",
