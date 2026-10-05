@@ -20,7 +20,8 @@ export function jsonc(text: string, filepath: string): unknown {
         const error = `${printParseErrorCode(e.error)} at line ${line}, column ${column}`
         if (!problemLine) return error
 
-        return `${error}\n   Line ${line}: ${problemLine}\n${"".padStart(column + 9)}^`
+        const prefix = `   Line ${line}: `
+        return `${error}\n${prefix}${problemLine}\n${"".padStart(prefix.length + column - 1)}^`
       })
       .join("\n")
     throw new JsonError({
