@@ -283,3 +283,62 @@ test("a message removed during hydration does not regain stale parts", async () 
     app.renderer.destroy()
   }
 })
+
+test("a first page loads the latest messages and a later full sync the rest", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+  const history = Array.from({ length: 50 }, (_, index) => ({
+    info: { ...assistant, id: `msg_${String(index).padStart(3, "0")}`, time: { created: index, completed: index } },
+    parts: [],
+  }))
+  const limits: number[] = []
+  const { app, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`) {
+      const limit = Number(url.searchParams.get("limit"))
+      limits.push(limit)
+      return json(history.slice(-limit))
+    }
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
+    return undefined
+  }, tmp.path)
+
+  try {
+    await sync.session.sync(sessionID, { firstPage: true })
+    expect(sync.data.message[sessionID].length).toBe(20)
+    expect(sync.data.message[sessionID].at(-1)?.id).toBe("msg_049")
+
+    await sync.session.sync(sessionID, { firstPage: true })
+    await sync.session.sync(sessionID)
+    expect(sync.data.message[sessionID].length).toBe(50)
+    await sync.session.sync(sessionID)
+    expect(limits).toEqual([20, 100])
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
+test("a full sync asked for while the first page loads still loads the full history", async () => {
+  await using tmp = await tmpdir()
+  await Bun.write(`${tmp.path}/kv.json`, "{}")
+  const history = Array.from({ length: 50 }, (_, index) => ({
+    info: { ...assistant, id: `msg_${String(index).padStart(3, "0")}`, time: { created: index, completed: index } },
+    parts: [],
+  }))
+  const { app, sync } = await mount((url) => {
+    if (url.pathname === `/session/${sessionID}`) return json(session)
+    if (url.pathname === `/session/${sessionID}/message`)
+      return json(history.slice(-Number(url.searchParams.get("limit"))))
+    if (url.pathname === `/session/${sessionID}/todo` || url.pathname === `/session/${sessionID}/diff`) return json([])
+    return undefined
+  }, tmp.path)
+
+  try {
+    const first = sync.session.sync(sessionID, { firstPage: true })
+    await sync.session.sync(sessionID)
+    await first
+    expect(sync.data.message[sessionID].length).toBe(50)
+  } finally {
+    app.renderer.destroy()
+  }
+})

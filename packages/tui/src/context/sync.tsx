@@ -33,6 +33,9 @@ import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
 
+/** Enough messages to fill a tall terminal before the rest of a session's history loads. */
+const FIRST_PAGE_MESSAGES = 20
+
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
   switchableOrgCount: 0,
@@ -148,6 +151,7 @@ export const {
     const sdk = useSDK()
 
     const fullSyncedSessions = new Set<string>()
+    const firstPageSessions = new Set<string>()
     const syncingSessions = new Map<string, Promise<void>>()
     const hydratingSessions = new Map<string, { messages: Set<string>; parts: Set<string> }>()
     const touchMessage = (sessionID: string, messageID: string) => {
@@ -591,16 +595,23 @@ export const {
           if (last.role === "user") return "working"
           return last.time.completed ? "idle" : "working"
         },
-        async sync(sessionID: string) {
+        /**
+         * Load a session and its latest messages. `firstPage` loads only the last screenful, which a
+         * long session draws many times faster than its full history; a later full sync adds the rest.
+         */
+        async sync(sessionID: string, input: { firstPage?: boolean } = {}): Promise<void> {
           if (fullSyncedSessions.has(sessionID)) return
+          if (input.firstPage && firstPageSessions.has(sessionID)) return
           const syncing = syncingSessions.get(sessionID)
-          if (syncing) return syncing
-          const tracker = { messages: new Set<string>(), parts: new Set<string>() }
+          if (syncing) return input.firstPage ? syncing : syncing.then(() => result.session.sync(sessionID))
+          const limit = input.firstPage ? FIRST_PAGE_MESSAGES : 100
+          // Kept from a first page, so the full sync also leaves alone what events changed since.
+          const tracker = hydratingSessions.get(sessionID) ?? { messages: new Set<string>(), parts: new Set<string>() }
           hydratingSessions.set(sessionID, tracker)
           const task = (async () => {
             const [session, messages, todo, diff] = await Promise.all([
               sdk.client.session.get({ sessionID }, { throwOnError: true }),
-              sdk.client.session.messages({ sessionID, limit: 100 }),
+              sdk.client.session.messages({ sessionID, limit }),
               sdk.client.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
             ])
@@ -657,10 +668,15 @@ export const {
                 draft.session_diff[sessionID] = diff.data ?? []
               }),
             )
+            if (input.firstPage) {
+              firstPageSessions.add(sessionID)
+              return
+            }
+            firstPageSessions.delete(sessionID)
             fullSyncedSessions.add(sessionID)
           })().finally(() => {
             syncingSessions.delete(sessionID)
-            hydratingSessions.delete(sessionID)
+            if (!firstPageSessions.has(sessionID)) hydratingSessions.delete(sessionID)
           })
           syncingSessions.set(sessionID, task)
           return task
