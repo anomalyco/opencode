@@ -3,6 +3,7 @@ import { displayName } from "@opencode/ui/project-avatar"
 import { pathKey } from "@/workspaces/path-key"
 import { isProjectDirectory } from "@/workspaces/paths"
 import type { ServerConnection } from "@/runtime/server/registry"
+import type { Project } from "@/runtime/server/types"
 import type { HomeProjectSelection } from "@/shell/state/layout"
 
 export function compareSessionTime(a: SessionInfo, b: SessionInfo) {
@@ -40,6 +41,26 @@ export function closeHomeProject(
   projects.close(directory)
   if (selected?.server === server && selected.directory === directory) return { server }
   return selected
+}
+
+// Appends server-known projects the user never opened after the opened ones, newest first.
+// Render-only: the persisted project store still contains only user-opened projects.
+export function appendKnownProjects<O extends { worktree: string; expanded: boolean }>(
+  opened: readonly O[],
+  known: readonly Project[],
+): Array<O | (Project & { expanded: boolean })> {
+  const seen = new Set(opened.map((project) => pathKey(project.worktree)))
+  const appended = known
+    .filter((project) => {
+      if (!project.worktree) return false
+      const key = pathKey(project.worktree)
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+    .sort((a, b) => b.time.updated - a.time.updated)
+    .map((project) => ({ ...project, expanded: false }))
+  return [...opened, ...appended]
 }
 
 export function homeProjectDirectories(result: string | string[] | null) {
