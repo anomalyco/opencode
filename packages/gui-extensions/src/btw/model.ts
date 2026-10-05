@@ -1,7 +1,7 @@
-import { batch, createRoot, getOwner, onCleanup } from "solid-js"
+import { batch, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { showToast } from "@opencode/ui/toast"
-import { createKeyed, type MountedSession, type SetupContext } from "../sdk"
+import type { MountedSession, SetupContext } from "../sdk"
 import type Btw from "./index"
 
 const instructions = [
@@ -12,7 +12,6 @@ const instructions = [
 
 /** One-shot side questions per session, one tab each, stored until the tab closes. */
 export function createBtw(ctx: SetupContext<typeof Btw>) {
-  const owner = getOwner()
   const controllers = new Map<string, AbortController>()
   const [requests, setRequests] = createStore<{ pending: string[] }>({ pending: [] })
   const saved = (session: MountedSession) => ctx.stores.chats(session)
@@ -30,10 +29,9 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
   const entry = (session: MountedSession, id: string) => saved(session).value?.chats.find((item) => item.id === id)
   const pending = (id: string) => requests.pending.includes(id)
 
-  const generate = (session: MountedSession, id: string) => {
-    const item = entry(session, id)
-
-    if (!item || pending(id)) return
+  // Takes the question rather than reading it back, because a new chat's write may still wait for the store to load.
+  const generate = (session: MountedSession, id: string, question: string) => {
+    if (pending(id)) return
 
     const store = saved(session)
     const controller = new AbortController()
@@ -43,7 +41,7 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
     return (
       session.server.client.session
         .generate(
-          { sessionID: session.id, prompt: [instructions, item.question].join("\n\n") },
+          { sessionID: session.id, prompt: [instructions, question].join("\n\n") },
           { signal: controller.signal },
         )
         .then((result) => {
@@ -75,44 +73,18 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
 
     if (!session?.id) return
 
-    const store = saved(session)
     const id = crypto.randomUUID()
 
-    // Desktop storage loads asynchronously. Record the question and open its tab once the store has loaded, in one
-    // batch, because the host drops a transient tab its panel does not list. Leaving the session first cancels it.
-    return new Promise<void>((resolve) => {
-      const controller = new AbortController()
-      const signal = AbortSignal.any([controller.signal, ctx.signal])
-
-      createRoot((dispose) => {
-        const done = () => {
-          signal.removeEventListener("abort", done)
-          dispose()
-          resolve()
-        }
-
-        signal.addEventListener("abort", done, { once: true })
-        createKeyed(
-          () => ctx.sessions.current()?.key === session.key,
-          () => onCleanup(() => controller.abort()),
-        )
-        createKeyed(
-          () => store.ready(),
-          () => {
-            if (signal.aborted) return
-            batch(() => {
-              store.update((draft) => {
-                draft.chats.push({ id, question })
-              })
-              ctx.layout.open(`${ctx.id}:${id}`, session, { tab: "select" })
-            })
-            // Release the composer once the request starts, not when its answer arrives.
-            void generate(session, id)
-            done()
-          },
-        )
-      }, owner)
+    // Desktop storage loads asynchronously. A write before load queues and lands in the same batch that marks the
+    // store ready, and the panel keeps a tab hidden until then, so the chat and its tab need not wait. The session's
+    // store lives while its tab stays open, so leaving the session first still records the chat.
+    batch(() => {
+      saved(session).update((draft) => {
+        draft.chats.push({ id, question })
+      })
+      ctx.layout.open(`${ctx.id}:${id}`, session, { tab: "select" })
     })
+    void generate(session, id, question)
   }
 
   return {
@@ -126,7 +98,11 @@ export function createBtw(ctx: SetupContext<typeof Btw>) {
 
       return !!item && item.answer === undefined && !pending(id)
     },
-    retry: generate,
+    retry: (session: MountedSession, id: string) => {
+      const question = entry(session, id)?.question
+
+      if (question) void generate(session, id, question)
+    },
     /** Closing a tab forgets its question and answer. */
     remove: (session: MountedSession, id: string) => {
       stop(id)
