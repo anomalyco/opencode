@@ -30,6 +30,8 @@ import { or } from "drizzle-orm"
 import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProviderError } from "@/provider/error"
 import { iife } from "@/util/iife"
+import { isRecord } from "@/util/record"
+import { SessionRetry } from "./retry"
 import { errorMessage } from "@/util/error"
 import { isMedia } from "@/util/media"
 import type { SystemError } from "bun"
@@ -607,6 +609,18 @@ function isAfter(info: Info, other?: Info) {
   return info.id > other.id
 }
 
+// Providers often wrap socket/DNS failures, so the code may only exist on a cause.
+// An explicit non-transient marker means the provider already gave up retrying.
+function networkErrorCode(e: unknown) {
+  let current = e
+  for (let depth = 0; depth < 8 && isRecord(current); depth++) {
+    if (current.transient === false || current.isRetryable === false) return undefined
+    if (typeof current.code === "string" && SessionRetry.NETWORK_ERROR_CODES.has(current.code)) return current.code
+    current = current.cause
+  }
+  return undefined
+}
+
 export function fromError(
   e: unknown,
   ctx: { providerID: ProviderV2.ID; aborted?: boolean },
@@ -703,6 +717,15 @@ export function fromError(
           responseHeaders: parsed.responseHeaders,
           responseBody: parsed.responseBody,
           metadata: parsed.metadata,
+        },
+        { cause: e },
+      ).toObject()
+    case e instanceof Error && networkErrorCode(e) !== undefined:
+      return new APIError(
+        {
+          message: errorMessage(e),
+          isRetryable: true,
+          metadata: { code: networkErrorCode(e) ?? "" },
         },
         { cause: e },
       ).toObject()

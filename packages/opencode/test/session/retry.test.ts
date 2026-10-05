@@ -146,6 +146,36 @@ describe("session.retry.delay", () => {
       expect(attempts).toStrictEqual([1, 2, 3, 4, 5])
     }),
   )
+
+  it.instance("policy allows more retries for network errors", () =>
+    Effect.gen(function* () {
+      let attempts = 0
+      const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+        new SessionV1.APIError({
+          message: "Cursor HTTP/2 connection failed",
+          isRetryable: true,
+          responseHeaders: { "retry-after-ms": "0" },
+          metadata: { code: "ENOTFOUND" },
+        }).toObject(),
+      )
+      const step = yield* Schedule.toStepWithMetadata(
+        SessionRetry.policy({
+          provider: "test",
+          parse: Schema.decodeUnknownSync(SessionV1.APIError.Schema),
+          set: () =>
+            Effect.sync(() => {
+              attempts++
+            }),
+        }),
+      )
+
+      yield* Effect.forEach(Array.from({ length: SessionRetry.RETRY_MAX_RETRIES_NETWORK + 1 }), () =>
+        Effect.ignore(step(error)),
+      )
+
+      expect(attempts).toBe(SessionRetry.RETRY_MAX_RETRIES_NETWORK)
+    }),
+  )
 })
 
 describe("session.retry.retryable", () => {
@@ -477,6 +507,30 @@ describe("session.message-v2.fromError", () => {
     const retryable = SessionRetry.retryable(error, retryProvider)
     expect(retryable).toBeDefined()
     expect(retryable).toEqual({ message: "Connection reset by server" })
+  })
+
+  test("wrapped DNS failures are retryable", () => {
+    const dns = Object.assign(new Error("getaddrinfo ENOTFOUND"), { code: "ENOTFOUND" })
+    const wrapped = Object.assign(new Error("Cursor HTTP/2 connection failed", { cause: dns }), {
+      transient: true,
+      code: "ENOTFOUND",
+    })
+    const result = MessageV2.fromError(wrapped, { providerID })
+    if (!SessionV1.APIError.isInstance(result)) throw new Error("expected APIError")
+    expect(result.data.isRetryable).toBe(true)
+    expect(result.data.metadata?.code).toBe("ENOTFOUND")
+    expect(SessionRetry.retryable(result, retryProvider)).toEqual({ message: "Cursor HTTP/2 connection failed" })
+  })
+
+  test("network failures a provider marked non-transient are not retried", () => {
+    const inner = Object.assign(new Error("Cursor HTTP/2 connection failed"), { transient: true, code: "ENOTFOUND" })
+    const exhausted = Object.assign(new Error("Cursor Run failed after 3 attempts", { cause: inner }), {
+      transient: false,
+      code: "ENOTFOUND",
+    })
+    const result = MessageV2.fromError(exhausted, { providerID })
+    expect(SessionV1.APIError.isInstance(result)).toBe(false)
+    expect(SessionRetry.retryable(result, retryProvider)).toBeUndefined()
   })
 
   test("marks OpenAI 404 status codes as retryable", () => {
