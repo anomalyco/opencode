@@ -153,6 +153,26 @@ describe("Vcs", () => {
       }),
     { git: true },
   )
+
+  it.instance(
+    "status() exposes porcelain codes for untracked and modified files",
+    () =>
+      Effect.gen(function* () {
+        const test = yield* TestInstance
+        yield* write(path.join(test.directory, "tracked.txt"), "original\n")
+        yield* git(test.directory, ["add", "."])
+        yield* git(test.directory, ["commit", "--no-gpg-sign", "-m", "add file"])
+        yield* write(path.join(test.directory, "tracked.txt"), "changed\n")
+        yield* write(path.join(test.directory, "untracked.txt"), "new\n")
+
+        const vcs = yield* init()
+        const status = yield* vcs.status()
+
+        expect(status.find((item) => item.file === "untracked.txt")).toMatchObject({ status: "added", code: "??" })
+        expect(status.find((item) => item.file === "tracked.txt")).toMatchObject({ status: "modified", code: " M" })
+      }),
+    { git: true },
+  )
 })
 
 describe("Vcs diff", () => {
@@ -331,5 +351,58 @@ describe("Vcs diff", () => {
         )
       }),
     { git: true },
+  )
+})
+
+describe("Vcs tracking", () => {
+  afterEach(async () => {
+    await disposeAllInstances()
+  })
+
+  it.instance(
+    "tracking() is undefined without an upstream branch",
+    () =>
+      Effect.gen(function* () {
+        const vcs = yield* init()
+        const tracking = yield* vcs.tracking()
+
+        expect(tracking).toEqual({ ahead: undefined, behind: undefined })
+      }),
+    { git: true },
+  )
+
+  worktreeIt.live("tracking() counts commits ahead of and behind the upstream branch", () =>
+    Effect.gen(function* () {
+      const remote = yield* tmpdirScoped()
+      const local = yield* tmpdirScoped({ git: true })
+      const clone = yield* tmpdirScoped()
+
+      yield* git(remote, ["init", "--bare", "."])
+      yield* git(local, ["branch", "-M", "main"])
+      yield* git(local, ["remote", "add", "origin", remote])
+      yield* git(local, ["push", "-u", "origin", "main"])
+
+      yield* write(path.join(local, "ahead.txt"), "local\n")
+      yield* git(local, ["add", "."])
+      yield* git(local, ["commit", "--no-gpg-sign", "-m", "local commit"])
+
+      yield* git(clone, ["clone", remote, "."])
+      yield* git(clone, ["checkout", "main"])
+      yield* git(clone, ["config", "user.email", "test@opencode.test"])
+      yield* git(clone, ["config", "user.name", "Test"])
+      yield* git(clone, ["config", "commit.gpgsign", "false"])
+      yield* write(path.join(clone, "behind.txt"), "remote\n")
+      yield* git(clone, ["add", "."])
+      yield* git(clone, ["commit", "--no-gpg-sign", "-m", "remote commit"])
+      yield* git(clone, ["push", "origin", "HEAD:main"])
+      yield* git(local, ["fetch", "origin"])
+
+      const tracking = yield* Effect.gen(function* () {
+        const vcs = yield* init()
+        return yield* vcs.tracking()
+      }).pipe(provideInstance(local))
+
+      expect(tracking).toEqual({ ahead: 1, behind: 1 })
+    }),
   )
 })
