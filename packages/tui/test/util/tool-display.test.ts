@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import {
+  canonicalToolName,
   finiteNumber,
   primitiveInputSummary,
   toolDisplayMetadata,
@@ -7,6 +8,12 @@ import {
 } from "../../src/util/tool-display"
 
 test("normalizes shared tool primitives", () => {
+  expect(["bash", "task", "apply_patch", "plugin_tool"].map(canonicalToolName)).toEqual([
+    "shell",
+    "subagent",
+    "patch",
+    "plugin_tool",
+  ])
   expect([finiteNumber(-1.5), finiteNumber(Number.NaN), finiteNumber("1")]).toEqual([-1.5, undefined, undefined])
   expect(primitiveInputSummary({ command: "pwd", count: 2, nested: {} })).toBe("[command=pwd, count=2]")
   expect(primitiveInputSummary({ path: "src/a.ts", line: 2 }, ["path"])).toBe("[line=2]")

@@ -4,8 +4,7 @@ import type {
   SessionMessageAssistantTool,
   SessionMessageInfo,
 } from "@opencode/client"
-import { Tool } from "@opencode/schema/tool"
-import { executeCalls } from "../../util/tool-display"
+import { canonicalToolName, executeCalls } from "../../util/tool-display"
 import { visitEntries } from "./anchor-view"
 import { instructionPaths, type PartRef, type SessionEntry, type SessionNode } from "./grouping/session"
 import { reasoningContent } from "./message-parts"
@@ -47,7 +46,7 @@ export function summarizeActivity(
 /** Status for a running item, independent of its details, so it doesn't flicker as they arrive. */
 export function busyLabel(part: Item["part"]) {
   if (part.type === "reasoning") return "Thinking…"
-  const name = Tool.canonicalName(part.name)
+  const name = canonicalToolName(part.name)
   const noun = name === "shell" ? "command" : name === "execute" ? "code" : name
   return `${part.state.status === "streaming" ? "Preparing" : "Running"} ${noun}…`
 }
@@ -67,13 +66,13 @@ export function activitySummary(items: readonly Item[], instructions: number, cl
       if (!isActive(item, closed) && reasoningContent(item.part)) counts.thought++
       return
     }
-    const name = Tool.canonicalName(item.part.name)
+    const name = canonicalToolName(item.part.name)
     if (name === "execute") {
       const calls = executeCalls(
         item.part.state.status === "streaming" ? undefined : item.part.state.metadata?.toolCalls,
       ).filter((call) => call.status !== "running")
       calls.forEach((call) => {
-        if (Tool.canonicalName(call.tool) === "read") counts.read++
+        if (canonicalToolName(call.tool) === "read") counts.read++
         else counts.tool++
       })
       // With no finished nested calls to count, a finished execute counts as itself.

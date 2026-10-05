@@ -1,5 +1,4 @@
 import { createMemo, createSignal, Match, Show, Switch } from "solid-js"
-import { Tool } from "@opencode/schema/tool"
 import { RGBA, TextAttributes } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
 import type {
@@ -15,6 +14,7 @@ import { SplitBorder } from "../../ui/border"
 import { Locale } from "../../util/locale"
 import { use } from "./render-context"
 import { generateThinkingSyntax } from "./thinking-syntax"
+import { canonicalToolName } from "../../util/tool-display"
 
 export const INLINE_TOOL_ICON_WIDTH = 2
 
@@ -35,7 +35,7 @@ const toolDisplays = new Set([
 ])
 
 export function toolDisplay(tool: string) {
-  const normalized = Tool.canonicalName(tool)
+  const normalized = canonicalToolName(tool)
   return toolDisplays.has(normalized) ? normalized : "generic"
 }
 

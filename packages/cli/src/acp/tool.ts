@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from "node:path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
-import { Tool } from "@opencode/schema/tool"
-import { readDisplayText } from "@opencode/tui/mini/tool"
+import type { Tool } from "@opencode/schema/tool"
+import { canonicalToolName, readDisplayText } from "@opencode/tui/mini/tool"
 import { Patch } from "@opencode/util/patch"
 import { Result } from "effect"
 
@@ -179,7 +179,7 @@ function locationFrom(cwd: string, ...values: unknown[]): ToolCallLocation[] {
 }
 
 export function canonicalName(toolName: string) {
-  return Tool.canonicalName(toolName.toLocaleLowerCase())
+  return canonicalToolName(toolName.toLocaleLowerCase())
 }
 
 // Sessions migrated from V1 keep their original `filePath` tool inputs.

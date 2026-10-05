@@ -1,6 +1,5 @@
-import { Tool } from "@opencode/schema/tool"
 import { Locale } from "./locale"
-import { finiteNumber, webSearchProviderLabel } from "./tool-display"
+import { canonicalToolName, finiteNumber, webSearchProviderLabel } from "./tool-display"
 
 type Dict = Record<string, unknown>
 
@@ -25,7 +24,7 @@ export function permissionPresentation(
   source: PermissionPresentationInput,
   formatPath: (value: string) => string = (value) => value,
 ): PermissionPresentation {
-  const action = Tool.canonicalName(source.action)
+  const action = canonicalToolName(source.action)
   const input = normalizeInput(action, source.input)
   const metadata = { ...dict(source.toolMetadata), ...dict(source.metadata) }
   const resources = source.resources.filter((item): item is string => typeof item === "string")

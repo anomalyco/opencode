@@ -23,7 +23,6 @@ import type {
   SessionMessageInfo,
   SessionMessageUser,
 } from "@opencode/client/promise"
-import { Tool } from "@opencode/schema/tool"
 import { Locale } from "../util/locale"
 import { createFragmentReconciler, fragmentRef, type FragmentReconciler } from "./stream-v2.fragment"
 import { toolImageCommits, userImageCommits } from "./stream-v2.image"
@@ -35,7 +34,7 @@ import type {
   MiniPermissionRequest,
   StreamCommit,
 } from "./types"
-import { normalizeTool, toolOutputText, toolView } from "./tool"
+import { canonicalToolName, normalizeTool, toolOutputText, toolView } from "./tool"
 import { toolDisplayContent } from "../util/tool-display"
 import { isRecord } from "../util/record"
 
@@ -968,7 +967,7 @@ export function createSubagentTracker(input: SubagentTrackerInput): SubagentTrac
     main(sdk, event, signal = input.signal) {
       if (!active(signal)) return
       if (event.type === "session.tool.input.started") {
-        if (Tool.canonicalName(event.data.name) === "subagent")
+        if (canonicalToolName(event.data.name) === "subagent")
           pendingCalls.set(sourceKey(event.data.assistantMessageID, event.data.id), {})
         return
       }
