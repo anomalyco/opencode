@@ -145,6 +145,7 @@ describe("MCP OAuth", () => {
           redirect.searchParams.set("code", "accepted")
           redirect.searchParams.set("state", state)
           expect((yield* Effect.promise(() => fetch(redirect))).status).toBe(200)
+          expect((yield* Effect.promise(() => fetch(redirect))).status).toBe(409)
           return yield* authorization.callback
         }),
       ),
