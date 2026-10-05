@@ -12,7 +12,7 @@ import { Wildcard } from "../util/wildcard.js"
 
 type Part = { type: string; text: string }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
-const POWERSHELL_PATH_FLAGS = new Set(["-literalpath", "-path"])
+const POWERSHELL_PATH_FLAGS = new Set(["-literalpath", "-lp", "-p", "-path"])
 
 export type Result = {
   commands: Array<{ resource: string; save: string }>
@@ -222,15 +222,23 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
     // The legacy command walk skips declarations, not the substitutions within them.
     if (item.declaration) continue
     const words = item.redirectWordCount === undefined ? item.rawWords : item.rawWords.slice(0, item.redirectWordCount)
-    // The shipped PowerShell grammar treats bare statement-head foreach prefixes as control flow.
-    if (powershell && item.statementHead && /^foreach(?:-|$)/i.test(words[0] ?? "")) continue
+    // The shipped PowerShell grammar treats bare statement-head foreach blocks as control flow.
+    if (
+      powershell &&
+      item.statementHead &&
+      /^foreach(?:-|$)/i.test(words[0] ?? "") &&
+      words.length > 1 &&
+      words.slice(1).every((word) => word.startsWith("{"))
+    )
+      continue
     const name = powershell ? words[0]?.toLowerCase() : words[0]
     if (CWD.has(name)) {
       output.directories.push(
         ...directoryArgs(
           powershell
-            ? words.flatMap((text): Part[] => {
-                const parameter = /^(-(?:literalpath|path)):(.*)$/i.exec(text)
+            ? words.flatMap((raw, index): Part[] => {
+                const text = !raw.includes("`$") && /['"`]/.test(raw) ? (item.words[index] ?? raw) : raw
+                const parameter = /^(-(?:literalpath|lp|path|p)):(.*)$/i.exec(text)
                 if (parameter)
                   return [
                     { type: "command_parameter", text: parameter[1] },
