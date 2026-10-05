@@ -21,6 +21,7 @@ import {
   autoRespondsPermission,
   sessionAutoAccept,
 } from "./permission-auto-respond"
+import { isPermissionNotFoundError } from "@/utils/server-errors"
 
 type PermissionRespondFn = (input: {
   sessionID: string
@@ -155,6 +156,9 @@ export const { use: usePermission, provider: PermissionProvider } = createSimple
       respond(input: Parameters<PermissionRespondFn>[0]) {
         selected().respond(input)
       },
+      reply(input: { sessionID: string; requestID: string; reply: "once" | "always" | "reject"; directory?: string }) {
+        return selected().api.reply(input)
+      },
       autoResponds(permission: PermissionRequest, directory?: string) {
         return selected().autoResponds(permission, directory)
       },
@@ -243,6 +247,10 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
     }
   }
 
+  function removePermission(sessionID: string, requestID: string) {
+    input.sync.session.permission.remove(sessionID, requestID)
+  }
+
   const respond: PermissionRespondFn = (request) => {
     if (meta.disposed) return
     input.sdk.api.permission
@@ -252,9 +260,37 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
         reply: request.response,
         location: request.directory ? { directory: request.directory } : undefined,
       })
-      .catch(() => {
+      .then(() => {
+        removePermission(request.sessionID, request.permissionID)
+      })
+      .catch((error: unknown) => {
+        // The server no longer knows this request; treat it as terminal instead of
+        // retrying forever, and drop the stale prompt locally.
+        if (isPermissionNotFoundError(error)) {
+          removePermission(request.sessionID, request.permissionID)
+          return
+        }
         responded.delete(request.permissionID)
       })
+  }
+
+  async function reply(value: {
+    sessionID: string
+    requestID: string
+    reply: "once" | "always" | "reject"
+    directory?: string
+  }) {
+    await input.sdk.api.permission
+      .reply({
+        sessionID: value.sessionID,
+        requestID: value.requestID,
+        reply: value.reply,
+        location: value.directory ? { directory: value.directory } : undefined,
+      })
+      .catch((error: unknown) => {
+        if (!isPermissionNotFoundError(error)) throw error
+      })
+    removePermission(value.sessionID, value.requestID)
   }
 
   const list = async (directory: string) => {
@@ -425,6 +461,7 @@ function createServerPermissionState(input: { sdk: ServerSDK; sync: ServerSync }
   const api = {
     ready: () => !meta.disposed && ready(),
     respond,
+    reply,
     autoResponds(permission: PermissionRequest, directory?: string) {
       if (meta.disposed) return false
       return shouldAutoRespond(permission, directory)

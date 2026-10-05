@@ -983,6 +983,17 @@ export function createServerSession(
       void resolve(sessionID, { force: true }).catch(() => {})
   }
 
+  const removePermission = (sessionID: string, requestID: string) =>
+    setData(
+      "permission",
+      sessionID,
+      produce((draft) => {
+        if (!draft) return
+        const result = Binary.search(draft, requestID, (item) => item.id)
+        if (result.found) draft.splice(result.index, 1)
+      }),
+    )
+
   const apply = (event: { type: string; properties?: unknown }) => {
     const eventID = eventSessionID(event)
     if (eventID) {
@@ -1249,15 +1260,7 @@ export function createServerSession(
       }
       case "permission.replied": {
         const props = event.properties as { sessionID: string; requestID: string }
-        setData(
-          "permission",
-          props.sessionID,
-          produce((draft) => {
-            if (!draft) return
-            const result = Binary.search(draft, props.requestID, (item) => item.id)
-            if (result.found) draft.splice(result.index, 1)
-          }),
-        )
+        removePermission(props.sessionID, props.requestID)
         return
       }
       case "question.asked": {
@@ -1306,6 +1309,9 @@ export function createServerSession(
         const session = await resolve(sessionID)
         return { session, root: await rootSession(session, resolve) }
       },
+    },
+    permission: {
+      remove: removePermission,
     },
     sync,
     prefetch,

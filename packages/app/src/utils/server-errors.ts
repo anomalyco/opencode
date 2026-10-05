@@ -1,3 +1,5 @@
+import { isPermissionNotFoundError as isSdkPermissionNotFoundError } from "@opencode-ai/client/promise"
+
 export type ConfigInvalidError = {
   name: "ConfigInvalidError"
   data: {
@@ -61,6 +63,12 @@ export function isSessionNotFoundError(error: unknown, sessionID: string) {
   if (typeof unwrapped !== "object" || unwrapped === null) return false
   const value = unwrapped as Record<string, unknown>
   return value._tag === "SessionNotFoundError" && value.sessionID === sessionID
+}
+
+// A reply to a permission request the server no longer knows about (the request
+// was cleaned up while it was pending, and the terminal event never reached us).
+export function isPermissionNotFoundError(error: unknown) {
+  return isSdkPermissionNotFoundError(unwrapNamedError(error))
 }
 
 function isConfigInvalidErrorLike(error: unknown): error is ConfigInvalidError {

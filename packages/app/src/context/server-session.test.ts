@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import type { retry } from "@opencode-ai/core/util/retry"
 import type { OpenCodeEvent, SessionApi } from "@opencode-ai/client/promise"
-import type { Message, OpencodeClient, Part, Session } from "@opencode-ai/sdk/v2/client"
+import type { Message, OpencodeClient, Part, PermissionRequest, Session } from "@opencode-ai/sdk/v2/client"
 import { createServerSession } from "./server-session"
 import type { ServerApi } from "@/utils/server"
 
@@ -1638,5 +1638,37 @@ describe("server session", () => {
 
     expect(ctx.store.data.message.active?.map((message) => message.id)).toEqual(["message"])
     expect(ctx.store.data.session_status["session-0"]).toBeUndefined()
+  })
+})
+
+describe("server session permissions", () => {
+  const permissionRequest = (id: string, sessionID: string): PermissionRequest => ({
+    id,
+    sessionID,
+    permission: "read",
+    patterns: ["/tmp/file.png"],
+    metadata: {},
+    always: [],
+  })
+
+  test("removes one permission request without touching the others", () => {
+    const ctx = setup({ child: session("child") })
+    ctx.store.set("permission", "child", [permissionRequest("per_a", "child"), permissionRequest("per_b", "child")])
+
+    ctx.store.permission.remove("child", "per_a")
+
+    expect(ctx.store.data.permission.child?.map((item) => item.id)).toEqual(["per_b"])
+  })
+
+  test("removes a permission request when the server replies", () => {
+    const ctx = setup({ child: session("child") })
+    ctx.store.set("permission", "child", [permissionRequest("per_a", "child")])
+
+    ctx.store.apply({
+      type: "permission.replied",
+      properties: { sessionID: "child", requestID: "per_a" },
+    })
+
+    expect(ctx.store.data.permission.child).toEqual([])
   })
 })

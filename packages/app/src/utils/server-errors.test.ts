@@ -1,7 +1,15 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionNotFoundError } from "@opencode-ai/sdk/v2/client"
+import type {
+  PermissionNotFoundError as SdkPermissionNotFoundError,
+  SessionNotFoundError,
+} from "@opencode-ai/sdk/v2/client"
 import type { ConfigInvalidError, ProviderModelNotFoundError } from "./server-errors"
-import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidError } from "./server-errors"
+import {
+  formatServerError,
+  isPermissionNotFoundError,
+  isSessionNotFoundError,
+  parseReadableConfigInvalidError,
+} from "./server-errors"
 
 function fill(text: string, vars?: Record<string, string | number>) {
   if (!vars) return text
@@ -169,6 +177,37 @@ describe("isSessionNotFoundError", () => {
           cause: { body: { _tag: "ProviderNotFoundError", providerID: "missing" }, status: 404 },
         }),
         "ses_tab",
+      ),
+    ).toBe(false)
+  })
+})
+
+describe("isPermissionNotFoundError", () => {
+  test("matches an error body thrown by the promise client", () => {
+    const body = {
+      _tag: "PermissionNotFoundError",
+      requestID: "per_missing",
+      message: "Permission request not found: per_missing",
+    } satisfies SdkPermissionNotFoundError
+
+    expect(isPermissionNotFoundError(body)).toBe(true)
+  })
+
+  test("matches an SDK-wrapped error", () => {
+    const body = {
+      _tag: "PermissionNotFoundError",
+      requestID: "per_missing",
+      message: "Permission request not found: per_missing",
+    } satisfies SdkPermissionNotFoundError
+
+    expect(isPermissionNotFoundError(new Error(body.message, { cause: { body, status: 404 } }))).toBe(true)
+  })
+
+  test("rejects other errors", () => {
+    expect(isPermissionNotFoundError(new Error("Permission request not found: per_missing"))).toBe(false)
+    expect(
+      isPermissionNotFoundError(
+        new Error("Session not found", { cause: { body: { _tag: "SessionNotFoundError" }, status: 404 } }),
       ),
     ).toBe(false)
   })
