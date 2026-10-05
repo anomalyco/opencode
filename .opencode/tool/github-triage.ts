@@ -6,7 +6,7 @@ const TEAM = {
   desktop_web: ["Hona", "Brendonovich"],
   core: ["jlongster", "rekram1-node", "neriousy", "nexxeln", "kitlangton"],
   inference: ["fwang", "MrMushrooooom", "starptech"],
-  windows: ["Hona", "neriousy"],
+  windows: ["Hona"],
 } as const
 
 function pick<T>(items: readonly T[]) {
