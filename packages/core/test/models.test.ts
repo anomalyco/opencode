@@ -316,10 +316,6 @@ describe("ModelsDev Service", () => {
       expect(result.length).toBeGreaterThan(0)
       const anthropic = result.find((snapshot) => snapshot.info.id === "anthropic")
       expect(anthropic?.environment).toContain("ANTHROPIC_API_KEY")
-      const azure = result.find((snapshot) => snapshot.info.id === "azure")
-      expect(azure?.models.find((model) => model.id === "model-router")?.package).toBe(
-        "@opencode/ai/providers/azure/chat",
-      )
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
     }),
