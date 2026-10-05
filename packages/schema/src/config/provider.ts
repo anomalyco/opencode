@@ -13,6 +13,7 @@ export const Settings = Schema.StructWithRest(
     chunkTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
     compaction: Provider.Compaction.pipe(optional),
     transport: Provider.Transport.pipe(optional),
+    modelDiscovery: Schema.Boolean.pipe(optional),
   }),
   [Schema.Record(Schema.String, Schema.UndefinedOr(Schema.Json))],
 ).annotate({ identifier: "Config.Provider.Settings" })
@@ -76,6 +77,9 @@ class Model extends Schema.Class<Model>("Config.Model")({
   // Partial: unset fields fall back to the base model's capabilities, then the defaults.
   capabilities: Capabilities.mapFields((fields) => ({
     tools: optional(fields.tools),
+    parallelTools: fields.parallelTools,
+    reasoning: fields.reasoning,
+    endpoints: fields.endpoints,
     input: optional(fields.input),
     output: optional(fields.output),
   }))

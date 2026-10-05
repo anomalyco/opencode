@@ -222,10 +222,29 @@ it.effect("auto compaction estimates current content against the buffered prompt
     expect(yield* due(input(83_999, contextLimited))).toBe(false)
     expect(yield* due(input(84_000, contextLimited))).toBe(true)
 
-    // The reply limit does not lower the ceiling.
+    // A normal reply must fit in the total context even when it exceeds the estimation reserve.
     const outputLimited = { context: 100_000, output: 30_000 }
-    expect(yield* due(input(83_999, outputLimited))).toBe(false)
-    expect(yield* due(input(84_000, outputLimited))).toBe(true)
+    expect(yield* due(input(69_999, outputLimited))).toBe(false)
+    expect(yield* due(input(70_000, outputLimited))).toBe(true)
+
+    // Input and context are independent: a 1.05M prompt limit does not leave room for a 128K reply.
+    const fullContext = { context: 1_050_000, input: 1_050_000, output: 128_000 }
+    expect(yield* due(input(921_999, fullContext))).toBe(false)
+    expect(yield* due(input(922_000, fullContext))).toBe(true)
+    expect(yield* due(native(921_999, fullContext))).toBe(false)
+    expect(yield* due(native(922_000, fullContext))).toBe(true)
+
+    // Child sessions compact against their selected model definition, independently of the parent's model.
+    const child = yield* insertSession(Session.ID.make("ses_input_limit_child"), { parent_id: session.id })
+    expect(yield* due({ ...input(500_000, fullContext), session: child })).toBe(false)
+    expect(yield* due({ ...input(922_000, fullContext), session: child })).toBe(true)
+    expect(yield* due({ ...input(244_800, inputLimited), session: child })).toBe(true)
+    expect(yield* due(input(244_800, fullContext))).toBe(false)
+
+    // An advertised input limit larger than total context must never hide the total-context ceiling.
+    const smallerContext = { context: 400_000, input: 1_050_000, output: 128_000 }
+    expect(yield* due(input(271_999, smallerContext))).toBe(false)
+    expect(yield* due(input(272_000, smallerContext))).toBe(true)
 
     const assistant = input(89_000, contextLimited).messages[0]
     const tool = SessionMessage.AssistantTool.make({
@@ -460,7 +479,7 @@ it.effect("manual compaction summarizes short context instead of no-op", () =>
       "x-opencode-session": parentID,
       "x-opencode-client": "opencode",
     })
-    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 20_000 }))
+    expect(requests[0]?.generation).toEqual(GenerationOptions.make({ maxTokens: 32_000 }))
     expect(JSON.stringify(requests[0]?.messages)).toContain("Manual compaction should include this short conversation.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("Use Effect services and generators.")
     expect(JSON.stringify(requests[0]?.messages)).toContain("User shell pwd completed: /project")

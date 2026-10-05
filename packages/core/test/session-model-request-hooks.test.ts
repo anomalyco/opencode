@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { OpenAIChat } from "@opencode/ai/protocols"
+import { ToolDefinition } from "@opencode/ai"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
 import { Session } from "@opencode/schema/session"
@@ -40,6 +41,38 @@ const transport = SessionModelTransport.Service.of({
 })
 
 describe("SessionModelRequest HTTP hooks", () => {
+  it.effect("honors advertised tools and parallel tool support on both main and child requests", () =>
+    Effect.gen(function* () {
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const tools = {
+        definitions: [ToolDefinition.make({ name: "read", description: "Read", inputSchema: { type: "object" } })],
+        execute: () => Effect.die("unused"),
+      }
+      for (const selected of [session, { ...session, parentID: Session.ID.make("ses_parent") }]) {
+        const noTools = yield* requests.primary({
+          session: selected,
+          agent: Agent.ID.make("build"),
+          model: { ...model, capabilities: { ...model.capabilities, tools: false } },
+          tools,
+          system: [],
+          messages: [],
+        })
+        expect(noTools.request.tools).toEqual([])
+        expect(noTools.request.toolChoice).toBeUndefined()
+        const serial = yield* requests.primary({
+          session: selected,
+          agent: Agent.ID.make("build"),
+          model: { ...model, capabilities: { ...model.capabilities, parallelTools: false } },
+          tools,
+          toolChoice: "read",
+          system: [],
+          messages: [],
+        })
+        expect(serial.request.tools).toHaveLength(1)
+        expect(serial.request.toolChoice).toMatchObject({ type: "tool", name: "read", disableParallelToolUse: true })
+      }
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
   it.effect("tags every Session request kind on http.request and http.response", () =>
     Effect.gen(function* () {
       const hooks = yield* PluginHooks.Service

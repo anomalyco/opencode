@@ -3,6 +3,25 @@ import { Schema } from "effect"
 import { Model } from "../src/model.js"
 import { Provider } from "../src/provider.js"
 
+describe("Model.Capabilities", () => {
+  test("preserves explicit gateway flags and omits unknown optional capabilities", () => {
+    const encode = Schema.encodeSync(Model.Capabilities)
+    expect(
+      encode({
+        tools: true,
+        input: ["text"],
+        output: ["text"],
+        parallelTools: undefined,
+        reasoning: undefined,
+        endpoints: undefined,
+      }),
+    ).toEqual({ tools: true, input: ["text"], output: ["text"] })
+    expect(
+      encode({ tools: false, input: [], output: [], parallelTools: false, reasoning: false, endpoints: [] }),
+    ).toEqual({ tools: false, input: [], output: [], parallelTools: false, reasoning: false, endpoints: [] })
+  })
+})
+
 describe("Model.Ref", () => {
   test("parses model references with optional variants", () => {
     const variant = Model.Ref.parse("openrouter/openai/gpt-5#high")

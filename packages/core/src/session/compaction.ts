@@ -898,17 +898,21 @@ export const estimatePrompt = (context: SessionContext.Loaded) => {
 }
 
 /**
- * The largest request the model takes while leaving room for its reply: 10% of the window, or `RESERVE_MIN` when that
- * is more. The summary request is capped at the same size, so its output limit is whatever the reserve leaves. A window
- * too small to give up `RESERVE_MIN` keeps 10%.
+ * Respect the independent input ceiling and leave room in the total context for the normal reply,
+ * as well as the existing estimation headroom. A small window keeps the existing 10% reserve.
  */
 const calculateCeiling = (limit: SessionContext.Loaded["model"]["limit"], buffer: number | undefined) => {
   // Unknown limits are reported as 0. An unknown input limit falls back to the context window; with no window at
   // all, only a provider rejection can limit the request.
-  const window = limit.input || limit.context
-  if (window <= 0) return Number.POSITIVE_INFINITY
-  if (buffer !== undefined) return window - buffer
-  return window - Math.max(Math.floor(window * 0.1), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
+  const window = Math.min(
+    ...[limit.input, limit.context].filter((value): value is number => value !== undefined && value > 0),
+  )
+  if (!Number.isFinite(window)) return Number.POSITIVE_INFINITY
+  const headroom = buffer ?? Math.max(Math.floor(window * 0.1), window >= 2 * RESERVE_MIN ? RESERVE_MIN : 0)
+  const reply = SessionModelRequest.outputLimit(limit, "primary")
+  // The output fitter permits smaller replies for tiny windows; do not make their prompt ceiling negative.
+  const context = limit.context > reply ? limit.context - reply : Number.POSITIVE_INFINITY
+  return Math.min(window - headroom, context)
 }
 
 /**

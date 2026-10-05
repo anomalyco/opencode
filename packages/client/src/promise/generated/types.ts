@@ -231,7 +231,14 @@ export type ModelReasoningField = "reasoning" | "reasoning_content" | "reasoning
 
 export type ModelMaxTokensField = "max_completion_tokens" | "max_tokens"
 
-export type ModelCapabilities = { tools: boolean; input: Array<string>; output: Array<string> }
+export type ModelCapabilities = {
+  tools: boolean
+  parallelTools?: boolean
+  reasoning?: boolean
+  endpoints?: Array<string>
+  input: Array<string>
+  output: Array<string>
+}
 
 export type MoneyUSDPerMillionTokens = number
 
@@ -443,7 +450,14 @@ export type McpProtocol = "legacy" | "auto" | "2026-07-28"
 
 export type ConfigWorktree = { directory: string }
 
-export type ConfigModelCapabilities = { tools?: boolean; input?: Array<string>; output?: Array<string> }
+export type ConfigModelCapabilities = {
+  tools?: boolean
+  parallelTools?: boolean
+  reasoning?: boolean
+  endpoints?: Array<string>
+  input?: Array<string>
+  output?: Array<string>
+}
 
 export type ConfigShellOption = { path: string; name: string; acceptable: boolean }
 
@@ -487,6 +501,7 @@ export type ProviderSettings = {
   chunkTimeout?: number | false
   compaction?: ProviderCompaction
   transport?: ProviderTransport
+  modelDiscovery?: boolean
 } & { [x: string]: any }
 
 export type ConfigProviderSettings = {
@@ -495,6 +510,7 @@ export type ConfigProviderSettings = {
   chunkTimeout?: number | false
   compaction?: ProviderCompaction
   transport?: ProviderTransport
+  modelDiscovery?: boolean
 } & { [x: string]: JsonValue | null }
 
 export type PermissionRule = { action: string; resource: string; effect: PermissionEffect }

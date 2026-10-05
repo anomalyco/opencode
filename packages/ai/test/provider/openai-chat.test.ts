@@ -45,6 +45,26 @@ const request = LLM.request({
 })
 
 describe("OpenAI Chat route", () => {
+  it.effect("disables parallel calls only when explicitly requested with active tools", () =>
+    Effect.gen(function* () {
+      const tool = ToolDefinition.make({ name: "read", description: "Read", inputSchema: { type: "object" } })
+      const serial = yield* compileRequest(
+        LLM.request({
+          model,
+          prompt: "Read",
+          tools: [tool],
+          toolChoice: { type: "auto", disableParallelToolUse: true },
+        }),
+      )
+      expect(serial.body).toMatchObject({ parallel_tool_calls: false })
+      const normal = yield* compileRequest(LLM.request({ model, prompt: "Read", tools: [tool] }))
+      expect(normal.body).not.toHaveProperty("parallel_tool_calls")
+      const empty = yield* compileRequest(
+        LLM.request({ model, prompt: "Read", toolChoice: { type: "auto", disableParallelToolUse: true } }),
+      )
+      expect(empty.body).not.toHaveProperty("parallel_tool_calls")
+    }),
+  )
   it.effect("prepares OpenAI Chat payload", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(request)
