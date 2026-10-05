@@ -165,7 +165,14 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
             </Show>
           </li>
           <li>
-            <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+            <Show
+              when={config.consoleMarketingEnabled}
+              fallback={<A href={language.route("/go")}>{i18n.t("nav.go")}</A>}
+            >
+              <a href="/console/go" target="_self">
+                {i18n.t("nav.go")}
+              </a>
+            </Show>
           </li>
           <li>
             <Show
@@ -282,7 +289,14 @@ export function Header(props: { zen?: boolean; go?: boolean; hideGetStarted?: bo
                 </Show>
                 <Show when={!props.go}>
                   <li>
-                    <A href={language.route("/go")}>{i18n.t("nav.go")}</A>
+                    <Show
+                      when={config.consoleMarketingEnabled}
+                      fallback={<A href={language.route("/go")}>{i18n.t("nav.go")}</A>}
+                    >
+                      <a href="/console/go" target="_self">
+                        {i18n.t("nav.go")}
+                      </a>
+                    </Show>
                   </li>
                 </Show>
                 <li>
