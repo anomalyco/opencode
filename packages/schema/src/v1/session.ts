@@ -490,15 +490,6 @@ export type Assistant = Omit<Types.DeepMutable<Schema.Schema.Type<typeof Assista
 export const Info = Schema.Union([User, Assistant]).annotate({ discriminator: "role", identifier: "SessionV1.Message" })
 export type Info = User | Assistant
 
-export const WithParts = Schema.Struct({
-  info: Info,
-  parts: Schema.Array(Part),
-})
-export type WithParts = {
-  info: Info
-  parts: Part[]
-}
-
 const options = {
   durable: {
     aggregate: "sessionID",

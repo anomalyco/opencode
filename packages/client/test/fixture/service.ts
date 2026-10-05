@@ -44,15 +44,23 @@ const handoff = {
 }
 const server = Bun.serve({
   port: 0,
-  async fetch(request) {
+  async fetch(request): Promise<Response> {
     const pathname = new URL(request.url).pathname
+    if (mode === "protocol" && pathname === "/api/experimental/persistent-pty/handoff") {
+      await writeFile(registration + ".handoff-request", "")
+      return Response.json({ handoff: null })
+    }
     if (pathname === "/api/experimental/persistent-pty/handoff" && mode === "handoff") {
       if (request.method !== "POST" || request.headers.get("authorization") !== "Basic " + btoa("opencode:private"))
         return new Response(null, { status: 401 })
       await writeFile(registration + ".prepared", JSON.stringify(handoff))
       return Response.json({ handoff })
     }
+    if (pathname === "/api/experimental/persistent-pty/handoff" && mode === "handoff-broken")
+      return new Response(null, { status: 500 })
     if (pathname !== "/api/info") return new Response(null, { status: 404 })
+    if (mode === "protocol" && (await Bun.file(registration + ".missing-health").exists()))
+      return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".status-request", "")
     if (mode === "hanging") {

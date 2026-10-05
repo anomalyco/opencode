@@ -37,7 +37,7 @@ export type Settings = ProviderPackage.Settings &
 const route = Route.make({
   id: "google-vertex-messages",
   provider: id,
-  providerMetadataKey: "anthropic",
+  providerMetadataKey: "vertex",
   protocol: Protocol.make({
     id: AnthropicMessages.protocol.id,
     body: {

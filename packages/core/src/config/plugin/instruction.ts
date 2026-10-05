@@ -60,14 +60,17 @@ export const Plugin = define({
       })
 
       const globalSource = Effect.fn("ConfigInstructionPlugin.globalSource")(function* () {
-        if (!discovery.global) return []
+        if (!discovery.global || !(yield* fs.isFile(globalFile))) return []
         const file = yield* read(globalFile)
         return file ? [file] : []
       })
 
       const projectSource = Effect.fn("ConfigInstructionPlugin.projectSource")(function* () {
         if (!project) return []
-        const walked = yield* Effect.forEach(yield* fs.up({ targets: ["AGENTS.md"], start, stop }), fs.resolve)
+        const walked = yield* Effect.forEach(
+          yield* fs.up({ targets: ["AGENTS.md"], start, stop, type: "file" }),
+          fs.resolve,
+        )
         const discovered = new Set(walked.filter((file) => discovery.global || file !== globalFile))
         const files = yield* Effect.forEach(discovered, read, { concurrency: "unbounded" })
         if (files.some((file) => file === undefined)) return Instructions.unavailable

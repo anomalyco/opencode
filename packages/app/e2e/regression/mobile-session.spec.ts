@@ -221,6 +221,54 @@ test("the summary's changes row switches the view and keeps the side tabs", asyn
 
   await page.setViewportSize({ width: 1280, height: 900 })
   await expect(readme).toHaveAttribute("aria-selected", "true")
+
+  // After a reload forgets the preview, a stored Open file tab is still the slot a narrow-screen file open replaces.
+  const launcher = panel.getByRole("tab", { name: "Open file", exact: true })
+  await panel.getByRole("button", { name: "Open file", exact: true }).click()
+  await expect(launcher).toHaveAttribute("aria-selected", "true")
+  await expect(readme).toHaveCount(0)
+  await page.reload()
+  await expect(launcher).toHaveAttribute("aria-selected", "true")
+  await page.setViewportSize({ width: 390, height: 844 })
+  await tabs.getByRole("tab", { name: "Files", exact: true }).click()
+  const files = page.locator('[data-slot="session-mobile-files"]')
+  await files.getByRole("button", { name: "README.md", exact: true }).click()
+  await expect(files.getByText("contents:README.md", { exact: true })).toBeVisible()
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await expect(readme).toHaveAttribute("aria-selected", "true")
+  await expect(launcher).toHaveCount(0)
+})
+
+test("a narrow-screen palette pick keeps the view and dock, and the side region shows the file when wide", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  await mockStressTimeline(page, {
+    fileList: (path) => (path ? [] : [fileNode(fixture.directory, "README.md")]),
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    findFiles: ({ query }) => ("README.md".includes(query) ? [fileNode(fixture.directory, "README.md")] : []),
+    pty: {},
+  })
+  await openStress(page, { lastProject: { local: fixture.directory } })
+  await page.goto(sessionHref(fixture.targetID))
+
+  const tabs = page.getByRole("tablist", { name: "Session view", exact: true })
+  const terminal = page.locator("#terminal-panel")
+  await tabs.getByRole("tab", { name: "Terminal", exact: true }).click()
+  await expect(terminal.locator("textarea")).toBeEditable()
+  await page.keyboard.press("ControlOrMeta+p")
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("textbox").fill("README")
+  await dialog.getByRole("option", { name: "/ README.md", exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(tabs.getByRole("tab", { selected: true })).toHaveText("Terminal")
+  await expect(terminal).toHaveAttribute("data-opened", "true")
+
+  await page.setViewportSize({ width: 1280, height: 900 })
+  await expect(terminal).toHaveAttribute("data-opened", "true")
+  const panel = page.locator("#review-panel")
+  await expect(panel.getByRole("tab", { name: "README.md", exact: true })).toHaveAttribute("aria-selected", "true")
+  await expect(panel.getByText("contents:README.md", { exact: true })).toBeVisible()
 })
 
 test.describe("touch", () => {

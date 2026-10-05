@@ -1,10 +1,11 @@
 import type { SessionConfigOption } from "@agentclientprotocol/sdk"
-import type { ModelRef } from "@opencode/client/promise"
+import type { Agent } from "@opencode/schema/agent"
+import type { Model } from "@opencode/schema/model"
 import { builtinCommands, type Catalog } from "./catalog"
 
 export const DEFAULT_VARIANT_VALUE = "default"
 
-export type ConfigOptionModel = {
+type ConfigOptionModel = {
   id: string
   name: string
   variants?: ReadonlyArray<string>
@@ -16,7 +17,7 @@ export type ConfigOptionProvider = {
   models: ReadonlyArray<ConfigOptionModel>
 }
 
-export type ConfigOptionMode = {
+type ConfigOptionMode = {
   id: string
   name: string
   description?: string
@@ -27,10 +28,9 @@ export type ModelSelection = {
   variant?: string
 }
 
-/** A session's model and mode. Unset fields follow the catalog defaults. */
 export type Selection = {
-  readonly model?: ModelRef
-  readonly modeID?: string
+  readonly model?: Model.Ref
+  readonly modeID?: Agent.ID
 }
 
 export function currentModel(catalog: Catalog, selection: Selection) {
@@ -163,5 +163,3 @@ function selectVariant(variant: string | undefined, variants: readonly string[])
   if (variants.includes(DEFAULT_VARIANT_VALUE)) return DEFAULT_VARIANT_VALUE
   return variants[0] ?? DEFAULT_VARIANT_VALUE
 }
-
-export * as ACPConfigOption from "./config-option"

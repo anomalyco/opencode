@@ -306,10 +306,6 @@ export const dict = {
   "dialog.project.edit.color.select": "{{color}} အရောင်ကို ရွေးပါ။",
   "dialog.project.edit.worktree.startup": "Workspace စတင်ခြင်း script",
   "dialog.project.edit.worktree.startup.placeholder": "e.g. bun install လုပ်ပါ။",
-  "dialog.releaseNotes.action.getStarted": "စတင်လိုက်ပါ။",
-  "dialog.releaseNotes.action.next": "နောက်တစ်ခု",
-  "dialog.releaseNotes.action.hideFuture": "ဒါတွေကို အနာဂတ်မှာ မပြပါနဲ့။",
-  "dialog.releaseNotes.media.alt": "ဖြန့်ချိမှု အကြိုကြည့်ရှုခြင်း။",
   "toast.permissions.autoaccept.on.title": "ခွင့်ပြုချက်များကို အလိုအလျောက် လက်ခံခြင်း။",
   "toast.permissions.autoaccept.on.description": "ခွင့်ပြုချက်တောင်းဆိုမှုများကို အလိုအလျောက် အတည်ပြုပေးမည်ဖြစ်သည်။",
   "toast.permissions.autoaccept.off.title": "ခွင့်ပြုချက်များကို အလိုအလျောက်လက်ခံခြင်းကို ရပ်ထားသည်။",
@@ -727,7 +723,6 @@ export const dict = {
   "session.view.select": "ကဏ္ဍမြင်ကွင်း",
   "session.background.moveRunning": "နောက်ခံသို့ ရွှေ့ပါ။",
   "session.timeline.working": "အလုပ်လုပ်တယ်။",
-  "session.review.wrapLines": "လိုင်းများခြုံ",
   "session.websearch.title": "Third-party ဝဘ်ရှာဖွေမှု",
   "session.websearch.description": "ဝဘ်ကို ရှာဖွေရန် အသုံးပြုသည့် ရှာဖွေပေးသူ အေးဂျင့်များကို ရွေးပါ။",
   "session.websearch.provider": "ရှာဖွေပေးသူ",
@@ -791,8 +786,6 @@ export const dict = {
   "settings.timeline.category.subagents": "အေးဂျင့်ခွဲများ",
   "settings.timeline.category.notices": "သတိပေးချက်များ",
   "settings.timeline.category.tools": "အခြားကိရိယာများ",
-  "settings.general.row.mobileDiffWrap.description":
-    "အလျားလိုက် လှိမ့်မည့်အစား မိုဘိုင်း ကွဲပြားမှုများတွင် ရှည်လျားသော လိုင်းများကို ခြုံပါ။",
 
   "provider.connect.error.unsupportedFields": "ဤအထောက်အထားစိစစ်ခြင်းဖောင်တွင် ပံ့ပိုးမထားသော အကွက်များပါရှိသည်။",
   "settings.about.writtenByNames": "{{names}} မှ ရေးသည်",

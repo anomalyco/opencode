@@ -1,7 +1,7 @@
 import { useCommand, type CommandOption } from "@/shell/commands/command"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { previewSelectedLines } from "@opencode/session-ui/pierre/selection-bridge"
-import { useFile, selectionFromLines, type FileSelection, type SelectedLineRange } from "@/workspaces/files/model"
+import { useFile, selectionFromLines, type FileSelection } from "@/workspaces/files/model"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useLayout } from "@/shell/state/layout"
 import { useComposerState } from "@/composer/persistence"
@@ -54,20 +54,25 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
   const platform = usePlatform()
   const layout = useLayout()
   const host = useExtensionHost()
+
   const openDialog = async <T,>(load: () => Promise<T>, show: (value: T) => void) => {
     const owner = actions.session.ownership.capture()
     const value = await load()
     owner.run(() => show(value))
   }
+
   const shown = settings.visibility.fileTree
 
   // The file the selected side tab shows; other tabs have no line selection.
   const activeFile = () => actions.region.selected()?.tab.file
+
   // Pinned tabs stay open.
   const closableTab = () => {
     const entry = actions.region.selected()
-    return entry && entry.tab.kind !== "pinned" ? entry.key : undefined
+
+    return entry && !entry.tab.pinned ? entry.key : undefined
   }
+
   // Focus inside an extension command's scope belongs to that extension, which binds its own shortcuts there.
   const extensionScoped = (target: EventTarget | null) =>
     target instanceof Element &&
@@ -75,7 +80,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const selectionPreview = (path: string, selection: FileSelection) => {
     const content = file.get(path)?.content?.content
+
     if (!content) return undefined
+
     return previewSelectedLines(content, { start: selection.startLine, end: selection.endLine })
   }
 
@@ -86,7 +93,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const canAddSelectionContext = () => {
     const path = activeFile()
+
     if (!path) return false
+
     return file.selectedLines(path) != null
   }
 
@@ -103,13 +112,17 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const exportSession = async () => {
     const sessionID = actions.session.identity.params.id
+
     if (!sessionID) return
+
     try {
       const data = await fetchSessionExport({
         sessionID,
         api: serverSDK.api,
       })
+
       const filename = sessionExportFilename(data.info)
+
       if (!(await saveSessionExport(filename, data, platform))) return
       showToast({
         variant: "success",
@@ -128,7 +141,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const copySessionID = async () => {
     const sessionID = actions.session.identity.params.id
+
     if (!sessionID) return
+
     try {
       await (platform.writeClipboardText?.(sessionID) ?? navigator.clipboard.writeText(sessionID))
       showToast({
@@ -148,7 +163,9 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const copyProjectID = async () => {
     const projectID = actions.session.data.info()?.projectID
+
     if (!projectID) return
+
     try {
       await (platform.writeClipboardText?.(projectID) ?? navigator.clipboard.writeText(projectID))
       showToast({
@@ -175,19 +192,23 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const closeTab = () => {
     const tab = closableTab()
+
     if (tab) actions.region.close(tab)
   }
 
   const addSelection = () => {
     const path = activeFile()
+
     if (!path) return
 
-    const range = file.selectedLines(path) as SelectedLineRange | null | undefined
+    const range = file.selectedLines(path)
+
     if (!range) {
       showToast({
         title: language.t("toast.context.noLineSelection.title"),
         description: language.t("toast.context.noLineSelection.description"),
       })
+
       return
     }
 
@@ -219,6 +240,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const compact = async () => {
     const sessionID = actions.session.identity.params.id
+
     if (!sessionID) return
 
     await serverSDK.api.session.compact({ sessionID })
@@ -226,6 +248,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const fork = () => {
     const sessionID = actions.session.identity.params.id
+
     if (!sessionID) return
     void openDialog(
       () => import("@/session/commands/fork-dialog"),
@@ -298,6 +321,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
 
   const fileCmds = () => {
     const tab = closableTab()
+
     return [
       fileCommand({
         id: "file.open",

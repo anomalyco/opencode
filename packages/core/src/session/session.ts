@@ -15,7 +15,6 @@ import {
   BusyError,
   CompactionConflictError,
   InboxConflictError,
-  MessageNotFoundError,
   NotFoundError,
   PromptConflictError,
   SyntheticConflictError,

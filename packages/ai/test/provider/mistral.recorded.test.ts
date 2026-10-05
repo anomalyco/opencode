@@ -1,7 +1,7 @@
 import { configure } from "@opencode/ai/providers/mistral"
 import { describe, expect } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMEvent, LLMRequest, Message, ToolChoice, ToolDefinition } from "../../src/index.js"
+import { LLM, LLMEvent, LLMRequest, Message, SystemPart, ToolChoice, ToolDefinition } from "../../src/index.js"
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { recordedTests } from "../recorded-test.js"
@@ -97,7 +97,10 @@ describe("Mistral recorded", () => {
         const model = configure({ apiKey, providerOptions: { reasoningEffort: "none" } }).model("mistral-small-latest")
         const firstRequest = LLM.request({
           model,
-          system: "Call lookup_weather exactly once with Paris.",
+          system: [
+            SystemPart.make("Call lookup_weather exactly once with Paris."),
+            SystemPart.make("After the tool result, describe the weather briefly."),
+          ],
           prompt: "What is the weather?",
           tools: [weather],
           toolChoice: weather,

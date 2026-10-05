@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { ConfigEntry, OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, session } from "../utils/app"
-import { mockRemoteServer, openSettings, type WorkspaceInput } from "../utils/workspace"
+import { mockRemoteServer, mockWorkspace, openSettings, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/Projects/settings-demo"
 const projectID = "proj_settings_demo"
@@ -63,6 +63,20 @@ test("settings has its own route and returns through app history", async ({ page
   await home.click()
   await expect(page).toHaveURL("/")
   await expect(settings).toBeHidden()
+})
+
+test("Ctrl+, opens settings as soon as the app loads", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "Settings demo",
+    directory,
+    provider: NO_PROVIDER,
+    sessions: [],
+    seed: { tabs: [] },
+  })
+  await page.goto("/")
+  await page.keyboard.press("Control+,")
+  await expect(page.getByTestId("settings-screen")).toBeVisible()
+  await expect(page).toHaveURL("/settings")
 })
 
 test("a settings page survives refresh", async ({ page }) => {

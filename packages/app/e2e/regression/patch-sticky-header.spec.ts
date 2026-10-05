@@ -220,13 +220,16 @@ for (const scenario of scenarios) {
                 const top = sessionTop + (group?.getBoundingClientRect().height ?? 0)
                 const rect = element.getBoundingClientRect()
                 const trigger = element.querySelector("button")!
+                // The header stuck directly below the session title sits where the title's fade starts.
+                const hits = (target: Element, box: DOMRect) =>
+                  [box.top + 1, box.top + box.height / 2].every((y) =>
+                    target.contains(document.elementFromPoint(box.left + box.width / 2, y)),
+                  )
                 return {
                   gap: Math.abs(rect.top - top - (toolTitle?.getBoundingClientRect().height ?? 0)),
                   groupGap: group ? Math.abs(group.getBoundingClientRect().top - sessionTop) : 0,
                   titleGap: toolTitle ? Math.abs(toolTitle.getBoundingClientRect().top - top) : 0,
-                  clickable: trigger.contains(
-                    document.elementFromPoint(rect.left + rect.width / 2, rect.top + rect.height / 2),
-                  ),
+                  clickable: hits(trigger, rect) && (!group || hits(group, group.getBoundingClientRect())),
                 }
               }),
             )

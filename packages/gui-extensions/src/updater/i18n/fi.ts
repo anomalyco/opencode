@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Päivitys valmis",
   "dialog.restart": "Käynnistä uudelleen",
   "dialog.later": "Myöhemmin",
+  "releaseNotes.action.getStarted": "Aloita",
+  "releaseNotes.action.next": "Seuraava",
+  "releaseNotes.action.hideFuture": "Älä näytä näitä jatkossa",
+  "releaseNotes.media.alt": "Julkaisun esikatselu",
 }

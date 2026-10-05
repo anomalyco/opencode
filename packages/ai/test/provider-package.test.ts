@@ -121,6 +121,25 @@ describe("provider package entrypoints", () => {
     })
   })
 
+  test("maps Cohere entrypoints onto native and compatibility routes", async () => {
+    const modules = await Promise.all([
+      import("@opencode/ai/providers/cohere"),
+      import("@opencode/ai/providers/cohere/chat"),
+    ])
+    const settings = { apiKey: "fixture", headers: { "x-test": "fixture" }, body: { future_option: true } }
+    const routes = [
+      ["cohere-chat", "https://api.cohere.com/v2"],
+      ["cohere-chat-completions", "https://api.cohere.ai/compatibility/v1"],
+    ]
+    modules.forEach((module, index) => {
+      const selected = module.model("command-a-03-2025", settings)
+      expect(selected.provider).toBe("cohere")
+      expect([selected.route.id, selected.route.endpoint.baseURL]).toEqual(routes[index])
+      expect(selected.route.defaults.headers).toEqual(settings.headers)
+      expect(selected.route.defaults.http?.body).toEqual(settings.body)
+    })
+  })
+
   test("maps MiniMax API entrypoints onto provider-owned routes", async () => {
     const modules = await Promise.all([
       import("@opencode/ai/providers/minimax"),
@@ -411,6 +430,7 @@ describe("provider package entrypoints", () => {
 
   test("maps Google package settings onto the Gemini model", async () => {
     const Google = await import("@opencode/ai/providers/google")
+    const GoogleInteractions = await import("@opencode/ai/providers/google/interactions")
     const selected = Google.model("gemini-2.5-flash", {
       apiKey: "fixture",
       baseURL: "https://generativelanguage.test/v1beta",
@@ -424,6 +444,16 @@ describe("provider package entrypoints", () => {
     expect(selected.route.defaults.headers).toEqual({ "x-application": "opencode" })
     expect(selected.route.defaults.http?.body).toEqual({ safetySettings: [] })
     expect(selected.route.defaults.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
+    const interactions = GoogleInteractions.model("gemini-3.8-flash", {
+      apiKey: "fixture",
+      baseURL: "https://generativelanguage.test/v1beta",
+      thinkingLevel: "low",
+      store: true,
+    })
+    expect(interactions.route.id).toBe("google-interactions")
+    expect(interactions.route.endpoint.baseURL).toBe("https://generativelanguage.test/v1beta")
+    expect(interactions.route.defaults.providerOptions).toEqual({ thinkingLevel: "low", store: true })
+    expect(Google.configure().interactions("gemini-3.8-flash").route.protocol).toBe("google-interactions")
   })
 
   test("selects Vertex entrypoints with the same model contract", async () => {

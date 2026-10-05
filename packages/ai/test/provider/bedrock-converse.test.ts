@@ -21,7 +21,6 @@ import {
 import { LLMClient } from "../../src/route.js"
 import { compileRequest } from "../../src/route/client.js"
 import { AmazonBedrock } from "../../src/providers.js"
-import * as BedrockConverse from "../../src/protocols/bedrock-converse.js"
 import { it } from "../lib/effect.js"
 import { withProcessEnv } from "../lib/env.js"
 import { dynamicResponse, fixedResponse } from "../lib/http.js"

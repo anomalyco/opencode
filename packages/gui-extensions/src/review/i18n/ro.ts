@@ -12,4 +12,6 @@ export default {
   "git.description": "Urmărește, revizuiește și anulează modificările din acest proiect",
   loadingChanges: "Se încarcă modificările…",
   noChanges: "Nicio modificare",
+  "settings.wrapLines.title": "Încadrează liniile",
+  "settings.wrapLines.description": "Înfășurați linii lungi în diferențele mobile în loc să derulați pe orizontală",
 }

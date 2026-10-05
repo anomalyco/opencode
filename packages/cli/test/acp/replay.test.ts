@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import type { SessionMessage } from "@opencode/schema/session-message"
 import { assistantMessage, makeSession, startWire } from "./wire-fixture"
 
 describe("acp session replay over the wire", () => {
@@ -59,57 +59,9 @@ describe("acp session replay over the wire", () => {
     })
     expect(updates[11]?.update).toMatchObject({ toolCallId: "call_streaming", status: "pending", rawInput: {} })
   })
-
-  test("continues replay after one message fails to translate", async () => {
-    await using acp = await startWire({
-      fetch(request) {
-        if (request.path !== "/api/session/ses_replay_failure/message") return undefined
-        return Response.json({
-          data: [
-            replayToolMessage("call_first", { status: "error", input: {}, metadata: {} }),
-            replayToolMessage("call_after", {
-              status: "completed",
-              input: { command: "printf done" },
-              metadata: { exit: 0 },
-              content: [{ type: "text", text: "done" }],
-            }),
-          ],
-          cursor: {},
-        })
-      },
-    })
-    acp.server.sessions.set("ses_replay_failure", makeSession("ses_replay_failure"))
-    await acp.initialize()
-
-    const loaded = await acp.request("session/load", {
-      cwd: "/workspace",
-      sessionId: "ses_replay_failure",
-      mcpServers: [],
-    })
-
-    expect(loaded.configOptions).toBeDefined()
-    expect(
-      acp.updates.flatMap((item) =>
-        item.update.sessionUpdate === "tool_call" || item.update.sessionUpdate === "tool_call_update"
-          ? [[item.update.toolCallId, item.update.sessionUpdate]]
-          : [],
-      ),
-    ).toEqual([
-      ["call_first", "tool_call"],
-      ["call_after", "tool_call"],
-      ["call_after", "tool_call_update"],
-    ])
-  })
 })
 
-function replayToolMessage(id: string, state: Record<string, unknown>) {
-  return {
-    ...assistantMessage(`msg_${id}`),
-    content: [{ type: "tool", id, name: "shell", time: { created: 1, completed: 2 }, state }],
-  }
-}
-
-function replayFixtureMessages(): SessionMessageInfo[] {
+function replayFixtureMessages(): Array<typeof SessionMessage.Info.Encoded> {
   return [
     {
       id: "msg_user",

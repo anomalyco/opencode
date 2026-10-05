@@ -32,7 +32,7 @@ import { SessionModelRequest } from "./model-request.js"
 import { SessionProviderContext } from "./provider-context.js"
 import { SessionRunnerRetry } from "./runner/retry.js"
 import { toLLMMessages } from "./runner/to-llm-message.js"
-import { toSessionError } from "./to-session-error.js"
+import { contentFilterError, toSessionError } from "./to-session-error.js"
 import { SessionUsage } from "./usage.js"
 
 export type Settings = {
@@ -540,10 +540,7 @@ export const layer = Layer.effect(
                   message: "Compaction summary reached the output token limit",
                 })
               case "content-filter":
-                return unusable({
-                  type: "provider.content-filter",
-                  message: "Compaction summary was blocked by the provider",
-                })
+                return unusable(contentFilterError("Compaction summary was blocked by the provider", event.reason))
               default:
                 return Effect.succeed(streamed)
             }

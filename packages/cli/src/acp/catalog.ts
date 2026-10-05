@@ -1,24 +1,25 @@
-import type { CommandInfo, ModelInfo, ModelRef, OpenCodeClient, OpenCodeEvent } from "@opencode/client/promise"
+import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
+import type { Agent } from "@opencode/schema/agent"
+import type { Command } from "@opencode/schema/command"
+import type { Model } from "@opencode/schema/model"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Context, Deferred, Effect, Exit, Schedule, Schema, Semaphore, Stream, SubscriptionRef } from "effect"
+import { Cause, Deferred, Effect, Exit, Schedule, Schema, Semaphore, Stream, SubscriptionRef } from "effect"
 import type { ConfigOptionProvider } from "./config-option"
 
-// ACP runs these itself; they take precedence over server commands with the same name.
 export const builtinCommands = new Map([
   ["compact", { description: "Compact the session", start: "compaction" as const }],
 ])
 
 export type Catalog = {
   readonly providers: ConfigOptionProvider[]
-  readonly models: ModelInfo[]
-  readonly defaultModel: ModelRef
-  readonly modes: Array<{ id: string; name: string; description?: string }>
-  readonly defaultModeID: string
-  /** Server commands, without those shadowed by a built-in. */
-  readonly commands: CommandInfo[]
+  readonly models: ReadonlyArray<Model.Info>
+  readonly defaultModel: Model.Ref
+  readonly modes: ReadonlyArray<{ id: Agent.ID; name: string; description?: string }>
+  readonly defaultModeID: Agent.ID
+  readonly commands: ReadonlyArray<Command.Info>
 }
 
-export class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatalogNotReadyError", {
+class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatalogNotReadyError", {
   reason: Schema.Literals(["models", "agents"]),
 }) {
   override get message() {
@@ -26,32 +27,26 @@ export class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatal
   }
 }
 
-export class LoadError extends Schema.TaggedError<LoadError>()("ACPCatalogLoadError", {
+class LoadError extends Schema.TaggedError<LoadError>()("ACPCatalogLoadError", {
   cause: Schema.Defect(),
 }) {}
 
 export type Error = NotReadyError | LoadError
 
 export interface Interface {
-  /** Loads a directory's catalog once. Concurrent callers share the load, and a failed load is not cached. */
   readonly get: (cwd: string) => Effect.Effect<Catalog, Error>
-  /** Resolves after a reload that started after the call. A failed reload keeps the previous catalog. */
   readonly reload: (cwd: string) => Effect.Effect<void, Error>
-  /** Emits the current catalog, then each reloaded one. */
   readonly changes: (cwd: string) => Stream.Stream<Catalog, Error>
 }
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Catalog") {}
 
 type Entry = {
   readonly cwd: string
   readonly catalog: SubscriptionRef.SubscriptionRef<Catalog>
   readonly lock: Semaphore.Semaphore
-  requested: number
-  loaded: number
+  requestedGeneration: number
+  loadedGeneration: number
 }
 
-// Provider, integration, and credential changes reach the catalog through model.updated.
 const reloadOn = new Set<OpenCodeEvent["type"]>(["model.updated", "agent.updated", "command.updated"])
 
 export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
@@ -59,21 +54,20 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
   const entries = new Map<string, Deferred.Deferred<Entry, Error>>()
   const connected = yield* Deferred.make<void>()
 
-  // A reload covers every request made before it starts, so requests queued behind a running reload share
-  // one more load. Typed load failures keep the previous catalog and still settle the requests they covered.
+  // Requests queued behind a running load share the next one.
   const reload = (entry: Entry) =>
     Effect.suspend(() => {
-      const target = ++entry.requested
+      const target = ++entry.requestedGeneration
       return entry.lock.withPermit(
         Effect.suspend(() => {
-          if (entry.loaded >= target) return Effect.void
-          const generation = entry.requested
+          if (entry.loadedGeneration >= target) return Effect.void
+          const generation = entry.requestedGeneration
           return load(client, entry.cwd).pipe(
             Effect.flatMap((next) => SubscriptionRef.set(entry.catalog, next)),
             Effect.ignore,
             Effect.andThen(
               Effect.sync(() => {
-                entry.loaded = generation
+                entry.loadedGeneration = generation
               }),
             ),
           )
@@ -82,7 +76,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
     })
 
   // Subscribe before the first read so an update between the read and the subscription is not lost.
-  yield* Stream.fromAsyncIterable(client.event.subscribe(), (cause) => cause).pipe(
+  yield* client.event.subscribe().pipe(
     Stream.runForEach((event) => {
       if (event.type === "server.connected") return Deferred.succeed(connected, undefined)
       if (!reloadOn.has(event.type)) return Effect.void
@@ -94,7 +88,9 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
         { discard: true },
       )
     }),
-    Effect.ignore,
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP catalog event stream failed", cause),
+    ),
     Effect.ensuring(Deferred.succeed(connected, undefined)),
     Effect.forkScoped,
   )
@@ -105,8 +101,8 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       cwd,
       catalog: yield* SubscriptionRef.make<Catalog>(yield* load(client, cwd)),
       lock: Semaphore.makeUnsafe(1),
-      requested: 0,
-      loaded: 0,
+      requestedGeneration: 0,
+      loadedGeneration: 0,
     } satisfies Entry
   })
 
@@ -127,8 +123,8 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       )
     })
 
-  return Service.of({
-    get: Effect.fn("cli.acp.catalog.get")(function* (cwd) {
+  return {
+    get: Effect.fnUntraced(function* (cwd) {
       const loaded = yield* entry(cwd)
       return yield* SubscriptionRef.get(loaded.catalog)
     }),
@@ -136,12 +132,12 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       yield* reload(yield* entry(cwd))
     }),
     changes: (cwd) => Stream.unwrap(entry(cwd).pipe(Effect.map((loaded) => SubscriptionRef.changes(loaded.catalog)))),
-  })
+  } satisfies Interface
 })
 
 const load = (client: OpenCodeClient, cwd: string) =>
   read(client, cwd).pipe(
-    // Some providers discover models in the background after plugin startup begins.
+    // Providers may still be discovering models after startup.
     Effect.retry({
       while: (error) => error._tag === "ACPCatalogNotReadyError",
       schedule: Schedule.spaced("25 millis").pipe(Schedule.upTo({ duration: "5 seconds" })),
@@ -151,19 +147,18 @@ const load = (client: OpenCodeClient, cwd: string) =>
 
 const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   const location = { directory: cwd }
-  const [modelResult, defaultResult, agentResult, commandResult] = yield* Effect.tryPromise({
-    try: (signal) =>
-      Promise.all([
-        client.model.list({ location }, { signal }),
-        client.model.default({ location }, { signal }),
-        client.agent.list({ location }, { signal }),
-        client.command.list({ location }, { signal }),
-      ]),
-    catch: (cause) => new LoadError({ cause }),
-  })
+  const [modelResult, defaultResult, agentResult, commandResult] = yield* Effect.all(
+    [
+      client.model.list({ location }),
+      client.model.default({ location }),
+      client.agent.list({ location }),
+      client.command.list({ location }),
+    ],
+    { concurrency: "unbounded" },
+  ).pipe(Effect.mapError((cause) => new LoadError({ cause })))
   const models = modelResult.data.filter((model) => model.enabled)
   const preferred = defaultResult.data
-  // Parallel reads can straddle initialization; select only from this model list.
+  // The parallel default read can name a model missing from this list.
   const defaultModel = preferred
     ? models.find((model) => model.providerID === preferred.providerID && model.id === preferred.id)
     : models[0]
@@ -186,7 +181,7 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   } satisfies Catalog
 })
 
-function providers(models: readonly ModelInfo[]): ConfigOptionProvider[] {
+function providers(models: ReadonlyArray<Model.Info>) {
   return Array.from(new Set(models.map((model) => model.providerID)))
     .toSorted()
     .map((providerID) => ({

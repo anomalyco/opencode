@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "التحديث جاهز",
   "dialog.restart": "إعادة التشغيل",
   "dialog.later": "لاحقًا",
+  "releaseNotes.action.getStarted": "البدء",
+  "releaseNotes.action.next": "التالي",
+  "releaseNotes.action.hideFuture": "عدم إظهارها مستقبلاً",
+  "releaseNotes.media.alt": "معاينة الإصدار",
 }

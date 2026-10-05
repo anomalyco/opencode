@@ -584,10 +584,7 @@ const serverToolResultType = (name: string): AnthropicServerToolResultType | und
   return undefined
 }
 
-const lowerServerToolResult = Effect.fn("AnthropicMessages.lowerServerToolResult")(function* (
-  part: ToolResultPart,
-  providerMetadataKey: string,
-) {
+const lowerServerToolResult = Effect.fnUntraced(function* (part: ToolResultPart, providerMetadataKey: string) {
   const wireType = serverToolResultType(part.name)
   if (!wireType)
     return yield* invalid(`Anthropic Messages does not know how to round-trip server tool result for ${part.name}`)
@@ -657,10 +654,7 @@ const citationsFromMetadata = (metadata: MediaPart["metadata"]): AnthropicDocume
 
 const isHttpUrl = (value: string) => /^https?:\/\//i.test(value.trim())
 
-const lowerMedia = Effect.fn("AnthropicMessages.lowerMedia")(function* (
-  part: MediaPart,
-  breakpoints?: Cache.Breakpoints,
-) {
+const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, breakpoints?: Cache.Breakpoints) {
   const mime = part.media.mediaType.toLowerCase()
   const cacheControlValue = breakpoints ? cacheControl(breakpoints, part.cache) : undefined
   const fileId = fileIdFromMetadata(part.metadata)
@@ -828,7 +822,7 @@ const splitsLocalToolResults = (messages: LLMRequest["messages"], index: number)
   return pending.size > 0
 }
 
-const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUpdate")(function* (
+const lowerNativeSystemUpdate = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
   breakpoints: Cache.Breakpoints,
 ) {
@@ -843,7 +837,7 @@ const lowerNativeSystemUpdate = Effect.fn("AnthropicMessages.lowerNativeSystemUp
   }
 })
 
-const lowerWrappedSystemUpdate = Effect.fn("AnthropicMessages.lowerWrappedSystemUpdate")(function* (
+const lowerWrappedSystemUpdate = Effect.fnUntraced(function* (
   message: LLMRequest["messages"][number],
   breakpoints: Cache.Breakpoints,
 ) {
@@ -857,10 +851,7 @@ const appendToUserTurn = (messages: AnthropicMessage[], block: AnthropicUserBloc
   else messages.push({ role: "user", content: [block] })
 }
 
-const lowerMessages = Effect.fn("AnthropicMessages.lowerMessages")(function* (
-  request: LLMRequest,
-  breakpoints: Cache.Breakpoints,
-) {
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoints: Cache.Breakpoints) {
   const messages: AnthropicMessage[] = []
   const providerMetadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
   // Text updates stay where they are unless a user turn follows them; then they move after the latest

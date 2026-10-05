@@ -10,4 +10,6 @@ export default {
   "git.description": "在此项目中跟踪、审查和撤消更改",
   loadingChanges: "正在加载更改…",
   noChanges: "无更改",
+  "settings.wrapLines.title": "换行",
+  "settings.wrapLines.description": "在移动设备差异中换行，而不是水平滚动",
 }

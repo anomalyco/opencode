@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Թարմացումը պատրաստ է",
   "dialog.restart": "Վերագործարկեք",
   "dialog.later": "Հետագայում",
+  "releaseNotes.action.getStarted": "Սկսել",
+  "releaseNotes.action.next": "Հաջորդ",
+  "releaseNotes.action.hideFuture": "Չցուցադրել դրանք ապագայում",
+  "releaseNotes.media.alt": "Թողարկման նախադիտում",
 }

@@ -13,11 +13,13 @@ import {
 } from "../utils/app"
 import { mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
-import { mockWorkspace } from "../utils/workspace"
+import { fileNode, mockWorkspace, openSession } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 
 const a = { id: "ses_tab_a", title: "Tab A session" }
+
 const b = { id: "ses_tab_b", title: "Tab B session" }
+
 const c = { id: "ses_tab_c", title: "Tab C session" }
 
 test.use({ serviceWorkers: "block" })
@@ -28,6 +30,7 @@ test("tab strip keeps draft tabs as wide as session tabs and navigates on mouse 
     sessions: [a, b],
     seed: { tabs: [a.id, { draft: "draft_tab_width", directory: "C:/OpenCode/Tabs" }, b.id] },
   })
+
   await page.goto(sessionHref(a.id))
 
   const tabs = page.locator("[data-titlebar-tab-slot]")
@@ -36,6 +39,7 @@ test("tab strip keeps draft tabs as wide as session tabs and navigates on mouse 
     .poll(() =>
       tabs.evaluateAll((tabs) => {
         const widths = tabs.map((tab) => tab.getBoundingClientRect().width)
+
         return Math.max(...widths) - Math.min(...widths)
       }),
     )
@@ -43,6 +47,7 @@ test("tab strip keeps draft tabs as wide as session tabs and navigates on mouse 
 
   const link = page.locator(`a[data-titlebar-tab-link][href="${sessionHref(b.id, workspace.server)}"]`)
   const box = await link.boundingBox()
+
   if (!box) throw new Error("tab link has no bounding box")
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
   await page.mouse.down()
@@ -118,6 +123,7 @@ for (const row of [
 
     await expectPath(page, sessionHref(b.id))
     await expect(page.getByRole("dialog", { name: "Tabs", exact: true })).toBeHidden()
+
     if (row.tabLayout !== "vertical") return
     await page.setViewportSize({ width: 1280, height: 720 })
     await expect(
@@ -156,11 +162,13 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
 
   const handle = sidebar.locator('[data-component="resize-handle"]')
+
   for (const [offset, width] of [
     [-80, "180px"],
     [-200, "140px"],
   ] as const) {
     const box = await handle.boundingBox()
+
     if (!box) throw new Error("vertical tab resize handle has no bounding box")
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
     await page.mouse.down()
@@ -168,6 +176,7 @@ test("vertical tabs resize, scroll, show shortcut hints, and navigate", async ({
     await page.mouse.up()
     await expect(sidebar).toHaveCSS("width", width)
   }
+
   for (const name of ["Home", "New session"]) {
     const label = sidebar.getByRole("button", { name, exact: true }).getByText(name, { exact: true })
     await expect(label).toBeVisible()
@@ -242,8 +251,11 @@ test("inactive tabs load attention, but read transcript and inbox only on select
   })
   page.on("request", (request) => {
     const path = new URL(request.url()).pathname
+
     if (!path.startsWith("/api/")) return
+
     if (request.method() === "GET") reads.push(path)
+
     if (request.method() === "DELETE" || /\/(interrupt|prompt)$/.test(path)) mutations.push(path)
   })
   const state = { text: "Original fixture answer" }
@@ -267,6 +279,7 @@ test("inactive tabs load attention, but read transcript and inbox only on select
     lastProject: { local: fixture.directory },
     tabs: [fixture.sourceID, fixture.targetID, fixture.childID],
   })
+
   const attention = Promise.all(
     [fixture.targetID, fixture.childID].flatMap((id) =>
       ["permission", "form"].map((kind) =>
@@ -274,6 +287,7 @@ test("inactive tabs load attention, but read transcript and inbox only on select
       ),
     ),
   )
+
   await page.goto(sessionHref(fixture.sourceID))
   await expectSessionTitle(page, fixture.expected.sourceTitle)
   await expect(page.locator(`[data-timeline-part-id="msg_${fixture.sourceID}_assistant:text:0"]`)).toContainText(
@@ -292,10 +306,12 @@ test("inactive tabs load attention, but read transcript and inbox only on select
   await expect(page.locator(`[data-timeline-part-id="msg_${fixture.targetID}_assistant:text:0"]`)).toContainText(
     state.text,
   )
+
   for (const id of [fixture.sourceID, fixture.targetID]) {
     expect(reads.filter((path) => path === `/api/session/${id}/message`)).toHaveLength(1)
     expect(reads.filter((path) => path === `/api/session/${id}/inbox`)).toHaveLength(1)
   }
+
   expect(
     reads.filter(
       (path) => path === `/api/session/${fixture.childID}/message` || path === `/api/session/${fixture.childID}/inbox`,
@@ -307,12 +323,14 @@ test("inactive tabs load attention, but read transcript and inbox only on select
 
 test("five loaded workspace tabs stay rendered and reactive through repeated switches", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
+
   const sessions = Array.from({ length: 5 }, (_, index) => ({
     ...fixture.sessions[0]!,
     id: `ses_workspace_cycle_${index}`,
     directory: `${fixture.directory}/worktree-${index}`,
     title: `Workspace session ${index}`,
   }))
+
   const mock = await mockStressTimeline(page, {
     sessions,
     pageMessages: (id) => ({
@@ -329,6 +347,7 @@ test("five loaded workspace tabs stay rendered and reactive through repeated swi
       ] satisfies SessionMessageInfo[],
     }),
   })
+
   // Each worktree session resolves to its own location in the shared project (the mock echoes the requested one).
   await seed(page, {
     projects: { local: [{ worktree: fixture.directory, expanded: true }] },
@@ -342,6 +361,7 @@ test("five loaded workspace tabs stay rendered and reactive through repeated swi
     await expect(page.locator(`[data-timeline-part-id="msg_assistant_${item.id}:text:0"]`)).toBeVisible()
     await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
   }
+
   const active = sessions[0]!
   await mock.push([
     {
@@ -359,6 +379,56 @@ test("five loaded workspace tabs stay rendered and reactive through repeated swi
     },
   ])
   await expect(page.getByText("Still receiving updates", { exact: true })).toBeVisible()
+})
+
+test("each session tab shows its own file tab after a switch to a session in another folder", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 })
+  const directory = "C:/OpenCode/FolderSwitch"
+  const alpha = { id: "ses_folderswitch_alpha", title: "Folder switch alpha" }
+  const beta = { id: "ses_folderswitch_beta", title: "Folder switch beta" }
+  const other = { id: "ses_folderswitch_other", title: "Folder switch other", directory: "C:/OpenCode/FolderOther" }
+  await openSession(page, {
+    name: "FolderSwitch",
+    sessions: [alpha, beta, other],
+    fileList: (path) => (path ? [] : ["greet.ts", "guide.md", "notes.txt"].map((file) => fileNode(directory, file))),
+    fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
+    seed: { panes: Object.fromEntries([alpha, beta, other].map((item) => [item.id, { review: true }])) },
+  })
+  const panel = page.locator("#review-panel")
+
+  const shows = async (file: string) => {
+    await expect(panel.getByRole("tab", { name: file, exact: true })).toHaveAttribute("aria-selected", "true")
+    await expect(panel.getByText(`contents:${file}`, { exact: true })).toBeVisible()
+  }
+
+  const visit = async (target: { id: string; title: string }) => {
+    await page.locator(`[data-titlebar-tab-link][href="${sessionHref(target.id)}"]`).click()
+    await expectSessionTitle(page, target.title)
+  }
+
+  const open = async (file: string) => {
+    await panel.getByRole("button", { name: "Open file" }).click()
+    await panel.getByRole("button", { name: file, exact: true }).click()
+    await shows(file)
+  }
+
+  await open("greet.ts")
+  await visit(other)
+  await open("notes.txt")
+  await visit(beta)
+  await open("guide.md")
+
+  // The session screen stays mounted while the route moves between folders, and each tab reads its own folder.
+  for (const [target, file] of [
+    [alpha, "greet.ts"],
+    [other, "notes.txt"],
+    [beta, "guide.md"],
+    [other, "notes.txt"],
+    [alpha, "greet.ts"],
+  ] as const) {
+    await visit(target)
+    await shows(file)
+  }
 })
 
 // Windows has no native menu bar: the titlebar menu owns Paste, which only the desktop edit action can perform.
@@ -384,6 +454,7 @@ async function twoServers(
 ) {
   const config = (sessions: ReturnType<typeof session>[], id: string) => {
     const directory = String(sessions[0]!.directory)
+
     return {
       directory,
       project: project({ id, directory }),
@@ -393,6 +464,7 @@ async function twoServers(
       strictDirectory: true,
     }
   }
+
   await mockServers(page, {
     [SERVER]: config(input.a, "proj_server_a"),
     [REMOTE_SERVER]: {

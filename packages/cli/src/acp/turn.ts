@@ -1,10 +1,6 @@
 import type { CancelNotification, PromptRequest, PromptResponse, RequestError } from "@agentclientprotocol/sdk"
-import {
-  isSessionNotFoundError,
-  type CommandInfo,
-  type OpenCodeClient,
-  type OpenCodeEvent,
-} from "@opencode/client/promise"
+import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
+import type { Command } from "@opencode/schema/command"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import {
@@ -24,38 +20,27 @@ import {
 } from "effect"
 import { access, constants } from "node:fs/promises"
 import { fileURLToPath } from "node:url"
+import type { Capabilities } from "./capabilities"
 import { builtinCommands, type ACPCatalog, type Catalog } from "./catalog"
+import { ACPChild } from "./child"
+import { ACPClient } from "./client"
 import { currentModel } from "./config-option"
 import type { ACPConnection } from "./connection"
 import { linkReference, promptContentToParts, type PromptPart } from "./content"
 import { ACPElicitation } from "./elicitation"
 import { ACPError } from "./error"
 import { ACPPermission } from "./permission"
-import { ACPPromise } from "./promise"
-import type { ACPService } from "./service"
 import type { ACPSessions, Attached } from "./sessions"
 import { ACPTranslate } from "./translate"
 
-type Failure = ACPError.Error | RequestError | ACPCatalog.Error
-
 export interface Interface {
-  /**
-   * Runs the session's only turn. Cancelling it, including through the request's `$/cancel_request` signal,
-   * interrupts the turn and still resolves with `stopReason: "cancelled"`.
-   */
-  readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, Failure>
-  /** Interrupts the session's active turn and waits for it to settle. No-op when the session is idle. */
+  readonly prompt: (input: PromptRequest, signal: AbortSignal) => Effect.Effect<PromptResponse, ACPError.Failure>
   readonly cancel: (input: CancelNotification) => Effect.Effect<void>
-  /** Like `cancel`, but an idle session is still interrupted, since server work can outlive its turn. */
+  /** Unlike `cancel`, interrupts an idle session too, since server work can outlive its turn. */
   readonly close: (sessionID: string) => Effect.Effect<void, ACPError.Error | RequestError>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Turn") {}
-
-/**
- * How long a cancelled turn keeps forwarding the server's wind-down. Core acknowledges an interrupt before its
- * cleanup settles, and its shell tool waits 3 seconds before escalating to SIGKILL.
- */
+/** Core acknowledges an interrupt before its cleanup settles, and its shell tool waits 3s before SIGKILL. */
 export const CancelDrainTimeout = Context.Reference<Duration.Input>("@opencode/cli/acp/Turn/CancelDrainTimeout", {
   defaultValue: () => "5 seconds",
 })
@@ -66,21 +51,18 @@ type PreparedPrompt = {
   readonly files: Array<{ readonly uri: string; readonly name?: string }>
   readonly synthetic: ReadonlyArray<string>
   readonly slash?: { readonly name: string; readonly args: string }
-  readonly command?: CommandInfo
+  readonly command?: Command.Info
 }
 
 type PermissionAsk = Extract<ACPTranslate.Output, { readonly _tag: "PermissionAsk" }>
 
-/** A turn's event feed. It moves to the session scope when the turn ends with children still running. */
 type Subscription = {
   readonly scope: Scope.Closeable
   readonly events: Queue.Dequeue<OpenCodeEvent, unknown>
-  /** Runs permission and form asks one at a time in ask order, without holding back the rest of the stream. */
+  /** Asks run serially off the event stream. */
   readonly asks: Queue.Queue<Effect.Effect<void, ACPError.Error | RequestError>>
-  /** Completed when the turn is cancelled; pending and later asks then resolve without the client. */
   readonly cancelled: Deferred.Deferred<void>
-  /** Completed per asked form once the server reports it answered or cancelled. */
-  readonly forms: Map<string, Deferred.Deferred<void>>
+  readonly settled: Map<string, Deferred.Deferred<void>>
 }
 
 export const make = Effect.fnUntraced(function* (input: {
@@ -88,24 +70,23 @@ export const make = Effect.fnUntraced(function* (input: {
   readonly connection: ACPConnection.Interface
   readonly sessions: ACPSessions.Interface
   readonly catalog: ACPCatalog.Interface
-  readonly capabilities: Ref.Ref<ACPService.Capabilities>
+  readonly capabilities: Ref.Ref<Capabilities>
 }) {
   const scope = yield* Effect.scope
   const drainTimeout = yield* CancelDrainTimeout
-  const turns = yield* FiberMap.make<string, PromptResponse, Failure>()
+  const turns = yield* FiberMap.make<string, PromptResponse, ACPError.Failure>()
 
   const subscribe = Effect.fnUntraced(function* () {
-    // Parented, so it still closes when the session scope it is handed to is already gone.
+    // Parented to the service scope; the session scope may already be closed.
     const subscriptionScope = yield* Scope.fork(scope)
     const subscription: Subscription = {
       scope: subscriptionScope,
-      events: yield* Stream.fromAsyncIterable(input.client.event.subscribe(), (cause) => cause).pipe(
-        Stream.toQueue({ capacity: "unbounded" }),
-        Scope.provide(subscriptionScope),
-      ),
+      events: yield* input.client.event
+        .subscribe()
+        .pipe(Stream.toQueue({ capacity: "unbounded" }), Scope.provide(subscriptionScope)),
       asks: yield* Queue.unbounded<Effect.Effect<void, ACPError.Error | RequestError>>(),
       cancelled: yield* Deferred.make<void>(),
-      forms: new Map(),
+      settled: new Map(),
     }
     yield* Queue.take(subscription.asks).pipe(
       Effect.flatten,
@@ -121,18 +102,22 @@ export const make = Effect.fnUntraced(function* (input: {
   const take = (subscription: Subscription) =>
     Queue.take(subscription.events).pipe(
       Effect.catch((error) =>
-        Cause.isDone(error) ? Effect.fail(new ACPError.ServerUnavailableError()) : ACPPromise.classify(error),
+        Cause.isDone(error) ? Effect.fail(new ACPError.ServerUnavailableError()) : ACPClient.classify(error),
       ),
     )
 
-  // A turn settles only after the asks it saw have been resolved.
   const asksSettled = Effect.fnUntraced(function* (subscription: Subscription) {
     const settled = yield* Deferred.make<void>()
     yield* Queue.offer(subscription.asks, Deferred.succeed(settled, undefined).pipe(Effect.asVoid))
     yield* Deferred.await(settled)
   })
 
-  const reply = (subscription: Subscription, ctx: ACPTranslate.Context, ask: PermissionAsk) =>
+  const reply = (
+    subscription: Subscription,
+    ctx: ACPTranslate.Context,
+    ask: PermissionAsk,
+    settled: Deferred.Deferred<void>,
+  ) =>
     ACPPermission.reply(
       {
         client: input.client,
@@ -142,7 +127,8 @@ export const make = Effect.fnUntraced(function* (input: {
         clientSessionID: ctx.sessionID,
         cwd: ctx.cwd,
         tool: ask.tool,
-        ...(ask.child ? { toolCallPrefix: ask.child.id, titlePrefix: ask.child.title } : {}),
+        child: ask.child,
+        settled: Deferred.await(settled),
       },
       Deferred.await(subscription.cancelled),
     )
@@ -153,17 +139,27 @@ export const make = Effect.fnUntraced(function* (input: {
         return input.connection.sessionUpdate({ sessionId: ctx.sessionID, update: output.update })
       case "ChildUpdate":
         return input.connection
-          .extNotification(ACPTranslate.ChildSessionUpdateMethod, output.update)
-          .pipe(Effect.ignoreCause)
+          .extNotification(ACPChild.UpdateMethod, output.update)
+          .pipe(
+            Effect.catchCause((cause) =>
+              Cause.hasInterruptsOnly(cause)
+                ? Effect.void
+                : Effect.logWarning("ACP child session update failed", cause),
+            ),
+          )
       case "PermissionAsk":
-        return Queue.offer(subscription.asks, reply(subscription, ctx, output)).pipe(Effect.asVoid)
+        return Effect.gen(function* () {
+          const settled = yield* Deferred.make<void>()
+          subscription.settled.set(output.event.data.id, settled)
+          yield* Queue.offer(subscription.asks, reply(subscription, ctx, output, settled))
+        })
       case "FormAsk":
         return Effect.gen(function* () {
           const capabilities = yield* Ref.get(input.capabilities)
           const requestedSchema = ACPElicitation.requestedSchema(output.form, capabilities)
-          if (!requestedSchema) return yield* ACPElicitation.cancel(input.client, output.form)
+          if (!requestedSchema) return yield* ACPElicitation.cancelUnshown(input.client, output.form)
           const settled = yield* Deferred.make<void>()
-          subscription.forms.set(output.form.id, settled)
+          subscription.settled.set(output.form.id, settled)
           yield* Queue.offer(
             subscription.asks,
             ACPElicitation.reply(
@@ -181,10 +177,10 @@ export const make = Effect.fnUntraced(function* (input: {
             ),
           )
         })
-      case "FormSettled":
+      case "AskSettled":
         return Effect.suspend(() => {
-          const settled = subscription.forms.get(output.formID)
-          subscription.forms.delete(output.formID)
+          const settled = subscription.settled.get(output.id)
+          subscription.settled.delete(output.id)
           return settled ? Deferred.succeed(settled, undefined) : Effect.void
         })
     }
@@ -197,8 +193,10 @@ export const make = Effect.fnUntraced(function* (input: {
   ) {
     while (true) {
       const event = yield* take(subscription)
-      const next = ACPTranslate.step(yield* Ref.get(state), event, ctx)
-      yield* Ref.set(state, next.state)
+      const next = yield* Ref.modify(state, (current) => {
+        const step = ACPTranslate.step(current, event, ctx)
+        return [step, step.state]
+      })
       yield* Effect.forEach(next.outputs, (output) => interpret(subscription, ctx, output), { discard: true })
       if (next.terminal) {
         yield* asksSettled(subscription)
@@ -210,60 +208,56 @@ export const make = Effect.fnUntraced(function* (input: {
   const submit = Effect.fnUntraced(function* (attached: Attached, prompt: PreparedPrompt) {
     const sessionID = attached.id
     if (prompt.synthetic.length > 0) {
-      yield* ACPPromise.promise((signal) =>
-        input.client.session.synthetic(
-          {
-            sessionID,
-            text: prompt.synthetic.join("\n\n"),
-            description: "ACP embedded context",
-            delivery: "steer",
-            resume: false,
-          },
-          { signal },
-        ),
-      )
+      yield* input.client.session
+        .synthetic({
+          sessionID,
+          text: prompt.synthetic.join("\n\n"),
+          description: "ACP embedded context",
+          delivery: "steer",
+          resume: false,
+        })
+        .pipe(Effect.catch(ACPClient.classify))
     }
     if (prompt.start.type === "compaction") {
-      yield* ACPPromise.promise((signal) =>
-        input.client.session.compact({ sessionID, id: prompt.start.id }, { signal }),
-      )
+      yield* input.client.session.compact({ sessionID, id: prompt.start.id }).pipe(Effect.catch(ACPClient.classify))
       return
     }
     const command = prompt.command
     if (command) {
-      yield* ACPPromise.promise((signal) =>
-        input.client.session.command(
-          { sessionID, name: command.name, text: prompt.slash?.args ?? "", files: prompt.files, delivery: "steer" },
-          { signal },
-        ),
-      )
+      yield* input.client.session
+        .command({
+          sessionID,
+          name: command.name,
+          text: prompt.slash?.args ?? "",
+          files: prompt.files,
+          delivery: "steer",
+        })
+        .pipe(Effect.catch(ACPClient.classify))
       return
     }
-    yield* ACPPromise.promise((signal) =>
-      input.client.session.prompt(
-        { sessionID, id: prompt.start.id, text: prompt.text, files: prompt.files, delivery: "steer" },
-        { signal },
-      ),
-    )
+    yield* input.client.session
+      .prompt({ sessionID, id: prompt.start.id, text: prompt.text, files: prompt.files, delivery: "steer" })
+      .pipe(Effect.catch(ACPClient.classify))
   })
 
-  const interruptServer = (sessionID: string) =>
-    ACPPromise.promise(() => input.client.session.interrupt({ sessionID })).pipe(Effect.ignoreCause)
-
-  // Rejects pending asks, interrupts the server once, then forwards its wind-down until the terminal event or the
-  // timeout. Tools still open at the timeout are reported failed so the client never shows them running.
   const windDown = Effect.fnUntraced(function* (
     subscription: Subscription,
     ctx: ACPTranslate.Context,
     state: Ref.Ref<ACPTranslate.TurnState>,
-    events: Fiber.Fiber<ACPTranslate.Terminal, Failure>,
+    events: Fiber.Fiber<ACPTranslate.Terminal, ACPError.Failure>,
   ) {
     yield* Deferred.succeed(subscription.cancelled, undefined)
-    yield* interruptServer(ctx.sessionID)
+    yield* input.client.session
+      .interrupt({ sessionID: ctx.sessionID })
+      .pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP server interrupt failed", cause),
+        ),
+      )
     if (!(yield* Ref.get(state)).started) return
-    if (Option.isSome(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)))) return
+    if (Option.exists(yield* Fiber.await(events).pipe(Effect.timeoutOption(drainTimeout)), Exit.isSuccess)) return
     yield* Fiber.interrupt(events)
-    const abandoned = ACPTranslate.abandonTools(yield* Ref.get(state), ctx)
+    const abandoned = ACPTranslate.abandon(yield* Ref.get(state), ctx)
     yield* Ref.set(state, abandoned.state)
     yield* Effect.forEach(abandoned.outputs, (output) => interpret(subscription, ctx, output), { discard: true }).pipe(
       Effect.ignore,
@@ -299,12 +293,12 @@ export const make = Effect.fnUntraced(function* (input: {
     subscription: Subscription,
     ctx: ACPTranslate.Context,
     state: Ref.Ref<ACPTranslate.TurnState>,
-    exit: Exit.Exit<ACPTranslate.Terminal, Failure>,
+    exit: Exit.Exit<ACPTranslate.Terminal, ACPError.Failure>,
   ) {
     const close = Scope.close(subscription.scope, Exit.void)
     if (Exit.isFailure(exit) && !Cause.hasInterruptsOnly(exit.cause)) return yield* close
     if ((yield* Ref.get(state)).openChildren.size === 0) return yield* close
-    // Children that outlive a cancelled turn were not cancelled, so their asks still go to the client.
+    // Children outlive a cancelled turn, so their asks still reach the client.
     const cancelled = yield* Deferred.make<void>()
     const background = consume({ ...subscription, cancelled }, { ...ctx, mode: "background" }, state).pipe(
       Effect.ignore,
@@ -317,7 +311,7 @@ export const make = Effect.fnUntraced(function* (input: {
   const settle = Effect.fnUntraced(function* (
     attached: Attached,
     state: Ref.Ref<ACPTranslate.TurnState>,
-    exit: Exit.Exit<ACPTranslate.Terminal, Failure>,
+    exit: Exit.Exit<ACPTranslate.Terminal, ACPError.Failure>,
   ) {
     if (Exit.isFailure(exit) && !Cause.hasInterrupts(exit.cause)) return yield* Effect.failCause(exit.cause)
     const current = yield* Ref.get(state)
@@ -335,9 +329,7 @@ export const make = Effect.fnUntraced(function* (input: {
       const current = currentModel(catalog, yield* Ref.get(attached.selection))
       const model = catalog.models.find((item) => item.providerID === current.providerID && item.id === current.id)
       if (!model?.limit.context) return
-      const info = yield* ACPPromise.promise((signal) =>
-        input.client.session.get({ sessionID: attached.id }, { signal }),
-      )
+      const info = yield* input.client.session.get({ sessionID: attached.id }).pipe(Effect.catch(ACPClient.classify))
       yield* input.connection.sessionUpdate({
         sessionId: attached.id,
         update: {
@@ -348,37 +340,39 @@ export const make = Effect.fnUntraced(function* (input: {
         },
       })
     },
-    (effect) => Effect.ignoreCause(effect),
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP usage update failed", cause),
+    ),
   )
 
   // Forked uninterruptible: interruption reaches only `execute`, so the fiber still settles with a response.
-  const run = Effect.fn("cli.acp.turn.run")(function* (
-    attached: Attached,
-    prompt: PreparedPrompt,
-    childUpdates: boolean,
-  ) {
+  const run = Effect.fn("cli.acp.turn.run")(function* (attached: Attached, prompt: PreparedPrompt) {
+    const capabilities = yield* Ref.get(input.capabilities)
     const state = yield* Ref.make(ACPTranslate.initial)
     const ctx: ACPTranslate.Context = {
       sessionID: attached.id,
       cwd: attached.cwd,
       start: prompt.start,
-      childUpdates,
+      childUpdates: capabilities.childSessionUpdates,
+      compaction: capabilities.compaction,
       mode: "turn",
     }
     const exit = yield* Effect.exit(Effect.interruptible(execute(attached, prompt, ctx, state)))
     return yield* settle(attached, state, exit)
   })
 
-  return Service.of({
-    prompt: Effect.fn("cli.acp.turn.prompt")(function* (params, signal) {
+  return {
+    prompt: Effect.fnUntraced(function* (params, signal) {
       const attached = yield* input.sessions.require(params.sessionId)
       const catalog = yield* input.catalog.get(attached.cwd)
-      const childUpdates = (yield* Ref.get(input.capabilities)).childSessionUpdates
+      if (params.prompt.some((block) => block.type === "image" && !block.data && !block.uri)) {
+        return yield* new ACPError.InvalidRequestError({ message: "image content has no data or uri", field: "prompt" })
+      }
       const parts = yield* Effect.forEach(promptContentToParts(params.prompt), referenceUnreadableFile, {
         concurrency: "unbounded",
       })
       const prompt = preparePrompt(catalog, parts, SessionMessage.ID.create())
-      // Check and register in one synchronous step.
+      // Synchronous, so concurrent prompts for one session cannot both register.
       const turn = yield* Effect.withFiber((fiber) => {
         if (FiberMap.hasUnsafe(turns, attached.id)) {
           return Effect.fail(
@@ -388,7 +382,7 @@ export const make = Effect.fnUntraced(function* (input: {
             }),
           )
         }
-        const forked = Effect.runForkWith(fiber.context)(run(attached, prompt, childUpdates), { uninterruptible: true })
+        const forked = Effect.runForkWith(fiber.context)(run(attached, prompt), { uninterruptible: true })
         FiberMap.setUnsafe(turns, attached.id, forked)
         return Effect.succeed(forked)
       })
@@ -396,18 +390,18 @@ export const make = Effect.fnUntraced(function* (input: {
       yield* aborted(signal).pipe(Effect.andThen(Fiber.interrupt(turn)), Effect.forkChild)
       return yield* Fiber.join(turn)
     }),
-    cancel: Effect.fn("cli.acp.turn.cancel")(function* (params) {
+    cancel: Effect.fnUntraced(function* (params) {
       yield* FiberMap.remove(turns, params.sessionId)
     }),
     close: Effect.fn("cli.acp.turn.close")(function* (sessionID) {
       if (FiberMap.hasUnsafe(turns, sessionID)) return yield* FiberMap.remove(turns, sessionID)
-      yield* ACPPromise.promise(() =>
-        input.client.session.interrupt({ sessionID }).catch((error) => {
-          if (!isSessionNotFoundError(error)) throw error
-        }),
+      yield* ACPClient.decodeSessionID(sessionID).pipe(
+        Effect.flatMap((id) => input.client.session.interrupt({ sessionID: id })),
+        Effect.catchTag(["ACPInvalidRequestError", "SessionNotFoundError"], () => Effect.void),
+        Effect.catch(ACPClient.classify),
       )
     }),
-  })
+  } satisfies Interface
 })
 
 function aborted(signal: AbortSignal) {
@@ -419,18 +413,26 @@ function aborted(signal: AbortSignal) {
   })
 }
 
-function preparePrompt(catalog: Catalog, parts: readonly PromptPart[], messageID: string): PreparedPrompt {
+function preparePrompt(catalog: Catalog, parts: readonly PromptPart[], messageID: SessionMessage.ID): PreparedPrompt {
   const visible = parts.filter((part) => part.type !== "text" || (!part.synthetic && !part.ignored))
   const synthetic = parts.flatMap((part) => (part.type === "text" && part.synthetic ? [part.text] : []))
   const text = visible.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
   const files = visible.flatMap((part) => (part.type === "file" ? [{ uri: part.url, name: part.filename }] : []))
   const slash = detectSlashCommand(text)
   const command = slash ? catalog.commands.find((item) => item.name === slash.name) : undefined
-  const start = turnStart(messageID, slash)
-  return { start, text, files, synthetic, slash, command }
+  return {
+    start:
+      slash && builtinCommands.get(slash.name)?.start === "compaction"
+        ? { type: "compaction", id: messageID }
+        : { type: "input", id: messageID },
+    text,
+    files,
+    synthetic,
+    slash,
+    command,
+  }
 }
 
-// Covers only missing or permission-denied targets; the server still rejects oversized, non-regular, or unlistable ones.
 function referenceUnreadableFile(part: PromptPart) {
   if (part.type !== "file" || !part.url.startsWith("file://")) return Effect.succeed(part)
   return Effect.tryPromise(() => access(fileURLToPath(part.url), constants.R_OK)).pipe(
@@ -439,12 +441,7 @@ function referenceUnreadableFile(part: PromptPart) {
   )
 }
 
-function turnStart(messageID: string, slash: PreparedPrompt["slash"]): ACPTranslate.TurnStart {
-  if (slash && builtinCommands.get(slash.name)?.start === "compaction") return { type: "compaction", id: messageID }
-  return { type: "input", id: messageID }
-}
-
-function detectSlashCommand(text: string): { readonly name: string; readonly args: string } | undefined {
+function detectSlashCommand(text: string) {
   const value = text.trim()
   if (!value.startsWith("/")) return undefined
   const [name, ...rest] = value.slice(1).split(/\s+/)

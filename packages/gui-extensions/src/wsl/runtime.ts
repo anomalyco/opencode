@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process"
 import { existsSync } from "node:fs"
 import { join } from "node:path"
-import type { Context } from "../sdk/main"
+import type { MainContext } from "../sdk/main"
 import type { WslDistroProbe, WslInstalledDistro, WslOnlineDistro, WslRuntimeCheck } from "./contract"
 import { discoverScript, installScript, parseVersion, versionScript } from "./remote-cli"
 
@@ -38,6 +38,7 @@ export type WslCliBuild = {
 export type WslRuntime = ReturnType<typeof createWslRuntime>
 
 const DEFAULT_WSL_TIMEOUT_MS = 20_000
+
 const DEFAULT_WSL_INSTALL_TIMEOUT_MS = 15 * 60_000
 
 export function wslArgs(args: string[], distro?: string | null, user?: string | null) {
@@ -66,7 +67,7 @@ export function shellEscape(value: string) {
 }
 
 /** WSL commands; `t` resolves the extension's copy for errors the user sees. */
-export function createWslRuntime(t: Context["t"]) {
+export function createWslRuntime(t: MainContext["t"]) {
   const runWsl = (args: string[], opts: RunWslOptions = {}) => runCommand("wsl", args, opts)
 
   const runPowerShell = (command: string, opts: RunWslOptions = {}) =>
@@ -89,12 +90,14 @@ export function createWslRuntime(t: Context["t"]) {
       // pending, etc.) wsl.exe produces no output and never exits; without
       // this the whole sidecar spawn flow stalls the app forever.
       const timeoutMs = opts.timeoutMs ?? DEFAULT_WSL_TIMEOUT_MS
+
       const timeoutId = setTimeout(() => {
         try {
           child.kill()
         } catch {
           /* ignore */
         }
+
         reject(new Error(t("error.commandTimeout", { command, args: args.join(" "), timeout: timeoutMs })))
       }, timeoutMs)
 
@@ -105,10 +108,13 @@ export function createWslRuntime(t: Context["t"]) {
 
       const append = (stream: WslCommandLine["stream"], chunk: string) => {
         if (!chunk) return
+
         if (stream === "stdout") {
           stdout += chunk
+
           return
         }
+
         stderr += chunk
       }
 
@@ -144,6 +150,7 @@ export function createWslRuntime(t: Context["t"]) {
   ) => {
     // The native addon is only needed for interactive installs; loading it here keeps it out of startup.
     const pty = await import("@lydell/node-pty")
+
     return new Promise<WslCommandResult>((resolve, reject) => {
       const child = pty.spawn(command, args, {
         name: "xterm-color",
@@ -163,12 +170,14 @@ export function createWslRuntime(t: Context["t"]) {
       }
 
       const timeoutMs = opts.timeoutMs ?? defaultTimeoutMs
+
       const timeoutId = setTimeout(() => {
         try {
           child.kill()
         } catch {
           /* ignore */
         }
+
         if (settled) return
         settled = true
         cleanup()
@@ -181,14 +190,17 @@ export function createWslRuntime(t: Context["t"]) {
         } catch {
           /* ignore */
         }
+
         if (settled) return
         settled = true
         cleanup()
         reject(new DOMException("Aborted", "AbortError"))
       }
+
       const abortCleanup = opts.signal
         ? (() => {
             opts.signal?.addEventListener("abort", abortHandler, { once: true })
+
             return () => opts.signal?.removeEventListener("abort", abortHandler)
           })()
         : undefined
@@ -244,17 +256,21 @@ export function createWslRuntime(t: Context["t"]) {
 
     async listInstalled(opts?: RunWslOptions) {
       const result = await runWsl(["--list", "--verbose"], opts)
+
       if (result.code !== 0) {
         throw new Error(summarize(result.stderr || result.stdout) || t("error.listInstalled"))
       }
+
       return parseInstalledDistros(result.stdout)
     },
 
     async listOnline(opts?: RunWslOptions) {
       const result = await runWsl(["--list", "--online"], opts)
+
       if (result.code !== 0) {
         throw new Error(summarize(result.stderr || result.stdout) || t("error.listOnline"))
       }
+
       return parseOnlineDistros(result.stdout)
     },
 
@@ -264,6 +280,7 @@ export function createWslRuntime(t: Context["t"]) {
         "$process = Start-Process -FilePath 'wsl.exe' -Verb RunAs -ArgumentList @('--install','--no-distribution') -Wait -PassThru",
         "if ($null -ne $process.ExitCode) { exit $process.ExitCode }",
       ].join("; ")
+
       const result = await runPowerShell(script, withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS))
       requireSuccess(result, t("error.installWsl"))
     },
@@ -275,6 +292,7 @@ export function createWslRuntime(t: Context["t"]) {
         withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
         DEFAULT_WSL_INSTALL_TIMEOUT_MS,
       )
+
       requireSuccess(result, t("error.installDistro", { distro }))
     },
 
@@ -285,6 +303,7 @@ export function createWslRuntime(t: Context["t"]) {
         withTimeout(opts, DEFAULT_WSL_INSTALL_TIMEOUT_MS),
         DEFAULT_WSL_INSTALL_TIMEOUT_MS,
       )
+
       requireSuccess(result, t("error.installOpencode"))
     },
 
@@ -295,6 +314,7 @@ export function createWslRuntime(t: Context["t"]) {
         stdout: "",
         stderr: error instanceof Error ? error.message : String(error),
       }))
+
       if (executable.code !== 0) {
         return {
           name,
@@ -325,6 +345,7 @@ export function createWslRuntime(t: Context["t"]) {
 
     async readCliVersion(command: string, distro: string, opts?: RunWslOptions) {
       const result = await runWslSh(versionScript(shellEscape(command)), distro, opts)
+
       return parseVersion(result.stdout)
     },
   }
@@ -332,9 +353,11 @@ export function createWslRuntime(t: Context["t"]) {
 
 function createOutputDecoder() {
   let decoder: TextDecoder | undefined
+
   return {
     decode(chunk: Buffer) {
       decoder ??= new TextDecoder(detectOutputEncoding(chunk))
+
       return decoder.decode(chunk, { stream: true })
     },
     flush() {
@@ -346,20 +369,26 @@ function createOutputDecoder() {
 function detectOutputEncoding(chunk: Uint8Array) {
   if (chunk[0] === 0xff && chunk[1] === 0xfe) return "utf-16le"
   const pairs = Math.floor(chunk.length / 2)
+
   if (pairs < 2) return "utf-8"
   const oddZeroes = Array.from({ length: pairs }).filter((_, index) => chunk[index * 2 + 1] === 0).length
   const evenZeroes = Array.from({ length: pairs }).filter((_, index) => chunk[index * 2] === 0).length
+
   return oddZeroes >= Math.ceil(pairs / 3) && evenZeroes * 2 <= oddZeroes ? "utf-16le" : "utf-8"
 }
 
 function parseInstalledDistros(output: string) {
   return output.split(/\r?\n/g).flatMap((line) => {
     const trimmed = line.trim()
+
     if (!trimmed) return []
     const match = line.match(/^\s*(\*)?\s*(.*?)\s{2,}\S+\s+(\d+)\s*$/)
+
     if (!match) return []
     const [, marker, name, version] = match
+
     if (!name || /^name$/i.test(name)) return []
+
     return [
       {
         name: name.trim(),
@@ -373,11 +402,15 @@ function parseInstalledDistros(output: string) {
 function parseOnlineDistros(output: string) {
   return output.split(/\r?\n/g).flatMap((line) => {
     const trimmed = line.trim()
+
     if (!trimmed) return []
     const match = trimmed.match(/^([A-Za-z0-9._-]+)\s{2,}(.+)$/)
+
     if (!match) return []
     const [, name, label] = match
+
     if (/^name$/i.test(name)) return []
+
     return [{ name, label: label.trim() } satisfies WslOnlineDistro]
   })
 }
@@ -393,8 +426,10 @@ function firstLine(value: string) {
 
 function system32(command: string) {
   const root = process.env.SystemRoot ?? process.env.windir
+
   if (!root) return command
   const resolved = join(root, "System32", command)
+
   return existsSync(resolved) ? resolved : command
 }
 

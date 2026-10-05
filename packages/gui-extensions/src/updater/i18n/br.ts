@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Atualização pronta",
   "dialog.restart": "Reiniciar",
   "dialog.later": "Mais tarde",
+  "releaseNotes.action.getStarted": "Começar",
+  "releaseNotes.action.next": "Próximo",
+  "releaseNotes.action.hideFuture": "Não mostrar isso no futuro",
+  "releaseNotes.media.alt": "Prévia do lançamento",
 }

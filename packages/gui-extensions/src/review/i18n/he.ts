@@ -12,4 +12,6 @@ export default {
   "git.description": "עקוב, סקור ובטל שינויים בפרויקט הזה",
   loadingChanges: "טוען שינויים…",
   noChanges: "אין שינויים",
+  "settings.wrapLines.title": "גלישת שורות",
+  "settings.wrapLines.description": "גלוש שורות ארוכות בהבדלים בנייד במקום לגלול אופקית",
 }

@@ -1,43 +1,38 @@
 import { isDeepStrictEqual } from "node:util"
-import type { McpServer, RequestError } from "@agentclientprotocol/sdk"
-import type { OpenCodeClient, OpenCodeEvent, SessionInfo } from "@opencode/client/promise"
-import { Context, Deferred, Effect, Exit, Queue, Ref, Scope, Stream } from "effect"
+import type { McpServer, SessionConfigOption } from "@agentclientprotocol/sdk"
+import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
+import { Mcp } from "@opencode/schema/mcp"
+import type { Session } from "@opencode/schema/session"
+import { Cause, Deferred, Effect, Exit, Queue, Ref, Scope, Stream } from "effect"
 import type { ACPCatalog, Catalog } from "./catalog"
+import { ACPClient } from "./client"
 import { availableCommands, configOptions, type Selection } from "./config-option"
 import { ACPConnection } from "./connection"
 import { ACPError } from "./error"
-import { ACPPromise } from "./promise"
+
+export type SupportedMcpServer = Exclude<McpServer, { readonly type: "acp" | "sse" }>
 
 export type Attached = {
-  readonly id: string
+  readonly id: Session.ID
   readonly cwd: string
   readonly selection: Ref.Ref<Selection>
 }
 
 export interface Interface {
-  /**
-   * Attaches a session in its own scope, closing any previous attachment of the same ID. Once the attaching request
-   * has responded, the scope follows the cwd's catalog and pushes config option and command updates while it is
-   * open. A failed attach leaves the session detached.
-   */
   readonly attach: (
-    session: SessionInfo,
+    session: Session.Info,
     cwd: string,
-    mcpServers: readonly McpServer[],
-  ) => Effect.Effect<Attached, ACPError.Error | RequestError | ACPCatalog.Error>
-  /** Closes the session scope. No-op when the session is not attached. */
+    mcpServers: readonly SupportedMcpServer[],
+  ) => Effect.Effect<{ readonly attached: Attached; readonly configOptions: SessionConfigOption[] }, ACPError.Failure>
   readonly detach: (sessionID: string) => Effect.Effect<void>
+  readonly release: (attached: Attached) => Effect.Effect<void>
   readonly require: (sessionID: string) => Effect.Effect<Attached, ACPError.SessionNotFoundError>
-  /** Forks work into this attachment's scope, so it ends on detach or re-attach. Fails once the attachment is gone. */
   readonly fork: (attached: Attached, effect: Effect.Effect<void>) => Effect.Effect<void, ACPError.SessionNotFoundError>
 }
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Sessions") {}
 
 type Entry = {
   readonly attached: Attached
   readonly scope: Scope.Closeable
-  /** Selection changes from other clients, applied by the session's fold. */
   readonly selected: Queue.Queue<Selection>
 }
 
@@ -50,12 +45,12 @@ export const make = Effect.fnUntraced(function* (input: {
 }) {
   const scope = yield* Effect.scope
   const sessions = new Map<string, Entry>()
-  // Kept across re-attachment so resuming with the same servers does not add them again.
-  const registeredMcp = new Map<string, Set<string>>()
+  // Outlives entries so re-attaching does not re-add servers.
+  const registeredMcpBySession = new Map<string, Map<string, Mcp.ServerConfig>>()
   const connected = yield* Deferred.make<void>()
 
   // Subscribe before any attach so a switch right after `sessions.set` reaches the session.
-  yield* Stream.fromAsyncIterable(input.client.event.subscribe(), (cause) => cause).pipe(
+  yield* input.client.event.subscribe().pipe(
     Stream.tap((event) => (event.type === "server.connected" ? Deferred.succeed(connected, undefined) : Effect.void)),
     Stream.filter(
       (event): event is SelectedEvent =>
@@ -69,7 +64,9 @@ export const make = Effect.fnUntraced(function* (input: {
         event.type === "session.model.selected" ? { model: event.data.model } : { modeID: event.data.agent },
       )
     }),
-    Effect.ignore,
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP selection event stream failed", cause),
+    ),
     Effect.ensuring(Deferred.succeed(connected, undefined)),
     Effect.forkScoped,
   )
@@ -92,22 +89,20 @@ export const make = Effect.fnUntraced(function* (input: {
     if (!isDeepStrictEqual(next.commands, previous.commands)) yield* sendCommands(attached.id, next)
   })
 
-  const registerMcp = (attached: Attached, servers: readonly McpServer[]) =>
+  const registerMcp = (attached: Attached, servers: readonly SupportedMcpServer[]) =>
     Effect.suspend(() => {
-      const registered = registeredMcp.get(attached.id) ?? new Set<string>()
-      registeredMcp.set(attached.id, registered)
+      const registered = registeredMcpBySession.get(attached.id) ?? new Map<string, Mcp.ServerConfig>()
+      registeredMcpBySession.set(attached.id, registered)
       return Effect.forEach(
         servers,
         (server) =>
           Effect.suspend(() => {
             const config = mcpConfig(server)
-            const key = `${server.name}:${stableStringify(config)}`
-            if (registered.has(key)) return Effect.void
-            registered.add(key)
-            return ACPPromise.promise(() =>
-              input.client.mcp.add({ server: server.name, location: { directory: attached.cwd }, config }),
-            ).pipe(
-              Effect.onError(() => Effect.sync(() => registered.delete(key))),
+            if (isDeepStrictEqual(registered.get(server.name), config)) return Effect.void
+            registered.set(server.name, config)
+            return input.client.mcp.add({ server: server.name, location: { directory: attached.cwd }, config }).pipe(
+              Effect.catch(ACPClient.classify),
+              Effect.onError(() => Effect.sync(() => registered.delete(server.name))),
               Effect.uninterruptible,
             )
           }),
@@ -119,12 +114,12 @@ export const make = Effect.fnUntraced(function* (input: {
     Effect.suspend(() => {
       if (sessions.get(sessionID) === entry) {
         sessions.delete(sessionID)
-        registeredMcp.delete(sessionID)
+        registeredMcpBySession.delete(sessionID)
       }
       return Scope.close(entry.scope, Exit.void)
     })
 
-  return Service.of({
+  return {
     attach: Effect.fn("cli.acp.sessions.attach")(function* (session, cwd, mcpServers) {
       yield* Deferred.await(connected)
       const current = yield* input.catalog.get(cwd)
@@ -143,9 +138,8 @@ export const make = Effect.fnUntraced(function* (input: {
       if (replaced) yield* Scope.close(replaced.scope, Exit.void)
       yield* registerMcp(entry.attached, mcpServers).pipe(Effect.onError(() => remove(session.id, entry)))
       const responded = yield* ACPConnection.Responded
-      // Updates wait for the response that hands the client this session. `changes` emits the latest catalog
-      // first, so a reload since `current` is still pushed. One fold applies catalog and selection changes so
-      // pushes leave the client on the latest pair.
+      // `changes` replays the latest catalog, so a reload since `current` still pushes.
+      // One fold keeps catalog and selection consistent.
       yield* Effect.gen(function* () {
         yield* responded
         yield* sendCommands(session.id, current)
@@ -162,13 +156,20 @@ export const make = Effect.fnUntraced(function* (input: {
           ),
         )
       }).pipe(Effect.ignore, Effect.forkIn(entry.scope))
-      return entry.attached
+      return {
+        attached: entry.attached,
+        configOptions: configOptions(current, yield* Ref.get(entry.attached.selection)),
+      }
     }),
     detach: Effect.fn("cli.acp.sessions.detach")(function* (sessionID) {
       const entry = sessions.get(sessionID)
       if (entry) yield* remove(sessionID, entry)
     }),
-    require: Effect.fn("cli.acp.sessions.require")(function* (sessionID) {
+    release: Effect.fn("cli.acp.sessions.release")(function* (attached) {
+      const entry = sessions.get(attached.id)
+      if (entry?.attached === attached) yield* remove(attached.id, entry)
+    }),
+    require: Effect.fnUntraced(function* (sessionID) {
       const entry = sessions.get(sessionID)
       if (!entry) return yield* new ACPError.SessionNotFoundError({ sessionId: sessionID })
       return entry.attached
@@ -178,33 +179,23 @@ export const make = Effect.fnUntraced(function* (input: {
       if (entry?.attached !== attached) return yield* new ACPError.SessionNotFoundError({ sessionId: attached.id })
       yield* Effect.forkIn(effect, entry.scope, { startImmediately: true })
     }),
-  })
+  } satisfies Interface
 })
 
-function mcpConfig(server: McpServer) {
+function mcpConfig(server: SupportedMcpServer) {
   if ("type" in server) {
-    if (server.type === "acp") throw new Error("MCP-over-ACP is not supported")
-    return {
-      type: "remote" as const,
+    return new Mcp.RemoteConfig({
+      type: "remote",
       url: server.url,
       headers: Object.fromEntries(server.headers.map((header) => [header.name, header.value])),
-      oauth: false as const,
-    }
+      oauth: false,
+    })
   }
-  return {
-    type: "local" as const,
+  return new Mcp.LocalConfig({
+    type: "local",
     command: [server.command, ...server.args],
     environment: Object.fromEntries(server.env.map((entry) => [entry.name, entry.value])),
-  }
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`
-  if (!value || typeof value !== "object") return JSON.stringify(value)
-  return `{${Object.entries(value)
-    .toSorted(([a], [b]) => a.localeCompare(b))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
-    .join(",")}}`
+  })
 }
 
 export * as ACPSessions from "./sessions"

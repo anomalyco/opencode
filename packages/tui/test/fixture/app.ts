@@ -1,5 +1,6 @@
 import { createTestRenderer } from "@opentui/core/testing"
 import { Effect, FileSystem } from "effect"
+import path from "node:path"
 import { Global } from "@opencode/util/global"
 import type { TuiInput } from "../../src/app"
 import type { Config } from "../../src/config"
@@ -17,7 +18,7 @@ export async function createAppFixture(
   } = {},
 ) {
   const { run } = await import("../../src/app")
-  const state = input.state ? undefined : await tmpdir()
+  const root = await tmpdir()
   const setup = await createTestRenderer({
     width: input.width ?? 100,
     height: input.height ?? 30,
@@ -39,7 +40,19 @@ export async function createAppFixture(
       args: input.args ?? {},
       log: () => {},
     }).pipe(
-      Effect.provide(Global.layerWith({ state: input.state ?? state?.path })),
+      Effect.provide(
+        Global.layerWith({
+          home: path.join(root.path, "home"),
+          data: path.join(root.path, "data"),
+          cache: path.join(root.path, "cache"),
+          config: path.join(root.path, "config"),
+          state: input.state ?? path.join(root.path, "state"),
+          bin: path.join(root.path, "cache", "bin"),
+          log: path.join(root.path, "data", "log"),
+          repos: path.join(root.path, "data", "repos"),
+          tmp: path.join(root.path, "tmp"),
+        }),
+      ),
       Effect.provide(FileSystem.layerNoop({})),
     ),
   )
@@ -53,7 +66,7 @@ export async function createAppFixture(
         await task
       } finally {
         await server.stop()
-        await state?.[Symbol.asyncDispose]()
+        await root[Symbol.asyncDispose]()
       }
     },
   }

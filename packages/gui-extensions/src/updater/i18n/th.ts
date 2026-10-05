@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "พร้อมอัปเดต",
   "dialog.restart": "เริ่มการทำงานใหม่",
   "dialog.later": "ภายหลัง",
+  "releaseNotes.action.getStarted": "เริ่มต้น",
+  "releaseNotes.action.next": "ถัดไป",
+  "releaseNotes.action.hideFuture": "ไม่ต้องแสดงสิ่งนี้อีกในอนาคต",
+  "releaseNotes.media.alt": "ตัวอย่างรุ่น",
 }

@@ -135,7 +135,6 @@ export const dict = {
   "session.view.select": "Vue de la session",
   "session.background.moveRunning": "Déplacer en arrière-plan",
   "session.timeline.working": "En cours",
-  "session.review.wrapLines": "Renvoyer les lignes à la ligne",
   "session.websearch.title": "Recherche web tierce",
   "session.websearch.description":
     "Sélectionnez le fournisseur de recherche que les agents utilisent pour effectuer des recherches sur le web",
@@ -198,8 +197,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Sous-agents",
   "settings.timeline.category.notices": "Avis",
   "settings.timeline.category.tools": "Autres outils",
-  "settings.general.row.mobileDiffWrap.description":
-    "Renvoyer à la ligne les longues lignes des diffs mobiles au lieu de les faire défiler horizontalement",
   "session.background.shell.many": "{{count}} shells",
   "session.background.subagent.many": "{{count}} sous-agents",
   "settings.about.otherContributor.many": "{{count}} autres",
@@ -806,10 +803,6 @@ export const dict = {
   "workspace.delete.confirm": 'Supprimer l\'espace de travail "{{name}}" ?',
   "workspace.delete.button": "Supprimer l'espace de travail",
   "common.open": "Ouvrir",
-  "dialog.releaseNotes.action.getStarted": "Commencer",
-  "dialog.releaseNotes.action.next": "Suivant",
-  "dialog.releaseNotes.action.hideFuture": "Ne plus afficher à l'avenir",
-  "dialog.releaseNotes.media.alt": "Aperçu de la version",
   "toast.project.reloadFailed.title": "Échec du rechargement de {{project}}",
   "error.server.invalidConfiguration": "Configuration invalide",
   "common.moreCountSuffix": " (+{{count}} de plus)",

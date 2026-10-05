@@ -30,12 +30,17 @@ import "./session-identity-header.css"
 
 export function SessionTitleHeader(props: ParentProps) {
   return (
-    <div
-      data-session-title
-      class="sticky top-0 z-30 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base)_48px,transparent)] pb-4 pe-3 ps-2.5"
-    >
-      {props.children}
-    </div>
+    <>
+      {/* The bottom inset reserves room for the fade without covering rows stuck below the bar. */}
+      <div data-session-title class="pointer-events-none sticky top-0 z-30 w-full pb-4">
+        <div class="pointer-events-auto bg-v2-background-bg-base pe-3 ps-2.5">{props.children}</div>
+      </div>
+      {/* Stuck timeline headers stack above this fade, so it only fades content scrolling under the bar. */}
+      <div
+        aria-hidden="true"
+        class="pointer-events-none sticky top-12 z-[5] -mt-4 h-4 w-full bg-[linear-gradient(to_bottom,var(--v2-background-bg-base),transparent)]"
+      />
+    </>
   )
 }
 

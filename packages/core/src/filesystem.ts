@@ -26,6 +26,30 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("FileSyst
   path: RelativePath,
 }) {}
 
+export class DirectoryNotFoundError extends Schema.TaggedError<DirectoryNotFoundError>()(
+  "FileSystem.DirectoryNotFoundError",
+  {
+    directory: AbsolutePath,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message() {
+    return `Directory not found: ${this.directory}`
+  }
+}
+
+export class DirectoryAccessDeniedError extends Schema.TaggedError<DirectoryAccessDeniedError>()(
+  "FileSystem.DirectoryAccessDeniedError",
+  {
+    directory: AbsolutePath,
+    cause: Schema.Defect(),
+  },
+) {
+  override get message() {
+    return `Access denied to directory: ${this.directory}`
+  }
+}
+
 export const Content = Schema.Struct({
   uri: Schema.String,
   name: Schema.String.pipe(Schema.optional),
@@ -87,7 +111,24 @@ const baseLayer = Layer.effect(
     // configured directory as canonical; local placements keep symlink
     // canonicalization. This skip is boot-only: resolve/read/list below still
     // access the host filesystem per operation (tracked in #44568).
-    const root = location.workspaceID ? location.directory : yield* fs.realPath(location.directory).pipe(Effect.orDie)
+    const root = location.workspaceID
+      ? location.directory
+      : yield* fs.realPath(location.directory).pipe(
+          Effect.catch((cause): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> => {
+            if (cause.reason._tag === "NotFound")
+              return Effect.fail(new DirectoryNotFoundError({ directory: location.directory, cause }))
+            // macOS privacy denials arrive as Unknown with an EPERM cause.
+            if (
+              cause.reason._tag === "PermissionDenied" ||
+              (cause.reason._tag === "Unknown" &&
+                cause.reason.cause instanceof Error &&
+                "code" in cause.reason.cause &&
+                cause.reason.cause.code === "EPERM")
+            )
+              return Effect.fail(new DirectoryAccessDeniedError({ directory: location.directory, cause }))
+            return Effect.die(cause)
+          }),
+        )
     const resolve = Effect.fnUntraced(function* (input?: RelativePath) {
       const absolute = path.resolve(location.directory, input ?? ".")
       if (!FSUtil.contains(location.directory, absolute))

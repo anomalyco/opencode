@@ -1,5 +1,6 @@
 import { createEffect, createMemo, createSignal, on, onCleanup, Show, type Accessor, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Predicate } from "effect"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import type { SessionUserActions } from "@opencode/session-ui/actions"
 import { Button } from "@opencode/ui/button"
@@ -9,7 +10,7 @@ import { InlineInput } from "@opencode/ui/inline-input"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import type { BackgroundTask, SessionView } from "@opencode/gui-extensions/sdk"
+import type { BackgroundTask, MountedSession, SessionScreen } from "@opencode/gui-extensions/sdk"
 import { ExtensionSlot } from "@/runtime/extension/render"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServer } from "@/runtime/server/current"
@@ -58,7 +59,8 @@ type MessageTimelineProps = {
   hideHeader?: boolean
   active?: boolean
   session: TimelineSessionSource
-  view: SessionView
+  view: MountedSession
+  screen: SessionScreen
   background: SessionBackground
   actions?: SessionUserActions
   scroll: { overflow: boolean; jump: boolean }
@@ -83,10 +85,13 @@ type MessageTimelineProps = {
 export function MessageTimeline(props: MessageTimelineProps) {
   const controller = createTimelineController({ session: props.session })
   const tail = props.pinned ? controller.data.projection.rows().at(-1) : undefined
+
   if (tail?._tag === "AssistantPart" && tail.group.type === "part") {
     const message = controller.data.projection.messageByID().get(tail.group.ref.messageID)
+
     if (message?.type === "assistant" && message.time.completed !== undefined) {
       const content = Timeline.resolveContent(message, tail.group.ref.partID)
+
       // Start the required worker job while the rest of the selected view is constructed.
       if (content?.type === "text" && content.text.trim()) {
         const preload = new AbortController()
@@ -95,6 +100,7 @@ export function MessageTimeline(props: MessageTimelineProps) {
       }
     }
   }
+
   return (
     <MessageTimelineView {...props} data={controller.data} action={controller.action} pending={controller.pending} />
   )
@@ -119,21 +125,29 @@ function MessageTimelineView(
   const childTitle = props.data.childTitle
   const projection = props.data.projection
   const sessionDirectory = createMemo(() => props.session.data.info()?.location.directory ?? sdk().directory)
+
   const project = createMemo(() => {
     const session = props.session.data.info()
     const projects = server.ctx.sync.data.project
+
     return session
       ? server.ctx.projects.detailsForSession(session)
       : projects.find((item) => containsDirectory(item.worktree, sessionDirectory()))
   })
+
   const workspaceSession = createMemo(() => isWorkspaceDirectory(project(), sessionDirectory()))
+
   const headerProject = createMemo(() => {
     const session = props.session.data.info()
+
     if (!session) return
+
     return server.ctx.projects.forSession(session)
   })
+
   createEffect(() => {
     const directory = project()?.worktree
+
     if (!directory) return
     void data.location.vcs.sync({ directory }).catch(() => undefined)
   })
@@ -141,6 +155,7 @@ function MessageTimelineView(
   const showHeader = createMemo(() => !props.hideHeader && (props.data.showHeader() || workspaceSession()))
   const pinned = createMemo(() => props.pinned)
   const messageByID = projection.messageByID
+
   const virtualized = createTimelineVirtualizer({
     active: () => props.active !== false,
     sessionKey: () => `${server.key}/${props.data.sessionID()}`,
@@ -159,19 +174,24 @@ function MessageTimelineView(
     onUserScroll: props.onUserScroll,
     onHistoryScroll: props.onHistoryScroll,
     canRenderImmediately: (row, disclosure) => {
-      if (row._tag === "TurnGap" || row._tag === "TurnDivider") return true
-      if (row._tag === "Notice") {
+      if (Predicate.isTagged(row, "TurnGap") || Predicate.isTagged(row, "TurnDivider")) return true
+
+      if (Predicate.isTagged(row, "Notice")) {
         const message = messageByID().get(row.messageID)
+
         return (
           (message?.type === "system" || message?.type === "synthetic") &&
           (message.description ?? message.text).length <= 1024
         )
       }
-      if (row._tag === "UserMessage") {
+
+      if (Predicate.isTagged(row, "UserMessage")) {
         const message = messageByID().get(row.userMessageID)
+
         if (message?.type !== "user" || message.text.length > 1024 || message.files?.length || message.agents?.length)
           return false
         const presentation = readPromptPresentation(message.metadata)
+
         return (
           (presentation?.displayText ?? message.text).length <= 1024 &&
           !presentation?.comments?.length &&
@@ -179,12 +199,16 @@ function MessageTimelineView(
           !parseCommentNote(message.text)
         )
       }
-      if (row._tag !== "AssistantPart" || row.group.type !== "part") return false
+
+      if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
       const message = messageByID().get(row.group.ref.messageID)
+
       if (message?.type !== "assistant" || message.time.completed === undefined) return false
       const content = Timeline.resolveContent(message, row.group.ref.partID)
+
       if (content?.type === "reasoning")
         return !(disclosure[row.group.ref.partID] ?? props.data.reasoningMode() === "full")
+
       return (
         content?.type === "text" &&
         content.text.length <= 1024 &&
@@ -194,13 +218,16 @@ function MessageTimelineView(
     setRevealMessage: props.setRevealMessage,
     setScrollToEnd: props.setScrollToEnd,
   })
+
   const VirtualizedTimeline = virtualized.View
+
   const [title, setTitle] = createStore({
     draft: "",
     editing: false,
     menuOpen: false,
     pendingRename: false,
   })
+
   let titleRef: HTMLInputElement | undefined
 
   createEffect(
@@ -234,6 +261,7 @@ function MessageTimelineView(
 
   const saveTitleEditor = async () => {
     if (!title.editing || props.pending.rename()) return
+
     if (await props.action.rename(title.draft)) setTitle("editing", false)
   }
 
@@ -249,6 +277,7 @@ function MessageTimelineView(
     presentation: (message) => {
       const value = readPromptPresentation(message.metadata)
       const parsed = value ? undefined : parseCommentNote(message.text)
+
       return {
         displayText: value?.displayText,
         comments: value?.comments ?? (parsed ? [parsed] : []),
@@ -265,31 +294,42 @@ function MessageTimelineView(
     padding: turnPadding,
     anchor: props.anchor,
   })
+
   const backgroundHintPartID = createMemo(() => {
     const blocking = new Set(props.background.blocking().map((task) => task.partID))
+
     if (blocking.size === 0) return
+
     return projection
       .rows()
       .flatMap((row) =>
-        row._tag === "AssistantPart" ? (row.group.type === "part" ? [row.group.ref] : row.group.refs) : [],
+        Predicate.isTagged(row, "AssistantPart") ? (row.group.type === "part" ? [row.group.ref] : row.group.refs) : [],
       )
       .findLast((ref) => blocking.has(ref.partID))?.partID
   })
+
   const [backgroundHintRef, setBackgroundHintRef] = createSignal<HTMLDivElement>()
+
   const backgroundHintPresence = createAnimatedPresence(
     backgroundHintPartID,
     () => backgroundHintRef() ?? null,
     sessionID,
     1000,
   )
+
   const showWorking = createMemo(() => {
     const id = sessionID()
+
     if (!id || sessionStatus().type !== "busy") return false
+
     if (data.session.permission.list(id)?.length || data.session.form.list(id)?.length) return false
     const active = projection.activeMessageID()
+
     if (!active) return false
     const assistant = projection.assistantMessagesByParent().get(active)?.at(-1)
+
     if (assistant?.retry) return false
+
     // Pending steers still project under the previous response until delivery.
     // Its error must not hide feedback for a newly submitted prompt.
     if (
@@ -298,6 +338,7 @@ function MessageTimelineView(
     )
       return false
     const content = assistant?.content.at(-1)
+
     if (
       assistant?.time.completed === undefined &&
       assistant?.time.streamed === undefined &&
@@ -306,24 +347,34 @@ function MessageTimelineView(
     )
       return false
     const background = new Set(props.background.tasks().map((task) => task.id))
+
     return !projection.rows().some((row) => {
       if (row.userMessageID !== active) return false
-      if (row._tag === "Thinking") return true
-      if (row._tag === "Notice") {
+
+      if (Predicate.isTagged(row, "Thinking")) return true
+
+      if (Predicate.isTagged(row, "Notice")) {
         const message = messageByID().get(row.messageID)
+
         return message?.type === "compaction" && message.status === "running"
       }
+
       // Used groups keep the fallback regardless of disclosure state.
-      if (row._tag !== "AssistantPart" || row.group.type === "context") return false
+      if (!Predicate.isTagged(row, "AssistantPart") || row.group.type === "context") return false
+
       return (row.group.type === "part" ? [row.group.ref] : row.group.refs).some((ref) => {
         const content = Timeline.resolveContent(messageByID().get(ref.messageID), ref.partID)
+
         if (content?.type !== "tool") return false
+
         if (content.state.status === "streaming" || content.state.status === "running") return true
         const taskID = content.state.metadata?.[content.name === "subagent" ? "sessionID" : "shellID"]
-        return background.has(content.id) || (typeof taskID === "string" && background.has(taskID))
+
+        return background.has(content.id) || (Predicate.isString(taskID) && background.has(taskID))
       })
     })
   })
+
   return (
     <VirtualizedTimeline
       workspaceSession={workspaceSession}
@@ -362,8 +413,9 @@ function MessageTimelineView(
         </Show>
       }
       deferred={(row) => {
-        if (row._tag !== "AssistantPart" || row.group.type !== "part") return false
+        if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
         const content = Timeline.resolveContent(messageByID().get(row.group.ref.messageID), row.group.ref.partID)
+
         return content?.type === "tool" && ["edit", "write"].includes(content.name)
       }}
       renderRow={(row, onSizeChange) => <rowRenderer.Row row={row} onSizeChange={onSizeChange} />}
@@ -419,12 +471,16 @@ function MessageTimelineView(
                         onInput={(event) => setTitle("draft", event.currentTarget.value)}
                         onKeyDown={(event) => {
                           event.stopPropagation()
+
                           if (event.isComposing || event.keyCode === 229) return
+
                           if (event.key === "Enter") {
                             event.preventDefault()
                             void saveTitleEditor()
+
                             return
                           }
+
                           if (event.key === "Escape") {
                             event.preventDefault()
                             closeTitleEditor()
@@ -496,7 +552,12 @@ function MessageTimelineView(
                     <ExtensionSlot
                       at="session.header"
                       input={{
-                        session: props.view,
+                        get session() {
+                          return props.view
+                        },
+                        get screen() {
+                          return props.screen
+                        },
                         get active() {
                           return props.active !== false
                         },
