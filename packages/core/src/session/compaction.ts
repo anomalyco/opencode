@@ -244,7 +244,6 @@ export const layer = Layer.effect(
       // A compaction just completed; let the runner rebuild the request from it first.
       const last = messages.at(-1)
       if (last?.type === "compaction" && last.status === "completed") return false
-      if (!previousCompaction(messages) && !messages.some((message) => message.type === "assistant")) return false
       // An encrypted native window estimates as nothing, so wait for a response to measure it.
       const measured = messages.findLastIndex((message) => hasMeasuredPrompt(message, context.model.ref))
       if (measured < messages.findLastIndex(SessionProviderContext.isCheckpoint)) return false

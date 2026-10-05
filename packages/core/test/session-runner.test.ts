@@ -3220,16 +3220,6 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
   })
 
-  scenario("does not auto-compact the initial prompt before any assistant response", function* (s) {
-    s.currentModel = compactModel
-    yield* s.llm.push(TestLLM.text("Direct answer", "text-initial-over-ceiling"))
-    yield* s.runPrompt("Initial oversized request ".repeat(200))
-
-    expect(s.requests).toHaveLength(1)
-    expect(userTexts(s.requests[0])).toEqual(["Initial oversized request ".repeat(200)])
-    expect(yield* s.context).not.toContainEqual(expect.objectContaining({ type: "compaction" }))
-  })
-
   scenario("stops after required automatic compaction fails", function* (s) {
     yield* s.llm.push(TestLLM.textWithUsage("Earlier answer", "text-before-failed-compaction", 3_950))
     yield* s.runPrompt("Earlier question ".repeat(180))
