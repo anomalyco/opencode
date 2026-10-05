@@ -307,6 +307,15 @@ export const settings: Setting[] = [
     keywords: ["selection", "clipboard"],
   },
   {
+    title: "Linux clipboard selection",
+    category: "Terminal",
+    path: ["linux_clipboard_selection"],
+    default: "both",
+    values: ["clipboard", "primary", "both"],
+    labels: ["clipboard", "primary", "both"],
+    keywords: ["linux", "primary selection", "middle click", "clipboard buffer"],
+  },
+  {
     title: "Developer tools",
     category: "Debug",
     path: ["debug", "devtools"],

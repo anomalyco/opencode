@@ -75,6 +75,16 @@ test("resolves nested config and keybind defaults", () => {
   expect(config.session.tps).toBe(true)
 })
 
+test("validates and resolves the linux clipboard selection", () => {
+  expect(decodeInfo({ linux_clipboard_selection: "primary" })).toEqual({ linux_clipboard_selection: "primary" })
+  expect(() => decodeInfo({ linux_clipboard_selection: "middle" })).toThrow()
+  expect(resolve({}, { terminalSuspend: true, environment: {} }).linux_clipboard_selection).toBe("both")
+  expect(
+    resolve({ linux_clipboard_selection: "clipboard" }, { terminalSuspend: true, environment: {} })
+      .linux_clipboard_selection,
+  ).toBe("clipboard")
+})
+
 test("resolves automatic tabs from the terminal environment", () => {
   expect(resolve({}, { terminalSuspend: true, environment: {} }).tabs.enabled).toBe(true)
   expect(resolve({}, { terminalSuspend: true, environment: { HERDR_ENV: "1" } }).tabs.enabled).toBe(false)
@@ -106,6 +116,13 @@ test("shows resolved tab defaults in settings", () => {
 
 test("shows the new session location default in settings", () => {
   expect(settings.find((setting) => setting.path.join(".") === "session.new_location")?.default).toBe("launch")
+})
+
+test("shows the linux clipboard selection in settings", () => {
+  const setting = settings.find((setting) => setting.path.join(".") === "linux_clipboard_selection")
+  expect(setting?.category).toBe("Terminal")
+  expect(setting?.default).toBe("both")
+  expect(setting?.values).toEqual(["clipboard", "primary", "both"])
 })
 
 test("shows the TPS default in session settings", () => {

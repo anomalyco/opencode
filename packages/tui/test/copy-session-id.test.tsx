@@ -38,7 +38,7 @@ test.each(["success", "failure", "home"])("Copy session ID from Ctrl+P (%s)", as
     run({
       app: { name: "test", version: "test", channel: "test" },
       server: { endpoint: { url: server.url.toString() } },
-      config: { get: async () => ({ animations: false }), update: async () => ({}) },
+      config: { get: async () => ({ animations: false, linux_clipboard_selection: "clipboard" }), update: async () => ({}) },
       packages: { prepare: async () => ({ directory: "" }) },
       terminalHandoff: async () => ({ renderer: setup.renderer, mode: "dark", complete: () => {} }),
       args: mode === "home" ? {} : { sessionID },

@@ -265,7 +265,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       })
       renderer.setMaxListeners(15)
       const clipboard = yield* Effect.acquireRelease(
-        Effect.sync(() => createTuiClipboard(renderer)),
+        Effect.sync(() => createTuiClipboard(renderer, config.linux_clipboard_selection)),
         (clipboard) =>
           Effect.tryPromise(() => clipboard.dispose()).pipe(
             Effect.catch((error) => Effect.sync(() => log("error", "Failed to dispose TUI clipboard", { error }))),

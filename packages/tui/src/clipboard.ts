@@ -3,28 +3,40 @@ import {
   createHostClipboard,
   createRendererClipboardAdapter,
   decodePasteBytes,
+  type ClipboardSelection,
   type ClipboardService as CoreClipboardService,
   type RendererClipboardBoundary,
 } from "@opentui/core"
 import type { ClipboardContent, ClipboardService } from "./context/clipboard"
 
 export type OwnedClipboardService = Required<ClipboardService> & Readonly<{ dispose(): Promise<void> }>
+export type ClipboardWriteSelection = ClipboardSelection | "both"
 
-export function createTuiClipboard(renderer: RendererClipboardBoundary): OwnedClipboardService {
+export function createTuiClipboard(
+  renderer: RendererClipboardBoundary,
+  selection: ClipboardWriteSelection,
+): OwnedClipboardService {
   return createClipboardAdapter(
     createClipboard({
       host: createHostClipboard(),
       terminal: createRendererClipboardAdapter(renderer),
     }),
+    selection,
   )
 }
 
-export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedClipboardService {
+export function createClipboardAdapter(
+  clipboard: CoreClipboardService,
+  selection: ClipboardWriteSelection = "clipboard",
+): OwnedClipboardService {
+  const readSelection: ClipboardSelection = selection === "primary" ? "primary" : "clipboard"
+  const writeSelections: ClipboardSelection[] = selection === "both" ? ["clipboard", "primary"] : [selection]
+
   return {
     async read(): Promise<ClipboardContent | undefined> {
       const result = await clipboard.read({
         preferredTypes: ["image/png", "text/plain"],
-        selection: "clipboard",
+        selection: readSelection,
       })
       if (result.status !== "read") {
         if (result.status === "failed") throw result.error
@@ -52,13 +64,22 @@ export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedCl
     },
     async write(text) {
       // OpenTUI rejects NUL before any destination; host clipboard text cannot contain it.
-      const result = await clipboard.writeText(text.replaceAll("\0", ""), {
-        destination: "all-available",
-        selection: "clipboard",
-      })
-      if (result.host.status === "written" || result.terminal.status === "attempted") return
-      if (result.host.status === "failed") throw result.host.error
-      throw new Error(`Clipboard write failed (host: ${result.host.status}, terminal: ${result.terminal.status})`)
+      const payload = text.replaceAll("\0", "")
+      const results = await Promise.all(
+        writeSelections.map((selection) =>
+          clipboard.writeText(payload, {
+            destination: "all-available",
+            selection,
+          }),
+        ),
+      )
+      if (results.some((result) => result.host.status === "written" || result.terminal.status === "attempted")) return
+      const failure = results.map((result) => (result.host.status === "failed" ? result.host.error : undefined)).find(
+        (error) => error !== undefined,
+      )
+      if (failure) throw failure
+      const [first] = results
+      throw new Error(`Clipboard write failed (host: ${first.host.status}, terminal: ${first.terminal.status})`)
     },
     dispose() {
       return clipboard.dispose()
