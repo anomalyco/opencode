@@ -2,7 +2,6 @@ import { batch, createEffect, createMemo, createResource, createSignal, onCleanu
 import type { OpenCodeEvent, SessionInfo } from "@opencode/client"
 import path from "path"
 import { useTerminalDimensions } from "@opentui/solid"
-import { TextAttributes, type RGBA } from "@opentui/core"
 import { dialogWidth, useDialog } from "../ui/dialog"
 import { DialogSelect, dialogSelectContentWidth, type DialogSelectRef } from "../ui/dialog-select"
 import { DialogPrompt } from "../ui/dialog-prompt"
@@ -21,6 +20,7 @@ import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
 import { stringWidth } from "../util/string-width"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
+import { sessionStatusGutter } from "./dialog-session-list"
 import { Spinner } from "./spinner"
 import { projectName } from "../util/project"
 
@@ -160,67 +160,45 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   const sessions = createMemo(() => {
     const seen = new Set<string>()
     const match = matched()
-    return [...data.session.list(), ...props.sessions, ...(match ? [match] : [])]
-      .filter((session) => {
-        if (session.parentID || seen.has(session.id)) return false
-        seen.add(session.id)
-        return true
-      })
-      .toSorted((a, b) => {
-        const attentionA = Boolean(attention(a.id))
-        const attentionB = Boolean(attention(b.id))
-        if (attentionA !== attentionB) return attentionA ? -1 : 1
-        return b.time.updated - a.time.updated
-      })
+    const list = [...data.session.list(), ...props.sessions, ...(match ? [match] : [])].filter((session) => {
+      if (session.parentID || seen.has(session.id)) return false
+      seen.add(session.id)
+      return true
+    })
+    const attentionByID = new Map(list.map((session) => [session.id, Boolean(attention(session.id))]))
+    return list.toSorted((a, b) => {
+      const attentionA = attentionByID.get(a.id) ?? false
+      const attentionB = attentionByID.get(b.id) ?? false
+      if (attentionA !== attentionB) return attentionA ? -1 : 1
+      return b.time.updated - a.time.updated
+    })
   })
 
   createEffect(() => {
-    const locations = new Map<string, { directory: string; workspaceID?: string }>()
-    const current = location.ref ?? data.location.default()
-    locations.set(locationKey(current), current)
-    for (const session of sessions()) {
-      const running =
-        data.session.status(session.id) === "running" ||
-        data.session.family(session.id).some((id) => data.session.status(id) === "running")
-      if (running) locations.set(locationKey(session.location), session.location)
-    }
-    for (const id of data.session.active()) {
-      const info = data.session.get(id)
-      if (info) locations.set(locationKey(info.location), info.location)
-    }
-    for (const target of locations.values()) {
+    const knownByID = new Map(props.sessions.map((session) => [session.id, session]))
+    const active = data.session.active()
+    new Map(
+      [
+        location.ref ?? data.location.default(),
+        ...active
+          .map((id) => data.session.get(id)?.location ?? knownByID.get(id)?.location)
+          .filter((target) => target !== undefined),
+      ].map((target) => [locationKey(target), target]),
+    ).forEach((target) => {
       void data.session.permission.syncLocation(target).catch(() => undefined)
       void data.session.form.sync("global", target).catch(() => undefined)
-    }
-  })
-
-  createEffect(() => {
-    const knownRoots = new Set(props.sessions.map((session) => session.id))
-    const pendingIDs = new Set([
-      ...data.session.permission.sessions(),
-      ...data.session.form.sessions(),
-      ...(recent() === true ? data.session.active() : []),
-    ])
-    for (const id of pendingIDs) {
-      if (knownRoots.has(id)) continue
-      const info = data.session.get(id)
-      if (!info) {
-        void data.session.sync(id).catch(() => undefined)
-        continue
+    })
+    new Set(
+      [
+        ...data.session.permission.sessions(),
+        ...data.session.form.sessions(),
+        ...(recent() === true ? active : []),
+      ].map((id) => data.session.root(id)),
+    ).forEach((rootID) => {
+      if (!knownByID.has(rootID) && !data.session.get(rootID)) {
+        void data.session.sync(rootID).catch(() => undefined)
       }
-      let parentID = info.parentID
-      const seen = new Set([id])
-      while (parentID && !seen.has(parentID)) {
-        seen.add(parentID)
-        if (knownRoots.has(parentID)) break
-        const parent = data.session.get(parentID)
-        if (!parent) {
-          void data.session.sync(parentID).catch(() => undefined)
-          break
-        }
-        parentID = parent.parentID
-      }
-    }
+    })
   })
 
   const options = createMemo(() => {
@@ -230,9 +208,9 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
     // visible in the strip, so recents exclude them unless a background session is awaiting input.
     // Typing widens the pool to every session so matching a loaded tab by name still switches to it.
     const candidates = sessions().filter(
-      (session) => !tabs.has(session.id) || (Boolean(attention(session.id)) && session.id !== currentID),
+      (session) => !tabs.has(session.id) || (attention(session.id) && session.id !== currentID),
     )
-    const attentionCount = candidates.filter((session) => Boolean(attention(session.id))).length
+    const attentionCount = candidates.filter((session) => attention(session.id)).length
     const recent = filter().trim() ? sessions() : candidates.slice(0, Math.max(RECENT_LIMIT, attentionCount))
     const sessionOptions = recent.map((session) => {
       const project = data.project.get(session.projectID)
@@ -254,20 +232,12 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         category: "Sessions",
         footer: `${label ? `${Locale.truncate(label, 30)} · ` : ""}${timeAgo(session.time.updated)}`,
         onSelect: () => location.set(session.location),
-        gutter: state
-          ? (color: RGBA) => (
-              <text
-                fg={color === theme.text.action.primary.focused ? color : theme.text.feedback.warning.base}
-                attributes={TextAttributes.BOLD}
-              >
-                {state === "permission" ? "!" : "?"}
-              </text>
-            )
-          : running
-            ? (color: RGBA) => <Spinner color={color} />
-            : tabs.has(session.id)
-              ? () => <text fg={theme.hue.accent[200]}>▪</text>
-              : undefined,
+        gutter: sessionStatusGutter(
+          theme,
+          state,
+          running,
+          tabs.has(session.id) ? () => <text fg={theme.hue.accent[200]}>▪</text> : undefined,
+        ),
       }
     })
 

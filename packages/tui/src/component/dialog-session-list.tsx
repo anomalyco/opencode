@@ -1,9 +1,8 @@
-import { createMemo, createResource, createSignal, onMount, Show } from "solid-js"
+import { createMemo, createResource, createSignal, onMount, Show, type JSX } from "solid-js"
 import path from "path"
 import type { SessionInfo } from "@opencode/client"
 import { Project } from "@opencode/schema/project"
-import { TextAttributes } from "@opentui/core"
-import type { RGBA } from "@opentui/core"
+import { TextAttributes, type RGBA } from "@opentui/core"
 import { useDialog } from "../ui/dialog"
 import { DialogSelect } from "../ui/dialog-select"
 import { useRoute } from "../context/route"
@@ -171,21 +170,14 @@ export function DialogSessionList() {
         footer,
         bg: deleting ? theme.background.action.destructive.focused : undefined,
         fg: deleting ? theme.text.action.destructive.focused : undefined,
-        gutter: attention
-          ? (color: RGBA) => (
-              <text
-                fg={color === theme.text.action.primary.focused ? color : theme.text.feedback.warning.base}
-                attributes={TextAttributes.BOLD}
-              >
-                {attention === "permission" ? "!" : "?"}
-              </text>
-            )
-          : data.session.status(session.id) === "running" ||
-              data.session.family(session.id).some((id) => data.session.status(id) === "running")
-            ? (color: RGBA) => <Spinner color={color} />
-            : slot === undefined
-              ? undefined
-              : () => <text fg={theme.hue.accent[200]}>{slot}</text>,
+        gutter: sessionStatusGutter(
+          theme,
+          attention,
+          !attention &&
+            (data.session.status(session.id) === "running" ||
+              data.session.family(session.id).some((id) => data.session.status(id) === "running")),
+          slot === undefined ? undefined : () => <text fg={theme.hue.accent[200]}>{slot}</text>,
+        ),
       }
     }
 
@@ -305,4 +297,24 @@ function quickSwitchRange(first: string, last: string) {
   const prefix = first.slice(0, -1)
   if (first.endsWith("1") && last === `${prefix}9`) return `${prefix}1-9`
   return `${first} through ${last}`
+}
+
+export function sessionStatusGutter(
+  theme: ReturnType<ReturnType<typeof useTheme>["surface"]>,
+  attention: "permission" | "question" | false,
+  running: boolean,
+  fallback?: () => JSX.Element,
+) {
+  if (attention) {
+    return (color: RGBA) => (
+      <text
+        fg={color === theme.text.action.primary.focused ? color : theme.text.feedback.warning.base}
+        attributes={TextAttributes.BOLD}
+      >
+        {attention === "permission" ? "!" : "?"}
+      </text>
+    )
+  }
+  if (running) return (color: RGBA) => <Spinner color={color} />
+  return fallback
 }
