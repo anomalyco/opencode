@@ -68,6 +68,7 @@ import { QuestionPrompt } from "./question"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import * as Model from "../../util/model"
 import { formatTranscript } from "../../util/transcript"
+import { renderMath } from "../../util/math"
 import { sessionEpilogue } from "../../util/presentation"
 import { setPreLayoutSiblingMargin } from "../../util/layout"
 import { useTuiConfig } from "../../config"
@@ -1637,7 +1638,7 @@ function ReasoningPart(props: { last: boolean; part: ReasoningPart; message: Ass
               drawUnstyledText={false}
               streaming={true}
               syntaxStyle={syntax()}
-              content={summary().body}
+              content={renderMath(summary().body)}
               conceal={ctx.conceal()}
               fg={theme.textMuted}
             />
@@ -1693,7 +1694,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
           syntaxStyle={syntax()}
           streaming={true}
           internalBlockMode="top-level"
-          content={props.part.text.trim()}
+          content={renderMath(props.part.text.trim())}
           tableOptions={{ style: "grid" }}
           conceal={ctx.conceal()}
           fg={theme.markdownText}
