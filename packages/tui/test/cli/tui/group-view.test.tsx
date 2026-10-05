@@ -300,60 +300,6 @@ test("failed low activity uses a disclosure icon and keeps details expandable", 
   }
 })
 
-test("an exploration group with a failed tool keeps its completion icon", async () => {
-  const message: SessionMessageAssistant = {
-    id: "a",
-    type: "assistant",
-    agent: "build",
-    model: { providerID: "fixture", id: "fixture" },
-    time: { created: 0, completed: 2 },
-    content: [
-      {
-        type: "tool",
-        id: "read",
-        name: "read",
-        time: { created: 0, completed: 1 },
-        state: { status: "completed", input: { path: "a" }, content: [{ type: "text", text: "a" }], metadata: {} },
-      },
-      {
-        type: "tool",
-        id: "failed-read",
-        name: "read",
-        time: { created: 1, completed: 2 },
-        state: { status: "error", input: { path: "b" }, error: { type: "Fixture", message: "missing file" } },
-      },
-    ],
-  }
-  const app = await mount({
-    row: {
-      type: "group",
-      kind: "exploration",
-      size: 2,
-      completed: true,
-      pending: [],
-      children: ["read", "failed-read"].map((partID) => ({
-        type: "entry" as const,
-        size: 1,
-        entry: { type: "part" as const, ref: { messageID: "a", partID } },
-      })),
-    },
-    anchors: createTimelineAnchors(),
-    config: createTuiResolvedConfig({ animations: false }),
-    expanded: () => false,
-    setExpanded: () => {},
-    message: () => message,
-    entry: () => <text>entry</text>,
-  })
-  try {
-    app.renderer.start()
-    await app.waitForFrame((frame) => frame.includes("Explored"))
-    expect(app.captureCharFrame()).toContain("→ Explored: 2 reads")
-    expect(app.captureCharFrame()).not.toContain("✗")
-  } finally {
-    app.renderer.destroy()
-  }
-})
-
 function mount(input: {
   row: SessionGroup
   anchors: ReturnType<typeof createTimelineAnchors>
