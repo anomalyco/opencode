@@ -224,7 +224,6 @@ describe("AISDKNative", () => {
     const chat = map("@ai-sdk/azure", { ...settings, useCompletionUrls: true }, "custom-deployment")
     expect(chat?.package).toBe("@opencode/ai/providers/azure/chat")
     expect(chat?.settings).not.toHaveProperty("useCompletionUrls")
-    expect(map("@ai-sdk/azure", settings, "model-router")?.package).toBe("@opencode/ai/providers/azure/chat")
     expect(AISDKNative.native("@ai-sdk/azure", { providerID: "azure", shape: "completions" })).toBe(
       "@opencode/ai/providers/azure/chat",
     )

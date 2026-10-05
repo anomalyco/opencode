@@ -136,9 +136,7 @@ export function native(npm: string, context: Context & { readonly settings?: Pro
 }
 
 const azureChat = (context: Context & { readonly settings?: Provider.Settings }) =>
-  context.shape === "completions" ||
-  context.settings?.useCompletionUrls === true ||
-  context.modelID?.toLowerCase() === "model-router"
+  context.shape === "completions" || context.settings?.useCompletionUrls === true
 
 const mantle = (modelID: string | undefined) => {
   if (modelID === undefined) return "@opencode/ai/providers/amazon-bedrock/mantle"
