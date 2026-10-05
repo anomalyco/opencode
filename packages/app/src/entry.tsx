@@ -9,6 +9,7 @@ import { PlatformProvider } from "@/runtime/platform/platform"
 import { createWebPlatform } from "@/runtime/platform/web"
 import { isStandalone, PwaRoutePersistence, restorePwaRoute } from "@/runtime/platform/pwa"
 import { KeyboardInsets } from "@/runtime/platform/keyboard"
+import { ServiceWorkerUpdates } from "@/runtime/platform/service-worker-updates"
 import en from "@/runtime/i18n/en"
 import zh from "@/runtime/i18n/zh"
 import { authFromToken } from "@/runtime/server/api"
@@ -16,28 +17,34 @@ import pkg from "../package.json"
 import { ServerConnection } from "@/runtime/server/registry"
 
 const getLocale = () => {
-  if (typeof navigator !== "object") return "en" as const
+  if (!("navigator" in globalThis)) return "en" as const
   const languages = navigator.languages?.length ? navigator.languages : [navigator.language]
+
   for (const language of languages) {
     if (!language) continue
+
     if (language.toLowerCase().startsWith("zh")) return "zh" as const
   }
+
   return "en" as const
 }
 
 const getRootNotFoundError = () => {
   const key = "error.dev.rootNotFound" as const
   const locale = getLocale()
+
   return locale === "zh" ? (zh[key] ?? en[key]) : en[key]
 }
 
 const root = document.getElementById("root")
+
 if (!(root instanceof HTMLElement) && import.meta.env.DEV) {
   throw new Error(getRootNotFoundError())
 }
 
 const clearAuthToken = () => {
   const params = new URLSearchParams(location.search)
+
   if (!params.has("auth_token")) return
   params.delete("auth_token")
   history.replaceState(null, "", location.pathname + (params.size ? `?${params}` : "") + location.hash)
@@ -76,7 +83,9 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
     clearAuthToken()
     const standalone = isStandalone()
     root.dataset.standalone = String(standalone)
+
     if (standalone) restorePwaRoute()
+
     const server: ServerConnection.Http | undefined = web.currentServerUrl
       ? {
           type: "http",
@@ -87,6 +96,7 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
           },
         }
       : undefined
+
     render(
       () => (
         <PlatformProvider value={web.platform}>
@@ -98,6 +108,7 @@ if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
             >
               <KeyboardInsets />
               {standalone && <PwaRoutePersistence />}
+              {import.meta.env.PROD && "serviceWorker" in navigator && <ServiceWorkerUpdates />}
             </AppInterface>
           </AppBaseProviders>
         </PlatformProvider>

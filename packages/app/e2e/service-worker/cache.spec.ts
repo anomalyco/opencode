@@ -9,9 +9,16 @@ import { fileURLToPath } from "node:url"
 import { build } from "vite"
 import { serviceWorker } from "../../vite.pwa"
 
+/** The registration global of a service worker's scope, where `replacement.evaluate` callbacks run. */
+declare const registration: ServiceWorkerRegistration
+
+// The app's real update watcher, so each fixture build behaves like the shipped app.
+const updates = fileURLToPath(new URL("../../src/runtime/platform/service-worker.ts", import.meta.url))
+
 type Site = {
   url: string
   deploy: (fault?: "failed" | "html" | "corrupt" | "mixed-html" | "blocked") => void
+  rerelease: () => void
   legacy: () => void
   requests: string[]
   release: () => void
@@ -22,18 +29,31 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
     async ({}, use) => {
       const directory = await mkdtemp(join(tmpdir(), "opencode-precache-"))
       const builds: Record<string, Record<string, Buffer>> = {}
+
       try {
-        for (const version of ["old", "new"]) {
-          const root = join(directory, version)
+        // The re-release ships the old build's exact files under the next release.
+        for (const [name, version, release] of [
+          ["old", "old", "1"],
+          ["new", "new", "2"],
+          ["rerelease", "old", "2"],
+        ]) {
+          const root = join(directory, name)
           const outDir = join(root, "dist")
           await mkdir(join(root, "public", "nested"), { recursive: true })
           await Promise.all(
             Object.entries({
               "index.html": `<html><head></head><body><h1>Loading</h1><label>Draft<textarea></textarea></label><button>Load lazy</button><output></output><script type="module" src="/main.js"></script></body></html>`,
-              "main.js": `document.querySelector("h1").textContent = "${version}";
+              "main.js": `import { watchServiceWorkerUpdates } from ${JSON.stringify(updates)};
+            document.querySelector("h1").textContent = "${version}";
             document.querySelector("button").onclick = async () => {
               document.querySelector("output").textContent = await (await import("./lazy.js")).load()
-            };`,
+            };
+            navigator.serviceWorker.getRegistration().then((registration) => registration && watchServiceWorkerUpdates(registration, (apply) => {
+              const update = document.createElement("button");
+              update.textContent = "Reload to update";
+              update.onclick = apply;
+              document.body.append(update);
+            }));`,
               "lazy.js": `export async function load() { return (await import("./nested.js")).value }`,
               "nested.js": `export const value = "${version} nested lazy loaded"`,
               "public/nested/data.json": JSON.stringify({ version }),
@@ -49,19 +69,21 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
             root,
             logLevel: "silent",
             build: { outDir, assetsDir: "_assets", sourcemap: true },
-            plugins: serviceWorker(outDir),
+            plugins: serviceWorker(outDir, release),
           })
-          builds[version] = Object.fromEntries(
+          builds[name] = Object.fromEntries(
             await Promise.all(
               (await readdir(outDir, { recursive: true, withFileTypes: true }))
                 .filter((entry) => entry.isFile())
                 .map(async (entry) => {
                   const path = join(entry.parentPath, entry.name)
+
                   return ["/" + relative(outDir, path).split(sep).join("/"), await readFile(path)]
                 }),
             ),
           )
         }
+
         await use(builds)
       } finally {
         await rm(directory, { recursive: true, force: true })
@@ -74,23 +96,31 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
     const requests: string[] = []
     const blocked: ServerResponse[] = []
     const release = () => blocked.splice(0).forEach((response) => response.end(builds.new["/large.bin"]))
+
     const server = createServer((request, response) => {
       const url = new URL(request.url ?? "/", "http://localhost")
       const path = url.pathname
       requests.push(path)
       response.setHeader("cache-control", "no-store")
+      // Stands in for headers the server changes between releases, such as its Content-Security-Policy.
+      response.setHeader("x-release", state.version === "old" ? "1" : "2")
+
       if (path === "/observer.html")
         return void response.writeHead(200, { "content-type": "text/html" }).end("<title>Worker observer</title>")
+
       if (path === "/api/info")
         return void response
           .writeHead(200, { "content-type": "application/json" })
           .end(`{"version":"test","pid":1,"urls":["${url.origin}"],"paths":{"tmp":"/tmp/opencode"}}`)
+
       if (path === "/sw.js" && state.legacy && state.version === "old") {
         // Model the shipped worker's shared precache name and cache-first navigation behavior.
         const urls = Object.keys(builds.old).filter(
           (path) => path === "/index.html" || (path.startsWith("/_assets/") && path.endsWith(".js")),
         )
+
         response.setHeader("content-type", "text/javascript")
+
         return void response.end(`
           self.addEventListener("install", event => event.waitUntil(
             caches.open("workbox-precache-v2-" + self.registration.scope).then(cache => cache.addAll(${JSON.stringify(urls)}))
@@ -101,38 +131,54 @@ const fixture = test.extend<{ site: Site }, { builds: Record<string, Record<stri
           ));
         `)
       }
+
       if (path === "/index.html" && state.fault === "mixed-html")
         return void response.writeHead(200, { "content-type": "text/html" }).end(builds.old["/index.html"])
+
       if (path === "/large.bin" && state.fault && state.fault !== "mixed-html") {
         if (state.fault === "blocked") return void blocked.push(response)
+
         if (state.fault === "failed") return void response.writeHead(503).end("Unavailable")
+
         if (state.fault === "html")
           return void response.writeHead(200, { "content-type": "text/html" }).end("<html>Wrong fallback</html>")
+
         return void response.end("Incorrect bytes with a successful status")
       }
+
       const file = builds[state.version][path]
-      const types: Record<string, string> = {
-        ".js": "text/javascript",
-        ".html": "text/html",
-        ".json": "application/json",
-        ".wasm": "application/wasm",
-      }
-      response.setHeader("content-type", types[extname(path)] ?? "application/octet-stream")
+
+      const types = new Map([
+        [".js", "text/javascript"],
+        [".html", "text/html"],
+        [".json", "application/json"],
+        [".wasm", "application/wasm"],
+      ])
+
+      response.setHeader("content-type", types.get(extname(path)) ?? "application/octet-stream")
+
       if (file) return void response.end(file)
+
       if (extname(path)) return void response.writeHead(404).end("Not found")
       response.setHeader("content-type", "text/html")
       response.end(builds[state.version]["/index.html"])
     })
+
     server.listen(0, "127.0.0.1")
     await once(server, "listening")
     const address = server.address()
-    if (!address || typeof address === "string") throw new Error("Expected a TCP address")
+
+    if (!(address instanceof Object)) throw new Error("Expected a TCP address")
+
     try {
       await use({
         url: `http://127.0.0.1:${address.port}`,
         deploy: (fault = undefined) => {
           state.version = "new"
           state.fault = fault ?? ""
+        },
+        rerelease: () => {
+          state.version = "rerelease"
         },
         legacy: () => {
           state.legacy = true
@@ -163,7 +209,9 @@ async function install(page: Page, url: string) {
 async function update(page: Page) {
   return page.evaluateHandle(async () => {
     const registration = await navigator.serviceWorker.getRegistration()
+
     if (!registration) throw new Error("Missing installed worker")
+
     const found = new Promise<ServiceWorker>((resolve) =>
       registration.addEventListener(
         "updatefound",
@@ -174,7 +222,9 @@ async function update(page: Page) {
         { once: true },
       ),
     )
+
     await registration.update()
+
     return found
   })
 }
@@ -205,17 +255,21 @@ fixture(
       expect(output["/sw.js.map"]).toBeUndefined()
       expect(Object.keys(output).some((path) => path.startsWith("/_assets/") && path.endsWith(".map"))).toBe(true)
     }
+
     await install(page, site.url)
     const files = ["/nested/data.json", "/nested/font.woff2", "/nested/module.wasm", "/large.bin"]
     await context.setOffline(true)
+
     for (const path of files) {
       const digest = await page.evaluate(
         async (path) =>
           Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", await (await fetch(path)).arrayBuffer()))),
         path,
       )
+
       expect(Buffer.from(digest)).toEqual(createHash("sha256").update(builds.old[path]).digest())
     }
+
     expect(site.requests).not.toContain("/_headers")
     expect(site.requests).not.toContain("/_redirects")
     expect(site.requests.filter((path) => path.endsWith(".map"))).toEqual([])
@@ -254,7 +308,6 @@ fixture(
     await expect
       .poll(() =>
         replacement.evaluate(() => {
-          const registration = (self as unknown as { registration: ServiceWorkerRegistration }).registration
           return { waiting: !!registration.waiting, active: registration.active?.state }
         }),
       )
@@ -267,6 +320,73 @@ fixture(
     await expect(observer.getByRole("status")).toHaveText("new nested lazy loaded")
   },
 )
+
+fixture(
+  "offers a downloaded build when the app returns to the foreground and moves every window to it on reload",
+  async ({ page, context, site }) => {
+    await install(page, site.url)
+    const second = await context.newPage()
+    await second.goto(site.url)
+    await expect(second.getByRole("heading")).toHaveText("old")
+    // Chromium coalesces the update checks of these navigations into one delayed fetch (ServiceWorkerVersion::
+    // ScheduleUpdate resets its timer). Wait for it, so only the foreground check below can find the new build.
+    await expect.poll(() => site.requests.filter((path) => path === "/sw.js").length).toBe(2)
+    site.deploy()
+
+    // A suspended home-screen app resumes without navigating; only the foreground check finds the new worker.
+    await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")))
+    await waiting(page)
+    await expect(page.getByRole("heading")).toHaveText("old")
+    await page.getByRole("button", { name: "Reload to update", exact: true }).click()
+
+    await expect(page.getByRole("heading")).toHaveText("new")
+    await expect(second.getByRole("heading")).toHaveText("new")
+    await page.getByRole("button", { name: "Load lazy" }).click()
+    await expect(page.getByRole("status")).toHaveText("new nested lazy loaded")
+    await expect(page.getByRole("button", { name: "Reload to update", exact: true })).toHaveCount(0)
+  },
+)
+
+fixture(
+  "a release refreshes the cached page and its headers even when the page's bytes did not change",
+  async ({ page, site, builds }) => {
+    expect(builds.rerelease["/index.html"]).toEqual(builds.old["/index.html"])
+    await install(page, site.url)
+    expect((await page.goto(`${site.url}/workspace/before`))?.headers()["x-release"]).toBe("1")
+
+    site.rerelease()
+    await update(page)
+    await waiting(page)
+    // The app reloads itself once the new worker takes over.
+    const reloaded = page.waitForEvent("load")
+    await page.getByRole("button", { name: "Reload to update", exact: true }).click()
+    await reloaded
+
+    const response = await page.goto(`${site.url}/workspace/after`)
+    expect({ fromServiceWorker: response?.fromServiceWorker(), release: response?.headers()["x-release"] }).toEqual({
+      fromServiceWorker: true,
+      release: "2",
+    })
+  },
+)
+
+fixture("offers a build that was still downloading when the app opened", async ({ page, site }) => {
+  await install(page, site.url)
+  site.requests.length = 0
+  site.deploy("blocked")
+  const worker = await update(page)
+  await expect.poll(() => site.requests.includes("/large.bin")).toBe(true)
+  expect(await worker.evaluate((worker) => worker.state)).toBe("installing")
+  await page.reload()
+  await expect(page.getByRole("heading")).toHaveText("old")
+  // The app's watcher attaches while the build is still downloading.
+  expect(await page.evaluate(async () => (await navigator.serviceWorker.getRegistration())?.installing?.state)).toBe(
+    "installing",
+  )
+
+  site.release()
+  await expect(page.getByRole("button", { name: "Reload to update", exact: true })).toBeVisible()
+})
 
 for (const fault of ["failed", "html", "corrupt", "mixed-html"] as const) {
   fixture(`retains the old complete build when a precache download is ${fault}`, async ({ page, context, site }) => {
@@ -349,37 +469,49 @@ fixture("does not substitute cached HTML for API or missing asset navigations", 
 
 test("the production build precaches every deployable file", async ({ page, context }) => {
   const directory = new URL("../../dist/", import.meta.url)
+
   const files = (await readdir(directory, { recursive: true, withFileTypes: true }))
     .filter((entry) => entry.isFile())
     .map((entry) => "/" + relative(fileURLToPath(directory), join(entry.parentPath, entry.name)).split(sep).join("/"))
     .filter((path) => !path.endsWith(".map") && !["/_headers", "/_redirects", "/sw.js"].includes(path))
+
   expect(files.length).toBeGreaterThan(1)
+
   const server = createServer(async (request, response) => {
     const path = new URL(request.url ?? "/", "http://localhost").pathname
     response.setHeader("cache-control", "no-store")
+
     if (path === "/probe.html")
       return void response.writeHead(200, { "content-type": "text/html" }).end("<title>Precache probe</title>")
     const bytes = await readFile(new URL(`.${path}`, directory)).catch(() => undefined)
+
     if (!bytes) return void response.writeHead(404).end("Not found")
+
     if (path.endsWith(".js")) response.setHeader("content-type", "text/javascript")
+
     if (path.endsWith(".html")) {
       response.setHeader("content-type", "text/html")
       // Inspect the real cached HTML without executing the app or contacting a backend.
       response.setHeader("content-security-policy", "default-src 'none'")
     }
+
     response.end(bytes)
   })
+
   server.listen(0, "127.0.0.1")
   await once(server, "listening")
   const address = server.address()
-  if (!address || typeof address === "string") throw new Error("Expected a TCP address")
+
+  if (!(address instanceof Object)) throw new Error("Expected a TCP address")
   const url = `http://127.0.0.1:${address.port}`
+
   try {
     await page.goto(`${url}/probe.html`)
     await page.evaluate(async () => {
       await navigator.serviceWorker.register("/sw.js")
       await navigator.serviceWorker.ready
     })
+
     const cached = await page.evaluate(async () =>
       (
         await Promise.all(
@@ -391,6 +523,7 @@ test("the production build precaches every deployable file", async ({ page, cont
         .flat()
         .sort(),
     )
+
     expect(cached).toEqual(files.sort())
     await context.setOffline(true)
     const response = await page.goto(`${url}/workspace/offline-probe`)
