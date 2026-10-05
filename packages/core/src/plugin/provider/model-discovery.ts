@@ -1,7 +1,7 @@
 import { define } from "@opencode/plugin/effect/plugin"
 import type { Entry } from "@opencode/schema/config"
 import { ConfigProvider } from "@opencode/schema/config/provider"
-import { PositiveInt } from "@opencode/schema/schema"
+import { NonNegativeInt, PositiveInt } from "@opencode/schema/schema"
 import { Duration, Effect, Schedule, Schema, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { Config } from "../../config.js"
@@ -13,10 +13,10 @@ import type { PluginInternal } from "../internal.js"
 
 const optional = <S extends Schema.Top>(schema: S) => Schema.NullOr(schema).pipe(Schema.optional)
 const RemoteModel = Schema.Struct({
-  id: Schema.String,
-  context_window: optional(Schema.Int),
-  max_input_tokens: optional(Schema.Int),
-  max_output_tokens: optional(Schema.Int),
+  id: Schema.String.check(Schema.isPattern(/\S/)),
+  context_window: optional(NonNegativeInt),
+  max_input_tokens: optional(NonNegativeInt),
+  max_output_tokens: optional(NonNegativeInt),
   supported_endpoints: optional(Schema.Array(Schema.String)),
   supports_function_calling: optional(Schema.Boolean),
   supports_parallel_function_calling: optional(Schema.Boolean),
@@ -46,6 +46,7 @@ export function make(interval: Duration.Input = "30 seconds") {
         { source: ConfigProvider.Info; apiKey?: string; models: readonly (typeof RemoteModel.Type)[] }
       >()
       const settings = { current: configured(yield* config.entries()) }
+      const generations = new Map<string, number>()
 
       yield* ctx.provider.transform((providers) => {
         for (const [id, result] of loaded) {
@@ -63,11 +64,11 @@ export function make(interval: Duration.Input = "30 seconds") {
               if (!providers.get(Provider.ID.make(id))?.models.has(Model.ID.make(item.id)))
                 model.limit = { context: 0, output: 0 }
               if (item.context_window !== undefined && item.context_window !== null)
-                model.limit.context = Math.max(0, item.context_window)
+                model.limit.context = item.context_window
               if (item.max_input_tokens !== undefined && item.max_input_tokens !== null)
-                model.limit.input = Math.max(0, item.max_input_tokens)
+                model.limit.input = item.max_input_tokens
               if (item.max_output_tokens !== undefined && item.max_output_tokens !== null)
-                model.limit.output = Math.max(0, item.max_output_tokens)
+                model.limit.output = item.max_output_tokens
               if (item.request_defaults != null)
                 model.requestDefaults = {
                   ...model.requestDefaults,
@@ -124,11 +125,20 @@ export function make(interval: Duration.Input = "30 seconds") {
         }
       })
 
+      yield* ctx.model.transform((models) => {
+        models.filter((model) => {
+          const catalog = loaded.get(model.providerID)
+          return catalog === undefined || catalog.models.some((item) => item.id === model.id)
+        })
+      })
+
       const refresh = Effect.fn("ModelDiscovery.refresh")(function* () {
         yield* Effect.forEach(
           settings.current,
           ([id, source]) =>
             Effect.gen(function* () {
+              const generation = (generations.get(id) ?? 0) + 1
+              generations.set(id, generation)
               const baseURL = source.settings?.baseURL
               if (typeof baseURL !== "string" || !URL.canParse(baseURL)) return
               const endpoint = new URL(baseURL)
@@ -151,6 +161,7 @@ export function make(interval: Duration.Input = "30 seconds") {
                   : credential?.type === "key"
                     ? credential.key
                     : undefined
+              if (settings.current.get(id) !== source || generations.get(id) !== generation) return
               // Account-scoped discovery must not survive a credential switch when the new account rejects access.
               if (loaded.has(id) && loaded.get(id)?.apiKey !== apiKey) {
                 loaded.delete(id)
@@ -163,8 +174,9 @@ export function make(interval: Duration.Input = "30 seconds") {
               const response = yield* http
                 .execute(apiKey ? HttpClientRequest.bearerToken(request, apiKey) : request)
                 .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Response)), Effect.timeout("5 seconds"))
-              if (settings.current.get(id) !== source) return
-              const models = response.data.filter((model) => model.id.length > 0)
+              if (settings.current.get(id) !== source || generations.get(id) !== generation) return
+              const models = response.data
+              if (new Set(models.map((model) => model.id)).size !== models.length) return
               if (JSON.stringify(loaded.get(id)?.models) === JSON.stringify(models)) return
               loaded.set(id, { source, apiKey, models })
               yield* ctx.provider.reload()

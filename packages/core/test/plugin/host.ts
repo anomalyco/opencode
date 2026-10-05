@@ -278,6 +278,7 @@ export function modelHost(models: Model.Interface): Plugin.Context["model"] {
           update: (providerID, modelID, update) =>
             editor.update(Provider.ID.make(providerID), Model.ID.make(modelID), update),
           remove: (providerID, modelID) => editor.remove(Provider.ID.make(providerID), Model.ID.make(modelID)),
+          filter: editor.filter,
           default: {
             get: editor.default.get,
             set: (providerID, modelID) => editor.default.set(Provider.ID.make(providerID), Model.ID.make(modelID)),

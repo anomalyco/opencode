@@ -1,5 +1,7 @@
 # Gateway model discovery
 
+This is a vendor-neutral optional extension to the OpenAI-style model list. Any OpenAI-compatible gateway can implement the fields below; the client needs no gateway-specific code, detection, authentication, model naming rules or supplier connections. OpenCode sends catalog and inference requests only to the configured gateway.
+
 An OpenAI-compatible gateway can supply its model catalog, token limits and capabilities through `GET <baseURL>/models`. Enable discovery once on the provider:
 
 ```json
@@ -16,7 +18,7 @@ An OpenAI-compatible gateway can supply its model catalog, token limits and capa
 }
 ```
 
-No per-model definitions are necessary. An active API-key connection can supply the key instead of `settings.apiKey`. Provider headers are also used for discovery. Discovery is opt-in, runs at startup and refreshes every 30 seconds. A successful response replaces the discovered inventory, including when the gateway returns an empty list. An unsuccessful or malformed response retains the last successful catalog; changing the endpoint or credentials invalidates its cached metadata. Legacy configured models remain available when discovery fails.
+No per-model definitions are necessary. An active API-key connection can supply the key instead of `settings.apiKey`. Provider headers are also used for discovery. Discovery is opt-in, runs at startup and refreshes every 30 seconds. A successful response authoritatively replaces the inventory of that opted-in provider, including when the gateway returns an empty list. Local metadata overrides cannot recreate a model absent from that inventory. Removed selections become unavailable for new main-agent and subagent requests; in-flight requests retain their resolved snapshot. Reappearing models become available with current metadata. Other providers, including ordinary free offerings, retain their existing discovery and access behavior. An unsuccessful or malformed response retains the last successful catalog; changing the endpoint or credentials invalidates its cached metadata. Before any successful discovery, ordinary configured models remain available when discovery fails; a changed endpoint or account likewise falls back to its own ordinary configuration, without inheriting the previous account's catalog.
 
 The response is an OpenAI-style list, with metadata on each `data` item:
 
@@ -30,7 +32,7 @@ The response is an OpenAI-style list, with metadata on each `data` item:
 | `supports_function_calling`          | Whether tools can be advertised.                                    |
 | `supports_parallel_function_calling` | Whether parallel tool calls are supported.                          |
 | `supports_reasoning`                 | Whether reasoning controls are available.                           |
-| `reasoning_effort_levels`            | Exact supplier-supported reasoning choices.                         |
+| `reasoning_effort_levels`            | Exact gateway-supported reasoning choices.                          |
 | `default_reasoning_effort`           | Default reasoning choice, when compatible with the advertised list. |
 | `supported_modalities`               | Input modalities.                                                   |
 | `supported_output_modalities`        | Output modalities.                                                  |

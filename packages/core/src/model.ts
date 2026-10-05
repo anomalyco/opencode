@@ -68,6 +68,8 @@ export interface Editor {
   readonly get: (providerID: Provider.ID, modelID: ID) => MutableInfo | undefined
   readonly update: (providerID: Provider.ID, modelID: ID, update: (model: MutableInfo) => void) => void
   readonly remove: (providerID: Provider.ID, modelID: ID) => void
+  /** Final catalog eligibility; later metadata edits cannot bypass a registered filter. */
+  readonly filter: (predicate: (model: Info) => boolean) => void
   readonly default: {
     readonly get: () => { providerID: Provider.ID; modelID: ID } | undefined
     readonly set: (providerID: Provider.ID, modelID: ID) => void
@@ -92,6 +94,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Mo
 type Data = {
   models: Map<Provider.ID, ReadonlyMap<ID, Info>>
   defaultModel?: { providerID: Provider.ID; modelID: ID }
+  filters: ((model: Info) => boolean)[]
 }
 
 const layer = Layer.effect(
@@ -105,6 +108,7 @@ const layer = Layer.effect(
       name: "model",
       initial: () => ({
         models: new Map((input?.available ?? []).map((record) => [record.provider.id, record.models])),
+        filters: [],
       }),
       editor: (data) => {
         // Definitions are shared across Locations; a provider's map and a model are copied before their first edit.
@@ -159,6 +163,9 @@ const layer = Layer.effect(
           remove: (providerID, modelID) => {
             writable(providerID)?.delete(modelID)
           },
+          filter: (predicate) => {
+            data.filters.push(predicate)
+          },
           default: {
             get: () => data.defaultModel,
             set: (providerID, modelID) => {
@@ -203,23 +210,25 @@ const layer = Layer.effect(
             return [
               providerID,
               new Map(
-                Array.from(models, ([id, model]) => {
-                  const reusable = merged.get(model)
-                  if (reusable && reusable.provider === provider) return [id, reusable.model]
-                  const value = {
-                    ...model,
-                    ...(provider?.canonical === undefined ? {} : { canonical: provider.canonical }),
-                    package: model.package ?? provider?.package,
-                    settings: Provider.mergeOverlay(
-                      Provider.modelSettings(provider?.settings),
-                      Provider.modelSettings(model.settings),
-                    ),
-                    headers: Provider.mergeHeaders(provider?.headers, model.headers),
-                    body: Provider.mergeOverlay(provider?.body, model.body),
-                  } satisfies Info
-                  merged.set(model, { provider, model: value })
-                  return [id, value]
-                }),
+                Array.from(models)
+                  .filter(([, model]) => data.filters.every((predicate) => predicate(model)))
+                  .map(([id, model]) => {
+                    const reusable = merged.get(model)
+                    if (reusable && reusable.provider === provider) return [id, reusable.model]
+                    const value = {
+                      ...model,
+                      ...(provider?.canonical === undefined ? {} : { canonical: provider.canonical }),
+                      package: model.package ?? provider?.package,
+                      settings: Provider.mergeOverlay(
+                        Provider.modelSettings(provider?.settings),
+                        Provider.modelSettings(model.settings),
+                      ),
+                      headers: Provider.mergeHeaders(provider?.headers, model.headers),
+                      body: Provider.mergeOverlay(provider?.body, model.body),
+                    } satisfies Info
+                    merged.set(model, { provider, model: value })
+                    return [id, value]
+                  }),
               ),
             ]
           }),

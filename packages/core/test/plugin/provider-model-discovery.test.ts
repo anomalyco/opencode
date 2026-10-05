@@ -7,6 +7,10 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { make } from "@opencode/core/plugin/provider/model-discovery"
 import { Provider } from "@opencode/core/provider"
+import { Session } from "@opencode/core/session"
+import { Integration } from "@opencode/core/integration"
+import { Location } from "@opencode/core/location"
+import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Schema } from "effect"
@@ -17,7 +21,7 @@ import { withEnv } from "../fixture/env"
 const it = testEffect(Layer.merge(PluginTestLayer, Config.testLayer()))
 const decode = Schema.decodeUnknownSync(Info)
 const remote = {
-  id: "gateway/gpt",
+  id: "orchid/large",
   context_window: 1_050_000,
   max_input_tokens: 1_050_000,
   max_output_tokens: 128_000,
@@ -46,6 +50,175 @@ function eventually<A>(
 }
 
 describe("OpenAI-compatible model discovery", () => {
+  it.live("removes selected gateway models after local overrides and restores them for parents and children", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { models: [remote], mode: "valid", requests: 0 }
+        return {
+          state,
+          server: Bun.serve({
+            port: 0,
+            fetch: () => {
+              state.requests++
+              if (state.mode === "unauthorized") return new Response(null, { status: 401 })
+              if (state.mode === "malformed") return Response.json({ data: [{ id: remote.id, context_window: "bad" }] })
+              return Response.json({ data: state.models })
+            },
+          }),
+        }
+      }),
+      ({ state, server }) =>
+        Effect.gen(function* () {
+          const config = yield* Config.Test
+          const entry = (key: string) =>
+            new Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  gateway: {
+                    settings: { baseURL: `${server.url.origin}/v1`, apiKey: key, modelDiscovery: true },
+                    models: { [remote.id]: { disabled: false, limit: { context: 900_000 } } },
+                  },
+                  "ordinary-free": {
+                    package: "@opencode/ai/providers/openai-compatible",
+                    models: { "willow/small": { limit: { context: 64_000, output: 8192 } } },
+                  },
+                },
+              }),
+            })
+          yield* config.setEntries([entry("first-key")])
+          const host = yield* PluginHost.make(yield* Plugin.Service)
+          yield* make("5 millis").effect(host)
+          yield* ConfigProviderPlugin.Plugin.effect(host)
+          const models = yield* Model.Service
+          const runner = yield* SessionRunnerModel.Service
+          const sessions = yield* Session.Service
+          const location = yield* Location.Service
+          const parent = yield* sessions.create({ location: { directory: location.directory } })
+          const child = yield* sessions.create({ parentID: parent.id })
+          const selected = (session: typeof parent) => ({
+            ...session,
+            model: Model.Ref.make({ providerID: Provider.ID.make("gateway"), id: Model.ID.make(remote.id) }),
+          })
+          for (const session of [parent, child])
+            expect((yield* runner.resolve(selected(session), models.available)).limit.context).toBe(900_000)
+          for (const mode of ["unauthorized", "malformed"]) {
+            const before = state.requests
+            state.mode = mode
+            yield* eventually(
+              Effect.sync(() => state.requests),
+              (requests) => requests > before,
+            )
+            expect(yield* models.get(Provider.ID.make("gateway"), Model.ID.make(remote.id))).toBeDefined()
+          }
+          state.mode = "valid"
+          state.models = []
+          yield* eventually(
+            models.get(Provider.ID.make("gateway"), Model.ID.make(remote.id)),
+            (model) => model === undefined,
+          )
+          for (const session of [parent, child]) {
+            const result = yield* runner.resolve(selected(session), models.available).pipe(Effect.result)
+            expect(result).toMatchObject({
+              _tag: "Failure",
+              failure: { _tag: "SessionRunnerModel.ModelUnavailableError" },
+            })
+          }
+          expect(yield* models.get(Provider.ID.make("ordinary-free"), Model.ID.make("willow/small"))).toBeDefined()
+          state.models = [{ ...remote, max_output_tokens: 64_000 }]
+          yield* eventually(
+            models.get(Provider.ID.make("gateway"), Model.ID.make(remote.id)),
+            (model) => model !== undefined,
+          )
+          for (const session of [parent, child]) {
+            const refreshed = yield* runner.resolve(selected(session), models.available)
+            expect(refreshed.limit).toMatchObject({ context: 900_000, output: 64_000 })
+          }
+          // A newly rejected account may use its own legacy config, but cannot inherit the old catalog metadata.
+          state.mode = "unauthorized"
+          yield* config.setEntries([entry("second-key")])
+          const bus = yield* Bus.Service
+          yield* bus.publish(Event.Updated, {})
+          yield* eventually(
+            models.get(Provider.ID.make("gateway"), Model.ID.make(remote.id)),
+            (model) => model?.limit.output === 32_000,
+          )
+          expect(yield* models.get(Provider.ID.make("ordinary-free"), Model.ID.make("willow/small"))).toBeDefined()
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+  it.live("discards a delayed old-account response after an overlapping credential refresh with unchanged config", () =>
+    withEnv({ OPENCODE_DISCOVERY_REFRESH_KEY: "old-key" }, () =>
+      Effect.acquireUseRelease(
+        Effect.sync(() => {
+          const state = { hold: false, releases: [] as (() => void)[], newRequests: 0 }
+          return {
+            state,
+            server: Bun.serve({
+              port: 0,
+              fetch: (request) => {
+                if (request.headers.get("authorization") === "Bearer new-key") {
+                  state.newRequests++
+                  return Response.json({ data: [{ ...remote, id: "orchid/new-account" }] })
+                }
+                if (!state.hold) return Response.json({ data: [remote] })
+                return new Promise<Response>((resolve) => {
+                  state.releases.push(() => resolve(Response.json({ data: [remote] })))
+                })
+              },
+            }),
+          }
+        }),
+        ({ state, server }) =>
+          Effect.gen(function* () {
+            const config = yield* Config.Test
+            yield* config.setEntries([
+              new Document({
+                type: "document",
+                info: decode({
+                  providers: {
+                    gateway: {
+                      env: ["OPENCODE_DISCOVERY_REFRESH_KEY"],
+                      settings: { baseURL: `${server.url.origin}/v1`, modelDiscovery: true },
+                    },
+                  },
+                }),
+              }),
+            ])
+            const host = yield* PluginHost.make(yield* Plugin.Service)
+            yield* make("5 millis").effect(host)
+            yield* ConfigProviderPlugin.Plugin.effect(host)
+            const models = yield* Model.Service
+            state.hold = true
+            yield* eventually(
+              Effect.sync(() => state.releases.length),
+              (count) => count > 0,
+            )
+            process.env.OPENCODE_DISCOVERY_REFRESH_KEY = "new-key"
+            const bus = yield* Bus.Service
+            yield* bus.publish(Integration.Event.Updated, {})
+            yield* eventually(
+              models.get(Provider.ID.make("gateway"), Model.ID.make("orchid/new-account")),
+              (model) => model !== undefined,
+            )
+            state.releases.forEach((release) => release())
+            const before = state.newRequests
+            yield* eventually(
+              Effect.sync(() => state.newRequests),
+              (count) => count > before,
+            )
+            expect(yield* models.get(Provider.ID.make("gateway"), Model.ID.make(remote.id))).toBeUndefined()
+            expect(yield* models.get(Provider.ID.make("gateway"), Model.ID.make("orchid/new-account"))).toBeDefined()
+          }),
+        ({ state, server }) =>
+          Effect.promise(() => {
+            state.releases.forEach((release) => release())
+            return server.stop(true)
+          }),
+      ),
+    ),
+  )
   it.live("authenticates the first cold-start discovery request using configured environment credentials", () =>
     withEnv({ OPENCODE_DISCOVERY_FIXTURE_KEY: "env-fixture-key" }, () =>
       Effect.acquireUseRelease(
@@ -353,6 +526,10 @@ describe("OpenAI-compatible model discovery", () => {
               if (state.mode === "unauthorized") return new Response(null, { status: 401 })
               if (state.mode === "malformed")
                 return Response.json({ data: [{ ...remote, context_window: "not-a-limit" }] })
+              if (state.mode === "empty-id") return Response.json({ data: [{ ...remote, id: "" }] })
+              if (state.mode === "duplicate-id") return Response.json({ data: [remote, remote] })
+              if (state.mode === "negative-limit")
+                return Response.json({ data: [{ ...remote, max_output_tokens: -1 }] })
               return Response.json({ data: [remote] })
             },
           }),
@@ -396,11 +573,13 @@ describe("OpenAI-compatible model discovery", () => {
             models.get(Provider.ID.make("gateway"), Model.ID.make(remote.id)),
             (item) => item !== undefined,
           )
-          state.mode = "malformed"
-          yield* Effect.promise(() => Bun.sleep(30))
-          expect(yield* models.get(Provider.ID.make("gateway"), Model.ID.make(remote.id))).toMatchObject({
-            limit: { context: 1_050_000 },
-          })
+          for (const mode of ["malformed", "empty-id", "duplicate-id", "negative-limit"]) {
+            state.mode = mode
+            yield* Effect.promise(() => Bun.sleep(30))
+            expect(yield* models.get(Provider.ID.make("gateway"), Model.ID.make(remote.id))).toMatchObject({
+              limit: { context: 1_050_000 },
+            })
+          }
           expect(state.requests).toContainEqual({
             path: "/prefix/v1/models",
             authorization: "Bearer fixture-key",

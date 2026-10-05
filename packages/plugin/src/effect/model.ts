@@ -11,6 +11,8 @@ export interface ModelEditor {
   /** Edits raw model overrides; cannot create an unavailable provider. */
   update(providerID: string, modelID: string, update: (model: Types.DeepMutable<Model.Info>) => void): void
   remove(providerID: string, modelID: string): void
+  /** Final eligibility gate evaluated after all model edits, including local overrides. */
+  filter(predicate: (model: Model.Info) => boolean): void
   readonly default: {
     get(): { providerID: string; modelID: string } | undefined
     set(providerID: string, modelID: string): void
