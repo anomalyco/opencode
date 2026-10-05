@@ -127,78 +127,65 @@ const GatewayOptionsSchema = Schema.Struct({
   gateway: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
   upstream: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))),
   reasoningEffort: Schema.optional(ReasoningEffort),
+  thinking: Schema.optional(
+    Schema.Struct({
+      type: Schema.String,
+      budgetTokens: Schema.optional(Schema.Number),
+      budget_tokens: Schema.optional(Schema.Number),
+    }),
+  ),
   cacheTTL: Schema.optional(Schema.String),
   cacheAnchorItems: Schema.optional(Schema.Number),
 })
 const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(GatewayOptionsSchema))
 
-const ChatThinking = Schema.Struct({
-  type: Schema.String,
-  budgetTokens: Schema.optional(Schema.Number),
-  budget_tokens: Schema.optional(Schema.Number),
-})
-type ChatThinking = typeof ChatThinking.Type
-const decodeChatThinking = ProviderShared.validateWith(Schema.decodeUnknownEffect(ChatThinking))
-
-function messagesRequest(request: LLMRequest, effort: ReasoningEffort | undefined) {
-  if (effort === undefined) return request
-  const enabled = effort !== "none"
-  const thinking = request.providerOptions?.thinking ?? { type: enabled ? "adaptive" : "disabled" }
-  return LLMRequest.update(request, {
-    providerOptions: {
-      ...request.providerOptions,
-      effort: enabled ? effort : undefined,
-      thinking,
-    },
-  })
-}
-
-function chatReasoning(thinking: ChatThinking | undefined) {
-  if (!thinking) return undefined
-  return {
-    enabled: thinking.type !== "disabled",
-    max_tokens: thinking.budgetTokens ?? thinking.budget_tokens,
-  }
-}
-
-function gatewayProviderOptions(options: typeof GatewayOptionsSchema.Type) {
-  if (options.upstream === undefined && options.gateway === undefined) return undefined
-  return {
-    ...options.upstream,
-    ...(options.gateway ? { gateway: options.gateway } : {}),
-  }
-}
-
 const prepare = (api: "messages" | "responses" | "chat") =>
   Effect.fnUntraced(function* (request: LLMRequest) {
     const options = yield* decodeOptions(request.providerOptions ?? {})
-    const providerOptions = gatewayProviderOptions(options)
-    if (api === "messages") {
-      return {
-        request: messagesRequest(request, options.reasoningEffort),
-        body: { providerOptions },
+    const providerOptions =
+      options.upstream || options.gateway
+        ? { ...options.upstream, ...(options.gateway ? { gateway: options.gateway } : {}) }
+        : undefined
+    switch (api) {
+      case "messages": {
+        const effort = options.reasoningEffort
+        const enabled = effort !== undefined && effort !== "none"
+        return {
+          request:
+            effort === undefined
+              ? request
+              : LLMRequest.update(request, {
+                  providerOptions: {
+                    ...request.providerOptions,
+                    effort: enabled ? effort : undefined,
+                    thinking: request.providerOptions?.thinking ?? { type: enabled ? "adaptive" : "disabled" },
+                  },
+                }),
+          body: { providerOptions },
+        }
       }
-    }
-    if (api === "responses") {
-      return {
-        request,
-        body: {
-          providerOptions,
-          cache_ttl: options.cacheTTL,
-          cache_anchor_items: options.cacheAnchorItems,
-        },
-      }
-    }
-    const thinking =
-      request.providerOptions?.thinking === undefined
-        ? undefined
-        : yield* decodeChatThinking(request.providerOptions.thinking)
-    return {
-      request,
-      body: {
-        providerOptions,
-        reasoning: chatReasoning(thinking),
-      },
+      case "responses":
+        return {
+          request,
+          body: {
+            providerOptions,
+            cache_ttl: options.cacheTTL,
+            cache_anchor_items: options.cacheAnchorItems,
+          },
+        }
+      case "chat":
+        return {
+          request,
+          body: {
+            providerOptions,
+            reasoning: options.thinking
+              ? {
+                  enabled: options.thinking.type !== "disabled",
+                  max_tokens: options.thinking.budgetTokens ?? options.thinking.budget_tokens,
+                }
+              : undefined,
+          },
+        }
     }
   })
 
@@ -317,9 +304,7 @@ export const configure = (input: Options = {}) => {
                 (cause) => new AIError({ reason: new InvalidRequestError({ message: cause.message, cause }) }),
               ),
             )
-            const headers = yield* Auth.toEffect(
-              AuthOptions.bearer(input, ["AI_GATEWAY_API_KEY", "VERCEL_OIDC_TOKEN"]),
-            )({
+            const headers = yield* Auth.toEffect(configured.auth)({
               request: req,
               method: "POST",
               url: url.toString(),
@@ -358,10 +343,11 @@ export const configure = (input: Options = {}) => {
                 ? new Usage({
                     inputTokens: data.usage.inputTokens ?? undefined,
                     outputTokens: data.usage.outputTokens ?? undefined,
-                    totalTokens:
-                      data.usage.inputTokens == null && data.usage.outputTokens == null
-                        ? undefined
-                        : (data.usage.inputTokens ?? 0) + (data.usage.outputTokens ?? 0),
+                    totalTokens: ProviderShared.totalTokens(
+                      data.usage.inputTokens ?? undefined,
+                      data.usage.outputTokens ?? undefined,
+                      undefined,
+                    ),
                     providerMetadata: { gateway: data.usage },
                   })
                 : undefined,
