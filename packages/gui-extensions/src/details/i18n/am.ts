@@ -3,8 +3,6 @@ export default {
   tooltip: "ማጠቃለያ",
   "command.toggle": "ማጠቃለያ ቀያይር",
   noBranch: "ቅርንጫፍ የለም",
-  "background.tasksRunning.one": "{{count}} የዳራ ተግባር እየሰራ ነው",
-  "background.tasksRunning.other": "{{count}} የዳራ ተግባራት እየሰሩ ናቸው",
   "move.title": "ወደ workspace አንቀሳቅስ",
   "move.menu": "ክፍለ ጊዜን አንቀሳቅስ ወደ",
   "move.failed": "ክፍለ ጊዜን ማንቀሳቀስ አልተሳካም",

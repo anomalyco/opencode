@@ -285,7 +285,7 @@ const lowerToolCall = (part: ToolCallPart, normalizeID: (id: string) => string):
   },
 })
 
-const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent")(function* (
+const lowerToolResultContent = Effect.fnUntraced(function* (
   part: ToolResultPart,
   documentNames: Set<string>,
 ) {
@@ -305,7 +305,7 @@ const lowerToolResultContent = Effect.fn("BedrockConverse.lowerToolResultContent
   return content
 })
 
-const lowerToolResult = Effect.fn("BedrockConverse.lowerToolResult")(function* (
+const lowerToolResult = Effect.fnUntraced(function* (
   part: ToolResultPart,
   documentNames: Set<string>,
   normalizeID: (id: string) => string,
@@ -322,7 +322,7 @@ const lowerToolResult = Effect.fn("BedrockConverse.lowerToolResult")(function* (
 // Keep Claude and Nova tool-result images inline; put other models' images beside the result.
 const keepToolImagesInline = (id: string) => id.includes("anthropic.claude-") || id.includes("amazon.nova-")
 
-const lowerMessages = Effect.fn("BedrockConverse.lowerMessages")(function* (
+const lowerMessages = Effect.fnUntraced(function* (
   request: LLMRequest,
   breakpoints: BedrockCache.Breakpoints,
 ) {

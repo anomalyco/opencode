@@ -3,8 +3,6 @@ export default {
   tooltip: "საერთო მიმოხილვა",
   "command.toggle": "შეჯამების ცვლის ჩართვა/გამორთვა",
   noBranch: "ბრენჩი არ არის",
-  "background.tasksRunning.one": "{{count}} ფონური დავალება მუშაობს",
-  "background.tasksRunning.other": "{{count}} ფონური დავალება მუშაობს",
   "move.title": "სამუშაო სივრცეში გადატანა",
   "move.menu": "სესიის გადატანა:",
   "move.failed": "სესიის გადატანა ვერ მოხერხდა",

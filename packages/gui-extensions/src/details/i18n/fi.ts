@@ -3,8 +3,6 @@ export default {
   tooltip: "Yhteenveto",
   "command.toggle": "Yhteenveto päälle/pois",
   noBranch: "Ei haaraa",
-  "background.tasksRunning.one": "{{count}} taustatehtävä käynnissä",
-  "background.tasksRunning.other": "{{count}} taustatehtävää käynnissä",
   "move.title": "Siirrä työtilaan",
   "move.menu": "Siirrä istunto kohteeseen",
   "move.failed": "Istunnon siirtäminen epäonnistui",

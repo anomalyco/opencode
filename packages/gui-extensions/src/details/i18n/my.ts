@@ -3,8 +3,6 @@ export default {
   tooltip: "အနှစ်ချုပ်",
   "command.toggle": "အကျဉ်းချုပ်ဖွင့်/ပိတ်",
   noBranch: "ဌာနခွဲ မရှိပါ",
-  "background.tasksRunning.one": "{{count}} နောက်ခံအလုပ် လုပ်ဆောင်နေပါသည်။",
-  "background.tasksRunning.other": "နောက်ခံလုပ်ဆောင်စရာ {{count}} ခု လုပ်ဆောင်နေပါသည်။",
   "move.title": "အလုပ်နေရာသို့ ရွှေ့ပါ",
   "move.menu": "စက်ရှင်ကို ရွှေ့ရန်",
   "move.failed": "စက်ရှင်ကို ရွှေ့ရန် မအောင်မြင်ပါ",

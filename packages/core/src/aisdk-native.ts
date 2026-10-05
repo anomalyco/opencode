@@ -70,6 +70,7 @@ const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/xai": "@opencode/ai/providers/xai",
   "@openrouter/ai-sdk-provider": "@opencode/ai/providers/openrouter",
   "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
+  "venice-ai-sdk-provider": "@opencode/ai/providers/venice",
 }
 
 const protocols = (name: string) => ({

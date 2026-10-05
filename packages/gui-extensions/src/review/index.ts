@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import { FileTree } from "../file/contract"
+import { FileTree, OpenInApp } from "../file/contract"
 import { Extension, Store } from "../sdk"
 import { Changes } from "./contract"
 import en from "./i18n/en"
@@ -19,8 +19,9 @@ const SessionState = Schema.Struct({
 export default Extension.define({
   id: "review",
   provides: { changes: Changes },
-  // The changed files list in the file browser's tree; without it the list stays empty.
-  uses: { tree: FileTree },
+  // The changed files list in the file browser's tree; without it the list stays empty. The toolbar also shows the
+  // file extension's "Open in" button.
+  uses: { tree: FileTree, openIn: OpenInApp },
   stores: {
     diff: Store.global(
       DiffState,

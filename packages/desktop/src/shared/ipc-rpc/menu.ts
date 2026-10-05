@@ -26,4 +26,5 @@ const DesktopMenuAction = Schema.Literals([
 export const MenuRunAction = Rpc.make("MenuRunAction", {
   payload: { action: DesktopMenuAction },
 })
+
 export const MenuRpcs = RpcGroup.make(MenuRunAction)

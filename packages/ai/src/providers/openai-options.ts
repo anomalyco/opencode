@@ -50,7 +50,7 @@ export const gpt5DefaultOptions = (modelID: string): ProviderOptions | undefined
 export const openAIDefaultOptions = (modelID: string): ProviderOptions | undefined =>
   mergeProviderOptions(openAIProviderOptions({ store: false }), gpt5DefaultOptions(modelID))
 
-export const withOpenAIOptions = <Options extends { readonly providerOptions?: OpenAIProviderOptionsInput }>(
+export const withOpenAIOptions = <Options extends { readonly providerOptions?: ProviderOptions }>(
   modelID: string,
   options: Options,
 ): Omit<Options, "providerOptions"> & { readonly providerOptions?: ProviderOptions } => {

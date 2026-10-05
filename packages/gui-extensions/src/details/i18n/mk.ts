@@ -3,8 +3,6 @@ export default {
   tooltip: "Резиме",
   "command.toggle": "Префрли преглед на резиме",
   noBranch: "Нема гранка",
-  "background.tasksRunning.one": "{{count}} задача во заднина се извршува",
-  "background.tasksRunning.other": "{{count}} задачи во заднина се извршуваат",
   "move.title": "Премести во работен простор",
   "move.menu": "Преместете ја сесијата во",
   "move.failed": "Не успеа да се премести сесијата",

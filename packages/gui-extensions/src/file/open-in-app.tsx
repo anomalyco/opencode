@@ -9,7 +9,7 @@ import { showToast } from "@opencode/ui/toast"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { createLatest, useExtension, type Context, type OS, type MountedSession, type SessionScreen } from "../sdk"
 import type { OpenApp } from "./apps"
-import { useShared } from "./context"
+import { useShared, type OpenRequest } from "./context"
 import { openInAppParentPath } from "./path"
 
 const MAC_OPEN_APPS = [
@@ -68,7 +68,7 @@ const showRequestError = (ctx: Context, err: Error | string) => {
   })
 }
 
-export function useOpenInApp(input: { session: MountedSession; path: () => string }) {
+export function useOpenInApp(input: { session: MountedSession; path: () => string; request?: OpenRequest }) {
   const ctx = useExtension()
   const desktop = ctx.desktop
   const shared = useShared()
@@ -110,7 +110,9 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
   })
 
   const [menu, setMenu] = createStore({ open: false })
-  const [openRequest, setOpenRequest] = createStore<{ app?: OpenApp }>({})
+  const [local, setLocal] = createStore<{ app?: OpenApp }>({})
+
+  const request = input.request ?? { app: () => local.app, set: (app: OpenApp | undefined) => setLocal("app", app) }
 
   const canOpen = createMemo(() => !!desktop && input.session.server.local)
 
@@ -121,7 +123,7 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
       ({ id: "finder", label: fileManager().label, icon: fileManager().icon } as const),
   )
 
-  const opening = createMemo(() => openRequest.app !== undefined)
+  const opening = createMemo(() => request.app() !== undefined)
 
   const selectApp = (app: OpenApp | "finder") => {
     if (!options().some((item) => item.id === app)) return
@@ -135,19 +137,19 @@ export function useOpenInApp(input: { session: MountedSession; path: () => strin
 
     const item = options().find((o) => o.id === app)
     const openWith = item && "openWith" in item ? item.openWith : undefined
-    setOpenRequest("app", app)
+    request.set(app)
 
-    const request =
+    const launched =
       app === "finder" && reveal
         ? desktop
             .reveal(target)
             .then((revealed) => (revealed ? undefined : desktop.launch(openInAppParentPath(target))))
         : desktop.launch(target, openWith)
 
-    request
+    launched
       .catch((err) => showRequestError(ctx, err))
       .finally(() => {
-        setOpenRequest("app", undefined)
+        request.set(undefined)
       })
   }
 
@@ -187,7 +189,7 @@ type OpenInAppState = ReturnType<typeof useOpenInApp>
 export default function OpenInAppButton(props: { session: MountedSession; screen: SessionScreen }) {
   const ctx = useExtension()
   const directory = () => props.screen.file.root
-  const state = useOpenInApp({ session: props.session, path: directory })
+  const state = useOpenInApp({ session: props.session, path: directory, request: useShared().request })
 
   return (
     <Show when={directory() && state.canOpen()}>

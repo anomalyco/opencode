@@ -3,8 +3,6 @@ export default {
   tooltip: "Ամփոփում",
   "command.toggle": "Փոխել ամփոփագիրը",
   noBranch: "Ճյուղ չկա",
-  "background.tasksRunning.one": "{{count}} ֆոնային առաջադրանք է աշխատում",
-  "background.tasksRunning.other": "{{count}} ֆոնային առաջադրանքներ են աշխատում",
   "move.title": "Տեղափոխել աշխատանքային տարածք",
   "move.menu": "Նիստը տեղափոխել՝",
   "move.failed": "Չհաջողվեց տեղափոխել նիստը",

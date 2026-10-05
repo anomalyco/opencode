@@ -3,8 +3,6 @@ export default {
   tooltip: "សង្ខេប",
   "command.toggle": "បិទ/បើកការជាអង្អែល",
   noBranch: "គ្មានសាខា",
-  "background.tasksRunning.one": "កិច្ចការផ្ទៃខាងក្រោយ {{count}} កំពុងដំណើរការ",
-  "background.tasksRunning.other": "កិច្ចការផ្ទៃខាងក្រោយ {{count}} កំពុងដំណើរការ",
   "move.title": "ផ្លាស់ទីទៅកន្លែងធ្វើការ",
   "move.menu": "ផ្លាស់ទីសម័យទៅ",
   "move.failed": "បរាជ័យក្នុងការផ្លាស់ទីសម័យ",

@@ -9,6 +9,7 @@ import {
   permissionAsked,
   startSession,
   succeeded,
+  textDelta,
   toolCalled,
   toolStarted,
   toolSucceeded,
@@ -58,6 +59,8 @@ describe("acp turn events over the wire", () => {
         { childSessionId: "ses_background", type: "status", status: "created" },
         { childSessionId: "ses_child", type: "status", status: "completed" },
         { childSessionId: "ses_background", type: "status", status: "running" },
+        { childSessionId: "ses_background", type: "update", update: { sessionUpdate: "agent_message_chunk" } },
+        { childSessionId: "ses_background", type: "status", status: "completed" },
       ],
     },
   ])(
@@ -66,35 +69,43 @@ describe("acp turn events over the wire", () => {
       await using acp = await startSession({
         capabilities: { childSessionUpdates: row.childSessionUpdates },
         onPrompt: ({ sessionID, id }) =>
-          turn(
-            sessionID,
-            id,
-            childCreated("ses_child", sessionID, "Explore code"),
-            durableEvent("session.execution.started", { sessionID: "ses_child" }),
-            childCreated("ses_grandchild", "ses_child", "Deeper"),
-            toolStarted("ses_grandchild", "call_read", "read"),
-            toolCalled("ses_grandchild", "call_read", { path: "/workspace/src/index.ts" }),
-            permissionAsked("ses_grandchild", "perm_child", {
-              action: "read",
-              source: { type: "tool", messageID: "msg_child", id: "call_read" },
-            }),
-            toolSucceeded("ses_grandchild", "call_read", {}, "source"),
-            succeeded("ses_grandchild"),
-            childCreated("ses_background", sessionID, "Research"),
-            succeeded("ses_child"),
-          ),
+          acp.server.prompts.length > 1
+            ? turn(sessionID, id)
+            : turn(
+                sessionID,
+                id,
+                childCreated("ses_child", sessionID, "Explore code"),
+                durableEvent("session.execution.started", { sessionID: "ses_child" }),
+                childCreated("ses_grandchild", "ses_child", "Deeper"),
+                toolStarted("ses_grandchild", "call_read", "read"),
+                toolCalled("ses_grandchild", "call_read", { path: "/workspace/src/index.ts" }),
+                permissionAsked("ses_grandchild", "perm_child", {
+                  action: "read",
+                  source: { type: "tool", messageID: "msg_child", id: "call_read" },
+                }),
+                toolSucceeded("ses_grandchild", "call_read", {}, "source"),
+                succeeded("ses_grandchild"),
+                childCreated("ses_background", sessionID, "Research"),
+                succeeded("ses_child"),
+              ),
         permission: () => ({ outcome: { outcome: "selected", optionId: "once" } }),
       })
 
       expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
+      const responded = turnUpdates(acp.updates).length
       acp.server.send(
         durableEvent("session.execution.started", { sessionID: "ses_background" }),
         permissionAsked("ses_background", "perm_background", {
           action: "read",
           metadata: { path: "/workspace/notes.md" },
         }),
+        textDelta("ses_background", "msg_background", "late"),
+        succeeded("ses_background"),
+        permissionAsked("ses_background", "perm_after_end", { action: "read" }),
       )
       await acp.until(() => acp.server.replies.length === 2, "child permission replies")
+      expect(turnUpdates(acp.updates).slice(responded)).toEqual([])
+      expect((await acp.prompt(acp.sessionId, "again")).stopReason).toBe("end_turn")
 
       expect(turnUpdates(acp.updates).map((item) => item.update)).toMatchObject(row.parent)
       expect(acp.childUpdates).toMatchObject(row.child)

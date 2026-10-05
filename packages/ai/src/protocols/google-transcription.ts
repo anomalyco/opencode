@@ -138,7 +138,7 @@ const turn = (part: Schema.Schema.Type<typeof AudioTranscription>) => {
   }
 }
 
-const step = Effect.fn("GoogleTranscription.step")(function* (state: State, frame: string) {
+const step = Effect.fnUntraced(function* (state: State, frame: string) {
   const chunk = yield* decodeChunk(frame)
   const blocked = GeminiGenerateContent.blocked(route.name, chunk, frame)
   if (blocked !== undefined) return yield* blocked
