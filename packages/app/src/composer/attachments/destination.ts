@@ -19,6 +19,7 @@ export function useAttachmentDestination(controls: Accessor<ComposerControls>) {
   const server = useServer()
   const sdk = useServerSDK()
   const location = useWorkspaceLocation()
+
   return (): AttachmentDestination => ({
     input: controls().model.selection.current()?.capabilities.input ?? { image: false, pdf: false },
     local: server.isLocal,
@@ -29,6 +30,7 @@ export function useAttachmentDestination(controls: Accessor<ComposerControls>) {
       const url = new URL("/api/experimental/fs/write", server.conn.http.url)
       url.searchParams.set("location[directory]", location().directory)
       url.searchParams.set("path", `${info.paths.tmp}/uploads/${crypto.randomUUID()}/${file.name}`)
+
       return write(url, file, server.conn.http.password, report, signal)
     },
   })
@@ -43,6 +45,7 @@ function write(url: URL, file: File, password: string | undefined, report: (load
     xhr.open("POST", url)
     xhr.responseType = "json"
     xhr.setRequestHeader("content-type", "application/octet-stream")
+
     if (password) xhr.setRequestHeader("authorization", `Basic ${authTokenFromCredentials({ password })}`)
     xhr.upload.addEventListener("progress", (event) => report(event.loaded))
     xhr.addEventListener("load", () => {

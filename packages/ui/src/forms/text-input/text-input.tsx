@@ -29,6 +29,7 @@ export interface TextInputProps extends Omit<ComponentProps<"input">, "type"> {
 
 export function TextInput(props: TextInputProps) {
   const i18n = useI18n()
+
   const [local, inputProps] = splitProps(props, [
     "class",
     "classList",
@@ -89,8 +90,10 @@ export function TextInput(props: TextInputProps) {
           onClick={(event) => {
             if (local.showClearButton) {
               local.onClearClick?.(event)
+
               return
             }
+
             local.onCopyClick?.(event)
           }}
         >

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { authorization, ready } from "./sidecar-credentials"
 
 const sidecar = { url: "http://127.0.0.1:4096", password: "secret" }
+
 const expected = `Basic ${Buffer.from("opencode:secret").toString("base64")}`
 
 describe("sidecar authorization", () => {

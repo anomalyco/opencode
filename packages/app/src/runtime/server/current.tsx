@@ -30,10 +30,12 @@ export const useServer = context.use
 export function ServerProvider(props: ParentProps<{ conn: ServerConnection.Any }>) {
   const global = useGlobal()
   const key = ServerConnection.key(props.conn)
+
   const ctx = createMemo<ServerCtx>(
     (previous) => (global.servers.health[key]?.healthy ? global.serverCtx(key) : undefined) ?? previous,
     global.ensureServerCtx(props.conn),
   )
+
   return (
     <Show when={ctx()} keyed>
       {(ctx) => (
@@ -47,5 +49,6 @@ export function ServerProvider(props: ParentProps<{ conn: ServerConnection.Any }
 
 export const useData = () => {
   const server = useServer()
+
   return server.ctx.data
 }

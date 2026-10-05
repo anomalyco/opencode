@@ -1,6 +1,7 @@
 import { expect, sourceURL, story } from "../../storybook/playwright/story"
 
 const fixture = sourceURL(new URL("./read-image.fixture.tsx", import.meta.url))
+
 const png = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a4ioAAAAASUVORK5CYII=",
   "base64",
@@ -40,18 +41,22 @@ for (const grouped of [true, false]) {
       await expect(trigger.locator('[data-slot="collapsible-arrow"]')).toBeVisible()
       expect(requests).toEqual([])
       await expect(image).toHaveCount(0)
+
       if (grouped) {
         const text = root.locator('[data-slot="context-tool-group-item"]').filter({ hasText: "example.ts" })
         await expect(text).toContainText("limit=20")
         await expect(text.getByRole("button")).toHaveCount(0)
       }
+
       for (const action of ["click", "Enter", "Space"]) {
         if (action === "click") await trigger.click()
+
         if (action !== "click") await trigger.press(action)
         await expect(trigger).toHaveAttribute("aria-expanded", "true")
         await expect(image).toHaveJSProperty("naturalWidth", 1)
         await expect(image).toHaveAttribute("src", /^blob:/)
         const url = await image.getAttribute("src")
+
         if (action === "click") {
           expect(requests).toHaveLength(1)
           expect(new URL(requests[0]).pathname).toBe("/api/fs/read/chart%2520%20one.PNG")
@@ -60,7 +65,9 @@ for (const grouped of [true, false]) {
           await expect(image).toHaveAttribute("src", url!)
           expect(requests).toHaveLength(1)
         }
+
         if (action === "click") await trigger.click()
+
         if (action !== "click") await trigger.press(action)
         await expect(trigger).toHaveAttribute("aria-expanded", "false")
         await expect(image).toHaveCount(0)
@@ -75,6 +82,7 @@ for (const grouped of [true, false]) {
           ),
         ).toBe(true)
       }
+
       await trigger.click()
       await expect(image).toHaveJSProperty("naturalWidth", 1)
       const url = await image.getAttribute("src")
@@ -121,6 +129,7 @@ for (const width of [840, 390]) {
         await image.evaluate((image) => {
           const bounds = image.getBoundingClientRect()
           const row = image.closest('[data-slot="context-tool-group-item"]')!.getBoundingClientRect()
+
           return bounds.width > 0 && bounds.left >= row.left && bounds.right <= row.right && bounds.bottom <= row.bottom
         }),
       ).toBe(true)

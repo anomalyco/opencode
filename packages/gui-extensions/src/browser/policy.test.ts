@@ -4,6 +4,7 @@ import { allowedDestination, destinationOrigin, fileURLWithin, localFileURL, nor
 test("allows cross-origin HTTP navigation but rejects unsafe destinations and embedded credentials", () => {
   expect(destinationOrigin("https://other.example/path")).toBe("https://other.example")
   expect(destinationOrigin("http://localhost:3000/")).toBe("http://localhost:3000")
+
   for (const url of [
     "file:///etc/passwd",
     "javascript:alert(1)",

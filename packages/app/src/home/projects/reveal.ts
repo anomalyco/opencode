@@ -9,6 +9,7 @@ import { showToast } from "@/shell/notifications/toast"
 export function useRevealProject() {
   const language = useLanguage()
   const platform = usePlatform()
+
   const available = (conn: ServerConnection.Any) =>
     platform.platform === "desktop" && !!platform.revealPath && ServerConnection.local(conn)
 

@@ -15,6 +15,7 @@ const names = [
 
 function SelectModelWithoutProviders() {
   const dialog = useDialog()
+
   const models = names.map((name, index) => ({
     id: name.toLowerCase().replaceAll(" ", "-"),
     name,
@@ -26,7 +27,9 @@ function SelectModelWithoutProviders() {
       input: { text: true, image: false, audio: false, video: false, pdf: false },
     },
   }))
+
   const [current, setCurrent] = createSignal(models[2])
+
   const model = {
     list: () => models,
     current,
@@ -34,6 +37,7 @@ function SelectModelWithoutProviders() {
       setCurrent(models.find((item) => item.id === value?.modelID))
     },
   }
+
   const open = () => dialog.show(() => <DialogSelectModelUnpaid model={model} />)
 
   onMount(open)

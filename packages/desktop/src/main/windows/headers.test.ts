@@ -8,6 +8,7 @@ describe("renderer response headers", () => {
       "access-control-allow-headers": ["authorization"],
       "access-control-max-age": ["86400"],
     }
+
     addRendererHeaders(headers, { document: false })
     expect(headers).toEqual({
       "access-control-allow-origin": ["*"],

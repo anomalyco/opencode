@@ -5,8 +5,11 @@ import { expectSessionTitle } from "../../utils/waits"
 import { fixture } from "../../utils/session-fixture"
 
 const sessionID = "ses_composer_write_batch"
+
 const title = "Composer persistence workload"
+
 const addition = " Keep the existing error handling and add coverage."
+
 const text =
   Array.from(
     { length: 180 },
@@ -15,6 +18,7 @@ const text =
       `A failed request must retain its payload, report its cause, and remain safe to retry.\n` +
       `Expected: await queue.flush(); expect(await repository.read(id)).toEqual(accepted);\n`,
   ).join("") + "Implementation notes:"
+
 const items = Array.from({ length: 8 }, (_, index) => ({
   type: "file",
   path: `src/queue/worker-${index}.ts`,
@@ -26,13 +30,16 @@ const items = Array.from({ length: 8 }, (_, index) => ({
     (_, line) => `  const request${line} = await repository.loadPending("queue-${index}");`,
   ).join("\n"),
 }))
+
 const document = {
   prompt: [{ type: "text", content: text, start: 0, end: text.length }],
   cursor: text.length,
   mode: "normal",
   context: { items },
 }
+
 type Probe = { active: boolean; encodes: number; bytes: number; inputs: number; keyups: number }
+
 type ProbeWindow = typeof window & { composerWriteBatch: Probe }
 
 benchmark.use({
@@ -57,8 +64,11 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
     await page.addInitScript(
       ({ key, value, counts }) => {
         localStorage.setItem(key, JSON.stringify(value))
+
         const probe: Probe = { active: false, encodes: 0, bytes: 0, inputs: 0, keyups: 0 }
+
         ;(window as ProbeWindow).composerWriteBatch = probe
+
         // The draft adapter parses each schema-encoded composer document once before
         // its asynchronous blob walk. Count at this boundary, not at the IDB write
         // (which already discards superseded writes). This fixture is ASCII only.
@@ -69,9 +79,11 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
               probe.encodes++
               probe.bytes += value.length
             }
+
             return parse(value, reviver)
           }
         }
+
         window.addEventListener("input", (event) => {
           if (
             probe.active &&
@@ -104,6 +116,7 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
     await editor.focus()
     await editor.press("ControlOrMeta+End")
     await page.evaluate(() => window.document.fonts.ready)
+
     const stored = async () =>
       page.evaluate(async (sessionID) => {
         const db = await new Promise<IDBDatabase>((resolve, reject) => {
@@ -111,6 +124,7 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
           request.onsuccess = () => resolve(request.result)
           request.onerror = () => reject(request.error)
         })
+
         try {
           const transaction = db.transaction("documents")
           const keys = transaction.objectStore("documents").getAllKeys()
@@ -126,11 +140,13 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
           probe.active = false
           const value = index < 0 ? undefined : JSON.parse(values.result[index])
           probe.active = active
+
           return value as { prompt: { content: string }[]; cursor: number; context: { items: unknown[] } } | undefined
         } finally {
           db.close()
         }
       }, sessionID)
+
     await expect.poll(async () => (await stored())?.cursor).toBe(text.length)
     expect((await stored())?.context.items).toHaveLength(items.length)
     const cdp = await page.context().newCDPSession(page)
@@ -142,39 +158,52 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
       performance.mark("composer-write-batch-start")
     })
     const start = performance.now()
+
     if (scenario === "typing") await editor.pressSequentially(addition)
+
     if (scenario === "cursor-movement") await editor.press("ArrowLeft")
+
     if (scenario === "cursor-noop") await editor.press("ArrowRight")
+
     if (scenario === "submit-cleanup") await editor.press("Enter")
     const expectedText = scenario === "typing" ? text + addition : scenario === "submit-cleanup" ? "" : text
+
     const expectedCursor =
       scenario === "typing"
         ? text.length + addition.length
         : scenario === "submit-cleanup"
           ? 0
           : text.length - Number(scenario === "cursor-movement")
+
     await expect(editor).toHaveText(expectedText)
     await expect.poll(async () => (await stored())?.cursor).toBe(expectedCursor)
     const elapsedMs = performance.now() - start
     const after = await cdp.send("Performance.getMetrics")
+
     const probe = await page.evaluate(() => {
       performance.mark("composer-write-batch-end")
       const probe = (window as ProbeWindow).composerWriteBatch
       probe.active = false
+
       return probe
     })
+
     expect((await stored())?.prompt.map((part) => part.content).join("")).toBe(expectedText)
+
     if (scenario === "submit-cleanup") {
       await expect.poll(() => submitted.length).toBe(1)
       expect(submitted[0].text).toContain(text)
       expect((await stored())?.context.items).toHaveLength(0)
     }
+
     expect(probe.keyups).toBe(scenario === "typing" ? addition.length : 1)
     expect(probe.inputs).toBe(scenario === "typing" ? addition.length : 0)
+
     const metric = (name: string) =>
       1000 *
       ((after.metrics.find((x) => x.name === name)?.value ?? 0) -
         (before.metrics.find((x) => x.name === name)?.value ?? 0))
+
     report(
       { elapsedMs, taskMs: metric("TaskDuration"), scriptMs: metric("ScriptDuration"), ...probe },
       {
@@ -192,6 +221,7 @@ for (const scenario of ["typing", "cursor-movement", "cursor-noop", "submit-clea
     )
     await benchmarkDiagnostics(page).stop()
     await cdp.detach()
+
     if (testInfo.repeatEachIndex === 0) await page.screenshot({ path: testInfo.outputPath(`${scenario}.png`) })
   })
 }

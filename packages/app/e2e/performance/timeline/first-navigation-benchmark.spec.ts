@@ -11,12 +11,14 @@ import { draftHref, sessionHref } from "../../utils/app"
 import { waitForStableTimeline } from "./session-tab-switch-probe"
 
 const contentSelector = '[data-message-id], [data-component="composer-editor"]'
+
 const draftID = "draft_first_navigation"
 
 benchmark.describe("performance: first navigation paint", () => {
   benchmark("opens an unvisited session tab without a blank frame", async ({ page, report }) => {
     await setup(page)
     const href = sessionHref(fixture.targetID)
+
     const result = await measureFirstNavigation(page, {
       href,
       destinationPath: href,
@@ -28,6 +30,7 @@ benchmark.describe("performance: first navigation paint", () => {
         await expectSessionTitle(page, fixture.expected.targetTitle)
       },
     })
+
     report(result)
     expect(result.summary.blankSamples).toBe(0)
     expect(result.summary.unknownSamples).toBe(0)
@@ -36,6 +39,7 @@ benchmark.describe("performance: first navigation paint", () => {
   benchmark("opens the new session page before its lazy module is used", async ({ page, report }) => {
     await setup(page, draftID)
     const href = draftHref(draftID)
+
     const result = await measureFirstNavigation(page, {
       href,
       destinationPath: href,
@@ -47,6 +51,7 @@ benchmark.describe("performance: first navigation paint", () => {
         await expect(page.locator('[data-component="composer-editor"]')).toBeVisible()
       },
     })
+
     report(result)
     expect(result.summary.blankSamples).toBe(0)
     expect(result.summary.unknownSamples).toBe(0)
@@ -67,6 +72,7 @@ benchmark.describe("performance: first navigation paint", () => {
     const href = sessionHref(fixture.targetID)
     const sessionTab = page.locator(`[data-slot="titlebar-tabs"] a[href="${href}"]`)
     await expect(sessionTab).toHaveCount(1)
+
     const result = await measureFirstNavigation(page, {
       href,
       destinationPath: href,
@@ -78,6 +84,7 @@ benchmark.describe("performance: first navigation paint", () => {
         await expectSessionTitle(page, fixture.expected.targetTitle)
       },
     })
+
     report(result)
     expect(result.summary.blankSamples).toBe(0)
     expect(result.summary.unknownSamples).toBe(0)
@@ -86,6 +93,7 @@ benchmark.describe("performance: first navigation paint", () => {
   benchmark("opens a child session without a blank frame", async ({ page, report }) => {
     await setup(page)
     const href = sessionHref(fixture.childID)
+
     const result = await measureFirstNavigation(page, {
       href,
       destinationPath: href,
@@ -97,6 +105,7 @@ benchmark.describe("performance: first navigation paint", () => {
         await expectSessionTitle(page, fixture.expected.childTitle)
       },
     })
+
     report(result)
     expect(result.summary.blankSamples).toBe(0)
     expect(result.summary.unknownSamples).toBe(0)

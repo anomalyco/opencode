@@ -11,6 +11,7 @@ test("preserves an already normalized reactive catalog", () => {
 test("shares catalog snapshots and reacts to replacement lists", () => {
   createRoot((dispose) => {
     const provider = { id: "openai", name: "OpenAI", package: "@ai-sdk/openai", activation: "enabled" as const }
+
     const model = {
       id: "gpt-5",
       modelID: "gpt-5",
@@ -26,6 +27,7 @@ test("shares catalog snapshots and reacts to replacement lists", () => {
       enabled: true,
       limit: { context: 128_000, output: 8192 },
     }
+
     const [store, setStore] = createStore({ providers: [provider], models: [model] })
     const first = createMemo(() => normalizeProviderList(store.providers, store.models))
     const second = createMemo(() => normalizeProviderList(store.providers, store.models))

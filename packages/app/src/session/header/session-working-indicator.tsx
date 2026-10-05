@@ -9,6 +9,7 @@ export function SessionWorkingIndicator(props: { sessionID?: string }) {
   const language = useLanguage()
   const server = useServer()
   const [elements, setElements] = createStore<{ indicator?: HTMLSpanElement }>({})
+
   const presence = createAnimatedPresence(
     () => {
       const id = props.sessionID

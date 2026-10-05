@@ -41,10 +41,12 @@ export function SessionRunningMenu(props: {
   const sdk = useServerSDK()
   const id = createUniqueId()
   const [menu, setMenu] = createStore({ open: false })
+
   const [appearance, setAppearance] = createStore<{
     group?: HTMLElement
     entered: boolean
   }>({ entered: false })
+
   const sessionAgent = (id: string | undefined) => (id ? server.ctx.data.session.get(id)?.agent : undefined)
 
   // Foreground shells stay out: the timeline already shows them at the bottom.
@@ -89,6 +91,7 @@ export function SessionRunningMenu(props: {
     () => appearance.group ?? null,
     () => props.sessionID,
   )
+
   // Label updates change presence state without changing visibility.
   const visible = createMemo(presence.show)
 
@@ -98,6 +101,7 @@ export function SessionRunningMenu(props: {
       (show) => {
         if (show) {
           setAppearance("entered", false)
+
           return
         }
 

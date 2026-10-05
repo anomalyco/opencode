@@ -20,10 +20,13 @@ export function PairingScanner(props: { onScan: (value: Pairing) => void; onCanc
       video,
       (result) => {
         const link = pairingLink(result.data)
+
         if (!link) {
           setState("error", language.t("server.connect.scan.invalid"))
+
           return
         }
+
         scanner.stop()
         void redeemPairingLink(link).then((redeemed) => {
           if (redeemed) return props.onScan(redeemed)
@@ -32,6 +35,7 @@ export function PairingScanner(props: { onScan: (value: Pairing) => void; onCanc
       },
       { preferredCamera: "environment", maxScansPerSecond: 10, returnDetailedScanResult: true },
     )
+
     // Terminal QR codes can be light-on-dark depending on the terminal theme.
     scanner.setInversionMode("both")
     onCleanup(() => scanner.destroy())

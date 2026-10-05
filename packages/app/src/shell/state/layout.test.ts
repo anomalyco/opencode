@@ -89,10 +89,12 @@ describe("layout persistence", () => {
 
   test("keeps scoped state and salvages valid tab entries", () => {
     const key = "local\u0000L3Byb2plY3Q/session"
+
     const value = decode({
       sessionTabs: { old: { all: ["old"] }, [key]: { all: ["a", null, "a", "b", "btw"], active: "btw" } },
       sessionView: { old: { scroll: {} }, [key]: { scroll: {} } },
     })
+
     // Transient tabs leave once the side region stops listing them, not during migration.
     expect(value.sessionTabs).toEqual({ [key]: { all: ["a", "b", "btw"], active: "btw" } })
     expect(value.sessionView).toEqual({ [key]: { scroll: {} } })
@@ -127,6 +129,7 @@ test("pruneSessionKeys keeps the active key, drops the lowest-used keys, and nev
     ["k3", 3],
     ["k4", 4],
   ])
+
   const input = { max: 3, used, view: ["k1", "k2", "k4"], tabs: ["k1", "k3", "k4"] }
   expect(pruneSessionKeys({ ...input, keep: "k4" })).toEqual(["k1"])
   expect(pruneSessionKeys({ ...input, keep: undefined, max: 1 })).toEqual([])

@@ -13,6 +13,7 @@ for (const streaming of [false, true]) {
     await expect(diagrams.nth(1)).toContainText("Send prompt")
     await expect(timeline.locator('[data-mermaid-ready="true"]')).toHaveCount(2)
     await expect(timeline.locator('[data-mermaid-ready="true"] > pre:visible')).toHaveCount(0)
+
     if (streaming) {
       await root.getByRole("button", { name: "Complete response" }).click()
       await expect(timeline.locator('[data-markdown-complete="true"]')).toHaveCount(2)
@@ -30,6 +31,7 @@ story("aligns the retry icon with the error label", async ({ mount }) => {
   const label = card.locator('[data-slot="session-turn-retry-message"]')
   await expect(icon).toBeVisible()
   await expect(label).toBeVisible()
+
   const [iconY, labelY] = await Promise.all([
     icon.evaluate((element) => element.getBoundingClientRect().y),
     label.evaluate((element) => element.getBoundingClientRect().y),

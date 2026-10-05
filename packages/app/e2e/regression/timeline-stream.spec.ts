@@ -1036,6 +1036,7 @@ test.describe("background shortcut", () => {
     const working = header.getByRole("status", { name: "Working", exact: true })
 
     await expect(working.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
+
     const gap = await working.evaluate((element) => {
       const title = document.createRange()
 
@@ -1074,6 +1075,7 @@ test.describe("background shortcut", () => {
   test("keeps the running menu closed when work restarts after all subagents finish", async ({ page }) => {
     const childID = "ses_restarted_child"
     const otherID = "ses_counted_child"
+
     const timeline = await setupTimeline(page, {
       sessionMessages: [user, completed],
       sessions: [
@@ -1113,6 +1115,7 @@ test.describe("background shortcut", () => {
   test("keeps the subagent title anchored when its additional count disappears", async ({ page }) => {
     const childID = "ses_collapsing_viewed"
     const otherID = "ses_collapsing_sibling"
+
     const timeline = await setupTimeline(page, {
       sessionMessages: [user, completed],
       sessions: [
@@ -1717,6 +1720,7 @@ test.describe("shell completion", () => {
 function pauseExitAnimations(locator: Locator) {
   return locator.evaluateHandle((element) => {
     const animations: Animation[] = []
+
     const pause = (event: AnimationEvent) => {
       if (event.target !== element || event.animationName !== "exit") return
 
@@ -1726,6 +1730,7 @@ function pauseExitAnimations(locator: Locator) {
     }
 
     element.addEventListener("animationstart", pause)
+
     return animations
   })
 }

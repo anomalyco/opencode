@@ -3,6 +3,7 @@
 export function destinationOrigin(input: string) {
   if (!URL.canParse(input)) return
   const url = new URL(input)
+
   return /^https?:$/.test(url.protocol) && !url.username && !url.password ? url.origin : undefined
 }
 
@@ -10,6 +11,7 @@ export function destinationOrigin(input: string) {
 export function localFileURL(input: string) {
   if (!URL.canParse(input)) return
   const url = new URL(input)
+
   return url.protocol === "file:" && !url.hostname ? url.href : undefined
 }
 
@@ -18,6 +20,7 @@ function canonicalPath(input: string) {
   const value = decodeURIComponent(input)
     .replaceAll("\\", "/")
     .replace(/^\/([A-Za-z]:\/)/, "$1")
+
   return process.platform === "win32" ? value.toLowerCase() : value
 }
 
@@ -28,10 +31,13 @@ function canonicalPath(input: string) {
  */
 export function fileURLWithin(input: string, roots: ReadonlyArray<string>) {
   const href = localFileURL(input)
+
   if (!href || roots.length === 0) return false
   const path = canonicalPath(new URL(href).pathname)
+
   return roots.some((root) => {
     const prefix = canonicalPath(root).replace(/\/+$/, "")
+
     return path === prefix || path.startsWith(`${prefix}/`)
   })
 }
@@ -45,13 +51,16 @@ export function allowedDestination(input: string, policy?: Policy) {
 export function normalizeURL(input: string, policy?: Policy) {
   const value = input.trim() || "about:blank"
   const local = /^(?:localhost|127(?:\.\d{1,3}){3}|\[::1\])(?::\d+)?(?:[/?#]|$)/i.test(value)
+
   const url =
     value === "about:blank" || /^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `${local ? "http" : "https"}://${value}`
+
   if (url !== "about:blank" && !allowedDestination(url, policy))
     throw new Error(
       policy?.fileRoots?.length
         ? "Only HTTP, HTTPS, about:blank, and file URLs inside the workspace are supported."
         : "Only HTTP, HTTPS, and about:blank URLs are supported.",
     )
+
   return url
 }

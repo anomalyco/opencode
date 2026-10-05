@@ -17,6 +17,7 @@ import { SessionPanelFrame, SessionRouteFrame } from "@/session/session-frame"
 export function DraftRoute() {
   const [search] = useSearchParams<{ draftId?: string }>()
   const tabs = useTabs()
+
   return (
     <Show
       when={tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId)}
@@ -58,6 +59,7 @@ function ResolvedDraftContent(props: { draft: DraftTab }) {
             <IncompatibleServerPanel
               onClose={() => {
                 const index = tabs.store.findIndex((tab) => tab.type === "draft" && tab.draftID === props.draft.draftID)
+
                 if (index !== -1) tabs.closeTab(index)
               }}
             />
