@@ -12,6 +12,8 @@ export const dict = {
   "nav.x": "X",
   "nav.enterprise": "Enterprise",
   "nav.zen": "Zen",
+  "nav.models": "Models",
+  "nav.teams": "Teams",
   "nav.go": "Go",
   "nav.login": "Login",
   "nav.free": "Download",
