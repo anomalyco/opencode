@@ -226,12 +226,12 @@ describe("Integration refresh", () => {
         integrationID,
         methodID,
         value: oauthValue(methodID, "old"),
-        refresh: () =>
+        refresh: (current) =>
           Effect.gen(function* () {
             attempts++
             yield* Deferred.succeed(entered, undefined)
             yield* Deferred.await(release)
-            if (fail) return yield* Effect.fail(new Error("fixture refresh failed"))
+            if (fail) return yield* Effect.fail(new Error(`fixture refresh failed for ${current.refresh}`))
             return refreshed
           }),
       })
@@ -245,7 +245,7 @@ describe("Integration refresh", () => {
       expect(exits.every(Exit.isFailure)).toBe(true)
       expect(attempts).toBe(1)
       expect((yield* fixture.resolve.pipe(Effect.flip)).message).toBe(
-        "OAuth refresh previously failed; reconnect the credential",
+        "OAuth refresh previously failed: fixture refresh failed for [redacted]; reconnect the credential",
       )
       expect(attempts).toBe(1)
 
@@ -253,7 +253,7 @@ describe("Integration refresh", () => {
         value: Credential.OAuth.make({ ...oauthValue(methodID, "updated", 1), refresh: "refresh-old" }),
       })
       expect((yield* fixture.resolve.pipe(Effect.flip)).message).toBe(
-        "OAuth refresh previously failed; reconnect the credential",
+        "OAuth refresh previously failed: fixture refresh failed for [redacted]; reconnect the credential",
       )
       expect(attempts).toBe(1)
 
@@ -293,7 +293,9 @@ describe("Integration refresh", () => {
             expect(Exit.isFailure(yield* Fiber.await(owner))).toBe(true)
           }
           expect((yield* fixture.resolve.pipe(Effect.flip)).message).toBe(
-            "OAuth refresh previously failed; reconnect the credential",
+            mode === "timeout"
+              ? "OAuth refresh previously failed: OAuth refresh timed out; reconnect the credential"
+              : "OAuth refresh previously failed; reconnect the credential",
           )
           expect(attempts).toBe(1)
 

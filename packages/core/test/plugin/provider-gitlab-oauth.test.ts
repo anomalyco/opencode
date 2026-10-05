@@ -318,12 +318,11 @@ describe("GitLabPlugin OAuth", () => {
     }),
   )
 
-  it.effect("reports a revoked refresh token with a sign-in-again hint instead of authorization-code hints", () =>
+  it.live("reports a revoked refresh token with a sign-in-again hint instead of authorization-code hints", () =>
     Effect.gen(function* () {
       const test = yield* fixture()
-      // Rejections are not shared, so discovery and this resolve may each send one refresh.
-      const revoked = () => new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 })
-      test.replies.push(revoked(), revoked())
+      // Discovery and this resolve share one rejection: a rejected refresh token is never replayed.
+      test.replies.push(new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }))
       const saved = yield* test.credentials.create({
         integrationID,
         value: expired({ instanceUrl: "https://gitlab.com", clientID: bundledClientID }),
@@ -332,6 +331,7 @@ describe("GitLabPlugin OAuth", () => {
       expect(error.message).toContain("refresh token was revoked, expired")
       expect(error.message).toContain("Sign in to GitLab again")
       expect(error.message).not.toContain("authorization code")
+      expect(yield* tokenRequests(test.requests)).toHaveLength(1)
     }),
   )
 

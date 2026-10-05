@@ -733,11 +733,29 @@ const layer = Layer.effect(
                 const blocked = yield* fs
                   .readFileString(marker)
                   .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined))
-                if (blocked === fingerprint)
-                  return yield* Effect.fail(new Error("OAuth refresh previously failed; reconnect the credential"))
+                if (blocked?.startsWith(fingerprint)) {
+                  const reason = blocked.slice(fingerprint.length + 1)
+                  return yield* Effect.fail(
+                    new Error(
+                      `OAuth refresh previously failed${reason ? `: ${reason}` : ""}; reconnect the credential`,
+                    ),
+                  )
+                }
                 yield* fs.writeFileString(marker, fingerprint)
-                const result = yield* refresh(current).pipe(Effect.timeout(refreshTimeout), Effect.exit)
-                if (Exit.isFailure(result)) return yield* Effect.failCause(result.cause)
+                const result = yield* refresh(current).pipe(
+                  Effect.timeoutOrElse({
+                    duration: refreshTimeout,
+                    orElse: () => Effect.fail(new Error("OAuth refresh timed out")),
+                  }),
+                  Effect.exit,
+                )
+                if (Exit.isFailure(result)) {
+                  const reason = [current.refresh, current.access]
+                    .filter(Boolean)
+                    .reduce((text, secret) => text.replaceAll(secret, "[redacted]"), message(result.cause))
+                  yield* fs.writeFileString(marker, `\n${reason}`, { flag: "a" }).pipe(Effect.ignore)
+                  return yield* Effect.failCause(result.cause)
+                }
                 return yield* Effect.gen(function* () {
                   const value = result.value
                   if (yield* credentials.updateValue(credential.id, current, value)) {
