@@ -1,5 +1,6 @@
 export const DESKTOP_NATIVE_LOCALES = [
   "en",
+  "en-GB",
   "zh",
   "zht",
   "ko",
@@ -67,7 +68,8 @@ export const DESKTOP_NATIVE_LOCALES = [
 export type DesktopNativeLocale = (typeof DESKTOP_NATIVE_LOCALES)[number]
 
 export const DESKTOP_NATIVE_LABELS: Record<DesktopNativeLocale, string> = {
-  en: "English",
+  en: "English (US)",
+  "en-GB": "English (UK)",
   zh: "简体中文",
   zht: "繁體中文",
   ko: "한국어",
@@ -134,6 +136,7 @@ export const DESKTOP_NATIVE_LABELS: Record<DesktopNativeLocale, string> = {
 
 export const DESKTOP_NATIVE_LOCALE_TAGS: Record<DesktopNativeLocale, string> = {
   en: "en",
+  "en-GB": "en-GB",
   zh: "zh-Hans",
   zht: "zh-Hant",
   ko: "ko",
@@ -203,6 +206,7 @@ export function detectDesktopNativeLocale(languages: readonly string[]): Desktop
     const source = locale(language)
     if (!source) continue
     if (["no", "nb", "nn"].includes(source.language)) return "no"
+    if (source.language === "en") return source.region && BRITISH_ENGLISH_REGIONS.has(source.region) ? "en-GB" : "en"
     const match = DESKTOP_NATIVE_LOCALES.find((candidate) => {
       const target = locale(DESKTOP_NATIVE_LOCALE_TAGS[candidate])
       return target?.language === source.language && normalizeScript(target.script) === normalizeScript(source.script)
@@ -215,6 +219,15 @@ export function detectDesktopNativeLocale(languages: readonly string[]): Desktop
 export function desktopNativePluralCategories(locale: DesktopNativeLocale) {
   return new Intl.PluralRules(DESKTOP_NATIVE_LOCALE_TAGS[locale]).resolvedOptions().pluralCategories
 }
+
+// Regions whose CLDR English locale inherits from en-001 (directly or through en-150), which follows British conventions.
+const BRITISH_ENGLISH_REGIONS = new Set(
+  (
+    "001 150 AG AI AT AU BB BE BM BS BW BZ CC CH CK CM CX CY CZ DE DG DK DM EE ER ES FI FJ FK FM FR GB GD GE GG GH " +
+    "GI GM GS GY HK HU ID IE IL IM IN IO IT JE JM KE KI KN KY LC LR LS LT LV MG MO MS MT MU MV MW MY NA NF NG NL NO " +
+    "NR NU NZ PG PK PL PN PT PW RO RW SB SC SD SE SG SH SI SK SL SS SX SZ TC TK TO TT TV TZ UA UG VC VG VU WS ZA ZM ZW"
+  ).split(" "),
+)
 
 function locale(value: string) {
   try {

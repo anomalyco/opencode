@@ -92,6 +92,7 @@ const merge = (app: Promise<Source>, ui: Promise<Source>) =>
   Promise.all([app, ui]).then(([a, b]) => ({ ...base, ...flatten({ ...a.dict, ...b.dict }) }) as Dictionary)
 
 const loaders: Record<Exclude<Locale, "en">, () => Promise<Dictionary>> = {
+  "en-GB": () => merge(import("@/runtime/i18n/en-GB"), import("@opencode/ui/i18n/en-GB")),
   zh: () => merge(import("@/runtime/i18n/zh"), import("@opencode/ui/i18n/zh")),
   zht: () => merge(import("@/runtime/i18n/zht"), import("@opencode/ui/i18n/zht")),
   ko: () => merge(import("@/runtime/i18n/ko"), import("@opencode/ui/i18n/ko")),
@@ -255,7 +256,7 @@ export const { use: useLanguage, provider: LanguageProvider } = createSimpleCont
       key: TranslationKey<Key>,
       source: string,
       params?: Record<string, string | number | boolean>,
-    ) => (intl().toLowerCase().split("-")[0] === "en" ? resolveTemplate(source, params) : t(key, params))
+    ) => (locale() === "en" ? resolveTemplate(source, params) : t(key, params))
 
     const rich = <Key extends Extract<keyof Dictionary, string>>(
       key: TranslationKey<Key>,

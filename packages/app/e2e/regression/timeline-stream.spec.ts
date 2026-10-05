@@ -1198,7 +1198,7 @@ test.describe("compaction", () => {
       reason: "manual",
       partial: "Summary before cancellation.",
       error: { type: "aborted", message: "Cancellation detail should stay hidden." },
-      label: "Session compaction cancelled",
+      label: "Session compaction canceled",
       shown: undefined,
     },
     interrupted: {
