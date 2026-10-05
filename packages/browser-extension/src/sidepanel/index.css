@@ -1,0 +1,50 @@
+@import "@opencode/ui/styles/tailwind";
+@import "@opencode/session-ui/styles";
+@import "@opencode/ui/styles/tokens";
+@source "../";
+
+@font-face {
+  font-family: "JetBrainsMono Nerd Font Mono";
+  src: url("@opencode/ui/fonts/JetBrainsMonoNerdFontMono-Regular.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "Inter";
+  src: url("@opencode/ui/fonts/Inter.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+}
+
+@layer components {
+  /* Docks share the column with the timeline; keep the transcript visible behind a long request. */
+  :root {
+    --question-prompt-max-height: 65vh;
+  }
+
+  [data-component="dock-prompt"][data-kind="permission"] {
+    max-height: 65vh;
+  }
+
+  /* Matches the desktop composer's raised surface, which lifts to layer 01 in dark mode. */
+  [data-component="composer"] {
+    background: var(--v2-background-bg-base);
+  }
+
+  [data-color-scheme="dark"] [data-component="composer"] {
+    background: var(--v2-background-bg-layer-01);
+  }
+
+  /* Light mode's weak icon tone is near white; tint the wordmark's inner shadows like the desktop's. */
+  [data-color-scheme="light"] [data-component="new-chat-logo"] {
+    --icon-weak-base: color-mix(in srgb, var(--icon-base) 30%, transparent);
+  }
+
+  /* The panel is narrow: let the permission actions wrap instead of overflowing. */
+  [data-component="dock-prompt"] [data-slot="permission-footer-actions"],
+  [data-component="dock-prompt"] [data-slot="question-footer-actions"] {
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+}

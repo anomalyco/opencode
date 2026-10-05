@@ -1,0 +1,26 @@
+{
+  "name": "opencode-browser-cli",
+  "version": "0.0.2",
+  "description": "Set up the OpenCode Browser extension: registers its helper with your browsers and connects it to opencode.",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "opencode-browser-cli": "dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "extension"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/anomalyco/opencode.git",
+    "directory": "packages/browser-extension/cli"
+  },
+  "scripts": {
+    "build": "bun build.ts",
+    "prepublishOnly": "bun build.ts"
+  }
+}

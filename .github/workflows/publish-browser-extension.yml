@@ -1,0 +1,105 @@
+name: publish-browser-extension
+
+# Releases OpenCode Browser (packages/browser-extension): publishes the opencode-browser-cli helper to npm and
+# attaches the Chrome Web Store zip to a GitHub release. The version is packages/browser-extension/cli/package.json;
+# push a matching tag (browser-extension-v<version>) or run it by hand to rebuild the artifacts.
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish to npm and create the GitHub release (otherwise build only)"
+        type: boolean
+        default: false
+  push:
+    tags:
+      - "browser-extension-v*.*.*"
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+permissions:
+  contents: write
+  # npm trusted publishing (OIDC) and provenance.
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    if: github.repository == 'anomalyco/opencode'
+    steps:
+      - uses: actions/checkout@f43a0e5ff2bd294095638e18286ca9a3d1956744 # v3.6.0
+
+      - uses: ./.github/actions/setup-bun
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Read version
+        id: version
+        env:
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          version=$(node -p "require('./packages/browser-extension/cli/package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$REF_TYPE" = "tag" ] && [ "$REF_NAME" != "browser-extension-v$version" ]; then
+            echo "::error::Tag $REF_NAME does not match cli/package.json version $version"
+            exit 1
+          fi
+
+      - name: Typecheck
+        run: bun typecheck
+        working-directory: packages/browser-extension
+
+      - name: Build the helper and the store zip
+        run: |
+          bun run build
+          cd .. && bun run package
+        working-directory: packages/browser-extension/cli
+
+      - name: Smoke test the helper
+        run: node dist/cli.mjs | grep -q "npx opencode-browser-cli install"
+        working-directory: packages/browser-extension/cli
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: opencode-browser-${{ steps.version.outputs.version }}
+          path: packages/browser-extension/release/opencode-browser-${{ steps.version.outputs.version }}.zip
+          if-no-files-found: error
+
+      # Trusted publishing needs npm 11.5.1 or newer.
+      - name: Update npm
+        if: github.ref_type == 'tag' || inputs.publish
+        run: npm install -g npm@^11.5.1
+
+      - name: Publish to npm
+        if: github.ref_type == 'tag' || inputs.publish
+        working-directory: packages/browser-extension/cli
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          # Unset when the package uses npm trusted publishing for this workflow.
+          NODE_AUTH_TOKEN: ${{ secrets.OPENCODE_BROWSER_NPM_TOKEN }}
+        run: |
+          if npm view "opencode-browser-cli@$VERSION" version >/dev/null 2>&1; then
+            echo "opencode-browser-cli@$VERSION is already published"
+            exit 0
+          fi
+          # dist/ and extension/ are already built; skip prepublishOnly's rebuild.
+          npm publish --access public --provenance --ignore-scripts
+
+      - name: GitHub release
+        if: github.ref_type == 'tag' || inputs.publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tag="browser-extension-v$VERSION"
+          zip="packages/browser-extension/release/opencode-browser-$VERSION.zip"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "$zip" --clobber
+          else
+            gh release create "$tag" "$zip" --target "$GITHUB_SHA" --title "OpenCode Browser $VERSION" --prerelease \
+              --notes "Helper: \`npx opencode-browser-cli@$VERSION install\`. Upload the zip in the Chrome Web Store dashboard."
+          fi

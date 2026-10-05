@@ -8,6 +8,12 @@ export function attached(file: PromptFileAttachment) {
   return file.source.uri.startsWith("data:")
 }
 
+/** An image whose bytes travel with the message, so it can be shown without a server read. */
+export function attachedImage(file: PromptFileAttachment) {
+  if (!file.mime.startsWith("image/")) return false
+  return file.source.type === "inline" || file.source.uri.startsWith("data:")
+}
+
 // language metadata only; grammars stay behind shiki's lazy imports
 const LANGUAGE_NAMES = new Map<string, string>(
   bundledLanguagesInfo.flatMap((info) =>

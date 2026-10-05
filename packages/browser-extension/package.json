@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/browser-extension",
+  "version": "2.0.22",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "vite build && vite build -c vite.content.config.ts",
+    "dev": "vite build -c vite.content.config.ts --mode development && (vite build -c vite.content.config.ts --watch --mode development & vite build --watch --mode development)",
+    "typecheck": "tsgo --noEmit -p tsconfig.json",
+    "package": "bun scripts/package.ts"
+  },
+  "dependencies": {
+    "@opencode/client": "workspace:*",
+    "@opencode/plugin-browser": "workspace:*",
+    "@opencode/session-ui": "workspace:*",
+    "@opencode/ui": "workspace:*",
+    "effect": "catalog:",
+    "solid-js": "catalog:"
+  },
+  "devDependencies": {
+    "@opencode/plugin": "workspace:*",
+    "@tailwindcss/vite": "4.3.3",
+    "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/chrome": "0.3.4",
+    "@typescript/native-preview": "catalog:",
+    "devtools-protocol": "0.0.1687809",
+    "tailwindcss": "catalog:",
+    "typescript": "catalog:",
+    "vite": "8.2.2",
+    "vite-plugin-solid": "2.11.14"
+  }
+}
