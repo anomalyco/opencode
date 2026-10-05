@@ -23,6 +23,9 @@
   Content-Type: application/javascript
   Cache-Control: no-cache
 
+/notification.js
+  Cache-Control: no-cache
+
 /registerSW.js
   Content-Type: application/javascript
   Cache-Control: no-cache
