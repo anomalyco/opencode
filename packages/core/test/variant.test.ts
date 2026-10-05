@@ -14,6 +14,23 @@ const model = (packageName: string, modelID: string, output?: number, providerID
 const resolve = (input: Model.Info, supports: readonly Variant.Support[]) =>
   Variant.resolve(input, supports).map((item) => ({ ...item, id: String(item.id) }))
 
+test("Venice keeps effort and reasoning toggles separate", () => {
+  expect(
+    resolve(model("@opencode/ai/providers/venice", "qwen3-6-27b"), [
+      { type: "effort", values: ["low", "high"] },
+      { type: "toggle" },
+    ]),
+  ).toEqual([
+    { id: "none", settings: { reasoning: { enabled: false } } },
+    { id: "low", settings: { reasoningEffort: "low" } },
+    { id: "high", settings: { reasoningEffort: "high" } },
+  ])
+  expect(resolve(model("@opencode/ai/providers/venice", "qwen3-6-27b"), [{ type: "toggle" }])).toEqual([
+    { id: "none", settings: { reasoning: { enabled: false } } },
+    { id: "thinking", settings: { reasoning: { enabled: true } } },
+  ])
+})
+
 test("spells Messages variants for each provider", () => {
   expect(
     resolve(model("@opencode/ai/providers/anthropic", "claude-opus-4-5"), [

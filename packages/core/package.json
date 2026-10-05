@@ -134,7 +134,6 @@
     "mime-types": "3.0.2",
     "tree-sitter-bash": "0.25.0",
     "tree-sitter-powershell": "0.25.10",
-    "venice-ai-sdk-provider": "2.1.1",
     "web-tree-sitter": "0.25.10",
     "which": "6.0.1",
     "zod": "catalog:"
