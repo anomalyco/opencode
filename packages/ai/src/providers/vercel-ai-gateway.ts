@@ -57,7 +57,6 @@ export interface GatewayOptions {
     | `!quantization:${string}`
     | (string & {})
   >
-  readonly idempotencyKey?: string
   readonly quotaEntityId?: string
   readonly serviceTier?: "flex" | "priority" | (string & {})
   readonly user?: string
@@ -81,7 +80,7 @@ export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
         }
     readonly gateway?: GatewayOptions
     /** Upstream options forwarded under their Gateway provider namespace. */
-    readonly upstream?: Readonly<Record<string, Readonly<Record<string, unknown>> | undefined>>
+    readonly upstream?: Readonly<Record<string, Readonly<Record<string, unknown>>>>
     /** Responses automatic-cache lifetime. */
     readonly cacheTTL?: "5m" | "1h" | (string & {})
     /** Number of stable Responses input items. */
@@ -102,24 +101,24 @@ export type Options = Omit<RouteDefaultsInput, "providerOptions"> &
 export type Settings = ProviderPackage.Settings & ProviderOptionsInput & { readonly apiKey?: string }
 
 const GatewayOptionsSchema = Schema.Struct({
-  gateway: optionalNull(Schema.Record(Schema.String, Schema.Unknown)),
-  upstream: optionalNull(Schema.Record(Schema.String, optionalNull(Schema.Record(Schema.String, Schema.Unknown)))),
-  reasoningEffort: optionalNull(ReasoningEffort),
-  cacheTTL: optionalNull(Schema.String),
-  cacheAnchorItems: optionalNull(Schema.Number),
+  gateway: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  upstream: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))),
+  reasoningEffort: Schema.optional(ReasoningEffort),
+  cacheTTL: Schema.optional(Schema.String),
+  cacheAnchorItems: Schema.optional(Schema.Number),
 })
 const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(GatewayOptionsSchema))
 
 const ChatThinking = Schema.Struct({
   type: Schema.String,
-  budgetTokens: optionalNull(Schema.Number),
-  budget_tokens: optionalNull(Schema.Number),
+  budgetTokens: Schema.optional(Schema.Number),
+  budget_tokens: Schema.optional(Schema.Number),
 })
 type ChatThinking = typeof ChatThinking.Type
 const decodeChatThinking = ProviderShared.validateWith(Schema.decodeUnknownEffect(ChatThinking))
 
-function messagesRequest(request: LLMRequest, effort: ReasoningEffort | null | undefined) {
-  if (effort === undefined || effort === null) return request
+function messagesRequest(request: LLMRequest, effort: ReasoningEffort | undefined) {
+  if (effort === undefined) return request
   const enabled = effort !== "none"
   const thinking = request.providerOptions?.thinking ?? { type: enabled ? "adaptive" : "disabled" }
   return LLMRequest.update(request, {
@@ -135,21 +134,14 @@ function chatReasoning(thinking: ChatThinking | undefined) {
   if (!thinking) return undefined
   return {
     enabled: thinking.type !== "disabled",
-    max_tokens: thinking.budgetTokens ?? thinking.budget_tokens ?? undefined,
+    max_tokens: thinking.budgetTokens ?? thinking.budget_tokens,
   }
 }
 
 function gatewayProviderOptions(options: typeof GatewayOptionsSchema.Type) {
-  const upstream =
-    options.upstream === undefined || options.upstream === null
-      ? undefined
-      : Object.fromEntries(
-          Object.entries(options.upstream).filter(([, value]) => value !== undefined && value !== null),
-        )
-  const hasUpstream = upstream !== undefined && Object.keys(upstream).length > 0
-  if (!hasUpstream && !options.gateway) return undefined
+  if (options.upstream === undefined && options.gateway === undefined) return undefined
   return {
-    ...upstream,
+    ...options.upstream,
     ...(options.gateway ? { gateway: options.gateway } : {}),
   }
 }
@@ -169,14 +161,15 @@ const prepare = (api: "messages" | "responses" | "chat") =>
         request,
         body: {
           providerOptions,
-          cache_ttl: options.cacheTTL ?? undefined,
-          cache_anchor_items: options.cacheAnchorItems ?? undefined,
+          cache_ttl: options.cacheTTL,
+          cache_anchor_items: options.cacheAnchorItems,
         },
       }
     }
-    const rawThinking = request.providerOptions?.thinking
     const thinking =
-      rawThinking === undefined || rawThinking === null ? undefined : yield* decodeChatThinking(rawThinking)
+      request.providerOptions?.thinking === undefined
+        ? undefined
+        : yield* decodeChatThinking(request.providerOptions.thinking)
     return {
       request,
       body: {
