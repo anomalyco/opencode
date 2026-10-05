@@ -410,6 +410,46 @@ describe("session.retry.retryable", () => {
     expect(SessionRetry.retryable(error, "opencode")?.message).toBe(SessionRetry.GO_UPSELL_MESSAGE)
   })
 
+  test("falls back to static free message on malformed retry-after", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "Free usage exceeded",
+        isRetryable: true,
+        statusCode: 429,
+        responseHeaders: {
+          "retry-after": "300junk",
+        },
+        responseBody: JSON.stringify({
+          type: "error",
+          error: { type: "FreeUsageLimitError", message: "Free usage exceeded" },
+        }),
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, "opencode")?.message).toBe(SessionRetry.GO_UPSELL_MESSAGE)
+  })
+
+  test("carries overflow minutes into hours in free reset time", () => {
+    const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
+      new SessionV1.APIError({
+        message: "Free usage exceeded",
+        isRetryable: true,
+        statusCode: 429,
+        responseHeaders: {
+          "retry-after": "3599",
+        },
+        responseBody: JSON.stringify({
+          type: "error",
+          error: { type: "FreeUsageLimitError", message: "Free usage exceeded" },
+        }),
+      }).toObject(),
+    )
+
+    expect(SessionRetry.retryable(error, "opencode")?.message).toBe(
+      `${SessionRetry.GO_UPSELL_MESSAGE}. It will reset in 1 hour`,
+    )
+  })
+
   test("maps Go subscription limits to workspace PAYG upsell", () => {
     const error = Schema.decodeUnknownSync(SessionV1.APIError.Schema)(
       new SessionV1.APIError({

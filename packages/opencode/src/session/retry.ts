@@ -150,12 +150,12 @@ function matchesRetryableMessage(value: unknown) {
 }
 
 function resetText(value: unknown) {
-  const retryAfter = num(value)
-  if (retryAfter === undefined) return ""
-  const seconds = Math.max(0, Math.ceil(retryAfter))
-  const days = Math.floor(seconds / 86_400)
-  const hours = Math.floor((seconds % 86_400) / 3_600)
-  const minutes = Math.ceil((seconds % 3_600) / 60)
+  const text = str(value).trim()
+  if (!/^\d+$/.test(text)) return ""
+  const totalMinutes = Math.ceil(Number.parseInt(text, 10) / 60)
+  const days = Math.floor(totalMinutes / 1440)
+  const hours = Math.floor((totalMinutes % 1440) / 60)
+  const minutes = totalMinutes % 60
   const unit = (count: number, name: string) => `${count} ${name}${count === 1 ? "" : "s"}`
   if (days > 0) return hours > 0 ? `${unit(days, "day")} ${unit(hours, "hour")}` : unit(days, "day")
   if (hours > 0) return minutes > 0 ? `${unit(hours, "hour")} ${unit(minutes, "minute")}` : unit(hours, "hour")
@@ -165,12 +165,6 @@ function resetText(value: unknown) {
 function str(value: unknown) {
   if (value === undefined || value === null) return ""
   return String(value)
-}
-
-function num(value: unknown) {
-  const parsed = Number.parseFloat(str(value))
-  if (Number.isNaN(parsed)) return undefined
-  return parsed
 }
 
 function parseJSON(value: unknown) {
