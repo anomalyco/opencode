@@ -575,6 +575,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/zai-coding-plan/responses": openaiResponses,
 
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
+  "@opencode/ai/providers/azure/chat": openaiChat,
   "@opencode/ai/providers/google-vertex/chat": openaiChat,
   "@opencode/ai/providers/alibaba/chat": alibabaChat,
   "@opencode/ai/providers/baseten": basetenChat,
