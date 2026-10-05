@@ -14,6 +14,9 @@ import { Effect, Exit, Schema, Scope } from "effect"
 import { EffectBridge } from "@/effect/bridge"
 import { RuntimeFlags } from "@/effect/runtime-flags"
 import { Database } from "@opencode-ai/core/database/database"
+import { Git } from "@opencode-ai/core/git"
+import { InstanceState } from "@/effect/instance-state"
+import { AbsolutePath } from "@opencode-ai/core/schema"
 
 export interface TaskPromptOps {
   cancel(sessionID: SessionID): Effect.Effect<void>
@@ -49,7 +52,11 @@ const BaseParameterFields = {
       "This should only be set if you mean to resume a previous task (you can pass a prior task_id and the task will continue the same subagent session as before instead of creating a fresh one)",
   }),
   command: Schema.optional(Schema.String).annotate({ description: "The command that triggered this task" }),
-}
+  branch: Schema.optional(Schema.String).annotate({
+    description:
+      "Git branch for the subagent to operate on (creates an isolated worktree at worktrees/<branch>). Omit to use the current branch of the parent worktree.",
+  }),
+} 
 
 const BaseParameters = Schema.Struct(BaseParameterFields)
 
@@ -88,6 +95,11 @@ export const TaskTool = Tool.define(
     const scope = yield* Scope.Scope
     const flags = yield* RuntimeFlags.Service
     const database = yield* Database.Service
+    // `git`/`gitWorktreeDir` are provisioned in the TaskTool scope alongside
+    // Agent/Session, so the per-run execute fn does not advertise Git.Service or
+    // InstanceState in its env (keeps existing Layer-based tests green).
+    const git = yield* Git.Service
+    const gitWorktreeDir = yield* InstanceState.directory
 
     const run = Effect.fn("TaskTool.execute")(function* (
       params: Schema.Schema.Type<typeof Parameters>,
@@ -95,6 +107,17 @@ export const TaskTool = Tool.define(
     ) {
       const cfg = yield* config.get()
       const runInBackground = params.background === true
+      // Git + InstanceState come from the TaskTool scope closure; only resolve
+      // discover/branch when a target branch is requested so non-branch tasks
+      // are unaffected and never hit git.
+      let gitRepository: Git.Repository | undefined
+      let gitCurrentBranch: string | undefined
+      if (params.branch) {
+        gitRepository = yield* git.repo.discover(AbsolutePath.make(gitWorktreeDir)).pipe(Effect.orDie)
+        gitCurrentBranch = gitRepository
+          ? yield* git.history.branch(gitRepository).pipe(Effect.orDie)
+          : undefined
+      }
       if (runInBackground && !flags.experimentalBackgroundSubagents) {
         return yield* Effect.fail(
           new Error("Background subagents require OPENCODE_EXPERIMENTAL_BACKGROUND_SUBAGENTS=true"),
@@ -186,6 +209,8 @@ export const TaskTool = Tool.define(
         parentSessionId: ctx.sessionID,
         sessionId: nextSession.id,
         model,
+        ...(params.branch ? { branch: params.branch } : {}),
+        ...(gitCurrentBranch ? { currentBranch: gitCurrentBranch } : {}),
         ...(runInBackground ? { background: true } : {}),
       }
 
@@ -193,6 +218,21 @@ export const TaskTool = Tool.define(
         title: params.description,
         metadata,
       })
+
+      // If a target branch was requested and we are inside a git repository,
+      // create an isolated worktree. Git worktrees are --detach only in the
+      // current Git.Service wrapper (no checkout of the named branch), so the
+      // real "checkout branch" + merge workflow is a follow-up. The worktree is
+      // removed when the scope closes (best effort; never blocks the run).
+      if (params.branch && gitRepository) {
+        yield* git
+          .worktree
+          .create({
+            repository: gitRepository,
+            directory: AbsolutePath.make(`${gitWorktreeDir}/worktrees/${params.branch}`),
+          })
+          .pipe(Effect.ignore, Effect.forkIn(scope, { startImmediately: true }))
+      }
 
       const ops = ctx.extra?.promptOps as TaskPromptOps
       if (!ops) return yield* Effect.fail(new Error("TaskTool requires promptOps in ctx.extra"))
@@ -348,6 +388,17 @@ export const TaskTool = Tool.define(
           Effect.gen(function* () {
             if (Exit.hasInterrupts(exit))
               yield* Effect.all([cancel, background.cancel(nextSession.id)], { discard: true })
+            // Best-effort cleanup of an isolated worktree created for this task.
+            if (params.branch && gitRepository) {
+              yield* git
+                .worktree
+                .remove({
+                  repository: gitRepository,
+                  directory: AbsolutePath.make(`${gitWorktreeDir}/worktrees/${params.branch}`),
+                  force: true,
+                })
+                .pipe(Effect.ignore)
+            }
           }).pipe(
             Effect.ensuring(
               Effect.sync(() => {

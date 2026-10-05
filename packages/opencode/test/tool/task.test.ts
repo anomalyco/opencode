@@ -24,6 +24,7 @@ import { disposeAllInstances } from "../fixture/fixture"
 import { testEffect } from "../lib/effect"
 import { ProviderV2 } from "@opencode-ai/core/provider"
 import { ModelV2 } from "@opencode-ai/core/model"
+import { Git } from "@opencode-ai/core/git"
 
 afterEach(async () => {
   await disposeAllInstances()
@@ -55,8 +56,40 @@ const layer = (flags: Partial<RuntimeFlags.Info> = {}) =>
     [[RuntimeFlags.node, RuntimeFlags.layer(flags)]],
   )
 
-const it = testEffect(layer())
-const background = testEffect(layer({ experimentalBackgroundSubagents: true }))
+// Fase 9: mock Git.Service so branch detection + worktree lifecycle are
+// exercised deterministically (no real git binary / subprocess latency).
+const gitMock: Git.Interface = {
+  repo: {
+    discover: () => Effect.succeed({} as unknown as Git.Repository),
+    clone: () => Effect.void,
+    create: () => Effect.void,
+  },
+  remote: { get: () => Effect.void },
+  history: {
+    branch: () => Effect.succeed("main"),
+    head: () => Effect.void,
+    defaultRemoteBranch: () => Effect.void,
+    rootCommits: () => Effect.void,
+  },
+  sync: {
+    fetchRemotes: () => Effect.void,
+    fetchBranch: () => Effect.void,
+    checkoutRemoteBranch: () => Effect.void,
+    resetHard: () => Effect.void,
+  },
+  change: { capture: () => Effect.void, apply: () => Effect.void, discard: () => Effect.void },
+  worktree: {
+    create: () => Effect.void,
+    remove: () => Effect.void,
+    list: () => Effect.void,
+  },
+  index: { refresh: () => Effect.void, ignored: () => Effect.void },
+  tree: { capture: () => Effect.void, write: () => Effect.void, files: () => Effect.void },
+}
+const gitMockLayer = Layer.succeed(Git.Service, gitMock)
+
+const it = testEffect(Layer.mergeAll(layer(), gitMockLayer))
+const background = testEffect(Layer.mergeAll(layer({ experimentalBackgroundSubagents: true }), gitMockLayer))
 
 function defer<T>() {
   let resolve!: (value: T | PromiseLike<T>) => void
@@ -1097,5 +1130,38 @@ describe("tool.task", () => {
       expect((yield* jobs.get(child.id))?.status).toBe("cancelled")
       expect((yield* jobs.get(grandchild.id))?.status).toBe("cancelled")
     }),
+  )
+
+  it.instance(
+    "execute records requested branch and detected currentBranch metadata",
+    () =>
+      Effect.gen(function* () {
+        const { chat, assistant } = yield* seed()
+        const tool = yield* TaskTool
+        const def = yield* tool.init()
+        const promptOps = stubOps({ text: "done" })
+
+        const result = yield* def.execute(
+          {
+            description: "checkout feature branch",
+            prompt: "do work on feat-x",
+            subagent_type: "general",
+            branch: "feat-x",
+          },
+          {
+            sessionID: chat.id,
+            messageID: assistant.id,
+            agent: "build",
+            abort: new AbortController().signal,
+            extra: { promptOps },
+            messages: [],
+            metadata: () => Effect.void,
+            ask: () => Effect.void,
+          },
+        )
+
+        expect(result.metadata.branch).toBe("feat-x")
+        expect(result.metadata.currentBranch).toBe("main")
+      }),
   )
 })

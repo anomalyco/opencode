@@ -188,7 +188,30 @@ If you don’t specify anything, OpenCode starts from permissive defaults:
 
 ---
 
-## What “Ask” Does
+## Subagent isolation
+
+Subagents launched via the `task` tool inherit the parent's
+[`external_directory`](#external-directories) confinement out of the box, so
+writes outside the workspace still require approval. To give a subagent its own
+filesystem working tree, pass the optional `branch` input on the `task` call:
+
+| `task` input | Effect |
+|---|---|
+| _(omit)_ | Subagent runs in the parent worktree (default). `currentBranch` is not captured. |
+| `branch: "feat-x"` | OpenCode detects the parent `currentBranch`, creates an isolated Git worktree at `worktrees/feat-x`, and records `branch` (requested) plus `currentBranch` (detected) in the task metadata. |
+
+:::note
+The current Git worktree wrapper creates the worktree **detached** at `HEAD`, so
+the requested `branch` is recorded but not checked out into the new worktree
+yet. Fully checking out the named branch and merging its changes back is a
+follow-up — it depends on the "explicit workspace identity" placement semantics
+that are reserved and not yet wired into subagent sessions. The worktree is
+removed automatically when the task scope closes (best effort).
+:::
+
+---
+
+## What "Ask" Does
 
 When OpenCode prompts for approval, the UI offers three outcomes:
 
