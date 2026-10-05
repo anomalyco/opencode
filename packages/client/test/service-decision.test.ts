@@ -4,7 +4,7 @@ import { decide, type LocalService } from "../src/service-probe"
 const protocolError =
   "Background service uses an incompatible health protocol. Update this client or explicitly restart the service."
 
-function service(input: Pick<LocalService, "state" | "compatible"> & { readonly version?: string }) {
+function service(input: Pick<LocalService, "state" | "compatible" | "version">) {
   return {
     info: { url: "http://127.0.0.1:4096", pid: 4242, version: input.version },
     endpoint: { url: "http://127.0.0.1:4096" },

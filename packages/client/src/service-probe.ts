@@ -20,16 +20,15 @@ export type LocalService = {
  * it starts, replace it because its version does not meet the requirement, or fail.
  */
 export function decide(service: LocalService, options: DiscoverOptions) {
-  const versionMatches = matchesVersion(service.version, options)
-  if (!service.compatible && versionMatches)
+  if (!matchesVersion(service.version, options))
+    return { _tag: "replace", pty: service.state === "ready" ? "handoff" : "clear" } as const
+  if (!service.compatible)
     return fail(
       "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
     )
-  if (!versionMatches)
-    return { _tag: "replace" as const, pty: service.state === "ready" ? ("handoff" as const) : ("clear" as const) }
-  if (service.state === "ready") return { _tag: "reuse" as const }
+  if (service.state === "ready") return { _tag: "reuse" } as const
   if (service.state === "failed") return fail("Background service failed to start")
-  return { _tag: "wait" as const }
+  return { _tag: "wait" } as const
 }
 
 function fail(message: string) {
