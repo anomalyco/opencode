@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode/client"
-import { lastAssistantWithUsage, sessionFamily } from "../../src/util/session"
+import { lastAssistantWithUsage, sessionFamily, topLevelSessions } from "../../src/util/session"
 
 const assistant = (id: string, input: number): SessionMessageInfo => ({
   id,
@@ -59,5 +59,16 @@ describe("util.session", () => {
 
     messages.push(assistant("msg_after", 5))
     expect(lastAssistantWithUsage(messages)?.tokens.input).toBe(5)
+  })
+})
+
+describe("util.session open menu", () => {
+  test("drops child sessions but keeps the one whose exact ID was typed, once", () => {
+    const list = [{ id: "top-a" }, { id: "child-x", parentID: "top-a" }, { id: "top-b" }, { id: "top-a" }]
+    expect(topLevelSessions(list).map((session) => session.id)).toEqual(["top-a", "top-b"])
+    expect(topLevelSessions(list, "child-x").map((session) => session.id)).toEqual(["top-a", "child-x", "top-b"])
+    // The same child both in the loaded list and as the looked-up match appears once.
+    const twice = topLevelSessions([...list, { id: "child-x", parentID: "top-a" }], "child-x")
+    expect(twice.filter((session) => session.id === "child-x")).toHaveLength(1)
   })
 })
