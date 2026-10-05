@@ -1,7 +1,7 @@
 import { isAbsolute, resolve } from "node:path"
 import type { ToolCall, ToolCallContent, ToolCallLocation, ToolCallUpdate, ToolKind } from "@agentclientprotocol/sdk"
 import type { Tool } from "@opencode/schema/tool"
-import { canonicalToolName, readDisplayText } from "@opencode/tui/mini/tool"
+import { readDisplayText } from "@opencode/tui/mini/tool"
 import { Patch } from "@opencode/util/patch"
 import { Result } from "effect"
 
@@ -178,8 +178,15 @@ function locationFrom(cwd: string, ...values: unknown[]): ToolCallLocation[] {
   )
 }
 
+const V1Aliases = new Map([
+  ["bash", "shell"],
+  ["task", "subagent"],
+  ["apply_patch", "patch"],
+])
+
 export function canonicalName(toolName: string) {
-  return canonicalToolName(toolName.toLocaleLowerCase())
+  const name = toolName.toLocaleLowerCase()
+  return V1Aliases.get(name) ?? name
 }
 
 // Sessions migrated from V1 keep their original `filePath` tool inputs.
