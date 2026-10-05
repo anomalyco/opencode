@@ -13,7 +13,7 @@ import { Wildcard } from "../util/wildcard.js"
 type Part = { type: string; text: string }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
 const POWERSHELL_PATH_FLAG_RE =
-  /^-(?:p(?:ath|at|a)?|lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|pspa(?:t(?:h)?)?|psp):?$/i
+  /^-(?:p(?:ath|at|a)?|lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
 
 export type Result = {
   commands: Array<{ resource: string; save: string }>
@@ -238,8 +238,9 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
         ...directoryArgs(
           powershell
             ? words.flatMap((raw, index): Part[] => {
-                const text = !raw.includes("`$") && /['"`]/.test(raw) ? (item.words[index] ?? raw) : raw
-                if (!raw.startsWith("-")) return [{ type: "word", text }]
+                const text =
+                  !raw.includes("`$") && /['"`]/.test(raw) ? (item.words[index] ?? raw) : raw.replaceAll("`$", "\0")
+                if (!/^-[A-Za-z_?][\w?-]*(?::|$)/.test(raw)) return [{ type: "word", text }]
                 const colon = text.indexOf(":")
                 if (colon >= 0)
                   return colon + 1 < text.length
@@ -311,14 +312,19 @@ function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell:
 
   const directories: string[] = []
   let path = false
+  let endOfParameters = false
   for (const part of command.slice(1)) {
+    if (!endOfParameters && part.text === "--") {
+      endOfParameters = true
+      continue
+    }
     if (path) {
       const value = directoryArgument(part.text, powershell, cwd, shell)
       if (value) directories.push(value)
       path = false
       continue
     }
-    if (part.type === "command_parameter") {
+    if (!endOfParameters && part.type === "command_parameter") {
       path = POWERSHELL_PATH_FLAG_RE.test(part.text)
       continue
     }
@@ -351,11 +357,12 @@ function directoryArgument(value: string, powershell: boolean, cwd: string, shel
 function expandKnownDirectory(value: string) {
   // Unknown shell expressions cannot be resolved safely during permission analysis.
   if (value.includes("$") || value.includes("`") || value.startsWith("(")) return
-  if (value === "~") return os.homedir()
-  if (value.startsWith("~/") || (process.platform === "win32" && value.startsWith("~\\"))) {
-    return path.join(os.homedir(), value.slice(2))
+  const resolved = value.replaceAll("\0", "$")
+  if (resolved === "~") return os.homedir()
+  if (resolved.startsWith("~/") || (process.platform === "win32" && resolved.startsWith("~\\"))) {
+    return path.join(os.homedir(), resolved.slice(2))
   }
-  return value
+  return resolved
 }
 
 function environment(key: string) {

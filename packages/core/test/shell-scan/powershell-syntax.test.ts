@@ -76,9 +76,13 @@ describe("PowerShell practical syntax", () => {
       })
       expect(ShellScan.scanPowerShell(`Write-Output left\`${newline}right`)).toMatchObject({
         kind: "scanned",
-        commands: [
-          { words: ["Write-Output", `left${newline}right`], rawWords: ["Write-Output", `left\`${newline}right`] },
-        ],
+        commands:
+          newline === "\r\n"
+            ? [
+                { words: ["Write-Output", "left\r"], rawWords: ["Write-Output", "left`\r"] },
+                { words: ["right"], rawWords: ["right"] },
+              ]
+            : [{ words: ["Write-Output", `left${newline}right`], rawWords: ["Write-Output", `left\`${newline}right`] }],
       })
     },
   )

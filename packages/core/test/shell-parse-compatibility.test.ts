@@ -93,7 +93,7 @@ describe("portable shell parser compatibility", () => {
   test("extracts inline PowerShell directory flags with case-insensitive names and quoted values", async () => {
     const result = await Effect.runPromise(
       ShellParse.scanPortable(
-        "Set-Location -LITERALPATH:C:\\outside; Set-Location -pAtH:'../other dir'; Set-Location -p:/short; Set-Location -lp /literal; Set-Location -l:/prefix; Set-Location -lit:/litprefix; Set-Location -pat:/patprefix; Set-Location -PSPath:/pspath; Set-Location '-outside'; Set-Location /out`side; Set-Location 'C:\\quoted'",
+        "Set-Location -LITERALPATH:C:\\outside; Set-Location -pAtH:'../other dir'; Set-Location -p:/short; Set-Location -lp /literal; Set-Location -l:/prefix; Set-Location -lit:/litprefix; Set-Location -pat:/patprefix; Set-Location -PSPath:/pspath; Set-Location '-outside'; Set-Location -/../../outside; Set-Location -Path -- -/../../outside2; Set-Location -- -outside2; Set-Location -`outside3; Set-Location \"../`$a/../outside4\"; Set-Location /out`side; Set-Location 'C:\\quoted'",
         "pwsh",
         "/workspace",
       ),
@@ -110,6 +110,11 @@ describe("portable shell parser compatibility", () => {
         "/patprefix",
         "/pspath",
         "-outside",
+        "-/../../outside",
+        "-/../../outside2",
+        "-outside2",
+        "-outside3",
+        "../$a/../outside4",
         "/outside",
         "C:\\quoted",
       ],

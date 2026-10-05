@@ -88,7 +88,7 @@ describe("ShellScan adversarial corpus", () => {
     ["Get-ChildItem | ForEach-Object { Remove-Item $_ }", ["Get-ChildItem", "ForEach-Object", "Remove-Item"]],
     ['Write-Output "$(Get-ChildItem)"', ["Write-Output", "Get-ChildItem"]],
     ["Remove-`Item victim", ["Remove-Item"]],
-    ["Remove-Item`\r\n victim", ["Remove-Item\r\n"]],
+    ["Remove-Item`\r\n victim", ["Remove-Item\r", "victim"]],
     ["Invoke-`\nExpression 'Remove-Item victim'", ["Invoke-\nExpression"]],
     ["<# ignored #> Remove-Item victim", ["Remove-Item"]],
     ["[string]$x = Remove-Item victim", ["Remove-Item"]],
