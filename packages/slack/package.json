@@ -1,6 +1,6 @@
 {
   "name": "@opencode-ai/slack",
-  "version": "1.18.33",
+  "version": "1.18.34",
   "type": "module",
   "license": "MIT",
   "scripts": {

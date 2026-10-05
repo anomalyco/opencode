@@ -55,7 +55,10 @@ export declare namespace GeoStatRepo {
       readonly model?: string
     }) => Effect.Effect<GeoStatRow[], DatabaseError>
     readonly upsert: (rows: GeoStatRow[]) => Effect.Effect<void, DatabaseError>
-    readonly deleteRetiredDimensions: (rows: GeoStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteRetiredDimensions: (
+      rows: GeoStatRow[],
+      hiddenModels: readonly string[],
+    ) => Effect.Effect<void, DatabaseError>
     readonly deleteUnknownDimensions: (rows: GeoStatRow[]) => Effect.Effect<void, DatabaseError>
   }
 }
@@ -193,7 +196,10 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
           })
       }
 
-      const deleteRetiredDimensions = Effect.fn("GeoStatRepo.deleteRetiredDimensions")(function* (rows: GeoStatRow[]) {
+      const deleteRetiredDimensions = Effect.fn("GeoStatRepo.deleteRetiredDimensions")(function* (
+        rows: GeoStatRow[],
+        hiddenModels: readonly string[],
+      ) {
         const scope = statRowScope(rows)
         if (!scope) return
 
@@ -210,7 +216,7 @@ export class GeoStatRepo extends Context.Service<GeoStatRepo, GeoStatRepo.Servic
                   inArray(geoStat.source, scope.sources),
                   or(
                     inArray(geoStat.provider, RETIRED_STAT_PROVIDERS),
-                    inArray(geoStat.model, RETIRED_STAT_MODELS),
+                    inArray(geoStat.model, [...RETIRED_STAT_MODELS, ...hiddenModels]),
                     and(eq(geoStat.provider, "unknown"), eq(geoStat.model, "hy4-preview")),
                   ),
                 ),
