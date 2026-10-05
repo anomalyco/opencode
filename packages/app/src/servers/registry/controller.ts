@@ -16,7 +16,7 @@ function showRequestError(language: ReturnType<typeof useLanguage>, err: unknown
   })
 }
 
-function useDefaultServer() {
+function useDefaultServer(count: () => number) {
   const language = useLanguage()
   const platform = usePlatform()
   const [defaultKey, defaultKeyActions] = createResource(
@@ -42,7 +42,8 @@ function useDefaultServer() {
 
   return {
     key: () => defaultKey.latest,
-    available: createMemo(() => !!platform.getDefaultServer && !!platform.setDefaultServer),
+    // A default only changes startup selection and ordering, so it is meaningless with one server.
+    available: createMemo(() => !!platform.getDefaultServer && !!platform.setDefaultServer && count() > 1),
     set,
   }
 }
@@ -74,7 +75,7 @@ export function useServerActionsController() {
   const tabs = useTabs()
   const platform = usePlatform()
   const language = useLanguage()
-  const defaults = useDefaultServer()
+  const defaults = useDefaultServer(() => server.list.length)
 
   const remove = async (key: ServerConnection.Key) => {
     try {
