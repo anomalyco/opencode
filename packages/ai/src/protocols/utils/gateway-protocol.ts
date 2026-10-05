@@ -1,19 +1,19 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../../route/protocol.js"
 import { LLMEvent, mergeJsonRecords, type AIError, type LLMRequest } from "../../schema/index.js"
-import { ProviderShared } from "../shared.js"
+import { optionalNull, ProviderShared } from "../shared.js"
 
 // Gateway attaches billing and routing metadata to raw SSE frames under snake_case `provider_metadata.gateway`
 // (`message_delta` on Messages, `response.completed` on Responses, and `choices[].delta` on Chat).
 const WireMetadataField = Schema.Struct({
-  provider_metadata: Schema.optional(
-    Schema.Struct({ gateway: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)) }),
+  provider_metadata: optionalNull(
+    Schema.Struct({ gateway: optionalNull(Schema.Record(Schema.String, Schema.Unknown)) }),
   ),
 })
 const WireFrameMetadata = Schema.Struct({
   ...WireMetadataField.fields,
-  response: Schema.optional(WireMetadataField),
-  choices: Schema.optional(Schema.Array(Schema.Struct({ delta: Schema.optional(WireMetadataField) }))),
+  response: optionalNull(WireMetadataField),
+  choices: optionalNull(Schema.Array(Schema.Struct({ delta: optionalNull(WireMetadataField) }))),
 })
 const decodeWireMetadata = Schema.decodeUnknownOption(Schema.fromJsonString(WireFrameMetadata))
 
@@ -72,9 +72,9 @@ export function gatewayProtocol<Body, Event, State>(
             ? state.gateway
             : mergeJsonRecords(
                 state.gateway,
-                decoded.value.provider_metadata?.gateway,
-                decoded.value.response?.provider_metadata?.gateway,
-                ...(decoded.value.choices ?? []).map((choice) => choice.delta?.provider_metadata?.gateway),
+                decoded.value.provider_metadata?.gateway ?? undefined,
+                decoded.value.response?.provider_metadata?.gateway ?? undefined,
+                ...(decoded.value.choices ?? []).map((choice) => choice.delta?.provider_metadata?.gateway ?? undefined),
               )
         const [inner, events] = yield* protocol.stream.step(state.inner, event)
         return [{ inner, gateway }, attachGatewayMetadata(events, gateway)] as const

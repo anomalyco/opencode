@@ -11,7 +11,7 @@ import {
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
-import { ProviderShared } from "../protocols/shared.js"
+import { optionalNull, ProviderShared } from "../protocols/shared.js"
 import { gatewayProtocol } from "../protocols/utils/gateway-protocol.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { Auth } from "../route/auth.js"
@@ -40,24 +40,48 @@ const baseURL = "https://ai-gateway.vercel.sh/v1"
 
 export interface GatewayOptions {
   readonly [key: string]: unknown
-  readonly caching?: "auto"
+  readonly caching?: "auto" | (string & {})
   readonly only?: ReadonlyArray<string>
   readonly order?: ReadonlyArray<string>
-  readonly sort?: string
-  readonly models?: ReadonlyArray<string>
+  readonly sort?: "cost" | "tps" | "ttft" | (string & {})
+  readonly models?: ReadonlyArray<string | Readonly<Record<string, unknown>>>
   readonly zeroDataRetention?: boolean
+  readonly disallowPromptTraining?: boolean
+  readonly has?: ReadonlyArray<
+    | "implicit-caching"
+    | "reasoning"
+    | "structured-output"
+    | "tool-use"
+    | "vision"
+    | `quantization:${string}`
+    | `!quantization:${string}`
+    | (string & {})
+  >
+  readonly idempotencyKey?: string
+  readonly quotaEntityId?: string
+  readonly serviceTier?: "flex" | "priority" | (string & {})
   readonly user?: string
   readonly tags?: ReadonlyArray<string>
   readonly byok?: Readonly<Record<string, ReadonlyArray<Readonly<Record<string, unknown>>>>>
   readonly inferenceRegion?: string
-  readonly providerTimeouts?: { readonly byok?: Readonly<Record<string, number>> }
+  readonly providerTimeouts?: {
+    readonly [key: string]: unknown
+    readonly byok?: Readonly<Record<string, number>>
+  }
 }
 
 export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
-  AnthropicMessages.OptionsInput & {
+  Omit<AnthropicMessages.OptionsInput, "thinking"> & {
+    readonly thinking?:
+      | AnthropicMessages.OptionsInput["thinking"]
+      | {
+          readonly type: "enabled" | "adaptive" | "disabled" | (string & {})
+          readonly budgetTokens?: number
+          readonly budget_tokens?: number
+        }
     readonly gateway?: GatewayOptions
     /** Upstream options forwarded under their Gateway provider namespace. */
-    readonly upstream?: Readonly<Record<string, Readonly<Record<string, unknown>>>>
+    readonly upstream?: Readonly<Record<string, Readonly<Record<string, unknown>> | undefined>>
     /** Responses automatic-cache lifetime. */
     readonly cacheTTL?: "5m" | "1h" | (string & {})
     /** Number of stable Responses input items. */
@@ -66,11 +90,7 @@ export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
 
 export interface EvaluationOptions {
   readonly [key: string]: unknown
-  readonly gateway?: Readonly<{
-    readonly [key: string]: unknown
-    readonly zeroDataRetention?: boolean
-    readonly only?: ReadonlyArray<string>
-  }>
+  readonly gateway?: GatewayOptions
 }
 
 export type Options = Omit<RouteDefaultsInput, "providerOptions"> &
@@ -82,23 +102,24 @@ export type Options = Omit<RouteDefaultsInput, "providerOptions"> &
 export type Settings = ProviderPackage.Settings & ProviderOptionsInput & { readonly apiKey?: string }
 
 const GatewayOptionsSchema = Schema.Struct({
-  gateway: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
-  upstream: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))),
-  reasoningEffort: Schema.optional(ReasoningEffort),
-  cacheTTL: Schema.optional(Schema.String),
-  cacheAnchorItems: Schema.optional(Schema.Number),
+  gateway: optionalNull(Schema.Record(Schema.String, Schema.Unknown)),
+  upstream: optionalNull(Schema.Record(Schema.String, optionalNull(Schema.Record(Schema.String, Schema.Unknown)))),
+  reasoningEffort: optionalNull(ReasoningEffort),
+  cacheTTL: optionalNull(Schema.String),
+  cacheAnchorItems: optionalNull(Schema.Number),
 })
 const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(GatewayOptionsSchema))
 
-const ChatThinking = Schema.Union([
-  Schema.Struct({ type: Schema.Literals(["adaptive", "disabled"]) }),
-  Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Number }),
-])
+const ChatThinking = Schema.Struct({
+  type: Schema.String,
+  budgetTokens: optionalNull(Schema.Number),
+  budget_tokens: optionalNull(Schema.Number),
+})
 type ChatThinking = typeof ChatThinking.Type
 const decodeChatThinking = ProviderShared.validateWith(Schema.decodeUnknownEffect(ChatThinking))
 
-function messagesRequest(request: LLMRequest, effort: ReasoningEffort | undefined) {
-  if (effort === undefined) return request
+function messagesRequest(request: LLMRequest, effort: ReasoningEffort | null | undefined) {
+  if (effort === undefined || effort === null) return request
   const enabled = effort !== "none"
   const thinking = request.providerOptions?.thinking ?? { type: enabled ? "adaptive" : "disabled" }
   return LLMRequest.update(request, {
@@ -114,14 +135,21 @@ function chatReasoning(thinking: ChatThinking | undefined) {
   if (!thinking) return undefined
   return {
     enabled: thinking.type !== "disabled",
-    max_tokens: thinking.type === "enabled" ? thinking.budgetTokens : undefined,
+    max_tokens: thinking.budgetTokens ?? thinking.budget_tokens ?? undefined,
   }
 }
 
 function gatewayProviderOptions(options: typeof GatewayOptionsSchema.Type) {
-  if (options.upstream === undefined && options.gateway === undefined) return undefined
+  const upstream =
+    options.upstream === undefined || options.upstream === null
+      ? undefined
+      : Object.fromEntries(
+          Object.entries(options.upstream).filter(([, value]) => value !== undefined && value !== null),
+        )
+  const hasUpstream = upstream !== undefined && Object.keys(upstream).length > 0
+  if (!hasUpstream && !options.gateway) return undefined
   return {
-    ...options.upstream,
+    ...upstream,
     ...(options.gateway ? { gateway: options.gateway } : {}),
   }
 }
@@ -141,15 +169,14 @@ const prepare = (api: "messages" | "responses" | "chat") =>
         request,
         body: {
           providerOptions,
-          cache_ttl: options.cacheTTL,
-          cache_anchor_items: options.cacheAnchorItems,
+          cache_ttl: options.cacheTTL ?? undefined,
+          cache_anchor_items: options.cacheAnchorItems ?? undefined,
         },
       }
     }
+    const rawThinking = request.providerOptions?.thinking
     const thinking =
-      request.providerOptions?.thinking === undefined
-        ? undefined
-        : yield* decodeChatThinking(request.providerOptions.thinking)
+      rawThinking === undefined || rawThinking === null ? undefined : yield* decodeChatThinking(rawThinking)
     return {
       request,
       body: {
@@ -215,16 +242,16 @@ const Request = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Any)],
 )
 const Response = Schema.Struct({
-  model: Schema.optional(Schema.String),
+  model: optionalNull(Schema.String),
   answers: Schema.Record(Schema.String, EvaluationAnswer),
-  usage: Schema.optional(
+  usage: optionalNull(
     Schema.Struct({
-      inputTokens: Schema.optional(Schema.Number),
-      outputTokens: Schema.optional(Schema.Number),
+      inputTokens: optionalNull(Schema.Number),
+      outputTokens: optionalNull(Schema.Number),
     }),
   ),
-  rounding: Schema.optional(EvaluationRounding),
-  providerMetadata: Schema.optional(ProviderMetadata),
+  rounding: optionalNull(EvaluationRounding),
+  providerMetadata: optionalNull(ProviderMetadata),
 })
 
 export const configure = (input: Options = {}) => {
@@ -313,17 +340,17 @@ export const configure = (input: Options = {}) => {
               answers: data.answers,
               usage: data.usage
                 ? new Usage({
-                    inputTokens: data.usage.inputTokens,
-                    outputTokens: data.usage.outputTokens,
+                    inputTokens: data.usage.inputTokens ?? undefined,
+                    outputTokens: data.usage.outputTokens ?? undefined,
                     totalTokens:
-                      data.usage.inputTokens === undefined && data.usage.outputTokens === undefined
+                      data.usage.inputTokens == null && data.usage.outputTokens == null
                         ? undefined
                         : (data.usage.inputTokens ?? 0) + (data.usage.outputTokens ?? 0),
                     providerMetadata: { gateway: data.usage },
                   })
                 : undefined,
-              rounding: data.rounding,
-              providerMetadata: data.providerMetadata,
+              rounding: data.rounding ?? undefined,
+              providerMetadata: data.providerMetadata ?? undefined,
             })
           }),
       },
