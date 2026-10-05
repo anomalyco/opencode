@@ -17,5 +17,17 @@ jobs:
       - name: Setup Bun
         uses: ./.github/actions/setup-bun
 
+      - name: Run lint
+        run: bun run lint
+
       - name: Run typecheck
-        run: bun typecheck
+        run: bun run typecheck
+
+      - name: Run build
+        run: bun run build
+
+      - name: Run smoke
+        run: bun run smoke
+
+      - name: Run security
+        run: bun run security
