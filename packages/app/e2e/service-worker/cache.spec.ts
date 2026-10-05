@@ -332,7 +332,7 @@ fixture("upgrades the legacy shared precache only after old tabs close", async (
   await expect(observer.getByRole("status")).toHaveText("new nested lazy loaded")
 })
 
-fixture("does not substitute cached HTML for API or missing asset navigations", async ({ page, site }) => {
+fixture("does not substitute cached HTML for API, missing asset, or reauth navigations", async ({ page, site }) => {
   await install(page, site.url)
   const api = await page.goto(`${site.url}/api/info`)
   expect(await api?.json()).toEqual({
@@ -345,6 +345,8 @@ fixture("does not substitute cached HTML for API or missing asset navigations", 
   const asset = await page.goto(`${site.url}/_assets/missing.js`)
   expect(asset?.status()).toBe(404)
   expect(await asset?.text()).toBe("Not found")
+  const reauth = await page.goto(`${site.url}/workspace/open?reauth=1`)
+  expect(reauth?.fromServiceWorker()).toBe(false)
 })
 
 test("the production build precaches every deployable file", async ({ page, context }) => {
