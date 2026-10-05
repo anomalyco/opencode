@@ -150,6 +150,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
             get: (id) => mutable(editor.get(Agent.ID.make(id))),
             default: (id) => editor.default(id === undefined ? undefined : Agent.ID.make(id)),
             update: (id, update) => editor.update(Agent.ID.make(id), update),
+            add: (info) => editor.add(mutable(info)),
             remove: (id) => editor.remove(Agent.ID.make(id)),
           })
         }),

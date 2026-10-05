@@ -39,6 +39,7 @@ export type Editor = {
   get: (id: ID) => Info | undefined
   default: (id: ID | undefined) => void
   update: (id: ID, fn: (agent: Types.DeepMutable<Info>) => void) => void
+  add: (info: Types.DeepMutable<Info>) => void
   remove: (id: ID) => void
 }
 
@@ -82,6 +83,9 @@ const layer = Layer.effect(
           if (!editor.agents.has(id)) editor.agents.set(id, current)
           fn(current)
           current.id = id
+        },
+        add: (info) => {
+          editor.agents.set(info.id, info)
         },
         remove: (id) => {
           editor.agents.delete(id)
