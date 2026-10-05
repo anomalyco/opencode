@@ -8,7 +8,6 @@ import {
   Match,
   on,
   onCleanup,
-  onMount,
   Show,
   Switch,
   type Accessor,
@@ -20,7 +19,7 @@ import { useRoute, useRouteData } from "../../context/route"
 import { createStore } from "solid-js/store"
 import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
-import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
+import { useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { useTheme, useThemes } from "../../context/theme"
@@ -54,11 +53,11 @@ import { RetryProvider } from "../../component/retry-provider"
 import { useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import { useClient } from "../../context/client"
 import { useEditorContext } from "../../context/editor"
-import { openEditor } from "../../editor"
 import { useDialog } from "../../ui/dialog"
 import { DialogSelect } from "../../ui/dialog-select"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { DialogImagePreview } from "../../component/dialog-image-preview"
+import { statusLabel } from "../../component/dialog-workspace-file-changes"
 import { DialogMessage } from "./dialog-message"
 import { DialogFork } from "./dialog-fork"
 import { DialogTimeline } from "./dialog-timeline"
@@ -110,7 +109,6 @@ import { useArgs } from "../../context/args"
 import { withTimestampedFallback } from "@opencode/util/session-title-fallback"
 import { useSessionTabs, type ScrollAnchor } from "../../context/session-tabs"
 import { createSingleFlight } from "../../util/single-flight"
-import type { SessionInbox } from "@opencode/schema/session-inbox"
 import { createDelayedPresence } from "../../util/delayed-presence"
 import { SessionLocationMissing } from "./location-missing"
 import { isRecord } from "../../util/record"
@@ -159,7 +157,6 @@ export function Session(props: {
   const data = useData()
   const local = useLocal()
   const args = useArgs()
-  const paths = useTuiPaths()
   const configState = useConfig()
   const config = configState.data
   const theme = useTheme()
@@ -227,10 +224,6 @@ export function Session(props: {
     if (props.promptMuted && composer.open) setComposer("open", false)
   })
   const disabled = createMemo(() => promptedPermissions().length > 0 || forms().length > 0)
-
-  const lastAssistant = createMemo(() => {
-    return messages().findLast((x) => x.type === "assistant")
-  })
 
   const dimensions = useTerminalDimensions()
   const thinkingMode = createMemo<ThinkingMode>(() => config.session?.thinking ?? "hide")
@@ -972,14 +965,6 @@ export function Session(props: {
           .catch((error) => toast.show({ message: errorMessage(error), variant: "error" }))
         dialog.clear()
       },
-    },
-    {
-      title: "Unshare session",
-      id: "session.unshare",
-      group: "Session",
-      enabled: false,
-      slash: { name: "unshare" },
-      run: () => unavailable("Unsharing"),
     },
     {
       title: "Undo previous message",
@@ -2096,12 +2081,6 @@ function CompactionQueued() {
   )
 }
 
-function statusLabel(status: "added" | "modified" | "deleted") {
-  if (status === "added") return "A"
-  if (status === "deleted") return "D"
-  return "M"
-}
-
 function RevertMessage(props: {
   count: number
   files: ReadonlyArray<{
@@ -2620,11 +2599,9 @@ function useToolPermission(part: () => SessionMessageAssistantTool | undefined) 
 
 function InlineTool(props: {
   icon: string
-  iconColor?: RGBA
   color?: RGBA
   complete: unknown
   pending: string
-  failure?: string
   spinner?: boolean
   running?: boolean
   status?: JSX.Element
@@ -2664,7 +2641,6 @@ function InlineTool(props: {
   return (
     <InlineToolRow
       icon={props.icon}
-      iconColor={props.iconColor}
       color={fg()}
       errorColor={theme.text.feedback.error.base}
       failed={failed()}
@@ -2673,7 +2649,6 @@ function InlineTool(props: {
       errorExpanded={errorExpanded()}
       complete={props.complete}
       pending={props.pending}
-      failure={props.failure}
       spinner={props.spinner}
       status={props.status}
       onMouseOver={() => clickable() && setHover(true)}
@@ -3045,6 +3020,10 @@ function Read(props: ToolProps) {
         part={props.part}
       >
         Read {pathFormatter.format(stringValue(props.input.path))}
+        <Show when={props.input.offset !== undefined || props.input.limit !== undefined}>
+          :{finiteNumber(props.input.offset) || 1}-
+          {props.input.limit ? (finiteNumber(props.input.offset) || 1) + (finiteNumber(props.input.limit) || 0) - 1 : ""}
+        </Show>
       </InlineTool>
       <For each={loaded()}>
         {(filepath) => (

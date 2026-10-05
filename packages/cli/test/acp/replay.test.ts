@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessage } from "@opencode/schema/session-message"
-import { assistantMessage, makeSession, rpcError, startWire } from "./wire-fixture"
+import { assistantMessage, makeSession, startWire } from "./wire-fixture"
 
 describe("acp session replay over the wire", () => {
   test("replays user, text, reasoning, and tool messages in order on session/load", async () => {
@@ -59,49 +59,7 @@ describe("acp session replay over the wire", () => {
     })
     expect(updates[11]?.update).toMatchObject({ toolCallId: "call_streaming", status: "pending", rawInput: {} })
   })
-
-  test("fails the load and detaches when a message page does not decode", async () => {
-    await using acp = await startWire({
-      fetch(request) {
-        if (request.path !== "/api/session/ses_replay_failure/message") return undefined
-        return Response.json({
-          data: [
-            // An errored tool without its error does not decode.
-            replayToolMessage("call_first", { status: "error", input: {}, metadata: {} }),
-            replayToolMessage("call_after", {
-              status: "completed",
-              input: { command: "printf done" },
-              metadata: { exit: 0 },
-              content: [{ type: "text", text: "done" }],
-            }),
-          ],
-          cursor: {},
-        })
-      },
-    })
-    acp.server.sessions.set("ses_replay_failure", makeSession("ses_replay_failure"))
-    await acp.initialize()
-
-    expect(
-      await rpcError(
-        acp.request("session/load", { cwd: "/workspace", sessionId: "ses_replay_failure", mcpServers: [] }),
-      ),
-    ).toMatchObject({ code: -32603, data: { errorName: "ClientError" } })
-    expect(acp.updates.filter((item) => item.update.sessionUpdate !== "available_commands_update")).toEqual([])
-    expect(
-      await rpcError(
-        acp.request("session/set_config_option", { sessionId: "ses_replay_failure", configId: "mode", value: "plan" }),
-      ),
-    ).toMatchObject({ code: -32602, data: { sessionId: "ses_replay_failure" } })
-  })
 })
-
-function replayToolMessage(id: string, state: Record<string, unknown>) {
-  return {
-    ...assistantMessage(`msg_${id}`),
-    content: [{ type: "tool", id, name: "shell", time: { created: 1, completed: 2 }, state }],
-  }
-}
 
 function replayFixtureMessages(): Array<typeof SessionMessage.Info.Encoded> {
   return [

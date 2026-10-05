@@ -10,4 +10,6 @@ export default {
   "git.description": "මෙම ව්‍යාපෘතියේ වෙනස්කම් හඹා යන්න, සමාලෝචනය කරන්න, සහ පසුගමනය කරන්න",
   loadingChanges: "වෙනස්කම් පූරණය කරමින්…",
   noChanges: "වෙනස්කම් නොමැත",
+  "settings.wrapLines.title": "පේළි එතීම",
+  "settings.wrapLines.description": "ජංගම ඩිෆ්වල තිරස්ව අනුචලනය කිරීම වෙනුවට දිගු පේළි ඔතන්න",
 }

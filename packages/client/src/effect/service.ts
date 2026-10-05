@@ -58,6 +58,7 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
   let announced = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
+  let failure: Error | undefined
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
       if (announced) return
@@ -89,13 +90,27 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
         yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
         yield* terminate(info, options, timing)
+        for (const item of contenders) {
+          if (item.child.pid === info.pid || contenderFinished(item)) {
+            item.release()
+            contenders.delete(item)
+          }
+        }
+        failure = undefined
         timeouts = undefined
         lastSpawn = Date.now() - spawnDelay
       }
     } else timeouts = undefined
     if (service !== undefined) {
       spawnDelay = timing.spawnDelay
-      const compatible = service.compatible && matchesVersion(service.version, options)
+      const versionMatches = matchesVersion(service.version, options)
+      const compatible = service.compatible && versionMatches
+      if (!service.compatible && versionMatches)
+        return yield* Effect.fail(
+          new Error(
+            "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
+          ),
+        )
       if (compatible && service.state === "ready") {
         yield* Effect.tryPromise(() => PtyHandoff.complete(options.file ?? fallback(), service.info))
         return Option.some(service)
@@ -110,19 +125,27 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         file: options.file,
         pty: service.state === "ready" ? "handoff" : "clear",
       }).pipe(Effect.ignore)
+      for (const item of contenders) {
+        if (item.child.pid === service.info.pid || contenderFinished(item)) {
+          item.release()
+          contenders.delete(item)
+        }
+      }
+      failure = undefined
       lastSpawn = 0
       return Option.none<LocalService>()
     } else if (lastSpawn === 0 && info !== undefined) lastSpawn = Date.now()
 
     const finished = [...contenders].filter(contenderFinished)
-    const failure = finished.map(contenderFailure).find((error): error is Error => error !== undefined)
+    failure ??= finished.map(contenderFailure).find((error): error is Error => error !== undefined)
     if (finished.some((item) => item.child.exitCode === 0)) {
       spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
     }
     finished.forEach((item) => contenders.delete(item))
     if (failure !== undefined && contenders.size === 0) return yield* Effect.fail(failure)
-    // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
-    if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
+    // Keep one candidate plus one lock probe for pre-lock stalls. After a failure, let the
+    // survivors finish without recruiting replacements that could hide the error indefinitely.
+    if (failure === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
       yield* announce("missing")
       contenders.add(yield* spawnContender)
       lastSpawn = Date.now()
@@ -138,19 +161,20 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     Effect.ensuring(Effect.sync(() => contenders.forEach((contender) => contender.release()))),
   )
   if (Option.isNone(found))
-    return yield* Effect.fail(new Error("Timed out waiting for the background service to start"))
+    return yield* Effect.fail(failure ?? new Error("Timed out waiting for the background service to start"))
   return found.value.endpoint
 })
 
 /** Stop the registered local service. */
 export const stop = Effect.fn("service.stop")(function* (options: StopOptions = {}) {
   const info = yield* read(options.file)
-  if (options.pty === "handoff" && info !== undefined)
-    yield* Effect.tryPromise(() =>
-      PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout),
-    )
-  else yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-  if (info !== undefined) yield* terminate(info, options, defaultEnsureTiming)
+  // Terminal handoff is best-effort; it must never keep the old service running.
+  yield* Effect.tryPromise(() =>
+    options.pty === "handoff" && info !== undefined
+      ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
+      : PtyHandoff.clear(options.file ?? fallback()),
+  ).pipe(Effect.catch((cause) => Effect.logWarning("Failed to prepare persistent terminals for replacement", cause)))
+  if (info !== undefined) yield* terminate(info, options, ensureTiming(options))
 })
 
 function fallback() {
@@ -202,10 +226,7 @@ const probe = Effect.fnUntraced(function* (info: Info) {
   return (yield* probeResult(info)).service
 })
 
-const probeResult = Effect.fnUntraced(function* (
-  info: Info,
-  timeout = defaultEnsureTiming.requestTimeout,
-) {
+const probeResult = Effect.fnUntraced(function* (info: Info, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {
     url: info.url,
     auth:
@@ -227,8 +248,8 @@ const probeResult = Effect.fnUntraced(function* (
   )
   if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
   const response = result.value.response
-  // The previous V2 service exposes /api/status instead. Its authenticated 404 is enough
-  // to recognize the registered daemon as incompatible and route it through replacement.
+  // A missing health endpoint identifies protocol incompatibility, not an older
+  // version. Only an unmet version requirement lets ensure replace this owner.
   if (response.status === 404)
     return {
       service: {
@@ -291,9 +312,9 @@ const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly f
   if (current === undefined || !same(current, info)) return
   yield* signal(info.pid, "SIGTERM")
   const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
+  // The registration can disappear or change hands before this process exits. Only the PID we
+  // signalled can tell us whether it has stopped, so escalate based on that process.
   if (Option.isNone(done)) {
-    const latest = yield* read(options.file)
-    if (latest === undefined || !same(latest, info)) return
     yield* signal(info.pid, "SIGKILL")
     yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
   }

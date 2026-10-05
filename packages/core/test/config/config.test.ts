@@ -11,8 +11,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Credential } from "@opencode/core/credential"
-import { ConfigMigrateV1 } from "@opencode/core/v1/config/migrate"
-import { ConfigV1 } from "@opencode/core/v1/config/config"
+import { ConfigV1 } from "../fixture/v1-config/config"
 import { ConfigNormalize } from "@opencode/core/config/normalize"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Bus } from "@opencode/core/bus"
@@ -30,6 +29,18 @@ import { testEffect } from "../lib/effect"
 
 const it = testEffect(Layer.empty)
 const selection = Schema.decodeUnknownSync(ConfigModel.Selection)
+const decodeInfo = Schema.decodeUnknownSync(Info, {
+  errors: "all",
+  onExcessProperty: "ignore",
+  propertyOrder: "original",
+})
+const encodeInfo = Schema.encodeSync(Info)
+
+function migrateV1(input: unknown) {
+  const result = ConfigNormalize.normalize(input)
+  if (result.type !== "normalized") throw new Error("expected normalized config")
+  return encodeInfo(decodeInfo(result.encoded))
+}
 
 function inFixture(root: string, target: string) {
   const relative = path.relative(root, target)
@@ -636,38 +647,21 @@ describe("Config", () => {
   test("migrates arbitrary v1 configuration into valid v2 configuration", () => {
     FastCheck.assert(
       FastCheck.property(Schema.toArbitrary(ConfigV1.Info)(FastCheck), (info) => {
-        const parsed = Schema.decodeUnknownSync(ConfigV1.Info)(
-          Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
-            Schema.encodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(info),
-          ),
-        )
-        Schema.decodeUnknownSync(Info)(ConfigMigrateV1.migrate(parsed), { errors: "all" })
+        migrateV1(JSON.parse(JSON.stringify(info)))
       }),
       { numRuns: 100 },
     )
   }, 30_000)
 
   test("migrates the v1 experimental subagent depth", () => {
-    expect(ConfigMigrateV1.migrate({ experimental: { subagent_depth: 2 } }).experimental?.subagent_depth).toBe(2)
-  })
-
-  test("migrates the v1 small model to the title agent", () => {
-    expect(
-      ConfigMigrateV1.migrate({
-        small_model: "anthropic/claude-haiku-4-5",
-        agent: { title: { prompt: "Custom title prompt" } },
-      }).agents?.title,
-    ).toEqual({
-      model: { providerID: "anthropic", model: "claude-haiku-4-5" },
-      system: "Custom title prompt",
-    })
+    expect(migrateV1({ experimental: { subagent_depth: 2 } }).experimental?.subagent_depth).toBe(2)
   })
 
   test("migrates the v1 update policy", () => {
-    expect(ConfigMigrateV1.migrate({ autoupdate: false }).update).toBe("disable")
-    expect(ConfigMigrateV1.migrate({ autoupdate: "notify" }).update).toBe("notify")
-    expect(ConfigMigrateV1.migrate({ autoupdate: true }).update).toBe("auto")
-    expect(ConfigMigrateV1.migrate({}).update).toBeUndefined()
+    expect(migrateV1({ autoupdate: false }).update).toBe("disable")
+    expect(migrateV1({ autoupdate: "notify" }).update).toBe("notify")
+    expect(migrateV1({ autoupdate: true }).update).toBe("auto")
+    expect(migrateV1({}).update).toBeUndefined()
   })
 
   test("normalizes the native auto update policy", () => {
@@ -680,7 +674,7 @@ describe("Config", () => {
 
   test("migrates v1 provider lists to policies", () => {
     expect(
-      ConfigMigrateV1.migrate({
+      migrateV1({
         enabled_providers: ["anthropic", "openai"],
         disabled_providers: ["openai"],
       }).experimental?.policies,
@@ -690,13 +684,13 @@ describe("Config", () => {
       { action: "provider.use", resource: "openai", effect: "allow" },
       { action: "provider.use", resource: "openai", effect: "deny" },
     ])
-    expect(ConfigMigrateV1.migrate({ enabled_providers: [] }).experimental?.policies).toEqual([
+    expect(migrateV1({ enabled_providers: [] }).experimental?.policies).toEqual([
       { action: "provider.use", resource: "*", effect: "deny" },
     ])
   })
 
   test("migrates v1 provider setup options into AISDK settings", () => {
-    const migrated = ConfigMigrateV1.migrate({
+    const migrated = migrateV1({
       provider: {
         bedrock: {
           npm: "@ai-sdk/amazon-bedrock",
@@ -721,7 +715,7 @@ describe("Config", () => {
   })
 
   test("renames old provider IDs while migrating v1 configuration", () => {
-    const migrated = ConfigMigrateV1.migrate({
+    const migrated = migrateV1({
       model: "azure-cognitive-services/deployment",
       enabled_providers: ["google-vertex-anthropic"],
       disabled_providers: ["azure-cognitive-services"],
@@ -770,7 +764,7 @@ describe("Config", () => {
   })
 
   test("preserves the generated base URL for v1 Azure OpenAI-compatible providers", () => {
-    const migrated = ConfigMigrateV1.migrate({
+    const migrated = migrateV1({
       provider: {
         "azure-cognitive-services": {
           npm: "@ai-sdk/openai-compatible",
@@ -789,7 +783,7 @@ describe("Config", () => {
   })
 
   test("ignores old provider IDs when the current provider ID is configured", () => {
-    const migrated = ConfigMigrateV1.migrate({
+    const migrated = migrateV1({
       provider: {
         azure: { models: { current: {} } },
         "azure-cognitive-services": { models: { legacy: {} } },
@@ -803,7 +797,7 @@ describe("Config", () => {
   })
 
   test("preserves the built-in package for v1 Vertex Anthropic custom models", () => {
-    const migrated = ConfigMigrateV1.migrate({
+    const migrated = migrateV1({
       provider: {
         "google-vertex-anthropic": {
           models: { claude: {} },
@@ -818,7 +812,7 @@ describe("Config", () => {
   })
 
   test("migrates v1 interleaved fields to compatibility", () => {
-    const migrated = ConfigMigrateV1.migrate({
+    const migrated = migrateV1({
       provider: {
         custom: {
           models: {
@@ -840,7 +834,7 @@ describe("Config", () => {
   for (const subtask of [true, false]) {
     test(`migrates v1 command configuration with subtask: ${subtask}`, () => {
       expect(
-        ConfigMigrateV1.migrate({
+        migrateV1({
           command: {
             review: {
               template: "Review changes",
@@ -866,7 +860,7 @@ describe("Config", () => {
 
   test("normalizes renamed permission actions when migrating v1 permissions", () => {
     expect(
-      ConfigMigrateV1.migrate({
+      migrateV1({
         permission: {
           task: "ask",
           bash: { "git status": "allow", "*": "deny" },

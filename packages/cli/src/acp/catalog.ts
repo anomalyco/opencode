@@ -3,7 +3,7 @@ import type { Agent } from "@opencode/schema/agent"
 import type { Command } from "@opencode/schema/command"
 import type { Model } from "@opencode/schema/model"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Context, Deferred, Effect, Exit, Schedule, Schema, Semaphore, Stream, SubscriptionRef } from "effect"
+import { Cause, Deferred, Effect, Exit, Schedule, Schema, Semaphore, Stream, SubscriptionRef } from "effect"
 import type { ConfigOptionProvider } from "./config-option"
 
 export const builtinCommands = new Map([
@@ -19,7 +19,7 @@ export type Catalog = {
   readonly commands: ReadonlyArray<Command.Info>
 }
 
-export class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatalogNotReadyError", {
+class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatalogNotReadyError", {
   reason: Schema.Literals(["models", "agents"]),
 }) {
   override get message() {
@@ -27,7 +27,7 @@ export class NotReadyError extends Schema.TaggedError<NotReadyError>()("ACPCatal
   }
 }
 
-export class LoadError extends Schema.TaggedError<LoadError>()("ACPCatalogLoadError", {
+class LoadError extends Schema.TaggedError<LoadError>()("ACPCatalogLoadError", {
   cause: Schema.Defect(),
 }) {}
 
@@ -39,14 +39,12 @@ export interface Interface {
   readonly changes: (cwd: string) => Stream.Stream<Catalog, Error>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Catalog") {}
-
 type Entry = {
   readonly cwd: string
   readonly catalog: SubscriptionRef.SubscriptionRef<Catalog>
   readonly lock: Semaphore.Semaphore
-  requested: number
-  loaded: number
+  requestedGeneration: number
+  loadedGeneration: number
 }
 
 const reloadOn = new Set<OpenCodeEvent["type"]>(["model.updated", "agent.updated", "command.updated"])
@@ -59,17 +57,17 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
   // Requests queued behind a running load share the next one.
   const reload = (entry: Entry) =>
     Effect.suspend(() => {
-      const target = ++entry.requested
+      const target = ++entry.requestedGeneration
       return entry.lock.withPermit(
         Effect.suspend(() => {
-          if (entry.loaded >= target) return Effect.void
-          const generation = entry.requested
+          if (entry.loadedGeneration >= target) return Effect.void
+          const generation = entry.requestedGeneration
           return load(client, entry.cwd).pipe(
             Effect.flatMap((next) => SubscriptionRef.set(entry.catalog, next)),
             Effect.ignore,
             Effect.andThen(
               Effect.sync(() => {
-                entry.loaded = generation
+                entry.loadedGeneration = generation
               }),
             ),
           )
@@ -90,7 +88,9 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
         { discard: true },
       )
     }),
-    Effect.ignore,
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP catalog event stream failed", cause),
+    ),
     Effect.ensuring(Deferred.succeed(connected, undefined)),
     Effect.forkScoped,
   )
@@ -101,8 +101,8 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       cwd,
       catalog: yield* SubscriptionRef.make<Catalog>(yield* load(client, cwd)),
       lock: Semaphore.makeUnsafe(1),
-      requested: 0,
-      loaded: 0,
+      requestedGeneration: 0,
+      loadedGeneration: 0,
     } satisfies Entry
   })
 
@@ -123,8 +123,8 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       )
     })
 
-  return Service.of({
-    get: Effect.fn("cli.acp.catalog.get")(function* (cwd) {
+  return {
+    get: Effect.fnUntraced(function* (cwd) {
       const loaded = yield* entry(cwd)
       return yield* SubscriptionRef.get(loaded.catalog)
     }),
@@ -132,7 +132,7 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
       yield* reload(yield* entry(cwd))
     }),
     changes: (cwd) => Stream.unwrap(entry(cwd).pipe(Effect.map((loaded) => SubscriptionRef.changes(loaded.catalog)))),
-  })
+  } satisfies Interface
 })
 
 const load = (client: OpenCodeClient, cwd: string) =>
@@ -181,7 +181,7 @@ const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   } satisfies Catalog
 })
 
-function providers(models: ReadonlyArray<Model.Info>): ConfigOptionProvider[] {
+function providers(models: ReadonlyArray<Model.Info>) {
   return Array.from(new Set(models.map((model) => model.providerID)))
     .toSorted()
     .map((providerID) => ({

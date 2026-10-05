@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "اپ ڈیٹ تیار اے",
   "dialog.restart": "دوبارہ شروع کرو",
   "dialog.later": "پچھوں",
+  "releaseNotes.action.getStarted": "شروع کرو",
+  "releaseNotes.action.next": "اگلا",
+  "releaseNotes.action.hideFuture": "ایہہ اگوں نہ وکھاؤ",
+  "releaseNotes.media.alt": "ریلیز پیش نظارہ",
 }

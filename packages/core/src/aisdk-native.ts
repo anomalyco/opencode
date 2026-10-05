@@ -57,6 +57,7 @@ const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/anthropic": "@opencode/ai/providers/anthropic",
   "@ai-sdk/azure": "@opencode/ai/providers/azure/responses",
   "@ai-sdk/cerebras": "@opencode/ai/providers/cerebras",
+  "@ai-sdk/cohere": "@opencode/ai/providers/cohere",
   "@ai-sdk/deepinfra": "@opencode/ai/providers/deepinfra",
   "@ai-sdk/google": "@opencode/ai/providers/google",
   "@ai-sdk/google-vertex": "@opencode/ai/providers/google-vertex",
@@ -69,6 +70,7 @@ const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/xai": "@opencode/ai/providers/xai",
   "@openrouter/ai-sdk-provider": "@opencode/ai/providers/openrouter",
   "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
+  "venice-ai-sdk-provider": "@opencode/ai/providers/venice",
 }
 
 const protocols = (name: string) => ({
@@ -91,6 +93,7 @@ const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     "@ai-sdk/openai-compatible": "@opencode/ai/providers/cloudflare-ai-gateway",
     "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
   },
+  cohere: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/cohere/chat" },
   "cloudflare-workers-ai": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/cloudflare-workers-ai" },
   deepseek: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/deepseek" },
   digitalocean: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/digitalocean" },

@@ -227,7 +227,7 @@ describe("GitLabPlugin OAuth", () => {
     ),
   )
 
-  it.effect("refreshes an OAuth credential using its stored instance URL and includes redirect_uri", () =>
+  it.live("refreshes an OAuth credential using its stored instance URL and includes redirect_uri", () =>
     Effect.gen(function* () {
       const test = yield* fixture()
       // Creating the credential also wakes workflow discovery, which resolves the same expired
@@ -285,7 +285,7 @@ describe("GitLabPlugin OAuth", () => {
     }),
   )
 
-  it.effect("refreshes credentials without a client ID with the opencode-gitlab-auth application", () =>
+  it.live("refreshes credentials without a client ID with the opencode-gitlab-auth application", () =>
     withEnv({ GITLAB_OAUTH_CLIENT_ID: undefined }, () =>
       Effect.gen(function* () {
         const test = yield* fixture()
@@ -304,7 +304,7 @@ describe("GitLabPlugin OAuth", () => {
     ),
   )
 
-  it.effect("refreshes only with the recorded client ID when the credential has one", () =>
+  it.live("refreshes only with the recorded client ID when the credential has one", () =>
     Effect.gen(function* () {
       const test = yield* fixture()
       test.replies.push(renewal())

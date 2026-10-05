@@ -10,4 +10,6 @@ export default {
   "git.description": "ติดตาม ตรวจสอบ และเลิกทำการเปลี่ยนแปลงในโปรเจกต์นี้",
   loadingChanges: "กำลังโหลดการเปลี่ยนแปลง…",
   noChanges: "ไม่มีการเปลี่ยนแปลง",
+  "settings.wrapLines.title": "ตัดเส้น",
+  "settings.wrapLines.description": "ตัดบรรทัดยาวๆ ในอุปกรณ์เคลื่อนที่แทนการเลื่อนในแนวนอน",
 }

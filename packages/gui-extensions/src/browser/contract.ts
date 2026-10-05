@@ -1,4 +1,4 @@
-import { Service, type SessionRef } from "../sdk"
+import { Contract, type SessionRef } from "../sdk"
 
 export interface Browser {
   /** The desktop browser pane exists for this session (the session is attached to a pane). */
@@ -11,5 +11,5 @@ export interface Browser {
   openFile(session: SessionRef, path: string): void
 }
 
-/** Provided by the browser extension on desktop. Undefined on web or while the extension is off. */
-export const Browser = Service.define<Browser>("browser")
+/** The browser extension provides this on desktop. Inactive on web or while the extension is off. */
+export const Browser = Contract.define<Browser, "browser">("browser")

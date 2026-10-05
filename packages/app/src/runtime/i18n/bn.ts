@@ -1,4 +1,8 @@
-export const dict: Record<string, string> = {
+import en from "./en"
+
+type Keys = keyof typeof en
+
+export const dict = {
   "desktop.menu.app": "OpenCode",
   "desktop.menu.file": "ফাইল",
   "desktop.menu.edit": "সম্পাদনা করুন",
@@ -296,10 +300,6 @@ export const dict: Record<string, string> = {
   "dialog.project.edit.color.select": "{{color}} রঙ নির্বাচন করুন",
   "dialog.project.edit.worktree.startup": "ওয়ার্কস্পেস স্টার্টআপ স্ক্রিপ্ট",
   "dialog.project.edit.worktree.startup.placeholder": "যেমন বান ইনস্টল",
-  "dialog.releaseNotes.action.getStarted": "শুরু করুন",
-  "dialog.releaseNotes.action.next": "পরবর্তী",
-  "dialog.releaseNotes.action.hideFuture": "ভবিষ্যতে এগুলো দেখাবেন না",
-  "dialog.releaseNotes.media.alt": "রিলিজ পূর্বরূপ",
   "toast.permissions.autoaccept.on.title": "স্বয়ংক্রিয়ভাবে গ্রহণযোগ্য অনুমতি",
   "toast.permissions.autoaccept.on.description": "অনুমতি অনুরোধ স্বয়ংক্রিয়ভাবে অনুমোদিত হবে",
   "toast.permissions.autoaccept.off.title": "স্বয়ংক্রিয়ভাবে গ্রহণযোগ্য অনুমতি বন্ধ করা হয়েছে৷",
@@ -713,7 +713,6 @@ export const dict: Record<string, string> = {
   "session.view.select": "সেশন দৃশ্য",
   "session.background.moveRunning": "ব্যাকগ্রাউন্ডে নিন",
   "session.timeline.working": "কাজ চলছে",
-  "session.review.wrapLines": "লাইন মোড়ানো",
   "session.websearch.title": "তৃতীয়-পক্ষের ওয়েব অনুসন্ধান",
   "session.websearch.description":
     "এজেন্টরা ওয়েবে অনুসন্ধানের জন্য যে অনুসন্ধান প্রদানকারী ব্যবহার করবে সেটি বেছে নিন",
@@ -774,7 +773,6 @@ export const dict: Record<string, string> = {
   "settings.timeline.category.subagents": "সাবএজেন্ট",
   "settings.timeline.category.notices": "বিজ্ঞপ্তি",
   "settings.timeline.category.tools": "অন্যান্য টুল",
-  "settings.general.row.mobileDiffWrap.description": "মোবাইল ডিফে অনুভূমিকভাবে স্ক্রল করার বদলে দীর্ঘ লাইন মোড়ান",
 
   "provider.connect.error.unsupportedFields": "এই প্রমাণীকরণ ফর্মে অসমর্থিত ফিল্ড রয়েছে",
   "settings.about.writtenByNames": "লিখেছেন {{names}}",
@@ -898,4 +896,4 @@ export const dict: Record<string, string> = {
   "prompt.toast.uploading.percent": "{{percent}}%",
   "prompt.toast.uploading.cancelFile": "{{filename}}-এর আপলোড বাতিল করুন",
   "prompt.toast.uploadFailed.title": "আপলোড ব্যর্থ হয়েছে",
-}
+} satisfies Partial<Record<Keys, string>>

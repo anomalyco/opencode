@@ -29,8 +29,6 @@ export interface Interface {
   readonly responded: (requestId: JsonRpcId) => Effect.Effect<void>
 }
 
-export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Connection") {}
-
 export function make(app: AgentApp, stream: Stream) {
   const responses = new Map<JsonRpcId, Deferred.Deferred<void>>()
   const writer = stream.writable.getWriter()
@@ -51,7 +49,7 @@ export function make(app: AgentApp, stream: Stream) {
   })
   return {
     agent,
-    connection: Service.of({
+    connection: {
       sessionUpdate: (params) => promise(() => agent.client.notify(methods.client.session.update, params)),
       requestPermission: (params) =>
         promise((signal) =>
@@ -67,7 +65,7 @@ export function make(app: AgentApp, stream: Stream) {
         responses.set(requestId, responded)
         return Deferred.await(responded)
       },
-    }),
+    } satisfies Interface,
   }
 }
 

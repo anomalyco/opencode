@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "ອັບເດດພ້ອມແລ້ວ",
   "dialog.restart": "ຣີສະຕາດ",
   "dialog.later": "ຕໍ່ມາ",
+  "releaseNotes.action.getStarted": "ເລີ່ມຕົ້ນ",
+  "releaseNotes.action.next": "ຕໍ່ໄປ",
+  "releaseNotes.action.hideFuture": "ຢ່າສະແດງສິ່ງເຫຼົ່ານີ້ໃນອະນາຄົດ",
+  "releaseNotes.media.alt": "ປ່ອຍຕົວຢ່າງ",
 }

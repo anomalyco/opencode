@@ -1,6 +1,6 @@
 {
   "name": "@opencode/ui",
-  "version": "2.0.22",
+  "version": "2.0.23",
   "type": "module",
   "license": "MIT",
   "repository": {
@@ -46,6 +46,7 @@
     "./field": "./src/forms/field/field.tsx",
     "./file-tree.css": "./src/styles/file-tree.css",
     "./icon": "./src/icons/icon/icon.tsx",
+    "./icons/catalog": "./src/icons/catalog.ts",
     "./icon-button": "./src/actions/icon-button/icon-button.tsx",
     "./inline-input": "./src/forms/inline-input/inline-input.tsx",
     "./keybind": "./src/data-display/keybind/keybind.tsx",

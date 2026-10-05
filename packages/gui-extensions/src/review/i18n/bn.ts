@@ -10,4 +10,6 @@ export default {
   "git.description": "এই প্রকল্পের পরিবর্তনগুলি ট্র্যাক করুন, পর্যালোচনা করুন এবং পূর্বাবস্থায় ফেরান৷",
   loadingChanges: "পরিবর্তনগুলি লোড হচ্ছে…",
   noChanges: "কোনো পরিবর্তন নেই",
+  "settings.wrapLines.title": "লাইন মোড়ানো",
+  "settings.wrapLines.description": "মোবাইল ডিফে অনুভূমিকভাবে স্ক্রল করার বদলে দীর্ঘ লাইন মোড়ান",
 }

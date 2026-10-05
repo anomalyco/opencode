@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import path from "path"
-import { Clock, Deferred, Duration, Effect, Exit, Fiber } from "effect"
+import { Deferred, Duration, Effect, Exit, Fiber } from "effect"
 import { TestClock } from "effect/testing"
 import { Bus } from "@opencode/core/bus"
 import { Credential } from "@opencode/core/credential"

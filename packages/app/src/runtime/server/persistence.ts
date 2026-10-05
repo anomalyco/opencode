@@ -1,4 +1,4 @@
-import { Effect, Option, Schema, SchemaGetter } from "effect"
+import { Effect, Option, Predicate, Schema, SchemaGetter } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 
 export const ServerKey = Schema.String.pipe(Schema.brand("ServerConnection.Key"))
@@ -19,8 +19,10 @@ export const ServerHttp = Persistence.struct({
 const StoredServer = Schema.Union([ServerHttp, ServerHttpBase, Schema.String]).pipe(
   Schema.decodeTo(ServerHttp, {
     decode: SchemaGetter.transform((value) => {
-      if (typeof value === "string") return { type: "http", http: { url: value } }
+      if (Predicate.isString(value)) return { type: "http", http: { url: value } }
+
       if ("http" in value) return value
+
       return { type: "http", http: value }
     }),
     encode: SchemaGetter.transform((value) => value),
@@ -33,7 +35,9 @@ const ProjectList = Persistence.array(
     expanded: Persistence.fallback(Schema.Boolean, () => true),
   }),
 )
+
 const Projects = Persistence.record(ProjectList)
+
 const LastProject = Persistence.record(Schema.String.pipe(Schema.catchDecoding(() => Effect.succeed(Option.none()))))
 
 const State = Persistence.struct({
@@ -57,12 +61,15 @@ export function serverState(canonicalLocalServer: () => string | undefined = () 
       Schema.decode({
         decode: SchemaGetter.transform((value) => {
           const canonical = canonicalLocalServer()
+
           if (!canonical || canonical === "local") return value
           const previous = value.projects[canonical]
           const last = value.lastProject[canonical]
+
           if (!previous && last === undefined) return value
 
           const projects = { ...value.projects }
+
           if (previous) {
             const local = projects.local ?? []
             const worktrees = new Set(local.map((project) => project.worktree))
@@ -71,16 +78,20 @@ export function serverState(canonicalLocalServer: () => string | undefined = () 
               ...previous.filter((project) => {
                 if (worktrees.has(project.worktree)) return false
                 worktrees.add(project.worktree)
+
                 return true
               }),
             ]
             delete projects[canonical]
           }
+
           const lastProject = { ...value.lastProject }
+
           if (last !== undefined) {
             lastProject.local ??= last
             delete lastProject[canonical]
           }
+
           return { ...value, projects, lastProject }
         }),
         encode: SchemaGetter.transform((value) => value),

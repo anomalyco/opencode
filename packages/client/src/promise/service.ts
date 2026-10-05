@@ -38,6 +38,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   let announced = false
   let lastSpawn = 0
   let spawnDelay = timing.spawnDelay
+  let failure: Error | undefined
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
     if (announced) return
@@ -56,7 +57,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
   try {
     while (true) {
-      if (Date.now() >= deadline) throw new Error("Timed out waiting for the background service to start")
+      if (Date.now() >= deadline) throw failure ?? new Error("Timed out waiting for the background service to start")
       const registration = await registered(options.file, timing.requestTimeout)
       if (registration.timedOut && registration.info !== undefined) {
         timeouts = {
@@ -68,6 +69,13 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
           await PtyHandoff.clear(options.file ?? fallback())
           await terminate(registration.info, options, timing)
+          for (const item of contenders) {
+            if (item.child.pid === registration.info.pid || contenderFinished(item)) {
+              item.release()
+              contenders.delete(item)
+            }
+          }
+          failure = undefined
           timeouts = undefined
           lastSpawn = Date.now() - spawnDelay
         }
@@ -76,7 +84,12 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (registration.service !== undefined) {
         spawnDelay = timing.spawnDelay
         const service = registration.service
-        const compatible = service.compatible && matchesVersion(service.version, options)
+        const versionMatches = matchesVersion(service.version, options)
+        const compatible = service.compatible && versionMatches
+        if (!service.compatible && versionMatches)
+          throw new Error(
+            "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
+          )
         if (compatible && service.state === "ready") {
           await PtyHandoff.complete(options.file ?? fallback(), service.info)
           return service.endpoint
@@ -90,19 +103,27 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
             file: options.file,
             pty: service.state === "ready" ? "handoff" : "clear",
           }).catch(() => undefined)
+          for (const item of contenders) {
+            if (item.child.pid === service.info.pid || contenderFinished(item)) {
+              item.release()
+              contenders.delete(item)
+            }
+          }
+          failure = undefined
           lastSpawn = 0
         }
       } else {
         if (lastSpawn === 0 && registration.info !== undefined) lastSpawn = Date.now()
         const finished = [...contenders].filter(contenderFinished)
-        const failure = finished.map(contenderFailure).find((error) => error !== undefined)
+        failure ??= finished.map(contenderFailure).find((error) => error !== undefined)
         if (finished.some((item) => item.child.exitCode === 0)) {
           spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
         }
         finished.forEach((item) => contenders.delete(item))
         if (failure !== undefined && contenders.size === 0) throw failure
-        // Keep one candidate plus one lock probe so a pre-lock stall cannot block recovery.
-        if (contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
+        // Keep one candidate plus one lock probe for pre-lock stalls. After a failure, let the
+        // survivors finish without recruiting replacements that could hide the error indefinitely.
+        if (failure === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
           announce("missing")
           contenders.add(await spawnContender())
           lastSpawn = Date.now()
@@ -118,10 +139,13 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 /** Stop the registered local service. */
 export async function stop(options: StopOptions = {}) {
   const info = await read(options.file)
-  if (options.pty === "handoff" && info !== undefined)
-    await PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
-  else await PtyHandoff.clear(options.file ?? fallback())
-  if (info !== undefined) await terminate(info, options, defaultEnsureTiming)
+  // Terminal handoff is best-effort; it must never keep the old service running.
+  await (
+    options.pty === "handoff" && info !== undefined
+      ? PtyHandoff.prepare(options.file ?? fallback(), info, defaultEnsureTiming.requestTimeout)
+      : PtyHandoff.clear(options.file ?? fallback())
+  ).catch((cause: unknown) => console.warn("Failed to prepare persistent terminals for replacement", cause))
+  if (info !== undefined) await terminate(info, options, ensureTiming(options))
 }
 
 function fallback() {
@@ -174,8 +198,8 @@ async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTime
     )
   if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
   const response = result.value.response
-  // The previous V2 service exposes /api/status instead. Its authenticated 404 is enough
-  // to recognize the registered daemon as incompatible and route it through replacement.
+  // A missing health endpoint identifies protocol incompatibility, not an older
+  // version. Only an unmet version requirement lets ensure replace this owner.
   if (response.status === 404)
     return {
       service: {
@@ -250,9 +274,9 @@ async function terminate(info: Info, options: { readonly file?: string }, timing
   const current = await read(options.file)
   if (current === undefined || !same(current, info)) return
   signal(info.pid, "SIGTERM")
+  // The registration can disappear or change hands before this process exits. Only the PID we
+  // signalled can tell us whether it has stopped, so escalate based on that process.
   if (!(await waitUntilStopped(info.pid, timing))) {
-    const latest = await read(options.file)
-    if (latest === undefined || !same(latest, info)) return
     signal(info.pid, "SIGKILL")
     if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
   }
