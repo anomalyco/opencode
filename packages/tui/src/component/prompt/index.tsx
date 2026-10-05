@@ -447,7 +447,7 @@ export function Prompt(props: PromptProps) {
               project.instance.directory() ||
               paths.cwd,
           })
-          if (!content) return
+          if (content === undefined) return
           const normalized = normalizePromptContent(content)
 
           input.setText(normalized)
