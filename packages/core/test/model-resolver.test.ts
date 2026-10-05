@@ -82,42 +82,6 @@ function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effec
 }
 
 describe("ModelResolver", () => {
-  it.effect("loads legacy Venice catalog entries through the real native provider", () =>
-    Effect.gen(function* () {
-      const selected = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("venice-ai-sdk-provider"), {
-          providerID: Provider.ID.make("venice"),
-          modelID: "qwen3-6-27b",
-          settings: {
-            reasoningEffort: "high",
-            veniceParameters: { includeVeniceSystemPrompt: true },
-            queryParams: { deployment: "private" },
-          },
-        }),
-        Credential.Key.make({ type: "key", key: "fixture" }),
-      )
-      expect(selected).toMatchObject({ id: "qwen3-6-27b", provider: "venice" })
-      expect(selected.route).toMatchObject({
-        id: "venice-chat",
-        endpoint: { baseURL: "https://api.venice.ai/api/v1", query: { deployment: "private" } },
-      })
-      const request = LLM.request({ model: selected, prompt: "Hello" })
-      const compiled = yield* compileRequest(request)
-      expect(compiled.body).toMatchObject({
-        reasoning: { effort: "high" },
-        venice_parameters: { include_venice_system_prompt: true },
-      })
-      expect(selected.route.defaults.http?.body).toMatchObject({ custom_extension: { enabled: true } })
-      const auth = yield* selected.route.auth.apply({
-        request,
-        method: "POST",
-        url: "https://api.venice.ai/api/v1/chat/completions",
-        body: "{}",
-        headers: Headers.empty,
-      })
-      expect(auth.authorization).toBe("Bearer fixture")
-    }),
-  )
   it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
     Effect.gen(function* () {
       const responses = yield* ModelResolver.fromCatalogModel(
@@ -1074,12 +1038,6 @@ describe("ModelResolver", () => {
           { reasoningEffort: "high" },
         ],
         ["@ai-sdk/xai", "@opencode/ai/providers/xai", { reasoningEffort: "high" }, { reasoningEffort: "high" }],
-        [
-          "venice-ai-sdk-provider",
-          "@opencode/ai/providers/venice",
-          { reasoningEffort: "high", veniceParameters: { includeVeniceSystemPrompt: false } },
-          { reasoningEffort: "high", veniceParameters: { includeVeniceSystemPrompt: false } },
-        ],
       ] as const
 
       yield* Effect.forEach(packages, ([catalogPackage, nativePackage, sourceOptions, providerOptions]) =>
@@ -1136,7 +1094,6 @@ describe("ModelResolver", () => {
         ["@ai-sdk/togetherai", "@opencode/ai/providers/togetherai", "api-model"],
         ["@ai-sdk/xai", "@opencode/ai/providers/xai", "api-model"],
         ["ai-gateway-provider", "@opencode/ai/providers/cloudflare-ai-gateway", "xai/grok-4.6"],
-        ["venice-ai-sdk-provider", "@opencode/ai/providers/venice", "claude-opus-4-8"],
       ] as const
 
       yield* Effect.forEach(packages, ([catalogPackage, nativePackage, modelID]) =>

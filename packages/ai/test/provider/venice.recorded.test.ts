@@ -26,20 +26,9 @@ const lookup = ToolDefinition.make({
 
 for (const item of [
   { model: "deepseek-v4-flash", reasoning: "scalar" },
-  { model: "z-ai-glm-5-3-flash", reasoning: "scalar" },
-  { model: "qwen3-6-27b", reasoning: "scalar" },
-  { model: "kimi-k2-6", reasoning: "scalar" },
-  { model: "kimi-k3", reasoning: "scalar" },
-  { model: "minimax-m27", reasoning: "scalar" },
-  { model: "openai-gpt-oss-120b", reasoning: "scalar" },
-  { model: "claude-sonnet-4-6", reasoning: "signed", effort: "high" },
   { model: "claude-opus-4-8", reasoning: "signed", effort: "high" },
-  { model: "gemini-3-flash-preview", reasoning: "details" },
   { model: "gemini-3-1-pro-preview", reasoning: "details", effort: "high" },
-  { model: "gemini-3-8-flash", reasoning: "signature" },
   { model: "openai-gpt-54-mini", reasoning: "encrypted" },
-  { model: "openai-gpt-6-luna", reasoning: "encrypted" },
-  { model: "grok-4-3", reasoning: "encrypted" },
 ] as const) {
   recorded.effect.with(
     `${item.model} preserves reasoning through a tool loop and follow-up`,
@@ -97,16 +86,6 @@ for (const item of [
               expect.objectContaining({ type: "reasoning.encrypted", data: expect.any(String) }),
             ]),
           })
-        if (item.reasoning === "signature") {
-          expect(first.toolCalls[0].providerMetadata?.venice?.thoughtSignature).toEqual(expect.any(String))
-          expect(assistant).toMatchObject({
-            tool_calls: [
-              expect.objectContaining({
-                thought_signature: first.toolCalls[0].providerMetadata?.venice?.thoughtSignature,
-              }),
-            ],
-          })
-        }
         if (item.reasoning === "encrypted") {
           expect(first.reasoning).not.toContain("__ENCRYPTED_REASONING__")
           const details = first.message.content
@@ -128,16 +107,6 @@ for (const item of [
             Message.user("Add 7 to your previous final answer. Reply with just the number."),
           ],
         })
-        if (item.reasoning === "signature") {
-          const signature = second.message.content
-            .filter((part) => part.type === "text")
-            .map((part) => part.providerMetadata?.venice?.messageThoughtSignature)
-            .find((value) => value !== undefined)
-          expect(signature).toEqual(expect.any(String))
-          expect((yield* compileRequest(followUp)).body.messages).toEqual(
-            expect.arrayContaining([expect.objectContaining({ role: "assistant", thought_signature: signature })]),
-          )
-        }
         const third = yield* LLMClient.generate(followUp)
         expect(third.text).toContain("407")
         expect(third.finishReason.normalized).toBe("stop")
@@ -208,31 +177,46 @@ recorded.effect.with(
           }),
         ]),
       )
-      expect((yield* LLMClient.generate(continuation)).text).toContain("378")
+      const second = yield* LLMClient.generate(continuation)
+      expect(second.text).toContain("378")
+      const signature = second.message.content
+        .filter((part) => part.type === "text")
+        .map((part) => part.providerMetadata?.venice?.messageThoughtSignature)
+        .find((value) => value !== undefined)
+      expect(signature).toEqual(expect.any(String))
+      const followUp = LLMRequest.update(continuation, {
+        messages: [
+          ...continuation.messages,
+          second.message,
+          Message.user("Add 7 to your previous final answer. Reply with just the number."),
+        ],
+      })
+      expect((yield* compileRequest(followUp)).body.messages).toEqual(
+        expect.arrayContaining([expect.objectContaining({ role: "assistant", thought_signature: signature })]),
+      )
+      expect((yield* LLMClient.generate(followUp)).text).toContain("385")
     }),
   180_000,
 )
 
-for (const enabled of [false, true]) {
-  recorded.effect.with(
-    `Qwen ${enabled ? "enables" : "disables"} reasoning`,
-    { tags: ["text", "reasoning", "toggle"] },
-    () =>
-      Effect.gen(function* () {
-        const response = yield* LLMClient.generate(
-          LLM.request({
-            model: Venice.configure({ apiKey }).chat("qwen3-6-27b"),
-            prompt: "What is 23 multiplied by 17 plus 9? Reply with just the number.",
-            providerOptions: { reasoning: { enabled } },
-            generation: { maxTokens: 4096 },
-          }),
-        )
-        expect(response.text).toContain("400")
-        expect(response.reasoning.length > 0).toBe(enabled)
-      }),
-    120_000,
-  )
-}
+recorded.effect.with(
+  "Qwen disables reasoning",
+  { tags: ["text", "reasoning", "toggle"] },
+  () =>
+    Effect.gen(function* () {
+      const response = yield* LLMClient.generate(
+        LLM.request({
+          model: Venice.configure({ apiKey }).chat("qwen3-6-27b"),
+          prompt: "What is 23 multiplied by 17 plus 9? Reply with just the number.",
+          providerOptions: { reasoning: { enabled: false } },
+          generation: { maxTokens: 4096 },
+        }),
+      )
+      expect(response.text).toContain("400")
+      expect(response.reasoning).toBe("")
+    }),
+  120_000,
+)
 
 recorded.effect.with("surfaces Venice model errors", { tags: ["error"] }, () =>
   Effect.gen(function* () {

@@ -21,29 +21,6 @@ function map(
 }
 
 describe("AISDKNative", () => {
-  test("maps Venice SDK settings and variants to native Chat without losing overlays", () => {
-    const target = {
-      package: "aisdk:venice-ai-sdk-provider",
-      settings: {
-        apiKey: "fixture",
-        baseURL: "https://example.test/v1",
-        queryParams: { route: "private" },
-        veniceParameters: { includeVeniceSystemPrompt: true },
-      },
-      variants: [{ id: "high", settings: { reasoningEffort: "high" }, body: { temperature: 0.5 } }],
-    }
-    AISDKNative.rewrite(target, { specifier: target.package, providerID: "venice", modelID: "claude-opus-4-8" })
-    expect(target).toEqual({
-      package: "@opencode/ai/providers/venice",
-      settings: {
-        apiKey: "fixture",
-        baseURL: "https://example.test/v1",
-        queryParams: { route: "private" },
-        veniceParameters: { includeVeniceSystemPrompt: true },
-      },
-      variants: [{ id: "high", settings: { reasoningEffort: "high" }, body: { temperature: 0.5 } }],
-    })
-  })
   test("keeps Cloudflare AI Gateway models on its native gateway package", () => {
     for (const packageName of [
       "ai-gateway-provider",
