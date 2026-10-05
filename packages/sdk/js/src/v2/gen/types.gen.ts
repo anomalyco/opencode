@@ -2314,6 +2314,8 @@ export type Path = {
 export type VcsInfo = {
   branch?: string
   default_branch?: string
+  ahead?: number
+  behind?: number
 }
 
 export type VcsFileStatus = {
@@ -2321,6 +2323,7 @@ export type VcsFileStatus = {
   additions: number
   deletions: number
   status: "added" | "deleted" | "modified"
+  code?: string
 }
 
 export type VcsFileDiff = {

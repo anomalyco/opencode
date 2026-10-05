@@ -38,10 +38,11 @@ export const instanceHandlers = HttpApiBuilder.group(InstanceHttpApi, "instance"
     })
 
     const getVcs = Effect.fn("InstanceHttpApi.vcs")(function* () {
-      const [branch, default_branch] = yield* Effect.all([vcs.branch(), vcs.defaultBranch()], {
-        concurrency: "unbounded",
-      })
-      return { branch, default_branch }
+      const [branch, default_branch, tracking] = yield* Effect.all(
+        [vcs.branch(), vcs.defaultBranch(), vcs.tracking()],
+        { concurrency: "unbounded" },
+      )
+      return { branch, default_branch, ahead: tracking.ahead, behind: tracking.behind }
     })
 
     const getVcsStatus = Effect.fn("InstanceHttpApi.vcsStatus")(function* () {

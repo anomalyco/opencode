@@ -22410,6 +22410,12 @@
           },
           "default_branch": {
             "type": "string"
+          },
+          "ahead": {
+            "type": "number"
+          },
+          "behind": {
+            "type": "number"
           }
         },
         "additionalProperties": false
@@ -22429,6 +22435,9 @@
           "status": {
             "type": "string",
             "enum": ["added", "deleted", "modified"]
+          },
+          "code": {
+            "type": "string"
           }
         },
         "required": ["file", "additions", "deletions", "status"],
