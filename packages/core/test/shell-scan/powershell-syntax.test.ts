@@ -55,6 +55,9 @@ describe("PowerShell practical syntax", () => {
     ["ssh user@'host'", ["ssh user@'host'"]],
     ["git clone git@'github.com':org/repo", ["git clone git@'github.com':org/repo"]],
     ["switch ($x) { default { git status } }", ["git status"]],
+    ["switch ('a#b') { a#b { git status } }", ["git status"]],
+    ["[Parameter(Mandatory=$true)] param([string]$x = (git status)) git diff", ["git status", "git diff"]],
+    ['@"\n$(Write-Output \'\n"@\'; git status)\n"@', ["Write-Output '\n\"@'", "git status"]],
     ["class C { [int]$x = (git status); [void] M() { git diff } }", ["git status", "git diff"]],
     ["enum Color { Red; Green = 2 }; git status", ["git status"]],
   ] as const)("extracts command resources from %s", (source, resources) => {
