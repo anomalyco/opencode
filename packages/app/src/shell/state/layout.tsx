@@ -1,5 +1,5 @@
 import { createStore, produce, reconcile } from "solid-js/store"
-import { Schema, SchemaGetter } from "effect"
+import { Predicate, Schema, SchemaGetter } from "effect"
 import { batch, createEffect, createMemo, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import { useLocation } from "@solidjs/router"
 import { createSimpleContext } from "@opencode/ui/context"
@@ -17,14 +17,18 @@ import { requireServerKey } from "@/shell/routes/session"
 import { closeSessionTab, openSessionTab, previewSessionTab } from "./session-tabs"
 
 const DEFAULT_SIDEBAR_WIDTH = 344
+
 const DEFAULT_FILE_TREE_WIDTH = 200
+
 const DEFAULT_SESSION_WIDTH = 600
+
 const DEFAULT_DOCK_HEIGHT = 280
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded: boolean }
+
 export type HomeProjectSelection = typeof layoutSchema.Type.home.selection
 
-export type TabPanes = {
+export type TabRegions = {
   dockOpened: Accessor<boolean>
   setDockOpened(opened: boolean): void
   dockHeight: Accessor<number | undefined>
@@ -44,13 +48,18 @@ export type LayoutRoute =
 
 export const currentRoute = (pathname: string, search: string): LayoutRoute => {
   const parts = pathname.split("/").filter(Boolean)
+
   if (parts.length === 0) return { type: "home" }
+
   if (parts[0] === "settings") return { type: "settings" }
+
   if (parts[0] === "connect") return { type: "connect" }
 
   if (parts[0] === "new-session") {
     const draftID = new URLSearchParams(search).get("draftId")
+
     if (!draftID) return { type: "home" }
+
     return { type: "draft", draftID }
   }
 
@@ -67,6 +76,7 @@ export const currentRoute = (pathname: string, search: string): LayoutRoute => {
 
 export const useCurrentRoute = () => {
   const location = useLocation()
+
   return createMemo(() => currentRoute(location.pathname, location.search))
 }
 
@@ -74,6 +84,7 @@ const sessionTabsSchema = Persistence.struct({
   all: Persistence.array(Schema.String),
   active: Persistence.optional(Schema.String),
 })
+
 const sessionViewSchema = Persistence.struct({
   scroll: Persistence.record(Schema.Struct({ x: Schema.Finite, y: Schema.Finite })),
   // Review state from before extensions. An extension copies each session's entry out once; nothing writes these
@@ -92,7 +103,7 @@ export const layoutSchema = Persistence.struct({
     workspaces: Persistence.record(Schema.Boolean),
     workspacesDefault: Schema.Boolean,
   }),
-  // The dock and side region state moved to per-tab panes; these fields stay so stored layouts keep decoding.
+  // The dock and side region state moved to per-tab regions; these fields stay so stored layouts keep decoding.
   terminal: Persistence.struct({ height: Schema.Finite, opened: Schema.Boolean }),
   review: Persistence.struct({
     panelOpened: Schema.Boolean,
@@ -141,10 +152,9 @@ export const layoutPersistence = Persistence.migrate(
     Schema.decode({
       decode: SchemaGetter.transform((value) => ({
         ...value,
-        sidebar:
-          typeof value.sidebar?.workspaces === "boolean"
-            ? { ...value.sidebar, workspaces: {}, workspacesDefault: value.sidebar.workspaces }
-            : value.sidebar,
+        sidebar: Predicate.isBoolean(value.sidebar?.workspaces)
+          ? { ...value.sidebar, workspaces: {}, workspacesDefault: value.sidebar.workspaces }
+          : value.sidebar,
         // Only an existing review section inherits the old file-tree panel flag.
         review: value.review
           ? { ...value.review, panelOpened: value.review.panelOpened ?? value.fileTree?.opened }
@@ -169,6 +179,9 @@ export const layoutPersistence = Persistence.migrate(
     }),
   ),
 )
+
+/** The session key the user is on, whether pruning ran, and when each session key was last used. */
+type SessionKeyUsage = { active: string | undefined; pruned: boolean; used: Map<string, number> }
 
 export function initialLayout(server?: ServerConnection.Key): typeof layoutSchema.Type {
   return {
@@ -196,9 +209,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       layoutPersistence,
       initialLayout(servers.list[0] ? ServerConnection.key(servers.list[0]) : undefined),
     )
-    const [ephemeral, setEphemeral] = createStore({
-      sessionTabPreview: {} as Record<string, string | undefined>,
+
+    const [ephemeral, setEphemeral] = createStore<{ sessionTabPreview: Record<string, string | undefined> }>({
+      sessionTabPreview: {},
     })
+
     // Names of other session-scoped stores, e.g. extension storage, so pruning drops them with the layout state.
     const [scoped, setScoped, , scopedReady] = persisted(
       Persist.global("layout.scoped"),
@@ -208,25 +223,29 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const MAX_SESSION_KEYS = 50
     const PENDING_MESSAGE_TTL_MS = 2 * 60 * 1000
-    const usage = {
-      active: undefined as string | undefined,
+
+    const usage: SessionKeyUsage = {
+      active: undefined,
       pruned: false,
       used: new Map<string, number>(),
     }
 
     const dropSessionState = (keys: string[]) => {
       const names = ["prompt", "file-view", ...scoped]
+
       for (const key of keys) {
         const scope = SessionStateKey.scope(key)
         const parts = SessionStateKey.route(key).split("/")
         const dir = parts[0]
         const session = parts[1]
+
         if (!dir) continue
 
         for (const entry of names) {
           const target = session
             ? Persist.serverSession(scope, dir, session, entry)
             : Persist.serverWorkspace(scope, dir, entry)
+
           void removePersisted(target, platform)
         }
       }
@@ -234,6 +253,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     function prune(keep?: string) {
       if (!scopedReady()) return
+
       const drop = pruneSessionKeys({
         keep,
         max: MAX_SESSION_KEYS,
@@ -241,6 +261,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         view: Object.keys(store.sessionView),
         tabs: Object.keys(store.sessionTabs),
       })
+
       if (drop.length === 0) return
 
       setStore(
@@ -271,6 +292,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       usage.used.set(sessionKey, Date.now())
 
       if (!ready() || !scopedReady()) return
+
       if (usage.pruned) return
 
       usage.pruned = true
@@ -283,9 +305,11 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       onFlush: (sessionKey, next) => {
         const current = store.sessionView[sessionKey]
         const keep = usage.active ?? sessionKey
+
         if (!current) {
           setStore("sessionView", sessionKey, { scroll: next })
           prune(keep)
+
           return
         }
 
@@ -298,8 +322,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     createEffect(() => {
       if (!ready() || !scopedReady()) return
+
       if (usage.pruned) return
       const active = usage.active
+
       if (!active) return
       usage.pruned = true
       prune(active)
@@ -307,6 +333,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     onMount(() => {
       const flush = () => batch(() => scroll.flushAll())
+
       const handleVisibility = () => {
         if (document.visibilityState !== "hidden") return
         flush()
@@ -334,6 +361,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         track(name: string) {
           untrack(() => {
             const add = () => setScoped((names) => (names.includes(name) ? names : [...names, name]))
+
             if (scopedReady()) return add()
             void scopedReady.promise?.then(add)
           })
@@ -345,29 +373,37 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         open() {
           if (!store.fileTree) {
             setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+
             return
           }
+
           setStore("fileTree", "opened", true)
         },
         close() {
           if (!store.fileTree) {
             setStore("fileTree", { opened: false, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+
             return
           }
+
           setStore("fileTree", "opened", false)
         },
         toggle() {
           if (!store.fileTree) {
             setStore("fileTree", { opened: true, width: DEFAULT_FILE_TREE_WIDTH, tab: "changes" })
+
             return
           }
+
           setStore("fileTree", "opened", (x) => !x)
         },
         resize(width: number) {
           if (!store.fileTree) {
             setStore("fileTree", { opened: true, width, tab: "changes" })
+
             return
           }
+
           setStore("fileTree", "width", width)
         },
       },
@@ -376,8 +412,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         resize(width: number) {
           if (!store.session) {
             setStore("session", { width })
+
             return
           }
+
           setStore("session", "width", width)
         },
       },
@@ -395,6 +433,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const at = Date.now()
           touch(sessionKey)
           const current = store.sessionView[sessionKey]
+
           if (!current) {
             setStore("sessionView", sessionKey, {
               scroll: {},
@@ -402,6 +441,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               pendingMessageAt: at,
             })
             prune(usage.active ?? sessionKey)
+
             return
           }
 
@@ -418,6 +458,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           const current = store.sessionView[sessionKey]
           const message = current?.pendingMessage
           const at = current?.pendingMessageAt
+
           if (!message || !at) return
 
           setStore(
@@ -430,12 +471,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           )
 
           if (Date.now() - at > PENDING_MESSAGE_TTL_MS) return
+
           return message
         },
       },
       /** The dock and side regions of a shell tab, and the session panel width beside them. */
-      view(sessionKey: string | Accessor<string>, panes: TabPanes) {
+      view(sessionKey: string | Accessor<string>, regions: TabRegions) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
+
         return {
           scroll(tab: string) {
             return scroll.scroll(key(), tab)
@@ -444,25 +487,25 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             scroll.setScroll(key(), tab, pos)
           },
           dock: {
-            opened: panes.dockOpened,
-            height: createMemo(() => panes.dockHeight() ?? DEFAULT_DOCK_HEIGHT),
-            resize: panes.setDockHeight,
+            opened: regions.dockOpened,
+            height: createMemo(() => regions.dockHeight() ?? DEFAULT_DOCK_HEIGHT),
+            resize: regions.setDockHeight,
             open() {
-              panes.setDockOpened(true)
+              regions.setDockOpened(true)
             },
             close() {
-              panes.setDockOpened(false)
+              regions.setDockOpened(false)
             },
           },
           side: {
-            opened: panes.sideOpened,
+            opened: regions.sideOpened,
             toggle() {
-              panes.setSideOpened(!panes.sideOpened())
+              regions.setSideOpened(!regions.sideOpened())
             },
           },
           session: {
-            width: createMemo(() => panes.sessionWidth() ?? DEFAULT_SESSION_WIDTH),
-            resize: panes.setSessionWidth,
+            width: createMemo(() => regions.sessionWidth() ?? DEFAULT_SESSION_WIDTH),
+            resize: regions.setSessionWidth,
           },
         }
       },
@@ -478,6 +521,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             launchers,
             first,
           )
+
           batch(() => {
             setStore("sessionTabs", session, next.tabs)
             setEphemeral("sessionTabPreview", session, next.preview)
@@ -489,6 +533,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             tab,
             launchers,
           )
+
           batch(() => {
             setStore("sessionTabs", session, next.tabs)
             setEphemeral("sessionTabPreview", session, next.preview)
@@ -497,24 +542,52 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         /** Adds a tab at the end of the strip without selecting it or touching the preview. */
         append(session: string, tab: string) {
           const current = store.sessionTabs[session]
+
           if (!current) return setStore("sessionTabs", session, { all: [tab] })
+
           if (current.all.includes(tab)) return
           setStore("sessionTabs", session, "all", current.all.length, tab)
         },
         focus(session: string, tab: string) {
           if (!store.sessionTabs[session]) {
             setStore("sessionTabs", session, { all: [], active: tab })
+
             return
           }
+
           setStore("sessionTabs", session, "active", tab)
         },
         close(session: string, tab: string) {
           const current = store.sessionTabs[session]
+
           if (!current) return
           const next = closeSessionTab({ tabs: current, preview: ephemeral.sessionTabPreview[session] }, tab)
           batch(() => {
             setStore("sessionTabs", session, next.tabs)
             setEphemeral("sessionTabPreview", session, next.preview)
+          })
+        },
+        /**
+         * Replaces `to`'s strip, selection, preview tab and scroll offsets with copies of `from`'s, keeping `from`; a key
+         * with nothing stored copies as empty. `to` counts as just used, then pruning runs as for any new key.
+         */
+        copy(from: string, to: string) {
+          const current = store.sessionTabs[from]
+          usage.used.set(to, Date.now())
+          batch(() => {
+            scroll.flush(from)
+            setStore("sessionTabs", to, { all: [...(current?.all ?? [])], active: current?.active })
+            setEphemeral("sessionTabPreview", to, ephemeral.sessionTabPreview[from])
+            scroll.drop([to])
+            setStore("sessionView", to, {
+              scroll: Object.fromEntries(
+                Object.entries(store.sessionView[from]?.scroll ?? {}).map(([key, value]) => [
+                  key,
+                  { x: value.x, y: value.y },
+                ]),
+              ),
+            })
+            prune(usage.active ?? to)
           })
         },
         scroll(session: string, tab: string) {
@@ -527,12 +600,14 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
       tabs(sessionKey: string | Accessor<string>) {
         const key = createSessionKeyReader(sessionKey, ensureKey)
         const tabs = createMemo(() => store.sessionTabs[key()] ?? { all: [] })
+
         const apply = (session: string, next: ReturnType<typeof openSessionTab>) => {
           batch(() => {
             setStore("sessionTabs", session, next.tabs)
             setEphemeral("sessionTabPreview", session, next.preview)
           })
         }
+
         return {
           tabs,
           active: createMemo(() => tabs().active),
@@ -540,6 +615,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           preview: createMemo(() => ephemeral.sessionTabPreview[key()]),
           setActive(tab: string | undefined) {
             const session = key()
+
             if (!store.sessionTabs[session]) {
               setStore("sessionTabs", session, { all: [], active: tab })
             } else {
@@ -554,7 +630,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
               } else {
                 setStore("sessionTabs", session, "all", all)
               }
+
               const preview = ephemeral.sessionTabPreview[session]
+
               if (preview && !all.includes(preview)) setEphemeral("sessionTabPreview", session, undefined)
             })
           },
@@ -562,6 +640,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           remap(rewrite: (tab: string) => string) {
             const session = key()
             const current = store.sessionTabs[session]
+
             if (!current) return
             const all = Array.from(new Set(current.all.map(rewrite)))
             const active = current.active === undefined ? undefined : rewrite(current.active)
@@ -571,6 +650,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             const renamed = preview === undefined ? undefined : rewrite(preview)
             const nextPreview = renamed !== undefined && kept.has(renamed) ? undefined : renamed
             const changed = all.length !== current.all.length || all.some((tab, index) => tab !== current.all[index])
+
             if (!changed && active === current.active && nextPreview === preview) return
             batch(() => {
               setStore("sessionTabs", session, { ...current, all, active })
@@ -600,14 +680,17 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
           close(tab: string) {
             const session = key()
             const current = store.sessionTabs[session]
+
             if (!current) return
             apply(session, closeSessionTab({ tabs: current, preview: ephemeral.sessionTabPreview[session] }, tab))
           },
           move(tab: string, to: number) {
             const session = key()
             const current = store.sessionTabs[session]
+
             if (!current) return
             const index = current.all.findIndex((f) => f === tab)
+
             if (index === -1) return
             setStore(
               "sessionTabs",

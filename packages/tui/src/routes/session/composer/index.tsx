@@ -9,8 +9,6 @@ import { ShellTab } from "./shell-tab"
 import { TerminalsTab } from "./terminals-tab"
 import { ComposerContext, type ComposerTab } from "./context"
 
-export { useComposerTab, type ComposerHint } from "./context"
-
 export type ComposerProps = {
   sessionID: string
   open: boolean
@@ -42,8 +40,6 @@ export function Composer(props: ComposerProps) {
   })
 
   function close() {
-    const tab = activeTab()
-    tab?.onClose?.()
     props.onClose?.()
   }
 

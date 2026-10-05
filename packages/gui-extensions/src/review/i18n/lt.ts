@@ -14,4 +14,6 @@ export default {
   "git.description": "Stebėkite, peržiūrėkite ir anuliuokite šio projekto pakeitimus",
   loadingChanges: "Įkeliami pakeitimai…",
   noChanges: "Jokių pakeitimų",
+  "settings.wrapLines.title": "Laužyti eilutes",
+  "settings.wrapLines.description": "Užuot slinkus horizontaliai, apvyniokite ilgas eilutes mobiliaisiais skirtumais",
 }

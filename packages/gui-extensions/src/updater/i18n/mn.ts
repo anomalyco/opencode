@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Шинэчлэлт бэлэн боллоо",
   "dialog.restart": "Дахин эхлүүлэх",
   "dialog.later": "Дараа нь",
+  "releaseNotes.action.getStarted": "Эхлээрэй",
+  "releaseNotes.action.next": "Дараа нь",
+  "releaseNotes.action.hideFuture": "Ирээдүйд эдгээрийг бүү харуул",
+  "releaseNotes.media.alt": "Хувилбарыг урьдчилан үзэх",
 }

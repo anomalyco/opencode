@@ -11,74 +11,113 @@ import {
   type ParentComponent,
   type ParentProps,
 } from "solid-js"
-import { createStore, produce } from "solid-js/store"
+import { createStore, produce, reconcile } from "solid-js/store"
 import { Portal, render } from "solid-js/web"
 import type { Bridge, BridgeLayout } from "../sdk/bridge"
 import {
-  App,
   ExtensionContext,
-  Layout,
-  Native,
+  Live,
   PanelContext,
-  Sessions,
-  Storage,
-  Surfaces,
+  type Appearance,
+  type Build,
   type ComposerNote,
   type Context,
   type Definition,
+  type Embeds,
+  type Ipc,
+  type IpcClient,
+  type Keybinds,
+  type Layout,
+  type Locale,
+  type MountedSession,
+  type Mutable,
   type PanelFrame,
   type PanelTab,
-  type Remote,
-  type RemoteClient,
+  type Router,
+  type Servers,
   type SessionRef,
-  type SessionView,
+  type SessionScreen,
+  type SetupContext,
+  type Storage,
+  type Workspaces,
 } from "../sdk"
-import type { InspectEvent } from "./connection"
 import browserEn from "./i18n/en"
-import type { Model } from "./model"
+import type definition from "./index"
+import { createModel } from "./model"
 import SessionBrowserPane from "./panel"
-import { BrowserPane, type PaneEvent } from "./remote"
+import { BrowserPane, type PaneEvent } from "./ipc"
 
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
-type Host = {
-  createSurfaces(input: { bridge: Bridge | undefined; zoom: () => number; dialog: () => boolean }): Surfaces
+type PaneHost = {
+  createEmbeds(input: { bridge: Bridge | undefined; zoom: () => number; dialog: () => boolean }): Embeds
   LanguageProvider: Component<{ locale: string; children: JSX.Element }>
   UiI18nBridge: ParentComponent
   useLanguage(): { t(key: string): string }
 }
 
-// Component-test fixture: the real pane on the real host surface, with the desktop faked at its two
+type PaneFixtureState = {
+  session: string
+  mounted: boolean
+  visible: boolean
+  url: string | undefined
+  loading: boolean
+  generation: number
+  delayNavigation: boolean
+  pendingURL: string | undefined
+  loadErrors: Record<string, string | undefined>
+  error: string | undefined
+  layouts: Record<string, BridgeLayout | undefined>
+  covered: boolean
+  captures: number
+  holdCapture: boolean
+  picker: Record<string, boolean | undefined>
+  highlights: { sessionKey: string; ref?: Browser.Ref }[]
+  comments: ComposerNote[]
+}
+
+// Component-test fixture: the real pane on the real host embeds, with the desktop faked at its two
 // boundaries: the model's main-process pane (tab state, picker events) and the host bridge that shows native views.
-export function mountBrowserPane(input: Host) {
+export function mountBrowserPane(input: PaneHost) {
   const host = document.createElement("main")
   host.dataset.testid = "browser-pane-fixture"
   host.style.cssText = "position:fixed;inset:0;z-index:1000;background:#181818;color:#eee;padding:24px"
   document.body.appendChild(host)
+
   function Fixture() {
     const language = input.useLanguage()
-    const [store, setStore] = createStore({
+    const messages = new Map(Object.entries(browserEn))
+
+    const [store, setStore] = createStore<PaneFixtureState>({
       session: "Alpha",
       mounted: true,
       visible: true,
-      url: undefined as string | undefined,
+      url: undefined,
       loading: false,
       generation: 0,
       delayNavigation: false,
-      pendingURL: undefined as string | undefined,
-      loadErrors: {} as Record<string, string | undefined>,
-      error: undefined as string | undefined,
-      layouts: {} as Record<string, BridgeLayout | undefined>,
+      pendingURL: undefined,
+      loadErrors: {},
+      error: undefined,
+      layouts: {},
       covered: false,
       captures: 0,
       holdCapture: false,
-      picker: {} as Record<string, boolean | undefined>,
-      highlights: [] as string[],
-      comments: [] as ComposerNote[],
+      picker: {},
+      highlights: [],
+      comments: [],
     })
+
     // Each capture waits until the fixture releases it, so a spec can observe the pending state.
     const held: (() => void)[] = []
-    const inspectors = new Set<(event: InspectEvent) => void>()
-    const emitInspect = (event: InspectEvent) => inspectors.forEach((listener) => listener(event))
+    const bindings = new Map<string, string>()
+    const listeners = new Set<(value: { binding: string; event: PaneEvent }) => void>()
+
+    const emit = (key: string, event: PaneEvent) => {
+      const binding = bindings.get(key)
+
+      if (binding) listeners.forEach((listener) => listener({ binding, event }))
+    }
+
     const tabs = ["Alpha", "Beta"].map((name) => ({
       id: Browser.TabID.make(`tab_${name === "Alpha" ? "11111111" : "22222222"}-1111-1111-1111-111111111111`),
       title: name,
@@ -88,32 +127,38 @@ export function mountBrowserPane(input: Host) {
       canGoForward: false,
       generation: 0,
     }))
+
     const current = () => tabs.find((tab) => tab.title === store.session) ?? tabs[0]
-    const bridge = {
-      surface: (id: string, layout?: BridgeLayout) => setStore("layouts", id, layout),
+
+    const bridge: Pick<Bridge, "embed" | "capture"> = {
+      embed: (id, layout) => setStore("layouts", id, layout),
       capture: async () => {
         setStore("captures", (count) => count + 1)
+
         if (store.holdCapture) await new Promise<void>((resolve) => held.push(resolve))
         const canvas = new OffscreenCanvas(4, 4)
         const paint = canvas.getContext("2d")
+
         if (paint) {
           paint.fillStyle = "#3b82f6"
           paint.fillRect(0, 0, 4, 4)
         }
+
         return new Uint8Array(await (await canvas.convertToBlob({ type: "image/jpeg" })).arrayBuffer())
       },
     }
-    const surfaces = input.createSurfaces({ bridge: bridge as unknown as Bridge, zoom: () => 1, dialog: () => false })
-    const hosts: Record<string, unknown> = {
-      [App.id]: { keybind: () => [], keys: (bind: string) => bind.split("+") },
-      [Native.id]: { zoom: () => 1 },
-      [Surfaces.id]: surfaces,
-    }
-    const extension = {
+
+    // SAFETY: the host embeds call only `embed` and `capture` on their bridge (`runtime/extension/embeds.tsx`).
+    const embeds = input.createEmbeds({ bridge: bridge as Bridge, zoom: () => 1, dialog: () => false })
+
+    const base = {
       id: "browser",
-      use: (token: { id: string }) => hosts[token.id],
-      t: (key: string) => (browserEn as Record<string, string>)[key] ?? language.t(key),
-    } as unknown as Context
+      keybinds: { keybind: () => [], keys: (bind: string) => bind.split("+") },
+      desktop: { zoom: () => 1 },
+      embeds,
+      t: (key: string) => messages.get(key) ?? language.t(key),
+    }
+
     const panel: PanelFrame = {
       visible: () => store.visible,
       present: () => store.visible,
@@ -123,56 +168,140 @@ export function mountBrowserPane(input: Host) {
       sidebar: { opened: () => false, width: () => 0, transition: () => false, resize() {}, toggle() {} },
       open: () => [],
     }
-    const session = {
-      get key() {
-        return store.session
-      },
+
+    const server = { id: "browser-test", compatible: true, data: { on: () => () => undefined } }
+    const [reads, setReads] = createStore({ directory: 0 })
+
+    // Frozen session refs, as the real host supplies. Only the key belongs in the pane's transient state.
+    const views = new Map(
+      ["Alpha", "Beta", "Empty"].map((key) => {
+        const value = Object.freeze({
+          key,
+          id: key,
+          server,
+          pending: false,
+          location: { directory: "/repo" },
+          get directory() {
+            setReads("directory", (count) => count + 1)
+
+            return "/repo"
+          },
+        })
+
+        // SAFETY: the pane reads only `key`; the real model reads these listed fields and `server.data.on`.
+        // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+        return [key, value as unknown as MountedSession] as const
+      }),
+    )
+
+    const session = () => views.get(store.session) ?? views.get("Alpha")
+
+    // The session screen: one object that follows the route, with the composer the pane attaches comments to.
+    // SAFETY: the pane reads only file.search and composer.attach; the model's workspace-link paths are not invoked.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const screen = {
       file: { search: async () => [] },
       composer: { attach: (note: ComposerNote) => setStore("comments", (items) => [...items, note]) },
-    } as unknown as SessionView
-    const model = {
-      tab: (_session: unknown, id: string) => {
-        const tab = current()
-        if (tab.id !== id) return
-        return {
-          ...tab,
-          url: store.url ?? tab.url,
-          loading: store.loading,
-          generation: store.generation,
-          loadError: store.loadErrors[store.session],
-        }
+    } as unknown as SessionScreen
+
+    const report = (key = store.session) => {
+      const tab = tabs.find((item) => item.title === key)
+
+      if (!tab) return
+      emit(key, {
+        type: "state",
+        state: {
+          tabs: [
+            {
+              ...tab,
+              url: store.url ?? tab.url,
+              loading: store.loading,
+              generation: store.generation,
+              loadError: store.loadErrors[key],
+            },
+          ],
+          focusedTabID: tab.id,
+        },
+        error: store.error,
+      })
+    }
+
+    // Address rejection counters and cleanup run through the real model over this main-process Ipc boundary.
+    const pane: PaneClient = {
+      register: async (value) => {
+        bindings.set(value.session, value.binding)
+        queueMicrotask(() => {
+          report(value.session)
+          const tab = tabs.find((item) => item.title === value.session)
+
+          if (tab) emit(value.session, { type: "embed", tabID: tab.id, embed: `embed-${tab.title}` })
+        })
       },
-      suspended: () => false,
-      surface: (_session: unknown, id: string) => `surface-${tabs.find((tab) => tab.id === id)?.title}`,
-      error: () => store.error ?? (store.loadErrors[store.session] ? "Request failed" : undefined),
-      mount: () => () => undefined,
-      load: () => undefined,
-      command: (_session: unknown, command: Browser.Action) => {
+      load: async () => undefined,
+      command: async (value) => {
+        const command = value.command
+
         setStore("error", undefined)
+
         if (command.type === "navigate" || command.type === "reload") setStore("loadErrors", store.session, undefined)
+
         if (command.type === "navigate") {
           if (store.delayNavigation) {
             setStore("pendingURL", command.url)
+
             return
           }
+
           setStore({ url: command.url, loading: false, generation: store.generation + 1 })
         }
+
         if (command.type === "stop") setStore("loading", false)
+        report()
       },
       // The desktop confirms each picker change, as the page does once inspect mode is armed.
-      inspect: (_session: unknown, tabID: Browser.TabID, enabled: boolean) => {
-        setStore("picker", store.session, enabled)
-        emitInspect({ type: "inspect", tabID, active: enabled })
+      inspect: async (value) => {
+        const key = Array.from(bindings).find((item) => item[1] === value.binding)?.[0]
+
+        if (!key) throw new Error("Unknown picker binding")
+        setStore("picker", key, value.enabled)
+        emit(key, { type: "inspect", tabID: value.tabID, active: value.enabled })
       },
-      highlight: (_session: unknown, _tabID: Browser.TabID, ref?: Browser.Ref) =>
-        setStore("highlights", (items) => [...items, ref ?? "clear"]),
-      onInspect: (_session: unknown, listener: (event: InspectEvent) => void) => {
-        inspectors.add(listener)
-        return () => inspectors.delete(listener)
+      highlight: async (value) => {
+        const key = Array.from(bindings).find((item) => item[1] === value.binding)?.[0]
+
+        if (!key) throw new Error("Unknown highlight binding")
+        setStore("highlights", (items) => [...items, { sessionKey: key, ref: value.ref }])
       },
-    } as unknown as Model
-    const pick = () =>
-      emitInspect({
+      close: async () => undefined,
+      state: () => undefined,
+      on: (_name, listener) => {
+        // SAFETY: the pane's Ipc has one event, whose payload is exactly this binding and PaneEvent.
+        const added = listener as (value: { binding: string; event: PaneEvent }) => void
+        listeners.add(added)
+
+        return () => void listeners.delete(added)
+      },
+    }
+
+    const live = Live.accessor(() => ({ status: "active", generation: 1, value: pane }))
+
+    const fake = {
+      ...base,
+      uses: { pane: { load: () => live } },
+      sessions: { current: session, list: () => Array.from(views.values()).filter((view) => view.key !== "Empty") },
+      screen: { current: () => screen },
+      layout: { narrow: () => false, stored: () => [], state: () => "visible", open() {}, close() {} },
+      links: { open() {} },
+    }
+
+    // SAFETY: the real model and pane use only the host boundaries implemented above in this fixture's flows.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const extension = fake as unknown as Context & SetupContext<typeof definition>
+    const model = createModel(extension)
+
+    const pick = () => {
+      setStore("picker", store.session, false)
+      emit(store.session, {
         type: "inspect",
         tabID: current().id,
         active: false,
@@ -185,6 +314,8 @@ export function mountBrowserPane(input: Host) {
           rect: { x: 48, y: 40, width: 160, height: 36 },
         },
       })
+    }
+
     return (
       <ExtensionContext.Provider value={extension}>
         <PanelContext.Provider value={panel}>
@@ -194,33 +325,61 @@ export function mountBrowserPane(input: Host) {
               {(name) => <button onClick={() => setStore({ session: name, mounted: name !== "Empty" })}>{name}</button>}
             </For>
             <button onClick={() => setStore("mounted", false)}>Unmount pane</button>
-            <button onClick={() => setStore({ url: "about:blank", loading: false })}>Blank page</button>
-            <button onClick={() => setStore({ url: "about:blank", loading: true })}>Loading page</button>
             <button
-              onClick={() =>
+              onClick={() => {
+                setStore({ url: "about:blank", loading: false })
+                report()
+              }}
+            >
+              Blank page
+            </button>
+            <button
+              onClick={() => {
+                setStore({ url: "about:blank", loading: true })
+                report()
+              }}
+            >
+              Loading page
+            </button>
+            <button
+              onClick={() => {
                 setStore({
                   loading: true,
                   generation: store.generation + 1,
                   loadErrors: { [store.session]: undefined },
                 })
-              }
+                report()
+              }}
             >
               Load current page
             </button>
-            <button onClick={() => setStore("loadErrors", store.session, "ERR_CONNECTION_REFUSED")}>Failed page</button>
+            <button
+              onClick={() => {
+                setStore("loadErrors", store.session, "ERR_CONNECTION_REFUSED")
+                report()
+              }}
+            >
+              Failed page
+            </button>
             <button onClick={() => setStore("delayNavigation", true)}>Delay navigation</button>
-            <button onClick={() => setStore({ error: "ERR_BLOCKED_BY_CLIENT", pendingURL: undefined })}>
+            <button
+              onClick={() => {
+                setStore({ error: "ERR_BLOCKED_BY_CLIENT", pendingURL: undefined })
+                report()
+              }}
+            >
               Block navigation
             </button>
             <button
-              onClick={() =>
+              onClick={() => {
                 setStore({
                   url: store.pendingURL,
                   pendingURL: undefined,
                   loading: false,
                   generation: store.generation + 1,
                 })
-              }
+                report()
+              }}
             >
               Complete navigation
             </button>
@@ -231,11 +390,16 @@ export function mountBrowserPane(input: Host) {
             <button onClick={pick}>Pick element</button>
           </nav>
           <p>Captures: {store.captures}</p>
+          <p>Session getter reads: {reads.directory}</p>
           <p>Picker: {store.picker[store.session] ? "on" : "off"}</p>
-          <p>Highlights: {store.highlights.join(",")}</p>
+          <For each={tabs}>
+            {(tab) => <p>Picker {tab.title}: {store.picker[tab.title] ? "on" : "off"}</p>}
+          </For>
+          <p>Highlights: {store.highlights.map((item) => item.ref ?? "clear").join(",")}</p>
+          <p>Highlight owners: {store.highlights.map((item) => item.sessionKey).join(",")}</p>
           <div style={{ position: "relative", width: "640px", height: "360px", border: "1px solid #555" }}>
-            <Show when={store.mounted}>
-              <SessionBrowserPane tab={() => current()} session={session} model={model} />
+            <Show when={store.mounted && session()}>
+              {(view) => <SessionBrowserPane tab={() => current()} session={view()} screen={screen} model={model} />}
             </Show>
           </div>
           <ul data-testid="fixture-comments">
@@ -269,10 +433,10 @@ export function mountBrowserPane(input: Host) {
             {(tab) => (
               <div
                 data-testid={`native-${tab.title}`}
-                data-visible={!!store.layouts[`surface-${tab.title}`]?.visible}
+                data-visible={!!store.layouts[`embed-${tab.title}`]?.visible}
                 style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
               >
-                {tab.title}: {store.layouts[`surface-${tab.title}`]?.visible ? "visible" : "hidden"}
+                {tab.title}: {store.layouts[`embed-${tab.title}`]?.visible ? "visible" : "hidden"}
               </div>
             )}
           </For>
@@ -302,6 +466,8 @@ type StripTabs = {
   remap(rewrite: (tab: string) => string): void
 }
 
+type PaneClient = IpcClient<(typeof BrowserPane)["spec"]>
+
 /** The app's extension host and side region, passed in by `packages/app/component-tests/browser-pane-restore.spec.ts`. */
 type RegionHost = {
   LanguageProvider: Component<{ locale: string; children: JSX.Element }>
@@ -309,15 +475,20 @@ type RegionHost = {
     ParentProps<{
       definitions: readonly Definition[]
       disabled: Accessor<ReadonlySet<string> | undefined>
-      services: readonly {
-        readonly token: { readonly kind: "host"; readonly id: string }
-        create(extension: string): unknown
-      }[]
-      remote: (token: Remote) => unknown
+      /** The HostApis the fixture provides, by context property; the host provides links and dialogs itself. */
+      apis: { readonly [api: string]: (extension: string) => object | undefined }
+      /** Runs once the app interface mounts; the fixture's is always mounted. */
+      whenMounted: (run: () => void) => () => void
+      ipc: (token: Ipc) => PaneClient | undefined
     }>
   >
   useExtensionHost(): { ready(): boolean }
-  createRegion(input: { region: "side"; view: SessionView; tabs: Accessor<StripTabs> }): {
+  createRegion(input: {
+    region: "side"
+    view: Accessor<MountedSession>
+    screen: SessionScreen
+    tabs: Accessor<StripTabs>
+  }): {
     keys(): readonly string[]
     active(): string | undefined
     entry(key: string): { readonly tab: PanelTab } | undefined
@@ -326,38 +497,54 @@ type RegionHost = {
   definitions: readonly Definition[]
 }
 
+type RegionFixtureState = {
+  session: string
+  strips: Record<string, { all: string[]; active?: string }>
+  /** Each registration of a pane binding, with how many tabs it asked main to restore. */
+  registrations: { binding: string; session: string; restore: number }[]
+  /** The pane's Ipc is gone, as while its main extension reloads or is disabled. */
+  away: boolean
+}
+
 // Component-test fixture: the real side region over the real browser and file extensions, with the host's
-// session, layout, and storage services and the pane's main-process remote faked at their boundaries. Alpha was
+// session, layout, and storage HostApis and the pane's main-process Ipc faked at their boundaries. Alpha was
 // left on a file tab; Beta on a browser tab whose page the desktop reports only with its first inventory.
 export function mountBrowserRegion(input: RegionHost) {
   const host = document.createElement("main")
   host.dataset.testid = "browser-region-fixture"
   host.style.cssText = "position:fixed;inset:0;z-index:1000;background:#181818;color:#eee;padding:24px"
   document.body.appendChild(host)
+
   function Fixture() {
     const alpha = "browser-test\nses_alpha"
     const beta = "browser-test\nses_beta"
     const tabID = Browser.TabID.make("tab_33333333-3333-3333-3333-333333333333")
-    const [store, setStore] = createStore({
+
+    const [store, setStore] = createStore<RegionFixtureState>({
       session: alpha,
       strips: {
         [alpha]: { all: ["file://alpha.ts"], active: "file://alpha.ts" },
         [beta]: { all: ["file://beta.ts", `browser:${tabID}`], active: `browser:${tabID}` },
-      } as Record<string, { all: string[]; active?: string }>,
-      registrations: [] as { binding: string; session: string }[],
+      },
+      registrations: [],
+      away: false,
     })
+
     // The file tree's state, Changes or All files, as the file extension stores it.
     const [tree, setTree] = createSignal<object>()
     const strip = (session: string) => store.strips[session] ?? { all: [] }
     const setAll = (session: string, all: string[]) => setStore("strips", session, "all", all)
+
     const close = (session: string, key: string) =>
       batch(() => {
         setAll(
           session,
           strip(session).all.filter((item) => item !== key),
         )
+
         if (strip(session).active === key) setStore("strips", session, "active", undefined)
       })
+
     const server = {
       id: "browser-test",
       name: "Browser test",
@@ -368,48 +555,74 @@ export function mountBrowserRegion(input: RegionHost) {
       compatible: true,
       connected: true,
     }
+
     const location = { directory: "/repo" }
+
     const refs = [alpha, beta].map(
+      // SAFETY: the extensions read only these fields of a listed session, and of its server the ones `server` has.
+      // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
       (key) => ({ key, id: key.split("\n")[1], tab: key, server, pending: false, location }) as unknown as SessionRef,
     )
-    const view = {
-      get key() {
-        return store.session
-      },
-      get id() {
-        return store.session.split("\n")[1]
-      },
-      get tab() {
-        return store.session
-      },
-      server,
-      pending: false,
-      location,
-      directory: "/repo",
-      local: true,
-      background: [],
-      file: {
-        root: "/repo",
-        ready: () => false,
-        resolve: (path: string) => path.replace(/^file:\/\//, ""),
-        absolute: () => false,
-        get: () => undefined,
-        missing: () => false,
-        sync: async () => undefined,
-        search: async () => [],
-      },
-    } as unknown as SessionView
+
+    // The session screen's file model, which follows the route.
+    const file = {
+      root: "/repo",
+      ready: () => false,
+      resolve: (path: string) => path.replace(/^file:\/\//, ""),
+      absolute: () => false,
+      get: () => undefined,
+      missing: () => false,
+      sync: async () => undefined,
+      search: async () => [],
+    }
+
+    // One object per routed session, as the host gives each its own.
+    const views = new Map(
+      [alpha, beta].map((key) => {
+        const routed = {
+          key,
+          id: key.split("\n")[1],
+          tab: key,
+          visit: {},
+          server,
+          pending: false,
+          location,
+          directory: "/repo",
+          local: true,
+          background: [],
+        }
+
+        // SAFETY: the browser and file extensions read only these fields of the routed session in this fixture's flows.
+        // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+        return [key, routed as unknown as MountedSession] as const
+      }),
+    )
+
+    const fallback = views.get(alpha)
+
+    if (!fallback) throw new Error("The fixture has no Alpha session")
+
+    const view = () => views.get(store.session) ?? fallback
+
+    // One screen object while the strip mounts, whichever session it routes.
+    // SAFETY: this fixture draws tab triggers only. Its file model implements the list, normalize and focus paths;
+    // comment, composer and file-view operations are never invoked here.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const screen = { file } as unknown as SessionScreen
+
     const layout = (extension: string): Layout => ({
       narrow: () => false,
       ready: () => true,
       open(key, session, options) {
         if (!strip(session.key).all.includes(key)) setAll(session.key, [...strip(session.key).all, key])
-        if (options?.focus !== false) setStore("strips", session.key, "active", key)
+
+        if (options?.tab !== "append") setStore("strips", session.key, "active", key)
       },
       close: (key, session) => close(session.key, key),
       toggle() {},
       state(key, session) {
         if (strip(session.key).active === key) return "visible"
+
         return strip(session.key).all.includes(key) ? "open" : "closed"
       },
       stored: (session) =>
@@ -417,40 +630,60 @@ export function mountBrowserRegion(input: RegionHost) {
           key.startsWith(`${extension}:`) ? [key.slice(extension.length + 1)] : [],
         ),
       side: { opened: () => true, toggle() {} },
+      sidebar: { opened: () => true },
       dock: { opened: () => false, placement: () => "side" },
       scroll: { get: () => undefined, set() {} },
       settings() {},
       project() {},
     })
+
     const keep = <T extends object>(key: string, initial: T) => {
       const [value, set] = createStore<T>(structuredClone(initial))
+
       if (key === "file:tree") setTree(() => value)
-      return [value, (mutation: (draft: T) => void) => set(produce(mutation))] as const
+
+      return {
+        memory: [value, (mutation: (draft: T) => void) => set(produce(mutation))] as const,
+        store: {
+          value,
+          ready: () => true,
+          update: (mutate: (draft: Mutable<T>) => undefined) =>
+            set(
+              produce((draft) => {
+                // SAFETY: keep uses Solid's writable produce draft; readonly schema fields apply only to readers.
+                const returned = mutate(draft as Mutable<T>)
+
+                if (returned !== undefined) throw new Error("Use set(next) to replace the value.")
+              }),
+            ),
+          set: (next: T) => set(reconcile(next)),
+        },
+      }
     }
+
+    // Loaded at once.
     const storage = (extension: string): Storage => ({
-      store: (key, options) => [...keep(`${extension}:${key}`, options.initial), () => true] as const,
-      memory: (key, options) => keep(`${extension}:${key}`, options.initial),
+      store: (key, options) => keep(`${extension}:${key}`, options.initial).store,
+      memory: (key, options) => keep(`${extension}:${key}`, options.initial).memory,
       remove() {},
     })
-    const app: App = {
-      channel: "dev",
-      platform: "desktop",
-      font: () => "monospace",
-      locale: () => "en",
-      direction: () => "ltr",
-      setDirection() {},
-      routing: () => false,
-      path: () => "/",
-      keybind: () => [],
-      keys: (bind) => bind.split("+"),
-      matches: () => false,
-      servers: () => [server.id],
-      on: () => () => undefined,
-    }
+
+    const build: Build = { version: "", channel: "dev", platform: "desktop", packaged: false }
+    const locale: Locale = { locale: () => "en", direction: () => "ltr", setDirection() {} }
+    const appearance: Appearance = { font: () => "monospace" }
+    const router: Router = { routing: () => false, path: () => "/" }
+    const keybinds: Keybinds = { keybind: () => [], keys: (bind) => bind.split("+"), matches: () => false }
+    const servers: Servers = { list: () => [server.id] }
+    const workspaces: Workspaces = { on: () => () => undefined }
+
     const listeners = new Set<(value: { binding: string; event: PaneEvent }) => void>()
-    const pane: RemoteClient<(typeof BrowserPane)["spec"]> = {
+
+    const pane: PaneClient = {
       register: async (value) => {
-        setStore("registrations", (items) => [...items, { binding: value.binding, session: value.session }])
+        setStore("registrations", (items) => [
+          ...items,
+          { binding: value.binding, session: value.session, restore: value.restore?.tabs.length ?? 0 },
+        ])
       },
       load: async () => undefined,
       command: async () => undefined,
@@ -459,23 +692,37 @@ export function mountBrowserRegion(input: RegionHost) {
       close: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {
-        // SAFETY: the pane's remote has one event, so every listener takes that event's payload.
+        // SAFETY: the pane's Ipc has one event, so every listener takes that event's payload.
         const added = listener as (value: { binding: string; event: PaneEvent }) => void
         listeners.add(added)
+
         return () => void listeners.delete(added)
       },
     }
-    const services = [
-      { token: App, create: () => app },
-      { token: Native, create: () => undefined },
-      { token: Sessions, create: () => ({ list: () => refs, current: () => view }) },
-      { token: Layout, create: layout },
-      { token: Storage, create: storage },
-    ]
+
+    const apis = {
+      build: () => build,
+      locale: () => locale,
+      appearance: () => appearance,
+      router: () => router,
+      keybinds: () => keybinds,
+      servers: () => servers,
+      workspaces: () => workspaces,
+      desktop: () => undefined,
+      sessions: () => ({ list: () => refs, current: view }),
+      screen: () => ({ current: () => screen }),
+      layout,
+      storage,
+    }
+
+    const latest = () => store.registrations.filter((item) => item.session === "ses_beta").at(-1)
+
     // The desktop answers Beta's latest registration with the tab it restored.
     const inventory = () => {
-      const binding = store.registrations.filter((item) => item.session === "ses_beta").at(-1)?.binding
+      const binding = latest()?.binding
+
       if (!binding) return
+
       const tab = {
         id: tabID,
         url: "http://localhost:4173/",
@@ -485,6 +732,7 @@ export function mountBrowserRegion(input: RegionHost) {
         canGoForward: false,
         generation: 0,
       }
+
       listeners.forEach((listener) =>
         listener({ binding, event: { type: "state", state: { tabs: [tab], focusedTabID: tabID } } }),
       )
@@ -495,19 +743,22 @@ export function mountBrowserRegion(input: RegionHost) {
       const region = input.createRegion({
         region: "side",
         view,
+        screen,
         tabs: () => ({
-          all: () => strip(view.key).all,
-          active: () => strip(view.key).active,
-          setAll: (all) => setAll(view.key, all),
-          setActive: (tab) => setStore("strips", view.key, "active", tab),
-          close: (tab) => close(view.key, tab),
+          all: () => strip(view().key).all,
+          active: () => strip(view().key).active,
+          setAll: (all) => setAll(view().key, all),
+          setActive: (tab) => setStore("strips", view().key, "active", tab),
+          close: (tab) => close(view().key, tab),
           remap(rewrite) {
-            const all = strip(view.key).all
+            const all = strip(view().key).all
             const next = Array.from(new Set(all.map(rewrite)))
-            if (next.length !== all.length || next.some((key, index) => key !== all[index])) setAll(view.key, next)
+
+            if (next.length !== all.length || next.some((key, index) => key !== all[index])) setAll(view().key, next)
           },
         }),
       })
+
       return (
         <>
           {/* The host strip draws a trigger for each of these keys. */}
@@ -524,8 +775,10 @@ export function mountBrowserRegion(input: RegionHost) {
         </>
       )
     }
+
     function Ready(props: ParentProps) {
       const extensions = input.useExtensionHost()
+
       return <Show when={extensions.ready()}>{props.children}</Show>
     }
 
@@ -534,15 +787,23 @@ export function mountBrowserRegion(input: RegionHost) {
         <input.ExtensionHostProvider
           definitions={input.definitions}
           disabled={() => new Set<string>()}
-          services={services}
-          remote={(token) => (token.id === BrowserPane.id ? pane : undefined)}
+          apis={apis}
+          whenMounted={(run) => {
+            run()
+
+            return () => undefined
+          }}
+          ipc={(token) => (token.id === BrowserPane.id && !store.away ? pane : undefined)}
         >
           <h1 style={{ "font-size": "24px", "margin-bottom": "16px" }}>Restored side strip</h1>
           <nav style={{ display: "flex", gap: "12px", margin: "16px 0" }}>
             <button onClick={() => setStore("session", beta)}>Beta</button>
             <button onClick={inventory}>First inventory</button>
+            <button onClick={() => setStore("away", true)}>Pane away</button>
+            <button onClick={() => setStore("away", false)}>Pane back</button>
           </nav>
           <p>Registrations: {store.registrations.length}</p>
+          <p>Beta restores: {latest()?.restore ?? 0}</p>
           <p data-testid="tree">{JSON.stringify(tree())}</p>
           <Ready>
             <Strip />

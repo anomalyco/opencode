@@ -303,10 +303,6 @@ export const dict = {
   "dialog.project.edit.color.select": "\u2068{{color}}\u2069 رنگ چنو",
   "dialog.project.edit.worktree.startup": "ورک اسپیس اسٹارٹ اپ سکرپٹ",
   "dialog.project.edit.worktree.startup.placeholder": "مثلاً بن انسٹال کرو",
-  "dialog.releaseNotes.action.getStarted": "شروع کرو",
-  "dialog.releaseNotes.action.next": "اگلا",
-  "dialog.releaseNotes.action.hideFuture": "ایہہ اگوں نہ وکھاؤ",
-  "dialog.releaseNotes.media.alt": "ریلیز پیش نظارہ",
   "dialog.usageExceeded.dontShowAgain": "دوبارہ نہ وکھاؤ",
 
   "toast.permissions.autoaccept.on.title": "اجازتاں نوں خودکار قبول کرنا",
@@ -726,7 +722,6 @@ export const dict = {
   "session.view.select": "سیشن ویو",
   "session.background.moveRunning": "بیک گراؤنڈ وچ لے جاؤ",
   "session.timeline.working": "کم ہو رہیا اے",
-  "session.review.wrapLines": "سطراں لپیٹو",
   "session.websearch.title": "تیجی دھِر دی ویب سرچ",
   "session.websearch.description": "اوہ سرچ پرووائیڈر چُݨو جیہڑا ایجنٹ ویب تے سرچ لئی ورتݨ گے",
   "session.websearch.provider": "سرچ پرووائیڈر",
@@ -784,7 +779,6 @@ export const dict = {
   "settings.timeline.category.subagents": "سب ایجنٹ",
   "settings.timeline.category.notices": "اطلاعاں",
   "settings.timeline.category.tools": "ہور ٹول",
-  "settings.general.row.mobileDiffWrap.description": "موبائل ڈف وچ پاسے سکرول کرن دی بجائے لمیاں سطراں لپیٹو",
 
   "provider.connect.error.unsupportedFields": "ایس تصدیقی فارم وچ غیر معاون خانے نیں",
   "settings.about.writtenByNames": "\u2068{{names}}\u2069 نے لکھیا",

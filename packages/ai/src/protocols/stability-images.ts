@@ -82,7 +82,7 @@ const endpoint = (model: string) => (model.startsWith("sd3") ? "sd3" : model)
 
 const RESERVED_FORM_FIELDS = new Set(["image", "prompt", "mode", "model"])
 
-const form = Effect.fn("StabilityImages.form")(function* (
+const form = Effect.fnUntraced(function* (
   identity: MediaProtocol.Identity,
   fields: Record<string, unknown>,
   native: Record<string, unknown> | undefined,

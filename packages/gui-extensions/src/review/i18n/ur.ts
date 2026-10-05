@@ -10,4 +10,6 @@ export default {
   "git.description": "اس پروجیکٹ میں تبدیلیوں کو ٹریک کریں، ان کا جائزہ لیں اور ان کو کالعدم کریں۔",
   loadingChanges: "تبدیلیاں لوڈ ہو رہی ہیں…",
   noChanges: "کوئی تبدیلی نہیں۔",
+  "settings.wrapLines.title": "سطریں لپیٹیں",
+  "settings.wrapLines.description": "موبائل ڈف میں افقی اسکرولنگ کے بجائے لمبی سطریں لپیٹیں",
 }

@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Ažuriranje je spremno",
   "dialog.restart": "Ponovo pokreni",
   "dialog.later": "Kasnije",
+  "releaseNotes.action.getStarted": "Započni",
+  "releaseNotes.action.next": "Sljedeće",
+  "releaseNotes.action.hideFuture": "Ne prikazuj ovo u budućnosti",
+  "releaseNotes.media.alt": "Pregled izdanja",
 }

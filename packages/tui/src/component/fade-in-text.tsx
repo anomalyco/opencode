@@ -3,7 +3,7 @@ import { extend, type JSX } from "@opentui/solid"
 import { splitProps } from "solid-js"
 import { useConfig } from "../config"
 import { MaskedTextRenderable } from "./masked-text"
-import { coast, smootherstep } from "./tab-pulse"
+import { clamp, coast, smootherstep } from "./tab-pulse"
 
 type FadeInTextOptions = TextOptions & {
   backdrop?: RGBA
@@ -14,7 +14,6 @@ type FadeInTextOptions = TextOptions & {
 
 const DURATION = 200
 const FEATHER = 8
-const clamp = (value: number) => Math.max(0, Math.min(1, value))
 
 class FadeInTextRenderable extends MaskedTextRenderable {
   private _backdrop = RGBA.defaultBackground()

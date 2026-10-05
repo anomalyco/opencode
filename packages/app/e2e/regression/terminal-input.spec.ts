@@ -48,7 +48,9 @@ test("routes typing to the composer unless the open terminal is focused", async 
   await expect.poll(() => pty.sockets.length).toBe(1)
   pty.send("ready")
   await expect(terminal).toHaveCSS("opacity", "1")
-  await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur())
+  await page.evaluate(() => {
+    if (document.activeElement instanceof HTMLElement) document.activeElement.blur()
+  })
   await page.keyboard.type("a")
   await expect(editor).toBeFocused()
   await expect(editor).toHaveText("a")
@@ -64,6 +66,7 @@ for (const mount of ["cached", "explicit"] as const) {
       await route.continue()
     })
     const cached = { id: "pty_cached", title: "Terminal 1" }
+
     const { pty, sessions } = await mockWorkspace(page, {
       ...workspace,
       pty: mount === "cached" ? { initial: [cached] } : {},
@@ -76,14 +79,17 @@ for (const mount of ["cached", "explicit"] as const) {
             }
           : undefined,
     })
+
     await page.goto(sessionHref(sessions[0]!.id), { waitUntil: "commit" })
     await expectSessionTitle(page, "TerminalInput")
     const editor = page.locator('[data-component="composer-editor"]')
     const terminal = page.locator('[data-component="terminal"]')
+
     if (mount === "explicit") {
       await expect(editor).toBeEditable()
       await page.keyboard.press("Control+Backquote")
     }
+
     await expect(terminal).toBeVisible()
     await ghostty.promise
     await editor.click()
@@ -95,6 +101,7 @@ for (const mount of ["cached", "explicit"] as const) {
     pty.send("ready")
     await expect(terminal).toHaveCSS("opacity", "1")
     await expect(editor).toBeFocused()
+
     if (mount === "cached") expect(pty.created).toEqual([])
   })
 }
@@ -113,8 +120,40 @@ test("focuses a terminal created from the new-terminal button", async ({ page })
   await expect.poll(() => active.evaluate((element) => element.contains(document.activeElement))).toBe(true)
 })
 
+test("closing the last restored terminal does not create a hidden replacement", async ({ page }) => {
+  const cached = { id: "pty_cached", title: "Terminal 1" }
+
+  const { pty } = await openSession(page, {
+    ...workspace,
+    pty: { initial: [cached] },
+    seed: {
+      panes: { ses_terminalinput: { terminal: true, terminalHeight: 320 } },
+      storage: { [legacyTerminalKey()]: { active: cached.id, all: [{ ...cached, titleNumber: 1 }] } },
+    },
+  })
+
+  const terminal = page.locator('[data-component="terminal"]')
+  await expect(terminal.locator("textarea")).toHaveCount(1)
+  await expect.poll(() => pty.sockets.length).toBe(1)
+  expect(pty.created).toEqual([])
+
+  await page.locator("#terminal-panel").getByRole("button", { name: "Close terminal", exact: true }).click()
+  await expect(terminal).toBeHidden()
+  await expect.poll(() => pty.removed).toEqual([cached.id])
+  expect(pty.created).toEqual([])
+
+  await page.keyboard.press("Control+Backquote")
+  await expect(terminal.locator("textarea")).toHaveCount(1)
+  await expect.poll(() => pty.created.map((item) => item.id)).toEqual(["pty_1"])
+  await expect(page.locator("#terminal-panel").getByRole("tab", { name: "Terminal 1", exact: true })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  )
+})
+
 function legacyTerminalKey() {
   const dir = base64Encode("C:/OpenCode/TerminalInput")
   const head = dir.slice(0, 12).replace(/[^a-zA-Z0-9._-]/g, "-")
+
   return `opencode.workspace.${head}.${checksum(dir) ?? "0"}.dat:workspace:terminal`
 }

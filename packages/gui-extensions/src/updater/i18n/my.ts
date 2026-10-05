@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "အပ်ဒိတ်အဆင်သင့်ဖြစ်ပါပြီ။",
   "dialog.restart": "ပြန်လည်စတင်ပါ။",
   "dialog.later": "နောက်ပိုင်း",
+  "releaseNotes.action.getStarted": "စတင်လိုက်ပါ။",
+  "releaseNotes.action.next": "နောက်တစ်ခု",
+  "releaseNotes.action.hideFuture": "ဒါတွေကို အနာဂတ်မှာ မပြပါနဲ့။",
+  "releaseNotes.media.alt": "ဖြန့်ချိမှု အကြိုကြည့်ရှုခြင်း။",
 }

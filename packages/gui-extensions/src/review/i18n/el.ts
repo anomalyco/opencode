@@ -10,4 +10,6 @@ export default {
   "git.description": "Παρακολούθηση, έλεγχος και αναίρεση αλλαγών σε αυτό το έργο",
   loadingChanges: "Φόρτωση αλλαγών…",
   noChanges: "Χωρίς αλλαγές",
+  "settings.wrapLines.title": "Αναδίπλωση γραμμών",
+  "settings.wrapLines.description": "Τυλίξτε τις μακριές γραμμές σε κινητές διαφορές αντί να κάνετε κύλιση οριζόντια",
 }

@@ -1,14 +1,23 @@
 import { afterEach, expect, jest, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
-import type { RemoteClient } from "../sdk"
+import type { IpcClient } from "../sdk"
 import { createConnection } from "./connection"
-import type { BrowserPane, PaneEvent } from "./remote"
+import type { BrowserPane, PaneEvent } from "./ipc"
 
 type Input = Parameters<typeof createConnection>[0]
+
 type State = Parameters<Input["change"]>[0]
-type Client = RemoteClient<(typeof BrowserPane)["spec"]>
+
+type Client = IpcClient<(typeof BrowserPane)["spec"]>
+
+/** The pane's Ipc as a test drives it: whether it is available, and the error its register rejects with. */
+type IpcStub = { available: boolean; reject?: Error }
+
+/** The strip's owner: whether the session's location is known, and the mirror it holds until it is. */
+type StripOwner = { located: boolean; held?: () => void }
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
+
 const browser: Browser.State = {
   tabs: [
     {
@@ -37,20 +46,24 @@ function fixture(strip: string[] = []) {
   const calls: { input: Parameters<Client["register"]>[0]; commands: Browser.Action[] }[] = []
   const closed: string[] = []
   const highlights: { binding: string; tabID: Browser.TabID; ref?: Browser.Ref }[] = []
+
   const routed: Record<"preview" | "inspect" | "focus", unknown[]> = {
     preview: [],
     inspect: [],
     focus: [],
   }
+
   const target = { server: "browser-test", session: "ses_browser" }
-  // The remote is gone while the pane's main extension reloads or is disabled.
+  // The Ipc is gone while the pane's main extension reloads or is disabled.
   // An endpoint main cannot resolve, e.g. an SSH server's while it reconnects, makes register reject.
-  const remote: { available: boolean; reject?: Error } = { available: true }
-  const owner: { located: boolean; held?: () => void } = { located: true }
+  const ipc: IpcStub = { available: true }
+  const owner: StripOwner = { located: true }
+
   const client: Client = {
     register: async (input) => {
       calls.push({ input, commands: [] })
-      if (remote.reject) throw remote.reject
+
+      if (ipc.reject) throw ipc.reject
     },
     load: async () => undefined,
     command: async (input) => {
@@ -66,15 +79,18 @@ function fixture(strip: string[] = []) {
     state: () => undefined,
     on: () => () => undefined,
   }
+
   const connection = createConnection({
-    client: () => (remote.available ? client : undefined),
+    client: () => (ipc.available ? client : undefined),
     listen(binding, listener) {
       listeners.set(binding, listener)
+
       return () => listeners.delete(binding)
     },
     target: () => ({ ...target }),
     change: (state, mirror) => {
       states.push(state)
+
       if (owner.located) return mirror()
       owner.held = mirror
     },
@@ -91,10 +107,12 @@ function fixture(strip: string[] = []) {
     preview: (path) => routed.preview.push(path),
     inspect: (event) => routed.inspect.push(event),
   })
+
   const emit = (index: number, event: PaneEvent) => listeners.get(calls[index].input.binding)?.(event)
   connection.wake()
   emit(0, { type: "state", state: browser })
-  return { connection, calls, states, target, remote, owner, routed, highlights, closed, listeners, emit, strip }
+
+  return { connection, calls, states, target, ipc, owner, routed, highlights, closed, listeners, emit, strip }
 }
 
 const element = {
@@ -103,6 +121,7 @@ const element = {
   label: "button#save",
   rect: { x: 1, y: 2, width: 3, height: 4 },
 }
+
 test.each([
   { route: "preview" as const, event: { type: "preview", path: "docs/report.pdf" } as const, value: "docs/report.pdf" },
   { route: "focus" as const, event: { type: "focus", tabID } as const, value: tabID },
@@ -113,6 +132,7 @@ test.each([
   },
 ])("$route events reach the session without touching connection state", ({ route, event, value }) => {
   const app = fixture()
+
   try {
     const before = app.states.length
     app.emit(0, event)
@@ -125,6 +145,7 @@ test.each([
 
 test("highlights of picked elements reach the page", async () => {
   const app = fixture()
+
   try {
     app.connection.highlight(tabID, element.ref)
     app.connection.highlight(tabID)
@@ -142,6 +163,7 @@ test("highlights of picked elements reach the page", async () => {
 test("suspension retains tabs and reconnects once on demand using the current target", () => {
   jest.useFakeTimers()
   const app = fixture()
+
   try {
     const stale = app.listeners.get(app.calls[0].input.binding)!
     app.emit(0, { type: "state", state: browser, error: "browser.pane.suspended" })
@@ -169,16 +191,17 @@ test("suspension retains tabs and reconnects once on demand using the current ta
   }
 })
 
-test("a registration lost with the pane's remote registers again with its tabs once the remote is back", () => {
+test("a registration lost with the pane's Ipc registers again with its tabs once the Ipc is back", () => {
   const app = fixture()
+
   try {
-    app.emit(0, { type: "surface", tabID, surface: "surface-1" })
-    expect(app.states.at(-1)?.surfaces).toEqual({ [tabID]: "surface-1" })
-    app.remote.available = false
+    app.emit(0, { type: "embed", tabID, embed: "embed-1" })
+    expect(app.states.at(-1)?.embeds).toEqual({ [tabID]: "embed-1" })
+    app.ipc.available = false
     app.connection.refresh()
     expect(app.listeners.has(app.calls[0].input.binding)).toBe(false)
-    expect(app.states.at(-1)).toMatchObject({ registration: undefined, surfaces: {}, browser, suspended: true })
-    app.remote.available = true
+    expect(app.states.at(-1)).toMatchObject({ registration: undefined, embeds: {}, browser, suspended: true })
+    app.ipc.available = true
     app.connection.refresh()
     app.connection.refresh()
     expect(app.calls).toHaveLength(2)
@@ -196,16 +219,17 @@ test("a registration lost with the pane's remote registers again with its tabs o
 test("only a native inventory, the first one included, closes stored tabs the desktop lacks", () => {
   const stale = `tab_${crypto.randomUUID()}`
   const app = fixture([tabID, stale])
+
   try {
     expect(app.strip).toEqual([tabID])
     // Suspended, restoring, and unavailable states keep a stored tab until the desktop answers.
     app.strip.push(stale)
     app.emit(0, { type: "state", state: browser, error: "browser.pane.suspended" })
     app.connection.wake()
-    app.remote.available = false
+    app.ipc.available = false
     app.connection.refresh()
     expect(app.strip).toEqual([tabID, stale])
-    app.remote.available = true
+    app.ipc.available = true
     app.connection.refresh()
     app.emit(2, { type: "state", state: browser })
     expect(app.strip).toEqual([tabID])
@@ -218,12 +242,13 @@ test("a mirror held while the strip cannot be written still adds new tabs and pr
   const added = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
   const stale = `tab_${crypto.randomUUID()}`
   const app = fixture()
+
   try {
     app.owner.located = false
     app.strip.push(stale)
     app.emit(0, { type: "state", state: { ...browser, tabs: [...browser.tabs, { ...browser.tabs[0], id: added }] } })
     // A later report replaces the held mirror before the strip can be written.
-    app.emit(0, { type: "surface", tabID: added, surface: "surface-2" })
+    app.emit(0, { type: "embed", tabID: added, embed: "embed-2" })
     expect(app.strip).toEqual([tabID, stale])
     app.owner.located = true
     app.owner.held?.()
@@ -236,13 +261,14 @@ test("a mirror held while the strip cannot be written still adds new tabs and pr
 test("a rejected registration clears itself and retries with its tabs after the backoff", async () => {
   jest.useFakeTimers()
   const app = fixture()
+
   try {
     app.emit(0, { type: "state", state: browser, error: "browser.pane.suspended" })
-    app.remote.reject = new Error("browser.pane.registration.invalid")
+    app.ipc.reject = new Error("browser.pane.registration.invalid")
     await expect(app.connection.command({ type: "reload", tabID })).rejects.toThrow("browser.pane.registration.invalid")
     expect(app.listeners.has(app.calls[1].input.binding)).toBe(false)
-    expect(app.states.at(-1)).toMatchObject({ registration: undefined, surfaces: {}, browser, suspended: false })
-    app.remote.reject = undefined
+    expect(app.states.at(-1)).toMatchObject({ registration: undefined, embeds: {}, browser, suspended: false })
+    app.ipc.reject = undefined
     jest.advanceTimersByTime(999)
     expect(app.calls).toHaveLength(2)
     jest.advanceTimersByTime(1)
@@ -264,6 +290,7 @@ test("a rejected registration clears itself and retries with its tabs after the 
 
 test("a command wakes its attachment once and is not replayed", async () => {
   const app = fixture()
+
   try {
     app.emit(0, { type: "state", state: browser, error: "browser.pane.suspended" })
     await app.connection.command({ type: "reload", tabID })
@@ -288,13 +315,15 @@ test.each([
 ])("$error blocks automatic ownership recovery (register rejected first: $rejected)", async ({ error, rejected }) => {
   jest.useFakeTimers()
   const app = fixture()
+
   try {
     if (rejected) {
       app.emit(0, { type: "state", state: browser, error: "browser.pane.suspended" })
-      app.remote.reject = new Error("browser.pane.registration.closed")
+      app.ipc.reject = new Error("browser.pane.registration.closed")
       app.connection.wake()
       await Promise.resolve()
     }
+
     app.emit(app.calls.length - 1, { type: "state", state: null, error })
     jest.advanceTimersByTime(30_000)
     app.connection.wake()

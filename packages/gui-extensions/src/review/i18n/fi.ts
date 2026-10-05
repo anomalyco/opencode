@@ -10,4 +10,6 @@ export default {
   "git.description": "Seuraa, tarkista ja kumoa muutoksia tässä projektissa",
   loadingChanges: "Ladataan muutoksia…",
   noChanges: "Ei muutoksia",
+  "settings.wrapLines.title": "Rivitä rivit",
+  "settings.wrapLines.description": "Rivitä pitkät rivit mobiilidiffeissä vaakavierityksen sijaan",
 }

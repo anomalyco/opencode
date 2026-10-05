@@ -12,4 +12,7 @@ export default {
   "git.description": "Rastrea, revisa y deshaz cambios en este proyecto",
   loadingChanges: "Cargando cambios…",
   noChanges: "Sin cambios",
+  "settings.wrapLines.title": "Ajustar líneas",
+  "settings.wrapLines.description":
+    "Ajustar las líneas largas en los diffs móviles en vez de desplazarse horizontalmente",
 }
