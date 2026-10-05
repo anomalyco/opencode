@@ -22,6 +22,7 @@ export const PROJECT_AVATAR_VARIANTS = [
   "blue",
   "purple",
   "gray",
+  "transparent",
 ] as const
 
 export type ProjectAvatarVariant = (typeof PROJECT_AVATAR_VARIANTS)[number]
@@ -50,7 +51,8 @@ export function getProjectAvatarVariant(key?: string): ProjectAvatarVariant {
     key === "pink" ||
     key === "blue" ||
     key === "purple" ||
-    key === "gray"
+    key === "gray" ||
+    key === "transparent"
   )
     return key
   return "gray"

@@ -136,7 +136,10 @@ export const SettingsProjectGeneral: Component<{
                         })}
                         aria-pressed={selected()}
                         class="project-settings-color"
-                        classList={{ "project-settings-color--selected": selected() }}
+                        classList={{
+                          "project-settings-color--selected": selected(),
+                          "project-settings-color--transparent": color === "transparent",
+                        }}
                         onClick={() => model.setColor(selected() ? undefined : color)}
                       >
                         <ProjectAvatar

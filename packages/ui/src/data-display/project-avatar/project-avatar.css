@@ -92,6 +92,13 @@
   background: var(--project-avatar-bg);
 }
 
+[data-slot="project-avatar-surface"][data-variant="transparent"] {
+  background: transparent;
+  box-shadow: none;
+  color: var(--v2-text-text-base);
+  text-shadow: none;
+}
+
 [data-slot="project-avatar-surface"] [data-slot="project-avatar-image"] {
   position: relative;
   display: block;

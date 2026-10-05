@@ -252,6 +252,21 @@
   color: var(--v2-icon-icon-contrast);
 }
 
+.project-settings-color--transparent {
+  background-color: var(--v2-background-bg-layer-01);
+  background-image: conic-gradient(
+    var(--v2-background-bg-layer-03) 25%,
+    transparent 0 50%,
+    var(--v2-background-bg-layer-03) 0 75%,
+    transparent 0
+  );
+  background-size: 8px 8px;
+}
+
+.project-settings-color--transparent .project-settings-color-check {
+  color: var(--v2-icon-icon-base);
+}
+
 .project-settings-startup {
   display: flex;
   flex-direction: column;
