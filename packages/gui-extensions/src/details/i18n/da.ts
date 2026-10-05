@@ -3,8 +3,6 @@ export default {
   tooltip: "Resumé",
   "command.toggle": "Skift sammendrag",
   noBranch: "Ingen gren",
-  "background.tasksRunning.one": "{{count}} baggrundsopgave kører",
-  "background.tasksRunning.other": "{{count}} baggrundsopgaver kører",
   "move.title": "Flyt til arbejdsområdet",
   "move.menu": "Flyt session til",
   "move.failed": "Sessionen kunne ikke flyttes",

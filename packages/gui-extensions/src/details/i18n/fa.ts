@@ -3,8 +3,6 @@ export default {
   tooltip: "خلاصه",
   "command.toggle": "نمایش یا پنهان کردن خلاصه",
   noBranch: "بدون شاخه",
-  "background.tasksRunning.one": "{{count}} وظیفه در پس‌زمینه در حال اجراست",
-  "background.tasksRunning.other": "{{count}} وظیفه در پس‌زمینه در حال اجراست",
   "move.title": "انتقال به فضای کاری",
   "move.menu": "انتقال جلسه به",
   "move.failed": "انتقال جلسه ناموفق بود",

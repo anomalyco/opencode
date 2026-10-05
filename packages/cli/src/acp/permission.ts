@@ -5,11 +5,20 @@ import type { Permission } from "@opencode/schema/permission"
 import type { Session } from "@opencode/schema/session"
 import { Patch } from "@opencode/util/patch"
 import { applyPatch } from "diff"
-import { Cause, Effect, Option, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { ACPChild } from "./child"
 import { ACPClient } from "./client"
 import type { ACPConnection } from "./connection"
-import { absolutePath, filePath, patchHunks, pendingToolCall, stringValue, toLocations, type ToolInput } from "./tool"
+import {
+  absolutePath,
+  canonicalName,
+  filePath,
+  patchHunks,
+  pendingToolCall,
+  stringValue,
+  toLocations,
+  type ToolInput,
+} from "./tool"
 
 type PermissionEvent = Extract<OpenCodeEvent, { type: "permission.asked" }>
 type Tool = { readonly id: string; readonly name: string; readonly input: ToolInput }
@@ -24,7 +33,6 @@ type Input = {
   readonly cwd: string
   readonly tool?: Tool
   readonly child?: ACPChild.Session
-  readonly settled: Effect.Effect<void>
 }
 
 const options: PermissionOption[] = [
@@ -35,24 +43,7 @@ const options: PermissionOption[] = [
 
 const decodeFiles = Schema.decodeUnknownOption(Schema.Array(FileDiff.Info))
 
-export const reply = Effect.fn("cli.acp.permission.reply")(function* (input: Input, cancelled: Effect.Effect<void>) {
-  yield* Effect.uninterruptibleMask((restore) =>
-    // The race starts racers in order and stops once one is done, so an earlier cancel never starts the ask.
-    restore(
-      cancelled.pipe(
-        Effect.as("reject" as const),
-        Effect.raceFirst(input.settled.pipe(Effect.as("settled" as const))),
-        Effect.raceFirst(ask(input)),
-      ),
-    ).pipe(
-      Effect.tapCauseIf(Cause.hasDies, (cause) => Effect.logWarning("ACP permission ask failed", cause)),
-      Effect.catchCause(() => Effect.succeed("reject" as const)),
-      Effect.flatMap((decision) => respond(input, decision)),
-    ),
-  )
-})
-
-const ask = Effect.fnUntraced(function* (input: Input) {
+export const ask = Effect.fnUntraced(function* (input: Input) {
   const toolName = input.tool?.name ?? input.event.data.action
   const toolInput = input.tool?.input ?? input.event.data.metadata ?? {}
   const previews = yield* permissionPreviews(toolName, toolInput, input.event.data.metadata, input.cwd).pipe(
@@ -80,8 +71,7 @@ const ask = Effect.fnUntraced(function* (input: Input) {
   return selected === "once" || selected === "always" ? selected : "reject"
 })
 
-function respond(input: Input, decision: Permission.Reply | "settled") {
-  if (decision === "settled") return Effect.void
+export function respond(input: Input, decision: Permission.Reply) {
   return input.client.permission.reply({ sessionID: input.sessionID, requestID: input.event.data.id, decision }).pipe(
     Effect.catchTag("PermissionNotFoundError", () => Effect.void),
     Effect.catch(ACPClient.classify),
@@ -95,8 +85,7 @@ const permissionPreviews = Effect.fnUntraced(function* (
   metadata: ToolInput | undefined,
   cwd: string,
 ) {
-  const tool = toolName.toLocaleLowerCase()
-  if (tool === "patch" || tool === "apply_patch") return yield* patchPreviews(input, cwd)
+  if (canonicalName(toolName) === "patch") return yield* patchPreviews(input, cwd)
   const files = Option.getOrElse(decodeFiles(metadata?.files), () => [])
   const previews = yield* Effect.forEach(
     files,
@@ -137,7 +126,7 @@ function diff(path: string, oldText: string | null, newText: string) {
 
 function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyArray<Preview>) {
   if (previews.length > 1) return `${previews.length} files`
-  switch (toolName.toLocaleLowerCase()) {
+  switch (canonicalName(toolName)) {
     case "external_directory":
       return stringValue(input.description) ?? stringValue(input.command) ?? stringValue(input.parentDir)
     case "webfetch":
@@ -151,7 +140,6 @@ function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyA
     case "edit":
     case "write":
     case "patch":
-    case "apply_patch":
       return filePath(input) ?? previews[0]?.path
     default:
       return undefined

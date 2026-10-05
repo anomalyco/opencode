@@ -186,8 +186,6 @@ export interface PanelTab {
   readonly file?: string
   /** The tab panel itself joins the tab order, for content without focusable elements. */
   readonly tabbable?: boolean
-  /** `locked`: forces the panel's inner sidebar open and disables its toggle. */
-  readonly sidebar?: "locked"
   /** Stable DOM ids for the trigger and the tab panel. */
   readonly dom?: {
     /** The trigger's id. */

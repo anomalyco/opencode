@@ -3,7 +3,6 @@ import { Icon } from "@opencode/ui/icon"
 import { containsDirectory, getFilename } from "@opencode/util/path"
 import { createMemo, Show } from "solid-js"
 import { useExtension, type Project, type MountedSession } from "../sdk"
-import { BackgroundWork } from "./background"
 import { workspaceDirectories } from "./paths"
 import { ProjectDetailsCard } from "./project-card"
 import { SessionServerPanel } from "./server-panel"
@@ -48,6 +47,18 @@ export default function SessionDetailsPanel(props: DetailsPanelProps) {
     return getFilename(workspace ?? props.session.directory)
   }
 
+  // A subagent shares its parent's workspace, so it shows where it runs but cannot move on its own.
+  const subagent = () => !!data().session.get(props.session.id)?.parentID
+
+  const workspace = () => (
+    <>
+      <Icon name={props.session.local ? "monitor" : "outline-worktree"} class="shrink-0 text-v2-icon-icon-muted" />
+      <span dir="auto" class="session-summary-label">
+        {location()}
+      </span>
+    </>
+  )
+
   const branch = () => data().location.vcs.info({ directory: props.session.directory })?.branch.current
   const baseBranch = () => data().location.vcs.info({ directory: props.project.worktree })?.branch.current
 
@@ -59,22 +70,18 @@ export default function SessionDetailsPanel(props: DetailsPanelProps) {
           expanded={props.disclosure.project()}
           onExpandedChange={props.disclosure.setProject}
         >
-          <SessionWorkspaceMenu
-            session={props.session}
-            project={props.project}
-            directory={props.session.directory}
-            placement={placement()}
-            class="session-summary-row"
-          >
-            <Icon
-              name={props.session.local ? "monitor" : "outline-worktree"}
-              class="shrink-0 text-v2-icon-icon-muted"
-            />
-            <span dir="auto" class="session-summary-label">
-              {location()}
-            </span>
-            <Icon name="fill-triangle-down" class="session-summary-menu-indicator shrink-0 text-v2-icon-icon-muted" />
-          </SessionWorkspaceMenu>
+          <Show when={!subagent()} fallback={<div class="session-summary-row">{workspace()}</div>}>
+            <SessionWorkspaceMenu
+              session={props.session}
+              project={props.project}
+              directory={props.session.directory}
+              placement={placement()}
+              class="session-summary-row"
+            >
+              {workspace()}
+              <Icon name="fill-triangle-down" class="session-summary-menu-indicator shrink-0 text-v2-icon-icon-muted" />
+            </SessionWorkspaceMenu>
+          </Show>
           <div class="session-summary-row">
             <Icon name="branch" class="shrink-0 text-v2-icon-icon-muted" />
             <Show
@@ -120,9 +127,16 @@ export default function SessionDetailsPanel(props: DetailsPanelProps) {
               </span>
             </button>
           </Show>
-          <BackgroundWork tasks={props.session.background} mobile={props.mobile} />
         </ProjectDetailsCard>
-        <Show when={props.disclosure.project() && props.session.local && props.diffs?.length && !props.moveDismissed}>
+        <Show
+          when={
+            !subagent() &&
+            props.disclosure.project() &&
+            props.session.local &&
+            props.diffs?.length &&
+            !props.moveDismissed
+          }
+        >
           <div class="session-summary-move">
             <SessionWorkspaceMenu
               session={props.session}

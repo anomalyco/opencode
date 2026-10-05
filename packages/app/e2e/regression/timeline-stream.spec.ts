@@ -28,7 +28,9 @@ import {
 } from "../utils/timeline"
 
 const detailed = timelinePresets[2].value
+
 const user = { id: "msg_user", type: "user", text: "Run it", time: { created: 1 } } satisfies SessionMessageInfo
+
 const completed = {
   id: "msg_assistant",
   type: "assistant",
@@ -89,28 +91,34 @@ test.describe("static projection", () => {
       ],
       { summary: { diffs: Array.from({ length: 11 }, (_, index) => summaryDiff(index)) } },
     )
+
     const aborted = assistantMessage([{ id: "prt_before_abort", type: "text", text: "Before interruption" }], {
       id: "msg_1001_assistant_aborted",
       error: { type: "MessageAbortedError", message: "Stopped" },
     })
+
     const failed = assistantMessage([{ id: "prt_after_abort", type: "text", text: "After interruption" }], {
       id: "msg_1002_assistant_failed",
       error: { type: "APIError", message: "Visible provider failure" },
       created: 1700000003000,
     })
+
     const nextUser = userMessage([userText("Second turn", { id: "prt_second_user" })], {
       id: "msg_2000_second_user",
       created: 1700000005000,
     })
+
     const nextAssistant = assistantMessage([{ id: "prt_second_text", type: "text", text: "Second response" }], {
       id: "msg_2001_second_assistant",
       parentID: "msg_2000_second_user",
       created: 1700000006000,
     })
+
     const timeline = await setupTimeline(page, {
       settings: { timelineDetail: detailed },
       messages: [firstUser, aborted, failed, nextUser, nextAssistant],
     })
+
     await timeline.send(status("idle"))
     const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
     await scroller.evaluate((element) => (element.scrollTop = 0))
@@ -140,6 +148,7 @@ test.describe("static projection", () => {
         url: "data:text/plain;base64,bm90ZXM=",
       },
     ])
+
     message.metadata = {
       displayText: "what's goin on here",
       comments: [
@@ -198,6 +207,7 @@ test.describe("static projection", () => {
       toolPart("prt_skill_break", "read", "completed", { path: "src/a.ts" }),
       toolPart("prt_skill_last", "skill", "completed", { id: "opencode" }),
     ]
+
     await setupTimeline(page, {
       settings: { timelineDetail: detailed },
       messages: [userMessage(), assistantMessage(parts)],
@@ -217,6 +227,7 @@ test.describe("static projection", () => {
       toolPart("prt_collapsed_patch", "patch", "completed", { patchText: "Update src/value.ts" }),
       toolPart("prt_collapsed_read", "read", "completed", { path: "src/value.ts" }),
     ]
+
     await setupTimeline(page, {
       messages: [userMessage(), assistantMessage(parts)],
       settings: { shellToolPartsExpanded: true },
@@ -235,6 +246,7 @@ test.describe("static projection", () => {
 
 test("combines adjacent patch calls and repeated files into one group", async ({ page }) => {
   const [first, second] = ["prt_patch_first", "prt_patch_second"]
+
   const timeline = await setupTimeline(page, {
     settings: { timelineDetail: { ...detailed, edit: { placement: "separate", details: "collapsed" } } },
     messages: [
@@ -258,6 +270,7 @@ test("combines adjacent patch calls and repeated files into one group", async ({
   await expect(initialFile.getByRole("button")).toHaveAttribute("aria-expanded", "true")
   await initial.evaluate((element) => {
     const row = element.closest<HTMLElement>("[data-timeline-key]")
+
     if (row) row.dataset.patchRow = "stable"
   })
 
@@ -292,6 +305,7 @@ test("combines adjacent patch calls and repeated files into one group", async ({
 test("keeps a failed patch in Used without losing the surviving file choice", async ({ page }) => {
   const failed = "prt_grouped_patch_failed"
   const surviving = "prt_grouped_patch_surviving"
+
   const timeline = await setupTimeline(page, {
     settings: { timelineDetail: detailed },
     messages: [
@@ -321,6 +335,7 @@ test("keeps a failed patch in Used without losing the surviving file choice", as
   await expect(file).toHaveAttribute("aria-expanded", "true")
   await group.evaluate((element) => {
     const row = element.closest<HTMLElement>("[data-timeline-key]")
+
     if (row) row.dataset.groupIdentity = "preserved"
   })
 
@@ -331,9 +346,11 @@ test("keeps a failed patch in Used without losing the surviving file choice", as
   )
 
   const failedRow = page.locator("[data-timeline-key]", { has: page.locator(`[data-timeline-part-id="${failed}"]`) })
+
   const survivingRow = page.locator("[data-timeline-key]", {
     has: page.locator(`[data-timeline-part-id="${surviving}"]`),
   })
+
   await expect(group).toHaveAttribute("data-timeline-part-ids", `${failed},${surviving}`)
   await expect(used).toHaveAttribute("aria-expanded", "true")
   await expect(failedRow).toHaveAttribute("data-timeline-key", /^assistant-part:context:/)
@@ -351,15 +368,21 @@ test("does not remount an edit diff when a sibling part arrives", async ({ page 
     const attachShadow = Element.prototype.attachShadow
     Element.prototype.attachShadow = function (init) {
       count += 1
+
       return attachShadow.call(this, init)
     }
-    ;(window as Window & { __shadowRoots?: { reset(): void; count(): number } }).__shadowRoots = {
+
+    // SAFETY: this init script owns `__shadowRoots`; the probe reads below run only after it installed it.
+    const probe = window as Window & { __shadowRoots?: { reset(): void; count(): number } }
+
+    probe.__shadowRoots = {
       reset: () => {
         count = 0
       },
       count: () => count,
     }
   })
+
   const timeline = await setupTimeline(page, {
     settings: { editToolPartsExpanded: true, shellToolPartsExpanded: true, showReasoningSummaries: true },
     messages: [
@@ -401,8 +424,10 @@ test("does not remount an edit diff when a sibling part arrives", async ({ page 
       ),
     ],
   })
+
   const tool = page.locator(`[data-timeline-part-id="${editID}"]`)
   await expect(tool.locator('[data-component="file"][data-mode="diff"]')).toBeVisible()
+
   const markers = () =>
     tool.evaluate((element) => {
       const nodes = [
@@ -410,12 +435,15 @@ test("does not remount an edit diff when a sibling part arrives", async ({ page 
         element.querySelector('[data-component="file"][data-mode="diff"]'),
         element.closest("[data-timeline-key]"),
         element.closest("[data-timeline-row]"),
-      ] as (HTMLElement | null)[]
+      ]
+
       return {
-        markers: nodes.map((node) => node?.dataset.timelineProbe),
+        markers: nodes.map((node) => (node instanceof HTMLElement ? node.dataset.timelineProbe : undefined)),
+        // SAFETY: the init script installed `__shadowRoots` before the page loaded.
         shadowRoots: (window as Window & { __shadowRoots?: { count(): number } }).__shadowRoots!.count(),
       }
     })
+
   await tool.evaluate((element) => {
     ;[
       element,
@@ -426,7 +454,11 @@ test("does not remount an edit diff when a sibling part arrives", async ({ page 
       if (!(node instanceof HTMLElement)) throw new Error("missing edit tool, diff, row, or frame")
       node.dataset.timelineProbe = "before"
     })
-    ;(window as Window & { __shadowRoots?: { reset(): void } }).__shadowRoots!.reset()
+
+    // SAFETY: the init script installed `__shadowRoots` before the page loaded.
+    const probe = window as Window & { __shadowRoots?: { reset(): void } }
+
+    probe.__shadowRoots!.reset()
   })
 
   await timeline.send(partUpdated(textPart("prt_sibling_text", "Streaming added a later assistant text part.")))
@@ -438,10 +470,12 @@ for (const transition of ["reasoning-end", "idle", "retry"] as const) {
   test(`stops active Thinking on ${transition} without a following tool`, async ({ page }) => {
     const id = `prt_reasoning_stop_${transition}`
     const text = "## Inspecting stability\n\nThe timeline is ready for the next step."
+
     const timeline = await setupTimeline(page, {
       messages: [userMessage(), assistantMessage([reasoningPart(id, text)], { completed: false })],
       settings: { timelineDetail: { ...detailed, thinking: { placement: "separate", details: "collapsed" } } },
     })
+
     const part = page.locator(`[data-timeline-part-id="${renderedPartID(id)}"]`)
     const trigger = part.locator('[data-slot="collapsible-trigger"]')
     await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
@@ -465,6 +499,7 @@ for (const shellDefault of ["collapsed", "expanded"] as const) {
     const shellID = `prt_separate_shell_${shellDefault}`
     const output = (count: number) => Array.from({ length: count }, (_, index) => `line ${index + 1}`).join("\n")
     const assistant = assistantMessage([reasoningPart(reasoningID, "## Inspecting stability")], { completed: false })
+
     const timeline = await setupTimeline(page, {
       messages: [userMessage(), assistant],
       settings: {
@@ -475,9 +510,11 @@ for (const shellDefault of ["collapsed", "expanded"] as const) {
         },
       },
     })
+
     const thought = page.locator(
       `[data-timeline-part-id="${renderedPartID(reasoningID)}"] [data-slot="collapsible-trigger"]`,
     )
+
     const shellTrigger = page.locator(`[data-timeline-part-id="${shellID}"] [data-slot="collapsible-trigger"]`)
     const group = page.locator('[data-component="collapsed-tool-group"]')
     // One row opens the thought, the other opens and then closes it again.
@@ -485,6 +522,7 @@ for (const shellDefault of ["collapsed", "expanded"] as const) {
     await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
     await expect(thought).toHaveAttribute("aria-expanded", "false")
     await thought.click()
+
     if (!thoughtOpen) await thought.click()
     await expect(thought).toHaveAttribute("aria-expanded", String(thoughtOpen))
 
@@ -518,6 +556,7 @@ test.describe("Working", () => {
       viewport: { width: 390, height: 900 },
       settings: { timelineDetail: { ...detailed, thinking: { placement: "separate", details: "collapsed" } } },
     })
+
     const working = page.locator('[data-component="session-working"]')
     const shimmer = working.locator('[data-component="text-shimmer"]')
     await expect(working).toHaveCount(1)
@@ -551,6 +590,7 @@ test.describe("Working", () => {
       ],
       settings: { timelineDetail: detailed },
     })
+
     const working = page.locator('[data-component="session-working"]')
     const group = page.locator('[data-component="collapsed-tool-group"]')
     await expect(working).toBeVisible()
@@ -571,16 +611,20 @@ test.describe("Working", () => {
           timelineDetail: { ...timelinePresets[0].value, shell: { placement: "separate", details: "collapsed" } },
         },
       })
+
       const working = page.locator('[data-component="session-working"]')
       await expect(working).toBeVisible()
 
       const id = `prt_working_${name}`
-      const input =
-        name === "shell"
-          ? { command: "printf ready" }
-          : name === "patch"
-            ? { patchText: "*** Begin Patch\n*** Add File: src/working.ts\n+export const ready = true\n*** End Patch" }
-            : { agent: "general", description: "Inspect working indicator", prompt: "Inspect the timeline." }
+
+      const input = {
+        shell: { command: "printf ready" },
+        patch: {
+          patchText: "*** Begin Patch\n*** Add File: src/working.ts\n+export const ready = true\n*** End Patch",
+        },
+        subagent: { agent: "general", description: "Inspect working indicator", prompt: "Inspect the timeline." },
+      }[name]
+
       await timeline.send(partUpdated(toolPart(id, name, "streaming", input)))
       const tool = page.locator(`[data-timeline-part-id="${id}"]`)
       await expect(tool).toBeVisible()
@@ -590,9 +634,10 @@ test.describe("Working", () => {
         name === "patch"
           ? { files: [{ ...patchFile("src/working.ts", "added"), patch: "@@ -0,0 +1 @@\n+export const ready = true" }] }
           : {}
+
       await timeline.send(partUpdated(toolPart(id, name, "running", input, { metadata })))
       await expect(tool).toContainText(
-        name === "shell" ? "printf ready" : name === "patch" ? "working.ts" : "Inspect working indicator",
+        { shell: "printf ready", patch: "working.ts", subagent: "Inspect working indicator" }[name],
       )
       await expect(working).toHaveCount(0)
 
@@ -604,6 +649,43 @@ test.describe("Working", () => {
       await expect(working.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
     })
   }
+
+  test("keeps Working while a new read joins a standalone read group", async ({ page }) => {
+    const timeline = await setupTimeline(page, {
+      messages: [
+        userMessage(),
+        assistantMessage(
+          ["one", "two", "three"].map((name) =>
+            toolPart(`prt_read_${name}`, "read", "completed", { path: `src/${name}.ts` }),
+          ),
+          { completed: false },
+        ),
+      ],
+      settings: { timelineDetail: timelinePresets[0].value },
+    })
+
+    const working = page.locator('[data-component="session-working"]')
+    const group = page.locator('[data-component="read-tool-group"]')
+    const shimmer = group.locator('[data-component="text-shimmer"]')
+    await expect(group).toHaveAttribute("data-timeline-part-ids", "prt_read_one,prt_read_two,prt_read_three")
+    await expect(working).toBeVisible()
+
+    await timeline.send(partUpdated(toolPart("prt_read_four", "read", "streaming", { path: "src/four.ts" })))
+    await expect(group).toHaveAttribute(
+      "data-timeline-part-ids",
+      "prt_read_one,prt_read_two,prt_read_three,prt_read_four",
+    )
+    await expect(shimmer).toHaveAttribute("data-active", "true")
+    await expect(working).toBeVisible()
+
+    await timeline.send(partUpdated(toolPart("prt_read_four", "read", "running", { path: "src/four.ts" })))
+    await expect(group.locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText("one.ts, two.ts, three.ts, four.ts")
+    await expect(working).toBeVisible()
+
+    await timeline.send(partUpdated(toolPart("prt_read_four", "read", "completed", { path: "src/four.ts" })))
+    await expect(shimmer).toHaveAttribute("data-active", "false")
+    await expect(working).toBeVisible()
+  })
 
   for (const grouped of [false, true]) {
     test(`uses ${grouped ? "grouped" : "standalone"} background shell presentation`, async ({ page }) => {
@@ -627,14 +709,18 @@ test.describe("Working", () => {
         ],
       })
       const working = page.locator('[data-component="session-working"]')
+
       if (!grouped) {
         await expect(page.locator('[data-timeline-part-id="prt_background_active"]')).toBeVisible()
         await expect(working).toHaveCount(0)
+
         return
       }
+
       const trigger = page
         .locator('[data-component="collapsed-tool-group"]')
         .getByRole("button", { name: "Used 2 Shell", exact: true, includeHidden: true })
+
       await expect(trigger).toHaveAttribute("aria-expanded", "false")
       await expect(working).toBeVisible()
       await trigger.click()
@@ -666,6 +752,7 @@ test.describe("Working", () => {
     const timeline = await setupTimeline(page, {
       messages: [userMessage(), assistantMessage([], { completed: false })],
     })
+
     const working = page.locator('[data-component="session-working"]')
     await expect(working).toBeVisible()
 
@@ -708,7 +795,9 @@ test.describe("background shortcut", () => {
     await expect
       .poll(async () => {
         const [cardBox, hintBox] = await Promise.all([card.boundingBox(), hint.boundingBox()])
+
         if (!cardBox || !hintBox) return undefined
+
         return { aligned: Math.abs(cardBox.x - hintBox.x) < 2, ordered: cardBox.y < hintBox.y }
       })
       .toEqual({ aligned: true, ordered: true })
@@ -729,11 +818,11 @@ test.describe("background shortcut", () => {
                 "prt_grouped_active",
                 name,
                 "running",
-                name === "shell"
-                  ? { command: "sleep 10" }
-                  : name === "subagent"
-                    ? { agent: "general", description: "Inspect the timeline", prompt: "Inspect it." }
-                    : { filePath: "src/working.ts" },
+                {
+                  read: { filePath: "src/working.ts" },
+                  shell: { command: "sleep 10" },
+                  subagent: { agent: "general", description: "Inspect the timeline", prompt: "Inspect it." },
+                }[name],
               ),
             ],
             { completed: false },
@@ -745,19 +834,24 @@ test.describe("background shortcut", () => {
       const trigger = group.locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
       await expect(trigger).toHaveAttribute("aria-expanded", "false")
       await expect(working).toBeInViewport()
+
       if (name !== "read") {
         await expect(backgroundHint(page)).toBeInViewport()
         await expect(page.locator('[data-component="session-background-hint-row"]')).toHaveCSS("height", "24px")
       }
+
       await trigger.click()
       await expect(trigger).toHaveAttribute("aria-expanded", "true")
+
       if (name === "subagent") await expect(group.getByText("Inspect the timeline", { exact: true })).toBeVisible()
+
       if (name !== "subagent")
         await expect(group.locator('[data-component="text-shimmer"][data-active="true"]')).toBeVisible()
       await expect(working).toBeVisible()
       await trigger.click()
       await expect(trigger).toHaveAttribute("aria-expanded", "false")
       await expect(working).toBeVisible()
+
       if (name !== "read") await expectBackgroundRequest(page)
     })
   }
@@ -765,6 +859,7 @@ test.describe("background shortcut", () => {
   test("separates blocking and already-backgrounded work into two rows", async ({ page }) => {
     const backgroundID = "ses_background_existing"
     const blockingID = "ses_background_blocking"
+
     const timeline = await setupTimeline(page, {
       settings: { timelineDetail: detailed },
       sessionMessages: [
@@ -781,7 +876,7 @@ test.describe("background shortcut", () => {
               name: "subagent",
               state: {
                 status: "completed",
-                input: { description: "Background task" },
+                input: { description: "Background task", agent: "explore" },
                 content: [{ type: "text", text: "working" }],
                 metadata: { sessionID: backgroundID, status: "running" },
               },
@@ -814,7 +909,7 @@ test.describe("background shortcut", () => {
               name: "subagent",
               state: {
                 status: "running",
-                input: { description: "Foreground task" },
+                input: { description: "Foreground task", agent: "build" },
                 metadata: { sessionID: blockingID },
               },
               time: { created: 4 },
@@ -825,8 +920,8 @@ test.describe("background shortcut", () => {
       ],
       sessions: [
         session(),
-        session({ id: backgroundID, parentID: sessionID, title: "Background task" }),
-        session({ id: blockingID, parentID: sessionID, title: "Foreground task" }),
+        session({ id: backgroundID, parentID: sessionID, title: "Background task", agent: "explore" }),
+        session({ id: blockingID, parentID: sessionID, title: "Foreground task", agent: "build" }),
       ],
       sessionStatus: {
         [sessionID]: { type: "busy" },
@@ -855,27 +950,58 @@ test.describe("background shortcut", () => {
     })
     const backgroundCard = page.locator('[data-timeline-part-id="call_backgrounded"]')
     await expect(backgroundHint(page)).toBeVisible()
+
     const used = page
       .locator('[data-timeline-part-ids="call_backgrounded,call_shell_backgrounded,call_blocking"]')
       .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+
     await expect(used).toHaveText(/^Used\s*3\s*Agent, Shell$/)
     await expect(used).toHaveAttribute("aria-expanded", "false")
-    await used.click()
+    await page.getByRole("button", { name: "3 running", exact: true }).click()
+    const list = page.getByRole("menu", { name: "3 running", exact: true })
+    await expect(list.getByRole("menuitem")).toHaveText([
+      /^Build\s*Foreground task$/,
+      /^Explore\s*Background task$/,
+      /^Shell\s*sleep 120$/,
+    ])
+    await list.getByRole("menuitem", { name: /sleep 120/ }).click()
+    await expect(list).toHaveCount(0)
     await expect(used).toHaveAttribute("aria-expanded", "true")
-    await page.getByRole("button", { name: "Session details" }).click()
-    const summary = page.getByRole("button", { name: "2 background tasks running", exact: true })
-    await expect(summary).toContainText("2")
-    await summary.click()
-    const list = page.locator('[data-component="session-background-list"]')
-    await expect(list).toContainText("Background task")
-    await expect(list).toContainText("sleep 120")
-    await expect(list).not.toContainText("Foreground task")
+    const shellCall = page.locator('[data-timeline-part-id="call_shell_backgrounded"]')
+    await expect(shellCall.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
+    await expect(shellCall).toBeInViewport()
+
+    await page.getByRole("button", { name: "3 running", exact: true }).click()
+
+    const interrupt = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${blockingID}/interrupt`,
+    )
+
+    const foreground = list.getByRole("menuitem", { name: /Foreground task/ })
+
+    await foreground.hover()
+    await foreground.getByRole("button", { name: "Interrupt subagent", exact: true }).click()
+    await interrupt
+    await expect(list).toBeVisible()
+
+    const kill = page.waitForRequest(
+      (request) => request.method() === "DELETE" && new URL(request.url()).pathname === "/api/shell/shell_backgrounded",
+    )
+
+    await list.getByRole("menuitem", { name: /sleep 120/ }).hover()
+    await page.keyboard.press("Delete")
+    await kill
+    await page.keyboard.press("Escape")
+    await expect(list).toHaveCount(0)
     await expect(backgroundCard).toContainText("Background task (background)")
     await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toBeVisible()
     await expect(
       page.locator('[data-timeline-part-id="call_shell_backgrounded"] [data-component="text-shimmer"]'),
     ).toHaveAttribute("data-active", "true")
 
+    // SAFETY: the transport forwards this payload unchanged, and the client marks a session idle from
+    // `type` and `data.sessionID` alone; the child session's event needs no durable metadata here.
     await timeline.transport.send({
       id: "evt_background_succeeded",
       created: Date.now(),
@@ -884,6 +1010,116 @@ test.describe("background shortcut", () => {
     } as never)
     await expect(backgroundCard.locator('[data-component="session-progress-indicator-v2"]')).toHaveCount(0)
     await expect(backgroundCard).toContainText("Background task (background)")
+  })
+
+  test("moves between siblings and to the parent's shell from inside a subagent", async ({ page }) => {
+    const siblings = [
+      { id: "ses_sibling_one", agent: "explore", description: "Draft TUI proposal" },
+      { id: "ses_sibling_two", agent: "build", description: "Fix context controls" },
+    ]
+
+    const timeline = await setupTimeline(page, {
+      settings: { timelineDetail: detailed },
+      sessionMessages: [
+        user,
+        {
+          id: "msg_sibling_shell",
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: [
+            {
+              type: "tool",
+              id: "call_sibling_shell",
+              name: "shell",
+              state: {
+                status: "completed",
+                input: { command: "sleep 120" },
+                content: [{ type: "text", text: "working" }],
+                metadata: { shellID: "shell_sibling", status: "running" },
+              },
+              time: { created: 2, completed: 3 },
+            },
+          ],
+          time: { created: 2, completed: 3 },
+        },
+        {
+          id: "msg_siblings",
+          type: "assistant",
+          agent: "build",
+          model: { id: "model", providerID: "provider" },
+          content: siblings.map((item) => ({
+            type: "tool" as const,
+            id: `call_${item.id}`,
+            name: "subagent",
+            state: {
+              status: "running" as const,
+              input: { description: item.description, agent: item.agent },
+              metadata: { sessionID: item.id },
+            },
+            time: { created: 2 },
+          })),
+          time: { created: 2 },
+        },
+      ],
+      sessions: [
+        session(),
+        ...siblings.map((item) =>
+          session({ id: item.id, parentID: sessionID, title: item.description, agent: item.agent }),
+        ),
+      ],
+      sessionStatus: Object.fromEntries(
+        [sessionID, ...siblings.map((item) => item.id)].map((id) => [id, { type: "busy" }]),
+      ),
+    })
+
+    await timeline.transport.send({
+      id: "evt_sibling_shell_created",
+      created: 3,
+      type: "shell.created",
+      location: { directory },
+      data: {
+        info: {
+          id: "shell_sibling",
+          status: "running",
+          command: "sleep 120",
+          cwd: directory,
+          shell: "bash",
+          file: "/tmp/sibling.out",
+          metadata: { sessionID },
+          time: { started: 2 },
+        },
+      },
+    })
+
+    const header = page.locator("[data-session-title]")
+    const trigger = header.getByRole("button", { name: "3 running", exact: true })
+    const list = page.getByRole("menu", { name: "3 running", exact: true })
+
+    await trigger.click()
+    await list.getByRole("menuitem", { name: /Draft TUI proposal/ }).click()
+    await expect(page).toHaveURL(/\/session\/ses_sibling_one$/)
+
+    await trigger.click()
+    await expect(list.getByRole("menuitem")).toHaveText([
+      /^Explore\s*Draft TUI proposal/,
+      /^Build\s*Fix context controls/,
+      /^Shell\s*sleep 120/,
+    ])
+    await expect(list.getByRole("menuitem", { name: /Draft TUI proposal/ })).toHaveAttribute("aria-current", "page")
+    await expect(list.getByRole("menuitem", { name: /Fix context controls/ })).not.toHaveAttribute("aria-current")
+    await list.getByRole("menuitem", { name: /Fix context controls/ }).click()
+    await expect(page).toHaveURL(/\/session\/ses_sibling_two$/)
+
+    // The shell call lives in the parent: the row opens it there, expanded.
+    await trigger.click()
+    await list.getByRole("menuitem", { name: /sleep 120/ }).click()
+    await expect(page).toHaveURL(new RegExp(`/session/${sessionID}$`))
+
+    const shellCall = page.locator('[data-timeline-part-id="call_sibling_shell"]')
+
+    await expect(shellCall.locator('[data-slot="collapsible-trigger"]')).toHaveAttribute("aria-expanded", "true")
+    await expect(shellCall).toBeInViewport()
   })
 })
 
@@ -916,6 +1152,7 @@ test.describe("compaction", () => {
       .poll(async () => {
         const summary = await compaction.locator('[data-component="text-part"]').boundingBox()
         const status = await running.boundingBox()
+
         return !!summary && !!status && status.y >= summary.y + summary.height
       })
       .toBe(true)
@@ -937,6 +1174,7 @@ test.describe("compaction", () => {
       .poll(async () => {
         const summary = await compaction.locator('[data-component="text-part"]').boundingBox()
         const done = await compaction.getByText("Session compacted", { exact: true }).boundingBox()
+
         return !!summary && !!done && done.y >= summary.y + summary.height
       })
       .toBe(true)
@@ -971,16 +1209,21 @@ test.describe("compaction", () => {
       shown: undefined,
     },
   } as const
+
   const labels = Object.values(outcomes).map((outcome) => outcome.label)
 
   // Failed then cancelled share one history, so each boundary must keep its own outcome.
   for (const names of [["failed", "cancelled"], ["interrupted"]] as const) {
     test(`ends running compactions as ${names.join(", then ")}`, async ({ page }) => {
-      const timeline = await setupTimeline(page, {
-        sessionMessages: [user, completed],
-        ...(names[0] === "interrupted" ? { sessionStatus: { [sessionID]: { type: "busy" as const } } } : {}),
-      })
+      const timeline = await setupTimeline(
+        page,
+        names[0] === "interrupted"
+          ? { sessionMessages: [user, completed], sessionStatus: { [sessionID]: { type: "busy" } } }
+          : { sessionMessages: [user, completed] },
+      )
+
       const compactions = page.locator('[data-component="session-compaction-message"]')
+
       for (const [index, name] of names.entries()) {
         const outcome = outcomes[name]
         await timeline.send(compactionStarted({ sessionID, reason: outcome.reason, recent: "" }))
@@ -988,36 +1231,45 @@ test.describe("compaction", () => {
         await expect(compactions).toHaveCount(index + 1)
         const compaction = compactions.nth(index)
         await expect(compaction).toContainText(outcome.partial)
+
         if (name === "interrupted") {
           await expect(compaction.getByRole("status").getByLabel("Compacting", { exact: true })).toBeVisible()
+
           const request = page.waitForRequest(
             (request) =>
               request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/interrupt`,
           )
+
           await page.getByRole("button", { name: "Stop", exact: true }).click()
           await request
         }
+
         await timeline.send(compactionFailed({ sessionID, reason: outcome.reason, error: outcome.error }))
         await expect(compaction.getByText(outcome.label, { exact: true })).toBeVisible()
       }
 
       await expect(compactions).toHaveCount(names.length)
+
       for (const [index, name] of names.entries()) {
         const outcome = outcomes[name]
         const compaction = compactions.nth(index)
         await expect(compaction.getByText("Session compaction started", { exact: true })).toBeVisible()
         await expect(compaction.getByText(outcome.label, { exact: true })).toBeVisible()
+
         for (const other of labels.filter((label) => label !== outcome.label))
           await expect(compaction.getByText(other, { exact: true })).toHaveCount(0)
         await expect(compaction.getByText("Session compacted", { exact: true })).toHaveCount(0)
         await expect(compaction.getByRole("status")).toHaveCount(0)
         await expect(compaction).not.toContainText(outcome.partial)
+
         if (outcome.shown) await expect(compaction.getByText(outcome.shown, { exact: true })).toBeVisible()
+
         if (!outcome.shown) await expect(compaction).not.toContainText(outcome.error.message)
       }
     })
   }
 })
+
 test("reducer-hardening: converges when idle arrives before final part and message completion", async ({ page }) => {
   const textID = "prt_event_order_text"
   const assistant = assistantMessage([textPart(textID, "Partial")], { completed: false })
@@ -1048,11 +1300,13 @@ test("changes timeline presets and saves custom thinking details", async ({ page
   const slider = settings.getByRole("slider", { name: "Timeline detail", exact: true })
   await expect(slider).toBeEnabled()
   await slider.press("Home")
+
   for (const [index, name] of ["Messages only", "Quiet", "Compact", "Detailed", "Everything"].entries()) {
     if (index) await slider.press("ArrowRight")
     await expect(slider).toHaveValue(String(index))
     await expect(slider).toHaveAttribute("aria-valuetext", name)
   }
+
   await slider.press("End")
   await settings.getByRole("button", { name: "Advanced", exact: true }).click()
   const grouped = settings.getByRole("switch", { name: "Thinking grouped", exact: true })
@@ -1132,6 +1386,7 @@ test.describe("shell completion", () => {
         ],
         time: { created: 2, completed: 3 },
       }
+
       const state = { finished: false, requests: 0 }
       // Larger than one server page (65,536 bytes), so the final output is read in two pages. The card shows its most
       // recent 64 KiB.
@@ -1141,9 +1396,11 @@ test.describe("shell completion", () => {
       const reads: number[] = []
       page.on("request", (request) => {
         const url = new URL(request.url())
+
         if (url.pathname === `/api/shell/${background.id}/output`)
           reads.push(Number(url.searchParams.get("cursor") ?? 0))
       })
+
       const timeline = await setupTimeline(page, {
         viewport: { width: grouped ? 390 : 1400, height: 900 },
         settings: { shellToolPartsExpanded: !grouped },
@@ -1156,15 +1413,19 @@ test.describe("shell completion", () => {
         shellOutput: ({ id }) => {
           if (id !== background.id) return "Checking project\n"
           state.requests++
+
           return state.finished ? finished : "Checking project\n"
         },
       })
+
       await page.clock.install()
       await page.reload()
       await timeline.transport.waitForConnection()
+
       const groupTrigger = page
         .locator('[data-component="collapsed-tool-group"]')
         .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+
       if (grouped) {
         await expect(page.locator('[data-component="collapsed-tool-group"]')).toHaveAttribute(
           "data-timeline-part-ids",
@@ -1173,11 +1434,13 @@ test.describe("shell completion", () => {
         await expect(groupTrigger).toHaveAttribute("aria-expanded", "false")
         await groupTrigger.click()
       }
+
       const card = page.locator(`[data-timeline-part-id="call_${background.id}"]`)
       const shimmer = card.locator('[data-component="text-shimmer"]')
       const other = page.locator('[data-timeline-part-id="call_sh_other"] [data-component="text-shimmer"]')
       await expect(shimmer).toHaveAttribute("data-active", "true")
       await expect(other).toHaveAttribute("data-active", "true")
+
       if (grouped) await card.locator('[data-slot="collapsible-trigger"]').click()
       await expect(card.locator('[data-slot="bash-result"]')).toHaveText("Checking project")
 
@@ -1202,9 +1465,11 @@ test.describe("shell completion", () => {
 
       reads.length = 0
       await page.reload()
+
       if (grouped) await groupTrigger.click()
       await expect(shimmer).toHaveAttribute("data-active", "false")
       await expect(other).toHaveAttribute("data-active", "true")
+
       // An expanded card reads the exited shell's final output from the start, again in two pages.
       if (grouped) return
       await expect(card.locator('[data-slot="bash-result"]')).toHaveText(tail)
@@ -1240,6 +1505,7 @@ test.describe("shell completion", () => {
       ],
       shellOutput: ({ id }) => (id === background.id ? "Checking project\n" : undefined),
     })
+
     const card = page.locator('[data-timeline-part-id="call_foreground"]')
     const shimmer = card.locator('[data-component="text-shimmer"]')
     await expect(shimmer).toHaveAttribute("data-active", "true")
@@ -1290,6 +1556,7 @@ async function expectBackgroundRequest(page: Page) {
     (request) =>
       request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/background`,
   )
+
   await page.keyboard.press("Control+b")
   await request
 }
@@ -1298,12 +1565,11 @@ function patchFile(file: string, status: "added" | "modified" | "deleted") {
   return {
     file,
     status,
-    patch:
-      status === "added"
-        ? "@@ -0,0 +1 @@\n+export const after = true"
-        : status === "deleted"
-          ? "@@ -1 +0,0 @@\n-export const before = true"
-          : "@@ -1 +1 @@\n-export const before = true\n+export const after = true",
+    patch: {
+      added: "@@ -0,0 +1 @@\n+export const after = true",
+      deleted: "@@ -1 +0,0 @@\n-export const before = true",
+      modified: "@@ -1 +1 @@\n-export const before = true\n+export const after = true",
+    }[status],
     additions: status === "deleted" ? 0 : 1,
     deletions: status === "added" ? 0 : 1,
   }

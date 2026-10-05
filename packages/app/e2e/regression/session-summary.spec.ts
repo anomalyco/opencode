@@ -134,6 +134,27 @@ test("a session in a worktree subfolder names its worktree and lists cached work
   list.release()
 })
 
+test("a subagent shows its details but cannot move to another worktree", async ({ page }) => {
+  const root = "C:/OpenCode/SmokeWorktrees"
+
+  await mockStressTimeline(page, {
+    sessions: fixture.sessions.map((item) =>
+      item.id === fixture.targetID
+        ? { ...item, parentID: fixture.sourceID, directory: `${root}/feature` }
+        : { ...item },
+    ),
+    worktrees: [{ directory: fixture.directory }, { directory: `${root}/feature`, strategy: "git" }],
+  })
+  await page.goto(sessionHref(fixture.targetID))
+
+  const summary = page.getByRole("dialog", { name: "Session details", exact: true })
+
+  await page.getByRole("button", { name: "Session details", exact: true }).click()
+  await expect(summary.getByText("feature", { exact: true })).toBeVisible()
+  await expect(summary.getByRole("button", { name: "feature", exact: true })).toHaveCount(0)
+  await expect(summary.getByRole("button", { name: "Extensions", exact: true })).toBeVisible()
+})
+
 test("the details follow the routed session when it moves to another worktree", async ({ page }) => {
   const root = "C:/OpenCode/SmokeWorktrees"
 

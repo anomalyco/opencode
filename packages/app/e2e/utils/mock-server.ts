@@ -125,6 +125,7 @@ export interface MockServerConfig {
   sessionStatus?: Resolvable<Record<string, { type: string }>>
   inbox?: unknown[] | (() => unknown[])
   onPrompt?: (input: { sessionID: string; body: Schema.JsonObject }) => void
+  onCompact?: (input: { sessionID: string; body: Schema.JsonObject }) => void
   generate?: (input: { sessionID: string; prompt: string }) => { text: string } | Promise<{ text: string }>
   onInboxChange?: (input: { sessionID: string; inboxID: string; action: "cancel" | "steer" | "queue" }) => void
   // Serves `/api/pty*` and mock PTY WebSockets. Created IDs are the first unused `${prefix}<n>` (prefix must start with "pty").
@@ -1032,6 +1033,8 @@ function mockHandlers(
               },
             })
           }),
+        // Like the server, which also answers 204 for a shell that already ended.
+        shellRemove: () => noContent,
         ptyList: (ctx) =>
           ptyEnabled.pipe(
             Effect.map(() => {
@@ -1155,7 +1158,12 @@ function mockHandlers(
         sessionFormReply: () => noContent,
         sessionFormCancel: () => noContent,
         sessionBackground: () => noContent,
-        sessionInbox: () => Effect.sync(() => ({ data: resolve(config.inbox ?? []) })),
+        sessionInbox: (ctx) =>
+          Effect.sync(() => ({
+            data: resolve(config.inbox ?? []).filter(
+              (item) => Predicate.isObject(item) && item.sessionID === ctx.params.sessionID,
+            ),
+          })),
         sessionPrompt: (ctx) =>
           Effect.sync(() => {
             const body = Option.getOrElse(decodeJsonObject(ctx.payload), () => ({}))
@@ -1171,6 +1179,23 @@ function mockHandlers(
                 // Keys the request omits stay omitted.
                 payload: { text: "", ...Option.getOrUndefined(decodePromptPayload(body)) },
                 delivery: prompt?.delivery ?? "steer",
+              },
+            }
+          }),
+        // Like the server, a compaction is admitted as a steered inbox item under the proposed ID.
+        sessionCompact: (ctx) =>
+          Effect.sync(() => {
+            const body = Option.getOrElse(decodeJsonObject(ctx.payload), (): Schema.JsonObject => ({}))
+            config.onCompact?.({ sessionID: ctx.params.sessionID, body })
+
+            return {
+              data: {
+                id: Predicate.isString(body.id) ? body.id : `inb_mock_${Date.now()}`,
+                sessionID: ctx.params.sessionID,
+                time: { created: Date.now() },
+                type: "compaction",
+                payload: {},
+                delivery: "steer",
               },
             }
           }),

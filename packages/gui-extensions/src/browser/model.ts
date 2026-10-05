@@ -27,6 +27,8 @@ type Live = {
   revision: number
   /** Strip writes waiting for the session's location, without which the strip cannot be written. */
   held: { mirror?: () => void; focus?: Browser.TabID }
+  /** The agent's previews waiting for the session's screen, which resolves their paths. */
+  previews: string[]
   dispose: () => void
 }
 
@@ -110,6 +112,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       ref,
       revision: 0,
       held: {},
+      previews: [],
       dispose: () => undefined,
       connection: createConnection({
         client,
@@ -132,7 +135,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
           layout.open(key(tabID), ref, { tab: "select" })
         },
-        preview: (path) => preview(ref, path),
+        preview: (path) => preview(entry, path),
         inspect: (event) => inspectors.get(id)?.forEach((listener) => listener(event)),
         change: (next, mirror) => {
           if (next.error === "browser.pane.unsupported") {
@@ -215,6 +218,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
             if (held.focus) layout.open(key(held.focus), ref, { tab: "select" })
           }),
+      )
+
+      // Previews made while another session was on screen open once the user returns to this one.
+      createKeyed(
+        () => sessions.current()?.key === ref.key && ctx.screen.current(),
+        () => entry.previews.splice(0).forEach((path) => preview(entry, path)),
       )
 
       return dispose
@@ -348,11 +357,18 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     return { view, path }
   }
 
-  // The agent's browser.preview tool: the link router picks the browser for HTML, the file panel otherwise.
-  const preview = (ref: SessionRef, path: string) => {
+  // The agent's browser.preview tool: the link router picks the browser for HTML, the file panel otherwise. Only the
+  // session's screen resolves workspace paths, so a preview for a session that is not on screen waits for it.
+  const preview = (entry: Live, path: string) => {
     const view = sessions.current()
 
-    if (view?.key === ref.key) links.open({ href: path, session: view, background: true })
+    if (view?.key === entry.ref.key && ctx.screen.current()) {
+      links.open({ href: path, session: view, background: true })
+
+      return
+    }
+
+    if (!entry.previews.includes(path)) entry.previews.push(path)
   }
 
   return {
