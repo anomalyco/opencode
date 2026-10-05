@@ -221,13 +221,12 @@ it.effect("Gateway Responses replays encrypted reasoning alongside tool calls", 
 it.effect("Gateway 401 and 403 failures are terminal and retain HTTP context", () =>
   Effect.gen(function* () {
     for (const status of [401, 403]) {
-      const result = yield* LLMClient.generate(
+      const error = yield* LLMClient.generate(
         LLM.request({
           model: VercelAIGateway.configure({ apiKey: "fixture" }).chat("openai/gpt-6-luna"),
           prompt: "Hello",
         }),
       ).pipe(
-        Effect.result,
         Effect.provide(
           dynamicResponse((input) =>
             Effect.succeed(
@@ -238,12 +237,10 @@ it.effect("Gateway 401 and 403 failures are terminal and retain HTTP context", (
             ),
           ),
         ),
+        Effect.flip,
       )
-      expect(result._tag).toBe("Failure")
-      if (result._tag === "Failure") {
-        expect(result.failure.reason.http?.status).toBe(status)
-        expect(isRetryable(result.failure)).toBe(false)
-      }
+      expect(error.reason.http?.status).toBe(status)
+      expect(isRetryable(error)).toBe(false)
     }
   }),
 )

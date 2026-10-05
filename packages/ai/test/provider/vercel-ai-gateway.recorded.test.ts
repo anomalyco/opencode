@@ -86,18 +86,15 @@ recorded.effect(
   "rejects invalid credentials without retryable classification",
   () =>
     Effect.gen(function* () {
-      const result = yield* LLMClient.generate(
+      const error = yield* LLMClient.generate(
         LLM.request({
           model: VercelAIGateway.configure({ apiKey: "invalid-gateway-key" }).messages("anthropic/claude-sonnet-5.5"),
           prompt: "Hello",
           generation: { maxTokens: 32 },
         }),
-      ).pipe(Effect.result)
-      expect(result._tag).toBe("Failure")
-      if (result._tag === "Failure") {
-        expect(result.failure.reason.http?.status).toBe(401)
-        expect(isRetryable(result.failure)).toBe(false)
-      }
+      ).pipe(Effect.flip)
+      expect(error.reason.http?.status).toBe(401)
+      expect(isRetryable(error)).toBe(false)
     }),
   30_000,
 )

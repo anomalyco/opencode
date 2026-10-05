@@ -30,14 +30,39 @@ import {
   ModelID,
   ProviderID,
   ProviderMetadata,
+  ReasoningEffort,
   Usage,
 } from "../schema/index.js"
-import { VercelAIGatewayOptions, type ProviderOptionsInput } from "./vercel-ai-gateway-options.js"
-
-export type { GatewayOptions, ProviderOptionsInput } from "./vercel-ai-gateway-options.js"
+import type { OpenResponsesProviderOptionsInput } from "./open-responses-options.js"
 
 export const id = ProviderID.make("vercel-ai-gateway")
 const baseURL = "https://ai-gateway.vercel.sh/v1"
+
+export interface GatewayOptions {
+  readonly [key: string]: unknown
+  readonly caching?: "auto"
+  readonly only?: ReadonlyArray<string>
+  readonly order?: ReadonlyArray<string>
+  readonly sort?: string
+  readonly models?: ReadonlyArray<string>
+  readonly zeroDataRetention?: boolean
+  readonly user?: string
+  readonly tags?: ReadonlyArray<string>
+  readonly byok?: Readonly<Record<string, ReadonlyArray<Readonly<Record<string, unknown>>>>>
+  readonly inferenceRegion?: string
+  readonly providerTimeouts?: { readonly byok?: Readonly<Record<string, number>> }
+}
+
+export type ProviderOptionsInput = OpenResponsesProviderOptionsInput &
+  AnthropicMessages.OptionsInput & {
+    readonly gateway?: GatewayOptions
+    /** Upstream options forwarded under their Gateway provider namespace. */
+    readonly upstream?: Readonly<Record<string, Readonly<Record<string, unknown>>>>
+    /** Responses automatic-cache lifetime. */
+    readonly cacheTTL?: "5m" | "1h" | (string & {})
+    /** Number of stable Responses input items. */
+    readonly cacheAnchorItems?: number
+  }
 
 export interface EvaluationOptions {
   readonly [key: string]: unknown
@@ -56,7 +81,15 @@ export type Options = Omit<RouteDefaultsInput, "providerOptions"> &
 
 export type Settings = ProviderPackage.Settings & ProviderOptionsInput & { readonly apiKey?: string }
 
-const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(VercelAIGatewayOptions.Options))
+const GatewayOptionsSchema = Schema.Struct({
+  gateway: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  upstream: Schema.optional(Schema.Record(Schema.String, Schema.Record(Schema.String, Schema.Unknown))),
+  reasoningEffort: Schema.optional(ReasoningEffort),
+  cacheTTL: Schema.optional(Schema.String),
+  cacheAnchorItems: Schema.optional(Schema.Number),
+})
+const decodeOptions = ProviderShared.validateWith(Schema.decodeUnknownEffect(GatewayOptionsSchema))
+
 const ChatThinking = Schema.Union([
   Schema.Struct({ type: Schema.Literals(["adaptive", "disabled"]) }),
   Schema.Struct({ type: Schema.Literal("enabled"), budgetTokens: Schema.Number }),
@@ -64,7 +97,7 @@ const ChatThinking = Schema.Union([
 type ChatThinking = typeof ChatThinking.Type
 const decodeChatThinking = ProviderShared.validateWith(Schema.decodeUnknownEffect(ChatThinking))
 
-function messagesRequest(request: LLMRequest, effort: VercelAIGatewayOptions.Options["reasoningEffort"]) {
+function messagesRequest(request: LLMRequest, effort: ReasoningEffort | undefined) {
   if (effort === undefined) return request
   const enabled = effort !== "none"
   const thinking = request.providerOptions?.thinking ?? { type: enabled ? "adaptive" : "disabled" }
@@ -85,29 +118,39 @@ function chatReasoning(thinking: ChatThinking | undefined) {
   }
 }
 
-function gatewayProviderOptions(request: LLMRequest, options: VercelAIGatewayOptions.Options) {
-  const defaultGateway = request.cache === "none" ? undefined : { caching: "auto" as const }
-  return {
-    ...options.upstream,
-    gateway: { ...defaultGateway, ...options.gateway },
-  }
-}
-
 const prepare = (api: "messages" | "responses" | "chat") =>
   Effect.fnUntraced(function* (request: LLMRequest) {
     const options = yield* decodeOptions(request.providerOptions ?? {})
+    const defaultGateway = request.cache === "none" ? undefined : { caching: "auto" as const }
+    const providerOptions = {
+      ...options.upstream,
+      gateway: { ...defaultGateway, ...options.gateway },
+    }
+    if (api === "messages") {
+      return {
+        request: messagesRequest(request, options.reasoningEffort),
+        body: { providerOptions },
+      }
+    }
+    if (api === "responses") {
+      return {
+        request,
+        body: {
+          providerOptions,
+          cache_ttl: options.cacheTTL,
+          cache_anchor_items: options.cacheAnchorItems,
+        },
+      }
+    }
     const thinking =
-      api === "chat" && request.providerOptions?.thinking !== undefined
-        ? yield* decodeChatThinking(request.providerOptions.thinking)
-        : undefined
-    const reasoning = chatReasoning(thinking)
+      request.providerOptions?.thinking === undefined
+        ? undefined
+        : yield* decodeChatThinking(request.providerOptions.thinking)
     return {
-      request: api === "messages" ? messagesRequest(request, options.reasoningEffort) : request,
+      request,
       body: {
-        ...(reasoning ? { reasoning } : {}),
-        providerOptions: gatewayProviderOptions(request, options),
-        cache_ttl: api === "responses" ? options.cacheTTL : undefined,
-        cache_anchor_items: api === "responses" ? options.cacheAnchorItems : undefined,
+        providerOptions,
+        reasoning: chatReasoning(thinking),
       },
     }
   })
