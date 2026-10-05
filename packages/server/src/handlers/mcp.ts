@@ -1,4 +1,5 @@
 import { Mcp } from "@opencode/core/mcp/index"
+import { Plugin } from "@opencode/core/plugin"
 import { McpServerNotFoundError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
@@ -14,6 +15,8 @@ export const McpHandler = HttpApiBuilder.group(Api, "server.mcp", (handlers) =>
       .handle(
         "mcp.list",
         Effect.fn(function* () {
+          // Config-sourced servers are registered by the opencode.config.mcp plugin; a cold location has none until it activates.
+          yield* Plugin.awaitActivation
           const service = yield* Mcp.Service
           return yield* response(
             service
