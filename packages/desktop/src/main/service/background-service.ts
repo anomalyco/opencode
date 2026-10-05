@@ -53,7 +53,9 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
         ...cli.command,
         "serve",
         "--service",
-        ...(isolated ? ["--hostname", "0.0.0.0", "--port", String(0x0c0c)] : []),
+        ...(isolated
+          ? ["--hostname", "0.0.0.0", "--port", process.env.OPENCODE_DESKTOP_SERVER_PORT ?? String(0x0c0c)]
+          : []),
       ],
       onStart: (reason, previousVersion) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
