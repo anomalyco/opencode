@@ -40,6 +40,11 @@ for (const position of ["top", "bottom"] as const) {
     await expect(tabs.getByRole("tab")).toHaveText(["Session", "Changes", "Files", "Terminal"])
     await expect(tabs).toHaveCSS("padding-left", "0px")
     await expect(tabs).toHaveCSS("padding-right", "0px")
+    if (position === "top") {
+      const titlebar = page.locator('[data-slot="titlebar-v2"]')
+      await expect(titlebar).toHaveCSS("padding-top", "16px")
+      await expect(titlebar).toHaveCSS("height", "44px")
+    }
     await expect
       .poll(async () => {
         const bounds = await navigation.boundingBox()
