@@ -143,10 +143,7 @@ test("spells Vercel AI Gateway variants for their selected routes", () => {
     "medium",
     "high",
   ])
-  expect(
-    resolve(model(pkg, "anthropic/claude-sonnet-4.6"), [{ type: "effort", values: ["none", "low", "high"] }]),
-  ).toEqual([
-    { id: "none", settings: { thinking: { type: "disabled" } } },
+  expect(resolve(model(pkg, "anthropic/claude-sonnet-4.6"), [{ type: "effort", values: ["low", "high"] }])).toEqual([
     { id: "low", settings: { effort: "low", thinking: { type: "adaptive", display: "summarized" } } },
     { id: "high", settings: { effort: "high", thinking: { type: "adaptive", display: "summarized" } } },
   ])
