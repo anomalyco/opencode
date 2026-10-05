@@ -227,7 +227,7 @@ describe("GitLabPlugin OAuth", () => {
     ),
   )
 
-  it.effect("refreshes an OAuth credential using its stored instance URL and includes redirect_uri", () =>
+  it.live("refreshes an OAuth credential using its stored instance URL and includes redirect_uri", () =>
     Effect.gen(function* () {
       const test = yield* fixture()
       // Creating the credential also wakes workflow discovery, which resolves the same expired
@@ -285,7 +285,7 @@ describe("GitLabPlugin OAuth", () => {
     }),
   )
 
-  it.effect("refreshes credentials without a client ID with the opencode-gitlab-auth application", () =>
+  it.live("refreshes credentials without a client ID with the opencode-gitlab-auth application", () =>
     withEnv({ GITLAB_OAUTH_CLIENT_ID: undefined }, () =>
       Effect.gen(function* () {
         const test = yield* fixture()
@@ -304,7 +304,7 @@ describe("GitLabPlugin OAuth", () => {
     ),
   )
 
-  it.effect("refreshes only with the recorded client ID when the credential has one", () =>
+  it.live("refreshes only with the recorded client ID when the credential has one", () =>
     Effect.gen(function* () {
       const test = yield* fixture()
       test.replies.push(renewal())
@@ -318,12 +318,11 @@ describe("GitLabPlugin OAuth", () => {
     }),
   )
 
-  it.effect("reports a revoked refresh token with a sign-in-again hint instead of authorization-code hints", () =>
+  it.live("reports a revoked refresh token with a sign-in-again hint instead of authorization-code hints", () =>
     Effect.gen(function* () {
       const test = yield* fixture()
-      // Rejections are not shared, so discovery and this resolve may each send one refresh.
-      const revoked = () => new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 })
-      test.replies.push(revoked(), revoked())
+      // Discovery and this resolve share one rejection: a rejected refresh token is never replayed.
+      test.replies.push(new Response(JSON.stringify({ error: "invalid_grant" }), { status: 400 }))
       const saved = yield* test.credentials.create({
         integrationID,
         value: expired({ instanceUrl: "https://gitlab.com", clientID: bundledClientID }),
@@ -332,6 +331,7 @@ describe("GitLabPlugin OAuth", () => {
       expect(error.message).toContain("refresh token was revoked, expired")
       expect(error.message).toContain("Sign in to GitLab again")
       expect(error.message).not.toContain("authorization code")
+      expect(yield* tokenRequests(test.requests)).toHaveLength(1)
     }),
   )
 

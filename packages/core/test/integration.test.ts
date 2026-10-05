@@ -9,8 +9,14 @@ import { Bus } from "@opencode/core/bus"
 import { Integration } from "@opencode/core/integration"
 import { State } from "@opencode/core/state"
 import { testEffect } from "./lib/effect"
+import { Global } from "@opencode/util/global"
+import { tempGlobalLayer } from "./fixture/global"
 
-const it = testEffect(AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, Bus.node])))
+const it = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Integration.node, Credential.node, Bus.node]), [
+    Global.node.replace(tempGlobalLayer),
+  ]),
+)
 const failingCredentialNode = makeGlobalNode({
   service: Credential.Service,
   layer: Layer.succeed(
@@ -22,6 +28,7 @@ const failingCredentialNode = makeGlobalNode({
       create: () => Effect.die(new Error("credential persistence failed")),
       activate: () => Effect.void,
       update: () => Effect.void,
+      updateValue: () => Effect.succeed(false),
       remove: () => Effect.void,
     }),
   ),
@@ -30,7 +37,6 @@ const failingCredentialNode = makeGlobalNode({
 const failingIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([Integration.node, Bus.node]), [Credential.node.replace(failingCredentialNode)]),
 )
-
 function eventually<A, E, R>(
   effect: Effect.Effect<A, E, R>,
   predicate: (value: A) => boolean,

@@ -48,6 +48,43 @@ describe("Credential", () => {
     }),
   )
 
+  it.effect("updates a credential value only while the expected value is still current", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("openai")
+      const methodID = Integration.MethodID.make("oauth")
+      const original = Credential.OAuth.make({
+        type: "oauth",
+        methodID,
+        access: "access-original",
+        refresh: "refresh-original",
+        expires: 1,
+      })
+      const replacement = Credential.OAuth.make({
+        type: "oauth",
+        methodID,
+        access: "access-replacement",
+        refresh: "refresh-replacement",
+        expires: 2,
+      })
+      const stale = Credential.OAuth.make({
+        type: "oauth",
+        methodID,
+        access: "access-stale",
+        refresh: "refresh-stale",
+        expires: 3,
+      })
+      const credential = yield* credentials.create({ integrationID, value: original })
+
+      expect(yield* credentials.updateValue(credential.id, original, replacement)).toBe(true)
+      expect((yield* credentials.get(credential.id))?.value).toEqual(replacement)
+      expect(yield* credentials.updateValue(credential.id, original, stale)).toBe(false)
+      expect((yield* credentials.get(credential.id))?.value).toEqual(replacement)
+      yield* credentials.remove(credential.id)
+      expect(yield* credentials.updateValue(credential.id, replacement, stale)).toBe(false)
+    }),
+  )
+
   it.effect("publishes global events only for observable credential mutations", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
