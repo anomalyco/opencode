@@ -159,6 +159,46 @@ describe("MCP OAuth", () => {
     expect(tokenRequests[0]?.get("resource")).toBe(server.url.href)
   })
 
+  test("reports a rejected token exchange on the callback page", async () => {
+    const server = Bun.serve({
+      port: 0,
+      fetch(request) {
+        if (request.method !== "POST" || new URL(request.url).pathname !== "/token")
+          return new Response(null, { status: 404 })
+        return Response.json(
+          { error: "invalid_client", error_description: "bad_client_secret" },
+          { status: 400 },
+        )
+      },
+    })
+
+    const result = await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const { authorization, url: authorizationUrl } = yield* start(server, { client_id: "client" })
+          const redirect = new URL(authorizationUrl.searchParams.get("redirect_uri") ?? "")
+          redirect.searchParams.set("code", "accepted")
+          redirect.searchParams.set("state", authorizationUrl.searchParams.get("state") ?? "")
+          const response = yield* Effect.promise(() => fetch(redirect))
+          const page = yield* Effect.promise(() => response.text())
+          const exit = yield* Effect.exit(authorization.callback)
+          return { status: response.status, page, exit }
+        }),
+      ),
+    ).finally(() => server.stop(true))
+
+    expect(result.status).toBe(400)
+    expect(result.page).toContain("Authorization failed")
+    expect(result.page).toContain("bad_client_secret")
+    expect(result.exit._tag).toBe("Failure")
+  })
+
+  test("rejects an empty client secret before opening the browser", async () => {
+    await expect(
+      Effect.runPromise(Effect.scoped(start(authServer, { client_id: "client", client_secret: "" }))),
+    ).rejects.toThrow(/client_secret/)
+  })
+
   test("refreshes tokens loaded from a persisted credential", async () => {
     const tokenRequests: URLSearchParams[] = []
     const server = Bun.serve({
