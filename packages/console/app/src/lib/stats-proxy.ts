@@ -1,5 +1,6 @@
 import type { APIEvent } from "@solidjs/start/server"
 import { Resource, waitUntil } from "@opencode-ai/console-resource"
+import { prefersMarkdown } from "~/lib/content-negotiation"
 import { LOCALE_HEADER, cookie, localeFromRequest, route, tag } from "~/lib/language"
 
 const dataPath = "/data"
@@ -40,8 +41,12 @@ export async function statsProxy(evt: APIEvent) {
     method: req.method,
     headers: requestHeaders,
     body: req.body,
+    // Pass canonical redirects from the stats app to the client instead of following them here.
+    redirect: "manual",
   })
 
+  const location = response.headers.get("location")
+  if (location) return withPublicLocation(response, new URL(location, targetUrl), targetUrl)
   if (!response.headers.get("content-type")?.includes("text/html")) return response
 
   const headers = new Headers(response.headers)
@@ -49,7 +54,7 @@ export async function statsProxy(evt: APIEvent) {
   headers.delete("content-length")
   headers.delete("etag")
   headers.delete("set-cookie")
-  appendVary(headers, "Accept-Language", "Cookie", LOCALE_HEADER)
+  appendVary(headers, "Accept", "Accept-Language", "Cookie", LOCALE_HEADER)
 
   const result = new Response(rewriteStatsHtml(await response.text()), {
     status: response.status,
@@ -71,6 +76,14 @@ export function statsRedirect(evt: APIEvent) {
       Location: url.toString(),
     },
   })
+}
+
+// A redirect to the stats origin itself would send clients past the proxy, so keep only the path.
+function withPublicLocation(response: Response, location: URL, upstream: URL) {
+  if (location.origin !== upstream.origin) return response
+  const headers = new Headers(response.headers)
+  headers.set("location", `${location.pathname}${location.search}${location.hash}`)
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers })
 }
 
 function rewriteStatsHtml(html: string) {
@@ -120,7 +133,7 @@ function redirectToLocalizedData(request: Request, url: URL, locale: ReturnType<
     Location: next.toString(),
   })
   headers.append("set-cookie", cookie(locale))
-  appendVary(headers, "Accept-Language", "Cookie", LOCALE_HEADER)
+  appendVary(headers, "Accept", "Accept-Language", "Cookie", LOCALE_HEADER)
 
   return new Response(null, {
     status: 308,
@@ -130,6 +143,8 @@ function redirectToLocalizedData(request: Request, url: URL, locale: ReturnType<
 
 function acceptsHtml(request: Request) {
   const accept = request.headers.get("accept")
+  // The stats app answers Markdown requests itself, so keep them out of the HTML cache and locale redirect.
+  if (prefersMarkdown(accept)) return false
   return !accept || accept.includes("text/html") || accept.includes("*/*")
 }
 
@@ -140,7 +155,10 @@ function isDataBypassPath(pathname: string) {
     pathname.startsWith(`${dataPath}/_server`) ||
     pathname === `${dataPath}/banner.jpg` ||
     pathname === `${dataPath}/banner.png` ||
-    pathname === `${dataPath}/sitemap.xml`
+    pathname === `${dataPath}/sitemap.xml` ||
+    pathname.endsWith("/llms.txt") ||
+    pathname.endsWith(".md") ||
+    pathname.endsWith(".json")
   )
 }
 
