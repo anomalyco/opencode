@@ -120,6 +120,24 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
       )
     },
   }
+  // @ff-labs/fff-bun publishes no FreeBSD build (its package.json "os" field
+  // excludes it), so bun never installs it there and the static import in
+  // fff.bun.ts would fail to resolve.  Replace the module with an unavailable
+  // backend only for the freebsd target; other platforms import it normally.
+  const fffPlugin: BunPlugin = {
+    name: "fff-binding",
+    setup(build) {
+      if (item.os !== "freebsd") return
+      build.onResolve({ filter: /^@ff-labs\/fff-bun$/ }, (args) => ({ path: args.path, namespace: "fff-stub" }))
+      build.onLoad({ filter: /.*/, namespace: "fff-stub" }, () => ({
+        contents: `export const FileFinder = {
+  isAvailable: () => false,
+  create: () => ({ ok: false, error: "fff is unavailable on this platform" }),
+}`,
+        loader: "js",
+      }))
+    },
+  }
   const target = targetName(item)
   const name = target.replace(binary, "cli")
   const executablePath = await compileExecutable(item)
@@ -127,7 +145,7 @@ export default { path: file, version: ${JSON.stringify(opencodePty.version)}, sh
   const result = await Bun.build({
     entrypoints: ["./src/index.ts"],
     tsconfig: "./tsconfig.json",
-    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, opencodePtyPlugin, simulationGraphPlugin],
+    plugins: [appAssetsPlugin, solidPlugin, parcelWatcherPlugin, fffPlugin, opencodePtyPlugin, simulationGraphPlugin],
     external: ["node-gyp"],
     format: "esm",
     minify: true,
