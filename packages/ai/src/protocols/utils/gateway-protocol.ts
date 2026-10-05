@@ -1,25 +1,16 @@
 import { Effect, Schema } from "effect"
 import { Protocol } from "../../route/protocol.js"
 import { LLMEvent, mergeJsonRecords, type AIError, type LLMRequest } from "../../schema/index.js"
-import { optionalNull, ProviderShared } from "../shared.js"
-
-// Gateway attaches billing and routing metadata to raw SSE frames under snake_case `provider_metadata.gateway`
-// (`message_delta` on Messages, `response.completed` on Responses, and `choices[].delta` on Chat).
-const WireMetadataField = Schema.Struct({
-  provider_metadata: optionalNull(
-    Schema.Struct({ gateway: optionalNull(Schema.Record(Schema.String, Schema.Unknown)) }),
-  ),
-})
-const WireFrameMetadata = Schema.Struct({
-  ...WireMetadataField.fields,
-  response: optionalNull(WireMetadataField),
-  choices: optionalNull(Schema.Array(Schema.Struct({ delta: optionalNull(WireMetadataField) }))),
-})
-const decodeWireMetadata = Schema.decodeUnknownOption(Schema.fromJsonString(WireFrameMetadata))
+import { isRecord } from "../shared.js"
 
 interface ParserState<Inner> {
   readonly inner: Inner
   readonly gateway?: Record<string, unknown>
+}
+
+function gatewayMetadata(value: unknown): Record<string, unknown> | undefined {
+  if (!isRecord(value) || !isRecord(value.provider_metadata)) return undefined
+  return isRecord(value.provider_metadata.gateway) ? value.provider_metadata.gateway : undefined
 }
 
 function attachGatewayMetadata(
@@ -41,7 +32,6 @@ export function gatewayProtocol<Body, Event, State>(
     ) => Effect.Effect<{ readonly request: LLMRequest; readonly body: Record<string, unknown> }, AIError>
   },
 ) {
-  const decodeEvent = Schema.decodeUnknownEffect(protocol.stream.event)
   const initial = (request: LLMRequest): ParserState<State> => ({
     inner: protocol.stream.initial(request),
   })
@@ -60,25 +50,23 @@ export function gatewayProtocol<Body, Event, State>(
     supportsEffortUpdates: protocol.supportsEffortUpdates,
     sanitizer: protocol.sanitizer,
     stream: {
-      event: Schema.String,
+      event: protocol.stream.event,
       initial,
-      step: Effect.fnUntraced(function* (state: ParserState<State>, frame: string) {
-        const event = yield* decodeEvent(frame).pipe(
-          Effect.mapError((cause) => ProviderShared.eventError(input.id, "Invalid gateway event", frame, cause)),
-        )
-        const decoded = frame.includes("provider_metadata") ? decodeWireMetadata(frame) : undefined
-        const gateway =
-          decoded === undefined || decoded._tag === "None"
-            ? state.gateway
-            : mergeJsonRecords(
-                state.gateway,
-                decoded.value.provider_metadata?.gateway ?? undefined,
-                decoded.value.response?.provider_metadata?.gateway ?? undefined,
-                ...(decoded.value.choices ?? []).map((choice) => choice.delta?.provider_metadata?.gateway ?? undefined),
-              )
+      step: Effect.fnUntraced(function* (state: ParserState<State>, event: Event) {
+        const gateway = isRecord(event)
+          ? mergeJsonRecords(
+              state.gateway,
+              gatewayMetadata(event),
+              gatewayMetadata(event.response),
+              ...(Array.isArray(event.choices) ? event.choices : []).map((choice) =>
+                isRecord(choice) ? gatewayMetadata(choice.delta) : undefined,
+              ),
+            )
+          : state.gateway
         const [inner, events] = yield* protocol.stream.step(state.inner, event)
         return [{ inner, gateway }, attachGatewayMetadata(events, gateway)] as const
       }),
+      terminal: protocol.stream.terminal,
       onHalt: onHalt
         ? (state) => onHalt(state.inner).pipe(Effect.map((events) => attachGatewayMetadata(events, state.gateway)))
         : undefined,
