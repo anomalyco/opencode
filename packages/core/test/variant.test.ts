@@ -155,7 +155,7 @@ test("spells Vercel AI Gateway variants for their selected routes", () => {
     { id: "high", settings: { reasoningEffort: "high" } },
   ])
   expect(
-    resolve(model(`${pkg}/chat`, "alibaba/qwen-3-32b", 38_912), [
+    resolve(model(pkg, "alibaba/qwen-3-32b", 38_912), [
       { type: "toggle" },
       { type: "budget_tokens", min: 1, max: 38_912 },
     ]),

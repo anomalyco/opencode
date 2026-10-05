@@ -113,8 +113,6 @@ const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
   "minimax-cn-coding-plan": protocols("minimax"),
   moonshotai: protocols("moonshot"),
   "moonshotai-cn": protocols("moonshot"),
-  vercel: protocols("vercel-ai-gateway"),
-  "vercel-ai-gateway": protocols("vercel-ai-gateway"),
   zai: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/zai/chat" },
   "zai-coding-plan": protocols("zai-coding-plan"),
   zhipuai: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/zai/chat" },
@@ -151,7 +149,8 @@ function resolve(specifier: string, context: Context & { readonly settings?: Pro
   if (Provider.isAISDK(specifier) || npm in PACKAGES || npm in (HOSTS[context.providerID] ?? {}))
     return native(npm, context)
   if (npm === "@opencode/ai/providers/amazon-bedrock/mantle") return mantle(context.modelID)
-  if (npm === "@opencode/ai/providers/azure/responses" && azureChat(context)) return "@opencode/ai/providers/azure/chat"
+  if (npm === "@opencode/ai/providers/azure/responses" && azureChat(context))
+    return "@opencode/ai/providers/azure/chat"
   return NATIVE.has(npm) ? npm : undefined
 }
 

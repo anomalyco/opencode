@@ -452,12 +452,14 @@ const cohere: Protocol = (model, support) => {
   }
 }
 
-const vercelMessages: Protocol = (model, support) => {
+const vercelGateway: Protocol = (model, support) => {
   const id = modelID(model)
+  if (id.startsWith("openai/gpt-")) return openaiResponses(model, support)
+  if (id.startsWith("spacexai/grok-")) return xaiResponses(model, support)
   if (id.startsWith("anthropic/")) return anthropicMessages(model, support)
   switch (support.type) {
     case "effort":
-      return efforts(support.values ?? EFFORTS, (effort) => ({ settings: { reasoningEffort: effort } }))
+      return openaiChat(model, support)
     case "toggle":
       return toggle({ settings: { thinking: { type: "disabled" } } }, { settings: { thinking: { type: "adaptive" } } })
     case "budget_tokens":
@@ -468,32 +470,6 @@ const vercelMessages: Protocol = (model, support) => {
         id.startsWith("alibaba/") ? ALIBABA_THINKING_BUDGET_MAX : model.limit.output,
       )
   }
-}
-
-const vercelChat: Protocol = (model, support) => {
-  switch (support.type) {
-    case "effort":
-      return efforts(support.values ?? EFFORTS, (effort) => ({ settings: { reasoningEffort: effort } }))
-    case "toggle":
-      return toggle({ settings: { thinking: { type: "disabled" } } }, { settings: { thinking: { type: "enabled" } } })
-    case "budget_tokens":
-      return budgets(
-        model,
-        support,
-        (tokens) => ({ settings: { thinking: { type: "enabled", budgetTokens: tokens } } }),
-        modelID(model).startsWith("alibaba/") ? ALIBABA_THINKING_BUDGET_MAX : model.limit.output,
-      )
-  }
-}
-
-const vercelResponses: Protocol = (model, support) =>
-  modelID(model).startsWith("spacexai/") ? xaiResponses(model, support) : openaiResponses(model, support)
-
-const vercelGateway: Protocol = (model, support) => {
-  const id = modelID(model)
-  if (/^(openai\/gpt-|spacexai\/grok-)/.test(id)) return vercelResponses(model, support)
-  if (id.startsWith("meta/muse-")) return vercelChat(model, support)
-  return vercelMessages(model, support)
 }
 
 const sapAICore: Protocol = (model, support) => {
@@ -602,9 +578,6 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   [Provider.aisdk("venice-ai-sdk-provider")]: veniceChat,
   "@opencode/ai/providers/cloudflare-ai-gateway": cloudflareAIGateway,
   "@opencode/ai/providers/vercel-ai-gateway": vercelGateway,
-  "@opencode/ai/providers/vercel-ai-gateway/messages": vercelMessages,
-  "@opencode/ai/providers/vercel-ai-gateway/responses": vercelResponses,
-  "@opencode/ai/providers/vercel-ai-gateway/chat": vercelChat,
   [Provider.aisdk("@ai-sdk/gateway")]: vercelGateway,
   [Provider.aisdk("@jerome-benoit/sap-ai-provider-v2")]: sapAICore,
 }

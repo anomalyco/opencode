@@ -58,13 +58,6 @@ describe("AISDKNative", () => {
       headers: { "x-gateway": "test" },
       body: { custom: true },
     })
-    for (const [packageName, expected] of [
-      ["@ai-sdk/anthropic", "@opencode/ai/providers/vercel-ai-gateway/messages"],
-      ["@ai-sdk/openai", "@opencode/ai/providers/vercel-ai-gateway/responses"],
-      ["@ai-sdk/openai-compatible", "@opencode/ai/providers/vercel-ai-gateway/chat"],
-    ] as const) {
-      expect(map(packageName, {}, "openai/gpt-5.4", "vercel")?.package).toBe(expected)
-    }
   })
 
   test("maps OpenAI-family packages and request options to native providers", () => {

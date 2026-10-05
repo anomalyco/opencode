@@ -16,7 +16,6 @@ const direct = new Set([
 const gateways = new Set([
   "@opencode/ai/providers/cloudflare-ai-gateway",
   "@opencode/ai/providers/vercel-ai-gateway",
-  "@opencode/ai/providers/vercel-ai-gateway/responses",
   Provider.aisdk("@ai-sdk/gateway"),
 ])
 
