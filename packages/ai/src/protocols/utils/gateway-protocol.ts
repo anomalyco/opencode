@@ -1,17 +1,33 @@
-import { Effect, Schema } from "effect"
+import { Effect, Option, Schema } from "effect"
 import { Protocol } from "../../route/protocol.js"
 import { LLMEvent, mergeJsonRecords, type AIError, type LLMRequest } from "../../schema/index.js"
-import { isRecord } from "../shared.js"
+import { JsonObject, lenient } from "../shared.js"
 
 interface ParserState<Inner> {
   readonly inner: Inner
   readonly gateway?: Record<string, unknown>
 }
 
-function gatewayMetadata(value: unknown): Record<string, unknown> | undefined {
-  if (!isRecord(value) || !isRecord(value.provider_metadata)) return undefined
-  return isRecord(value.provider_metadata.gateway) ? value.provider_metadata.gateway : undefined
-}
+const GatewayHolder = Schema.Struct({
+  provider_metadata: lenient(
+    Schema.Struct({
+      gateway: lenient(JsonObject),
+    }),
+  ),
+})
+
+const GatewayEvent = Schema.Struct({
+  ...GatewayHolder.fields,
+  response: lenient(GatewayHolder),
+  choices: lenient(
+    Schema.Array(
+      Schema.Struct({
+        delta: lenient(GatewayHolder),
+      }),
+    ),
+  ),
+})
+const decodeGatewayEvent = Schema.decodeUnknownOption(GatewayEvent)
 
 function attachGatewayMetadata(
   events: ReadonlyArray<LLMEvent>,
@@ -40,7 +56,7 @@ export function gatewayProtocol<Body, Event, State>(
   return Protocol.make({
     id: input.id,
     body: {
-      schema: Schema.Record(Schema.String, Schema.Unknown),
+      schema: JsonObject,
       from: Effect.fnUntraced(function* (request: LLMRequest) {
         const prepared = yield* input.prepare(request)
         const body = yield* protocol.body.from(prepared.request)
@@ -53,14 +69,13 @@ export function gatewayProtocol<Body, Event, State>(
       event: protocol.stream.event,
       initial,
       step: Effect.fnUntraced(function* (state: ParserState<State>, event: Event) {
-        const gateway = isRecord(event)
+        const decoded = Option.getOrUndefined(decodeGatewayEvent(event))
+        const gateway = decoded
           ? mergeJsonRecords(
               state.gateway,
-              gatewayMetadata(event),
-              gatewayMetadata(event.response),
-              ...(Array.isArray(event.choices) ? event.choices : []).map((choice) =>
-                isRecord(choice) ? gatewayMetadata(choice.delta) : undefined,
-              ),
+              decoded.provider_metadata?.gateway,
+              decoded.response?.provider_metadata?.gateway,
+              ...(decoded.choices ?? []).map((choice) => choice.delta?.provider_metadata?.gateway),
             )
           : state.gateway
         const [inner, events] = yield* protocol.stream.step(state.inner, event)
