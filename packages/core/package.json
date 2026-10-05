@@ -20,6 +20,7 @@
     "./effect/app-node": "./src/effect/app-node.ts",
     "./session/runner": "./src/session/runner/index.ts",
     "./system-context": "./src/system-context/index.ts",
+    "./skeleton": "./src/skeleton/index.ts",
     "./*": "./src/*.ts"
   },
   "imports": {
@@ -125,7 +126,8 @@
     "venice-ai-sdk-provider": "2.1.1",
     "which": "6.0.1",
     "xdg-basedir": "5.1.0",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "typescript": "catalog:"
   },
   "overrides": {
     "drizzle-orm": "catalog:"

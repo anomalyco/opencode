@@ -23,6 +23,10 @@ const LocationInput = Schema.Struct({
   limit: ReadToolFileSystem.PageInput.fields.limit.annotate({
     description: "The maximum number of directory entries or text lines to read",
   }),
+  view: ReadToolFileSystem.PageInput.fields.view.annotate({
+    description:
+      "When set to 'skeleton', extracts interfaces, types and function/method signatures, omitting implementation bodies. Recommended for large files to save tokens.",
+  }),
 })
 const Input = LocationInput
 const Output = Schema.Union([FileSystem.Content, ReadToolFileSystem.TextPage, ReadToolFileSystem.ListPage])
@@ -82,6 +86,7 @@ const layer = Layer.effectDiscard(
               const content = yield* reader.read(absolute, resource, {
                 offset: input.offset,
                 limit: input.limit,
+                view: input.view,
               })
               if ("encoding" in content && content.encoding === "base64" && SUPPORTED_IMAGE_MIMES.has(content.mime)) {
                 return yield* image

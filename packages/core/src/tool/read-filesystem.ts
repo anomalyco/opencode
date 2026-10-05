@@ -7,6 +7,7 @@ import { FileSystem } from "../filesystem"
 import { FSUtil } from "../fs-util"
 import { makeLocationNode } from "../effect/app-node"
 import { AbsolutePath, PositiveInt, RelativePath } from "../schema"
+import { Skeleton } from "../skeleton"
 
 export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
@@ -72,6 +73,7 @@ export type ReadError =
 export const PageInput = Schema.Struct({
   offset: PositiveInt.pipe(Schema.optional),
   limit: PositiveInt.check(Schema.isLessThanOrEqualTo(MAX_READ_LINES)).pipe(Schema.optional),
+  view: Schema.Literals(["full", "skeleton"]).pipe(Schema.optional),
 })
 export type PageInput = typeof PageInput.Type
 
@@ -82,6 +84,9 @@ export class TextPage extends Schema.Class<TextPage>("ReadTool.TextPage")({
   offset: PositiveInt,
   truncated: Schema.Boolean,
   next: PositiveInt.pipe(Schema.optional),
+  view: Schema.Literals(["full", "skeleton"]).pipe(Schema.optional),
+  originalLines: Schema.Number.pipe(Schema.optional),
+  skeletonLines: Schema.Number.pipe(Schema.optional),
 }) {}
 
 export class ListPage extends Schema.Class<ListPage>("ReadTool.ListPage")({
@@ -211,6 +216,34 @@ export const read = Effect.fn("ReadTool.read")(function* (
       }
       if (startsWith(first, [0x25, 0x50, 0x44, 0x46]) || extensions.has(path.extname(resource).toLowerCase()))
         return yield* Effect.fail(new BinaryFileError({ resource }))
+      if (page.view === "skeleton") {
+        const skeletonOpt = yield* Effect.serviceOption(Skeleton.Service)
+        if (Option.isSome(skeletonOpt) && skeletonOpt.value.supports(real)) {
+          if (binary(resource, first)) return yield* Effect.fail(new BinaryFileError({ resource }))
+          const decoder = new TextDecoder("utf-8", { fatal: true })
+          const text = [yield* decodeUtf8(resource, decoder, first)]
+          while (true) {
+            const chunk = yield* file.readAlloc(64 * 1024)
+            if (Option.isNone(chunk)) break
+            text.push(yield* decodeChunk(resource, decoder, chunk.value))
+          }
+          text.push(yield* decodeUtf8(resource, decoder))
+          const fullContent = text.join("")
+          const pruned = yield* skeletonOpt.value.prune(real, fullContent)
+          if (pruned.pruned) {
+            return new TextPage({
+              type: "text-page",
+              content: pruned.content,
+              mime: FSUtil.mimeType(real),
+              offset: 1,
+              truncated: false,
+              view: "skeleton",
+              originalLines: pruned.originalLines,
+              skeletonLines: pruned.skeletonLines,
+            })
+          }
+        }
+      }
       const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
       if (!paged) {
         if (binary(resource, first)) return yield* Effect.fail(new BinaryFileError({ resource }))
@@ -363,4 +396,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [FSUtil.node, Skeleton.node] })
