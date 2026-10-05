@@ -41,7 +41,7 @@ const browser = {
   method: {
     id: browserMethodID,
     type: "oauth",
-    label: "ChatGPT Pro/Plus (browser)",
+    label: "Codex (browser sign-in)",
   },
   authorize: () =>
     Effect.gen(function* () {
@@ -98,7 +98,7 @@ const headless = {
   method: {
     id: headlessMethodID,
     type: "oauth",
-    label: "ChatGPT Pro/Plus (headless)",
+    label: "Codex (device-code sign-in)",
   },
   authorize: () =>
     Effect.gen(function* () {

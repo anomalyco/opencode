@@ -438,7 +438,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
       },
       methods: [
         {
-          label: "ChatGPT Pro/Plus (browser)",
+          label: "Codex (browser sign-in)",
           type: "oauth",
           authorize: async () => {
             const { redirectUri } = await startOAuthServer()
@@ -468,7 +468,7 @@ export async function CodexAuthPlugin(input: PluginInput, options: CodexAuthPlug
           },
         },
         {
-          label: "ChatGPT Pro/Plus (headless)",
+          label: "Codex (device-code sign-in)",
           type: "oauth",
           authorize: async () => {
             const deviceResponse = await fetch(`${ISSUER}/api/accounts/deviceauth/usercode`, {
