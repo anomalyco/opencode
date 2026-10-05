@@ -3,8 +3,6 @@ export default {
   tooltip: "සාරාංශය",
   "command.toggle": "සාරාංශය ටොගල් කරන්න",
   noBranch: "ශාඛාවක් නැත",
-  "background.tasksRunning.one": "පසුබිම් කාර්යය {{count}}ක් ධාවනය වේ",
-  "background.tasksRunning.other": "පසුබිම් කාර්ය {{count}}ක් ධාවනය වේ",
   "move.title": "වැඩබිමට ගෙන යන්න",
   "move.menu": "සැසිය ගෙන යන්න",
   "move.failed": "සැසිය ගෙන යාමට අසමත් විය",

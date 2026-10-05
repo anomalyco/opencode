@@ -408,7 +408,9 @@ export const layer = Layer.effect(
                 Effect.flatMap((model) =>
                   model && hasPackage(model)
                     ? Effect.succeed(model)
-                    : Effect.map(models.available(), (models) => models.find(hasPackage)),
+                    : Effect.map(models.available(), (models) =>
+                        models.find((model) => hasPackage(model) && Model.supportsText(model)),
+                      ),
                 ),
               )
         if (!selected) return undefined

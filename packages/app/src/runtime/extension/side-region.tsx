@@ -14,7 +14,6 @@ import { Mark } from "@opencode/ui/logo"
 import { Keybind } from "@opencode/ui/keybind"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Menu } from "@opencode/ui/menu"
-import { SessionReviewV2SidebarToggle } from "@opencode/session-ui/v2/session-review-v2"
 import {
   MenuItem,
   type MountedSession,
@@ -160,13 +159,6 @@ export function SideRegion(props: {
                             onCleanup(createTabStripScroll({ el, lead: props.region.lead }))
                           }}
                         >
-                          <div class="session-review-v2-sidebar-toggle-slot h-full shrink-0 sticky start-0 z-10 flex items-center justify-center bg-v2-background-bg-base">
-                            <SessionReviewV2SidebarToggle
-                              opened={props.sidebar.opened()}
-                              disabled={props.region.selected()?.tab.sidebar === "locked"}
-                              onToggle={props.sidebar.toggle}
-                            />
-                          </div>
                           <For each={props.region.keys()}>
                             {(key) => (
                               <Show when={props.region.entry(key)}>

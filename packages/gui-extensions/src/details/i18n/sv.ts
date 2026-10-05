@@ -3,8 +3,6 @@ export default {
   tooltip: "Sammanfattning",
   "command.toggle": "Växla sammanfattning",
   noBranch: "Ingen gren",
-  "background.tasksRunning.one": "{{count}} bakgrundsuppgift körs",
-  "background.tasksRunning.other": "{{count}} bakgrundsuppgifter körs",
   "move.title": "Flytta till arbetsytan",
   "move.menu": "Flytta session till",
   "move.failed": "Det gick inte att flytta sessionen",

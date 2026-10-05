@@ -3,8 +3,6 @@ export default {
   tooltip: "Kokkuvõte",
   "command.toggle": "Lülitab kokkuvõtet",
   noBranch: "Haru puudub",
-  "background.tasksRunning.one": "{{count}} taustaülesanne töötab",
-  "background.tasksRunning.other": "{{count}} taustaülesanded töötavad",
   "move.title": "Teisalda tööruumi",
   "move.menu": "Teisalda seanss asukohta",
   "move.failed": "Seansi teisaldamine ebaõnnestus",

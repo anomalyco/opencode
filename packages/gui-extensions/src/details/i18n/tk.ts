@@ -3,8 +3,6 @@ export default {
   tooltip: "Gysgaça mazmun",
   "command.toggle": "Gysgaça mazmuny üýtgetmek",
   noBranch: "Şaha ýok",
-  "background.tasksRunning.one": "{{count}} fon tabşyrygy işleýär",
-  "background.tasksRunning.other": "{{count}} fon tabşyrygy işleýär",
   "move.title": "Workspace-e geçiriň",
   "move.menu": "Sessiýany şu ýere geçiriň",
   "move.failed": "Sessiýany geçirip bolmady",

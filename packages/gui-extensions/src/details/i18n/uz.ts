@@ -3,8 +3,6 @@ export default {
   tooltip: "Xulosa",
   "command.toggle": "Xulosa",
   noBranch: "Branch yo‘q",
-  "background.tasksRunning.one": "{{count}} ta fon vazifasi bajarilmoqda",
-  "background.tasksRunning.other": "{{count}} ta fon vazifasi bajarilmoqda",
   "move.title": "Ish maydoniga ko‘chirish",
   "move.menu": "Sessiyani bu yerga ko‘chirish",
   "move.failed": "Sessiyani ko‘chirib bo‘lmadi",

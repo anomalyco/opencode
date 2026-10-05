@@ -3,8 +3,6 @@ export default {
   tooltip: "สรุป",
   "command.toggle": "สรุปแบบสลับ",
   noBranch: "ไม่มีสาขา",
-  "background.tasksRunning.one": "งานพื้นหลัง {{count}} งานกำลังทำงานอยู่",
-  "background.tasksRunning.other": "งานพื้นหลัง {{count}} งานกำลังทำงานอยู่",
   "move.title": "ย้ายไปยังพื้นที่ทำงาน",
   "move.menu": "ย้ายเซสชันไปยัง",
   "move.failed": "ไม่สามารถย้ายเซสชัน",

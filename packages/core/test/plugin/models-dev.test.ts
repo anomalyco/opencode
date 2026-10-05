@@ -624,7 +624,7 @@ describe("ModelsDevPlugin", () => {
     }),
   )
 
-  it.effect("omits deprecated model definitions", () =>
+  it.effect("omits deprecated and non-text model definitions", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       const providers = yield* Provider.Service
@@ -632,11 +632,13 @@ describe("ModelsDevPlugin", () => {
       const providerID = Provider.ID.make("acme")
       const activeID = Model.ID.make("current")
       const deprecatedID = Model.ID.make("legacy")
+      const videoID = Model.ID.make("video-gen")
+      const sttID = Model.ID.make("transcribe")
       const model = {
         modelID: activeID,
         providerID,
         name: "Current",
-        capabilities: { tools: true, input: [], output: [] },
+        capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
         variants: [],
         time: { released: Date.parse("2026-01-01") },
         cost: [],
@@ -662,6 +664,21 @@ describe("ModelsDevPlugin", () => {
               name: "Legacy",
               status: "deprecated" as const,
             },
+            {
+              id: videoID,
+              ...model,
+              modelID: videoID,
+              name: "Video Gen",
+              capabilities: { tools: false, input: ["text", "image"], output: ["video"] },
+              limit: { context: 1_024, output: 0 },
+            },
+            {
+              id: sttID,
+              ...model,
+              modelID: sttID,
+              name: "Transcribe",
+              capabilities: { tools: false, input: ["audio"], output: ["text"] },
+            },
           ],
         },
       ] satisfies readonly ModelsDev.Snapshot[]
@@ -684,6 +701,8 @@ describe("ModelsDevPlugin", () => {
       yield* activate(providers)
       expect(yield* modelState.get(providerID, activeID)).toBeDefined()
       expect(yield* modelState.get(providerID, deprecatedID)).toBeUndefined()
+      expect(yield* modelState.get(providerID, videoID)).toBeUndefined()
+      expect(yield* modelState.get(providerID, sttID)).toBeUndefined()
     }),
   )
 

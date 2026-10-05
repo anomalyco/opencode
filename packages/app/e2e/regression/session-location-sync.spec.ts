@@ -66,6 +66,72 @@ for (const endpoint of ["/api/location", "/api/agent"]) {
   }
 }
 
+test("replaces the composer when the location is not found and recovers by moving to another worktree", async ({
+  page,
+}) => {
+  const directory = "/projects/deleted-worktree"
+  const destination = "/projects/existing-worktree"
+  const sessionID = "ses_location_not_found"
+  const session = { id: sessionID, projectID: fixture.project.id, directory, title: "Missing location" }
+  const moves: unknown[] = []
+  const transport = await installSseTransport(page, { server: fixture.serverKey })
+  await mockOpenCodeServer(page, {
+    directory: fixture.directory,
+    project: fixture.project,
+    provider: fixture.provider,
+    sessions: [session],
+    fileList: () => [],
+    worktrees: [{ directory: fixture.directory }, { directory: destination, strategy: "git" }],
+    pageMessages: () => ({
+      items: [{ id: "msg_saved", type: "user", text: "Keep this session history", time: { created: 1 } }],
+    }),
+  })
+  let requests = 0
+  await page.route("**/api/location?**", (route) => {
+    if (new URL(route.request().url()).searchParams.get("location[directory]") !== directory) return route.fallback()
+    requests++
+
+    return route.fulfill({
+      status: 404,
+      // SAFETY: the server's wire body for a missing Location, which the client decodes into its own error.
+      // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- see SAFETY above
+      json: { _tag: "LocationNotFoundError", location: { directory }, message: `Location not found: ${directory}` },
+      headers: { "access-control-allow-origin": "*" },
+    })
+  })
+  await page.route(`**/api/session/${sessionID}/move`, (route) => {
+    if (route.request().method() !== "POST") return route.fallback()
+    moves.push(route.request().postDataJSON())
+
+    return route.fulfill({ status: 204, headers: { "access-control-allow-origin": "*" } })
+  })
+
+  await page.goto(`/server/${base64Encode(fixture.serverKey)}/session/${sessionID}`)
+  const status = page.getByRole("status").filter({ hasText: "Session location unavailable" })
+  await expect(status).toContainText(directory)
+  await expect(page.getByText("Keep this session history", { exact: true })).toBeVisible()
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toHaveCount(0)
+  // A typed not-found answer is final; retrying cannot succeed until the folder changes.
+  expect(requests).toBe(1)
+
+  await transport.waitForConnection()
+  await page.getByRole("button", { name: "Choose worktree", exact: true }).click()
+  await page.getByRole("menuitem", { name: "existing-worktree", exact: true }).click()
+  await expect.poll(() => moves).toEqual([{ directory: destination }])
+
+  session.directory = destination
+  await transport.send({
+    id: "evt_location_not_found_moved",
+    type: "session.moved",
+    created: 2,
+    durable: { aggregateID: sessionID, seq: 1, version: 1 },
+    data: { sessionID, location: { directory: destination }, projectID: fixture.project.id },
+  })
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
+  await expect(status).toHaveCount(0)
+  await expect(page.getByText("Keep this session history", { exact: true })).toBeVisible()
+})
+
 test("follows a live session move while the agent catalog is still loading", async ({ page }) => {
   const recovery = recoveryRequests(page)
   const directory = "/projects/old-tree"

@@ -301,18 +301,26 @@ export const OpenResponsesBody = Schema.Struct({
 })
 export type OpenResponsesBody = Schema.Schema.Type<typeof OpenResponsesBody>
 
-export const OpenResponsesUsage = Schema.Struct({
-  input_tokens: Schema.optional(Schema.Number),
-  input_tokens_details: optionalNull(
-    Schema.Struct({
-      cached_tokens: Schema.optional(Schema.Number),
-      cache_write_tokens: Schema.optional(Schema.Number),
-    }),
-  ),
-  output_tokens: Schema.optional(Schema.Number),
-  output_tokens_details: optionalNull(Schema.Struct({ reasoning_tokens: Schema.optional(Schema.Number) })),
-  total_tokens: Schema.optional(Schema.Number),
-})
+export const OpenResponsesUsage = Schema.StructWithRest(
+  Schema.Struct({
+    input_tokens: Schema.optional(Schema.Number),
+    input_tokens_details: optionalNull(
+      Schema.StructWithRest(
+        Schema.Struct({
+          cached_tokens: Schema.optional(Schema.Number),
+          cache_write_tokens: Schema.optional(Schema.Number),
+        }),
+        [JsonObject],
+      ),
+    ),
+    output_tokens: Schema.optional(Schema.Number),
+    output_tokens_details: optionalNull(
+      Schema.StructWithRest(Schema.Struct({ reasoning_tokens: Schema.optional(Schema.Number) }), [JsonObject]),
+    ),
+    total_tokens: Schema.optional(Schema.Number),
+  }),
+  [JsonObject],
+)
 type OpenResponsesUsage = Schema.Schema.Type<typeof OpenResponsesUsage>
 
 // The spec requires `id` on every output item, but some gateways drop it from
@@ -442,7 +450,7 @@ interface ReasoningStreamItem {
 // =============================================================================
 // Request Lowering
 // =============================================================================
-export const lowerTool = Effect.fn("OpenResponses.lowerTool")(function* (protocolName: string, tool: ToolDefinition) {
+export const lowerTool = Effect.fnUntraced(function* (protocolName: string, tool: ToolDefinition) {
   if (tool.native !== undefined)
     return yield* ProviderShared.invalidRequest(`${protocolName} does not support provider-native tool ${tool.name}`)
   return {
@@ -507,7 +515,10 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
   }
 }
 
-const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
+const decodeImageDetail = ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))
+const decodeMessageMetadata = ProviderShared.validateWith(Schema.decodeUnknownEffect(MessageMetadata))
+
+const lowerMedia = Effect.fnUntraced(function* (
   part: MediaPart,
   request: LLMRequest,
   adapter: ProviderAdapter,
@@ -516,9 +527,8 @@ const lowerMedia = Effect.fn("OpenResponses.lowerMedia")(function* (
   const media = part.media.inline()
   const providerMedia = adapter.lowerMedia?.({ part, media, request })
   if (providerMedia) return providerMedia
-  const detail = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(OpenResponsesInputImage.fields.detail))(
-    part.providerMetadata?.[metadataKey(request.model)]?.detail,
-  )
+  const rawDetail = part.providerMetadata?.[metadataKey(request.model)]?.detail
+  const detail = rawDetail === undefined ? undefined : yield* decodeImageDetail(rawDetail)
   const mime = part.media.mediaType.toLowerCase()
   const url = ProviderShared.mediaUrl(part.media)
   const location = url ?? (yield* ProviderShared.requireInlineMedia(adapter.name, part.media)).dataUrl
@@ -591,7 +601,7 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
-const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
+const lowerMessages = Effect.fnUntraced(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
@@ -599,9 +609,8 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
   const providerMetadataKey = metadataKey(request.model)
 
   for (const message of request.messages) {
-    const metadata = yield* ProviderShared.validateWith(
-      Schema.decodeUnknownEffect(Schema.UndefinedOr(MessageMetadata)),
-    )(message.providerMetadata?.[providerMetadataKey])
+    const rawMetadata = message.providerMetadata?.[providerMetadataKey]
+    const metadata = rawMetadata === undefined ? undefined : yield* decodeMessageMetadata(rawMetadata)
     if (message.role === "system") {
       const update = effortUpdate(message)
       if (update) {
@@ -755,7 +764,7 @@ const lowerMessages = Effect.fn("OpenResponses.lowerMessages")(function* (
   return input
 })
 
-export const lowerConversation = Effect.fn("OpenResponses.lowerConversation")(function* (
+export const lowerConversation = Effect.fnUntraced(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
@@ -1142,7 +1151,7 @@ const onReasoningSummaryPartDone = (state: ParserState, event: Event): StepResul
   ]
 }
 
-const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgumentsDelta")(function* (
+const onFunctionCallArgumentsDelta = Effect.fnUntraced(function* (
   state: ParserState,
   event: Event,
 ) {
@@ -1173,7 +1182,7 @@ const onFunctionCallArgumentsDelta = Effect.fn("OpenResponses.onFunctionCallArgu
   return [{ ...state, lifecycle, tools: result.tools }, events] satisfies StepResult
 })
 
-const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
+const onOutputItemDone = Effect.fnUntraced(function* (
   state: ParserState,
   item: NormalizedEvent["item"],
 ) {
@@ -1309,7 +1318,7 @@ const onOutputItemDone = Effect.fn("OpenResponses.onOutputItemDone")(function* (
   return [state, NO_EVENTS] satisfies StepResult
 })
 
-const onResponseFinish = Effect.fn("OpenResponses.onResponseFinish")(function* (state: ParserState, event: Event) {
+const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event: Event) {
   let current = state
   const events: LLMEvent[] = []
   if (event.type === "response.completed") {
