@@ -6,7 +6,7 @@ import { dialogWidth, useDialog } from "../ui/dialog"
 import { DialogSelect, dialogSelectContentWidth, type DialogSelectRef } from "../ui/dialog-select"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { useRoute } from "../context/route"
-import { locationKey, useData } from "../context/data"
+import { useData } from "../context/data"
 import { useClient } from "../context/client"
 import { useLocation } from "../context/location"
 import { useSessionTabs } from "../context/session-tabs"
@@ -175,18 +175,11 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   })
 
   createEffect(() => {
-    const knownByID = new Map(props.sessions.map((session) => [session.id, session]))
+    const knownRoots = new Set(props.sessions.map((session) => session.id))
     const active = data.session.active()
-    new Map(
-      [
-        location.ref ?? data.location.default(),
-        ...active
-          .map((id) => data.session.get(id)?.location ?? knownByID.get(id)?.location)
-          .filter((target) => target !== undefined),
-      ].map((target) => [locationKey(target), target]),
-    ).forEach((target) => {
-      void data.session.permission.syncLocation(target).catch(() => undefined)
-      void data.session.form.sync("global", target).catch(() => undefined)
+    active.forEach((id) => {
+      void data.session.permission.sync(id).catch(() => undefined)
+      void data.session.form.sync(id).catch(() => undefined)
     })
     new Set(
       [
@@ -195,7 +188,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         ...(recent() === true ? active : []),
       ].map((id) => data.session.root(id)),
     ).forEach((rootID) => {
-      if (!knownByID.has(rootID) && !data.session.get(rootID)) {
+      if (!knownRoots.has(rootID) && !data.session.get(rootID)) {
         void data.session.sync(rootID).catch(() => undefined)
       }
     })

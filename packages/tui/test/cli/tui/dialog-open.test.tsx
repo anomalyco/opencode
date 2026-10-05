@@ -875,9 +875,8 @@ test("surfaces sessions awaiting permissions or questions at the top with attent
         },
       })
     }
-    if (url.pathname === "/api/permission/request") {
+    if (url.pathname === "/api/session/ses_blocked_permission/permission") {
       return json({
-        location: { directory: "/fixture", project: { id: "proj_recent", directory: "/fixture", canonical: "/fixture" } },
         data: [
           {
             id: "per_shell",
@@ -888,21 +887,16 @@ test("surfaces sessions awaiting permissions or questions at the top with attent
         ],
       })
     }
-    if (url.pathname === "/api/form") {
-      const requested = url.searchParams.get("location[directory]") ?? "/fixture"
+    if (url.pathname === "/api/session/ses_child_question/form") {
       return json({
-        location: { directory: requested, project: { id: "proj_recent", directory: requested } },
-        data:
-          requested === remote.directory
-            ? [
-                {
-                  id: "frm_question",
-                  sessionID: "ses_child_question",
-                  title: "Questions",
-                  fields: [{ key: "q0", type: "string", title: "Target" }],
-                },
-              ]
-            : [],
+        data: [
+          {
+            id: "frm_question",
+            sessionID: "ses_child_question",
+            title: "Questions",
+            fields: [{ key: "q0", type: "string", title: "Target" }],
+          },
+        ],
       })
     }
     if (url.pathname !== "/api/session") return undefined

@@ -296,33 +296,6 @@ export function createData(config: CreateDataInput) {
     return true
   }
 
-  const locationSessions = new Map<string, Set<string>>()
-  function reconcileSessionLocation<Item extends { sessionID: string }>(
-    field: "permission" | "form",
-    directory: string,
-    items: ReadonlyArray<Item>,
-    apply: (sessionID: string, entries: Item[]) => void,
-  ) {
-    const key = `${field}:${directory}`
-    const bySession = items.reduce<Map<string, Item[]>>(
-      (acc, item) => acc.set(item.sessionID, [...(acc.get(item.sessionID) ?? []), item]),
-      new Map(),
-    )
-    const previous = new Set([
-      ...(locationSessions.get(key) ?? []),
-      ...Object.entries(store.session.info)
-        .filter(([, info]) => info.location.directory === directory)
-        .map(([sessionID]) => sessionID),
-    ])
-    locationSessions.set(key, new Set(bySession.keys()))
-    previous.forEach((sessionID) => {
-      if (!bySession.has(sessionID) && store.session[field][sessionID]?.length) {
-        apply(sessionID, [])
-      }
-    })
-    bySession.forEach((entries, sessionID) => apply(sessionID, entries))
-  }
-
   function settleForm(input: SessionFormCancelInput, ref: LocationRef | undefined, request: Promise<void>) {
     return request
       .catch((error: unknown) => {
@@ -1768,19 +1741,6 @@ export function createData(config: CreateDataInput) {
             setStore("session", "permission", sessionID, await api().permission.list({ sessionID }))
           })
         },
-        syncLocation(ref?: LocationRef) {
-          const location = ref ?? defaultLocation()
-          return sync.run(`location.permission:${locationKey(location)}`, async () => {
-            const response = await api().permission.request.list({
-              location: locationQuery(location),
-            })
-            batch(() =>
-              reconcileSessionLocation("permission", response.location.directory, response.data, (id, entries) =>
-                setStore("session", "permission", id, reconcile(entries)),
-              ),
-            )
-          })
-        },
         invalidate(sessionID: string) {
           sync.invalidate(`session.permission:${sessionID}`)
         },
@@ -1809,31 +1769,23 @@ export function createData(config: CreateDataInput) {
         sync(sessionID: string, ref?: LocationRef) {
           const key = `session.form:${sessionID}:${sessionID === "global" ? locationKey(ref ?? defaultLocation()) : ""}`
           return sync.run(key, async () => {
-            if (sessionID !== "global") {
-              setStore("session", "form", sessionID, await api().session.form.list({ sessionID }))
-              return
-            }
-            const response = await api().form.list({
-              location: locationQuery(ref ?? defaultLocation()),
-            })
-            const location = {
-              directory: response.location.directory,
-            }
-            const locationID = locationKey(location)
-            batch(() => {
+            if (sessionID === "global") {
+              const response = await api().form.list({
+                location: locationQuery(ref ?? defaultLocation()),
+              })
+              const location = {
+                directory: response.location.directory,
+              }
+              const locationID = locationKey(location)
               setStore("session", "form", sessionID, [
                 ...(store.session.form[sessionID] ?? []).filter(
                   (form) => form.location && locationKey(form.location) !== locationID,
                 ),
                 ...response.data.filter((form) => form.sessionID === "global").map((form) => ({ ...form, location })),
               ])
-              reconcileSessionLocation(
-                "form",
-                location.directory,
-                response.data.filter((form) => form.sessionID !== "global"),
-                (id, entries) => setStore("session", "form", id, reconcile(entries)),
-              )
-            })
+              return
+            }
+            setStore("session", "form", sessionID, await api().session.form.list({ sessionID }))
           })
         },
         invalidate(sessionID: string, ref?: LocationRef) {
@@ -1930,7 +1882,6 @@ export function createData(config: CreateDataInput) {
           result.location.reference.sync(location),
           result.location.skill.sync(location),
           result.shell.sync(location),
-          result.session.permission.syncLocation(location),
           result.session.form.sync("global", location),
         ])
       },
@@ -1949,7 +1900,6 @@ export function createData(config: CreateDataInput) {
         result.location.reference.invalidate(location)
         result.location.skill.invalidate(location)
         result.shell.invalidate(location)
-        sync.invalidate(`location.permission:${locationKey(location)}`)
         result.session.form.invalidate("global", location)
       },
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
