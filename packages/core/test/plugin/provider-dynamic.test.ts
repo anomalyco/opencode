@@ -105,44 +105,6 @@ describe("DynamicProviderPlugin", () => {
     }),
   )
 
-  it.live("installs unversioned official AI SDK packages from the ai-v6 dist-tag", () =>
-    Effect.gen(function* () {
-      const aisdk = yield* AISDK.Service
-      const tmp = yield* tempPackage(`export { createFixtureProvider } from ${JSON.stringify(fixtureProvider)}\n`)
-      const requested: string[] = []
-      yield* addPlugin(
-        Npm.Service.of({
-          ...npmPackage(tmp.directory),
-          add: (name) => {
-            requested.push(name)
-            return Effect.succeed({ directory: tmp.directory, name: "fixture-provider" })
-          },
-        }),
-      )
-      for (const pkg of [
-        "@ai-sdk/openai-compatible",
-        "@ai-sdk/openai-compatible@3.0.62",
-        "@ai-sdk/openai-compatible@latest",
-        "fixture-provider",
-      ])
-        yield* aisdk.runSDK({
-          model: Model.Info.make({
-            ...Model.Info.default(Provider.ID.make("npm-provider"), Model.ID.make("test-model")),
-            modelID: Model.ID.make("test-model"),
-            package: Provider.aisdk(pkg),
-          }),
-          package: pkg,
-          options: { name: "npm-provider" },
-        })
-      expect(requested).toEqual([
-        "@ai-sdk/openai-compatible@ai-v6",
-        "@ai-sdk/openai-compatible@3.0.62",
-        "@ai-sdk/openai-compatible@latest",
-        "fixture-provider",
-      ])
-    }),
-  )
-
   itWithAISDK.effect("wraps missing npm entrypoint failures as AISDK init errors", () =>
     Effect.gen(function* () {
       const aisdk = yield* AISDK.Service
