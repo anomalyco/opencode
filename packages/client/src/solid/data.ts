@@ -1378,6 +1378,11 @@ export function createData(config: CreateDataInput) {
       status(sessionID: string) {
         return store.session.active[sessionID] ?? "idle"
       },
+      active() {
+        return Object.entries(store.session.active).flatMap(([sessionID, status]) =>
+          status === "running" ? [sessionID] : [],
+        )
+      },
       // Inputs are the pending user and synthetic items; compactions are control items.
       input: {
         list(sessionID: string) {
@@ -1726,13 +1731,51 @@ export function createData(config: CreateDataInput) {
         list(sessionID: string) {
           return store.session.permission[sessionID]
         },
+        sessions() {
+          return Object.entries(store.session.permission).flatMap(([sessionID, requests]) =>
+            requests.length > 0 ? [sessionID] : [],
+          )
+        },
         sync(sessionID: string) {
           return sync.run(`session.permission:${sessionID}`, async () => {
             setStore("session", "permission", sessionID, await api().permission.list({ sessionID }))
           })
         },
+        syncLocation(ref?: LocationRef) {
+          const location = ref ?? defaultLocation()
+          const id = locationKey(location)
+          return sync.run(`location.permission:${id}`, async () => {
+            const response = await api().permission.request.list({
+              location: locationQuery(location),
+            })
+            const directory = response.location.directory
+            const bySession = new Map<string, PermissionRequest[]>()
+            for (const request of response.data) {
+              const list = bySession.get(request.sessionID)
+              if (list) list.push(request)
+              else bySession.set(request.sessionID, [request])
+            }
+            batch(() => {
+              for (const [sessionID, info] of Object.entries(store.session.info)) {
+                if (
+                  info.location.directory === directory &&
+                  !bySession.has(sessionID) &&
+                  store.session.permission[sessionID]?.length
+                ) {
+                  setStore("session", "permission", sessionID, [])
+                }
+              }
+              for (const [sessionID, requests] of bySession) {
+                setStore("session", "permission", sessionID, reconcile(requests))
+              }
+            })
+          })
+        },
         invalidate(sessionID: string) {
           sync.invalidate(`session.permission:${sessionID}`)
+        },
+        invalidateLocation(ref?: LocationRef) {
+          sync.invalidate(`location.permission:${locationKey(ref ?? defaultLocation())}`)
         },
         async reply(input: PermissionReplyInput) {
           await api()
@@ -1751,6 +1794,11 @@ export function createData(config: CreateDataInput) {
           const key = locationKey(ref)
           return forms?.filter((form) => form.location && locationKey(form.location) === key)
         },
+        sessions() {
+          return Object.entries(store.session.form).flatMap(([sessionID, forms]) =>
+            sessionID !== "global" && forms.length > 0 ? [sessionID] : [],
+          )
+        },
         sync(sessionID: string, ref?: LocationRef) {
           const key = `session.form:${sessionID}:${sessionID === "global" ? locationKey(ref ?? defaultLocation()) : ""}`
           return sync.run(key, async () => {
@@ -1762,12 +1810,33 @@ export function createData(config: CreateDataInput) {
                 directory: response.location.directory,
               }
               const locationID = locationKey(location)
-              setStore("session", "form", sessionID, [
-                ...(store.session.form[sessionID] ?? []).filter(
-                  (form) => form.location && locationKey(form.location) !== locationID,
-                ),
-                ...response.data.filter((form) => form.sessionID === "global").map((form) => ({ ...form, location })),
-              ])
+              const bySession = new Map<string, FormWithLocation[]>()
+              for (const form of response.data) {
+                if (form.sessionID === "global") continue
+                const list = bySession.get(form.sessionID)
+                if (list) list.push(form)
+                else bySession.set(form.sessionID, [form])
+              }
+              batch(() => {
+                setStore("session", "form", sessionID, [
+                  ...(store.session.form[sessionID] ?? []).filter(
+                    (form) => form.location && locationKey(form.location) !== locationID,
+                  ),
+                  ...response.data.filter((form) => form.sessionID === "global").map((form) => ({ ...form, location })),
+                ])
+                for (const [owner, info] of Object.entries(store.session.info)) {
+                  if (
+                    info.location.directory === location.directory &&
+                    !bySession.has(owner) &&
+                    store.session.form[owner]?.length
+                  ) {
+                    setStore("session", "form", owner, [])
+                  }
+                }
+                for (const [owner, forms] of bySession) {
+                  setStore("session", "form", owner, reconcile(forms))
+                }
+              })
               return
             }
             setStore("session", "form", sessionID, await api().session.form.list({ sessionID }))
@@ -1867,6 +1936,7 @@ export function createData(config: CreateDataInput) {
           result.location.reference.sync(location),
           result.location.skill.sync(location),
           result.shell.sync(location),
+          result.session.permission.syncLocation(location),
           result.session.form.sync("global", location),
         ])
       },
@@ -1885,6 +1955,7 @@ export function createData(config: CreateDataInput) {
         result.location.reference.invalidate(location)
         result.location.skill.invalidate(location)
         result.shell.invalidate(location)
+        result.session.permission.invalidateLocation(location)
         result.session.form.invalidate("global", location)
       },
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },

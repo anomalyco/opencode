@@ -161,6 +161,7 @@ export function DialogSessionList() {
           : undefined
       const slot = sessionTabs.enabled() ? undefined : slotByID.get(session.id)
       const deleting = toDelete() === session.id
+      const attention = sessionTabs.status(session.id).attention
       return {
         title: deleting
           ? `Press ${shortcuts.get("session.delete")} again to confirm`
@@ -170,9 +171,17 @@ export function DialogSessionList() {
         footer,
         bg: deleting ? theme.background.action.destructive.focused : undefined,
         fg: deleting ? theme.text.action.destructive.focused : undefined,
-        gutter:
-          data.session.status(session.id) === "running" ||
-          data.session.family(session.id).some((id) => data.session.status(id) === "running")
+        gutter: attention
+          ? (color: RGBA) => (
+              <text
+                fg={color === theme.text.action.primary.focused ? color : theme.text.feedback.warning.base}
+                attributes={TextAttributes.BOLD}
+              >
+                {attention === "permission" ? "!" : "?"}
+              </text>
+            )
+          : data.session.status(session.id) === "running" ||
+              data.session.family(session.id).some((id) => data.session.status(id) === "running")
             ? (color: RGBA) => <Spinner color={color} />
             : slot === undefined
               ? undefined

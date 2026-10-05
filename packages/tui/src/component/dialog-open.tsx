@@ -2,12 +2,12 @@ import { batch, createEffect, createMemo, createResource, createSignal, onCleanu
 import type { OpenCodeEvent, SessionInfo } from "@opencode/client"
 import path from "path"
 import { useTerminalDimensions } from "@opentui/solid"
-import type { RGBA } from "@opentui/core"
+import { TextAttributes, type RGBA } from "@opentui/core"
 import { dialogWidth, useDialog } from "../ui/dialog"
 import { DialogSelect, dialogSelectContentWidth, type DialogSelectRef } from "../ui/dialog-select"
 import { DialogPrompt } from "../ui/dialog-prompt"
 import { useRoute } from "../context/route"
-import { useData } from "../context/data"
+import { locationKey, useData } from "../context/data"
 import { useClient } from "../context/client"
 import { useLocation } from "../context/location"
 import { useSessionTabs } from "../context/session-tabs"
@@ -156,6 +156,7 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
   const currentSessionID = createMemo(() =>
     route.data.type === "session" ? data.session.root(route.data.sessionID) : undefined,
   )
+  const attention = (sessionID: string) => sessionTabs.status(sessionID).attention
   const sessions = createMemo(() => {
     const seen = new Set<string>()
     const match = matched()
@@ -165,19 +166,74 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         seen.add(session.id)
         return true
       })
-      .toSorted((a, b) => b.time.updated - a.time.updated)
+      .toSorted((a, b) => {
+        const attentionA = Boolean(attention(a.id))
+        const attentionB = Boolean(attention(b.id))
+        if (attentionA !== attentionB) return attentionA ? -1 : 1
+        return b.time.updated - a.time.updated
+      })
+  })
+
+  createEffect(() => {
+    const locations = new Map<string, { directory: string; workspaceID?: string }>()
+    const current = location.ref ?? data.location.default()
+    locations.set(locationKey(current), current)
+    for (const session of sessions()) {
+      const running =
+        data.session.status(session.id) === "running" ||
+        data.session.family(session.id).some((id) => data.session.status(id) === "running")
+      if (running) locations.set(locationKey(session.location), session.location)
+    }
+    for (const id of data.session.active()) {
+      const info = data.session.get(id)
+      if (info) locations.set(locationKey(info.location), info.location)
+    }
+    for (const target of locations.values()) {
+      void data.session.permission.syncLocation(target).catch(() => undefined)
+      void data.session.form.sync("global", target).catch(() => undefined)
+    }
+  })
+
+  createEffect(() => {
+    const knownRoots = new Set(props.sessions.map((session) => session.id))
+    const pendingIDs = new Set([
+      ...data.session.permission.sessions(),
+      ...data.session.form.sessions(),
+      ...(recent() === true ? data.session.active() : []),
+    ])
+    for (const id of pendingIDs) {
+      if (knownRoots.has(id)) continue
+      const info = data.session.get(id)
+      if (!info) {
+        void data.session.sync(id).catch(() => undefined)
+        continue
+      }
+      let parentID = info.parentID
+      const seen = new Set([id])
+      while (parentID && !seen.has(parentID)) {
+        seen.add(parentID)
+        if (knownRoots.has(parentID)) break
+        const parent = data.session.get(parentID)
+        if (!parent) {
+          void data.session.sync(parentID).catch(() => undefined)
+          break
+        }
+        parentID = parent.parentID
+      }
+    }
   })
 
   const options = createMemo(() => {
     const tabs = openTabs()
+    const currentID = currentSessionID()
     // With an empty query the menu shows what is not already one keystroke away: open tabs are
-    // visible in the strip, so recents exclude them. Typing widens the pool to every session so
-    // matching a loaded tab by name still switches to it.
-    const recent = filter().trim()
-      ? sessions()
-      : sessions()
-          .filter((session) => !tabs.has(session.id))
-          .slice(0, RECENT_LIMIT)
+    // visible in the strip, so recents exclude them unless a background session is awaiting input.
+    // Typing widens the pool to every session so matching a loaded tab by name still switches to it.
+    const candidates = sessions().filter(
+      (session) => !tabs.has(session.id) || (Boolean(attention(session.id)) && session.id !== currentID),
+    )
+    const attentionCount = candidates.filter((session) => Boolean(attention(session.id))).length
+    const recent = filter().trim() ? sessions() : candidates.slice(0, Math.max(RECENT_LIMIT, attentionCount))
     const sessionOptions = recent.map((session) => {
       const project = data.project.get(session.projectID)
       const name = projectName(project)
@@ -186,9 +242,11 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         name && session.location.directory !== project?.canonical && name.toLowerCase() !== basename.toLowerCase()
           ? `${name} · ${basename}`
           : name || basename
+      const state = attention(session.id)
       const running =
-        data.session.status(session.id) === "running" ||
-        data.session.family(session.id).some((id) => data.session.status(id) === "running")
+        !state &&
+        (data.session.status(session.id) === "running" ||
+          data.session.family(session.id).some((id) => data.session.status(id) === "running"))
       return {
         title: withTimestampedFallback(session),
         searchText: `${session.id} ${session.location.directory}`,
@@ -196,11 +254,20 @@ export function DialogOpen(props: { sessions: SessionInfo[]; onLoad: (sessions: 
         category: "Sessions",
         footer: `${label ? `${Locale.truncate(label, 30)} · ` : ""}${timeAgo(session.time.updated)}`,
         onSelect: () => location.set(session.location),
-        gutter: running
-          ? (color: RGBA) => <Spinner color={color} />
-          : tabs.has(session.id)
-            ? () => <text fg={theme.hue.accent[200]}>▪</text>
-            : undefined,
+        gutter: state
+          ? (color: RGBA) => (
+              <text
+                fg={color === theme.text.action.primary.focused ? color : theme.text.feedback.warning.base}
+                attributes={TextAttributes.BOLD}
+              >
+                {state === "permission" ? "!" : "?"}
+              </text>
+            )
+          : running
+            ? (color: RGBA) => <Spinner color={color} />
+            : tabs.has(session.id)
+              ? () => <text fg={theme.hue.accent[200]}>▪</text>
+              : undefined,
       }
     })
 

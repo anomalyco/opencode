@@ -851,6 +851,108 @@ test("option arrows stay in the only visible section", async () => {
   }
 })
 
+test("surfaces sessions awaiting permissions or questions at the top with attention icons", async () => {
+  const remote = { directory: "/tmp/opencode/remote" }
+  const fixture = await renderOpen((url) => {
+    if (url.pathname === "/api/session/active") {
+      return json({
+        data: {
+          ses_recent_1: { type: "running" },
+          ses_blocked_permission: { type: "running" },
+          ses_child_question: { type: "running" },
+        },
+      })
+    }
+    if (url.pathname === "/api/session/ses_child_question") {
+      return json({
+        data: {
+          ...recentSession,
+          id: "ses_child_question",
+          parentID: "ses_parent_question",
+          title: "Child subagent",
+          location: remote,
+          time: { created: 1, updated: 2 },
+        },
+      })
+    }
+    if (url.pathname === "/api/permission/request") {
+      return json({
+        location: { directory: "/fixture", project: { id: "proj_recent", directory: "/fixture", canonical: "/fixture" } },
+        data: [
+          {
+            id: "per_shell",
+            sessionID: "ses_blocked_permission",
+            action: "shell",
+            resources: ["git status"],
+          },
+        ],
+      })
+    }
+    if (url.pathname === "/api/form") {
+      const requested = url.searchParams.get("location[directory]") ?? "/fixture"
+      return json({
+        location: { directory: requested, project: { id: "proj_recent", directory: requested } },
+        data:
+          requested === remote.directory
+            ? [
+                {
+                  id: "frm_question",
+                  sessionID: "ses_child_question",
+                  title: "Questions",
+                  fields: [{ key: "q0", type: "string", title: "Target" }],
+                },
+              ]
+            : [],
+      })
+    }
+    if (url.pathname !== "/api/session") return undefined
+    return json({
+      data: [
+        ...Array.from({ length: 9 }, (_, index) => ({
+          ...recentSession,
+          id: `ses_recent_${index + 1}`,
+          title: `Recent session ${index + 1}`,
+          time: { created: 1, updated: 100 - index },
+        })),
+        {
+          ...recentSession,
+          id: "ses_parent_question",
+          title: "Parent awaiting question",
+          location: remote,
+          time: { created: 1, updated: 5 },
+        },
+        {
+          ...recentSession,
+          id: "ses_blocked_permission",
+          title: "Old session awaiting permission",
+          time: { created: 1, updated: 1 },
+        },
+      ],
+      cursor: {},
+    })
+  })
+
+  try {
+    const frame = await fixture.app.waitForFrame(
+      (value) =>
+        value.includes("! Old session awaiting permission") &&
+        value.includes("? Parent awaiting question") &&
+        value.includes("Recent session 1"),
+    )
+    expect(frame.indexOf("? Parent awaiting question")).toBeLessThan(
+      frame.indexOf("! Old session awaiting permission"),
+    )
+    expect(frame.indexOf("! Old session awaiting permission")).toBeLessThan(frame.indexOf("Recent session 1"))
+
+    fixture.app.mockInput.pressEnter()
+    await fixture.app.waitFor(() => fixture.route.data.type === "session")
+    expect(fixture.route.data).toEqual({ type: "session", sessionID: "ses_parent_question" })
+    expect(fixture.location.ref).toEqual(remote)
+  } finally {
+    await fixture.dispose()
+  }
+})
+
 async function renderOpen(
   handler: FetchHandler,
   beforeOpen?: (contexts: {
