@@ -35,6 +35,7 @@ export function SessionLocationMissing(props: { sessionID: string; projectID: st
     // Seed latest so even the first fetch does not enter Suspense.
     { initialValue: [] },
   )
+
   const otherWorktrees = () =>
     worktrees.latest.filter((item) => item.strategy && !sameDirectory(item.directory, props.directory))
 

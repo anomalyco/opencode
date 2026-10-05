@@ -93,6 +93,8 @@ test("replaces the composer when the location is not found and recovers by movin
 
     return route.fulfill({
       status: 404,
+      // SAFETY: the server's wire body for a missing Location, which the client decodes into its own error.
+      // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- see SAFETY above
       json: { _tag: "LocationNotFoundError", location: { directory }, message: `Location not found: ${directory}` },
       headers: { "access-control-allow-origin": "*" },
     })
