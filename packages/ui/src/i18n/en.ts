@@ -244,6 +244,7 @@ const source = {
   "ui.message.forkMessage": "Fork to new session",
   "ui.message.revertMessage": "Revert message",
   "ui.message.moveToQueue": "Move to queue",
+  "ui.message.pending": "Pending",
   "ui.message.deletePending": "Delete",
   "ui.message.copyResponse": "Copy response",
   "ui.message.copied": "Copied",

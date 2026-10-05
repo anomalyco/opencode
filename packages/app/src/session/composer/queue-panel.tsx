@@ -186,7 +186,7 @@ function SessionQueueRow(props: { queue: SessionQueueView; id: string; index: nu
                   type="button"
                   size="small"
                   variant="ghost-muted"
-                  icon={<Icon name="arrow-down-to-line" />}
+                  icon={<Icon name="outline-undo" />}
                   disabled={props.queue.busy()}
                   aria-label={language.t("session.queue.undo")}
                   onClick={() => props.queue.undo(props.id)}
