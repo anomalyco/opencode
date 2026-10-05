@@ -167,10 +167,18 @@ export const {
       }
     }
 
+    // The session last opened, kept through list refreshes that would drop it from under its open view
+    // when it is archived, older than the list, or in another directory.
+    let opened: string | undefined
+
     function listSessions() {
       return sdk.client.session
         .list({ start: Date.now() - 30 * 24 * 60 * 60 * 1000, ...sessionListQuery() })
-        .then((x) => (x.data ?? []).toSorted((a, b) => a.id.localeCompare(b.id)))
+        .then((x) => {
+          const list = x.data ?? []
+          const kept = list.some((s) => s.id === opened) ? [] : store.session.filter((s) => s.id === opened)
+          return [...list, ...kept].toSorted((a, b) => a.id.localeCompare(b.id))
+        })
     }
 
     event.subscribe((event, { directory, workspace }) => {
@@ -271,6 +279,7 @@ export const {
           break
 
         case "session.deleted": {
+          if (opened === event.properties.info.id) opened = undefined
           const result = search(store.session, event.properties.info.id, (s) => s.id)
           if (result.found) {
             setStore(
@@ -574,6 +583,17 @@ export const {
           if (match.found) return store.session[match.index]
           return undefined
         },
+        /** Show `info` even when it is outside the loaded list, and keep it through list refreshes. */
+        add(info: Session) {
+          opened = info.id
+          if (search(store.session, info.id, (s) => s.id).found) return
+          setStore(
+            produce((draft) => {
+              const match = search(draft.session, info.id, (s) => s.id)
+              if (!match.found) draft.session.splice(match.index, 0, info)
+            }),
+          )
+        },
         query() {
           return sessionListQuery()
         },
@@ -598,8 +618,14 @@ export const {
           const tracker = { messages: new Set<string>(), parts: new Set<string>() }
           hydratingSessions.set(sessionID, tracker)
           const task = (async () => {
+            // The session view renders only once the session is in the store, so add it as soon as it
+            // arrives rather than after its messages, which can take a second to load.
+            const sessionPromise = sdk.client.session.get({ sessionID }, { throwOnError: true }).then((response) => {
+              if (response.data) result.session.add(response.data)
+              return response
+            })
             const [session, messages, todo, diff] = await Promise.all([
-              sdk.client.session.get({ sessionID }, { throwOnError: true }),
+              sessionPromise,
               sdk.client.session.messages({ sessionID, limit: 100 }),
               sdk.client.session.todo({ sessionID }),
               sdk.client.session.diff({ sessionID }),
