@@ -40,9 +40,9 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
   options: DiscoverOptions & { readonly url: string },
 ) {
   const info = yield* read(options.file)
-  const found = info === undefined ? undefined : yield* probe({ ...info, url: options.url })
-  if (found === undefined) return undefined
-  if (!found.compatible) return undefined
+  if (info === undefined) return undefined
+  const found = (yield* Effect.promise(() => probeResult({ ...info, url: options.url }))).service
+  if (!found?.compatible) return undefined
   if (!matchesVersion(found.version, options)) return undefined
   return { endpoint: found.endpoint, state: found.state }
 })
@@ -194,10 +194,6 @@ const read = Effect.fnUntraced(function* (file?: string) {
   const text = yield* fs.readFileString(file ?? fallback()).pipe(Effect.option)
   if (Option.isNone(text)) return undefined
   return yield* decode(text.value).pipe(Effect.option, Effect.map(Option.getOrUndefined))
-})
-
-const probe = Effect.fnUntraced(function* (info: Info) {
-  return (yield* Effect.promise(() => probeResult(info))).service
 })
 
 const registered = Effect.fnUntraced(function* (file?: string, timeout?: number) {

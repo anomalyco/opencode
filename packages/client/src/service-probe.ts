@@ -28,10 +28,7 @@ export function same(left: Info, right: Info) {
 export async function probeResult(info: Info, timeout = defaultEnsureTiming.requestTimeout) {
   const endpoint = {
     url: info.url,
-    auth:
-      info.password === undefined
-        ? undefined
-        : { type: "basic" as const, username: "opencode", password: info.password },
+    auth: info.password === undefined ? undefined : { type: "basic", username: "opencode", password: info.password },
   } satisfies Endpoint
   const signal = AbortSignal.timeout(timeout)
   const result = await fetch(new URL("/api/info", info.url), { headers: headers(endpoint), signal })
@@ -39,12 +36,9 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
       response,
       body: response.status === 404 ? undefined : ((await response.json()) as unknown),
     }))
-    .then(
-      (value) => ({ value }),
-      (cause: unknown) => ({ cause }),
-    )
-  if ("cause" in result) return { service: undefined, timedOut: signal.aborted }
-  const response = result.value.response
+    .catch(() => undefined)
+  if (result === undefined) return { service: undefined, timedOut: signal.aborted }
+  const response = result.response
   // A missing health endpoint identifies protocol incompatibility, not an older
   // version. Only an unmet version requirement lets ensure replace this owner.
   if (response.status === 404)
@@ -53,12 +47,12 @@ export async function probeResult(info: Info, timeout = defaultEnsureTiming.requ
         info,
         endpoint,
         version: info.version,
-        state: "ready" as const,
+        state: "ready",
         compatible: false,
       } satisfies LocalService,
       timedOut: false,
     }
-  const serverInfo = decodeInfo(result.value.body)
+  const serverInfo = decodeInfo(result.body)
   if (serverInfo === undefined) return { service: undefined, timedOut: false }
   if (serverInfo.pid !== info.pid) return { service: undefined, timedOut: false }
   if (info.version !== undefined && serverInfo.version !== info.version) return { service: undefined, timedOut: false }
