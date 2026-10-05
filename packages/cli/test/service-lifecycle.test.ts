@@ -14,8 +14,6 @@ import { isolatedEnv } from "./fixture/environment"
 // the configured port, which a stop removes without leftovers.
 
 const entry = path.join(import.meta.dir, "../src/index.ts")
-// Servers run the CLI from source. A shared transpiler cache keeps each new home from starting cold.
-const transpilerCache = path.join(os.tmpdir(), "opencode-test-transpiler-cache")
 const serviceTest = process.platform === "win32" ? test.skip : test
 
 serviceTest(
@@ -114,8 +112,14 @@ serviceTest(
     await using home = await serviceHome()
     using listener = Bun.serve({ hostname: "127.0.0.1", port: home.port, fetch: () => new Response("unrelated") })
 
-    await expect(cli(home, "service", "start")).rejects.toThrow("already in use by another process")
+    const conflict = await cli(home, "service", "start").then(
+      () => undefined,
+      (error: Error) => error.message,
+    )
+    expect(conflict).toContain(`Managed service port ${home.port} on 127.0.0.1 is already in use by another process`)
+    expect(conflict).toContain("opencode service set port <port>")
     expect(await servers(home)).toEqual([])
+    expect(await Bun.file(home.registration).exists()).toBe(false)
 
     await listener.stop(true)
     await cli(home, "service", "start")
@@ -172,17 +176,13 @@ async function serviceHome(options: { readonly failBoot?: boolean } = {}) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-lifecycle-")))
   const port = await availablePort()
   await fs.mkdir(path.join(root, "config"), { recursive: true })
-  await fs.mkdir(transpilerCache, { recursive: true })
   await fs.writeFile(path.join(root, "config", "service-local.json"), JSON.stringify({ port }))
   // A directory where the database file belongs makes boot fail after the server registers.
   if (options.failBoot) await fs.mkdir(path.join(root, "database"))
   // Servers spawned through this home's entry carry its path, so `servers()` sees only this home.
   const homeEntry = path.join(root, "opencode.ts")
   await fs.writeFile(homeEntry, `import ${JSON.stringify(entry)}\n`)
-  const overrides = {
-    BUN_RUNTIME_TRANSPILER_CACHE_PATH: transpilerCache,
-    ...(options.failBoot ? { OPENCODE_DB: path.join(root, "database") } : {}),
-  }
+  const overrides = options.failBoot ? { OPENCODE_DB: path.join(root, "database") } : {}
   const home = {
     root,
     port,
