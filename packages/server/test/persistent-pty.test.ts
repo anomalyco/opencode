@@ -18,13 +18,14 @@ smoke(
   "reads the latest controlled terminal with optional physical line counts through the SDK",
   () =>
     Effect.gen(function* () {
-      const fixture = yield* testDirectory("xdg")
+      const fixture = yield* testDirectory()
       const server = yield* ServerProcess.start<never, never>({
         hostname: "127.0.0.1",
         port: 0,
         password: "secret",
         app: { version: "test-version" },
         database: { path: fixture.database },
+        pty: { root: fixture.directory },
         fs: { filewatcher: false },
       })
       const base = HttpServer.formatAddress(server.address)
@@ -142,13 +143,14 @@ smoke(
   "creates two persistent terminals for one session through the client API",
   () =>
     Effect.gen(function* () {
-      const fixture = yield* testDirectory("xdg")
+      const fixture = yield* testDirectory()
       const server = yield* ServerProcess.start<never, never>({
         hostname: "127.0.0.1",
         port: 0,
         password: "secret",
         app: { version: "test-version" },
         database: { path: fixture.database },
+        pty: { root: fixture.directory },
         fs: { filewatcher: false },
       })
       const base = HttpServer.formatAddress(server.address)
@@ -315,7 +317,7 @@ smoke(
   "isolates servers sharing a database and preserves terminals only through explicit restart handoff",
   () =>
     Effect.gen(function* () {
-      const fixture = yield* testDirectory("override")
+      const fixture = yield* testDirectory()
       const scope = yield* Scope.Scope
       const originalScope = yield* Scope.fork(scope)
       const options = {
@@ -324,6 +326,7 @@ smoke(
         password: "secret",
         app: { version: "test-version" },
         database: { path: fixture.database },
+        pty: { root: fixture.directory },
         fs: { filewatcher: false },
       }
       const original = yield* ServerProcess.start<never, never>(options).pipe(
@@ -365,7 +368,7 @@ smoke(
       expect(process.kill(first.pid, 0)).toBeTrue()
 
       const replacementScope = yield* Scope.fork(scope)
-      const replacement = yield* ServerProcess.start<never, never>({ ...options, pty: { handoff } }).pipe(
+      const replacement = yield* ServerProcess.start<never, never>({ ...options, pty: { ...options.pty, handoff } }).pipe(
         Effect.provideService(Scope.Scope, replacementScope),
       )
       const replacementBase = HttpServer.formatAddress(replacement.address)
@@ -385,25 +388,90 @@ smoke(
   30_000,
 )
 
-function testDirectory(mode: "xdg" | "override") {
+smoke(
+  "migrates a legacy runtime directory on restart and boots fresh when the registration is gone",
+  () =>
+    Effect.gen(function* () {
+      const fixture = yield* testDirectory()
+      const scope = yield* Scope.Scope
+      const legacy = path.join(fixture.root, "legacy")
+      const options = {
+        hostname: "127.0.0.1",
+        port: 0,
+        password: "secret",
+        app: { version: "test-version" },
+        database: { path: fixture.database },
+        fs: { filewatcher: false },
+      }
+      const sessionID = Session.ID.make("ses_persistent_pty_migration")
+      const originalScope = yield* Scope.fork(scope)
+      const original = yield* ServerProcess.start<never, never>({ ...options, pty: { root: legacy } }).pipe(
+        Effect.provideService(Scope.Scope, originalScope),
+      )
+      const base = HttpServer.formatAddress(original.address)
+      const first = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(base, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "stty -echo; printf before-migration; exec cat"],
+          cwd: process.cwd(),
+          title: "legacy",
+          env: {},
+        })).data,
+      )
+      expect(yield* waitForText(base, first.id, "before-migration")).toContain("before-migration")
+      const legacyHandoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
+        (yield* request(base, "POST", "/api/experimental/persistent-pty/handoff")).handoff,
+      )
+      yield* Scope.close(originalScope, Exit.void)
+
+      const migratedScope = yield* Scope.fork(scope)
+      const migrated = yield* ServerProcess.start<never, never>({
+        ...options,
+        pty: { root: fixture.directory, handoff: legacyHandoff },
+      }).pipe(Effect.provideService(Scope.Scope, migratedScope))
+      const migratedBase = HttpServer.formatAddress(migrated.address)
+      const directory = path.join(fixture.directory, path.basename(legacyHandoff.directory))
+      expect(existsSync(path.join(directory, "service.json"))).toBeTrue()
+      expect(existsSync(path.join(legacyHandoff.directory, "service.json"))).toBeFalse()
+      expect(
+        (yield* request(migratedBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data,
+      ).toMatchObject([{ id: first.id, pid: first.pid }])
+
+      const handoff = Schema.decodeUnknownSync(PersistentPty.Handoff)(
+        (yield* request(migratedBase, "POST", "/api/experimental/persistent-pty/handoff")).handoff,
+      )
+      expect(handoff.directory).toBe(directory)
+      yield* Scope.close(migratedScope, Exit.void)
+      // Simulate macOS purging the registration while the daemon waits for its successor.
+      yield* Effect.promise(() => fs.rm(path.join(directory, "service.json")))
+
+      const fresh = yield* ServerProcess.start<never, never>({ ...options, pty: { root: fixture.directory, handoff } })
+      const freshBase = HttpServer.formatAddress(fresh.address)
+      expect((yield* request(freshBase, "GET", `/api/experimental/session/${sessionID}/terminal`)).data).toEqual([])
+      const second = Schema.decodeUnknownSync(PersistentPty.Info)(
+        (yield* request(freshBase, "POST", `/api/experimental/session/${sessionID}/terminal`, {
+          command: "/bin/sh",
+          args: ["-c", "printf after-restart; exec cat"],
+          cwd: process.cwd(),
+          title: "fresh",
+          env: {},
+        })).data,
+      )
+      expect(yield* waitForText(freshBase, second.id, "after-restart")).toContain("after-restart")
+    }),
+  30_000,
+)
+
+function testDirectory() {
   return Effect.acquireRelease(
     Effect.promise(async () => {
-      const environment = {
-        binary: process.env.OPENCODE_PTY_BIN,
-        runtime: process.env.OPENCODE_PTY_RUNTIME_DIR,
-        xdg: process.env.XDG_RUNTIME_DIR,
-        shell: process.env.SHELL,
-      }
+      const environment = { binary: process.env.OPENCODE_PTY_BIN, shell: process.env.SHELL }
       const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-pty-server-test-"))
-      const runtime = path.join(root, "runtime")
       process.env.OPENCODE_PTY_BIN = binary
-      delete process.env.OPENCODE_PTY_RUNTIME_DIR
-      process.env.XDG_RUNTIME_DIR = runtime
       process.env.SHELL = "/bin/sh"
-      if (mode === "override") process.env.OPENCODE_PTY_RUNTIME_DIR = runtime
       return {
         database: path.join(root, "opencode.db"),
-        directory: mode === "override" ? runtime : path.join(runtime, "opencode-pty"),
+        directory: path.join(root, "runtime"),
         environment,
         root,
       }
@@ -412,8 +480,6 @@ function testDirectory(mode: "xdg" | "override") {
       Effect.promise(async () => {
         await fs.rm(fixture.root, { recursive: true, force: true })
         restore("OPENCODE_PTY_BIN", fixture.environment.binary)
-        restore("OPENCODE_PTY_RUNTIME_DIR", fixture.environment.runtime)
-        restore("XDG_RUNTIME_DIR", fixture.environment.xdg)
         restore("SHELL", fixture.environment.shell)
       }),
   )

@@ -2,7 +2,8 @@ import type { CDPSession, Page } from "@playwright/test"
 import { benchmark, expect } from "../benchmark"
 import { mockOpenCodeServer } from "../../utils/mock-server"
 import { APP_READY_TIMEOUT } from "../../utils/waits"
-import { fixture as stress } from "./session-timeline-stress.fixture"
+import { SERVER } from "../../utils/app"
+import { fixture as stress } from "../../utils/session-fixture"
 import { createHomeIndexFixture, type HomeIndexFixture } from "./home-session-index.fixture"
 
 // Home fetches the root-session index on mount. These cases hold the visible
@@ -28,7 +29,7 @@ type Probe = {
 
 type ProbeWindow = Window & {
   __homeIndexProbe?: Probe
-  __mockServerStream?: { push: (payloads: unknown[]) => void }
+  __mockServerStreams?: Record<string, { push: (payloads: unknown[]) => void }>
 }
 
 // Interaction-scoped tracing keeps the page-lifetime Chrome trace off unless a
@@ -137,11 +138,12 @@ benchmark.describe("performance: home session index", () => {
         target.time.updated += 1000
         target.time.idle = target.time.updated
         const pushed = await page.evaluate(
-          ({ id, title, event }) => {
+          ({ id, title, event, server }) => {
             const host = window as ProbeWindow
-            if (!host.__homeIndexProbe || !host.__mockServerStream) throw new Error("Missing Home index probe")
+            const stream = host.__mockServerStreams?.[server]
+            if (!host.__homeIndexProbe || !stream) throw new Error("Missing Home index probe")
             host.__homeIndexProbe.pending[id] = title
-            host.__mockServerStream.push([event])
+            stream.push([event])
             return performance.now()
           },
           {
@@ -153,6 +155,7 @@ benchmark.describe("performance: home session index", () => {
               type: "session.execution.succeeded",
               data: { sessionID: target.id },
             },
+            server: SERVER,
           },
         )
         await expect(titleLocator).toHaveText(title)

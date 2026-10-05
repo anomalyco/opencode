@@ -1,64 +1,72 @@
-import { fileURLToPath } from "node:url"
-import { expect, story } from "../../storybook/playwright/story"
+import { expect, sourceURL, story } from "../../storybook/playwright/story"
 
-const fixture = `/@fs/${fileURLToPath(new URL("./browser-pane.fixture.tsx", import.meta.url)).replaceAll("\\", "/")}`
+const source = (path: string) => sourceURL(new URL(path, import.meta.url))
+
+const modules = {
+  fixture: source("../../gui-extensions/src/browser/panel.fixture.tsx"),
+  embeds: source("../src/runtime/extension/embeds.tsx"),
+  language: source("../src/runtime/i18n/language.tsx"),
+}
 
 story.beforeEach(async ({ mount, page }) => {
-  const component = await mount("opencode-composer-flow--mixed-attachments")
-  await expect(component.getByRole("textbox", { name: "Prompt", exact: true })).toBeVisible()
-  await page.evaluate(async (fixture) => {
-    const { mountBrowserPane } = await import(fixture)
-    mountBrowserPane()
-  }, fixture)
+  // Any story loads the app styles; the fixture mounts the pane beside it on the real host embeds.
+  await mount("ui-line-comment--editor")
+  await page.evaluate(async (modules) => {
+    const [{ mountBrowserPane }, { createEmbeds }, language] = await Promise.all([
+      import(modules.fixture),
+      import(modules.embeds),
+      import(modules.language),
+    ])
+
+    mountBrowserPane({
+      createEmbeds,
+      LanguageProvider: language.LanguageProvider,
+      UiI18nBridge: language.UiI18nBridge,
+      useLanguage: language.useLanguage,
+    })
+  }, modules)
   await expect(page.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
 
-story("hides the previous registration when the mounted pane switches sessions", async ({ page }, testInfo) => {
+story("hides a native page when another takes the pane, the pane hides, or it unmounts", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
+  const alpha = root.getByTestId("native-Alpha")
+  const beta = root.getByTestId("native-Beta")
   await root.getByRole("button", { name: "Beta", exact: true }).click()
-  await expect(root.getByTestId("native-Beta")).toHaveAttribute("data-visible", "true")
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
-  await page.screenshot({ path: testInfo.outputPath("session-switch.png") })
-  await root.getByRole("button", { name: "Alpha", exact: true }).click()
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
-  await expect(root.getByTestId("native-Beta")).toHaveAttribute("data-visible", "false")
-})
-
-story("hides the outgoing browser when the destination has no browser pane", async ({ page }) => {
-  const root = page.getByTestId("browser-pane-fixture")
+  await expect(beta).toHaveAttribute("data-visible", "true")
+  await expect(alpha).toHaveAttribute("data-visible", "false")
   await root.getByRole("button", { name: "Empty", exact: true }).click()
   await expect(root.locator("#browser-panel")).toHaveCount(0)
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
+  await expect(beta).toHaveAttribute("data-visible", "false")
   await root.getByRole("button", { name: "Alpha", exact: true }).click()
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
-})
-
-story("hides and restores the same registration for Review tabs and unmount", async ({ page }) => {
-  const root = page.getByTestId("browser-pane-fixture")
+  await expect(alpha).toHaveAttribute("data-visible", "true")
   await root.getByRole("button", { name: "Toggle Review tab", exact: true }).click()
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
+  await expect(alpha).toHaveAttribute("data-visible", "false")
   await root.getByRole("button", { name: "Toggle Review tab", exact: true }).click()
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+  await expect(alpha).toHaveAttribute("data-visible", "true")
   await root.getByRole("button", { name: "Unmount pane", exact: true }).click()
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
+  await expect(alpha).toHaveAttribute("data-visible", "false")
 })
 
 story("hides the native view immediately while the pane stays mounted", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const toggle = root.getByRole("button", { name: "Toggle Review tab", exact: true })
   await expect(toggle).toBeEnabled()
+
   // Read in the same task as the click so a deferred animation-frame hide cannot pass.
   const visible = await toggle.evaluate((element) => {
     element.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+
     return document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
   })
+
   expect(visible).toBe("false")
   await expect(root.locator("#browser-panel")).toHaveCount(1)
   await toggle.click()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
 })
 
-story("keeps a still of the page under floating content that covers it", async ({ page }, testInfo) => {
+story("keeps a still of the page under floating content that covers it", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const still = root.locator("#browser-panel img")
   await root.getByRole("button", { name: "Hold capture", exact: true }).click()
@@ -71,7 +79,6 @@ story("keeps a still of the page under floating content that covers it", async (
   await root.getByRole("button", { name: "Release capture", exact: true }).click()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
   await expect(still).toBeVisible()
-  await page.screenshot({ path: testInfo.outputPath("covered.png") })
 
   await root.getByRole("button", { name: "Toggle popover", exact: true }).click()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
@@ -79,22 +86,28 @@ story("keeps a still of the page under floating content that covers it", async (
   await expect(root.getByText("Captures: 1", { exact: true })).toBeVisible()
 })
 
-story("comments on a picked element over a still of the page", async ({ page }, testInfo) => {
+story("comments on a picked element over a still of the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
   await picker.click()
   await expect(picker).toHaveAttribute("aria-pressed", "true")
   await expect(root.getByText("Picker: on", { exact: true })).toBeVisible()
+  await expect(root.getByText("Session getter reads: 0", { exact: true })).toBeVisible()
+  await expect(root.getByRole("status")).toHaveText(
+    "Click an element in the page to comment on it. Press Escape to cancel.",
+  )
 
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   await expect(picker).toHaveAttribute("aria-pressed", "false")
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
   await expect(editor).toBeFocused()
+  await expect(root.getByText("Session getter reads: 0", { exact: true })).toBeVisible()
   await expect(root.locator('[data-slot="browser-comment-editor"]')).toContainText("button.primary")
+  // The spotlight frames the picked element in surface pixels.
+  await expect(root.locator('[data-slot="browser-comment-spotlight"]')).toHaveCSS("left", "48px")
   // The native page hides behind its still so the editor can float over it.
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
   await expect(root.locator("#browser-panel img")).toBeVisible()
-  await page.screenshot({ path: testInfo.outputPath("comment.png") })
 
   await editor.fill("Make this the primary colour")
   await editor.press("Enter")
@@ -102,6 +115,19 @@ story("comments on a picked element over a still of the page", async ({ page }, 
   await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
   await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+
+  // The pane stays mounted when Beta is routed, and its picker then listens to Beta's page.
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByTestId("native-Beta")).toHaveAttribute("data-visible", "true")
+  await picker.click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(editor).toBeFocused()
+  await editor.fill("Beta's button too")
+  await editor.press("Enter")
+  await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([
+    "button.primary @e7: Make this the primary colour",
+    "button.primary @e7: Beta's button too",
+  ])
 })
 
 story("cancels the picker and a comment with Escape", async ({ page }) => {
@@ -121,6 +147,44 @@ story("cancels the picker and a comment with Escape", async ({ page }) => {
   await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
   await expect(root.getByTestId("fixture-comments")).toHaveText("")
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
+
+story("cleans up the originating session's picker and comment after a session switch", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  await picker.click()
+  await expect(root.getByText("Picker Alpha: on", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.getByTestId("native-Beta")).toHaveAttribute("data-visible", "true")
+  await expect(root.getByText("Picker Alpha: off", { exact: true })).toBeVisible()
+  await expect(picker).toHaveAttribute("aria-pressed", "false")
+
+  await root.getByRole("button", { name: "Alpha", exact: true }).click()
+  await picker.click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(root.locator('[data-slot="browser-comment-editor"] textarea')).toBeFocused()
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(root.locator('[data-component="browser-comment"]')).toHaveCount(0)
+  await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
+  await expect(root.getByText("Highlight owners: Alpha", { exact: true })).toBeVisible()
+})
+
+story("ends the native picker and highlight when the pane unmounts", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const picker = root.getByRole("button", { name: "Select an element to comment on", exact: true })
+  await picker.click()
+  await expect(root.getByText("Picker: on", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: "Unmount pane", exact: true }).click()
+  await expect(root.locator("#browser-panel")).toHaveCount(0)
+  await expect(root.getByText("Picker: off", { exact: true })).toBeVisible()
+
+  await root.getByRole("button", { name: "Alpha", exact: true }).click()
+  await picker.click()
+  await root.getByRole("button", { name: "Pick element", exact: true }).click()
+  await expect(root.locator('[data-slot="browser-comment-editor"] textarea')).toBeFocused()
+  await root.getByRole("button", { name: "Unmount pane", exact: true }).click()
+  await expect(root.locator("#browser-panel")).toHaveCount(0)
+  await expect(root.getByText("Highlights: clear", { exact: true })).toBeVisible()
 })
 
 story("keeps a comment draft but drops its ref when the page navigates", async ({ page }) => {
@@ -146,9 +210,15 @@ story("keeps the comment editor and its actions inside the page", async ({ page 
   await editor.locator("textarea").evaluate((element) => {
     element.style.height = "900px"
   })
-  const surface = await root.locator('[data-component="browser-comment"]').boundingBox()
-  const box = await editor.boundingBox()
-  expect(surface && box && box.y + box.height <= surface.y + surface.height).toBe(true)
+  // The editor moves once it has measured its new height.
+  await expect
+    .poll(async () => {
+      const surface = await root.locator('[data-component="browser-comment"]').boundingBox()
+      const box = await editor.boundingBox()
+
+      return !!surface && !!box && box.y + box.height <= surface.y + surface.height
+    })
+    .toBe(true)
   const submit = editor.getByRole("button", { name: "Comment", exact: true })
   await submit.scrollIntoViewIfNeeded()
   await expect(submit).toBeInViewport()
@@ -201,17 +271,22 @@ story("keeps the submitted URL visible until the browser reports navigation", as
   await expect(address).toHaveValue("https://example.com/")
 })
 
-story("restores the current URL when a submitted navigation is blocked", async ({ page }) => {
+story("restores the current URL each time the same submitted navigation is blocked", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
   const address = root.getByRole("textbox", { name: "Browser address", exact: true })
-  await address.fill("https://blocked.example/")
-  await address.press("Enter")
-  await expect(address).toHaveValue("https://blocked.example/")
-  await root.getByRole("button", { name: "Block navigation", exact: true }).click()
-  await expect(root.getByText("ERR_BLOCKED_BY_CLIENT", { exact: true })).toBeVisible()
-  await expect(address).toHaveValue("https://alpha.example/")
-  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+
+  for (const submission of [1, 2]) {
+    await story.step(`blocked submission ${submission}`, async () => {
+      await address.fill("https://blocked.example/")
+      await address.press("Enter")
+      await expect(address).toHaveValue("https://blocked.example/")
+      await root.getByRole("button", { name: "Block navigation", exact: true }).click()
+      await expect(root.getByRole("alert")).toHaveText("Request failed")
+      await expect(address).toHaveValue("https://alpha.example/")
+      await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+    })
+  }
 })
 
 story("shows a themed failure state for only the failed tab and allows retry", async ({ page }) => {
@@ -269,10 +344,12 @@ story("selects the full URL when the address field gains focus", async ({ page }
   await address.focus()
   await expect(address).toHaveJSProperty("selectionStart", 0)
   await expect(address).toHaveJSProperty("selectionEnd", "https://example.com/".length)
+  // A click on the focused field places the caret instead of selecting the URL again.
   await address.press("ArrowRight")
   await address.click()
-  await expect(address).toHaveJSProperty("selectionStart", 0)
-  await expect(address).toHaveJSProperty("selectionEnd", "https://example.com/".length)
+  await expect
+    .poll(() => address.evaluate((input: HTMLInputElement) => input.selectionStart === input.selectionEnd))
+    .toBe(true)
 })
 
 story("keeps the current page visible while a submitted URL loads", async ({ page }) => {

@@ -1,5 +1,5 @@
 import { Terminal } from "ghostty-web"
-import { SerializeAddon } from "../../../src/session/terminal/serialize"
+import { SerializeAddon } from "../../../../gui-extensions/src/terminal/serialize"
 
 export type TerminalProbe = {
   term?: Terminal

@@ -26,18 +26,24 @@ const patterns = [
   /tokens in request more than max tokens allowed/i,
   /maximum prompt length is \d+/i,
   /reduce the length of the messages/i,
+  // DeepInfra
+  /requested input length \d+ exceeds maximum input length/i,
   /maximum context length is \d+ tokens/i,
   /exceeds (?:the )?maximum allowed input length of [\d,]+ tokens?/i,
-  /input \(\d+ tokens\) is longer than the model'?s context length \(\d+ tokens\)/i,
+  // Novita omits the token counts.
+  /input(?: \(\d+ tokens\))? is longer than the model'?s context length/i,
   /exceeds the limit of \d+/i,
   /exceeds the available context size/i,
   /greater than the context length/i,
+  // Hugging Face Text Generation Inference, e.g. Together
+  /`inputs` tokens \+ `max_new_tokens` must be <= \d+/i,
   /context window exceeds limit/i,
   /exceeded model token limit/i,
   /context[_ ]length[_ ]exceeded/i,
   /context length is only \d+ tokens/i,
   /input length.*exceeds.*context length/i,
-  /prompt too long; exceeded (?:max )?context length/i,
+  // Z.ai code 1261 arrives as `Prompt too long` or `Prompt 超长`.
+  /prompt (?:too long|超长)/i,
   /too large for model with \d+ maximum context length/i,
   /prompt has [\d,]+ tokens?, but the configured context size is [\d,]+ tokens?/i,
   /model_context_window_exceeded/i,
@@ -49,7 +55,13 @@ const patterns = [
 
 const payloadPatterns = [/request entity too large/i, /payload too large/i, /request too large/i]
 
-const exclusions = [/^(throttling error|service unavailable):/i, /rate limit/i, /too many requests/i]
+const exclusions = [
+  /^(throttling error|service unavailable):/i,
+  /rate limit/i,
+  /too many requests/i,
+  // Cohere reports an output limit above the model maximum as "too many tokens"; compaction cannot fix it.
+  /max[_ ]tokens must be less than/i,
+]
 
 export const isContextOverflow = (message: string) =>
   !exclusions.some((pattern) => pattern.test(message)) &&
@@ -114,7 +126,8 @@ const QUOTA_CODES = new Set([
   "creditlimitexceeded",
 ])
 // Google reports an invalid API key as HTTP 400 INVALID_ARGUMENT with this `details[].reason`.
-const AUTH_CODES = new Set(["authentication_error", "permission_error", "api_key_invalid"])
+// Z.ai's Responses API reports account and plan rejections mid-stream as `permission_denied`.
+const AUTH_CODES = new Set(["authentication_error", "permission_error", "permission_denied", "api_key_invalid"])
 const SERVER_CODES = new Set([
   "api_error",
   "internal_error",
@@ -128,6 +141,7 @@ const SERVER_CODES = new Set([
 ])
 // `invalid_request` is the Vercel AI Gateway's code for an upstream request rejection.
 const INVALID_REQUEST_CODES = new Set([
+  "model_not_found",
   "invalid_prompt",
   "invalid_request",
   "invalid_request_error",
@@ -147,15 +161,19 @@ const CONTENT_POLICY_CODES = new Set([
 // OpenCode Zen replaces upstream codes outside its allow-list but keeps the original
 // as a `[code]` label at the start of the rewritten message.
 const GATEWAY_CODE_LABEL = /^[^:\n]+: \[([A-Za-z0-9_.-]+)\]/
+// xAI reports an invalid API key as HTTP 400 with the generic `invalid-argument` code.
+const AUTH_TEXT = /incorrect api key provided/i
 const RATE_LIMIT_TEXT = /rate increased too quickly|rate[-_\s]?limit|too[_\s]?many[_\s]?requests/i
 // Only consulted on 429, where throttles and account caps share a status.
-const QUOTA_TEXT = /insufficient[-_\s]?quota|quota[-_\s]?exceeded|budget exceeded|usage limit/i
+// Z.ai reports balance, plan expiry, plan limits, and plan model access on 429.
+const QUOTA_TEXT =
+  /insufficient[-_\s]?(?:quota|balance)|quota[-_\s]?exceeded|budget exceeded|usage limit|limit exhausted|package has expired|plan does not yet include/i
 // Policy rejections without a dedicated code, matched against the provider's own
 // explanation only. OpenAI reuses `invalid_prompt` for usage-policy rejections while
 // Bedrock Mantle reuses it for schema validation; Anthropic reports blocked output
 // under `invalid_request_error`.
 const CONTENT_POLICY_TEXT =
-  /violating our usage policy|blocked by content filtering policy|content[-_\s]?policy|rejected as a result of our safety system/i
+  /violating our usage policy|blocked by content filtering policy|content[-_\s]?policy|rejected as a result of our safety system|detected potentially unsafe or sensitive content/i
 const SERVER_ERROR_TEXT =
   /\b(?:try again|(?:please |you can )?retry (?:the |this |your )?request|try (?:the |this |your )?request again|(?:currently |temporarily )?at capacity|overloaded|temporarily unavailable|service[-_\s]?unavailable|(?:server|internal)[-_\s]?error|server (?:is )?busy|provider returned (?:an )?error|resource[-_\s]?exhausted|upstream (?:connect|connection|request)|request buffer limit while retrying upstream)\b/i
 
@@ -246,7 +264,12 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
     (input.status === 429 && QUOTA_TEXT.test(text))
   )
     return new QuotaExceededError(details)
-  if (input.status === 401 || input.status === 403 || codes.some((code) => AUTH_CODES.has(code)))
+  if (
+    input.status === 401 ||
+    input.status === 403 ||
+    codes.some((code) => AUTH_CODES.has(code)) ||
+    (input.status === 400 && AUTH_TEXT.test(text))
+  )
     return new AuthenticationError(details)
   if (
     input.status === 429 ||

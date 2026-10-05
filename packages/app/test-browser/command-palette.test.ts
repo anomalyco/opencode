@@ -5,7 +5,7 @@ import { createRoot } from "solid-js"
 import { createServerSessionEntries } from "@/shell/commands/palette"
 import type { LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
-import { getProjectAvatarSource } from "@/shell/layout/helpers"
+import { getProjectAvatarSource } from "@opencode/ui/project-avatar"
 
 const stored: Project = {
   id: "project-1",

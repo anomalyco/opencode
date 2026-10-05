@@ -8,6 +8,8 @@ import { createTwoFilesPatch } from "diff"
 
 const directory = "C:/OpenCode/TimelineStateRegression"
 const projectID = "proj_timeline_state_regression"
+/** The workspace a benchmark response names, in the shape the server's location-scoped routes return. */
+export const benchmarkLocation = { directory, project: { id: projectID, directory, canonical: directory } }
 const sessionID = "ses_timeline_state_regression"
 const userMessageID = "msg_user_regression"
 const assistantMessageID = "msg_assistant_regression"

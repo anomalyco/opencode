@@ -24,11 +24,11 @@ export const requestHeadersTimeoutMs = 60_000
 // kills the script midway and leaves a registered but half-initialised worktree behind.
 export const setupRequestHeadersTimeoutMs = 10 * 60_000
 
-export function isSlowRequest(pathname: string) {
+function isSlowRequest(pathname: string) {
   return slowRequestPaths.some((path) => pathname === path || pathname.startsWith(`${path}/`))
 }
 
-export function isSetupRequest(method: string, pathname: string) {
+function isSetupRequest(method: string, pathname: string) {
   return method === "POST" && pathname === "/api/worktree"
 }
 

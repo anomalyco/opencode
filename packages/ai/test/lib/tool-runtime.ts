@@ -8,7 +8,6 @@ import {
   type ProviderMetadata,
   type ToolCallPart,
   ToolResultPart,
-  type ToolResultValue,
   type Usage,
 } from "../../src/schema/index.js"
 import { type Tools, toDefinitions } from "../../src/tool.js"

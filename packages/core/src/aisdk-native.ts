@@ -14,7 +14,12 @@ type Target<ID extends string> = Overlays & {
   variants?: (Overlays & { id: ID })[]
 }
 
-type Context = { readonly providerID: string; readonly canonical?: string; readonly modelID?: string }
+type Context = {
+  readonly providerID: string
+  readonly canonical?: string
+  readonly modelID?: string
+  readonly shape?: "responses" | "completions"
+}
 
 export function rewrite<ID extends string>(
   target: Target<ID>,
@@ -57,6 +62,7 @@ const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/anthropic": "@opencode/ai/providers/anthropic",
   "@ai-sdk/azure": "@opencode/ai/providers/azure/responses",
   "@ai-sdk/cerebras": "@opencode/ai/providers/cerebras",
+  "@ai-sdk/cohere": "@opencode/ai/providers/cohere",
   "@ai-sdk/deepinfra": "@opencode/ai/providers/deepinfra",
   "@ai-sdk/google": "@opencode/ai/providers/google",
   "@ai-sdk/google-vertex": "@opencode/ai/providers/google-vertex",
@@ -69,6 +75,7 @@ const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/xai": "@opencode/ai/providers/xai",
   "@openrouter/ai-sdk-provider": "@opencode/ai/providers/openrouter",
   "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
+  "venice-ai-sdk-provider": "@opencode/ai/providers/venice",
 }
 
 const protocols = (name: string) => ({
@@ -91,8 +98,10 @@ const HOSTS: Readonly<Record<string, Readonly<Record<string, string>>>> = {
     "@ai-sdk/openai-compatible": "@opencode/ai/providers/cloudflare-ai-gateway",
     "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
   },
+  cohere: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/cohere/chat" },
   "cloudflare-workers-ai": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/cloudflare-workers-ai" },
   deepseek: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/deepseek" },
+  digitalocean: { "@ai-sdk/openai-compatible": "@opencode/ai/providers/digitalocean" },
   "fireworks-ai": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/fireworks" },
   "google-vertex": { "@ai-sdk/openai-compatible": "@opencode/ai/providers/google-vertex/chat" },
   "kimi-for-coding": protocols("moonshot"),
@@ -122,10 +131,12 @@ export function native(npm: string, context: Context & { readonly settings?: Pro
   const host = HOSTS[context.providerID]?.[npm]
   if (host) return host
   if (npm === "@ai-sdk/amazon-bedrock/mantle") return mantle(context.modelID)
-  if (npm === "@ai-sdk/azure" && context.settings?.useCompletionUrls === true)
-    return "@opencode/ai/providers/azure/chat"
+  if (npm === "@ai-sdk/azure" && azureChat(context)) return "@opencode/ai/providers/azure/chat"
   return PACKAGES[npm]
 }
+
+const azureChat = (context: Context & { readonly settings?: Provider.Settings }) =>
+  context.shape === "completions" || context.settings?.useCompletionUrls === true
 
 const mantle = (modelID: string | undefined) => {
   if (modelID === undefined) return "@opencode/ai/providers/amazon-bedrock/mantle"
@@ -137,7 +148,7 @@ function resolve(specifier: string, context: Context & { readonly settings?: Pro
   if (Provider.isAISDK(specifier) || npm in PACKAGES || npm in (HOSTS[context.providerID] ?? {}))
     return native(npm, context)
   if (npm === "@opencode/ai/providers/amazon-bedrock/mantle") return mantle(context.modelID)
-  if (npm === "@opencode/ai/providers/azure/responses" && context.settings?.useCompletionUrls === true)
+  if (npm === "@opencode/ai/providers/azure/responses" && azureChat(context))
     return "@opencode/ai/providers/azure/chat"
   return NATIVE.has(npm) ? npm : undefined
 }

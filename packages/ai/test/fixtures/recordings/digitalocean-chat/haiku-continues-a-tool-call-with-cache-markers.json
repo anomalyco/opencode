@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "anthropic-claude-haiku-4.5",
+    "tags": [
+      "prefix:digitalocean-chat",
+      "provider:digitalocean",
+      "protocol:digitalocean-chat",
+      "cache",
+      "tool",
+      "tool-loop"
+    ],
+    "name": "digitalocean-chat/haiku-continues-a-tool-call-with-cache-markers",
+    "recordedAt": "2026-10-01T07:36:38.471Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://inference.do-ai.run/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"anthropic-claude-haiku-4.5\",\"messages\":[{\"role\":\"system\",\"content\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\",\"cache_control\":{\"type\":\"ephemeral\"}}]},{\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"What is the weather in Paris?\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false},\"cache_control\":{\"type\":\"ephemeral\"}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":128}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"choices\":[{\"delta\":{\"content\":\"\",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0,\"logprobs\":null}],\"created\":1790840197,\"id\":\"chatcmpl-ccddd771-e8a6-4b59-b819-614f79ac4624\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"\",\"name\":\"get_weather\"},\"id\":\"toolu_014LEa2F66CGw2SoLmWBeH5C\",\"index\":0,\"type\":\"function\"}]},\"finish_reason\":null,\"index\":0,\"logprobs\":null}],\"created\":1790840197,\"id\":\"chatcmpl-ccddd771-e8a6-4b59-b819-614f79ac4624\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"\"},\"index\":0,\"type\":\"function\"}]},\"finish_reason\":null,\"index\":0,\"logprobs\":null}],\"created\":1790840197,\"id\":\"chatcmpl-ccddd771-e8a6-4b59-b819-614f79ac4624\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"{\\\"city\\\"\"},\"index\":0,\"type\":\"function\"}]},\"finish_reason\":null,\"index\":0,\"logprobs\":null}],\"created\":1790840197,\"id\":\"chatcmpl-ccddd771-e8a6-4b59-b819-614f79ac4624\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\": \\\"Pari\"},\"index\":0,\"type\":\"function\"}]},\"finish_reason\":null,\"index\":0,\"logprobs\":null}],\"created\":1790840197,\"id\":\"chatcmpl-ccddd771-e8a6-4b59-b819-614f79ac4624\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"function\":{\"arguments\":\"s\\\"}\"},\"index\":0,\"type\":\"function\"}]},\"finish_reason\":null,\"index\":0,\"logprobs\":null}],\"created\":1790840197,\"id\":\"chatcmpl-ccddd771-e8a6-4b59-b819-614f79ac4624\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"tool_calls\",\"index\":0,\"logprobs\":null}],\"created\":1790840197,\"id\":\"chatcmpl-ccddd771-e8a6-4b59-b819-614f79ac4624\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[],\"created\":1790840197,\"id\":\"chatcmpl-ccddd771-e8a6-4b59-b819-614f79ac4624\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\",\"usage\":{\"cache_created_input_tokens\":0,\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"cache_read_input_tokens\":0,\"completion_tokens\":54,\"completion_tokens_details\":{\"reasoning_tokens\":0},\"prompt_tokens\":593,\"prompt_tokens_details\":{\"cached_tokens\":0},\"speed\":null,\"total_tokens\":647}}\n\ndata: [DONE]\n\n"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://inference.do-ai.run/v1/chat/completions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"anthropic-claude-haiku-4.5\",\"messages\":[{\"role\":\"system\",\"content\":[{\"type\":\"text\",\"text\":\"Use the get_weather tool exactly once. After the tool result, reply exactly: Paris is sunny.\",\"cache_control\":{\"type\":\"ephemeral\"}}]},{\"role\":\"user\",\"content\":\"What is the weather in Paris?\"},{\"role\":\"assistant\",\"content\":null,\"tool_calls\":[{\"id\":\"toolu_014LEa2F66CGw2SoLmWBeH5C\",\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"arguments\":\"{\\\"city\\\":\\\"Paris\\\"}\"}}]},{\"role\":\"tool\",\"tool_call_id\":\"toolu_014LEa2F66CGw2SoLmWBeH5C\",\"content\":[{\"type\":\"text\",\"text\":\"{\\\"temperature\\\":22,\\\"condition\\\":\\\"sunny\\\"}\",\"cache_control\":{\"type\":\"ephemeral\"}}]}],\"tools\":[{\"type\":\"function\",\"function\":{\"name\":\"get_weather\",\"description\":\"Get current weather for a city.\",\"parameters\":{\"type\":\"object\",\"properties\":{\"city\":{\"type\":\"string\"}},\"required\":[\"city\"],\"additionalProperties\":false},\"strict\":false},\"cache_control\":{\"type\":\"ephemeral\"}}],\"stream\":true,\"stream_options\":{\"include_usage\":true},\"store\":false,\"max_completion_tokens\":128}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "text/event-stream"
+        },
+        "body": "data: {\"choices\":[{\"delta\":{\"content\":\"Paris\",\"role\":\"assistant\"},\"finish_reason\":null,\"index\":0,\"logprobs\":null}],\"created\":1790840198,\"id\":\"chatcmpl-3914ee28-f256-4a49-994f-49365922a7a6\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{\"content\":\" is sunny.\"},\"finish_reason\":null,\"index\":0,\"logprobs\":null}],\"created\":1790840198,\"id\":\"chatcmpl-3914ee28-f256-4a49-994f-49365922a7a6\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[{\"delta\":{},\"finish_reason\":\"stop\",\"index\":0,\"logprobs\":null}],\"created\":1790840198,\"id\":\"chatcmpl-3914ee28-f256-4a49-994f-49365922a7a6\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\"}\n\ndata: {\"choices\":[],\"created\":1790840198,\"id\":\"chatcmpl-3914ee28-f256-4a49-994f-49365922a7a6\",\"model\":\"anthropic-claude-haiku-4.5\",\"object\":\"chat.completion.chunk\",\"usage\":{\"cache_created_input_tokens\":0,\"cache_creation\":{\"ephemeral_1h_input_tokens\":0,\"ephemeral_5m_input_tokens\":0},\"cache_read_input_tokens\":0,\"completion_tokens\":7,\"completion_tokens_details\":{\"reasoning_tokens\":0},\"prompt_tokens\":668,\"prompt_tokens_details\":{\"cached_tokens\":0},\"speed\":null,\"total_tokens\":675}}\n\ndata: [DONE]\n\n"
+      }
+    }
+  ]
+}

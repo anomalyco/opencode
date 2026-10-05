@@ -1,13 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMRequest, Message, ToolCallPart } from "../src/index.js"
+import { LLM, Message, ToolCallPart } from "../src/index.js"
 import { Auth, LLMClient } from "../src/route.js"
 import { compileRequest } from "../src/route/client.js"
 import { AnthropicMessages } from "../src/protocols/anthropic-messages.js"
 import { OpenAIResponses } from "../src/protocols/openai-responses.js"
 import { Gemini } from "../src/protocols/gemini.js"
-import { GoogleVertexMessages, OpenAI } from "../src/providers.js"
-import { applyCachePolicy } from "../src/cache-policy.js"
+import { AmazonBedrockMantle, GoogleVertexMessages, OpenAI } from "../src/providers.js"
 import { applyEffortUpdates } from "../src/effort-updates.js"
 import { it, testEffect } from "./lib/effect.js"
 import { dynamicResponse } from "./lib/http.js"
@@ -147,7 +146,7 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
-  it.effect("accepts a marker between a tool call and its result", () =>
+  it.effect("moves a marker between a tool call and its result after the result", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         LLM.request({
@@ -166,8 +165,35 @@ describe("Anthropic Messages effort updates", () => {
       expect(prepared.body.messages).toEqual([
         { role: "user", content: [{ type: "text", text: "Weather?" }] },
         { role: "assistant", content: [{ type: "tool_use", id: "call_1", name: "lookup", input: {} }] },
-        { role: "system", content: [], output_config: { effort: "low" } },
         { role: "user", content: [{ type: "tool_result", tool_use_id: "call_1", content: '{"temp":72}' }] },
+        { role: "system", content: [], output_config: { effort: "low" } },
+      ])
+    }),
+  )
+
+  it.effect("releases a held system update next to an effort marker as one valid section", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: opus5,
+          messages: [
+            Message.user("Fix it."),
+            Message.assistant("Done."),
+            lowFromHigh,
+            Message.system("Update."),
+            Message.user("Next."),
+          ],
+          providerOptions: { effort: "low" },
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "Fix it." }] },
+        { role: "assistant", content: [{ type: "text", text: "Done." }] },
+        { role: "system", content: [], output_config: { effort: "low" } },
+        { role: "user", content: [{ type: "text", text: "Next." }] },
+        { role: "system", content: [{ type: "text", text: "Update.", cache_control: undefined }] },
       ])
     }),
   )
@@ -197,9 +223,15 @@ describe("Anthropic Messages effort updates", () => {
     ["anthropic/claude-opus-5", true],
     ["claude-fable-5-1", true],
     ["claude-mythos-5-1", true],
+    ["claude-opus-5-5", true],
+    ["claude-sonnet-5-5", true],
+    ["anthropic/claude-sonnet-5-5", true],
+    ["claude-sonnet-6", true],
+    ["claude-haiku-6", true],
     ["claude-fable-5", false],
     ["claude-opus-4-8", false],
     ["claude-sonnet-5", false],
+    ["claude-sonnet-5-20260801", false],
     ["kimi-k2.5", false],
   ] as const) {
     it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>
@@ -236,20 +268,53 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
-  it.effect("strips markers on the Vertex Anthropic route, whose protocol wrapper does not forward support", () =>
+  it.effect("strips markers for Opus 5.0 on Bedrock Mantle Messages while lowering Opus 5.5", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
+      const mantle = AmazonBedrockMantle.configure({ apiKey: "test", region: "us-east-1" })
+      const opus50 = yield* compileRequest(
         LLM.request({
-          model: GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" }).model(
-            "claude-opus-5",
-          ),
+          model: mantle.messages("anthropic.claude-opus-5"),
+          messages: conversation,
+          providerOptions: { effort: "low" },
+        }),
+      )
+      const opus55 = yield* compileRequest(
+        LLM.request({
+          model: mantle.messages("anthropic.claude-opus-5-5"),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
       )
 
-      expect(systemMessages(prepared.body)).toHaveLength(0)
-      expect(prepared.body.output_config).toEqual({ effort: "low" })
+      expect(systemMessages(opus50.body)).toHaveLength(0)
+      expect(opus50.body.output_config).toEqual({ effort: "low" })
+      expect(systemMessages(opus55.body)).toEqual([{ role: "system", content: [], output_config: { effort: "low" } }])
+      expect(opus55.body.output_config).toEqual({ effort: "high" })
+    }),
+  )
+
+  it.effect("lowers markers on the Vertex Anthropic route for models that support them", () =>
+    Effect.gen(function* () {
+      const vertex = GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" })
+      const opus5 = yield* compileRequest(
+        LLM.request({
+          model: vertex.model("claude-opus-5"),
+          messages: conversation,
+          providerOptions: { effort: "low" },
+        }),
+      )
+      const opus48 = yield* compileRequest(
+        LLM.request({
+          model: vertex.model("claude-opus-4-8"),
+          messages: conversation,
+          providerOptions: { effort: "low" },
+        }),
+      )
+
+      expect(systemMessages(opus5.body)).toEqual([{ role: "system", content: [], output_config: { effort: "low" } }])
+      expect(opus5.body.output_config).toEqual({ effort: "high" })
+      expect(systemMessages(opus48.body)).toHaveLength(0)
+      expect(opus48.body.output_config).toEqual({ effort: "low" })
     }),
   )
 })
@@ -375,11 +440,24 @@ describe("OpenAI Responses effort updates", () => {
     ["openai/gpt-6-sol", true],
     ["gpt-6-luna", true],
     ["openai/gpt-6-luna", true],
-    ["gpt-6-astra-2026-09-01", false],
-    ["gpt-6-sol-pro", false],
-    ["gpt-6-luna-pro", false],
-    ["gpt-6-sol-fast", false],
+    ["gpt-6", true],
+    ["gpt-6.1-sol", true],
+    ["openai/gpt-6.1-sol", true],
+    ["GPT-6.1-SOL", true],
+    ["gpt-6-astra-2026-09-01", true],
+    ["gpt-6-sol-pro", true],
+    ["gpt-6-luna-pro", true],
+    ["gpt-6-sol-fast", true],
+    ["gpt-7", true],
+    ["openai/gpt-7.2-new-family", true],
+    ["gpt-10.1", true],
+    ["gpt-5", false],
     ["gpt-5.6-sol", false],
+    ["gpt-5.10", false],
+    ["not-gpt-6-sol", false],
+    ["gpt-6foo", false],
+    ["gpt-6.x-sol", false],
+    ["future-model", false],
   ] as const) {
     it.effect(`${supported ? "lowers" : "strips"} markers for ${id}`, () =>
       Effect.gen(function* () {

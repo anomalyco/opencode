@@ -1,0 +1,15 @@
+export default {
+  "tab.title": "Upprifjun",
+  "tab.count.one": "{{count}} skrá breytt",
+  "tab.count.other": "{{count}} skrám breytt",
+  "mobile.title.one": "Breyta",
+  "mobile.title.other": "Breytingar",
+  "empty.git": "Engar óbundnar breytingar ennþá",
+  "empty.branch": "Engar greinarbreytingar ennþá",
+  "git.title": "Búðu til Git geymslu",
+  "git.description": "Fylgstu með, skoðaðu og afturkallaðu breytingar á þessu verkefni",
+  loadingChanges: "Hleður breytingum…",
+  noChanges: "Engar breytingar",
+  "settings.wrapLines.title": "Brjóta línur",
+  "settings.wrapLines.description": "Vefjið langar línur inn í farsímadiffur í stað þess að fletta lárétt",
+}

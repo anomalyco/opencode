@@ -220,6 +220,14 @@ const openaiCompatible: Protocol = (model, support) => {
   return openaiChat(model, support)
 }
 
+const veniceChat: Protocol = (_, support) => {
+  if (support.type === "effort")
+    return efforts(support.values ?? EFFORTS, (effort) => ({ settings: { reasoningEffort: effort } }))
+  if (support.type === "toggle")
+    return toggle({ settings: { reasoning: { enabled: false } } }, { settings: { reasoning: { enabled: true } } })
+  return []
+}
+
 const moonshotChat: Protocol = (model, support) => {
   const id = modelID(model).toLowerCase()
   const toggleable = id.includes("k2.5") || id.includes("k2-5") || id.includes("k2.6") || id.includes("k2-6")
@@ -567,13 +575,16 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/zai-coding-plan/responses": openaiResponses,
 
   "@opencode/ai/providers/openai-compatible": openaiCompatible,
+  "@opencode/ai/providers/azure/chat": openaiChat,
   "@opencode/ai/providers/google-vertex/chat": openaiChat,
   "@opencode/ai/providers/alibaba/chat": alibabaChat,
   "@opencode/ai/providers/baseten": basetenChat,
   "@opencode/ai/providers/cerebras": openaiChat,
   "@opencode/ai/providers/cloudflare-workers-ai": workersAIChat,
+  "@opencode/ai/providers/cohere/chat": openaiChat,
   "@opencode/ai/providers/deepinfra": deepinfraChat,
   "@opencode/ai/providers/deepseek": deepseekChat,
+  "@opencode/ai/providers/digitalocean": openaiChat,
   "@opencode/ai/providers/fireworks": openaiChat,
   "@opencode/ai/providers/groq": openaiChat,
   "@opencode/ai/providers/meta/chat": openaiChat,
@@ -581,6 +592,7 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/mistral": openaiChat,
   "@opencode/ai/providers/moonshot/chat": moonshotChat,
   "@opencode/ai/providers/togetherai": openaiChat,
+  "@opencode/ai/providers/venice": veniceChat,
   "@opencode/ai/providers/xai": xaiResponses,
   "@opencode/ai/providers/zai/chat": zaiChat,
   "@opencode/ai/providers/zai-coding-plan/chat": zaiChat,
@@ -597,11 +609,11 @@ const PROTOCOLS: Readonly<Record<string, Protocol>> = {
   "@opencode/ai/providers/google-vertex": gemini,
 
   "@opencode/ai/providers/amazon-bedrock": bedrockConverse,
+  "@opencode/ai/providers/cohere": cohere,
   "@opencode/ai/providers/openrouter": openrouter,
 
-  [Provider.aisdk("venice-ai-sdk-provider")]: openaiChat,
+  [Provider.aisdk("venice-ai-sdk-provider")]: veniceChat,
   "@opencode/ai/providers/cloudflare-ai-gateway": cloudflareAIGateway,
   [Provider.aisdk("@ai-sdk/gateway")]: vercelGateway,
   [Provider.aisdk("@jerome-benoit/sap-ai-provider-v2")]: sapAICore,
-  [Provider.aisdk("@ai-sdk/cohere")]: cohere,
 }

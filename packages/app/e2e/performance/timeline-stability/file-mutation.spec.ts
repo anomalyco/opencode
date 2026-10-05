@@ -16,7 +16,7 @@ import {
   toolPart,
   userMessage,
   waitForVisualSettle,
-} from "./fixture"
+} from "../../utils/timeline"
 
 test("adds patch files incrementally without resetting outer expansion", async ({ page }, testInfo) => {
   const patchID = "prt_incremental_01_patch"

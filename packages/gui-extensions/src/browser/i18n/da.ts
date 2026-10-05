@@ -1,0 +1,16 @@
+export default {
+  "command.open": "Åbn browser",
+  "command.reload": "Genindlæs browsersiden",
+  "tab.title": "Browser",
+  "address.label": "Browser adresse",
+  "address.placeholder": "Indtast URL",
+  "action.stop": "Stop",
+  replaced: "Browserkontrol flyttet til et andet skrivebordsvindue.",
+  unsupported: "Denne desktopapp understøtter ikke browserpanelet.",
+  suspended: "Browser suspenderet. Interager med denne session for at genoprette forbindelsen.",
+  "empty.title": "Indtast URL",
+  "empty.description": "Eller bed om ”Åbn i appbrowseren”",
+  "failed.title": "URL-adressen kan ikke nås",
+  "failed.description": "Kontrollér URL-adressen og din forbindelse, og prøv igen.",
+  "action.reload": "Genindlæs",
+}

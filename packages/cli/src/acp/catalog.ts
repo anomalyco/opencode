@@ -1,139 +1,170 @@
-import type { CommandInfo, ModelInfo, ModelRef, OpenCodeClient, OpenCodeEvent } from "@opencode/client/promise"
+import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
+import type { Agent } from "@opencode/schema/agent"
+import type { Command } from "@opencode/schema/command"
+import type { Model } from "@opencode/schema/model"
 import { FSUtil } from "@opencode/util/fs-util"
-import type { ConfigOptionProvider } from "./config-option"
+import { Cause, Deferred, Effect, Exit, Schedule, Semaphore, Stream, SubscriptionRef } from "effect"
+import { ACPError } from "./error"
+
+export const builtinCommands = new Map([
+  ["compact", { description: "Compact the session", start: "compaction" as const }],
+])
 
 export type Catalog = {
-  readonly providers: ConfigOptionProvider[]
-  readonly models: ModelInfo[]
-  readonly defaultModel: ModelRef
-  readonly modes: Array<{ id: string; name: string; description?: string }>
-  readonly defaultModeID: string
-  readonly commands: CommandInfo[]
+  readonly models: ReadonlyArray<Model.Info>
+  readonly defaultModel: Model.Ref
+  readonly modes: ReadonlyArray<{ id: Agent.ID; name: string; description?: string }>
+  readonly defaultModeID: Agent.ID
+  readonly commands: ReadonlyArray<Command.Info>
 }
 
-export type Live = {
+export function findModel(models: ReadonlyArray<Model.Info>, ref: Model.Ref) {
+  return models.find((model) => model.providerID === ref.providerID && model.id === ref.id)
+}
+
+export interface Interface {
+  readonly get: (cwd: string) => Effect.Effect<Catalog, ACPError.CatalogError>
+  readonly reload: (cwd: string) => Effect.Effect<void, ACPError.CatalogError>
+  readonly changes: (cwd: string) => Stream.Stream<Catalog, ACPError.CatalogError>
+}
+
+type Entry = {
   readonly cwd: string
-  current: Catalog
+  readonly catalog: SubscriptionRef.SubscriptionRef<Catalog>
+  readonly lock: Semaphore.Semaphore
+  requestedGeneration: number
+  loadedGeneration: number
 }
 
-// Provider, integration, and credential changes reach the catalog through model.updated.
 const reloadOn = new Set<OpenCodeEvent["type"]>(["model.updated", "agent.updated", "command.updated"])
 
-export function make(input: {
-  readonly client: OpenCodeClient
-  readonly signal?: AbortSignal
-  readonly changed: (live: Live, previous: Catalog) => Promise<unknown>
-}) {
-  const entries = new Map<string, Promise<Live>>()
-  const running = new Map<Live, Promise<void>>()
-  const queued = new Set<Live>()
-  let subscribed: Promise<void> | undefined
+export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
+  const scope = yield* Effect.scope
+  const entries = new Map<string, Deferred.Deferred<Entry, ACPError.CatalogError>>()
+  const connected = yield* Deferred.make<void>()
 
-  const get = (cwd: string) => {
-    const key = FSUtil.resolve(cwd)
-    const cached = entries.get(key)
-    if (cached) return cached
-    // Subscribe before the first read so an update between the read and the subscription is not lost.
-    const loaded = subscribe()
-      .then(() => load(input.client, cwd))
-      .then((current): Live => ({ cwd, current }))
-      .catch((error) => {
-        entries.delete(key)
-        throw error
-      })
-    entries.set(key, loaded)
-    return loaded
-  }
+  // Requests queued behind a running load share the next one.
+  const reload = (entry: Entry) =>
+    Effect.suspend(() => {
+      const target = ++entry.requestedGeneration
+      return entry.lock.withPermit(
+        Effect.suspend(() => {
+          if (entry.loadedGeneration >= target) return Effect.void
+          const generation = entry.requestedGeneration
+          return load(client, entry.cwd).pipe(
+            Effect.flatMap((next) => SubscriptionRef.set(entry.catalog, next)),
+            Effect.ignore,
+            Effect.andThen(
+              Effect.sync(() => {
+                entry.loadedGeneration = generation
+              }),
+            ),
+          )
+        }),
+      )
+    })
 
-  const reload = (live: Live) => {
-    const current = running.get(live)
-    if (current) {
-      queued.add(live)
-      return current
-    }
-    const run = (async () => {
-      do {
-        queued.delete(live)
-        const next = await load(input.client, live.cwd).catch(() => undefined)
-        if (!next) break
-        const previous = live.current
-        live.current = next
-        await input.changed(live, previous).catch(() => {})
-      } while (queued.has(live))
-      running.delete(live)
-    })()
-    running.set(live, run)
-    return run
-  }
+  // Subscribe before the first read so an update between the read and the subscription is not lost.
+  yield* client.event.subscribe().pipe(
+    Stream.runForEach((event) => {
+      if (event.type === "server.connected") return Deferred.succeed(connected, undefined)
+      if (!reloadOn.has(event.type)) return Effect.void
+      const directory = event.location?.directory
+      const targets = directory === undefined ? [...entries.values()] : [entries.get(FSUtil.resolve(directory))]
+      return Effect.forEach(
+        targets.filter((entry) => entry !== undefined),
+        (entry) => Deferred.await(entry).pipe(Effect.flatMap(reload), Effect.ignore, Effect.forkIn(scope)),
+        { discard: true },
+      )
+    }),
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP catalog event stream failed", cause),
+    ),
+    Effect.ensuring(Deferred.succeed(connected, undefined)),
+    Effect.forkScoped,
+  )
 
-  const subscribe = () =>
-    (subscribed ??= new Promise<void>((ready) => {
-      void (async () => {
-        for await (const event of input.client.event.subscribe({ signal: input.signal })) {
-          if (event.type === "server.connected") ready()
-          if (!reloadOn.has(event.type)) continue
-          const directory = event.location?.directory
-          const targets = directory === undefined ? [...entries.values()] : [entries.get(FSUtil.resolve(directory))]
-          targets.forEach((entry) => void entry?.then(reload, () => {}))
-        }
-      })()
-        .catch(() => {})
-        .finally(ready)
-    }))
+  const create = Effect.fnUntraced(function* (cwd: string) {
+    yield* Deferred.await(connected)
+    return {
+      cwd,
+      catalog: yield* SubscriptionRef.make<Catalog>(yield* load(client, cwd)),
+      lock: Semaphore.makeUnsafe(1),
+      requestedGeneration: 0,
+      loadedGeneration: 0,
+    } satisfies Entry
+  })
 
-  return { get, reload }
-}
+  const entry = (cwd: string) =>
+    Effect.suspend(() => {
+      const key = FSUtil.resolve(cwd)
+      const cached = entries.get(key)
+      if (cached) return Deferred.await(cached)
+      const loading = Deferred.makeUnsafe<Entry, ACPError.CatalogError>()
+      entries.set(key, loading)
+      return create(cwd).pipe(
+        Effect.onExit((exit) => {
+          if (Exit.isFailure(exit)) entries.delete(key)
+          return Deferred.done(loading, exit)
+        }),
+        Effect.forkIn(scope),
+        Effect.andThen(Deferred.await(loading)),
+      )
+    })
 
-async function load(client: OpenCodeClient, cwd: string): Promise<Catalog> {
+  return {
+    get: Effect.fnUntraced(function* (cwd) {
+      const loaded = yield* entry(cwd)
+      return yield* SubscriptionRef.get(loaded.catalog)
+    }),
+    reload: Effect.fn("cli.acp.catalog.reload")(function* (cwd) {
+      yield* reload(yield* entry(cwd))
+    }),
+    changes: (cwd) => Stream.unwrap(entry(cwd).pipe(Effect.map((loaded) => SubscriptionRef.changes(loaded.catalog)))),
+  } satisfies Interface
+})
+
+const load = (client: OpenCodeClient, cwd: string) =>
+  read(client, cwd).pipe(
+    // Providers may still be discovering models after startup.
+    Effect.retry({
+      while: (error) => error._tag === "ACPCatalogNotReadyError",
+      schedule: Schedule.spaced("25 millis").pipe(Schedule.upTo({ duration: "5 seconds" })),
+    }),
+    Effect.withSpan("cli.acp.catalog.load"),
+  )
+
+const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   const location = { directory: cwd }
-  // Some providers discover models in the background after plugin startup begins.
-  const deadline = Date.now() + 5_000
-  let missing = "No models are available"
-  while (Date.now() < deadline) {
-    const [modelResult, defaultResult, agentResult, commandResult] = await Promise.all([
+  const [modelResult, defaultResult, agentResult, commandResult] = yield* Effect.all(
+    [
       client.model.list({ location }),
       client.model.default({ location }),
       client.agent.list({ location }),
       client.command.list({ location }),
-    ])
-    const models = modelResult.data.filter((model) => model.enabled)
-    const preferred = defaultResult.data
-    // Parallel reads can straddle initialization; select only from this model list.
-    const defaultModel = preferred
-      ? models.find((model) => model.providerID === preferred.providerID && model.id === preferred.id)
-      : models[0]
-    const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
-    const defaultAgent = agents.find((agent) => agent.mode === "primary") ?? agents[0]
-    if (defaultModel && defaultAgent) {
-      return {
-        providers: providers(models),
-        models,
-        defaultModel: {
-          providerID: defaultModel.providerID,
-          id: defaultModel.id,
-          variant: defaultModel.variants.find((variant) => variant.id === "default")?.id,
-        },
-        modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
-        defaultModeID: defaultAgent.id,
-        commands: commandResult.data,
-      }
-    }
-    missing = defaultModel ? "No primary agents are available" : "No models are available"
-    await Bun.sleep(25)
-  }
-  throw new Error(missing)
-}
-
-function providers(models: readonly ModelInfo[]): ConfigOptionProvider[] {
-  return Array.from(new Set(models.map((model) => model.providerID)))
-    .toSorted()
-    .map((providerID) => ({
-      id: providerID,
-      name: providerID,
-      models: models
-        .filter((model) => model.providerID === providerID)
-        .map((model) => ({ id: model.id, name: model.name, variants: model.variants.map((variant) => variant.id) })),
-    }))
-}
+    ],
+    { concurrency: "unbounded" },
+  ).pipe(Effect.mapError((cause) => new ACPError.CatalogLoadError({ cause })))
+  const models = modelResult.data.filter((model) => model.enabled)
+  const preferred = defaultResult.data
+  // The parallel default read can name a model missing from this list.
+  const defaultModel = preferred ? findModel(models, preferred) : models[0]
+  if (!defaultModel) return yield* new ACPError.CatalogNotReadyError({ reason: "models" })
+  const agents = agentResult.data.filter((agent) => agent.mode !== "subagent" && !agent.hidden)
+  // Core lists its resolved default agent first, the same one a new session runs.
+  const defaultAgent = agents[0]
+  if (!defaultAgent) return yield* new ACPError.CatalogNotReadyError({ reason: "agents" })
+  return {
+    models,
+    defaultModel: {
+      providerID: defaultModel.providerID,
+      id: defaultModel.id,
+      variant: defaultModel.variants.find((variant) => variant.id === "default")?.id,
+    },
+    modes: agents.map((agent) => ({ id: agent.id, name: agent.name, description: agent.description })),
+    defaultModeID: defaultAgent.id,
+    commands: commandResult.data.filter((command) => !builtinCommands.has(command.name)),
+  } satisfies Catalog
+})
 
 export * as ACPCatalog from "./catalog"

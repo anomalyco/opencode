@@ -1,0 +1,61 @@
+{
+  "$schema": "https://json.schemastore.org/package.json",
+  "name": "@opencode/gui-extensions",
+  "version": "2.0.23",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    "./renderer": "./src/renderer.ts",
+    "./main": "./src/main.ts",
+    "./sdk": "./src/sdk/index.ts",
+    "./sdk/main": "./src/sdk/main.ts",
+    "./sdk/bridge": "./src/sdk/bridge.ts",
+    "./updater": "./src/updater/contract.ts"
+  },
+  "scripts": {
+    "typecheck": "tsgo -b",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "@dnd-kit/abstract": "0.5.0",
+    "@dnd-kit/dom": "0.5.0",
+    "@dnd-kit/solid": "0.5.0",
+    "@effect/platform-node": "catalog:",
+    "@kobalte/core": "catalog:",
+    "@opencode/client": "workspace:*",
+    "@opencode/plugin-browser": "workspace:*",
+    "@opencode/schema": "workspace:*",
+    "@opencode/session-ui": "workspace:*",
+    "@opencode/ui": "workspace:*",
+    "@opencode/util": "workspace:*",
+    "@pierre/trees": "1.0.0-beta.4",
+    "@solid-primitives/event-listener": "catalog:",
+    "@solid-primitives/keyed": "1.5.3",
+    "@solid-primitives/media": "catalog:",
+    "@solid-primitives/resize-observer": "catalog:",
+    "@solid-primitives/scheduled": "1.5.3",
+    "@tanstack/solid-query": "5.91.4",
+    "@tanstack/solid-virtual": "catalog:",
+    "effect": "catalog:",
+    "fuzzysort": "catalog:",
+    "ghostty-web": "github:anomalyco/ghostty-web#83c0a07b8628b748aed073b232cb4b52a6ca11c1",
+    "remeda": "catalog:",
+    "solid-js": "catalog:",
+    "solid-presence": "0.2.0",
+    "uqr": "0.1.3"
+  },
+  "devDependencies": {
+    "@happy-dom/global-registrator": "20.0.11",
+    "@lydell/node-pty": "catalog:",
+    "@tsconfig/node22": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "@typescript/native-preview": "catalog:",
+    "devtools-protocol": "0.0.1687809",
+    "electron": "44.4.5",
+    "electron-updater": "6.8.9",
+    "lighthouse": "13.4.1",
+    "vite": "catalog:"
+  }
+}

@@ -1,12 +1,21 @@
-import { describe, expect, test } from "bun:test"
+import { afterEach, beforeEach, describe, expect, setSystemTime, test } from "bun:test"
 import { sql } from "drizzle-orm"
 import { openDatabase } from "./database"
 import { blobGrace, createDraftStore } from "./drafts"
 
+const collectInterval = 60_000
+const start = Date.UTC(2026, 6, 1)
+const clock = (ms: number) => setSystemTime(new Date(start + ms))
+const text = (...ids: string[]) =>
+  JSON.stringify({ prompt: [{ type: "text", content: { blob: { kind: "text", ids } } }] })
+
+beforeEach(() => clock(0))
+afterEach(() => setSystemTime())
+
 describe("draft store", () => {
   test("queues documents and reads them back before and after flush", () => {
     const database = openDatabase(":memory:")
-    const drafts = createDraftStore(database.db, { delay: 1_000 })
+    const drafts = createDraftStore(database.db)
     drafts.set("a:draft:prompt", "{}")
     expect(drafts.get("a:draft:prompt")).toBe("{}")
     drafts.flush()
@@ -19,8 +28,7 @@ describe("draft store", () => {
 
   test("stores blobs by content hash and collects unreferenced ones shortly after open", async () => {
     const database = openDatabase(":memory:")
-    let clock = 0
-    const first = createDraftStore(database.db, { delay: 1_000, now: () => clock })
+    const first = createDraftStore(database.db)
     const used = first.putBlob(new Uint8Array([1, 2, 3]))
     const unused = first.putBlob(new Uint8Array([4, 5, 6]))
     expect(first.putBlob(new Uint8Array([1, 2, 3]))).toBe(used)
@@ -29,13 +37,13 @@ describe("draft store", () => {
     first.close()
     // The startup collection runs off the window's critical path and keeps the usual grace, so a
     // blob from a session that ended within the grace period is still there...
-    const second = createDraftStore(database.db, { delay: 1_000, now: () => clock, collectDelay: 0 })
+    const second = createDraftStore(database.db, { collectDelay: 0 })
     await new Promise((resolve) => setTimeout(resolve, 5))
     expect(second.getBlob(unused)).toEqual(new Uint8Array([4, 5, 6]))
     second.close()
     // ...and gone once the grace has passed.
-    clock = blobGrace + 1
-    const third = createDraftStore(database.db, { delay: 1_000, now: () => clock, collectDelay: 0 })
+    clock(blobGrace + 1)
+    const third = createDraftStore(database.db, { collectDelay: 0 })
     await new Promise((resolve) => setTimeout(resolve, 5))
     expect(third.getBlob(used)).toEqual(new Uint8Array([1, 2, 3]))
     expect(third.getBlob(unused)).toBeNull()
@@ -44,10 +52,7 @@ describe("draft store", () => {
 
   test("collects a retired chunk only once it is unreferenced and past the grace period", () => {
     const database = openDatabase(":memory:")
-    let clock = 0
-    const drafts = createDraftStore(database.db, { delay: 1_000, now: () => clock })
-    const text = (...ids: string[]) =>
-      JSON.stringify({ prompt: [{ type: "text", content: { blob: { kind: "text", ids } } }] })
+    const drafts = createDraftStore(database.db)
     const a = drafts.putBlob(new TextEncoder().encode("chunk a"))
     const b = drafts.putBlob(new TextEncoder().encode("chunk b"))
     drafts.set("doc", text(a, b))
@@ -56,13 +61,13 @@ describe("draft store", () => {
     drafts.set("doc", text(a, c))
     drafts.flush()
     // Retired but recently touched: survives a due collection.
-    clock = 120_000
+    clock(120_000)
     drafts.putBlob(new TextEncoder().encode("chunk d"))
     drafts.set("other", "{}")
     drafts.flush()
     expect(drafts.getBlob(b)).not.toBeNull()
     // Past the grace period and still unreferenced: collected. Referenced chunks stay.
-    clock = 120_000 + blobGrace + 1
+    clock(120_000 + blobGrace + 1)
     drafts.putBlob(new TextEncoder().encode("chunk e"))
     drafts.set("other", "{}")
     drafts.flush()
@@ -73,10 +78,7 @@ describe("draft store", () => {
 
   test("a document that republishes a cached chunk id refreshes the chunk without an upload", () => {
     const database = openDatabase(":memory:")
-    let clock = 0
-    const drafts = createDraftStore(database.db, { delay: 1_000, now: () => clock })
-    const text = (...ids: string[]) =>
-      JSON.stringify({ prompt: [{ type: "text", content: { blob: { kind: "text", ids } } }] })
+    const drafts = createDraftStore(database.db)
     const a = drafts.putBlob(new TextEncoder().encode("A"))
     drafts.set("doc", text(a))
     drafts.flush()
@@ -85,10 +87,10 @@ describe("draft store", () => {
     drafts.set("doc", text(b))
     drafts.flush()
     // Long after, undo republishes A from the renderer cache with no upload. The write touches A.
-    clock = blobGrace - 1
+    clock(blobGrace - 1)
     drafts.set("doc", text(a))
     drafts.flush()
-    clock = blobGrace + collectInterval
+    clock(blobGrace + collectInterval)
     drafts.putBlob(new TextEncoder().encode("unrelated"))
     drafts.set("other", "{}")
     drafts.flush()
@@ -98,7 +100,7 @@ describe("draft store", () => {
 
   test("set reports referenced blobs the store does not hold so the renderer can upload them again", () => {
     const database = openDatabase(":memory:")
-    const drafts = createDraftStore(database.db, { delay: 1_000 })
+    const drafts = createDraftStore(database.db)
     const kept = drafts.putBlob(new TextEncoder().encode("kept"))
     const image = drafts.putBlob(new Uint8Array([9]))
     const document = JSON.stringify({
@@ -122,12 +124,11 @@ describe("draft store", () => {
 
   test("an uploaded attachment survives a due collection before its document is written", () => {
     const database = openDatabase(":memory:")
-    let clock = 0
-    const drafts = createDraftStore(database.db, { delay: 1_000, now: () => clock })
+    const drafts = createDraftStore(database.db)
     drafts.putBlob(new TextEncoder().encode("old"))
     drafts.set("other", JSON.stringify({ n: 1 }))
     drafts.flush()
-    clock = collectInterval + 1
+    clock(collectInterval + 1)
     // The renderer uploads first and saves the referencing document up to a second later.
     const image = drafts.putBlob(new Uint8Array([1, 2, 3]))
     drafts.set("other", JSON.stringify({ n: 2 }))
@@ -138,5 +139,3 @@ describe("draft store", () => {
     expect(drafts.getBlob(image)).not.toBeNull()
   })
 })
-
-const collectInterval = 60_000

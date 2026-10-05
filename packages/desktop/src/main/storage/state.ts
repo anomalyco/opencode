@@ -9,7 +9,7 @@ type Row = { name: string; key: string; value: string | null }
 
 // Reads hit SQLite directly: they happen at mount time and a point lookup on the primary key
 // costs microseconds, so a second in-memory copy would only duplicate the renderer's cache.
-export function createStateStore(db: Database, input: { delay?: number; onError?: (error: unknown) => void } = {}) {
+export function createStateStore(db: Database, input: { onError?: (error: unknown) => void } = {}) {
   // Prepared once; the flush loop then only binds values instead of rebuilding SQL per row.
   const byKey = and(eq(state.name, sql.placeholder("name")), eq(state.key, sql.placeholder("key")))
   const read = db.select({ value: state.value }).from(state).where(byKey).prepare()
@@ -28,7 +28,7 @@ export function createStateStore(db: Database, input: { delay?: number; onError?
     })
     .prepare()
   const writer = createWriteBehind<Row>({
-    delay: input.delay ?? 250,
+    delay: 250,
     onError: input.onError,
     write: (batch) =>
       db.transaction(() => {
