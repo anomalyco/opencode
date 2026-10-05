@@ -24,7 +24,9 @@ function normalizeLineEndings(text: string): string {
 }
 
 function detectLineEnding(text: string): "\n" | "\r\n" {
-  return text.includes("\r\n") ? "\r\n" : "\n"
+  // only a fully CRLF file detects as CRLF; a mixed file falls back to LF so
+  // matching stays consistent with the LF view the read tool shows the model
+  return text.includes("\r\n") && !text.replaceAll("\r\n", "").includes("\n") ? "\r\n" : "\n"
 }
 
 function convertToLineEnding(text: string, ending: "\n" | "\r\n"): string {

@@ -523,6 +523,18 @@ describe("tool.edit", () => {
         expectCrlf(output)
       }),
     )
+
+    it.instance("matches LF regions of a mixed-ending file", () =>
+      Effect.gen(function* () {
+        const content = "alpha\nbeta\r\ngamma\n"
+        const output = yield* apply({
+          content,
+          oldString: "alpha\nbeta",
+          newString: "alpha\nbeta-updated",
+        })
+        expect(output).toBe("alpha\nbeta-updated\r\ngamma\n")
+      }),
+    )
   })
 
   describe("concurrent editing", () => {
