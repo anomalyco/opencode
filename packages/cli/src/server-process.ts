@@ -64,11 +64,11 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
       const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
-      const incumbent =
+      const findIncumbent =
         serviceOptions !== undefined && port !== undefined
-          ? yield* Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
+          ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
           : undefined
-      if (incumbent !== undefined) return
+      if (findIncumbent !== undefined && (yield* findIncumbent) !== undefined) return
       // Keep a package-manager or curl install replaceable while the service runs; Desktop updates its own copy.
       if (options.mode === "service" && process.platform === "win32" && RetainedImage.installed(global.home))
         yield* RetainedImage.retain(global.cache, "service")
@@ -147,20 +147,16 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       )
       const server = yield* launch.pipe(
         Effect.catch((error) => {
-          if (serviceOptions === undefined || port === undefined || !addressInUse(error)) return Effect.fail(error)
+          if (findIncumbent === undefined || !addressInUse(error)) return Effect.fail(error)
           return Effect.gen(function* () {
             const deadline = Date.now() + 15_000
             while (Date.now() < deadline) {
-              const incumbent = yield* Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) }).pipe(
-                Effect.timeoutOption(deadline - Date.now()),
-              )
-              if (Option.isSome(incumbent) && incumbent.value !== undefined) return
+              const found = yield* findIncumbent.pipe(Effect.timeoutOption(deadline - Date.now()))
+              if (Option.isSome(found) && found.value !== undefined) return
               yield* Effect.sleep("100 millis")
               if (Date.now() >= deadline) break
               // Failed binds close their scope; a successful bind may take longer than this window to boot.
-              const server = yield* launch.pipe(
-                Effect.catch((error) => (addressInUse(error) ? Effect.void : Effect.fail(error))),
-              )
+              const server = yield* launch.pipe(Effect.catchIf(addressInUse, () => Effect.void))
               if (server !== undefined) return server
             }
             return yield* Effect.fail(
