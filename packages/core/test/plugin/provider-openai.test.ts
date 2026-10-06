@@ -73,12 +73,12 @@ describe("OpenAIPlugin", () => {
         {
           id: Integration.MethodID.make("chatgpt-browser"),
           type: "oauth",
-          label: "ChatGPT browser (legacy)",
+          label: "Codex browser (legacy)",
         },
         {
           id: Integration.MethodID.make("chatgpt-headless"),
           type: "oauth",
-          label: "ChatGPT device code (legacy)",
+          label: "Codex device code (legacy)",
         },
       ])
     }),
