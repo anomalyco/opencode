@@ -50,6 +50,7 @@ import { DialogMessage } from "./dialog-message"
 import type { PromptInfo } from "../../component/prompt/history"
 import { DialogConfirm } from "../../ui/dialog-confirm"
 import { DialogTimeline } from "./dialog-timeline"
+import { SessionSearchBar, createSessionSearch, searchable } from "./search"
 import { DialogForkFromTimeline } from "./dialog-fork-from-timeline"
 import { DialogSessionRename } from "../../component/dialog-session-rename"
 import { Sidebar } from "./sidebar"
@@ -116,6 +117,7 @@ const sessionBindingCommands = [
   "session.share",
   "session.rename",
   "session.timeline",
+  "session.search",
   "session.fork",
   "session.compact",
   "session.unshare",
@@ -353,6 +355,16 @@ export function Session() {
   const keymap = useOpencodeKeymap()
   const dialog = useDialog()
   const renderer = useRenderer()
+  const search = createSessionSearch({
+    scroll: () => scroll,
+    content: () => [
+      conceal(),
+      messages().map((message) =>
+        (sync.data.part[message.id] ?? []).map((part) => (part.type === "text" ? part.text : part.id)),
+      ),
+    ],
+  })
+  createEffect(on(() => route.sessionID, search.close, { defer: true }))
 
   event.on("session.status", (evt) => {
     if (evt.properties.sessionID !== route.sessionID) return
@@ -534,6 +546,19 @@ export function Session() {
             setPrompt={(promptInfo) => prompt?.set(promptInfo)}
           />
         ))
+      },
+    },
+    {
+      title: "Search messages",
+      value: "session.search",
+      category: "Session",
+      slash: {
+        name: "search",
+        aliases: ["find"],
+      },
+      run: () => {
+        dialog.clear()
+        search.open()
       },
     },
     {
@@ -1190,7 +1215,7 @@ export function Session() {
                     foregroundColor: theme.border,
                   },
                 }}
-                stickyScroll={true}
+                stickyScroll={!search.active()}
                 stickyStart="bottom"
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
@@ -1309,7 +1334,10 @@ export function Session() {
                 <Show when={session()?.parentID}>
                   <SubagentFooter />
                 </Show>
-                <Show when={visible()}>
+                <Show when={search.active()}>
+                  <SessionSearchBar search={search} />
+                </Show>
+                <Show when={visible() && !search.active()}>
                   <pluginRuntime.Slot
                     name="session_prompt"
                     mode="replace"
@@ -1416,7 +1444,9 @@ function UserMessage(props: {
             backgroundColor={hover() ? theme.backgroundElement : theme.backgroundPanel}
             flexShrink={0}
           >
-            <text fg={theme.text}>{text()}</text>
+            <text fg={theme.text} ref={(el) => searchable.add(el)}>
+              {text()}
+            </text>
             <Show when={files().length}>
               <box flexDirection="row" paddingBottom={metadataVisible() ? 1 : 0} paddingTop={1} gap={1} flexWrap="wrap">
                 <For each={files()}>
@@ -1690,6 +1720,7 @@ function TextPart(props: { last: boolean; part: TextPart; message: AssistantMess
     <Show when={props.part.text.trim()}>
       <box ref={(el: BoxRenderable) => alwaysSeparate.add(el)} paddingLeft={3} marginTop={1} flexShrink={0}>
         <markdown
+          ref={(el) => searchable.add(el)}
           syntaxStyle={syntax()}
           streaming={true}
           internalBlockMode="top-level"
