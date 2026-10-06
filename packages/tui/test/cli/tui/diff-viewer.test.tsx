@@ -98,6 +98,59 @@ test("brackets navigate diff hunks", async () => {
   }
 })
 
+test("hunk navigation uses rendered row offsets", async () => {
+  const viewer = await renderDiffViewer(
+    [
+      {
+        file: "src/file.ts",
+        additions: 2,
+        deletions: 0,
+        status: "modified",
+        patch: `--- a/src/file.ts
++++ b/src/file.ts
+@@ -1,1 +1,2 @@
+ const first = true
++const wrapped = "${"x".repeat(240)}"
+@@ -20,1 +21,2 @@
+ const second = true
++const afterSecond = true
+@@ -40,8 +42,8 @@
+ const third = true
+ const fourth = true
+ const fifth = true
+ const sixth = true
+ const seventh = true
+ const eighth = true
+ const ninth = true
+ const tenth = true`,
+      },
+    ],
+    12,
+  )
+  try {
+    await viewer.app.waitForFrame((frame) => frame.includes("const first"))
+    await viewer.app.waitFor(() => Boolean(findScrollBox(viewer.app.renderer.root)))
+    await viewer.app.flush()
+    const scroll = findScrollBox(viewer.app.renderer.root)!
+    const diff = findDiff(scroll)!
+    const contentY = scroll.scrollTop + diff.y - scroll.viewport.y
+    const offsets = diff.getHunkRowOffsets()
+
+    expect(offsets).toHaveLength(3)
+    expect(offsets[1]).toBeGreaterThan(2)
+
+    viewer.commands.get("diff.next_hunk")!.run?.({} as never)
+    await viewer.app.renderOnce()
+    expect(scroll.scrollTop).toBe(contentY + offsets[0])
+
+    viewer.commands.get("diff.next_hunk")!.run?.({} as never)
+    await viewer.app.renderOnce()
+    expect(scroll.scrollTop).toBe(contentY + offsets[1])
+  } finally {
+    viewer.app.renderer.destroy()
+  }
+})
+
 async function renderDiffViewer(vcsDiff: unknown[], height = 20, initialRoute?: TuiRouteCurrent) {
   const commands = new Map<
     string,
@@ -193,6 +246,11 @@ function findScrollBox(root: Renderable): ScrollBoxRenderable | undefined {
 function containsDiff(root: Renderable): boolean {
   if (root instanceof DiffRenderable) return true
   return root.getChildren().some(containsDiff)
+}
+
+function findDiff(root: Renderable): DiffRenderable | undefined {
+  if (root instanceof DiffRenderable) return root
+  return root.getChildren().map(findDiff).find(Boolean)
 }
 
 const session = {
