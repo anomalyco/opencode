@@ -1965,6 +1965,58 @@ export const HLS: Info = {
   },
 }
 
+export const CircleCI: Info = {
+  id: "circleci",
+  extensions: [".yaml", ".yml"],
+  root: async (file, ctx) => {
+    const relative = path.relative(ctx.directory, file)
+    if (relative.startsWith("..") || path.isAbsolute(relative)) return undefined
+    if (!relative.split(path.sep).slice(0, -1).includes(".circleci")) return undefined
+    return ctx.directory
+  },
+  async spawn(root, _ctx, flags) {
+    let bin = which("circleci-yaml-language-server")
+
+    if (!bin) {
+      if (flags.disableLspDownload) return
+
+      const platform = process.platform
+      const suffix = platform === "win32" ? ".exe" : ""
+      const target = path.join(Global.Path.bin, "circleci-yaml-language-server" + suffix)
+
+      if (!(await Filesystem.exists(target))) {
+        const response = await fetch(
+          "https://api.github.com/repos/CircleCI-Public/circleci-yaml-language-server/releases/latest",
+        )
+        if (!response.ok) return
+
+        const release = (await response.json()) as {
+          assets?: { name?: string; browser_download_url?: string }[]
+        }
+
+        const assetName = `${platform === "win32" ? "windows" : platform}-${process.arch === "arm64" ? "arm64" : "amd64"}-lsp${suffix}`
+        const asset = release.assets?.find((a) => a.name === assetName)
+        if (!asset?.browser_download_url) return
+
+        const download = await fetch(asset.browser_download_url)
+        if (!download.ok || !download.body) return
+
+        const tempPath = target + ".download"
+        await Filesystem.writeStream(tempPath, download.body)
+        if (platform !== "win32") await fs.chmod(tempPath, 0o755).catch(() => {})
+        await fs.rename(tempPath, target)
+      }
+
+      bin = target
+    }
+
+    return {
+      process: spawn(bin, ["-stdio"], { cwd: root }),
+      initialization: { editDebounceMs: 0 },
+    }
+  },
+}
+
 export const JuliaLS: Info = {
   id: "julials",
   extensions: [".jl"],
