@@ -54,7 +54,9 @@ test("treats WSL sidecars as remote server connections", () => {
   expect(ServerConnection.local({ type: "sidecar", variant: "base", http: { url: "http://127.0.0.1:4096" } })).toBe(
     true,
   )
-  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } })).toBe(true)
+  // A loopback URL may be a WSL server forwarded to Windows localhost, which uses Linux paths.
+  expect(ServerConnection.local({ type: "http", http: { url: "http://localhost:4096" } })).toBe(false)
+  expect(ServerConnection.local({ type: "http", http: { url: "http://127.0.0.1:4096" } })).toBe(false)
   expect(ServerConnection.local({ type: "http", http: { url: "https://server.example.test" } })).toBe(false)
 })
 

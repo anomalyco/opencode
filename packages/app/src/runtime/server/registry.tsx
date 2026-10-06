@@ -30,12 +30,6 @@ export function serverName(conn?: ServerConnection.Any, ignoreDisplayName = fals
   return conn.http.url.replace(/^https?:\/\//, "").replace(/\/+$/, "")
 }
 
-function isLocalHost(url: string) {
-  const host = url.replace(/^https?:\/\//, "").split(":")[0]
-
-  if (host === "localhost" || host === "127.0.0.1") return "local"
-}
-
 export function createServerProjects(input: {
   scope: () => ServerScope
   store: Store<ServerState>
@@ -207,8 +201,9 @@ export namespace ServerConnection {
     return true
   }
 
-  export const local = (conn?: Any) =>
-    !!conn && (builtin(conn) || (conn.type === "http" && isLocalHost(conn.http.url) === "local"))
+  // Only the builtin sidecar is known to share the client's filesystem. A loopback URL is not
+  // enough: on Windows, a server inside WSL is also reachable at localhost but uses Linux paths.
+  export const local = (conn?: Any) => !!conn && builtin(conn)
 }
 
 export const { use: useServers, provider: ServersProvider } = createSimpleContext({
