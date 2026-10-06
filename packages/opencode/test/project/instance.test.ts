@@ -26,6 +26,9 @@ const it = testEffect(
   ]),
 )
 
+const symlinkEffect = process.platform === "win32" ? it.effect.skip : it.effect
+const symlinkLive = process.platform === "win32" ? it.live.skip : it.live
+
 const setBootstrap = (run: Effect.Effect<void>) =>
   Effect.acquireRelease(
     Effect.sync(() => {
@@ -371,7 +374,7 @@ describe("InstanceStore", () => {
     }),
   )
 
-  it.effect("keeps entry activity stable when its pathname is replaced", () =>
+  symlinkEffect("keeps entry activity stable when its pathname is replaced", () =>
     Effect.gen(function* () {
       const root = yield* tmpdirScoped({ git: true })
       const owner = join(root, "owner")
@@ -405,7 +408,7 @@ describe("InstanceStore", () => {
     }),
   )
 
-  it.effect("keeps a remembered symlink alias stable for the entry lifetime", () =>
+  symlinkEffect("keeps a remembered symlink alias stable for the entry lifetime", () =>
     Effect.gen(function* () {
       const root = yield* tmpdirScoped({ git: true })
       const target = join(root, "target")
@@ -437,7 +440,7 @@ describe("InstanceStore", () => {
     }),
   )
 
-  it.live("keeps waiting alias loads on the frozen key across tombstone cleanup", () =>
+  symlinkLive("keeps waiting alias loads on the frozen key across tombstone cleanup", () =>
     Effect.gen(function* () {
       const root = yield* tmpdirScoped({ git: true })
       const canonical = join(root, "canonical")
@@ -489,7 +492,7 @@ describe("InstanceStore", () => {
     }),
   )
 
-  it.live("releases an interrupted alias reservation", () =>
+  symlinkLive("releases an interrupted alias reservation", () =>
     Effect.gen(function* () {
       const root = yield* tmpdirScoped({ git: true })
       const canonical = join(root, "canonical")

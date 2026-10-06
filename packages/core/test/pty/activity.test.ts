@@ -28,7 +28,7 @@ describe("PtyActivity", () => {
     expect(InstanceActivity.snapshot(canonicalIdentity).generation).toBeGreaterThan(running)
   })
 
-  test("keeps the owning identity across rename and symlink replacement", async () => {
+  test.skipIf(process.platform === "win32")("keeps the owning identity across rename and symlink replacement", async () => {
     const root = await mkdtemp(join(tmpdir(), "opencode-pty-retarget-"))
     const owner = join(root, "owner")
     const moved = join(root, "moved")
