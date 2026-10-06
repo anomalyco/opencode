@@ -1561,6 +1561,7 @@ const layer = Layer.effect(
             const parsedModel: Model = {
               id: ModelV2.ID.make(modelID),
               api: {
+                ...existingModel?.api,
                 id: apiID,
                 npm: apiNpm,
                 url: model.provider?.api ?? provider?.api ?? existingModel?.api.url ?? modelsDev[providerID]?.api ?? "",
@@ -1598,6 +1599,7 @@ const layer = Layer.effect(
                     : false),
               },
               cost: {
+                ...existingModel?.cost,
                 input: model?.cost?.input ?? existingModel?.cost?.input ?? 0,
                 output: model?.cost?.output ?? existingModel?.cost?.output ?? 0,
                 cache: {
@@ -2073,6 +2075,7 @@ export function sort<T extends { id: string }>(models: T[]) {
     models,
     [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
     [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
+    [(model) => (/--long$/.test(model.id) ? 1 : 0), "asc"],
     [(model) => model.id, "desc"],
   )
 }

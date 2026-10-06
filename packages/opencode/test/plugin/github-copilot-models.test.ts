@@ -490,3 +490,59 @@ test("remaps fallback oauth model urls to the enterprise host", async () => {
   expect(models.claude.api.url).toBe("https://copilot-api.ghe.example.com")
   expect(models.claude.api.npm).toBe("@ai-sdk/github-copilot")
 })
+
+test.each([
+  [undefined, "https://api.githubcopilot.com"],
+  ["ghe.example.com", "https://copilot-api.ghe.example.com"],
+])("discovers selectable context tiers with OAuth for %s", async (enterpriseUrl, host) => {
+  globalThis.fetch = mock((request, init) => {
+    expect(String(request)).toBe(`${host}/models`)
+    expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer test-token")
+    expect(new Headers(init?.headers).get("X-GitHub-Api-Version")).toBe("2026-06-01")
+    return Promise.resolve(
+      Response.json({
+        data: [
+          {
+            id: "gpt-test",
+            name: "GPT Test",
+            version: "gpt-test-2026-10-01",
+            model_picker_enabled: true,
+            supported_endpoints: ["/responses"],
+            billing: {
+              token_prices: {
+                batch_size: 1_000_000,
+                default: { context_max: 272_000, input_price: 200, output_price: 1000, cache_price: 10 },
+                long_context: { context_max: 922_000, input_price: 400, output_price: 1500, cache_price: 20 },
+              },
+            },
+            capabilities: {
+              family: "gpt",
+              limits: { max_context_window_tokens: 1_050_000, max_prompt_tokens: 922_000, max_output_tokens: 128_000 },
+              supports: { tool_calls: true, reasoning_effort: ["medium", "high"] },
+            },
+          },
+        ],
+      }),
+    )
+  }) as unknown as typeof fetch
+  const hooks = await CopilotAuthPlugin({
+    client: {} as never,
+    project: {} as never,
+    directory: "",
+    worktree: "",
+    experimental_workspace: { register() {} },
+    serverUrl: new URL("http://localhost"),
+    $: {} as never,
+  })
+  const models = await hooks.provider!.models!({ id: "github-copilot", models: {} } as never, {
+    auth: { type: "oauth", refresh: "test-token", access: "different-access-token", expires: 0, enterpriseUrl },
+  })
+  expect(Object.keys(models)).toEqual(["gpt-test", "gpt-test--long"])
+  expect(models["gpt-test"].limit.input).toBe(272_000)
+  expect(models["gpt-test--long"].limit.input).toBe(922_000)
+  for (const model of Object.values(models)) {
+    expect(model.api.url).toBe(host)
+    expect(model.api.id).toBe("gpt-test")
+    expect(model.variants?.high).toMatchObject({ reasoningEffort: "high" })
+  }
+})

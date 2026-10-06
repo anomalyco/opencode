@@ -203,6 +203,34 @@ Use the keybind `variant_cycle` to quickly switch between variants. [Learn more]
 
 ## Loading models
 
+### Copilot context choices
+
+Eligible GitHub Copilot models show Default in `/models`, and show Long when
+advertised long-context pricing and a larger input limit are available. Default
+uses the pricing boundary returned by your account's Copilot `/models` endpoint,
+clamped to the supported input limit. Long uses the full advertised input limit.
+Reasoning variants remain a separate choice.
+
+Each entry shows its input budget and USD input/output prices per million tokens.
+Long-context prices apply only when a request exceeds the advertised Default pricing boundary.
+Some models charge the same rates in both tiers. The original model ID selects
+Default; append `--long` to select the larger budget:
+
+```sh
+opencode -m github-copilot/gpt-6.1-sol--long
+```
+
+These choices work with Copilot OAuth and configured Enterprise hosts. Models
+without tier metadata keep their existing context limits. Prices include the
+advertised cache-read and cache-write rates in model metadata.
+
+Input budgets control automatic compaction, not a hard spending cap. Large new
+prompts or tool results can cross a pricing boundary. Switching to a smaller
+budget may trigger compaction, which also consumes tokens. Your GitHub plan
+determines included credits and additional charges.
+
+### Model priority
+
 When OpenCode starts up, it checks for models in the following priority order:
 
 1. The `--model` or `-m` command line flag. The format is the same as in the config file: `provider_id/model_id`.

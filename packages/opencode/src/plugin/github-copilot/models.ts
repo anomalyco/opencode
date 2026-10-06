@@ -1,6 +1,16 @@
 import type { Model } from "@opencode-ai/sdk/v2"
 import { Option, Schema } from "effect"
 
+const price = Schema.Struct({
+  cache_price: Schema.optional(Schema.Number),
+  cache_read_price: Schema.optional(Schema.Number),
+  cache_write_price: Schema.optional(Schema.Number),
+  input_price: Schema.Number,
+  output_price: Schema.Number,
+  context_max: Schema.optional(Schema.Number),
+  max_prompt_tokens: Schema.optional(Schema.Number),
+})
+
 const item = Schema.Struct({
   model_picker_enabled: Schema.Boolean,
   id: Schema.String,
@@ -18,11 +28,8 @@ const item = Schema.Struct({
       token_prices: Schema.optional(
         Schema.Struct({
           batch_size: Schema.Number,
-          default: Schema.Struct({
-            cache_price: Schema.Number,
-            input_price: Schema.Number,
-            output_price: Schema.Number,
-          }),
+          default: price,
+          long_context: Schema.optional(price),
         }),
       ),
     }),
@@ -79,7 +86,13 @@ type CopilotModel = Omit<Model, "api"> & {
 const decodeModels = Schema.decodeUnknownSync(schema)
 const decodeItem = Schema.decodeUnknownOption(item)
 
-function build(key: string, remote: SelectableItem, url: string, prev?: Model): Model {
+function build(
+  key: string,
+  remote: SelectableItem,
+  url: string,
+  prev?: Model,
+  billing: Item["billing"] | null = remote.billing,
+): Model {
   const reasoning =
     !!remote.capabilities.supports.adaptive_thinking ||
     !!remote.capabilities.supports.reasoning_effort?.length ||
@@ -100,7 +113,7 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
       : remote.supported_endpoints?.includes("/chat/completions")
         ? "chat"
         : undefined
-  const prices = remote.billing?.token_prices
+  const prices = billing?.token_prices
   // Copilot prices are AIC per billing batch; OpenCode stores USD per million tokens.
   const usdPerMillion = prices && prices.batch_size > 0 ? 10_000 / prices.batch_size : 0
 
@@ -143,16 +156,38 @@ function build(key: string, remote: SelectableItem, url: string, prev?: Model): 
     },
     // existing wins
     family: prev?.family ?? remote.capabilities.family,
-    name: prev?.name ?? remote.name,
-    cost: {
-      input: (prices?.default.input_price ?? 0) * usdPerMillion,
-      output: (prices?.default.output_price ?? 0) * usdPerMillion,
-      cache: {
-        read: (prices?.default.cache_price ?? 0) * usdPerMillion,
-        // `/models` exposes cached-input reads only; per-request billing accounts for cache writes.
-        write: 0,
-      },
-    },
+    name: prev?.name?.replace(/ \| (?:Default|Long) [\d.]+K \| .*$/, "") ?? remote.name,
+    cost:
+      billing === null && prev
+        ? prev.cost
+        : {
+            input: (prices?.default.input_price ?? 0) * usdPerMillion,
+            output: (prices?.default.output_price ?? 0) * usdPerMillion,
+            cache: {
+              read: (prices?.default.cache_read_price ?? prices?.default.cache_price ?? 0) * usdPerMillion,
+              write: (prices?.default.cache_write_price ?? 0) * usdPerMillion,
+            },
+            ...(prices?.long_context && (prices.default.context_max ?? prices.default.max_prompt_tokens)
+              ? {
+                  tiers: [
+                    {
+                      input: prices.long_context.input_price * usdPerMillion,
+                      output: prices.long_context.output_price * usdPerMillion,
+                      cache: {
+                        read:
+                          (prices.long_context.cache_read_price ?? prices.long_context.cache_price ?? 0) *
+                          usdPerMillion,
+                        write: (prices.long_context.cache_write_price ?? 0) * usdPerMillion,
+                      },
+                      tier: {
+                        type: "context" as const,
+                        size: prices.default.context_max ?? prices.default.max_prompt_tokens!,
+                      },
+                    },
+                  ],
+                }
+              : {}),
+          },
     options: prev?.options ?? {},
     headers: prev?.headers ?? {},
     release_date:
@@ -238,18 +273,57 @@ export async function get(
 
   // prune existing models whose api.id isn't in the endpoint response
   for (const [key, model] of Object.entries(result)) {
+    const source = key.replace(/--long$/, "")
+    if (source !== key && !remote.has(key) && existing[source]?.api.id === model.api.id) {
+      delete result[key]
+      continue
+    }
     const m = remote.get(model.api.id)
     if (!m) {
       delete result[key]
       continue
     }
-    result[key] = build(key, m, baseURL, model)
+    // Catalog aliases such as Claude fast mode can share an API ID but have their own prices.
+    result[key] = build(
+      key,
+      m,
+      baseURL,
+      model,
+      model.options.speed === "fast" && !remote.has(key) ? null : (remote.get(key)?.billing ?? m.billing),
+    )
   }
 
   // add new endpoint models not already keyed in result
   for (const [id, m] of remote) {
     if (id in result) continue
     result[id] = build(id, m, baseURL)
+  }
+
+  for (const [key, model] of Object.entries(result)) {
+    if (model.options.speed === "fast" && !remote.has(key)) continue
+    const m = remote.get(key) ?? remote.get(model.api.id)
+    const prices = m?.billing?.token_prices
+    const boundary = prices?.default.context_max ?? prices?.default.max_prompt_tokens
+    if (!m?.model_picker_enabled || !prices || !boundary || boundary <= 0) continue
+    const input = model.limit.input ?? model.limit.context
+    const budget = Math.min(boundary, input)
+    const rates = (cost: Model["cost"]) => `$${cost.input}/$${cost.output} per 1M in/out`
+    const choice = (id: string, label: string, size: number, pricing: string): Model => ({
+      ...model,
+      id,
+      name: `${model.name} | ${label} ${size / 1000}K | ${pricing}`,
+      limit: {
+        ...model.limit,
+        input: size,
+        context: Math.min(model.limit.context, size + model.limit.output),
+      },
+    })
+    result[key] = choice(key, "Default", budget, rates(model.cost))
+    if (prices.long_context && input > budget) {
+      const id = `${key}--long`
+      const cost = model.cost.tiers?.[0]
+      if (!(id in result) && cost) result[id] = choice(id, "Long", input, rates(cost))
+    }
   }
 
   return {
