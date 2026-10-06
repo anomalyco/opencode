@@ -22,3 +22,18 @@ export class ContextSnapshotDecodeError extends Schema.TaggedErrorClass<ContextS
     return `Failed to decode context snapshot for session ${this.sessionID}: ${this.details}`
   }
 }
+
+/**
+ * Raised by the Phase 11 HumanEscalation watchdog when a single Session drain
+ * exceeds {@link RecoveryLimits.maxExecutionTime}. A drain that never goes idle
+ * (e.g. a provider turn that hangs without emitting a retryable error, or an
+ * otherwise stuck tool loop) surfaces this error instead of running forever.
+ */
+export class SessionTimeoutError extends Schema.TaggedErrorClass<SessionTimeoutError>()("Session.Timeout", {
+  sessionID: SessionSchema.ID,
+  elapsed: Schema.Number,
+}) {
+  override get message() {
+    return `Session exceeded the max execution time (${this.elapsed}ms)`
+  }
+}

@@ -12,7 +12,11 @@ import {
   TransportReason,
 } from "@opencode-ai/llm"
 import { ProviderRetry } from "@opencode-ai/core/session/runner/retry"
+import { SessionTimeoutError } from "@opencode-ai/core/session/error"
+import { SessionSchema } from "@opencode-ai/core/session/schema"
 import { testEffect } from "../../lib/effect"
+
+const SESSION_ID = ("ses_" + "0".repeat(64)) as SessionSchema.ID
 
 const rateLimitError = (retryAfterMs?: number, http?: unknown) =>
   new LLMError({
@@ -178,5 +182,18 @@ describe("DEFAULT_RECOVERY_LIMITS", () => {
     expect(ProviderRetry.DEFAULT_RECOVERY_LIMITS.maxTokens).toBeGreaterThan(0)
     expect(ProviderRetry.DEFAULT_RECOVERY_LIMITS.maxExecutionTime).toBeGreaterThan(0)
     expect(ProviderRetry.DEFAULT_RECOVERY_LIMITS.maxToolFailures).toBeGreaterThan(0)
+  })
+})
+
+describe("SessionTimeoutError", () => {
+  test("carries the sessionID and elapsed budget", () => {
+    const err = new SessionTimeoutError({
+      sessionID: SESSION_ID,
+      elapsed: ProviderRetry.DEFAULT_RECOVERY_LIMITS.maxExecutionTime,
+    })
+    expect(err._tag).toBe("Session.Timeout")
+    expect(err.sessionID).toBe(SESSION_ID)
+    expect(err.elapsed).toBe(ProviderRetry.DEFAULT_RECOVERY_LIMITS.maxExecutionTime)
+    expect(err.message).toMatch(/max execution time/)
   })
 })

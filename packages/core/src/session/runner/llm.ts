@@ -27,6 +27,7 @@ import { ToolOutputStore } from "../../tool-output-store"
 import { SessionContextEpoch } from "../context-epoch"
 import { SessionCompaction } from "../compaction"
 import { SessionEvent } from "../event"
+import { SessionTimeoutError } from "../error"
 import { SessionHistory } from "../history"
 import { SessionInput } from "../input"
 import { SessionSchema } from "../schema"
@@ -414,6 +415,7 @@ const layer = Layer.effect(
       readonly sessionID: SessionSchema.ID
       readonly force: boolean
     }) {
+      const startedAt = DateTime.toEpochMillis(yield* DateTime.now)
       const hasSteer = yield* SessionInput.hasPending(db, input.sessionID, "steer")
       const hasQueue = hasSteer ? false : yield* SessionInput.hasPending(db, input.sessionID, "queue")
       if (!input.force && !hasSteer && !hasQueue) return
@@ -421,6 +423,9 @@ const layer = Layer.effect(
       let promotion: SessionInput.Delivery | undefined = hasSteer ? "steer" : hasQueue ? "queue" : undefined
       let shouldRun = input.force || hasSteer || hasQueue
       while (shouldRun) {
+        const elapsed = DateTime.toEpochMillis(yield* DateTime.now) - startedAt
+        if (elapsed > ProviderRetry.DEFAULT_RECOVERY_LIMITS.maxExecutionTime)
+          yield* new SessionTimeoutError({ sessionID: input.sessionID, elapsed })
         let needsContinuation = true
         let step = 1
         while (needsContinuation) {
