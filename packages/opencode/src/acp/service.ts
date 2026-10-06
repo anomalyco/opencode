@@ -997,10 +997,15 @@ function sendAvailableCommands(
         sessionId,
         update: {
           sessionUpdate: "available_commands_update",
-          availableCommands: snapshot.availableCommands.map((command) => ({
-            name: command.name,
-            description: command.description ?? "",
-          })),
+          availableCommands: [
+            ...snapshot.availableCommands.map((command) => ({
+              name: command.name,
+              description: command.description ?? "",
+            })),
+            ...(snapshot.availableCommands.some((command) => command.name === "compact")
+              ? []
+              : [{ name: "compact", description: "Compact the session" }]),
+          ],
         },
       })
     }, 0)

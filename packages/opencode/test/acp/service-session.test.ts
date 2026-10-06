@@ -368,6 +368,10 @@ describe("ACP service sessions", () => {
     expect(updates).toHaveLength(1)
     expect(JSON.stringify(updates[0])).toContain("available_commands_update")
     expect(JSON.stringify(updates[0])).toContain("review-skill")
+    expect(updates[0].update).toMatchObject({
+      sessionUpdate: "available_commands_update",
+      availableCommands: expect.arrayContaining([{ name: "compact", description: "Compact the session" }]),
+    })
     expect(mcpAdds).toEqual(["tools"])
   })
 
