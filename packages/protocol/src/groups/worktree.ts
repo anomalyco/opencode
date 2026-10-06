@@ -6,7 +6,8 @@ import { ProjectNotFoundError } from "../errors.js"
 
 const root = "/api/worktree"
 
-export class WorktreeError extends Schema.Error<WorktreeError>("WorktreeError")(
+export class WorktreeError extends Schema.TaggedError<WorktreeError>()(
+  "WorktreeError",
   {
     name: Schema.Literal("WorktreeError"),
     data: Schema.Struct({

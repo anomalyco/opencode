@@ -8,10 +8,10 @@
 .settings-screen {
   display: flex;
   flex: 1;
-  width: calc(100% - 16px);
+  width: calc(100% - 2 * var(--shell-inline-inset, 8px));
   min-width: 0;
   min-height: 0;
-  margin-inline: 8px;
+  margin-inline: var(--shell-inline-inset, 8px);
   margin-block: var(--shell-top-inset, 8px) var(--shell-bottom-inset, 8px);
   justify-content: center;
   overflow: hidden;
@@ -31,7 +31,6 @@
 @media (max-width: 767px) {
   .settings-screen {
     --settings-mobile-inner-inset: 8px;
-    margin-block-start: var(--settings-top-inset, var(--shell-top-inset, 8px));
   }
 }
 

@@ -5,7 +5,7 @@ import { createRoot } from "solid-js"
 import { createServerSessionEntries } from "@/shell/commands/palette"
 import type { LocalProject } from "@/shell/state/layout"
 import { ServerConnection } from "@/runtime/server/registry"
-import { getProjectAvatarSource } from "@/shell/layout/helpers"
+import { getProjectAvatarSource } from "@opencode/ui/project-avatar"
 
 const stored: Project = {
   id: "project-1",
@@ -30,13 +30,16 @@ const session: SessionInfo = {
 describe("command palette sessions", () => {
   test("uses the home project avatar and cancels superseded searches", async () => {
     const server = ServerConnection.Key.make("selected-server")
+
     const opened: LocalProject = {
       ...stored,
       icon: { override: "home-project-avatar" },
       expanded: true,
     }
+
     const searches: string[] = []
     const gets: string[] = []
+
     const result = await new Promise<Awaited<ReturnType<ReturnType<typeof createServerSessionEntries>>>>(
       (resolve, reject) => {
         createRoot((dispose) => {
@@ -46,17 +49,20 @@ describe("command palette sessions", () => {
             stored: () => [{ ...stored, icon: { url: "stored-project-avatar" } }],
             load: async (text) => {
               searches.push(text)
+
               return {
                 data: [session, { ...session, id: "archived-session", time: { ...session.time, archived: 3 } }],
               }
             },
             get: async (sessionID) => {
               gets.push(sessionID)
+
               return session
             },
             untitled: () => "Untitled",
             category: () => "Sessions",
           })
+
           const first = search("palette")
           const second = search("palette session")
           Promise.all([first, second])
@@ -85,6 +91,7 @@ describe("command palette sessions", () => {
   test("loads an exact session when the query looks like an ID", async () => {
     const exact = { ...session, id: "ses_12345678901234567890123456", title: "Exact session" }
     const gets: string[] = []
+
     const result = await new Promise<Awaited<ReturnType<ReturnType<typeof createServerSessionEntries>>>>(
       (resolve, reject) => {
         createRoot((dispose) => {
@@ -95,11 +102,13 @@ describe("command palette sessions", () => {
             load: async () => ({ data: [] }),
             get: async (sessionID) => {
               gets.push(sessionID)
+
               return exact
             },
             untitled: () => "Untitled",
             category: () => "Sessions",
           })
+
           search(exact.id).then(resolve, reject).finally(dispose)
         })
       },

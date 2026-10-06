@@ -5,7 +5,6 @@ import { type Component, Show } from "solid-js"
 import type { ServerActionsController } from "@/servers/registry/controller"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
-import { SshMenu } from "../ssh/menu"
 
 export const ServerRowMenu: Component<{
   server: ServerConnection.Any
@@ -16,7 +15,7 @@ export const ServerRowMenu: Component<{
 }> = (props) => {
   const language = useLanguage()
   const key = ServerConnection.key(props.server)
-  if (props.server.type === "ssh" && props.server.id) return <SshMenu id={props.server.id} domain={props.domain} />
+
   return (
     <ServerRowMenuView
       server={props.server}
@@ -70,6 +69,7 @@ export const ServerRowMenuView: Component<{
 }> = (props) => {
   const builtin = () => ServerConnection.builtin(props.server)
   const httpServer = () => (props.server.type === "http" ? props.server : undefined)
+
   return (
     <Menu gutter={6} modal={false} placement="bottom-end" open={props.open} onOpenChange={props.onOpenChange}>
       <Menu.Trigger
@@ -87,6 +87,7 @@ export const ServerRowMenuView: Component<{
               disabled={builtin() || !httpServer()}
               onSelect={() => {
                 const server = httpServer()
+
                 if (server) props.onEdit(server)
               }}
             >

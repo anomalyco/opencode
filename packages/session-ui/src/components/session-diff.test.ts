@@ -12,6 +12,7 @@ describe("session diff", () => {
       // GHSA-73rr-hh4g-fpgx: isolate synchronous hangs and memory growth from the test runner.
       const name = `a${separator}b.ts`
       const padding = " ".repeat(10_000)
+
       const patches = [
         `--- ${name}\t\n+++ b.ts\t\n`,
         `--- a.ts\t\n+++ ${name}\t\n`,
@@ -20,6 +21,7 @@ describe("session diff", () => {
         `Index: ${padding}${name}\n--- a.ts\t\n+++ b.ts\t\n`,
         `diff -r abc -r def ${padding}${name}\n--- a.ts\t\n+++ b.ts\t\n`,
       ].map((header) => `${header}@@ -1 +1 @@\n-old\n+new\n`)
+
       const result = Bun.spawnSync({
         cmd: [
           process.execPath,
@@ -48,6 +50,7 @@ describe("session diff", () => {
       deletions: 1,
       status: "modified" as const,
     }
+
     const view = normalize(diff)
 
     expect(view.fileDiff.name).toBe("a.ts")
@@ -65,6 +68,7 @@ describe("session diff", () => {
       deletions: 1,
       status: "modified" as const,
     }
+
     const view = normalize(diff)
 
     expect(text(view, "deletions")).toBe("one\ntwo")
@@ -150,9 +154,11 @@ describe("session diff", () => {
   test("does not reuse an evicted highlight identity for different content", () => {
     const patch = "@@ -1 +1 @@\n-old\n+new\n"
     const first = resolveFileDiff({ file: "evicted.ts", patch })
+
     const keys = Array.from({ length: 20 }, (_, index) =>
       resolveFileDiff({ file: "evicted.ts", patch: patch.replace("+new", `+new${index}`) }).cacheKey,
     )
+
     expect(keys).not.toContain(first.cacheKey)
     const restored = resolveFileDiff({ file: "evicted.ts", patch })
     expect(restored.additionLines).toEqual(first.additionLines)
@@ -180,6 +186,7 @@ describe("session diff", () => {
       deletions: 1,
       status: "modified" as const,
     }
+
     const view = normalize(diff)
 
     expect(view.fileDiff.isPartial).toBe(false)
@@ -196,6 +203,7 @@ describe("session diff", () => {
       deletions: 1,
       status: "modified" as const,
     }
+
     const view = normalize(diff)
 
     expect(text(view, "deletions")).toBe("")

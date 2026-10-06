@@ -1,7 +1,7 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
   "name": "@opencode/plugin",
-  "version": "2.0.20",
+  "version": "2.0.24",
   "type": "module",
   "license": "MIT",
   "scripts": {
@@ -33,14 +33,12 @@
     "@opencode/protocol": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/util": "workspace:*",
-    "@standard-schema/spec": "catalog:",
-    "effect": "catalog:",
-    "zod": "catalog:"
+    "effect": "catalog:"
   },
   "peerDependencies": {
     "@opencode/theme": "workspace:*",
-    "@opentui/core": ">=0.5.13",
-    "@opentui/solid": ">=0.5.13",
+    "@opentui/core": ">=0.5.14",
+    "@opentui/solid": ">=0.5.14",
     "solid-js": ">=1.9.0"
   },
   "peerDependenciesMeta": {

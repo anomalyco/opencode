@@ -289,11 +289,14 @@ describe("auth command", () => {
     expect(removed).toEqual(["cred_test"])
   })
 
-  test("requires a target outside an interactive terminal", async () => {
-    const result = await cli(["auth", "login"])
+  test("requires a target outside an interactive terminal, including through acp --login", async () => {
+    const [result, acp] = await Promise.all([cli(["auth", "login"]), cli(["acp", "--login"])])
     expect(result.exitCode).toBe(1)
     expect(result.stdout).toContain("Pass an integration ID or name")
     expect(result.stdout).not.toContain("Background service failed to start")
+    expect(acp.exitCode).toBe(1)
+    expect(acp.stdout).toContain("Pass an integration ID or name when running without an interactive terminal")
+    expect(acp.stdout).not.toContain("Background service failed to start")
   })
 
   test("reports list connection failures without a stack trace", async () => {

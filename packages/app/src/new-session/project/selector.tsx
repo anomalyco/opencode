@@ -11,10 +11,13 @@ import {
 import { createStore } from "solid-js/store"
 import { Menu } from "@opencode/ui/menu"
 import { Icon } from "@opencode/ui/icon"
-import { ProjectAvatar } from "@opencode/ui/project-avatar"
-import { getProjectAvatarVariant } from "@/shell/state/layout"
+import {
+  displayName,
+  getProjectAvatarSource,
+  getProjectAvatarVariant,
+  ProjectAvatar,
+} from "@opencode/ui/project-avatar"
 import { useLanguage } from "@/runtime/i18n/language"
-import { displayName, getProjectAvatarSource } from "@/shell/layout/helpers"
 import { pathKey } from "@/workspaces/path-key"
 import { handleDocumentSearchKeydown } from "@/shell/commands/search-keydown"
 import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
@@ -38,6 +41,7 @@ export type PromptProjectControls = {
 }
 
 const actionPrefix = "action:"
+
 const projectPrefix = "project:"
 
 function projectKey(project: PromptProject) {
@@ -60,6 +64,7 @@ export function createPromptProjectController(input: {
     const controls = input.controls()
     const key = pathKey(controls.directory)
     const projects = controls.available.filter((project) => !project.server || project.server.key === controls.server)
+
     return (
       projects.find(
         (project) =>
@@ -67,21 +72,28 @@ export function createPromptProjectController(input: {
       ) ?? projects.find((project) => controls.projectID && project.id === controls.projectID)
     )
   }
+
   const selected = () => current() ?? input.controls().available[0]
+
   const projects = () => {
     const search = store.search.trim().toLowerCase()
+
     if (!search) return input.controls().available
+
     return input.controls().available.filter((project) => displayName(project).toLowerCase().includes(search))
   }
+
   const servers = () =>
     input
       .controls()
       .available.map((project) => project.server)
       .filter((server, index, all) => server && all.findIndex((item) => item?.key === server.key) === index)
+
   const keys = () => {
     if (servers().length <= 1) {
       return [...projects().map(projectKey), actionKey(servers()[0]?.key)]
     }
+
     return [
       ...servers().flatMap((server) =>
         projects()
@@ -91,16 +103,21 @@ export function createPromptProjectController(input: {
       actionKey(),
     ]
   }
+
   const initialActive = () => {
     const selectedKey = selected() ? projectKey(selected()!) : undefined
     const options = keys()
+
     if (selectedKey && options.includes(selectedKey)) return selectedKey
+
     return options[0] ?? ""
   }
+
   const close = () => {
     setStore({ open: false, search: "", active: "" })
     input.onDone()
   }
+
   const select = (project: PromptProject) => {
     if (
       pathKey(project.worktree) !== pathKey(current()?.worktree ?? "") ||
@@ -108,17 +125,22 @@ export function createPromptProjectController(input: {
     ) {
       input.controls().select(project.worktree, project.server?.key)
     }
+
     close()
   }
+
   const add = (server?: string) => {
     setStore({ open: false, search: "", active: "" })
     input.controls().add(language.t("command.project.open"), server)
   }
+
   const setSearch = (value: string) => {
     const search = value.trim().toLowerCase()
+
     const first = input
       .controls()
       .available.find((project) => !search || displayName(project).toLowerCase().includes(search))
+
     setStore({
       search: value,
       active: first ? projectKey(first) : actionKey(servers().length > 1 ? undefined : servers()[0]?.key),
@@ -147,8 +169,10 @@ export function createPromptProjectController(input: {
       if (open) {
         setStore({ open: true, active: initialActive() })
         setTimeout(() => requestAnimationFrame(() => searchRef?.focus()))
+
         return
       }
+
       setStore({ open: false, search: "", active: "" })
     },
     setSearch,
@@ -161,6 +185,7 @@ export function createPromptProjectController(input: {
     },
     moveActive(delta: number) {
       const options = keys()
+
       if (options.length === 0) return
       const index = options.indexOf(store.active)
       const start = index === -1 ? 0 : index
@@ -207,11 +232,14 @@ export function PromptProjectSelector(props: {
     const ready = () => {
       if (!element.isConnected) {
         triggerFrame = requestAnimationFrame(ready)
+
         return
       }
+
       triggerFrame = undefined
       setTriggerReady(true)
     }
+
     ready()
   }
 
@@ -223,34 +251,44 @@ export function PromptProjectSelector(props: {
     props.controller.active()
       ? contentRef?.querySelector<HTMLElement>(`[data-option-key="${CSS.escape(props.controller.active())}"]`)
       : undefined
+
   const selectProject = (project: PromptProject) => {
     dismiss.preventTriggerRestore()
     props.controller.setOpen(false)
     dismiss.afterClose(() => props.controller.select(project))
   }
+
   const selectAction = (server?: string) => {
     dismiss.preventTriggerRestore()
     props.controller.setOpen(false)
     dismiss.afterClose(() => props.controller.add(server))
   }
+
   const selectActive = () => {
     const project = props.controller.activeProject()
+
     if (project) {
       selectProject(project)
+
       return
     }
+
     if (props.controller.activeAction() && props.controller.servers().length > 1) {
       const item = activeItem()
       item?.focus()
       item?.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }))
+
       return
     }
+
     selectAction(props.controller.activeServer())
   }
+
   const moveActive = (delta: number) => {
     props.controller.moveActive(delta)
     queueMicrotask(() => activeItem()?.scrollIntoView({ block: "nearest" }))
   }
+
   const focusPreviousControl = () => {
     const target = Array.from(
       document.querySelectorAll<HTMLElement>(
@@ -259,14 +297,17 @@ export function PromptProjectSelector(props: {
     )
       .filter((element) => !contentRef?.contains(element) && !element.hasAttribute("data-focus-trap"))
       .findLast((element) => element.offsetParent !== null)
+
     dismiss.preventTriggerRestore()
     target?.focus()
     queueMicrotask(() => {
       if (props.controller.open()) props.controller.setOpen(false)
     })
   }
+
   const selectedValue = () => {
     const project = props.controller.selected()
+
     return project ? props.controller.projectKey(project) : undefined
   }
 
@@ -300,7 +341,7 @@ export function PromptProjectSelector(props: {
           onCloseAutoFocus={dismiss.onCloseAutoFocus}
         >
           <div class="flex flex-col">
-            <div class="flex h-7 items-center gap-2 rounded-sm pl-3 pr-2.5 text-v2-icon-icon-muted">
+            <div class="flex h-7 items-center gap-2 rounded-sm pl-3 pr-1 text-v2-icon-icon-muted">
               <Icon name="magnifying-glass" size="small" class="shrink-0" />
               <input
                 ref={(el) => props.controller.setSearchRef(el)}
@@ -315,30 +356,43 @@ export function PromptProjectSelector(props: {
                   if (event.key === "Tab") {
                     event.preventDefault()
                     event.stopPropagation()
+
                     if (event.shiftKey) {
                       focusPreviousControl()
+
                       return
                     }
+
                     activeItem()?.focus()
+
                     return
                   }
+
                   event.stopPropagation()
+
                   if (event.key === "Escape") {
                     event.preventDefault()
                     props.controller.setOpen(false)
+
                     return
                   }
+
                   if (event.altKey || event.metaKey) return
+
                   if (event.key === "ArrowDown") {
                     event.preventDefault()
                     moveActive(1)
+
                     return
                   }
+
                   if (event.key === "ArrowUp") {
                     event.preventDefault()
                     moveActive(-1)
+
                     return
                   }
+
                   if (event.key === "Enter" && !event.isComposing) {
                     event.preventDefault()
                     selectActive()
@@ -348,16 +402,16 @@ export function PromptProjectSelector(props: {
               <Show when={props.controller.search().trim()}>
                 <button
                   type="button"
-                  class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+                  class="flex size-5 items-center justify-center rounded-sm bg-transparent text-v2-icon-icon-faint transition-colors hover:text-v2-icon-icon-base focus-visible:text-v2-icon-icon-base active:text-v2-icon-icon-base"
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => props.controller.clearSearch()}
                   aria-label={props.controller.labels.clear()}
                 >
-                  <Icon name="close-small" size="small" />
+                  <Icon name="circle-xmark" />
                 </button>
               </Show>
             </div>
-            <div class="max-h-[224px] overflow-y-auto">
+            <div class="my-0.5 max-h-[224px] overflow-y-auto">
               <Show
                 when={props.controller.servers().length > 1}
                 fallback={
@@ -397,8 +451,8 @@ export function PromptProjectSelector(props: {
               </Show>
             </div>
           </div>
-          <div class="h-px bg-v2-border-border-muted" />
-          <div class="flex flex-col">
+          <div class="-mx-0.5 h-px bg-v2-border-border-muted" />
+          <div class="flex flex-col pt-0.5">
             <Show
               when={props.controller.servers().length > 1}
               fallback={
@@ -456,6 +510,7 @@ export function PromptProjectAddButton(props: { controller: PromptProjectControl
 function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptProjectController }) {
   const [local, rest] = splitProps(props, ["controller", "class", "classList", "onClick", "onKeyDown"])
   const project = () => local.controller.selected()
+
   return (
     <button
       {...rest}
@@ -473,8 +528,10 @@ function ProjectTrigger(props: ComponentProps<"button"> & { controller: PromptPr
         if (!local.controller.open() && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
           event.preventDefault()
           event.stopPropagation()
+
           return
         }
+
         if (typeof local.onKeyDown === "function") local.onKeyDown(event)
       }}
     >
@@ -504,6 +561,7 @@ function ProjectItem(props: {
   onSelect: (project: PromptProject) => void
 }) {
   const key = () => props.controller.projectKey(props.project)
+
   return (
     <Menu.RadioItem
       id={key()}
@@ -537,6 +595,7 @@ function ProjectAction(props: {
   onSelect: (server?: string) => void
 }) {
   const key = () => props.controller.actionKey(props.server)
+
   return (
     <Menu.Item
       id={key()}

@@ -42,6 +42,7 @@ const part = (key: string, partID: string) =>
   })
 
 const user = (userMessageID = "user-1") => new TimelineRow.UserMessage({ userMessageID })
+
 const keys = (rows: TimelineRow.TimelineRow[]) => rows.map(TimelineRow.key)
 
 describe("Timeline.resolveContent", () => {
@@ -53,6 +54,7 @@ describe("Timeline.resolveContent", () => {
     content,
     time: { created: 0 },
   })
+
   const tool = (id: string): SessionMessageAssistantTool => ({
     id,
     type: "tool",
@@ -71,6 +73,7 @@ describe("Timeline.resolveContent", () => {
         { type: "reasoning", text: "thought", time: { created: 0 } },
       ]),
     })
+
     expect(Timeline.resolveContent(store.message, "assistant:text:0")).toBe(store.message.content[0])
     expect(Timeline.resolveContent(store.message, "assistant:reasoning:0")).toBe(store.message.content[1])
     expect(Timeline.resolveContent(store.message, "read")).toBe(store.message.content[2])
@@ -212,6 +215,7 @@ describe("createTimelineProjection", () => {
   test("builds current message, parent, context, and row indexes", () => {
     const selectedModel = { id: "selected", providerID: "provider" } satisfies ModelRef
     const assistantModel = { id: "assistant", providerID: "provider", variant: "fast" } satisfies ModelRef
+
     const messages = [
       { id: "agent", type: "agent-switched", agent: "explore", time: { created: 1 } },
       { id: "model", type: "model-switched", model: selectedModel, time: { created: 2 } },
@@ -270,11 +274,13 @@ describe("createTimelineProjection", () => {
         time: { created: 2, completed: 3 },
       },
     ] satisfies SessionMessageInfo[]
+
     const first = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },
       reasoningMode: "full",
     })
+
     const second = createTimelineProjection({
       sessionMessages: messages,
       status: { type: "idle" },

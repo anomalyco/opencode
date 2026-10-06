@@ -242,6 +242,8 @@ import type {
   WorktreeRemoveOutput,
   WorktreeRefreshInput,
   WorktreeRefreshOutput,
+  VcsInitInput,
+  VcsInitOutput,
   VcsGetInput,
   VcsGetOutput,
   VcsBaseInput,
@@ -393,6 +395,7 @@ const EndpointSessionCreate = (raw: RawClient["server.session"]) => (input?: Ses
     raw["session.create"]({
       payload: {
         id: input?.["id"],
+        parentID: input?.["parentID"],
         title: input?.["title"],
         agent: input?.["agent"],
         model: input?.["model"],
@@ -735,9 +738,10 @@ const EndpointSessionFormReply = (raw: RawClient["server.session"]) => (input: S
 
 const EndpointSessionFormCancel = (raw: RawClient["server.session"]) => (input: SessionFormCancelInput) =>
   preserveEffect<SessionFormCancelOutput>()(
-    raw["session.form.cancel"]({ params: { sessionID: input["sessionID"], formID: input["formID"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
+    raw["session.form.cancel"]({
+      params: { sessionID: input["sessionID"], formID: input["formID"] },
+      query: { message: input["message"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointSessionEnvironment = (raw: RawClient["server.session"]) => (input: SessionEnvironmentInput) =>
@@ -1479,6 +1483,13 @@ const adaptGroupWorktree = (raw: RawClient["server.worktree"]) => ({
   refresh: EndpointWorktreeRefresh(raw),
 })
 
+const EndpointVcsInit = (raw: RawClient["server.vcs"]) => (input?: VcsInitInput) =>
+  preserveEffect<VcsInitOutput>()(
+    raw["vcs.init"]({ query: { location: input?.["location"], provider: input?.["provider"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
 const EndpointVcsGet = (raw: RawClient["server.vcs"]) => (input?: VcsGetInput) =>
   preserveEffect<VcsGetOutput>()(
     raw["vcs.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1509,6 +1520,7 @@ const EndpointVcsDiff = (raw: RawClient["server.vcs"]) => (input: VcsDiffInput) 
   )
 
 const adaptGroupVcs = (raw: RawClient["server.vcs"]) => ({
+  init: EndpointVcsInit(raw),
   get: EndpointVcsGet(raw),
   base: EndpointVcsBase(raw),
   status: EndpointVcsStatus(raw),

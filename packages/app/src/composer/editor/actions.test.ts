@@ -27,20 +27,6 @@ function createPromptStore() {
 }
 
 describe("Composer store", () => {
-  test("accepts an accessor for the backing store", () => {
-    const [state, setState] = createStore<ComposerPersistedState>({
-      prompt: [{ type: "text", content: "", start: 0, end: 0 }],
-      cursor: 0,
-      context: { items: [] },
-    })
-    const prompt = createComposerEditorActions([() => state, setState])
-
-    prompt.setText("accessed")
-
-    expect(prompt.state.prompt).toEqual([{ type: "text", content: "accessed", start: 0, end: 8 }])
-    expect(prompt.state.cursor).toBe(8)
-  })
-
   test("updates prompt text and cursor together while preserving attachments", () => {
     const prompt = createPromptStore()
 
@@ -69,6 +55,7 @@ describe("Composer store", () => {
       cursor: 2,
       context: { items: [] },
     })
+
     const prompt = createComposerEditorActions([state, setState])
 
     prompt.addText("X\nY")
@@ -94,9 +81,6 @@ describe("Composer store", () => {
       { type: "file", path: "src/app.ts", content: "@src/app.ts", start: 3, end: 14 },
       { type: "text", content: " ", start: 14, end: 15 },
     ])
-    prompt.setPrompt([{ type: "text", content: "old", start: 0, end: 3 }], 3)
-
-    expect(prompt.state.prompt).toEqual([{ type: "text", content: "old", start: 0, end: 3 }])
   })
 
   test("prepends a skill mention to an attachment-only draft without flattening it", () => {

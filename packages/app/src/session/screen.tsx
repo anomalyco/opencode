@@ -3,280 +3,295 @@ import {
   Show,
   Match,
   Switch,
-  Suspense,
-  lazy,
   createMemo,
   createEffect,
-  createComputed,
   on,
+  onCleanup,
+  untrack,
+  type Accessor,
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
+import { Slot, type BackgroundTask, type MountedSession, type SessionScreen } from "@opencode/gui-extensions/sdk"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
-import { useServer } from "@/runtime/server/current"
 import { ComposerDropzone } from "@/composer/dropzone"
+import { useSettings } from "@/settings/model"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
 import { SessionPanelFrame } from "@/session/session-frame"
-import { TerminalPanel } from "@/session/terminal/panel"
+import { useExtensionHost } from "@/runtime/extension/host"
+import { ExtensionLinks } from "@/runtime/extension/render"
+import { createPanelSidebar, createRegion, DockRegion, MobilePanel } from "@/runtime/extension/panels"
+import { createMobileViews, MobileViewTabs } from "@/runtime/extension/mobile"
+import { useExtensionAttachment } from "@/runtime/extension/host-apis"
+import { createMountedSession } from "@/runtime/extension/mounted-session"
 import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionScreenLayout } from "./screen-layout"
-import { createSessionReview } from "./review/model"
-import { SessionDesktopReview, SessionMobileReview, SessionMobileViewTabs } from "./review/view"
-import { SessionContextTab } from "./files/session-context-tab"
+import { SideRegion } from "@/runtime/extension/side-region"
 import { createSessionTimelineInteraction } from "./timeline/interaction"
 import { createTimelineSearchController } from "./timeline/search-controller"
 import { TimelineSearchBar } from "./timeline/search-bar"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
+import { SessionRunningMenu } from "./header/session-running-menu"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
-import { createSessionBrowser } from "./browser/model"
 import { createTimelineCache } from "./timeline/cache"
-import { ArtifactMarkdownProvider, ArtifactOpenerProvider } from "./files/open-artifact"
-import { createSessionBtw } from "./btw/model"
 
-const SessionMobileFiles = lazy(async () => {
-  const { SessionMobileFiles } = await import("./files/session-mobile-files")
-  return { default: SessionMobileFiles }
-})
-
-const SessionSummaryPanel = lazy(async () => {
-  const { SessionSummaryPanel } = await import("./summary/panel")
-  return { default: SessionSummaryPanel }
-})
-
-export function SessionScreen(props: { session: SessionModel }) {
+export function SessionScreenView(props: { session: SessionModel }) {
   // The timeline cache captures its owner when created, so link handling must be provided above it.
-  const browser = createSessionBrowser(props.session)
+  const mounted = createMountedSession(props.session)
+
   return (
-    <ArtifactOpenerProvider session={props.session} browser={browser}>
-      <ArtifactMarkdownProvider>
-        <SessionScreenContent session={props.session} browser={browser} />
-      </ArtifactMarkdownProvider>
-    </ArtifactOpenerProvider>
+    <ExtensionLinks session={mounted.view()}>
+      <SessionScreenContent
+        session={props.session}
+        screen={mounted.screen}
+        view={mounted.view}
+        bindBackground={mounted.bindBackground}
+      />
+    </ExtensionLinks>
   )
 }
 
-function SessionScreenContent(props: { session: SessionModel; browser: ReturnType<typeof createSessionBrowser> }) {
+function SessionScreenContent(props: {
+  session: SessionModel
+  /** One object per routed session; renders receive each through a reactive prop instead of remounting. */
+  view: Accessor<MountedSession>
+  screen: SessionScreen
+  bindBackground: (tasks: () => readonly BackgroundTask[]) => void
+}) {
   const session = props.session
-  const browser = props.browser
-  const server = useServer()
-  const detailsProject = createMemo(() => {
-    const info = session.data.info()
-    return info ? server.ctx.projects.detailsForSession(info) : undefined
-  })
+  const host = useExtensionHost()
+  const attachment = useExtensionAttachment()
+  const settings = useSettings()
   const isDesktop = session.isDesktop
-  const btw = createSessionBtw(session)
-  const screen = createSessionScreenLayout(session)
+  const bottomMobileTabs = () => settings.general.mobileTitlebarPosition() === "bottom"
+  const sidebar = createPanelSidebar()
+
+  const region = createRegion({
+    region: "side",
+    view: props.view,
+    screen: props.screen,
+    tabs: session.layout.tabs,
+  })
+
+  onCleanup(attachment.region(region))
+  const mobile = createMobileViews()
+
+  const screen = createSessionScreenLayout(session, {
+    wide: region.wide,
+    sidebar: () => host.items(Slot).some((item) => item.value.at === "session.panel.sidebar"),
+  })
+
   const timeline = createSessionTimelineInteraction(session)
+
   const timelineSearch = createTimelineSearchController({
     sessionID: session.identity.sessionID,
     scrollRef: timeline.scroller,
     revealMessage: timeline.actions.revealMessage,
     pauseAutoScroll: timeline.view.unpin,
   })
+
   const messagesReady = timeline.ready
+
   const [store, setStore] = createStore({
-    deferRender: false,
-    bottomTerminalCached: false,
+    bottomDockCached: false,
     sideWidthMotion: false,
     timelineScrollbarHidden: false,
     sideHeightMotion: false,
     sideRegionPresent: false,
-    sideReviewPresent: false,
-    sideTerminalPresent: false,
-    mobileTerminalCached: false,
-    mobileMoveDismissed: false,
+    sideTabsPresent: false,
+    sideDockPresent: false,
+    mobileDockCached: false,
   })
+
   const [elements, setElements] = createStore<{
     side?: HTMLDivElement
-    bottomTerminal?: HTMLDivElement
+    bottomDock?: HTMLDivElement
   }>({})
+
   const sideVisible = createMemo(() => isDesktop() && screen.side.layout().visible)
-  const sideTerminalVisible = createMemo(() => isDesktop() && screen.terminal.side() && screen.terminal.open())
-  const bottomTerminalVisible = createMemo(() => isDesktop() && screen.terminal.open() && screen.terminal.bottom())
+  const sideDockVisible = createMemo(() => isDesktop() && screen.dock.side() && screen.dock.open())
+  const bottomDockVisible = createMemo(() => isDesktop() && screen.dock.open() && screen.dock.bottom())
+
   const sidePresence = createAnimatedPresence(
     () => sideVisible() || undefined,
     () => elements.side ?? null,
     session.layout.tabKey,
   )
-  const bottomTerminalPresence = createAnimatedPresence(
-    () => bottomTerminalVisible() || undefined,
-    () => elements.bottomTerminal ?? null,
+
+  const bottomDockPresence = createAnimatedPresence(
+    () => bottomDockVisible() || undefined,
+    () => elements.bottomDock ?? null,
     session.layout.tabKey,
   )
+
   const sideMotion = createMemo<{
     key?: string
     region: boolean
-    terminal: boolean
+    dock: boolean
     animateRegion: boolean
-    animateTerminal: boolean
+    animateDock: boolean
   }>((previous) => {
     const key = session.layout.tabKey()
     const region = screen.side.region.open()
-    const terminal = sideTerminalVisible()
+    const dock = sideDockVisible()
     const sameTab = previous?.key === key
+
     return {
       key,
       region,
-      terminal,
+      dock,
       animateRegion: !!previous && sameTab && previous.region !== region,
-      animateTerminal: !!previous && sameTab && previous.terminal !== terminal,
+      animateDock: !!previous && sameTab && previous.dock !== dock,
     }
   })
-  const paneAnimating = () =>
-    sidePresence.animate() ||
-    sideMotion().animateRegion ||
-    sideMotion().animateTerminal ||
-    bottomTerminalPresence.animate()
+
+  const regionAnimating = () =>
+    sidePresence.animate() || sideMotion().animateRegion || sideMotion().animateDock || bottomDockPresence.animate()
+
   const trackSideWidthMotion = (event: TransitionEvent) => {
     if (event.currentTarget !== event.target || event.propertyName !== "width") return
     setStore("sideWidthMotion", event.type === "transitionrun")
   }
+
   const hideTimelineScrollbar = () => setStore("timelineScrollbarHidden", true)
+
   const revealTimelineScrollbar = (event: Event) => {
     if (!store.timelineScrollbarHidden || store.sideWidthMotion) return
+
     if (!(event.target instanceof Element) || !event.target.closest('[data-slot="session-timeline-scroll"]')) return
     setStore("timelineScrollbarHidden", false)
   }
+
   createEffect(() => {
-    if (sideTerminalVisible()) setStore("sideTerminalPresent", true)
-    if (bottomTerminalVisible()) setStore("bottomTerminalCached", true)
+    if (sideDockVisible()) setStore("sideDockPresent", true)
+
+    if (bottomDockVisible()) setStore("bottomDockCached", true)
+
     if (!sideVisible()) setStore("sideHeightMotion", false)
   })
   createEffect(() => {
-    if (!isDesktop() || screen.terminal.bottom()) setStore("sideTerminalPresent", false)
-    if (isDesktop() && screen.terminal.side()) setStore("bottomTerminalCached", false)
+    if (!isDesktop() || screen.dock.bottom()) setStore("sideDockPresent", false)
+
+    if (isDesktop() && screen.dock.side()) setStore("bottomDockCached", false)
   })
   createEffect(() => {
     if (screen.side.region.open()) setStore("sideRegionPresent", true)
-    if (screen.review.panelOpen()) setStore("sideReviewPresent", true)
+
+    if (screen.side.tabs.open()) setStore("sideTabsPresent", true)
   })
 
-  createComputed((prev) => {
-    const key = session.identity.sessionKey()
-    if (key !== prev) {
-      setStore("mobileMoveDismissed", false)
-      setStore("deferRender", true)
-      const owner = session.ownership.capture()
-      requestAnimationFrame(() => {
-        setTimeout(() => owner.run(() => setStore("deferRender", false)), 0)
-      })
-    }
-    return key
+  // The dock's narrow-screen view follows the dock's open state; other views are a selection.
+  const dockView = createMemo(() => mobile.entries().find((entry) => entry.provider.region === "dock"))
+
+  const mobileView = createMemo(() =>
+    screen.dock.open() ? (dockView()?.key ?? "session") : attachment.mobile.current(),
+  )
+
+  const mobileEntry = createMemo(() => {
+    const key = mobileView()
+
+    return key === "session" ? undefined : mobile.find(key)
   })
-  const review = createSessionReview({ session, screen, deferRender: () => store.deferRender })
-  const mobileView = createMemo(() => (screen.terminal.open() ? "terminal" : review.mobile.tab()))
+
   const conversationVisible = createMemo(() => isDesktop() || mobileView() === "session")
   createEffect(() => {
-    if (!isDesktop() && screen.terminal.open()) setStore("mobileTerminalCached", true)
+    if (!isDesktop() && screen.dock.open()) setStore("mobileDockCached", true)
   })
+
+  const selectMobile = (key: string) => {
+    if (key === dockView()?.key) {
+      session.layout.view().dock.open()
+
+      return
+    }
+
+    attachment.mobile.select(key)
+    session.layout.view().dock.close()
+  }
+
   const composer = createActiveSessionRegion({
     session,
     screen,
     timeline,
+    region,
     visible: conversationVisible,
-    browser,
   })
+
+  props.bindBackground(composer.requests.background.tasks)
   useUsageExceededDialogs()
 
-  const sessionErrorFallback = (error: unknown, reset: () => void) => {
+  const sessionErrorFallback = (cause: unknown, reset: () => void) => {
     createEffect(on(session.identity.sessionKey, reset, { defer: true }))
-    return <SessionErrorFallback error={error} sessionID={session.identity.params.id} />
+
+    return <SessionErrorFallback error={cause} sessionID={session.identity.params.id} />
   }
+
+  const timelineView = createTimelineCache(
+    session,
+    (source, active) => {
+      // A cached timeline keeps its own session's latest object while another session is routed.
+      const own = createMemo<MountedSession>((previous) => {
+        const view = props.view()
+
+        return view.id === source.identity.sessionID() ? view : previous
+      }, untrack(props.view))
+
+      return (
+        <MessageTimeline
+          active={active()}
+          hideHeader={!isDesktop()}
+          session={source}
+          view={own()}
+          screen={props.screen}
+          background={composer.requests.background}
+          actions={composer.actions.timeline}
+          scroll={timeline.scroll}
+          onResumeScroll={timeline.actions.resume}
+          setScrollRef={timeline.view.setScrollRef}
+          onScheduleScrollState={timeline.view.scheduleScrollState}
+          onPin={timeline.view.pin}
+          onUnpin={timeline.view.unpin}
+          onUserScroll={timeline.view.markUserScroll}
+          onHistoryScroll={timeline.view.onHistoryScroll}
+          onSelectionInteraction={timeline.view.selectionInteraction}
+          pinned={timeline.view.pinned()}
+          centered={screen.centered()}
+          reserveReviewToggle={!sideVisible()}
+          setContentRef={timeline.view.setContentRef}
+          anchor={timeline.view.anchor}
+          setRevealMessage={timeline.view.setRevealMessage}
+          reveal={timeline.view.reveal}
+          setScrollToEnd={timeline.view.setScrollToEnd}
+          search={
+            <Show when={active()}>
+              <TimelineSearchBar controller={timelineSearch} />
+            </Show>
+          }
+        />
+      )
+    },
+    () => conversationVisible() && messagesReady(),
+  )
 
   const mobileTabs = () => (
     <Show when={session.identity.sessionKey()} keyed>
       {(_key) => (
-        <SessionMobileViewTabs
+        <MobileViewTabs
+          bottom={bottomMobileTabs()}
+          screen={props.screen}
+          views={mobile}
+          region={region}
           current={mobileView()}
-          onDetailsOpenChange={review.details.setOpen}
-          details={
-            !session.data.isChild() && detailsProject()
-              ? (close) => (
-                  <Show when={detailsProject()}>
-                    {(project) => (
-                      <SessionSummaryPanel
-                        mobile
-                        project={project()}
-                        directory={session.workspace.directory()}
-                        local={!session.workspace.current()}
-                        branch={
-                          session.shared.data.location.vcs.info({ directory: session.workspace.directory() })?.branch
-                            .current
-                        }
-                        baseBranch={
-                          session.shared.data.location.vcs.info({ directory: project().worktree })?.branch.current
-                        }
-                        diffs={project().vcs ? review.details.diffs() : []}
-                        sessionID={session.identity.params.id ?? ""}
-                        moveEligible={composer.workspaceMoveEligible()}
-                        moveDismissed={store.mobileMoveDismissed}
-                        onMoveDismiss={() => setStore("mobileMoveDismissed", true)}
-                        onReview={() => {
-                          close()
-                          review.mobile.setTab("changes")
-                          session.layout.view().terminal.close()
-                        }}
-                        backgroundTasks={composer.requests.background.tasks()}
-                      />
-                    )}
-                  </Show>
-                )
-              : undefined
-          }
-          onSelect={(view) => {
-            if (view === "terminal") {
-              session.layout.view().terminal.open()
-              return
-            }
-            review.mobile.setTab(view)
-            session.layout.view().terminal.close()
-          }}
+          session={props.view()}
+          sidebar={sidebar}
+          onSelect={selectMobile}
         />
       )}
     </Show>
-  )
-
-  const timelineView = createTimelineCache(
-    session,
-    (source, active) => (
-      <MessageTimeline
-        active={active()}
-        hideHeader={!isDesktop()}
-        session={source}
-        background={composer.requests.background}
-        actions={composer.actions.timeline}
-        scroll={timeline.scroll}
-        onResumeScroll={timeline.actions.resume}
-        setScrollRef={timeline.view.setScrollRef}
-        onScheduleScrollState={timeline.view.scheduleScrollState}
-        onPin={timeline.view.pin}
-        onUnpin={timeline.view.unpin}
-        onUserScroll={timeline.view.markUserScroll}
-        onHistoryScroll={timeline.view.onHistoryScroll}
-        onSelectionInteraction={timeline.view.selectionInteraction}
-        pinned={timeline.view.pinned()}
-        centered={screen.centered()}
-        reserveReviewToggle={!sideVisible()}
-        setContentRef={timeline.view.setContentRef}
-        diffs={review.details.diffs}
-        onReview={review.open}
-        workspaceMoveEligible={composer.workspaceMoveEligible()}
-        onSummaryOpenChange={review.details.setOpen}
-        anchor={timeline.view.anchor}
-        setRevealMessage={timeline.view.setRevealMessage}
-        setScrollToEnd={timeline.view.setScrollToEnd}
-        search={
-          <Show when={active()}>
-            <TimelineSearchBar controller={timelineSearch} />
-          </Show>
-        }
-      />
-    ),
-    () => conversationVisible() && messagesReady(),
   )
 
   const sessionPanelContent = () => (
@@ -286,7 +301,7 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
         input={composer.drop.input()}
         identity={session.layout.tabKey}
       />
-      <Show when={!isDesktop() && !!session.identity.params.id}>{mobileTabs()}</Show>
+      <Show when={!isDesktop() && !!session.identity.params.id && !bottomMobileTabs()}>{mobileTabs()}</Show>
       {/* Surface query errors without suspending session metadata while messages load. */}
       <Show when={timeline.resource.error}>
         {(error) => {
@@ -294,29 +309,46 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
         }}
       </Show>
       <div class="relative flex-1 min-h-0 overflow-hidden">
-        <Show when={!isDesktop() && store.mobileTerminalCached}>
-          <div class="absolute inset-0" classList={{ invisible: mobileView() !== "terminal" }}>
-            <TerminalPanel fill embedded present contentHeight="100%" />
+        <Show when={!isDesktop() && store.mobileDockCached}>
+          <div class="absolute inset-0" classList={{ invisible: mobileView() !== dockView()?.key }}>
+            <DockRegion
+              view={props.view()}
+              screen={props.screen}
+              sidebar={sidebar}
+              fill
+              embedded
+              present
+              contentHeight="100%"
+            />
           </div>
         </Show>
         <Switch>
-          <Match when={!isDesktop() && mobileView() === "terminal"}>
+          <Match when={!isDesktop() && mobileEntry()?.provider.region === "dock"}>
             <></>
           </Match>
-          <Match when={!isDesktop() && mobileView() === "usage"}>
-            <SessionContextTab />
-          </Match>
-          <Match when={!isDesktop() && mobileView() === "files"}>
-            <Suspense>
-              <SessionMobileFiles />
-            </Suspense>
-          </Match>
-          <Match when={session.identity.params.id && review.mobile.changes()}>
-            <SessionMobileReview review={review} />
+          <Match when={!isDesktop() && session.identity.params.id ? mobileEntry() : undefined}>
+            {(entry) => (
+              <MobilePanel
+                screen={props.screen}
+                entry={entry()}
+                view={props.view()}
+                sidebar={sidebar}
+                visible
+                open={() => region.openFor(entry().extension)}
+              />
+            )}
           </Match>
           <Match when={session.identity.params.id}>
             <Show when={isDesktop() && !messagesReady()}>
-              <SessionIdentityHeader sessionID={session.identity.params.id ?? ""} session={session.data.info()} />
+              <SessionIdentityHeader sessionID={session.identity.params.id ?? ""} session={session.data.info()}>
+                <SessionRunningMenu
+                  sessionID={session.identity.params.id}
+                  owner={composer.requests.background.running.sessionID()}
+                  blocking={composer.requests.background.running.blocking()}
+                  tasks={composer.requests.background.running.tasks()}
+                  title={session.data.parentID() ? session.data.info()?.title : undefined}
+                />
+              </SessionIdentityHeader>
             </Show>
             <Show when={messagesReady() && session.identity.params.id}>{timelineView()}</Show>
           </Match>
@@ -324,20 +356,23 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
       </div>
 
       <Show when={composer.active()} keyed>
-        {(model) => <ActiveSessionComposerRegion model={model} suggestionBoundary={timeline.scroller} />}
+        {(model) => (
+          <ActiveSessionComposerRegion session={session} model={model} suggestionBoundary={timeline.scroller} />
+        )}
       </Show>
+      <Show when={!isDesktop() && !!session.identity.params.id && bottomMobileTabs()}>{mobileTabs()}</Show>
     </>
   )
 
   return (
     <>
-      <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+      <div class="flex-1 min-h-0 flex flex-col gap-2 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
-          {/* Keep the control outside panel animations; the terminal's 52px header includes a 1px divider. */}
+          {/* Keep the control outside panel animations; a side dock's 52px header includes a 1px divider. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
             <div
               class="absolute end-3 top-0 z-30 flex items-center"
-              classList={{ "h-[51px]": sideTerminalVisible(), "h-12": !sideTerminalVisible() }}
+              classList={{ "h-[51px]": sideDockVisible(), "h-12": !sideDockVisible() }}
               data-slot="session-review-toggle"
               onPointerDown={hideTimelineScrollbar}
               onClick={hideTimelineScrollbar}
@@ -380,20 +415,21 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
                   max={screen.panel.max()}
                   onResize={(width) => {
                     screen.size.touch()
-                    session.layout.view().reviewPanel.resize(width)
+                    session.layout.view().session.resize(width)
                   }}
                 />
               </div>
             </Show>
           </div>
 
-          <Show when={sidePresence.present() || store.sideReviewPresent || store.sideTerminalPresent}>
+          <Show when={sidePresence.present() || store.sideTabsPresent || store.sideDockPresent}>
             <div
               ref={(element) => setElements("side", element)}
               data-slot="session-side-panel-presence"
               data-opened={sidePresence.animate() ? sidePresence.show() : undefined}
               onAnimationEnd={(event) => {
                 if (event.currentTarget !== event.target) return
+
                 if (event.animationName !== "side-region-presence-in" || !sideVisible()) return
                 setStore("sideHeightMotion", true)
               }}
@@ -412,8 +448,8 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
                   data-slot="session-side-region"
                   classList={{
                     "absolute inset-x-0 top-0 min-h-0 overflow-visible transition-[height] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none": true,
-                    "will-change-[height]": !screen.size.active() && store.sideHeightMotion && paneAnimating(),
-                    "transition-none": screen.size.active() || !store.sideHeightMotion || !paneAnimating(),
+                    "will-change-[height]": !screen.size.active() && store.sideHeightMotion && regionAnimating(),
+                    "transition-none": screen.size.active() || !store.sideHeightMotion || !regionAnimating(),
                   }}
                   style={{ height: sideVisible() ? screen.side.region.height() : "100%" }}
                 >
@@ -424,18 +460,25 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
                       class="absolute inset-0"
                       onAnimationEnd={(event) => {
                         if (event.currentTarget !== event.target) return
+
                         if (event.animationName !== "side-region-presence-out") return
+
                         if (screen.side.region.open()) return
-                        if (sideTerminalVisible()) return
+
+                        if (sideDockVisible()) return
                         setStore("sideRegionPresent", false)
-                        setStore("sideReviewPresent", false)
+                        setStore("sideTabsPresent", false)
                       }}
                     >
-                      <SessionDesktopReview
-                        review={review}
-                        browser={browser}
-                        btw={btw}
-                        present={store.sideReviewPresent}
+                      <SideRegion
+                        screen={props.screen}
+                        view={props.view()}
+                        region={region}
+                        sidebar={sidebar}
+                        fileTree={screen.files.open()}
+                        present={store.sideTabsPresent}
+                        size={screen.size}
+                        stacked={screen.side.layout().stacked}
                       />
                     </div>
                   </Show>
@@ -447,7 +490,7 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
                       "relative z-0 shrink-0 overflow-visible bg-v2-background-bg-deep transition-[height] duration-[40ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none": true,
                       "delay-0": !screen.side.gap.closing(),
                       "delay-[200ms]": screen.side.gap.closing(),
-                      "transition-none": !paneAnimating(),
+                      "transition-none": !regionAnimating(),
                     }}
                     style={{ height: screen.side.gap.height() }}
                     onPointerDown={() => screen.size.start()}
@@ -456,15 +499,15 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
                       <ResizeHandle
                         class="!relative !inset-auto !h-full !w-full !transform-none"
                         direction="vertical"
-                        size={session.layout.view().terminal.height()}
+                        size={session.layout.view().dock.height()}
                         min={100}
                         max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
                         collapseThreshold={50}
                         onResize={(height) => {
                           screen.size.touch()
-                          session.layout.view().terminal.resize(height)
+                          session.layout.view().dock.resize(height)
                         }}
-                        onCollapse={() => session.layout.view().terminal.close()}
+                        onCollapse={() => session.layout.view().dock.close()}
                       />
                     </Show>
                   </div>
@@ -472,25 +515,28 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
                     data-slot="session-side-terminal-region"
                     classList={{
                       "relative z-10 min-h-0 shrink-0 overflow-visible transition-[height] duration-[240ms] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none": true,
-                      "will-change-[height]": !screen.size.active() && store.sideHeightMotion && paneAnimating(),
-                      "transition-none": screen.size.active() || !store.sideHeightMotion || !paneAnimating(),
+                      "will-change-[height]": !screen.size.active() && store.sideHeightMotion && regionAnimating(),
+                      "transition-none": screen.size.active() || !store.sideHeightMotion || !regionAnimating(),
                     }}
-                    style={{ height: screen.side.terminal.height() }}
+                    style={{ height: screen.side.dock.height() }}
                   >
-                    <Show when={store.sideTerminalPresent}>
+                    <Show when={store.sideDockPresent}>
                       <div
                         data-slot="side-terminal-panel-presence"
-                        data-opened={sideMotion().animateTerminal ? sideMotion().terminal : undefined}
+                        data-opened={sideMotion().animateDock ? sideMotion().dock : undefined}
                         class="absolute inset-0 rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
                       >
                         <div data-slot="side-terminal-panel-clip" class="size-full overflow-clip rounded-[10px]">
-                          <TerminalPanel
+                          <DockRegion
+                            screen={props.screen}
+                            view={props.view()}
+                            sidebar={sidebar}
                             fill
                             framed={false}
-                            present={store.sideTerminalPresent}
-                            animate={sidePresence.animate() || sideMotion().animateTerminal}
-                            contentHeight={screen.side.terminal.contentHeight()}
-                            reserveReviewToggle={!screen.side.region.open()}
+                            present={store.sideDockPresent}
+                            animate={sidePresence.animate() || sideMotion().animateDock}
+                            contentHeight={screen.side.dock.contentHeight()}
+                            reserve={!screen.side.region.open()}
                           />
                         </div>
                       </div>
@@ -502,13 +548,13 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
           </Show>
         </div>
 
-        <Show when={isDesktop() && (bottomTerminalPresence.present() || store.bottomTerminalCached)}>
+        <Show when={isDesktop() && (bottomDockPresence.present() || store.bottomDockCached)}>
           <div
-            ref={(element) => setElements("bottomTerminal", element)}
+            ref={(element) => setElements("bottomDock", element)}
             data-slot="terminal-panel-presence"
-            data-opened={bottomTerminalPresence.animate() ? bottomTerminalPresence.show() : undefined}
+            data-opened={bottomDockPresence.animate() ? bottomDockPresence.show() : undefined}
             classList={{
-              hidden: !bottomTerminalPresence.present(),
+              hidden: !bottomDockPresence.present(),
               "relative min-h-0 shrink-0": isDesktop(),
             }}
           >
@@ -517,22 +563,25 @@ function SessionScreenContent(props: { session: SessionModel; browser: ReturnTyp
                 <ResizeHandle
                   class="!relative !inset-auto !h-full !w-full !transform-none"
                   direction="vertical"
-                  size={session.layout.view().terminal.height()}
+                  size={session.layout.view().dock.height()}
                   min={100}
                   max={typeof window === "undefined" ? 600 : window.innerHeight * 0.6}
                   collapseThreshold={50}
                   onResize={(height) => {
                     screen.size.touch()
-                    session.layout.view().terminal.resize(height)
+                    session.layout.view().dock.resize(height)
                   }}
-                  onCollapse={() => session.layout.view().terminal.close()}
+                  onCollapse={() => session.layout.view().dock.close()}
                 />
               </div>
             </Show>
-            <TerminalPanel
+            <DockRegion
+              screen={props.screen}
+              view={props.view()}
+              sidebar={sidebar}
               stacked={isDesktop()}
-              present={store.bottomTerminalCached}
-              animate={bottomTerminalPresence.animate()}
+              present={store.bottomDockCached}
+              animate={bottomDockPresence.animate()}
             />
           </div>
         </Show>

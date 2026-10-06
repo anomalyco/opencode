@@ -6,7 +6,8 @@ import { Icon } from "@opencode/ui/icon"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
-import { displayName, homeProjectDirectories } from "@/shell/layout/helpers"
+import { displayName } from "@opencode/ui/project-avatar"
+import { homeProjectDirectories } from "@/shell/layout/helpers"
 import type { LocalProject } from "@/shell/state/layout"
 import { useDirectoryPicker } from "@/workspaces/selection/picker"
 import { addProjects } from "@/home/projects/add"
@@ -29,13 +30,17 @@ export const SettingsProjects: Component<{
   const context = createMemo(() => global.ensureServerCtx(props.server))
   const projects = createMemo(() => settingsProjects(context()))
   const searchable = createMemo(() => projects().length > 7)
+
   const filtered = createMemo(() => {
     const query = searchable() ? store.filter.trim().toLowerCase() : ""
+
     return query ? projects().filter((project) => displayName(project).toLowerCase().includes(query)) : projects()
   })
+
   createEffect(() => {
     if (!searchable()) setStore("filter", "")
   })
+
   const addProject = () =>
     pickDirectory({
       server: props.server,
@@ -44,11 +49,15 @@ export const SettingsProjects: Component<{
       onSelect: (result) => {
         const directories = homeProjectDirectories(result)
         const directory = addProjects(context(), directories)
+
         if (!directory) return
+
         if (directories.length > 1) return
+
         const project = context()
           .projects.list()
           .find((item) => item.worktree === directory)
+
         if (!project) return
         props.onOpenProject(project)
       },

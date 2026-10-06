@@ -21,6 +21,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const [store, setStore] = createStore<{ filter: string }>({ filter: "" })
 
   type Group = { category: string; items: [T, ...T[]] }
+
   const empty: Group[] = []
 
   const [grouped, { refetch }] = createResource(
@@ -32,6 +33,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
       const query = filter ?? ""
       const needle = query.toLowerCase()
       const all = (await Promise.resolve(items)) || []
+
       const result = pipe(
         all,
         (x) => {
@@ -39,10 +41,12 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
           const skipFilter = props.skipFilter
           const filterable = skipFilter ? x.filter((item) => !skipFilter(item)) : x
           const skipped = skipFilter ? x.filter(skipFilter) : []
+
           const filtered =
             !props.filterKeys && Array.isArray(filterable) && filterable.every((e) => typeof e === "string")
               ? (fuzzysort.go(needle, filterable).map((x) => x.target) as T[])
               : fuzzysort.go(needle, filterable, { keys: props.filterKeys! }).map((x) => x.obj)
+
           return skipped.length ? [...filtered, ...skipped] : filtered
         },
         groupBy((x) => (props.groupBy ? props.groupBy(x) : "")),
@@ -50,6 +54,7 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
         map(([k, v]) => ({ category: k, items: props.sortBy ? v.sort(props.sortBy) : v })),
         (groups) => (props.sortGroupsBy ? groups.sort(props.sortGroupsBy) : groups),
       )
+
       return result
     },
     { initialValue: empty },
@@ -64,10 +69,13 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
 
   function initialActive() {
     if (props.noInitialSelection) return ""
+
     if (props.current) return props.key(props.current)
 
     const items = flat()
+
     if (items.length === 0) return ""
+
     return props.key(items[0])
   }
 
@@ -80,9 +88,12 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
   const reset = () => {
     if (props.noInitialSelection) {
       list.setActive("")
+
       return
     }
+
     const all = flat()
+
     if (all.length === 0) return
     list.setActive(props.key(all[0]))
   }
@@ -92,14 +103,17 @@ export function useFilteredList<T>(props: FilteredListProps<T>) {
       event.preventDefault()
       const selectedIndex = flat().findIndex((x) => props.key(x) === list.active())
       const selected = flat()[selectedIndex]
+
       if (selected) props.onSelect?.(selected, selectedIndex)
     } else if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
       if (event.key === "n" || event.key === "p") {
         event.preventDefault()
+
         const navEvent = new KeyboardEvent("keydown", {
           key: event.key === "n" ? "ArrowDown" : "ArrowUp",
           bubbles: true,
         })
+
         list.onKeyDown(navEvent)
       }
     } else {

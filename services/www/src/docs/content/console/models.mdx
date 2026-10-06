@@ -110,8 +110,10 @@ You can also access the models directly through the following API endpoints.
 | Big Pickle                      | big-pickle                      | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Space Bunny Free                | space-bunny-free                | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | LongCat 2.5 Preview Free        | longcat-2.5-preview-free        | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Fledge Alpha Free               | fledge-alpha-free               | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.6-Flash Free            | mimo-v2.6-flash-free            | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | MiMo-V2.5 Free                  | mimo-v2.5-free                  | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
+| Ling 3.1 Flash Free             | ling-3.1-flash-free             | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Ling 3.0 Flash Fin Free         | ling-3.0-flash-fin-free         | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3 Ultra Free           | nemotron-3-ultra-free           | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
 | Nemotron 3.5 Lightning Free     | nemotron-3.5-lightning-free     | `https://opencode.ai/zen/v1/chat/completions`             | `@ai-sdk/openai-compatible` |
@@ -200,8 +202,10 @@ Console uses pay-as-you-go pricing. Below are the prices **per 1M tokens**.
 | Big Pickle                        | Free   | Free    | Free        | -            |
 | Space Bunny Free                  | Free   | Free    | Free        | -            |
 | LongCat 2.5 Preview Free          | Free   | Free    | Free        | -            |
+| Fledge Alpha Free                 | Free   | Free    | Free        | -            |
 | MiMo-V2.6-Flash Free              | Free   | Free    | Free        | -            |
 | MiMo-V2.5 Free                    | Free   | Free    | Free        | -            |
+| Ling 3.1 Flash Free               | Free   | Free    | Free        | -            |
 | Ling 3.0 Flash Fin Free           | Free   | Free    | Free        | -            |
 | Nemotron 3 Ultra Free             | Free   | Free    | Free        | -            |
 | Nemotron 3.5 Lightning Free       | Free   | Free    | Free        | -            |
@@ -307,8 +311,10 @@ models to generate session titles.
 
 ### Free models
 
+- Fledge Alpha Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - MiMo-V2.6-Flash Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - MiMo-V2.5 Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
+- Ling 3.1 Flash Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Ling 3.0 Flash Fin Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3 Ultra Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Nemotron 3.5 Lightning Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
@@ -360,8 +366,10 @@ you might still be charged more than $20 when your balance goes below $5.
 All our models are hosted in the US. Our providers follow a zero-retention policy and do not use your data for model training, with the following exceptions:
 
 - Big Pickle: During its free period, collected data may be used to improve the model.
+- Fledge Alpha Free: During its free period, collected data may be used to improve the model.
 - MiMo-V2.6-Flash Free: During its free period, collected data may be used to improve the model.
 - MiMo-V2.5 Free: During its free period, collected data may be used to improve the model.
+- Ling 3.1 Flash Free: During its free period, collected data may be used to improve the model.
 - Ling 3.0 Flash Fin Free: During its free period, collected data may be used to improve the model.
 - Nemotron 3 Ultra Free (NVIDIA free endpoints): Trial use only — do not submit personal or confidential data. Your use is logged for security purposes and to improve NVIDIA products and services. The logged session data for improvement purposes is not linked to your identity or any persistent identifier. For more information about our data processing practices, see our [Privacy Policy](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). By interacting with this endpoint, you consent to our collection, recording, and use of such information and the [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
 - Nemotron 3.5 Lightning Free (NVIDIA free endpoints): Trial use only — do not submit personal or confidential data. Your use is logged for security purposes and to improve NVIDIA products and services. The logged session data for improvement purposes is not linked to your identity or any persistent identifier. For more information about our data processing practices, see our [Privacy Policy](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). By interacting with this endpoint, you consent to our collection, recording, and use of such information and the [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).
@@ -373,33 +381,9 @@ For subscription models, see [Go privacy](/console/go#privacy).
 
 ## For teams
 
-You can invite teammates, assign roles, and curate the models your team uses.
-
-<Callout>
-  Managing workspaces is currently free for teams as part of the beta. More pricing details will be shared later.
-</Callout>
-
-### Roles
-
-Invite teammates to your workspace and assign roles:
-
-- **Admin:** Manage models, members, API keys, and billing.
-- **Member:** Manage only their own API keys.
-
-Admins can also set monthly spending limits for each member to keep costs under control.
-
-### Model access
-
-Admins can enable or disable specific models for the workspace. Requests made to a disabled model return an error.
-
-For example, you can disable a model that collects data so members of your workspace cannot use it.
-
-### Bring your own key
-
-You can use your own OpenAI or Anthropic API keys while still accessing other models through Console. Tokens used
-with your own keys are billed directly by the provider.
-
-For example, if your organization already has an OpenAI API key, you can use it instead of the one Console provides.
+Share Console models with your team from a [workspace](/console/workspaces). Owners and admins can
+[invite members](/console/members), choose which models are enabled from the **Models** tab, set
+[budgets](/console/budgets), and connect [their own providers](/console/providers).
 
 ## Background
 

@@ -47,7 +47,8 @@ export type Transport = typeof Transport.Type
 export const Settings = Schema.StructWithRest(
   Schema.Struct({
     timeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
-    chunkTimeout: Schema.Finite.pipe(optional),
+    headerTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
+    chunkTimeout: Schema.Union([Schema.Finite, Schema.Literal(false)]).pipe(optional),
     compaction: Compaction.pipe(optional),
     transport: Transport.pipe(optional),
   }),
