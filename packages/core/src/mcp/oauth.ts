@@ -19,6 +19,7 @@ import { OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema } from "@mod
 import { Cause, Deferred, Effect } from "effect"
 import type { ServerResponse } from "node:http"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
+import { EffectFlock } from "@opencode/util/effect-flock"
 import { Credential } from "../credential.js"
 import { OauthCallbackPage } from "../oauth/page.js"
 import type { Integration } from "../integration.js"
@@ -142,6 +143,7 @@ export interface Options {
   readonly clientMetadataUrl?: string
   readonly discovery?: OAuthDiscoveryState
   readonly invalidate?: OAuthClientProvider["invalidateCredentials"]
+  readonly refreshLock?: OAuthClientProvider["withRefreshLock"]
 }
 
 export const provider = (options: Options): OAuthClientProvider => {
@@ -203,6 +205,7 @@ export const provider = (options: Options): OAuthClientProvider => {
       return redirect.open(url)
     },
     ...(options.invalidate ? { invalidateCredentials: options.invalidate } : {}),
+    ...(options.refreshLock ? { withRefreshLock: options.refreshLock } : {}),
     saveCodeVerifier: (verifier) => options.store.saveCodeVerifier(verifier),
     codeVerifier: async () => {
       const verifier = await options.store.codeVerifier()
@@ -274,6 +277,7 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
   readonly integrationID: Integration.ID
 }) {
   const credentials = yield* Credential.Service
+  const flock = yield* EffectFlock.Service
   const run = Effect.runPromiseWith(yield* Effect.context())
   const found = (yield* credentials.list(input.integrationID)).at(-1)
   if (!found || found.value.type !== "oauth") return provider({ config: input.config, store: memoryStore() })
@@ -294,6 +298,10 @@ export const connectProvider = Effect.fnUntraced(function* (input: {
       await run(Effect.logWarning("mcp oauth credential invalidated", { credentialID: id, scope }))
       await run(credentials.remove(id))
     },
+    // Other processes share the row too. A refresh that waited here re-reads the token the previous
+    // holder saved instead of replaying the one it replaced, which rotating servers reject or revoke.
+    refreshLock: (refresh) =>
+      run(flock.withLock(Effect.tryPromise({ try: refresh, catch: (error) => error }), `mcp-oauth-refresh:${id}`)),
     store: {
       tokens: async () => {
         const oauth = await read()
