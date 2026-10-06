@@ -13,6 +13,34 @@ import {
 } from "../dialog-workspace-create"
 import type { WorkspaceStatus } from "../workspace-label"
 
+type TimedNoticeClock = {
+  setTimeout(callback: () => void, duration: number): ReturnType<typeof setTimeout>
+  clearTimeout(timer: ReturnType<typeof setTimeout>): void
+}
+
+export function createTimedNotice(duration = 4000, clock: TimedNoticeClock = { setTimeout, clearTimeout }) {
+  const [notice, setNotice] = createSignal<string>()
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  function show(message: string) {
+    if (timer) clock.clearTimeout(timer)
+    setNotice(message)
+    timer = clock.setTimeout(() => {
+      setNotice(undefined)
+      timer = undefined
+    }, duration)
+  }
+
+  function clear() {
+    if (timer) clock.clearTimeout(timer)
+    timer = undefined
+    setNotice(undefined)
+  }
+
+  onCleanup(clear)
+  return { notice, show, clear }
+}
+
 export function usePromptWorkspace(sessionID?: string) {
   const dialog = useDialog()
   const sdk = useSDK()
@@ -22,7 +50,7 @@ export function usePromptWorkspace(sessionID?: string) {
   const [selection, setSelection] = createSignal<WorkspaceSelection>()
   const [creating, setCreating] = createSignal(false)
   const [creatingDots, setCreatingDots] = createSignal(3)
-  const [notice, setNotice] = createSignal<string>()
+  const timedNotice = createTimedNotice()
 
   async function create(selection: Extract<WorkspaceSelection, { type: "new" }>) {
     setCreating(true)
@@ -94,12 +122,11 @@ export function usePromptWorkspace(sessionID?: string) {
   }
 
   function showNotice(name: string) {
-    setNotice(`Warped to ${name}`)
-    setTimeout(() => setNotice(undefined), 4000)
+    timedNotice.show(`Warped to ${name}`)
   }
 
   function clearNotice() {
-    setNotice(undefined)
+    timedNotice.clear()
   }
 
   function open() {
@@ -133,5 +160,5 @@ export function usePromptWorkspace(sessionID?: string) {
     }
   })
 
-  return { selection, creating, creatingDots, notice, label, open, warp, clearNotice }
+  return { selection, creating, creatingDots, notice: timedNotice.notice, label, open, warp, clearNotice }
 }
