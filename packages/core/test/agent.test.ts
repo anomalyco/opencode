@@ -167,7 +167,7 @@ describe("Agent", () => {
     }),
   )
 
-  it.effect("applies managed external directories without opting built-in agents into bash", () =>
+  it.effect("allows external directories without opting built-in agents into bash", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service
       yield* AgentPlugin.Plugin.effect(
