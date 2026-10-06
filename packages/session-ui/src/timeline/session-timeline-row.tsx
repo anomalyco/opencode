@@ -471,6 +471,7 @@ export function createSessionTimelineRowRenderer(input: {
         "md:max-w-[1000px] md:mx-auto": input.centered?.(),
         "pt-2": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "tool",
         "pt-4": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "content",
+        "pt-6": Predicate.isTagged(props.row, "Error"),
       }}
     >
       <div data-component="session-turn" class="min-w-0 w-full relative" style={{ height: "auto" }}>

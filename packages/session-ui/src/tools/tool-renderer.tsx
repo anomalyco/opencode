@@ -687,6 +687,7 @@ export function CurrentContextToolGroup(props: {
     <div
       ref={root}
       data-component="collapsed-tool-group"
+      data-notices-only={props.parts.every((part) => part.type === "notice") ? "" : undefined}
       data-timeline-part-ids={props.parts.map((part) => part.id).join(",")}
     >
       <BasicTool
