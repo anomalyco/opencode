@@ -11,7 +11,9 @@ import {
 import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
 
 export type { SessionUserActions, SessionUserAttachmentReference, SessionUserComment } from "../actions"
+
 export { SessionShellMessage } from "../tools/tool-renderer"
+
 export { currentContentDefaultOpen } from "./current-tool-state"
 
 export function SessionUserMessage(props: {

@@ -12,8 +12,10 @@ export async function expectSessionTitle(page: Page, title: string) {
     const trigger = page.locator('[data-slot="mobile-tabs-trigger"]')
     await expectAppVisible(trigger)
     await expect(trigger.locator('span[dir="auto"]')).toHaveText(title, { timeout: APP_READY_TIMEOUT })
+
     return
   }
+
   await expectAppVisible(page.getByRole("heading", { name: title }))
 }
 

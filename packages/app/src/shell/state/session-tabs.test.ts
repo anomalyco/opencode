@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { closeSessionTab, openSessionTab, previewSessionTab, type SessionTabState } from "./session-tabs"
 
 const OPEN = "file:open"
+
 const launchers = new Set([OPEN])
 
 const state = (all: string[], active?: string, preview?: string): SessionTabState => ({

@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 
 const number = Schema.Finite
+
 const Trace = Schema.Struct({
   traceEvents: Schema.Array(
     Schema.Struct({
@@ -13,6 +14,7 @@ const Trace = Schema.Struct({
     }),
   ),
 })
+
 const Cpu = Schema.Struct({
   startTime: number,
   endTime: number,
@@ -25,6 +27,7 @@ const Cpu = Schema.Struct({
   samples: Schema.optionalKey(Schema.Array(number)),
   timeDeltas: Schema.optionalKey(Schema.Array(number)),
 })
+
 const Heap = Schema.Struct({
   snapshot: Schema.Struct({
     meta: Schema.Struct({
@@ -41,6 +44,7 @@ const Heap = Schema.Struct({
 
 export function analyzeTrace(value: unknown, limit = 100) {
   const decoded = Schema.decodeUnknownOption(Trace)(value)
+
   if (decoded._tag === "None")
     throw new Error(
       "Selected file is not a Chromium performance trace. Use a fileID returned by browser.trace.stop for this tab; CPU profiles and heap snapshots use their own analysis tools.",
@@ -56,9 +60,11 @@ export function analyzeTrace(value: unknown, limit = 100) {
     item.totalMs += duration
     item.maxMs = Math.max(item.maxMs, duration)
     events.set(event.name, item)
+
     if ((event.name === "RunTask" || event.name === "ThreadControllerImpl::RunTask") && duration > 50)
       longTasks.push(duration)
   })
+
   return {
     metrics: [
       { name: "recordedEvents", value: trace.traceEvents.length, unit: "count" },
@@ -80,6 +86,7 @@ export function analyzeTrace(value: unknown, limit = 100) {
 
 export function analyzeCpu(value: unknown, limit = 100) {
   const decoded = Schema.decodeUnknownOption(Cpu)(value)
+
   if (decoded._tag === "None")
     throw new Error(
       "Selected file is not a CPU profile. Use a fileID returned by browser.cpu.stop for this tab, not a trace or heap snapshot.",
@@ -89,6 +96,7 @@ export function analyzeCpu(value: unknown, limit = 100) {
   profile.samples?.forEach((id, index) =>
     times.set(id, (times.get(id) ?? 0) + (profile.timeDeltas?.[index] ?? 0) / 1000),
   )
+
   return {
     durationMs: Math.max(0, (profile.endTime - profile.startTime) / 1000),
     functions: profile.nodes
@@ -111,6 +119,7 @@ const malformedHeap = () =>
 
 export function parseHeap(value: unknown) {
   const decoded = Schema.decodeUnknownOption(Heap)(value)
+
   if (decoded._tag === "None")
     throw new Error(
       "Selected file is not a V8 heap snapshot. Use a fileID returned by browser.heap.snapshot for this tab, not a trace or CPU profile.",
@@ -120,6 +129,7 @@ export function parseHeap(value: unknown) {
   const edgeFields = heap.snapshot.meta.edge_fields
   const width = fields.length
   const edgeWidth = edgeFields.length
+
   const indexes = {
     type: fields.indexOf("type"),
     name: fields.indexOf("name"),
@@ -130,6 +140,7 @@ export function parseHeap(value: unknown) {
     edgeName: edgeFields.indexOf("name_or_index"),
     to: edgeFields.indexOf("to_node"),
   }
+
   if (
     !width ||
     !edgeWidth ||
@@ -140,10 +151,12 @@ export function parseHeap(value: unknown) {
     throw malformedHeap()
   const types = heap.snapshot.meta.node_types[indexes.type]
   const edgeTypes = heap.snapshot.meta.edge_types[indexes.edgeType]
+
   if (!Array.isArray(types) || !Array.isArray(edgeTypes))
     throw new Error(
       "Heap snapshot type tables are unsupported. Use a complete capture from browser.heap.snapshot and report the compatibility issue if it persists.",
     )
+
   const node = (offset: number) => ({
     id: heap.nodes[offset + indexes.id],
     name: (heap.strings[heap.nodes[offset + indexes.name]] ?? "").slice(0, 100_000),
@@ -151,11 +164,14 @@ export function parseHeap(value: unknown) {
     selfBytes: heap.nodes[offset + indexes.size],
     edgeCount: heap.nodes[offset + indexes.count],
   })
+
   const classes = new Map<string, { name: string; count: number; bytes: number }>()
   let selfBytes = 0
   let edgeTotal = 0
+
   for (let offset = 0; offset < heap.nodes.length; offset += width) {
     const item = node(offset)
+
     if (!Number.isSafeInteger(item.edgeCount) || item.edgeCount < 0) throw malformedHeap()
     edgeTotal += item.edgeCount
     const name = item.name.slice(0, 2_048)
@@ -165,12 +181,16 @@ export function parseHeap(value: unknown) {
     selfBytes += item.selfBytes
     classes.set(name, entry)
   }
+
   // Edge counts drive the traversal below; a downloaded file can claim trillions of edges it does not carry.
   if (edgeTotal * edgeWidth !== heap.edges.length) throw malformedHeap()
+
   for (let offset = indexes.to; offset < heap.edges.length; offset += edgeWidth) {
     const to = heap.edges[offset]
+
     if (!Number.isSafeInteger(to) || to < 0 || to >= heap.nodes.length || to % width) throw malformedHeap()
   }
+
   return {
     summary(limit = 100) {
       return {
@@ -185,14 +205,18 @@ export function parseHeap(value: unknown) {
     classes,
     query(name = "", limit = 100) {
       const found: ReturnType<typeof node>[] = []
+
       for (let offset = 0; offset < heap.nodes.length; offset += width) {
         const item = node(offset)
+
         if (item.name.toLowerCase().includes(name.toLowerCase())) found.push(item)
       }
+
       return { nodes: found.sort((a, b) => b.selfBytes - a.selfBytes).slice(0, limit), truncated: found.length > limit }
     },
     object(id: number, limit = 100) {
       const target = heap.nodes.findIndex((value, index) => index % width === indexes.id && value === id) - indexes.id
+
       if (target < 0)
         throw new Error(
           "Object ID was not found in this heap snapshot. Call browser.heap.query with the same tabID and fileID, then copy an exact returned object id. Object IDs cannot be reused across snapshots.",
@@ -201,21 +225,27 @@ export function parseHeap(value: unknown) {
       const retainers: { name: string; node: ReturnType<typeof node> }[] = []
       let edgeOffset = 0
       let truncated = false
+
       for (let offset = 0; offset < heap.nodes.length; offset += width) {
         const count = heap.nodes[offset + indexes.count]
+
         for (let index = 0; index < count; index++, edgeOffset += edgeWidth) {
           const to = heap.edges[edgeOffset + indexes.to]
+
           if (offset !== target && to !== target) continue
           const type = edgeTypes[heap.edges[edgeOffset + indexes.edgeType]]
           const raw = heap.edges[edgeOffset + indexes.edgeName]
+
           const name = (type === "element" || type === "hidden" ? String(raw) : (heap.strings[raw] ?? "")).slice(
             0,
             100_000,
           )
+
           if (offset === target) {
             if (references.length < limit) references.push({ name, node: node(to) })
             else truncated = true
           }
+
           // A weak edge (WeakRef, WeakMap key) does not keep the target alive, so it is not a retainer.
           if (to === target && type !== "weak") {
             if (retainers.length < limit) retainers.push({ name, node: node(offset) })
@@ -223,6 +253,7 @@ export function parseHeap(value: unknown) {
           }
         }
       }
+
       return { node: node(target), references, retainers, truncated }
     },
   }

@@ -73,6 +73,7 @@ const PACKAGES: Readonly<Record<string, string>> = {
   "@ai-sdk/openai-compatible": "@opencode/ai/providers/openai-compatible",
   "@ai-sdk/togetherai": "@opencode/ai/providers/togetherai",
   "@ai-sdk/xai": "@opencode/ai/providers/xai",
+  "@ai-sdk/gateway": "@opencode/ai/providers/vercel-ai-gateway",
   "@openrouter/ai-sdk-provider": "@opencode/ai/providers/openrouter",
   "ai-gateway-provider": "@opencode/ai/providers/cloudflare-ai-gateway",
   "venice-ai-sdk-provider": "@opencode/ai/providers/venice",

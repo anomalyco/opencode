@@ -34,6 +34,32 @@ describe("AISDKNative", () => {
     }
   })
 
+  test("maps Vercel AI Gateway packages to native routes", () => {
+    expect(
+      map(
+        "@ai-sdk/gateway",
+        {
+          apiKey: "secret",
+          headers: { "x-gateway": "test" },
+          extraBody: { custom: true },
+          gateway: { order: ["anthropic"] },
+          reasoningEffort: "high",
+        },
+        "anthropic/claude-sonnet-5.5",
+        "vercel",
+      ),
+    ).toEqual({
+      package: "@opencode/ai/providers/vercel-ai-gateway",
+      settings: {
+        apiKey: "secret",
+        gateway: { order: ["anthropic"] },
+        reasoningEffort: "high",
+      },
+      headers: { "x-gateway": "test" },
+      body: { custom: true },
+    })
+  })
+
   test("maps OpenAI-family packages and request options to native providers", () => {
     expect(
       map("@ai-sdk/openai", {

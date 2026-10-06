@@ -17,6 +17,7 @@ for (const entry of ["home", "session"] as const) {
     await mockStressTimeline(page)
     await installStressSessionTabs(page, { sessionIDs: entry === "home" ? [] : [fixture.sourceID] })
     await page.goto(entry === "home" ? "/" : sessionHref(fixture.sourceID))
+
     if (entry === "session") await waitForStableTimeline(page, fixture.expected.sourceMessageIDs.at(-1)!)
     const trigger = entry === "home" ? '[data-action="home-new-session"]' : 'button[aria-label="New session"]'
     await expect(page.locator(trigger)).toBeVisible()
@@ -27,6 +28,7 @@ for (const entry of ["home", "session"] as const) {
         writes.push(request.method())
     })
     await benchmarkDiagnostics(page).startTrace()
+
     const result = await measureNavigationMilestones(page, {
       triggerSelector: trigger,
       milestones: {
@@ -39,6 +41,7 @@ for (const entry of ["home", "session"] as const) {
       },
       navigate: () => page.locator(trigger).click(),
     })
+
     await benchmarkDiagnostics(page).stop()
     const editor = page.locator('[data-component="new-session"] [data-component="composer-editor"]')
     await expect(editor).toHaveText("")
@@ -70,6 +73,7 @@ benchmark("entry: cold session from Home", async ({ page, report }) => {
   expect(requests).not.toContain(fixture.targetID)
   const href = sessionHref(fixture.targetID)
   await benchmarkDiagnostics(page).startTrace()
+
   const result = await measureSessionSwitch(page, {
     destinationIDs: fixture.messages[fixture.targetID].map((message) => message.id),
     sourceIDs: [],
@@ -82,6 +86,7 @@ benchmark("entry: cold session from Home", async ({ page, report }) => {
       await waitForStableTimeline(page, fixture.expected.targetMessageIDs.at(-1)!)
     },
   })
+
   await benchmarkDiagnostics(page).stop()
   await expect(
     page.locator(`[data-titlebar-tab-slot][data-active="true"] [data-titlebar-tab-link][href="${href}"]`),

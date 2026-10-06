@@ -12,9 +12,11 @@ test("detects blanking caused by ancestor opacity", async ({ page }) => {
   const partID = "prt_oracle_ancestor_opacity"
   await setupTimeline(page, { messages: [userMessage(), assistantMessage([textPart(partID, "Visible content")])] })
   const row = page.locator(`[data-timeline-part-id="${renderedPartID(partID)}"]`).first()
+
   const regions = defineVisualRegions({
     content: { selector: `[data-timeline-part-id="${renderedPartID(partID)}"]` },
   })
+
   await startVisualProbe(page, regions)
   await row.evaluate((element) => {
     element.parentElement!.style.opacity = "0"
@@ -25,6 +27,7 @@ test("detects blanking caused by ancestor opacity", async ({ page }) => {
   })
   await page.waitForTimeout(50)
   const trace = await stopVisualProbe<keyof typeof regions>(page)
+
   const issues = analyzeVisualObservations(
     trace.samples,
     visualPlan(regions, [
@@ -45,12 +48,14 @@ test("detects root opacity when probing descendant opacity", async ({ page }) =>
   await row.evaluate((element) => {
     element.innerHTML = '<span data-probe-opacity="true">Visible content</span>'
   })
+
   const regions = defineVisualRegions({
     content: {
       selector: `[data-timeline-part-id="${renderedPartID(partID)}"]`,
       opacitySelectors: ['[data-probe-opacity="true"]'],
     },
   })
+
   await startVisualProbe(page, regions)
   await row.evaluate((element) => {
     ;(element as HTMLElement).style.opacity = "0"
@@ -61,6 +66,7 @@ test("detects root opacity when probing descendant opacity", async ({ page }) =>
   })
   await page.waitForTimeout(50)
   const trace = await stopVisualProbe<keyof typeof regions>(page)
+
   const issues = analyzeVisualObservations(
     trace.samples,
     visualPlan(regions, [

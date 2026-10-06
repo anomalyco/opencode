@@ -153,19 +153,19 @@ declare const brand: unique symbol
 declare const problem: unique symbol
 
 /**
- * A token kind: a named place that accepts contributions. The extension or host that owns the point decides how to
- * render its items; others `ctx.add` to it. Define one with `Point.define`.
+ * A token kind: a typed list that accepts contributions. The extension or host that owns the registry decides how to
+ * use its items; others `ctx.add` to it. Define one with `Registry.define`.
  *
  * @example
  * ```ts
- * export const Badge = Point.define<{ readonly label: string }>("details.badge")
+ * export const Badge = Registry.define<{ readonly label: string }>("details.badge")
  * ctx.add(Badge, { label: "New" })
  * ```
  */
-export interface Point<T> {
+export interface Registry<T> {
   /** The token kind. */
-  readonly kind: "point"
-  /** The point's id; contributions are grouped by it. */
+  readonly kind: "registry"
+  /** The registry's id; contributions are grouped by it. */
   readonly id: string
   /** Carries the item type `T` at compile time only; never set. */
   readonly [brand]?: T
@@ -477,10 +477,10 @@ export interface BaseContext {
    */
   readonly id: string
   /**
-   * Contributes an item to a point. The host withdraws it with the current owner (a `createKeyed` run or a component),
-   * else with the extension; made after that owner or the extension ended, it is withdrawn at once.
+   * Contributes an item to a registry. The host withdraws it with the current owner (a `createKeyed` run or a
+   * component), else with the extension; made after that owner or the extension ended, it is withdrawn at once.
    *
-   * @param point - Where the item goes, such as `Command` or `TitlebarItem`.
+   * @param registry - Where the item goes, such as `Command` or `TitlebarItem`.
    * @param item - The item, or a function returning it. A function is reactive in the window (main reads it on every
    *   `list`); return undefined to withdraw the item until the function returns one again.
    * @returns Withdraws the item early.
@@ -491,19 +491,19 @@ export interface BaseContext {
    * ctx.add(TitlebarItem, () => (shown() ? pill : undefined))
    * ```
    */
-  add<T>(point: Point<T>, item: T | (() => T | undefined)): Cleanup
+  add<T>(registry: Registry<T>, item: T | (() => T | undefined)): Cleanup
   /**
-   * The items every extension contributed to a point, in contribution order. Reactive in the window. Use it for a
-   * point your extension owns and renders.
+   * The items every extension contributed to a registry, in contribution order. Reactive in the window. Use it for a
+   * registry your extension owns.
    *
-   * @param point - The point to read.
+   * @param registry - The registry to read.
    *
    * @example
    * ```ts
    * const badges = () => ctx.list(Badge)
    * ```
    */
-  list<T>(point: Point<T>): readonly T[]
+  list<T>(registry: Registry<T>): readonly T[]
   /**
    * Translates a key from the extension's catalog in the current locale, then from the app's shared keys
    * (`common.*`). Reactive in the window. Main returns the key itself when no catalog has it.
@@ -916,20 +916,20 @@ export const Extension = {
 }
 
 /**
- * Defines points.
+ * Defines registries.
  *
  * @example
  * ```ts
- * export const Badge = Point.define<{ readonly label: string }>("details.badge")
+ * export const Badge = Registry.define<{ readonly label: string }>("details.badge")
  * ```
  */
-export const Point = {
+export const Registry = {
   /**
-   * Creates a point token.
+   * Creates a registry token.
    *
-   * @param id - The point's id; start it with your extension's id.
+   * @param id - The registry's id; start it with your extension's id.
    */
-  define: <T>(id: string): Point<T> => ({ kind: "point", id }),
+  define: <T>(id: string): Registry<T> => ({ kind: "registry", id }),
 }
 
 /**

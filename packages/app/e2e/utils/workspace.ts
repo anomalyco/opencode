@@ -32,9 +32,11 @@ export async function mockWorkspace(page: Page, input: WorkspaceInput) {
   const slug = input.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")
   const directory = input.directory ?? `C:/OpenCode/${input.name}`
   const projectID = typeof input.project?.id === "string" ? input.project.id : `proj_${slug}`
+
   const sessions = (input.sessions ?? [{ id: `ses_${slug}`, title: input.name }]).map((item) =>
     session({ directory, projectID, ...item }),
   )
+
   const mock = await mockOpenCodeServer(page, {
     provider: provider(),
     pageMessages: () => ({ items: [] }),
@@ -43,12 +45,14 @@ export async function mockWorkspace(page: Page, input: WorkspaceInput) {
     project: project({ id: projectID, directory, name: input.name, ...input.project }),
     sessions,
   })
+
   await seed(page, {
     projects: { local: [{ worktree: directory, expanded: true }] },
     lastProject: { local: directory },
     tabs: sessions.map((item) => item.id),
     ...input.seed,
   })
+
   return { server: SERVER, directory, projectID, sessions, pty: mock.pty, push: mock.push }
 }
 
@@ -56,11 +60,13 @@ export async function mockWorkspace(page: Page, input: WorkspaceInput) {
 export async function openSession(page: Page, input: WorkspaceInput & { sessionID?: string }) {
   const workspace = await mockWorkspace(page, input)
   const target = workspace.sessions.find((item) => item.id === (input.sessionID ?? workspace.sessions[0]?.id))
+
   if (!target) throw new Error(`Unknown session ${input.sessionID}`)
   await page.goto(sessionHref(target.id))
   await expectSessionTitle(page, target.title)
   const editor = page.locator('[data-component="composer-editor"]')
   await expect(editor).toBeEditable({ timeout: APP_READY_TIMEOUT })
+
   return { ...workspace, session: target, editor }
 }
 
@@ -74,6 +80,7 @@ export async function openDraft(page: Page, input: WorkspaceInput & { draftID?: 
   await page.goto(draftHref(draftID))
   const editor = page.locator('[data-component="composer-editor"]')
   await expect(editor).toBeEditable({ timeout: APP_READY_TIMEOUT })
+
   return { ...workspace, draftID, editor }
 }
 
@@ -89,16 +96,20 @@ export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { dr
   page.on("request", (request) => {
     if (request.method() !== "POST") return
     const url = new URL(request.url())
+
     if (url.pathname === "/api/worktree") {
       calls.push("worktree")
       worktreeRequests.push({ url, body: request.postDataJSON() })
     }
+
     if (url.pathname === "/api/session") calls.push("session")
+
     if (/^\/api\/session\/[^/]+\/prompt$/.test(url.pathname)) calls.push("prompt")
   })
   const draftID = input.draftID ?? `draft_${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`
   const directory = input.directory ?? `C:/OpenCode/${input.name}`
   const sessions = input.sessions ?? []
+
   const workspace = await mockWorkspace(page, {
     ...input,
     directory,
@@ -109,14 +120,17 @@ export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { dr
     },
     onWorktreeCreate: async () => {
       const answer = await worktree.promise
+
       return { status: answer.status, body: answer.json }
     },
     onSessionCreate: (body, attempt) => {
       creates.push(body)
+
       return input.onSessionCreate?.(body, attempt)
     },
     seed: { tabs: [{ draft: draftID, directory }, ...sessions.map((item) => item.id)], ...input.seed },
   })
+
   await page.goto(draftHref(draftID))
   const editor = page.locator('[data-component="composer-editor"]')
   await expect(editor).toBeVisible({ timeout: APP_READY_TIMEOUT })
@@ -124,6 +138,7 @@ export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { dr
   await page.getByRole("menuitem", { name: "New worktree", exact: true }).click()
   await expect(page.getByRole("button", { name: "New worktree", exact: true })).toBeVisible()
   await expect(editor).toBeEditable()
+
   return { ...workspace, draftID, editor, worktree, calls, worktreeRequests, creates, prompts }
 }
 
@@ -135,6 +150,7 @@ export async function mockRemoteServer(
 ) {
   const server = input.server ?? REMOTE_SERVER
   const directory = input.directory ?? "/remote/project"
+
   const mock = await mockOpenCodeServer(page, {
     project: project({ id: "proj_remote", directory }),
     provider: NO_PROVIDER,
@@ -144,7 +160,9 @@ export async function mockRemoteServer(
     server,
     directory,
   })
+
   await seed(page, { servers: [input.name ? { url: server, name: input.name } : server] })
+
   return mock
 }
 
@@ -152,10 +170,12 @@ export async function mockRemoteServer(
 export async function openSettings(page: Page, input: WorkspaceInput) {
   const workspace = await mockWorkspace(page, { sessions: [], ...input })
   await page.goto("/")
+
   if ((page.viewportSize()?.width ?? 1280) < 800) await page.getByRole("button", { name: "Tabs", exact: true }).click()
   await page.getByRole("button", { name: "Settings", exact: true }).click()
   const settings = page.getByTestId("settings-screen")
   await expect(settings).toBeFocused({ timeout: APP_READY_TIMEOUT })
+
   return { ...workspace, settings }
 }
 
@@ -169,6 +189,7 @@ export function fileDiff(
   options: { additions?: number; deletions?: number; status?: "added" | "modified" | "deleted"; loaded?: boolean } = {},
 ) {
   const header = `diff --git a/${file} b/${file}\n--- a/${file}\n+++ b/${file}`
+
   return {
     file,
     additions: options.additions ?? 1,

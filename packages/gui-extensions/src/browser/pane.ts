@@ -325,6 +325,15 @@ export function createBrowserPane(input: {
     async highlight(window: number, binding: string, tabID: Browser.TabID, ref?: Browser.Ref) {
       await owned(window, binding).pages.get(tabID)?.highlight(ref)
     },
+    zoom(window: number, binding: string, tabID: Browser.TabID, direction: "in" | "out" | "reset") {
+      owned(window, binding).pages.get(tabID)?.zoom(direction)
+    },
+    async site(window: number, binding: string, tabID: Browser.TabID) {
+      return (await owned(window, binding).pages.get(tabID)?.site()) ?? { cookies: 0 }
+    },
+    async clearSite(window: number, binding: string, tabID: Browser.TabID) {
+      await owned(window, binding).pages.get(tabID)?.clearSite()
+    },
     async command(window: number, binding: string, command: Browser.Action) {
       const entry = owned(window, binding)
       await execute(entry, { action: command, files: [] }, new AbortController().signal)
@@ -480,9 +489,21 @@ export function createBrowserPane(input: {
       inspect: (event) => {
         if (entry.pages.has(id)) report(entry, { type: "inspect", tabID: id, ...event })
       },
-      popup: (popupOptions) => {
+      // Straight to the window: icons and zoom are local to this desktop, like the embed.
+      detail: (value) => {
+        if (entry.pages.has(id)) publish(entry, { type: "page", tabID: id, ...value })
+      },
+      zoomed: () => entry.pages.forEach((page) => page.detail()),
+      address: () => {
+        if (!entry.pages.has(id) || entry.win.isDestroyed()) return
+        // The page held keyboard focus; the app's address field needs it back.
+        entry.win.webContents.focus()
+        publish(entry, { type: "address", tabID: id })
+      },
+      popup: (popupOptions, background) => {
         const popup = create(entry, false, popupOptions)
-        focus(entry, popup.state().id)
+
+        if (!background) focus(entry, popup.state().id)
 
         return popup.contents
       },

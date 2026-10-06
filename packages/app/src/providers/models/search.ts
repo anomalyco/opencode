@@ -9,9 +9,11 @@ export const compactModelSearch = (value: string) => normalizeModelSearch(value)
 
 export const matchesModelSearch = (query: string, values: string[]) => {
   const search = normalizeModelSearch(query)
+
   if (!search) return true
 
   const compactSearch = compactModelSearch(query)
+
   return values.some(
     (value) => normalizeModelSearch(value).includes(search) || compactModelSearch(value).includes(compactSearch),
   )

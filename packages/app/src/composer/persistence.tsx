@@ -25,6 +25,7 @@ export {
   DEFAULT_PROMPT,
   isCommentItem,
 } from "./state"
+
 export type {
   AgentPart,
   ContentPart,
@@ -41,11 +42,14 @@ export type {
 } from "./state"
 
 const WORKSPACE_KEY = "__workspace__"
+
 const MAX_PROMPT_SESSIONS = 20
 
 export function selectPromptTab(tabs: Tab[], scope: PromptScope, server: ServerConnection.Key) {
   if ("draftID" in scope) return tabs.find((tab) => tab.type === "draft" && tab.draftID === scope.draftID)
+
   if (!scope.id) return
+
   return (
     tabs.find((tab) => tab.type === "session" && tab.server === server && tab.sessionId === scope.id) ??
     ({ type: "session", server, sessionId: scope.id } satisfies Tab)
@@ -54,6 +58,7 @@ export function selectPromptTab(tabs: Tab[], scope: PromptScope, server: ServerC
 
 function scopeKey(scope: PromptScope) {
   if ("draftID" in scope) return `draft:${scope.draftID}`
+
   return `${scope.dir}:${scope.id ?? WORKSPACE_KEY}`
 }
 
@@ -89,6 +94,7 @@ export const { use: useComposerState, provider: ComposerPersistenceProvider } = 
     const prune = () => {
       while (cache.size > MAX_PROMPT_SESSIONS) {
         const first = cache.keys().next().value
+
         if (!first) return
         const entry = cache.get(first)
         entry?.dispose()
@@ -97,19 +103,25 @@ export const { use: useComposerState, provider: ComposerPersistenceProvider } = 
     }
 
     const owner = getOwner()
+
     const serverKey = () =>
       params.serverKey ? requireServerKey(params.serverKey) : ServerConnection.key(serverSDK.server)
+
     const scope = (): PromptScope =>
       search.draftId ? { draftID: search.draftId } : { dir: base64Encode(sdk().directory), id: params.id }
+
     const load = (scope: PromptScope, target?: { server?: ServerConnection.Key; scope: ServerScope }) => {
       const current = selectPromptTab(tabs.store, scope, target?.server ?? serverKey())
+
       if (current) return createTabComposerState(tabs, current, target?.scope ?? serverSDK.scope, scope)
 
       const key = target ? `${target.scope}:${scopeKey(scope)}` : scopeKey(scope)
       const existing = cache.get(key)
+
       if (existing) {
         cache.delete(key)
         cache.set(key, existing)
+
         return existing.value
       }
 
@@ -123,12 +135,15 @@ export const { use: useComposerState, provider: ComposerPersistenceProvider } = 
 
       cache.set(key, entry)
       prune()
+
       return entry.value
     }
 
     const session = createMemo(() => load(scope()))
+
     const pick = (scope?: PromptScope, target?: { server?: ServerConnection.Key; scope: ServerScope }) =>
       scope ? load(scope, target) : session()
+
     const ready = createComposerReady(session)
 
     const withSuspense = <T,>(cb: () => T): (() => T) =>
@@ -136,6 +151,7 @@ export const { use: useComposerState, provider: ComposerPersistenceProvider } = 
         async () => {
           const value = cb()
           await session().ready.promise
+
           return value
         },
         cb,

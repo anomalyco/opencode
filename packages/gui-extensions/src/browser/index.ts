@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 import { Extension, Ipc, Store } from "../sdk"
 import { Browser } from "./contract"
+import { History } from "./history"
 import en from "./i18n/en"
 import type { BrowserPane } from "./ipc"
 
@@ -14,6 +15,9 @@ export default Extension.define({
   stores: {
     // The end of the last block of element refs main reserved, so refs stay unique across reloads.
     refs: Store.main(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)), 0),
+    // Pages the browser showed, for the new tab page and the address field's suggestions. One list for every
+    // session and server, kept on this device.
+    history: Store.global(History, { visits: [] }),
   },
   i18n: {
     en,

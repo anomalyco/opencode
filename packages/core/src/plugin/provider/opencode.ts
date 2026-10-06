@@ -471,7 +471,8 @@ export const OpencodePlugin = define<HttpClient.HttpClient | Bus.Service | Manag
 })
 
 function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Credential.OAuth) {
-  return http
+  // Scoped so responses whose body is never read (404, errors) are released here instead of by a GC-time abort.
+  return HttpClient.withScope(http)
     .execute(
       HttpClientRequest.get(`${serverUrl(value)}/api/v2/config`).pipe(
         HttpClientRequest.acceptJson,
@@ -499,6 +500,7 @@ function fetchConfig(http: HttpClient.HttpClient, value: Credential.Key | Creden
           )
         }),
       ),
+      Effect.scoped,
     )
 }
 

@@ -21,10 +21,13 @@ export function HomeCommandPalette(props: {
   const language = useLanguage()
   const server = global.ensureServerCtx(props.server)
   const state = { cleanup: undefined as (() => void) | void, committed: false }
+
   const commandEntries = createMemo(() => {
     const category = language.t("palette.group.commands")
+
     return commandPaletteOptions(command.options).map((option) => createCommandPaletteCommandEntry(option, category))
   })
+
   const sessions = createServerSessionEntries({
     server: ServerConnection.key(props.server),
     opened: server.projects.list,
@@ -38,22 +41,29 @@ export function HomeCommandPalette(props: {
   const highlight = (item: CommandPaletteEntry | undefined) => {
     state.cleanup?.()
     state.cleanup = undefined
+
     if (item?.type !== "command") return
     state.cleanup = item.option?.onHighlight?.()
   }
+
   const select = (item: CommandPaletteEntry | undefined) => {
     if (!item) return
     state.committed = true
     state.cleanup = undefined
     dialog.close()
+
     if (item.type === "command") {
       void item.option?.onSelect?.("palette")
+
       return
     }
+
     if (item.type === "session") props.onSelectSession(item)
   }
+
   const items = (query: string) => {
     if (!query) return commandEntries().slice(0, 5)
+
     return commandEntries().filter((entry) => matchesCommandPaletteEntry(entry, query))
   }
 

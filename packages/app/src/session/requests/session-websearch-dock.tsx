@@ -9,18 +9,25 @@ import "./session-websearch-dock.css"
 
 export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSubmit: () => void }) {
   const language = useLanguage()
+
   const options = createMemo(() => [
     ...(props.model.specific() ? [] : [{ value: "random", label: language.t("session.websearch.any") }]),
     ...props.model.options(),
   ])
+
   const current = createMemo(() => options().find((option) => option.value === props.model.selected()))
   const busy = () => props.model.sending() || !props.model.connected()
+
   const status = () => {
     if (props.model.loading()) return language.t("common.loading")
+
     if (props.model.failed()) return language.t("session.websearch.failed")
+
     if (!props.model.options().length) return language.t("session.websearch.empty")
   }
+
   const unavailable = () => props.model.loading() || props.model.loadFailed() || !props.model.options().length
+
   const submit = (selection: string | false) => {
     if (busy()) return
     props.onSubmit()
@@ -73,6 +80,7 @@ export function SessionWebSearchDock(props: { model: WebSearchRequestModel; onSu
             size="small"
             onClick={() => {
               const selected = props.model.selected()
+
               if (selected) submit(selected)
             }}
             disabled={busy() || unavailable() || !current()}

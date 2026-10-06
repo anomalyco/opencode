@@ -227,17 +227,17 @@ story("keeps the comment editor and its actions inside the page", async ({ page 
 story("shows the empty state over a blank native page and restores navigation", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
-  await expect(root.getByText("Enter URL", { exact: true })).toBeVisible()
-  await expect(root.getByText('Or prompt "Open in the app browser"', { exact: true })).toBeVisible()
+  await expect(root.getByText("Open a page", { exact: true })).toBeVisible()
+  await expect(root.getByText("Preview your app, read docs, or browse the web.", { exact: true })).toBeVisible()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeDisabled()
 
-  const address = root.getByRole("textbox", { name: "Browser address", exact: true })
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.fill("https://example.com/")
-  await expect(root.getByText("Enter URL", { exact: true })).toBeVisible()
+  await expect(root.getByText("Open a page", { exact: true })).toBeVisible()
   await address.press("Enter")
   await expect(address).not.toBeFocused()
-  await expect(root.getByText("Enter URL", { exact: true })).toBeHidden()
+  await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeEnabled()
 })
@@ -245,9 +245,9 @@ story("shows the empty state over a blank native page and restores navigation", 
 story("keeps Stop available and hides the empty state while a blank page loads", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Loading page", exact: true }).click()
-  await expect(root.getByText("Enter URL", { exact: true })).toBeHidden()
+  await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
   await root.getByRole("button", { name: "Stop", exact: true }).click()
-  await expect(root.getByText("Enter URL", { exact: true })).toBeVisible()
+  await expect(root.getByText("Open a page", { exact: true })).toBeVisible()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
 })
 
@@ -255,12 +255,12 @@ story("keeps the submitted URL visible until the browser reports navigation", as
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
-  const address = root.getByRole("textbox", { name: "Browser address", exact: true })
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.fill("https://example.com/")
   await address.press("Enter")
   await expect(address).not.toBeFocused()
   await expect(address).toHaveValue("https://example.com/")
-  await expect(root.getByText("Enter URL", { exact: true })).toBeHidden()
+  await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
 
   await root.getByRole("button", { name: "Complete navigation", exact: true }).click()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
@@ -274,7 +274,7 @@ story("keeps the submitted URL visible until the browser reports navigation", as
 story("restores the current URL each time the same submitted navigation is blocked", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
-  const address = root.getByRole("textbox", { name: "Browser address", exact: true })
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
 
   for (const submission of [1, 2]) {
     await story.step(`blocked submission ${submission}`, async () => {
@@ -296,7 +296,7 @@ story("shows a themed failure state for only the failed tab and allows retry", a
   await expect(root.getByText("Check the URL and your connection, then try again.", { exact: true })).toBeVisible()
   await expect(root.getByText("Request failed", { exact: true })).toBeHidden()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
-  await expect(root.getByRole("textbox", { name: "Browser address", exact: true })).toHaveValue(
+  await expect(root.getByRole("combobox", { name: "Browser address", exact: true })).toHaveValue(
     "https://alpha.example/",
   )
 
@@ -317,7 +317,7 @@ story("returns a failed tab to the empty state when an empty URL is submitted", 
   await expect(root.getByText("URL can't be reached", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
 
-  const address = root.getByRole("textbox", { name: "Browser address", exact: true })
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.fill("")
   await address.press("Enter")
   await expect(address).not.toBeFocused()
@@ -326,14 +326,14 @@ story("returns a failed tab to the empty state when an empty URL is submitted", 
   await expect(root.getByRole("button", { name: "Stop", exact: true })).toBeEnabled()
   await root.getByRole("button", { name: "Complete navigation", exact: true }).click()
   await expect(root.getByText("URL can't be reached", { exact: true })).toBeHidden()
-  await expect(root.getByText("Enter URL", { exact: true })).toBeVisible()
+  await expect(root.getByText("Open a page", { exact: true })).toBeVisible()
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeDisabled()
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "false")
 })
 
 story("selects the full URL when the address field gains focus", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const address = root.getByRole("textbox", { name: "Browser address", exact: true })
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.click()
   await expect(address).toHaveJSProperty("selectionStart", 0)
   await expect(address).toHaveJSProperty("selectionEnd", "https://alpha.example/".length)
@@ -352,10 +352,55 @@ story("selects the full URL when the address field gains focus", async ({ page }
     .toBe(true)
 })
 
+story("draws only the address at rest when focus leaves the window with the field selected", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.click()
+  // Chromium blurs the field when the window or the native page takes focus, and the field keeps its full selection.
+  await address.evaluate((input: HTMLInputElement) => {
+    input.dispatchEvent(new FocusEvent("blur"))
+    input.select()
+  })
+  await expect(address).toHaveJSProperty("selectionStart", 0)
+  await expect(address).toHaveJSProperty("selectionEnd", "https://alpha.example/".length)
+  await page.mouse.move(0, 0)
+
+  // Computed ::selection styles do not report the default highlight, so compare the input's own paint with the
+  // selection collapsed. The drawn address is hidden: a selection layer can change how its text is antialiased.
+  await page.addStyleTag({ content: '[data-slot="browser-address-display"] { visibility: hidden }' })
+  const field = root.locator('[data-component="browser-address"]')
+  const selected = (await field.screenshot()).toString("base64")
+  await address.evaluate((input: HTMLInputElement) => input.setSelectionRange(0, 0))
+  const collapsed = (await field.screenshot()).toString("base64")
+
+  const changed = await page.evaluate(
+    async (shots) => {
+      const pixels = await Promise.all(
+        shots.map(async (data) => {
+          const image = new Image()
+          image.src = `data:image/png;base64,${data}`
+          await image.decode()
+          const canvas = new OffscreenCanvas(image.width, image.height)
+          canvas.getContext("2d")?.drawImage(image, 0, 0)
+
+          return canvas.getContext("2d")?.getImageData(0, 0, image.width, image.height).data ?? new Uint8ClampedArray()
+        }),
+      )
+
+      return Array.from({ length: (pixels[0]?.length ?? 0) / 4 }, (_, index) => index * 4).filter((offset) =>
+        [0, 1, 2].some((channel) => pixels[0]?.[offset + channel] !== pixels[1]?.[offset + channel]),
+      ).length
+    },
+    [selected, collapsed],
+  )
+
+  expect(changed).toBe(0)
+})
+
 story("keeps the current page visible while a submitted URL loads", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Delay navigation", exact: true }).click()
-  const address = root.getByRole("textbox", { name: "Browser address", exact: true })
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.fill("https://example.com/")
   await address.press("Enter")
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
@@ -371,12 +416,74 @@ story("keeps the current page visible while a submitted URL loads", async ({ pag
 
 story("keeps the current page and restores its URL when an empty address is submitted", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const address = root.getByRole("textbox", { name: "Browser address", exact: true })
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.fill("")
   await address.press("Enter")
   await expect(address).not.toBeFocused()
   await expect(address).toHaveValue("https://alpha.example/")
   await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
-  await expect(root.getByText("Enter URL", { exact: true })).toBeHidden()
+  await expect(root.getByText("Open a page", { exact: true })).toBeHidden()
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeEnabled()
+})
+
+story("suggests visited pages and opens the first one that completes the typed address", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Seed history", exact: true }).click()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await address.click()
+  await address.pressSequentially("localhost")
+  const options = page.getByRole("option")
+  await expect(options).toHaveCount(1)
+  await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  await address.press("Enter")
+  await expect(address).toHaveValue("http://localhost:5173/settings")
+
+  // A search query also opens the first match; stepping past the list leaves the typed text, which searches.
+  await address.click()
+  await address.pressSequentially("color format")
+  await expect(options).toHaveCount(1)
+  await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  await address.press("ArrowDown")
+  await expect(options.first()).toHaveAttribute("aria-selected", "false")
+  await address.press("Enter")
+  await expect(address).toHaveValue("https://www.google.com/search?q=color%20format")
+})
+
+story("lists recent pages on a blank tab and opens one", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Seed history", exact: true }).click()
+  await root.getByRole("button", { name: "Blank page", exact: true }).click()
+  await expect(root.getByText("Recent", { exact: true })).toBeVisible()
+  await root.getByRole("button", { name: /^Settings - Preview/ }).click()
+  await expect(root.getByRole("combobox", { name: "Browser address", exact: true })).toHaveValue(
+    "http://localhost:5173/settings",
+  )
+  await expect(root.getByTestId("native-Alpha")).toHaveAttribute("data-visible", "true")
+})
+
+story("focuses the address field when the page uses the address shortcut", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Address shortcut", exact: true }).click()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  await expect(address).toBeFocused()
+  await expect(address).toHaveJSProperty("selectionEnd", "https://alpha.example/".length)
+})
+
+story("shows the page's cookies in the site information and clears them", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Site information", exact: true }).click()
+  const site = page.getByRole("dialog")
+  await expect(site).toContainText("3 cookies in use")
+  await site.getByRole("button", { name: "Clear", exact: true }).click()
+  await expect(site).toContainText("0 cookies in use")
+})
+
+story("zooms the page from the browser options and shows its zoom", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Browser options", exact: true }).click()
+  await page.getByRole("menuitem", { name: /^Zoom in/ }).click()
+  await expect(root.getByText("Zoom: 110", { exact: true })).toBeVisible()
+  await expect(page.getByRole("menuitem", { name: /^Reset zoom/ })).toContainText("110%")
+  await page.getByRole("menuitem", { name: /^Reset zoom/ }).click()
+  await expect(root.getByText("Zoom: 100", { exact: true })).toBeVisible()
 })

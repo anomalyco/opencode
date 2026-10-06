@@ -70,7 +70,7 @@ describe("OllamaPlugin", () => {
                     }
                   : body.model === "unknown-context"
                     ? show({ family: "unknown", capabilities: ["completion"], context: 0 })
-                  : show({ family: "nomic-bert", capabilities: ["embedding"], context: 8192 }),
+                    : show({ family: "nomic-bert", capabilities: ["embedding"], context: 8192 }),
               )
             },
           }),
@@ -299,6 +299,22 @@ describe("OllamaPlugin", () => {
             yield* eventually(providers.get(providerID), (provider) => provider?.settings?.apiKey === "")
             expect(requests).toContainEqual({ authorization: null, method: "GET", path: "/proxy/api/tags" })
             expect(requests).toContainEqual({ authorization: null, method: "POST", path: "/proxy/api/show" })
+
+            requests.splice(0)
+            const apiBaseURL = `${configured.url.origin}/proxy/api`
+            yield* config.setEntries([configuration({ baseURL: apiBaseURL, apiKey: "api-secret" })])
+            yield* bus.publish(Event.Updated, {})
+            yield* eventually(providers.get(providerID), (provider) => provider?.settings?.baseURL === apiBaseURL)
+            expect(requests).toContainEqual({
+              authorization: "Bearer api-secret",
+              method: "GET",
+              path: "/proxy/api/tags",
+            })
+            expect(requests).toContainEqual({
+              authorization: "Bearer api-secret",
+              method: "POST",
+              path: "/proxy/api/show",
+            })
           }),
         ({ initial, configured }) => Effect.promise(() => Promise.all([initial.stop(true), configured.stop(true)])),
       ),

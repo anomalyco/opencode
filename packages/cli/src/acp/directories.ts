@@ -2,6 +2,7 @@ import { isAbsolute, join, resolve } from "node:path"
 import { isDeepStrictEqual } from "node:util"
 import type { OpenCodeClient } from "@opencode/client/effect"
 import type { Permission } from "@opencode/schema/permission"
+import { AbsolutePath } from "@opencode/schema/schema"
 import type { Session } from "@opencode/schema/session"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Effect, Option, Schema } from "effect"
@@ -13,12 +14,19 @@ const decodeStored = Schema.decodeUnknownOption(Schema.Array(Schema.String))
 
 // Permission resources treat `*` and `?` as wildcards.
 export const parse = Effect.fnUntraced(function* (cwd: string, directories: readonly string[] = []) {
+  yield* parseCwd(cwd)
   const invalid = directories.find((directory) => !isAbsolute(directory) || /[*?]/.test(directory))
   if (invalid !== undefined) return yield* new ACPError.InvalidAdditionalDirectoryError({ directory: invalid })
   const root = FSUtil.resolve(cwd)
   return [...new Set(directories.map((directory) => resolve(FSUtil.windowsPath(directory))))].filter(
     (directory) => FSUtil.resolve(directory) !== root,
   )
+})
+
+export const parseCwd = Effect.fnUntraced(function* (cwd: string) {
+  if (!isAbsolute(cwd))
+    return yield* new ACPError.InvalidRequestError({ message: `cwd must be an absolute path: ${cwd}`, field: "cwd" })
+  return AbsolutePath.make(cwd)
 })
 
 export function grant(directories: readonly string[]) {

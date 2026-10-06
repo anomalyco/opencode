@@ -4,6 +4,7 @@ import { createWorkerTransport } from "./markdown-worker-transport"
 test("posts one request and retains only the latest queued snapshot per key", () => {
   const posted: number[] = []
   const superseded: number[] = []
+
   const transport = createWorkerTransport<{ id: number; key: string }>({
     post: (request) => posted.push(request.id),
     supersede: (request) => superseded.push(request.id),
@@ -23,6 +24,7 @@ test("posts one request and retains only the latest queued snapshot per key", ()
 
 test("ignores a disposed request response after the key is reused", () => {
   const posted: number[] = []
+
   const transport = createWorkerTransport<{ id: number; key: string }>({
     post: (request) => posted.push(request.id),
     supersede: () => {},
@@ -42,6 +44,7 @@ test("ignores a disposed request response after the key is reused", () => {
 
 test("drops queued snapshots when a key is disposed", () => {
   const superseded: number[] = []
+
   const transport = createWorkerTransport<{ id: number; key: string }>({
     post: () => {},
     supersede: (request) => superseded.push(request.id),

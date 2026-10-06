@@ -40,6 +40,7 @@ test("long page errors retain the operation context without classifying script t
     { type: "evaluate", tabID, script: "throw Error()" },
     new Error("ERR_CONNECTION_REFUSED " + "x".repeat(10_000)),
   )
+
   expect(failure.code).toBe("operation_failed")
   expect(failure.message.startsWith("browser.evaluate failed.")).toBe(true)
   expect(failure.message.length).toBeLessThanOrEqual(2_048)

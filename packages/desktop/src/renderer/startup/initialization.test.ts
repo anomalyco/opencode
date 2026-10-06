@@ -28,6 +28,7 @@ describe("desktop renderer initialization", () => {
   test("refreshes the managed sidecar endpoint", async () => {
     const sidecar = { url: "http://127.0.0.1:4321" }
     const updates: (typeof sidecar)[] = []
+
     const resolve = createSidecarResolver({
       api: { reconnectService: async () => sidecar },
       current: () => undefined,
@@ -41,6 +42,7 @@ describe("desktop renderer initialization", () => {
   test("keeps the current sidecar when reconnection resolves the same endpoint", async () => {
     const sidecar = { url: "http://127.0.0.1:4321" }
     const updates: (typeof sidecar)[] = []
+
     const resolve = createSidecarResolver({
       api: { reconnectService: async () => ({ ...sidecar }) },
       current: () => sidecar,
@@ -55,11 +57,13 @@ describe("desktop renderer initialization", () => {
     const sidecar = { url: "http://127.0.0.1:4321" }
     const pending = Promise.withResolvers<typeof sidecar>()
     const updates: (typeof sidecar)[] = []
+
     const resolve = createSidecarResolver({
       api: { reconnectService: () => pending.promise },
       current: () => undefined,
       update: (next) => updates.push(next),
     })
+
     const abort = new AbortController()
     const result = resolve(abort.signal)
     abort.abort()

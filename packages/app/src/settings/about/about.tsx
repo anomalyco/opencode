@@ -25,21 +25,25 @@ const writers = [
   "simonklee",
   "arvsrn",
 ] as const
+
 const illustrators = ["usrnk1", "ludvigrask_", "arvsrn", "iamdavidhill"] as const
 
 export function SettingsAbout(props: { active: boolean }) {
   const language = useLanguage()
   const platform = usePlatform()
+
   const [otherContributors] = createResource(
     () => props.active || undefined,
     () => loadOtherContributorCount(platform.fetch ?? fetch),
     { initialValue: FALLBACK_OTHER_CONTRIBUTORS },
   )
+
   const credit = (name: string) => (
     <bdi dir="ltr">
       <ExternalLink href={profile(name)}>{name}</ExternalLink>
     </bdi>
   )
+
   const writerCredits = () => [
     ...writers.map(credit),
     <ExternalLink href="https://github.com/anomalyco/opencode/graphs/contributors">
@@ -100,6 +104,8 @@ export function SettingsAbout(props: { active: boolean }) {
 
 function profile(name: string) {
   if (name === "r44vcorp") return "https://github.com/R44VC0RP"
+
   if (name === "ludvigrask_") return "https://x.com/ludvigrask_"
+
   return `https://github.com/${name}`
 }

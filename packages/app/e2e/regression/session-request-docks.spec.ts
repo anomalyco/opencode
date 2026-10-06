@@ -5,8 +5,11 @@ import { expectSessionTitle } from "../utils/waits"
 import { mockWorkspace, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/OpenCode/RequestDocks"
+
 const sessionID = "ses_request_docks"
+
 const title = "Request dock regression"
+
 test("shows a pending question dock", async ({ page }) => {
   await mockServer(page, {
     forms: [
@@ -69,11 +72,13 @@ test("shows a pending question dock", async ({ page }) => {
   expect(rejectRequests).toEqual([])
 
   await question.getByRole("radio", { name: /Minimal/ }).click()
+
   const reply = page.waitForRequest(
     (request) =>
       request.method() === "POST" &&
       new URL(request.url()).pathname === `/api/session/${sessionID}/form/frm_question_request/reply`,
   )
+
   await question.getByRole("button", { name: "Submit" }).click()
   expect((await reply).postDataJSON()).toEqual({ answer: { q0: "minimal" } })
 })
@@ -126,18 +131,23 @@ test("restores the draft caret before typing after a request dock closes", async
 
   const editor = page.locator('[data-component="composer-editor"][contenteditable="true"]')
   const draft = "keep the caret at the end"
+
   const caret = () =>
     editor.evaluate((element) => {
       const selection = window.getSelection()
+
       if (!selection?.rangeCount || !element.contains(selection.anchorNode)) return -1
       const range = selection.getRangeAt(0).cloneRange()
       range.selectNodeContents(element)
       range.setEnd(selection.anchorNode!, selection.anchorOffset)
+
       return range.toString().length
     })
+
   await editor.fill(draft)
   // The editor places the caret after the filled text; move it only from that known position.
   await expect.poll(caret).toBe(draft.length)
+
   for (let index = 0; index < 4; index++) await page.keyboard.press("ArrowLeft")
   const cursor = draft.length - 4
   await expect.poll(caret).toBe(cursor)

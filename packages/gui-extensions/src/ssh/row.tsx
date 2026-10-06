@@ -12,15 +12,20 @@ import type { SshController } from "./state"
 export default function SshRow(props: { row: ServerRow; id: string; ssh: SshController }) {
   const extension = useExtension()
   const pending = () => props.ssh.pending(props.id)
+
   return (
     <Show when={props.ssh.item(props.id)}>
       {(item) => {
         const indicator = () => {
           if (item().stage === "ready") return props.row.health() ?? { healthy: true }
+
           if (item().stage === "incompatible") return { healthy: false, incompatible: true }
+
           if (item().stage === "failed") return { healthy: false }
+
           return undefined
         }
+
         return (
           <div class="settings-servers-row">
             <div class="settings-servers-lead">

@@ -8,6 +8,7 @@ export const requestQueueLimit = 4
 // Endpoints that shell out to git or walk the filesystem take seconds on a large repository. They
 // may hold at most this many slots, so a session mount's small reads never queue behind them.
 export const requestQueueSlowLimit = 2
+
 export const slowRequestPaths = ["/api/vcs", "/api/worktree"]
 
 // A mount legitimately fires a dozen requests at once; only a request that has waited this long
@@ -57,11 +58,14 @@ export function createRequestQueue(input: {
   let watcher: ReturnType<typeof setTimeout> | undefined
 
   const describe = (entry: Entry) => ({ method: entry.method, url: entry.url, ms: now() - entry.at })
+
   // Debug exports include the console, so list what the server is busy with while requests wait.
   const watch = () => {
     watcher = undefined
     const oldest = waiting[0]?.entry
+
     if (!oldest) return
+
     if (now() - oldest.at >= stallMs && now() - warned >= 10_000) {
       warned = now()
       log("server thrashing detected", {
@@ -70,33 +74,43 @@ export function createRequestQueue(input: {
         queued: waiting.map((item) => describe(item.entry)),
       })
     }
+
     watcher = setTimeout(watch, stallMs)
   }
+
   const canStart = (entry: Entry) => {
     if (inflight.size >= limit) return false
+
     if (!entry.slow) return true
+
     return [...inflight].filter((item) => item.slow).length < slowLimit
   }
+
   // FIFO, except a slow request waits its turn behind faster ones while the slow slots are full.
   const release = (entry: Entry) => {
     inflight.delete(entry)
     const index = waiting.findIndex((item) => canStart(item.entry))
+
     if (index === -1) return
     waiting.splice(index, 1)[0]?.start()
   }
+
   const acquire = (entry: Entry) => {
     // A free slot must start fetch before the caller's synchronous UI work.
     // Awaiting an already-resolved promise postpones that dispatch until after it.
     if (canStart(entry)) {
       inflight.add(entry)
+
       return
     }
+
     return new Promise<void>((resolve) => {
       const start = () => {
         entry.at = now()
         inflight.add(entry)
         resolve()
       }
+
       waiting.push({ entry, start })
       watcher ??= setTimeout(watch, stallMs)
     })
@@ -106,21 +120,27 @@ export function createRequestQueue(input: {
     async (resource: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(resource, init)
       const pathname = new URL(request.url).pathname
+
       // The event stream is long-lived; never count it against the request budget.
       if (pathname === "/api/event") return base(request)
       const entry = { method: request.method, url: request.url, at: now(), slow: isSlowRequest(pathname) }
       const queued = acquire(entry)
+
       if (queued) await queued
+
       if (request.signal.aborted) {
         release(entry)
         throw request.signal.reason ?? new DOMException("The operation was aborted.", "AbortError")
       }
+
       const controller = new AbortController()
       request.signal.addEventListener("abort", () => controller.abort(request.signal.reason), { once: true })
+
       const timer = setTimeout(
         () => controller.abort(new DOMException("Timed out waiting for the server to respond", "TimeoutError")),
         isSetupRequest(request.method, pathname) ? setupHeadersTimeoutMs : headersTimeoutMs,
       )
+
       return base(new Request(request, { signal: controller.signal })).finally(() => {
         clearTimeout(timer)
         release(entry)

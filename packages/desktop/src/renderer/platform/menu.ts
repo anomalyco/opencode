@@ -17,14 +17,18 @@ export function createDesktopMenuAction(api: ElectronAPI): NonNullable<Platform[
     switch (action) {
       case "view.resetZoom":
         resetZoom()
+
         return
       case "view.zoomIn":
         zoomIn()
+
         return
       case "view.zoomOut":
         zoomOut()
+
         return
     }
+
     return api.runDesktopMenuAction(action)
   }
 }

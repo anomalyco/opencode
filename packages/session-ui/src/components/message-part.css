@@ -145,6 +145,13 @@
     border: none;
     padding: 8px 12px;
     border-radius: 10px;
+    transition:
+      background-color 200ms ease,
+      color 200ms ease;
+
+    @media (prefers-reduced-motion: reduce) {
+      transition: none;
+    }
 
     [data-highlight="file"],
     [data-highlight="agent"] {
@@ -156,6 +163,11 @@
 
     [data-slot="user-message-mention-prefix"] {
       color: var(--user-message-mention-prefix-color);
+      transition: color 200ms ease;
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
     }
 
     max-width: 100%;
@@ -674,6 +686,10 @@
       --sticky-accordion-top: calc(var(--context-group-sticky-top) + 28px + var(--tool-content-gap));
     }
   }
+}
+
+[data-notices-only] > [data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
+  --tool-content-gap: 0px;
 }
 
 [data-component="context-tool-group-list"] {
@@ -1573,29 +1589,42 @@
   background: var(--v2-background-bg-layer-02);
 }
 
-:root body [data-workspace-session] [data-component="user-message"] [data-slot="user-message-text"] {
+:root
+  body
+  [data-workspace-session]
+  [data-component="user-message"]:not([data-pending])
+  [data-slot="user-message-text"] {
   --user-message-mention-prefix-color: var(--v2-blue-300);
 
   background: var(--v2-background-bg-accent);
   color: var(--v2-text-text-contrast);
 }
 
+:root body [data-local-session] [data-component="user-message"] [data-slot="user-message-text"] {
+  border-radius: 8px;
+}
+
 :root[data-color-scheme="light"]
   body
   [data-local-session]
-  [data-component="user-message"]
+  [data-component="user-message"]:not([data-pending])
   [data-slot="user-message-text"] {
   background: var(--v2-blue-100);
   color: var(--v2-blue-700);
-  border-radius: 8px;
 }
 
 :root[data-color-scheme="dark"]
   body
   [data-local-session]
-  [data-component="user-message"]
+  [data-component="user-message"]:not([data-pending])
   [data-slot="user-message-text"] {
   background: var(--v2-blue-1200);
   color: var(--v2-blue-300);
-  border-radius: 8px;
+}
+
+:root body [data-component="user-message"][data-pending] [data-slot="user-message-text"] {
+  --user-message-mention-prefix-color: currentColor;
+
+  background: var(--v2-background-bg-layer-02);
+  color: var(--v2-text-text-base);
 }

@@ -32,17 +32,21 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
   let state: UpdaterState = dependencies.platform ? { status: "idle" } : { status: "disabled" }
   let pending: Deferred.Deferred<UpdaterState> | undefined
   let installing: Deferred.Deferred<void, unknown> | undefined
+
   const transition = (next: UpdaterState) => {
     runFork(Effect.logInfo("updater state changed", { from: state.status, to: next.status }))
     state = next
     dependencies.changed(state)
+
     return state
   }
+
   // electron-updater builds NSIS deltas against the installer of the running version but reads the "old" blockmap from
   // the last download. Once a release is staged without installing, the two no longer match and every later delta fails
   // its checksum before falling back to a full download, so remember which release the cache holds and skip the attempt.
   let downloaded: string | undefined
   let target: UpdateTarget | undefined
+
   const stage = (platform: Platform, version: string) =>
     Effect.gen(function* () {
       if (downloaded)
@@ -55,21 +59,29 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
       downloaded = version
       yield* dependencies.persistence.set({ version })
     })
+
   const findAndStage = (platform: Platform) =>
     Effect.gen(function* () {
       yield* Effect.sync(() => transition({ status: "checking" }))
       const next = yield* platform.checkForUpdate
+
       if (!next || (next.mode === "restart" && next.version === dependencies.currentVersion)) {
         yield* dependencies.persistence.clear
+
         return transition({ status: "up-to-date" })
       }
+
       target = next
+
       if (next.mode === "external") {
         yield* dependencies.persistence.clear
+
         return transition({ status: "download-required", version: next.version })
       }
+
       transition({ status: "downloading", version: next.version })
       yield* stage(platform, next.version)
+
       return transition({ status: "ready", version: next.version })
     }).pipe(
       Effect.catch((error) =>
@@ -78,17 +90,23 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
         ),
       ),
     )
+
   const refreshStaged = (platform: Platform, staged: string) =>
     Effect.gen(function* () {
       const next = yield* platform.checkForUpdate
+
       if (!next) return state
       target = next
+
       if (next.mode === "external") {
         yield* dependencies.persistence.clear
+
         return transition({ status: "download-required", version: next.version })
       }
+
       if (next.version === staged || next.version === dependencies.currentVersion) return state
       yield* stage(platform, next.version)
+
       return transition({ status: installing ? "installing" : "ready", version: next.version })
     }).pipe(
       Effect.catch((error) =>
@@ -99,16 +117,21 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
               message: error instanceof Error ? error.message : String(error),
             }),
           )
+
           return state
         }),
       ),
     )
+
   const refreshExternal = (platform: Platform) =>
     Effect.gen(function* () {
       const next = yield* platform.checkForUpdate
+
       if (!next || next.mode !== "external") return state
       target = next
+
       if (state.status === "download-required" && state.version === next.version) return state
+
       return transition({ status: "download-required", version: next.version })
     }).pipe(
       Effect.catch((error) =>
@@ -118,40 +141,52 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
               message: error instanceof Error ? error.message : String(error),
             }),
           )
+
           return state
         }),
       ),
     )
+
   const check = Effect.suspend(() => {
     const platform = dependencies.platform
+
     if (!platform || state.status === "installing") return Effect.succeed(state)
+
     if (pending) return Deferred.await(pending)
     const deferred = Deferred.makeUnsafe<UpdaterState>()
     pending = deferred
+
     const update =
       state.status === "ready"
         ? refreshStaged(platform, state.version)
         : state.status === "download-required"
           ? refreshExternal(platform)
           : findAndStage(platform)
+
     return update.pipe(
       Effect.tap((result) => Deferred.succeed(deferred, result)),
       Effect.ensuring(Effect.sync(() => (pending = undefined))),
     )
   })
+
   const install = Effect.suspend(() => {
     if (installing) return Deferred.await(installing)
     const platform = dependencies.platform
+
     if (!platform) return Effect.fail(new Error("Update is not ready to install"))
+
     if (state.status === "download-required") {
       const staged = state.version
       const deferred = Deferred.makeUnsafe<void, unknown>()
       installing = deferred
+
       return Effect.gen(function* () {
         yield* pending ? Deferred.await(pending) : refreshExternal(platform)
+
         if (!target || target.mode !== "external" || !platform.externalInstall)
           return yield* Effect.fail(new Error("External installer is unavailable"))
         transition({ status: "installing", version: target.version })
+
         return yield* platform.externalInstall(target.url)
       }).pipe(
         Effect.exit,
@@ -160,6 +195,7 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
             Effect.andThen(
               Effect.sync(() => {
                 installing = undefined
+
                 if (state.status === "installing")
                   transition({ status: "download-required", version: target?.version ?? staged })
               }),
@@ -169,14 +205,17 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
         ),
       )
     }
+
     if (state.status !== "ready") return Effect.fail(new Error("Update is not ready to install"))
     const staged = state.version
     transition({ status: "installing", version: staged })
     const deferred = Deferred.makeUnsafe<void, unknown>()
     installing = deferred
+
     return Effect.gen(function* () {
       yield* pending ? Deferred.await(pending) : refreshStaged(platform, staged)
       yield* dependencies.restart(platform.installAndRestart)
+
       // The app is quitting into the installer.
       return yield* Effect.never
     }).pipe(
@@ -186,6 +225,7 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
           Effect.andThen(
             Effect.sync(() => {
               installing = undefined
+
               if (Exit.isFailure(exit) && state.status === "installing") {
                 transition({ status: "ready", version: state.version })
               }
@@ -196,13 +236,17 @@ export const make = Effect.fn("Updater.make")(function* (dependencies: Dependenc
       ),
     )
   })
+
   const start = Effect.gen(function* () {
     const ready = yield* dependencies.persistence.get
+
     if (ready?.version === dependencies.currentVersion) yield* dependencies.persistence.clear
+
     // Any other persisted target was downloaded by an earlier launch and never installed, so its blockmap is cached.
     if (ready && ready.version !== dependencies.currentVersion) downloaded = ready.version
     yield* check
   })
+
   const starting = yield* start.pipe(Effect.forkScoped)
   yield* Effect.gen(function* () {
     yield* Effect.sleep("10 minutes")

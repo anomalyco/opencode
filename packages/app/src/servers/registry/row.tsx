@@ -110,6 +110,7 @@ export function ServerHealthIndicator(props: {
   authenticationRequired?: boolean
 }) {
   const language = useLanguage()
+
   return (
     <Show
       when={props.authenticationRequired}

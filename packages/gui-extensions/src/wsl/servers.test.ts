@@ -7,6 +7,7 @@ import { createWslServersController } from "./servers"
 test("teardown during a pending start resolves only after the started process exited", async () => {
   const children: ChildProcess[] = []
   const saved: WslServerConfig[] = []
+
   const controller = createWslServersController({
     cli: { version: "1.0.0" },
     runtime: {} as WslRuntime,
@@ -19,6 +20,7 @@ test("teardown during a pending start resolves only after the started process ex
     spawnSidecar: (_distro, signal) => {
       const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { stdio: "ignore" })
       children.push(child)
+
       return new Promise((_, reject) =>
         signal.addEventListener(
           "abort",
@@ -31,7 +33,9 @@ test("teardown during a pending start resolves only after the started process ex
       )
     },
   })
+
   await controller.addServer("Debian")
+
   while (!children.length) await Bun.sleep(1)
   expect(children[0].exitCode).toBeNull()
   await controller.stopServers()
