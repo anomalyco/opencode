@@ -1,7 +1,7 @@
 /** @jsxImportSource @opentui/solid */
 import { describe, expect, test } from "bun:test"
 import { tmpdir } from "../../../fixture/fixture"
-import { mount, wait } from "./sync-fixture"
+import { json, mount, wait } from "./sync-fixture"
 import type { GlobalEvent } from "@opencode-ai/sdk/v2"
 
 function branchEvent(branch: string, workspace?: string): GlobalEvent {
@@ -58,6 +58,33 @@ describe("tui sync", () => {
       await wait(() => sync.data.vcs?.branch === "feature")
 
       expect(sync.data.vcs?.branch).toBe("feature")
+    } finally {
+      app.renderer.destroy()
+    }
+  })
+
+  test("bootstrap leaves the provider catalog to the dialogs that list it", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(`${tmp.path}/kv.json`, "{}")
+    let catalogRequests = 0
+    const { app, sync } = await mount((url) => {
+      if (url.pathname !== "/provider") return undefined
+      catalogRequests++
+      return json({ all: [{ id: "acme", name: "Acme", env: [], models: {} }], default: {}, connected: ["acme"] })
+    }, tmp.path)
+
+    try {
+      await sync.bootstrap()
+      expect(catalogRequests).toBe(0)
+      expect(sync.data.provider_next.all).toHaveLength(0)
+
+      await Promise.all([sync.providerCatalog(), sync.providerCatalog()])
+      expect(catalogRequests).toBe(1)
+      expect(sync.data.provider_next.connected).toEqual(["acme"])
+
+      await sync.bootstrap()
+      await sync.providerCatalog()
+      expect(catalogRequests).toBe(2)
     } finally {
       app.renderer.destroy()
     }
