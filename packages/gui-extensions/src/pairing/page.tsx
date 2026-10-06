@@ -84,7 +84,7 @@ function SettingsPairing(props: { client: Client }) {
                   dialogs.open(() => (
                     <DialogPairing
                       title={ctx.t("connection")}
-                      host={localHosts().at(-1)!}
+                      host={localHosts()[0]!}
                       hosts={localHosts()}
                       code={() => props.client.code()}
                     />
@@ -169,7 +169,7 @@ function DialogPairing(props: {
   const qr = createMemo(() => {
     if (!code.isSuccess) return
 
-    return renderSVG(JSON.stringify({ code: code.data, url: props.host, urls: props.hosts }), {
+    return renderSVG(JSON.stringify({ code: code.data, urls: props.hosts }), {
       border: 4,
       blackColor: "currentColor",
       whiteColor: "transparent",

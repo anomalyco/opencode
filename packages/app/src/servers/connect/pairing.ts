@@ -19,14 +19,11 @@ export function serverAddress(value: string) {
 const CODE = /^[A-Za-z0-9_-]+$/
 
 const decodePayload = Schema.decodeUnknownOption(
-  Schema.fromJsonString(
-    Schema.Struct({ code: Schema.String, url: Schema.optional(Schema.String), urls: Schema.Array(Schema.String) }),
-  ),
+  Schema.fromJsonString(Schema.Struct({ code: Schema.String, urls: Schema.Array(Schema.String) })),
 )
 
 // `opencode pair` prints links carrying a single-use code that the server exchanges for a session token.
-// Its QR code carries the same code with every reachable server address as {"code","url","urls"} JSON,
-// where `url` is the default address.
+// Its QR code carries the same code with every reachable server address as {"code","urls"} JSON.
 export function pairingLink(value: string) {
   const trimmed = value.trim()
 
@@ -34,7 +31,7 @@ export function pairingLink(value: string) {
     const payload = Option.getOrUndefined(decodePayload(trimmed))
 
     if (!payload || !CODE.test(payload.code)) return
-    const urls = [...new Set([...(payload.url ? [payload.url] : []), ...payload.urls])].map(serverAddress)
+    const urls = [...new Set(payload.urls)].map(serverAddress)
 
     if (urls.length === 0 || urls.some((url) => url === undefined)) return
 

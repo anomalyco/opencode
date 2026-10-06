@@ -20,18 +20,6 @@ describe("pairing link", () => {
     })
   })
 
-  test("tries the default QR address first", () => {
-    expect(
-      pairingLink(
-        JSON.stringify({
-          code: "abc",
-          url: "http://100.64.0.3:49374",
-          urls: ["http://192.168.1.2:49374", "http://100.64.0.3:49374"],
-        }),
-      ),
-    ).toEqual({ urls: ["http://100.64.0.3:49374", "http://192.168.1.2:49374"], code: "abc" })
-  })
-
   test("rejects other URLs", () => {
     expect(pairingLink("http://192.168.1.2:49374/auth/connect/")).toBeUndefined()
     expect(pairingLink("http://192.168.1.2:49374/auth/connect/abc/extra")).toBeUndefined()
