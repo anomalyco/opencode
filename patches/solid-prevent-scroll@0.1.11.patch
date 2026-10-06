@@ -1,0 +1,85 @@
+diff --git a/node_modules/solid-prevent-scroll/.bun-tag-a8a1b245e515ca1 b/.bun-tag-a8a1b245e515ca1
+new file mode 100644
+index 0000000000000000000000000000000000000000..e69de29bb2d1d6434b8b29ae775ad8c2e48c5391
+diff --git a/dist/index.js b/dist/index.js
+index 87c1d70ce6b6cfa1dc24752a7b642a463c3bb976..6069e381892d46912d1a08a9d8562efda5ead473 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -98,14 +98,15 @@ var createPreventScroll = (props) => {
+     currentTouchStartDelta = null;
+   };
+   const maybePreventWheel = (event) => {
+-    const target = event.target;
++    const path = event.composedPath();
++    const target = path.find((node) => node instanceof HTMLElement) ?? event.target;
+     const wrapper = access(defaultedProps.element);
+     const delta = getDeltaXY(event);
+     const axis = Math.abs(delta[0]) > Math.abs(delta[1]) ? "x" : "y";
+     const axisDelta = axis === "x" ? delta[0] : delta[1];
+     const resultsInScroll = wouldScroll(target, axis, axisDelta, wrapper);
+     let shouldCancel;
+-    if (wrapper && contains(wrapper, target)) {
++    if (wrapper && path.includes(wrapper)) {
+       shouldCancel = !resultsInScroll;
+     } else {
+       shouldCancel = true;
+@@ -116,7 +117,8 @@ var createPreventScroll = (props) => {
+   };
+   const maybePreventTouch = (event) => {
+     const wrapper = access(defaultedProps.element);
+-    const target = event.target;
++    const path = event.composedPath();
++    const target = path.find((node) => node instanceof HTMLElement) ?? event.target;
+     let shouldCancel;
+     if (event.touches.length === 2) {
+       shouldCancel = !access(defaultedProps.allowPinchZoom);
+@@ -138,7 +140,7 @@ var createPreventScroll = (props) => {
+           currentTouchStartDelta,
+           wrapper
+         );
+-        if (wrapper && contains(wrapper, target)) {
++        if (wrapper && path.includes(wrapper)) {
+           shouldCancel = !wouldResultInScroll;
+         } else {
+           shouldCancel = true;
+diff --git a/dist/index.jsx b/dist/index.jsx
+index 150f2f1a7250f7648aa141cd3dda062ae6d6e419..267fb7c7b326a35f763387f3be2d2d9293c1acc6 100644
+--- a/dist/index.jsx
++++ b/dist/index.jsx
+@@ -103,14 +103,15 @@ var createPreventScroll = (props) => {
+     currentTouchStartDelta = null;
+   };
+   const maybePreventWheel = (event) => {
+-    const target = event.target;
++    const path = event.composedPath();
++    const target = path.find((node) => node instanceof HTMLElement) ?? event.target;
+     const wrapper = access(defaultedProps.element);
+     const delta = getDeltaXY(event);
+     const axis = Math.abs(delta[0]) > Math.abs(delta[1]) ? "x" : "y";
+     const axisDelta = axis === "x" ? delta[0] : delta[1];
+     const resultsInScroll = wouldScroll(target, axis, axisDelta, wrapper);
+     let shouldCancel;
+-    if (wrapper && contains(wrapper, target)) {
++    if (wrapper && path.includes(wrapper)) {
+       shouldCancel = !resultsInScroll;
+     } else {
+       shouldCancel = true;
+@@ -121,7 +122,8 @@ var createPreventScroll = (props) => {
+   };
+   const maybePreventTouch = (event) => {
+     const wrapper = access(defaultedProps.element);
+-    const target = event.target;
++    const path = event.composedPath();
++    const target = path.find((node) => node instanceof HTMLElement) ?? event.target;
+     let shouldCancel;
+     if (event.touches.length === 2) {
+       shouldCancel = !access(defaultedProps.allowPinchZoom);
+@@ -143,7 +145,7 @@ var createPreventScroll = (props) => {
+           currentTouchStartDelta,
+           wrapper
+         );
+-        if (wrapper && contains(wrapper, target)) {
++        if (wrapper && path.includes(wrapper)) {
+           shouldCancel = !wouldResultInScroll;
+         } else {
+           shouldCancel = true;

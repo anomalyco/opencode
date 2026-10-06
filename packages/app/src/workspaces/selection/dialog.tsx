@@ -293,6 +293,13 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         button[data-type="item"]:hover {
           background: var(--v2-overlay-simple-overlay-hover) !important;
         }
+        @media (hover: none) {
+          button[data-type="item"]:hover:not([data-item-selected="true"]),
+          button[data-type="item"][data-item-context-hover="true"]:not([data-item-selected="true"]) {
+            background: transparent !important;
+            --truncate-marker-background-overlay-color: transparent !important;
+          }
+        }
         button[data-type="item"]:focus-visible {
           outline: none !important;
           box-shadow: none !important;
@@ -300,6 +307,8 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         [data-file-tree-virtualized-scroll] {
           overscroll-behavior: contain;
           scrollbar-width: thin;
+          touch-action: pan-y;
+          -webkit-overflow-scrolling: touch;
         }
       `,
       onExpansionChange(change) {
