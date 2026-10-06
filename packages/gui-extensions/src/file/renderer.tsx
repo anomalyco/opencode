@@ -228,7 +228,8 @@ const setup: Setup<typeof File> = (ctx) => {
         return ctx.t("mobile.title")
       },
       order: 20,
-      kind: "tab",
+      kind: "menu",
+      icon: "folder",
     },
     list(input) {
       return input.open.flatMap((id) => {

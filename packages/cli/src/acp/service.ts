@@ -109,6 +109,7 @@ export function make(input: {
         description: "Run `opencode auth login` in the terminal",
         name: "Login with opencode",
         id: AuthMethodID,
+        ...(params.clientCapabilities?.auth?.terminal ? { type: "terminal" as const, args: ["--login"] } : {}),
       }
       if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
         authMethod._meta = {
@@ -164,7 +165,9 @@ export function make(input: {
     listSessions: Effect.fnUntraced(function* (params) {
       const page = yield* input.client.session
         .list({
-          ...(params.cwd ? { directory: AbsolutePath.make(params.cwd) } : {}),
+          ...(params.cwd !== undefined && params.cwd !== null
+            ? { directory: yield* ACPDirectories.parseCwd(params.cwd) }
+            : {}),
           order: "desc",
           limit: 100,
           ...(params.cursor ? { cursor: Schema.decodeSync(SessionsCursor)(params.cursor) } : {}),
@@ -188,6 +191,7 @@ export function make(input: {
       }
     }),
     deleteSession: Effect.fnUntraced(function* (params) {
+      yield* input.turn.cancel({ sessionId: params.sessionId })
       yield* ACPClient.decodeSessionID(params.sessionId).pipe(
         Effect.flatMap((sessionID) => input.client.session.remove({ sessionID })),
         Effect.catchTag(["ACPInvalidRequestError", "SessionNotFoundError"], () => Effect.void),

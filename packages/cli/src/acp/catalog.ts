@@ -124,15 +124,17 @@ export const make = Effect.fnUntraced(function* (client: OpenCodeClient) {
   } satisfies Interface
 })
 
-const load = (client: OpenCodeClient, cwd: string) =>
-  read(client, cwd).pipe(
-    // Providers may still be discovering models after startup.
-    Effect.retry({
-      while: (error) => error._tag === "ACPCatalogNotReadyError",
-      schedule: Schedule.spaced("25 millis").pipe(Schedule.upTo({ duration: "5 seconds" })),
-    }),
-    Effect.withSpan("cli.acp.catalog.load"),
+const poll = Schedule.spaced("25 millis").pipe(Schedule.upTo({ duration: "5 seconds" }))
+
+// A cold Location lists no plugins until activation finishes, and providers may still discover models after that.
+const load = Effect.fn("cli.acp.catalog.load")(function* (client: OpenCodeClient, cwd: string) {
+  yield* client.plugin
+    .list({ location: { directory: cwd } })
+    .pipe(Effect.repeat({ until: (plugins) => plugins.data.length > 0, schedule: poll }), Effect.ignore)
+  return yield* read(client, cwd).pipe(
+    Effect.retry({ while: (error) => error._tag === "ACPCatalogNotReadyError", schedule: poll }),
   )
+})
 
 const read = Effect.fnUntraced(function* (client: OpenCodeClient, cwd: string) {
   const location = { directory: cwd }

@@ -8,7 +8,9 @@ export function MobileDrawer(
     open: boolean
     onOpenChange: (open: boolean) => void
     onContentPresentChange?: (present: boolean) => void
+    initialFocus?: () => HTMLElement | undefined
     returnFocus?: () => HTMLElement | undefined
+    onFinalFocus?: (event: Event) => void
     closeOnOutsideFocus?: boolean
   }>,
 ) {
@@ -18,7 +20,9 @@ export function MobileDrawer(
       onOpenChange={props.onOpenChange}
       onContentPresentChange={props.onContentPresentChange}
       side="bottom"
+      initialFocusEl={props.initialFocus?.()}
       finalFocusEl={props.returnFocus?.()}
+      onFinalFocus={props.onFinalFocus}
       closeOnOutsideFocus={props.closeOnOutsideFocus}
     >
       {props.children}

@@ -341,7 +341,7 @@ export function PromptProjectSelector(props: {
           onCloseAutoFocus={dismiss.onCloseAutoFocus}
         >
           <div class="flex flex-col">
-            <div class="flex h-7 items-center gap-2 rounded-sm pl-3 pr-2.5 text-v2-icon-icon-muted">
+            <div class="flex h-7 items-center gap-2 rounded-sm pl-3 pr-1 text-v2-icon-icon-muted">
               <Icon name="magnifying-glass" size="small" class="shrink-0" />
               <input
                 ref={(el) => props.controller.setSearchRef(el)}
@@ -402,16 +402,16 @@ export function PromptProjectSelector(props: {
               <Show when={props.controller.search().trim()}>
                 <button
                   type="button"
-                  class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+                  class="flex size-5 items-center justify-center rounded-sm bg-transparent text-v2-icon-icon-faint transition-colors hover:text-v2-icon-icon-base focus-visible:text-v2-icon-icon-base active:text-v2-icon-icon-base"
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => props.controller.clearSearch()}
                   aria-label={props.controller.labels.clear()}
                 >
-                  <Icon name="close-small" size="small" />
+                  <Icon name="circle-xmark" />
                 </button>
               </Show>
             </div>
-            <div class="max-h-[224px] overflow-y-auto">
+            <div class="my-0.5 max-h-[224px] overflow-y-auto">
               <Show
                 when={props.controller.servers().length > 1}
                 fallback={
@@ -451,8 +451,8 @@ export function PromptProjectSelector(props: {
               </Show>
             </div>
           </div>
-          <div class="h-px bg-v2-border-border-muted" />
-          <div class="flex flex-col">
+          <div class="-mx-0.5 h-px bg-v2-border-border-muted" />
+          <div class="flex flex-col pt-0.5">
             <Show
               when={props.controller.servers().length > 1}
               fallback={

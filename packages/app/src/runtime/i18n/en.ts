@@ -490,6 +490,7 @@ export const dict = {
   "home.workspaceTip": "Start next session in a new workspace to keep changes isolated",
 
   "session.tab.session": "Session",
+  "session.tab.more": "More...",
   "session.view.select": "Session view",
   "session.tab.add": "Add tab",
   "session.tab.unknown": "Unknown Session",

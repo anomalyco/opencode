@@ -1,123 +1,52 @@
+import type { SessionMessageUser } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
-import type { FileSelection } from "@/workspaces/files/model"
+import { Persistence } from "@/runtime/persistence/schema"
+import { uuid } from "@/runtime/persistence/uuid"
+import { FileSelection } from "@/workspaces/files/types"
 import { durableNote, LegacyBrowserNote, NoteComment, type ContextItem } from "./schema"
 
-export type PromptFileComment = {
-  type?: "file"
-  path: string
-  selection?: FileSelection
-  comment: string
-  preview?: string
-  origin?: "review" | "file"
-}
+export const PromptFileComment = Persistence.struct({
+  type: Schema.optional(Schema.Literal("file")),
+  path: Schema.String,
+  selection: Persistence.optional(FileSelection),
+  comment: Schema.String,
+  preview: Persistence.optional(Schema.String),
+  origin: Persistence.optional(Schema.Literals(["review", "file"])),
+})
+
+export type PromptFileComment = typeof PromptFileComment.Type
 
 export type PromptComment = PromptFileComment | NoteComment
 
-const decodeNoteComment = Schema.decodeUnknownOption(NoteComment)
-
-const decodeLegacyBrowserNote = Schema.decodeUnknownOption(LegacyBrowserNote)
-
 /** An attachment the model receives as a path on the server rather than inline bytes. */
-export type PromptAttachmentReference = {
-  name: string
-  mime: string
-  path: string
-}
+export const PromptAttachmentReference = Persistence.struct({
+  name: Schema.String,
+  mime: Schema.String,
+  path: Schema.String,
+})
 
-function selection(selection: unknown) {
-  if (!selection || typeof selection !== "object") return undefined
-  const startLine = Number((selection as FileSelection).startLine)
-  const startChar = Number((selection as FileSelection).startChar)
-  const endLine = Number((selection as FileSelection).endLine)
-  const endChar = Number((selection as FileSelection).endChar)
+export type PromptAttachmentReference = typeof PromptAttachmentReference.Type
 
-  if (![startLine, startChar, endLine, endChar].every(Number.isFinite)) return undefined
+// Presentation metadata needs a comments list, which prompts from other clients lack; a malformed comment or
+// attachment is skipped rather than discarding the rest.
+const decodePromptPresentation = Schema.decodeUnknownOption(
+  Schema.Struct({
+    displayText: Schema.String,
+    comments: Schema.Array(Schema.Unknown),
+    attachments: Persistence.array(PromptAttachmentReference),
+  }),
+)
 
-  return {
-    startLine,
-    startChar,
-    endLine,
-    endChar,
-  } satisfies FileSelection
-}
+const decodePromptComment = Schema.decodeUnknownOption(Schema.Union([NoteComment, LegacyBrowserNote, PromptFileComment]))
 
-export function createCommentMetadata(input: PromptFileComment) {
-  return {
-    opencodeComment: {
-      path: input.path,
-      selection: input.selection,
-      comment: input.comment,
-      preview: input.preview,
-      origin: input.origin,
-    },
-  }
-}
-
-export function readCommentMetadata(value: unknown) {
-  if (!value || typeof value !== "object") return
-  const meta = (value as { opencodeComment?: unknown }).opencodeComment
-
-  if (!meta || typeof meta !== "object") return
-  const path = (meta as { path?: unknown }).path
-  const comment = (meta as { comment?: unknown }).comment
-
-  if (typeof path !== "string" || typeof comment !== "string") return
-  const preview = (meta as { preview?: unknown }).preview
-  const origin = (meta as { origin?: unknown }).origin
-
-  return {
-    path,
-    selection: selection((meta as { selection?: unknown }).selection),
-    comment,
-    preview: typeof preview === "string" ? preview : undefined,
-    origin: origin === "review" || origin === "file" ? origin : undefined,
-  } satisfies PromptComment
-}
-
-export function readPromptPresentation(value: unknown) {
-  if (!value || typeof value !== "object") return
-  const displayText = (value as { displayText?: unknown }).displayText
-  const comments = (value as { comments?: unknown }).comments
-
-  if (typeof displayText !== "string" || !Array.isArray(comments)) return
-  const attachments = (value as { attachments?: unknown }).attachments
-
-  return {
-    displayText,
-    attachments: (Array.isArray(attachments) ? attachments : []).flatMap((item): PromptAttachmentReference[] => {
-      if (!item || typeof item !== "object") return []
-      const name = (item as { name?: unknown }).name
-      const mime = (item as { mime?: unknown }).mime
-      const path = (item as { path?: unknown }).path
-
-      if (typeof name !== "string" || typeof mime !== "string" || typeof path !== "string") return []
-
-      return [{ name, mime, path }]
-    }),
-    comments: comments.flatMap((item): PromptComment[] => {
-      if (!item || typeof item !== "object") return []
-
-      if ((item as { type?: unknown }).type === "note") return Option.toArray(decodeNoteComment(item))
-
-      if ((item as { type?: unknown }).type === "browser") return Option.toArray(decodeLegacyBrowserNote(item))
-      const path = (item as { path?: unknown }).path
-      const comment = (item as { comment?: unknown }).comment
-
-      if (typeof path !== "string" || typeof comment !== "string") return []
-      const preview = (item as { preview?: unknown }).preview
-      const origin = (item as { origin?: unknown }).origin
-
-      return [
-        {
-          path,
-          comment,
-          selection: selection((item as { selection?: unknown }).selection),
-          preview: typeof preview === "string" ? preview : undefined,
-          origin: origin === "review" || origin === "file" ? origin : undefined,
-        },
-      ]
-    }),
-  }
+export function readPromptPresentation(metadata: SessionMessageUser["metadata"]) {
+  return Option.getOrUndefined(
+    Option.map(decodePromptPresentation(metadata), (presentation) => ({
+      displayText: presentation.displayText,
+      attachments: presentation.attachments,
+      comments: presentation.comments.flatMap((item): PromptComment[] => Option.toArray(decodePromptComment(item))),
+    })),
+  )
 }
 
 export function formatAttachmentReference(input: PromptAttachmentReference) {
@@ -132,7 +61,7 @@ export function formatNoteComment(input: NoteComment) {
 /** Restores a sent comment to the composer, for example after a revert or fork. */
 export function commentContextItem(comment: PromptComment): ContextItem {
   // The message may predate this app process, so a note's live references can no longer be trusted.
-  if (comment.type === "note") return { ...durableNote(comment), commentID: crypto.randomUUID() }
+  if (comment.type === "note") return { ...durableNote(comment), commentID: uuid() }
 
   return {
     type: "file",

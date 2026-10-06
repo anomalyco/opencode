@@ -1,6 +1,7 @@
 import { Popover } from "@kobalte/core/popover"
-import { Component, ComponentProps, createEffect, createMemo, For, JSX, Show } from "solid-js"
+import { Component, ComponentProps, createEffect, createMemo, For, JSX, Show, Suspense, lazy, on } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createMediaQuery } from "@solid-primitives/media"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { popularProviders } from "@/providers/catalog/providers"
@@ -24,8 +25,20 @@ import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./search"
 import { SettingsList } from "@/settings/list"
-import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelIcon, ProviderModelSections } from "@/providers/models/provider-group"
+import {
+  CONSOLE_GROUP_KEY,
+  consoleModelGroup,
+  ProviderModelIcon,
+  ProviderModelSections,
+} from "@/providers/models/provider-group"
 import "@/settings/settings.css"
+import "./select-dialog.css"
+
+const MobilePanelDrawer = lazy(async () => {
+  const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
+
+  return { default: MobilePanelDrawer }
+})
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
@@ -54,6 +67,8 @@ const sortModelGroups = (a: { category: string; items: ModelItem[] }, b: { categ
 }
 
 const ModelList: Component<{
+  mobile?: boolean
+  open?: boolean
   provider?: string
   onSelect: () => void
   model?: ModelState
@@ -66,12 +81,21 @@ const ModelList: Component<{
     onSelect: props.onSelect,
   })
 
-  const [store, setStore] = createStore({
+  const [store, setStore] = createStore<{ search: string; active: string; collapsed: Record<string, boolean> }>({
     search: "",
-    active: "",
-    collapsed: {} as Record<string, boolean>,
+    active: props.mobile ? (controller.current() ?? "") : "",
+    collapsed: {},
   })
 
+  createEffect(
+    on(
+      () => props.open,
+      (open) => {
+        if (!props.mobile || !open) return
+        setStore({ search: "", active: controller.current() ?? "" })
+      },
+    ),
+  )
   const models = createMemo(() => controller.models(store.search))
   const modelGroups = createMemo(() => controller.groups(models()))
   const managed = createMemo(() => consoleModelGroup(controller.all()))
@@ -110,7 +134,7 @@ const ModelList: Component<{
     if (item) controller.select(item)
   }
 
-  function ModelRows(props: { items: ModelItem[] }) {
+  function ModelRows(props: { items: ModelItem[]; mobile?: boolean }) {
     return (
       <SettingsList variant="catalog">
         <For each={props.items}>
@@ -119,6 +143,7 @@ const ModelList: Component<{
               type="button"
               data-component="settings-row"
               data-option-key={modelKey(item)}
+              aria-pressed={controller.current() === modelKey(item)}
               class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
               classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
               onMouseEnter={() => setStore("active", modelKey(item))}
@@ -128,6 +153,7 @@ const ModelList: Component<{
               <div data-slot="settings-row-copy">
                 <div data-slot="settings-row-title" class="flex items-center gap-2">
                   <Tooltip
+                    inactive={props.mobile}
                     placement="right-start"
                     gutter={12}
                     openDelay={0}
@@ -159,7 +185,7 @@ const ModelList: Component<{
 
   return (
     <div class="flex min-h-0 flex-1 flex-col">
-      <div class="shrink-0 px-4 pt-px pb-3">
+      <div data-slot="model-selector-search" class="shrink-0 pt-px pb-3" classList={{ "px-4": !props.mobile }}>
         <div class="relative">
           <TextInput
             type="search"
@@ -167,7 +193,7 @@ const ModelList: Component<{
             class="!w-full self-stretch"
             placeholder={language.t("dialog.model.search.placeholder")}
             value={store.search}
-            autofocus
+            autofocus={!props.mobile}
             spellcheck={false}
             autocorrect="off"
             autocomplete="off"
@@ -210,8 +236,12 @@ const ModelList: Component<{
           </Show>
         </div>
       </div>
-      <div class="relative min-h-0 flex-1">
-        <div ref={(element) => (scrollRef = element)} class="settings-panel settings-models h-full px-4 pt-1 pb-4">
+      <div class="relative min-h-0" classList={{ "flex-1": !props.mobile }}>
+        <div
+          ref={(element) => (scrollRef = element)}
+          class="settings-panel settings-models pt-1 pb-4"
+          classList={{ "h-full px-4": !props.mobile, "max-h-[min(360px,40dvh)]": props.mobile }}
+        >
           <Show
             when={models().length > 0}
             fallback={<div class="settings-models-status">{language.t("dialog.model.empty")}</div>}
@@ -222,7 +252,7 @@ const ModelList: Component<{
               expanded={expanded}
               disabled={store.search.length > 0}
               onExpandedChange={(key, value) => setStore("collapsed", key, !value)}
-              rows={(items) => <ModelRows items={items} />}
+              rows={(items) => <ModelRows items={items} mobile={props.mobile} />}
             />
           </Show>
         </div>
@@ -238,10 +268,12 @@ type ModelSelectorTrigger = (props: ModelSelectorTriggerProps) => JSX.Element
 export function ModelSelectorPopover(props: {
   provider?: string
   model?: ModelState
+  unpaid?: boolean
   trigger: ModelSelectorTrigger
   onClose?: () => void
 }) {
   const dialog = useDialog()
+  const mobile = createMediaQuery("(max-width: 767px)")
   const data = useData()
   const location = useWorkspaceLocation()
 
@@ -256,27 +288,171 @@ export function ModelSelectorPopover(props: {
 
     const connection = data.location.integration
       .list(location().ref)
-      ?.find((integration) => integration.id === "openai")
-      ?.connections[0]
+      ?.find((integration) => integration.id === "openai")?.connections[0]
 
     return connection?.type === "credential" && connection.method === "oauth"
   }
 
+  const manage = async () => {
+    const { DialogManageModels } = await import("./manage")
+    void dialog.show(() => <DialogManageModels />)
+  }
+
+  const connect = async () => {
+    const { DialogConnectProvider } = await import("@/providers/connect/dialog")
+    void dialog.show(() => <DialogConnectProvider directory={location().directory} />)
+  }
+
   return (
-    <ModelSelectorPopoverView
-      trigger={props.trigger}
-      models={controller.models}
-      groups={controller.groups}
-      current={controller.current()}
-      chatgptPlan={chatgptPlan()}
-      select={controller.select}
-      onManage={() => {
-        void import("./manage").then((module) => {
-          void dialog.show(() => <module.DialogManageModels />)
-        })
-      }}
-      onClose={() => props.onClose?.()}
-    />
+    <Show
+      when={mobile()}
+      fallback={
+        <ModelSelectorPopoverView
+          trigger={props.trigger}
+          models={controller.models}
+          groups={controller.groups}
+          current={controller.current()}
+          chatgptPlan={chatgptPlan()}
+          select={controller.select}
+          onManage={manage}
+          onClose={() => props.onClose?.()}
+        />
+      }
+    >
+      <ModelSelectorDrawer
+        trigger={props.trigger}
+        model={props.model}
+        provider={props.provider}
+        onConnect={props.unpaid ? connect : undefined}
+        chatgptPlan={chatgptPlan()}
+        onClose={() => props.onClose?.()}
+        onManage={manage}
+      />
+    </Show>
+  )
+}
+
+function ModelSelectorDrawer(props: {
+  trigger: ModelSelectorTrigger
+  model?: ModelState
+  provider?: string
+  chatgptPlan?: boolean
+  onClose: () => void
+  onManage: () => void
+  onConnect?: () => void
+}) {
+  const language = useLanguage()
+
+  const [store, setStore] = createStore<{
+    open: boolean
+    loaded: boolean
+    restoreTrigger: boolean
+    action?: "select" | "manage" | "connect"
+  }>({
+    open: false,
+    loaded: false,
+    restoreTrigger: true,
+  })
+
+  let trigger: HTMLDivElement | undefined
+  let content: HTMLDivElement | undefined
+
+  return (
+    <>
+      <div ref={trigger} class="min-w-0">
+        {props.trigger({
+          "aria-haspopup": "dialog",
+          get "aria-expanded"() {
+            return store.open
+          },
+          onClick: () => setStore({ open: true, loaded: true, restoreTrigger: true }),
+        })}
+      </div>
+      <Show when={store.loaded}>
+        <Suspense>
+          <MobilePanelDrawer
+            hideHeader
+            title={language.t("dialog.model.select.title")}
+            open={store.open}
+            onOpenChange={(open) => setStore("open", open)}
+            initialFocus={() => content}
+            returnFocus={() => trigger?.querySelector("button") ?? undefined}
+            onFinalFocus={(event) => {
+              if (!store.restoreTrigger) event.preventDefault()
+            }}
+            onContentPresentChange={(present) => {
+              if (present) return
+              const action = store.action
+              setStore("action", undefined)
+
+              if (action === "manage") {
+                props.onManage()
+
+                return
+              }
+
+              if (action === "connect") {
+                props.onConnect?.()
+
+                return
+              }
+
+              if (action === "select") queueMicrotask(props.onClose)
+            }}
+          >
+            <div
+              ref={content}
+              tabIndex={-1}
+              data-slot="model-selector-drawer"
+              class="flex min-h-0 flex-col gap-2 outline-none"
+            >
+              <div class="flex min-h-0 flex-col">
+                <ModelList
+                  mobile
+                  open={store.open}
+                  model={props.model}
+                  provider={props.provider}
+                  onSelect={() => setStore({ open: false, action: "select", restoreTrigger: false })}
+                />
+              </div>
+              <div data-slot="model-selector-actions" class="flex flex-col gap-2">
+                <Button
+                  variant="ghost"
+                  class="w-full !h-10 !justify-start"
+                  icon="outline-sliders"
+                  onClick={() => setStore({ open: false, action: "manage", restoreTrigger: false })}
+                >
+                  {language.t("dialog.model.manage")}
+                </Button>
+                <Show when={props.onConnect}>
+                  <Button
+                    variant="ghost"
+                    class="w-full !h-10 !justify-start"
+                    icon="plus"
+                    onClick={() => setStore({ open: false, action: "connect", restoreTrigger: false })}
+                  >
+                    {language.t("command.provider.connect")}
+                  </Button>
+                </Show>
+                <Show when={props.chatgptPlan}>
+                  <div class="flex min-h-10 items-center gap-2 border-t border-v2-border-border-muted px-3 py-2 text-[13px] leading-5 text-v2-text-text-base">
+                    <ProviderModelIcon provider={{ id: "openai", name: "OpenAI" }} class="shrink-0" />
+                    <span class="min-w-0 flex-1 truncate">{language.t("dialog.model.chatgptPlan")}</span>
+                    <ExternalLink
+                      href="https://chatgpt.com/settings/usage"
+                      class="flex shrink-0 items-center gap-1 rounded-sm text-v2-text-text-muted no-underline hover:text-v2-text-text-base focus-visible:outline focus-visible:outline-2"
+                    >
+                      {language.t("dialog.model.chatgptManageUsage")}
+                      <Icon name="arrow-up-right" size="small" />
+                    </ExternalLink>
+                  </div>
+                </Show>
+              </div>
+            </div>
+          </MobilePanelDrawer>
+        </Suspense>
+      </Show>
+    </>
   )
 }
 

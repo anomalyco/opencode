@@ -7,6 +7,12 @@ import { Result } from "effect"
 
 export type ToolInput = Record<string, unknown>
 
+export type DiffSource = {
+  readonly toolName: string
+  readonly input: ToolInput
+  readonly metadata?: Readonly<Record<string, unknown>>
+}
+
 function toToolKind(toolName: string): ToolKind {
   switch (canonicalName(toolName)) {
     case "shell":
@@ -66,6 +72,7 @@ export function pendingToolCall(input: {
 }): ToolCall {
   return {
     toolCallId: input.toolCallId,
+    name: input.toolName,
     title: toolTitle(input.toolName, input.state.input, input.state.title),
     kind: toToolKind(input.toolName),
     status: "pending",
@@ -106,18 +113,11 @@ export function completedToolUpdate(input: {
     read === undefined
       ? normalized.filter((part) => !images.includes(part))
       : [{ type: "content" as const, content: { type: "text" as const, text: read } }]
-  const oldText = stringValue(input.input.oldString)
-  const newText = stringValue(input.input.newString)
-  const path = filePath(input.input)
-  const diff: ToolCallContent[] =
-    oldText === undefined || newText === undefined || path === undefined
-      ? []
-      : [{ type: "diff", path: absolutePath(path, input.cwd), oldText, newText }]
   return {
     toolCallId: input.toolCallId,
     status: "completed",
     locations: toLocations(input.toolName, input.input, input.cwd),
-    content: [...primary, ...diff, ...images],
+    content: [...primary, ...images],
     rawOutput: {
       ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
     },

@@ -15,6 +15,7 @@ import { ResizeHandle } from "@opencode/ui/resize-handle"
 import { Slot, type BackgroundTask, type MountedSession, type SessionScreen } from "@opencode/gui-extensions/sdk"
 import { MessageTimeline } from "@/session/timeline/message-timeline"
 import { ComposerDropzone } from "@/composer/dropzone"
+import { useSettings } from "@/settings/model"
 import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
 import { SessionPanelFrame } from "@/session/session-frame"
@@ -64,7 +65,9 @@ function SessionScreenContent(props: {
   const session = props.session
   const host = useExtensionHost()
   const attachment = useExtensionAttachment()
+  const settings = useSettings()
   const isDesktop = session.isDesktop
+  const bottomMobileTabs = () => settings.general.mobileTitlebarPosition() === "bottom"
   const sidebar = createPanelSidebar()
 
   const region = createRegion({
@@ -274,6 +277,23 @@ function SessionScreenContent(props: {
     () => conversationVisible() && messagesReady(),
   )
 
+  const mobileTabs = () => (
+    <Show when={session.identity.sessionKey()} keyed>
+      {(_key) => (
+        <MobileViewTabs
+          bottom={bottomMobileTabs()}
+          screen={props.screen}
+          views={mobile}
+          region={region}
+          current={mobileView()}
+          session={props.view()}
+          sidebar={sidebar}
+          onSelect={selectMobile}
+        />
+      )}
+    </Show>
+  )
+
   const sessionPanelContent = () => (
     <>
       <ComposerDropzone
@@ -281,21 +301,7 @@ function SessionScreenContent(props: {
         input={composer.drop.input()}
         identity={session.layout.tabKey}
       />
-      <Show when={!isDesktop() && !!session.identity.params.id}>
-        <Show when={session.identity.sessionKey()} keyed>
-          {(_key) => (
-            <MobileViewTabs
-              screen={props.screen}
-              views={mobile}
-              region={region}
-              current={mobileView()}
-              session={props.view()}
-              sidebar={sidebar}
-              onSelect={selectMobile}
-            />
-          )}
-        </Show>
-      </Show>
+      <Show when={!isDesktop() && !!session.identity.params.id && !bottomMobileTabs()}>{mobileTabs()}</Show>
       {/* Surface query errors without suspending session metadata while messages load. */}
       <Show when={timeline.resource.error}>
         {(error) => {
@@ -354,12 +360,13 @@ function SessionScreenContent(props: {
           <ActiveSessionComposerRegion session={session} model={model} suggestionBoundary={timeline.scroller} />
         )}
       </Show>
+      <Show when={!isDesktop() && !!session.identity.params.id && bottomMobileTabs()}>{mobileTabs()}</Show>
     </>
   )
 
   return (
     <>
-      <div class="flex-1 min-h-0 flex flex-col gap-2 px-2 pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
+      <div class="flex-1 min-h-0 flex flex-col gap-2 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
           {/* Keep the control outside panel animations; a side dock's 52px header includes a 1px divider. */}
           <Show when={isDesktop() && messagesReady() && session.identity.params.id}>

@@ -204,10 +204,12 @@ export interface MobileView {
   /**
    * Where the view is offered.
    * - `tab`: a tab of the view switcher; it replaces the conversation.
-   * - `menu`: an overflow menu entry; it replaces the conversation.
-   * - `drawer`: an overflow menu entry; it opens in a drawer over the conversation (`useDrawer`).
+   * - `menu`: an entry of the switcher's More drawer; it replaces the conversation.
+   * - `drawer`: an entry of the switcher's More drawer; it opens in that drawer over the conversation (`useDrawer`).
    */
   readonly kind: "tab" | "menu" | "drawer"
+  /** The view's icon in the More drawer. */
+  readonly icon?: IconName
 }
 
 /**

@@ -332,6 +332,8 @@ function clearSubmission(input: ComposerSubmitInput, submission: ReturnType<type
   submission.target().mode.set("normal")
   input.setMode("normal")
   input.closePopover()
+
+  if (window.matchMedia("(max-width: 767px)").matches) input.editor()?.blur()
 }
 
 function restoreSubmission(
