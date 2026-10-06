@@ -10,6 +10,7 @@ import type { ProviderMetadata, Usage } from "@opencode-ai/llm"
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Database } from "@opencode-ai/core/database/database"
 import { EventV2Bridge } from "@/event-v2-bridge"
+import { EventSequenceTable, EventTable } from "@opencode-ai/core/event/sql"
 import { SessionV2 } from "@opencode-ai/core/session"
 import * as SessionExecutionLocal from "@opencode-ai/core/session/execution/local"
 import { locationServiceMapLayer } from "@opencode-ai/core/location-services"
@@ -26,7 +27,7 @@ import { inArray } from "drizzle-orm"
 import { lt } from "drizzle-orm"
 import { or } from "drizzle-orm"
 import type { SQL } from "drizzle-orm"
-import { PartTable, SessionTable } from "@opencode-ai/core/session/sql"
+import { MessageTable, PartTable, SessionTable } from "@opencode-ai/core/session/sql"
 import { ProjectTable } from "@opencode-ai/core/project/sql"
 import { MessageV2 } from "./message-v2"
 import type { InstanceContext } from "../project/instance-context"
@@ -286,6 +287,11 @@ export const SetMetadataInput = Schema.Struct({
   sessionID: SessionID,
   metadata: Metadata,
 })
+export const PruneInput = Schema.Struct({
+  ttlDays: NonNegativeInt,
+  now: Schema.optional(Schema.Finite),
+  vacuum: Schema.optional(Schema.Boolean),
+})
 export const SetPermissionInput = Schema.Struct({
   sessionID: SessionID,
   permission: PermissionV1.Ruleset,
@@ -448,6 +454,7 @@ export interface Interface {
   readonly messages: (input: { sessionID: SessionID; limit?: number }) => Effect.Effect<SessionV1.WithParts[], NotFound>
   readonly children: (parentID: SessionID) => Effect.Effect<Info[]>
   readonly remove: (sessionID: SessionID) => Effect.Effect<void, NotFound>
+  readonly prune: (input: typeof PruneInput.Type) => Effect.Effect<{ sessions: number; messages: number; parts: number }>
   readonly updateMessage: <T extends SessionV1.Info>(msg: T) => Effect.Effect<T>
   readonly removeMessage: (input: { sessionID: SessionID; messageID: MessageID }) => Effect.Effect<MessageID>
   readonly removePart: (input: { sessionID: SessionID; messageID: MessageID; partID: PartID }) => Effect.Effect<PartID>
@@ -624,6 +631,48 @@ const layer: Layer.Layer<
       } catch (error) {
         yield* Effect.logError("failed to remove session", { sessionID, error })
       }
+    })
+
+    const prune: Interface["prune"] = Effect.fn("Session.prune")(function* (input) {
+      const now = input.now ?? Date.now()
+      const cutoff = now - input.ttlDays * 24 * 60 * 60 * 1000
+      const rows = yield* db
+        .select({ id: SessionTable.id })
+        .from(SessionTable)
+        .where(and(isNull(SessionTable.time_archived), lt(SessionTable.time_updated, cutoff)))
+        .all()
+        .pipe(Effect.orDie)
+      const ids = rows.map((row) => row.id)
+      if (ids.length === 0) return { sessions: 0, messages: 0, parts: 0 }
+
+      const messageCount = yield* db
+        .select({ count: sql<number>`count(*)` })
+        .from(MessageTable)
+        .where(inArray(MessageTable.session_id, ids))
+        .get()
+        .pipe(Effect.orDie)
+      const partCount = yield* db
+        .select({ count: sql<number>`count(*)` })
+        .from(PartTable)
+        .where(inArray(PartTable.session_id, ids))
+        .get()
+        .pipe(Effect.orDie)
+
+      yield* db
+        .transaction(() =>
+          Effect.gen(function* () {
+            yield* db.update(SessionTable).set({ time_archived: now }).where(inArray(SessionTable.id, ids)).run()
+            yield* db.delete(PartTable).where(inArray(PartTable.session_id, ids)).run()
+            yield* db.delete(MessageTable).where(inArray(MessageTable.session_id, ids)).run()
+            yield* db.delete(EventSequenceTable).where(inArray(EventSequenceTable.aggregate_id, ids)).run()
+            yield* db.delete(EventTable).where(inArray(EventTable.aggregate_id, ids)).run()
+            if (input.vacuum) yield* db.run("PRAGMA wal_checkpoint(TRUNCATE)")
+            if (input.vacuum) yield* db.run("VACUUM")
+          }),
+        )
+        .pipe(Effect.orDie)
+
+      return { sessions: ids.length, messages: messageCount?.count ?? 0, parts: partCount?.count ?? 0 }
     })
 
     const updateMessage = <T extends SessionV1.Info>(msg: T): Effect.Effect<T> =>
@@ -924,6 +973,7 @@ const layer: Layer.Layer<
       messages,
       children,
       remove,
+      prune,
       updateMessage,
       removeMessage,
       removePart,

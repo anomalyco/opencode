@@ -44,7 +44,8 @@ function pagerCmd(): string[] {
 export const SessionCommand = cmd({
   command: "session",
   describe: "manage sessions",
-  builder: (yargs: Argv) => yargs.command(SessionListCommand).command(SessionDeleteCommand).demandCommand(),
+  builder: (yargs: Argv) =>
+    yargs.command(SessionListCommand).command(SessionDeleteCommand).command(SessionPruneCommand).demandCommand(),
   async handler() {},
 })
 
@@ -64,6 +65,32 @@ export const SessionDeleteCommand = effectCmd({
       .remove(sessionID)
       .pipe(Effect.catchIf(NotFoundError.isInstance, () => fail(`Session not found: ${args.sessionID}`)))
     UI.println(UI.Style.TEXT_SUCCESS_BOLD + `Session ${args.sessionID} deleted` + UI.Style.TEXT_NORMAL)
+  }),
+})
+
+export const SessionPruneCommand = effectCmd({
+  command: "prune",
+  describe: "archive and prune old sessions",
+  builder: (yargs) =>
+    yargs
+      .option("ttl-days", {
+        describe: "archive sessions not updated for this many days",
+        type: "number",
+        default: 30,
+      })
+      .option("vacuum", {
+        describe: "checkpoint WAL and vacuum after pruning",
+        type: "boolean",
+        default: false,
+      }),
+  handler: Effect.fn("Cli.session.prune")(function* (args) {
+    const svc = yield* Session.Service
+    const result = yield* svc.prune({ ttlDays: args.ttlDays, vacuum: args.vacuum })
+    UI.println(
+      UI.Style.TEXT_SUCCESS_BOLD +
+        `Archived ${result.sessions} sessions and pruned ${result.messages} messages / ${result.parts} parts` +
+        UI.Style.TEXT_NORMAL,
+    )
   }),
 })
 
