@@ -95,6 +95,35 @@ const kinds = [
   SymbolKind.Enum,
 ]
 
+const workspaceSymbolQuery = (client: LSPClient.Info, query: string): Promise<Symbol[]> => {
+  const attempt = (): Promise<Symbol[]> =>
+    client.connection
+      .sendRequest<Symbol[]>("workspace/symbol", { query })
+      .then((result) => result.filter((x) => kinds.includes(x.kind)).slice(0, 10))
+
+  const report = (label: string, error: unknown) =>
+    Effect.runSync(
+      Effect.logError(label, {
+        serverID: client.serverID,
+        query,
+        error: error instanceof Error ? error.message : String(error),
+      }),
+    )
+
+  return attempt().catch((error) => {
+    // tsserver needs at least one open document before it forms a project that
+    // workspace/symbol can search. The caller opens one via touchFile, but the first
+    // request can be ordered before the project exists and fails with "No Project".
+    // Retry once so the request is issued after the document has been processed, and
+    // log the failure so a broken server is distinguishable from an empty result.
+    report("workspace/symbol failed, retrying once", error)
+    return attempt().catch((retryError) => {
+      report("workspace/symbol failed after retry", retryError)
+      return [] as Symbol[]
+    })
+  })
+}
+
 const filterExperimentalServers = (servers: Record<string, LSPServer.Info>, flags: RuntimeFlags.Info) => {
   if (flags.experimentalLspTy) {
     if (servers["pyright"]) {
@@ -431,12 +460,7 @@ const layer = Layer.effect(
     })
 
     const workspaceSymbol = Effect.fn("LSP.workspaceSymbol")(function* (query: string) {
-      const results = yield* runAll((client) =>
-        client.connection
-          .sendRequest<Symbol[]>("workspace/symbol", { query })
-          .then((result) => result.filter((x) => kinds.includes(x.kind)).slice(0, 10))
-          .catch(() => [] as Symbol[]),
-      )
+      const results = yield* runAll((client) => workspaceSymbolQuery(client, query))
       return results.flat()
     })
 
