@@ -148,7 +148,7 @@ export const docsSections: DocsSection[] = [
           { title: "Basics", slug: "console/workspaces" },
           { title: "Members", slug: "console/members" },
           { title: "SSO", slug: "console/sso" },
-          { title: "Directory Sync", slug: "console/scim" },
+          { title: "SCIM", slug: "console/scim" },
           { title: "Budgets", slug: "console/budgets" },
           { title: "Billing", slug: "console/billing" },
         ],
