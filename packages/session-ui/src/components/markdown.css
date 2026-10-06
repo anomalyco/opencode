@@ -185,6 +185,8 @@
     position: relative;
     direction: ltr;
     unicode-bidi: isolate;
+    display: flex;
+    flex-direction: column;
   }
 
   [data-component="markdown-code"][data-code-kind="shell"] .shiki {
@@ -202,17 +204,44 @@
   }
 
   [data-slot="markdown-copy-button"] {
-    position: absolute;
-    top: 4px;
-    inset-inline-end: 4px;
-    opacity: 0;
-    transition: opacity 0.15s ease;
+    /* Slim sticky header strip spanning the code block: floats pinned to the
+       scrollport while scrolling through tall code, until the block ends. */
+    order: -1;
+    position: sticky;
+    top: var(--sticky-accordion-top, 0px);
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-inline: 12px 4px;
+    background: var(--v2-background-bg-layer-01);
+    border: 1px solid var(--v2-border-border-base);
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
     z-index: 1;
   }
 
-  [data-component="markdown-code"]:hover [data-slot="markdown-copy-button"],
-  [data-slot="markdown-copy-button"]:focus-within {
-    opacity: 1;
+  [data-slot="markdown-copy-button"]::before {
+    content: attr(data-language-label);
+    font-family: var(--font-family-mono);
+    font-size: 11px;
+    font-weight: var(--font-weight-medium);
+    color: var(--v2-text-text-muted);
+    direction: ltr;
+    unicode-bidi: isolate;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+  }
+
+  [data-component="markdown-code"] pre.shiki {
+    /* Seamless with the strip above: no gap, shared border, bottom corners. */
+    margin-top: 0;
+    border-top: none;
+    border-top-left-radius: 0;
+    border-top-right-radius: 0;
   }
 
   [data-slot="markdown-copy-button"] [data-check-icon] {

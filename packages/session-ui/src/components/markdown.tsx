@@ -113,9 +113,16 @@ function codeUrl(text: string) {
   }
 }
 
-function createCopyButton(labels: CopyLabels) {
+function transferLanguageLabel(source: HTMLElement, target: HTMLElement) {
+  const label = source.dataset.languageLabel
+  if (label) target.dataset.languageLabel = label
+  else delete target.dataset.languageLabel
+}
+
+function createCopyButton(labels: CopyLabels, source?: HTMLElement) {
   const host = document.createElement("div")
   host.setAttribute("data-slot", "markdown-copy-button")
+  if (source) transferLanguageLabel(source, host)
 
   const state: Partial<CopyButtonState> = {}
   const dispose = render(() => {
@@ -197,8 +204,13 @@ function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
     return
   }
 
-  if (language) wrapper.dataset.language = language
-  else delete wrapper.dataset.language
+  if (language) {
+    wrapper.dataset.language = language
+    wrapper.dataset.languageLabel = language
+  } else {
+    delete wrapper.dataset.language
+    delete wrapper.dataset.languageLabel
+  }
 
   const kind = codeKind(language)
   if (kind) wrapper.dataset.codeKind = kind
@@ -215,7 +227,7 @@ function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
     applyCodeMetadata(wrapper, codeLanguage(block))
     parent.replaceChild(wrapper, block)
     wrapper.appendChild(block)
-    wrapper.appendChild(createCopyButton(labels))
+    wrapper.appendChild(createCopyButton(labels, wrapper))
     return
   }
 
@@ -226,7 +238,7 @@ function ensureCodeWrapper(block: HTMLPreElement, labels: CopyLabels) {
   )
 
   if (buttons.length === 0) {
-    parent.appendChild(createCopyButton(labels))
+    parent.appendChild(createCopyButton(labels, parent))
     return
   }
 
@@ -688,7 +700,7 @@ function updateCodeBlock(
   ;[...block.stable, ...block.unstable].map(createTokenSpan).forEach((span) => codeElement.appendChild(span))
   pre.appendChild(codeElement)
   wrapper.appendChild(pre)
-  wrapper.appendChild(createCopyButton(labels))
+  wrapper.appendChild(createCopyButton(labels, wrapper))
   next.appendChild(wrapper)
   renderedCodeTokens.set(next, {
     language: block.language,
