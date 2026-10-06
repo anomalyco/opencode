@@ -7,7 +7,7 @@ import { InstanceState } from "@/effect/instance-state"
 import { Patch } from "../patch"
 import { createTwoFilesPatch, diffLines } from "diff"
 import { assertExternalDirectoryEffect } from "./external-directory"
-import { trimDiff } from "./edit"
+import { lock, trimDiff } from "./edit"
 import { LSP } from "@/lsp/lsp"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import DESCRIPTION from "./apply_patch.txt"
@@ -307,7 +307,26 @@ export const ApplyPatchTool = Tool.define(
       description: DESCRIPTION,
       parameters: Parameters,
       execute: (params: Schema.Schema.Type<typeof Parameters>, ctx: Tool.Context) =>
-        run(params, ctx).pipe(Effect.orDie),
+        Effect.gen(function* () {
+          const hunks = yield* Effect.try({
+            try: () => Patch.parsePatch(params.patchText).hunks,
+            catch: () => undefined,
+          }).pipe(Effect.orElseSucceed((): Patch.Hunk[] => []))
+          if (hunks.length === 0) return yield* run(params, ctx)
+          const instance = yield* InstanceState.context
+          // Take the same per-file locks as edit, so parallel tool calls on one file cannot both read the
+          // original content and drop each other's changes. Paths are acquired in sorted order to avoid deadlocks.
+          const files = Array.from(
+            new Set(
+              hunks
+                .flatMap((hunk) =>
+                  hunk.type === "update" && hunk.move_path ? [hunk.path, hunk.move_path] : [hunk.path],
+                )
+                .map((file) => FSUtil.resolve(path.resolve(instance.directory, file))),
+            ),
+          ).toSorted()
+          return yield* files.reduceRight((effect, file) => lock(file).withPermits(1)(effect), run(params, ctx))
+        }).pipe(Effect.orDie),
     }
   }),
 )

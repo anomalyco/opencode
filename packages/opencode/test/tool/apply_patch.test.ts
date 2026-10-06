@@ -3,7 +3,7 @@ import path from "path"
 import * as fs from "fs/promises"
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
-import { Cause, Effect, Exit, Layer, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Schema } from "effect"
 import { ApplyPatchTool } from "../../src/tool/apply_patch"
 import { LSP } from "@/lsp/lsp"
 import { FSUtil } from "@opencode-ai/core/fs-util"
@@ -544,6 +544,40 @@ EOF`
       yield* execute({ patchText }, ctx)
       // Result has ASCII quotes because that's what the patch specifies
       expect(yield* readText(target)).toBe(`He said "hi"\nsome${emDash}dash\nend\n`)
+    }),
+  )
+
+  it.instance("preserves concurrent patches to different sections of the same file", () =>
+    Effect.gen(function* () {
+      const test = yield* TestInstance
+      const target = path.join(test.directory, "file.txt")
+      yield* writeText(target, "top = 0\nmiddle = keep\nbottom = 0\n")
+
+      // Hold the first patch at its permission prompt until the second one has finished (or a
+      // short timeout when the second one is correctly waiting for the first).
+      const firstAsked = yield* Deferred.make<void>()
+      const secondDone = yield* Deferred.make<void>()
+      const first = yield* execute(
+        { patchText: "*** Begin Patch\n*** Update File: file.txt\n@@\n-top = 0\n+top = 1\n*** End Patch" },
+        {
+          ...baseCtx,
+          ask: () =>
+            Deferred.succeed(firstAsked, undefined).pipe(
+              Effect.andThen(Deferred.await(secondDone).pipe(Effect.timeout("500 millis"), Effect.ignore)),
+            ),
+        },
+      ).pipe(Effect.forkScoped)
+      yield* Deferred.await(firstAsked)
+
+      const second = yield* execute(
+        { patchText: "*** Begin Patch\n*** Update File: file.txt\n@@\n-bottom = 0\n+bottom = 2\n*** End Patch" },
+        makeCtx().ctx,
+      ).pipe(Effect.forkScoped)
+      yield* Fiber.join(second)
+      yield* Deferred.succeed(secondDone, undefined)
+      yield* Fiber.join(first)
+
+      expect(yield* readText(target)).toBe("top = 1\nmiddle = keep\nbottom = 2\n")
     }),
   )
 })
