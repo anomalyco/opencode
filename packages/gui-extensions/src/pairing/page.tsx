@@ -36,8 +36,9 @@ function SettingsPairing(props: { client: Client }) {
   // Reading pending query data would suspend the entire settings surface.
   const localInfo = () => (local.isSuccess ? local.data : undefined)
 
-  const localHost = createMemo(() =>
-    localInfo()?.urls.find((value) => {
+  // Loopback URLs are useless to the scanning device, so the QR code only carries reachable addresses.
+  const localHosts = createMemo(() =>
+    (localInfo()?.urls ?? []).filter((value) => {
       const host = new URL(value).hostname
 
       return (
@@ -78,10 +79,15 @@ function SettingsPairing(props: { client: Client }) {
             <Row title={ctx.t("connection")} description={ctx.t("local.description")}>
               <Button
                 variant="neutral"
-                disabled={!localHost()}
+                disabled={localHosts().length === 0}
                 onClick={() =>
                   dialogs.open(() => (
-                    <DialogPairing title={ctx.t("connection")} host={localHost()!} code={() => props.client.code()} />
+                    <DialogPairing
+                      title={ctx.t("connection")}
+                      host={localHosts().at(-1)!}
+                      hosts={localHosts()}
+                      code={() => props.client.code()}
+                    />
                   ))
                 }
               >
@@ -120,7 +126,12 @@ function SettingsPairing(props: { client: Client }) {
 /** The pending return from "Copied" to the copy label. */
 type CopiedTimer = { timeout?: ReturnType<typeof setTimeout> }
 
-function DialogPairing(props: { title: string; host: string; code: () => Promise<string> }) {
+function DialogPairing(props: {
+  title: string
+  host: string
+  hosts: ReadonlyArray<string>
+  code: () => Promise<string>
+}) {
   const ctx = useExtension()
   const system = ctx.system
 
@@ -156,11 +167,13 @@ function DialogPairing(props: { title: string; host: string; code: () => Promise
   }))
 
   const qr = createMemo(() => {
-    const value = url()
+    if (!code.isSuccess) return
 
-    if (!value) return
-
-    return renderSVG(value, { border: 4, blackColor: "currentColor", whiteColor: "transparent" })
+    return renderSVG(JSON.stringify({ code: code.data, url: props.host, urls: props.hosts }), {
+      border: 4,
+      blackColor: "currentColor",
+      whiteColor: "transparent",
+    })
   })
 
   return (
