@@ -427,6 +427,33 @@ describe("session HttpApi", () => {
     }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
   )
 
+  it.live("returns 404 with the model in the message for an unknown model", () =>
+    Effect.gen(function* () {
+      const llm = yield* TestLLMServer
+      const directory = yield* tmpdirScoped({ git: true, config: testProviderConfig(llm.url) })
+      const session = yield* createSession({ title: "unknown model" }).pipe(provideInstanceEffect(directory))
+
+      const response = yield* request(
+        `${pathFor(SessionPaths.prompt, { sessionID: session.id })}?directory=${encodeURIComponent(directory)}`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            agent: "build",
+            model: { providerID: "test", modelID: "no-such-model" },
+            parts: [{ type: "text", text: "hello" }],
+          }),
+        },
+      )
+
+      expect(response.status).toBe(404)
+      expect(yield* responseJson(response)).toMatchObject({
+        name: "NotFoundError",
+        data: { message: expect.stringMatching(/^Model not found: test\/no-such-model\./) },
+      })
+    }).pipe(Effect.provide(TestLLMServer.layer), Effect.provide(AppNodeBuilder.build(CrossSpawnSpawner.node))),
+  )
+
   it.instance(
     "returns v2 public request errors for cursor and workspace query failures",
     () =>

@@ -297,12 +297,14 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof PromptPayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      const message = yield* promptSvc
-        .prompt({
-          ...ctx.payload,
-          sessionID: ctx.params.sessionID,
-        })
-        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      const message = yield* SessionError.mapModelNotFound(
+        promptSvc
+          .prompt({
+            ...ctx.payload,
+            sessionID: ctx.params.sessionID,
+          })
+          .pipe(Effect.mapError(() => new HttpApiError.BadRequest({}))),
+      )
       return HttpServerResponse.stream(Stream.make(JSON.stringify(message)).pipe(Stream.encodeText), {
         contentType: "application/json",
       })
@@ -333,9 +335,11 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
       payload: typeof CommandPayload.Type
     }) {
       yield* requireSession(ctx.params.sessionID)
-      return yield* promptSvc
-        .command({ ...ctx.payload, sessionID: ctx.params.sessionID })
-        .pipe(Effect.mapError(() => new HttpApiError.BadRequest({})))
+      return yield* SessionError.mapModelNotFound(
+        promptSvc
+          .command({ ...ctx.payload, sessionID: ctx.params.sessionID })
+          .pipe(Effect.mapError(() => new HttpApiError.BadRequest({}))),
+      )
     })
 
     const shell = Effect.fn("SessionHttpApi.shell")(function* (ctx: {
