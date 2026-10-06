@@ -28,10 +28,13 @@ import { useTuiStartup } from "./runtime"
 import { createSimpleContext } from "./helper"
 import { useExit } from "./exit"
 import { useArgs } from "./args"
-import { batch, onMount } from "solid-js"
+import { batch, onMount, untrack } from "solid-js"
 import path from "path"
 import { useKV } from "./kv"
 import { usePermission } from "./permission"
+
+/** Sessions opened most recently whose messages stay loaded, so switching back to one is instant. */
+const KEPT_SESSIONS = 4
 
 const emptyConsoleState: ConsoleState = {
   consoleManagedProviders: [],
@@ -157,6 +160,37 @@ export const {
       hydratingSessions.get(sessionID)?.parts.add(partID)
     }
 
+    // The event stream carries every session on the server. Only sessions opened recently, and their
+    // subagent sessions, keep their messages here; the rest are dropped and load again when reopened.
+    const recentSessions: string[] = []
+    const kept = (sessionID: string) => {
+      let id: string | undefined = sessionID
+      for (let depth = 0; id && depth < 8; depth++) {
+        if (recentSessions.includes(id)) return true
+        id = result.session.get(id)?.parentID
+      }
+      return false
+    }
+    const loaded = (sessionID: string) =>
+      hydratingSessions.has(sessionID) || fullSyncedSessions.has(sessionID) || kept(sessionID)
+
+    function evict() {
+      const held = new Set([...Object.keys(store.message), ...fullSyncedSessions])
+      const dropped = new Set([...held].filter((id) => !syncingSessions.has(id) && !kept(id)))
+      if (dropped.size === 0) return
+      setStore(
+        produce((draft) => {
+          for (const id of dropped) {
+            for (const message of draft.message[id] ?? []) delete draft.part[message.id]
+            delete draft.message[id]
+            delete draft.todo[id]
+            delete draft.session_diff[id]
+          }
+        }),
+      )
+      for (const id of dropped) fullSyncedSessions.delete(id)
+    }
+
     function sessionListQuery(): { scope?: "project"; path?: string } {
       if (!kv.get("session_directory_filter_enabled", true)) return { scope: "project" }
       if (!project.data.instance.path.worktree || !project.data.instance.path.directory) return { scope: "project" }
@@ -263,10 +297,12 @@ export const {
         }
 
         case "todo.updated":
+          if (!loaded(event.properties.sessionID)) break
           setStore("todo", event.properties.sessionID, event.properties.todos)
           break
 
         case "session.diff":
+          if (!loaded(event.properties.sessionID)) break
           setStore("session_diff", event.properties.sessionID, event.properties.diff)
           break
 
@@ -322,6 +358,7 @@ export const {
           touchMessage(event.properties.info.sessionID, event.properties.info.id)
           const messages = store.message[event.properties.info.sessionID]
           if (!messages) {
+            if (!loaded(event.properties.info.sessionID)) break
             setStore("message", event.properties.info.sessionID, [event.properties.info])
             break
           }
@@ -377,6 +414,7 @@ export const {
           touchPart(event.properties.part.sessionID, event.properties.part.id)
           const parts = store.part[event.properties.part.messageID]
           if (!parts) {
+            if (!loaded(event.properties.part.sessionID)) break
             setStore("part", event.properties.part.messageID, [event.properties.part])
             break
           }
@@ -664,6 +702,14 @@ export const {
           })
           syncingSessions.set(sessionID, task)
           return task
+        },
+        /** Mark a session as shown, keeping its events, and drop the messages of sessions opened long ago. */
+        open(sessionID: string) {
+          const index = recentSessions.indexOf(sessionID)
+          if (index !== -1) recentSessions.splice(index, 1)
+          recentSessions.push(sessionID)
+          recentSessions.splice(0, Math.max(0, recentSessions.length - KEPT_SESSIONS))
+          untrack(evict)
         },
       },
       bootstrap,

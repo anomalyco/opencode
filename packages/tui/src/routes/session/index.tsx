@@ -285,6 +285,7 @@ export function Session() {
 
   createEffect(() => {
     const sessionID = route.sessionID
+    sync.session.open(sessionID)
     void (async () => {
       const previousWorkspace = untrack(() => project.workspace.current())
       const result = await sdk.client.session.get({ sessionID }, { throwOnError: true })

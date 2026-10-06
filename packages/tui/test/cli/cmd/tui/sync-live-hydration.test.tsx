@@ -45,6 +45,7 @@ test("live messages use creation time with an ID tie-break", async () => {
   ]
 
   try {
+    sync.session.open(sessionID)
     for (const info of messages) {
       emit(global({ id: `evt_${info.id}`, type: "message.updated", properties: { sessionID, info } }))
     }
@@ -168,6 +169,7 @@ test("hydration does not clear text streamed before it starts", async () => {
   }, tmp.path)
 
   try {
+    sync.session.open(sessionID)
     emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: assistant } }))
     emit(
       global({
@@ -266,6 +268,7 @@ test("a message removed during hydration does not regain stale parts", async () 
   }, tmp.path)
 
   try {
+    sync.session.open(sessionID)
     emit(global({ id: "evt_message", type: "message.updated", properties: { sessionID, info: assistant } }))
     await wait(() => sync.data.message[sessionID]?.length === 1)
     const hydrate = sync.session.sync(sessionID)
