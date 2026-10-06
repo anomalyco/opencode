@@ -296,7 +296,7 @@ it.live("applies custom CORS origins to HTTP responses and PTY ticket checks", (
             authorization: `Basic ${btoa("opencode:secret")}`,
             "content-type": "application/json",
           },
-          body: JSON.stringify({ command: "/bin/sh", args: ["-c", "sleep 30"] }),
+          body: JSON.stringify({ command: process.execPath, args: ["-e", "setInterval(() => {}, 1000)"] }),
         }),
       ).then((response) => response.json()),
     )) as { data: { id: string } }
