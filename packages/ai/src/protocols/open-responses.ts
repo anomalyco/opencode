@@ -761,7 +761,12 @@ const lowerMessages = Effect.fnUntraced(function* (
     }
   }
 
-  return input
+  return input.filter(
+    (item) =>
+      item.type !== "reasoning" ||
+      (Array.isArray(item.summary) && item.summary.length > 0) ||
+      (typeof item.encrypted_content === "string" && item.encrypted_content.length > 0),
+  )
 })
 
 export const lowerConversation = Effect.fnUntraced(function* (
