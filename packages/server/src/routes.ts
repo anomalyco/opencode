@@ -183,7 +183,9 @@ function makeRoutes<AuthError, AuthServices>(
         Layer.provide(auth),
         HttpRouter.provideRequest(requestServices),
         Layer.provideMerge(services),
-        Layer.provideMerge(HttpRouter.layer),
+        Layer.provideMerge(
+          HttpRouter.layer.pipe(Layer.provide(Layer.succeed(HttpRouter.RouterConfig, { maxParamLength: 512 }))),
+        ),
       )
       return Layer.merge(api, V1Migration.layer.pipe(Layer.provide(services)))
     }),
