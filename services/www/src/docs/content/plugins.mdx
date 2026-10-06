@@ -81,6 +81,15 @@ Two built-in plugins ignore removals so that a repository cannot switch off
 `opencode.provider.opencode`, the Console connection that delivers organization
 policy.
 
+To pass options to a built-in plugin, use the object form with the plugin ID as `package`. A later entry for the same
+ID replaces its options. Wildcards enable plugins but never set options.
+
+```jsonc title="opencode.jsonc"
+{
+  "plugins": [{ "package": "opencode.plan", "options": { "directory": ".opencode/plans" } }]
+}
+```
+
 ## Manage
 
 Install, list, check, update, or remove global package plugins with the CLI.

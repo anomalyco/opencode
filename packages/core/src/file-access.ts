@@ -76,6 +76,18 @@ export const resolvePath = (directory: string, input: string, home = Global.Path
   )
 }
 
+/** Name a path the way permission rules see it: Location-relative inside the project, absolute outside it. */
+export const resource = (location: Location.Info, absolute: string) =>
+  internal(location, absolute) ? slash(path.relative(location.directory, absolute) || ".") : slash(absolute)
+
+const internal = (location: Location.Info, absolute: string) => {
+  const worktree = path.resolve(location.project.directory)
+  return (
+    FSUtil.contains(location.directory, absolute) ||
+    (worktree !== path.parse(worktree).root && FSUtil.contains(worktree, absolute))
+  )
+}
+
 const slash = (value: string) => value.replaceAll("\\", "/")
 const invocation = (context: Invocation) => ({
   sessionID: context.sessionID,
@@ -92,16 +104,7 @@ const layer = Layer.effect(
 
     const resolve = Effect.fn("FileAccess.resolve")(function* (input: ResolveInput) {
       const absolute = AbsolutePath.make(resolvePath(location.directory, input.path))
-      const worktree = path.resolve(location.project.directory)
-      const internal =
-        FSUtil.contains(location.directory, absolute) ||
-        (worktree !== path.parse(worktree).root && FSUtil.contains(worktree, absolute))
-      if (internal) {
-        return {
-          absolute,
-          resource: slash(path.relative(location.directory, absolute) || "."),
-        } satisfies Target
-      }
+      if (internal(location, absolute)) return { absolute, resource: resource(location, absolute) } satisfies Target
       const type =
         input.kind === "directory"
           ? "Directory"
@@ -112,7 +115,7 @@ const layer = Layer.effect(
       const directory = AbsolutePath.make(type === "Directory" ? absolute : path.dirname(absolute))
       return {
         absolute,
-        resource: slash(absolute),
+        resource: resource(location, absolute),
         externalDirectory: {
           action: "external_directory",
           directory,

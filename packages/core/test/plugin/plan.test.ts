@@ -5,11 +5,14 @@ import type { SessionContext } from "@opencode/plugin/effect/session"
 import type { ToolHooks } from "@opencode/plugin/effect/tool"
 import { Agent } from "@opencode/core/agent"
 import { Environment } from "@opencode/core/environment/index"
+import { Location } from "@opencode/core/location"
 import { Event } from "@opencode/schema/event"
 import { Model } from "@opencode/core/model"
 import { PlanPlugin } from "@opencode/core/plugin/plan"
 import { Permission } from "@opencode/core/permission"
+import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
 import { SessionInbox } from "@opencode/core/session/inbox"
@@ -35,7 +38,10 @@ const agentSelected = (agent: Agent.ID, previous: Agent.ID): SessionEvent.AgentS
 })
 
 /** Runs the plan plugin against stubbed domains, capturing persisted reminders and the context hook. */
-const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.AgentSelected> = []) {
+const run = Effect.fnUntraced(function* (
+  events: ReadonlyArray<SessionEvent.AgentSelected> = [],
+  input: { options?: Record<string, unknown>; location?: Location.Info } = {},
+) {
   const persisted = new Array<string>()
   let contextHook: ((input: SessionContext) => Effect.Effect<void>) | undefined
   let toolHook: ((input: ToolHooks["execute.after"]) => Effect.Effect<void>) | undefined
@@ -51,8 +57,9 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
     ],
   } satisfies Types.DeepMutable<Agent.Info>
   const driver = Environment.makeMemoryDriver()
-  yield* PlanPlugin.Plugin.effect(
-    host({
+  yield* PlanPlugin.Plugin.effect({
+    ...host({
+      location: input.location,
       agent: {
         get: () => Effect.die("unused agent.get"),
         list: () => Effect.die("unused agent.list"),
@@ -106,7 +113,8 @@ const run = Effect.fnUntraced(function* (events: ReadonlyArray<SessionEvent.Agen
         },
       },
     }),
-  ).pipe(
+    options: input.options ?? {},
+  }).pipe(
     Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home })),
     Effect.provideService(
       Environment.Service,
@@ -306,6 +314,88 @@ describe("plan plugin mutations", () => {
       const event = toolError("edit", error)
       yield* toolHook(event)
       expect(event.error).toBe(error)
+    }),
+  )
+})
+
+describe("plan plugin directory", () => {
+  it.effect("uses an absolute directory from plugin options", () =>
+    Effect.gen(function* () {
+      const { planAgent, contextHook, toolHook } = yield* run([], { options: { directory: "/plans" } })
+      const messages = [Message.user("where do plans go?")]
+      yield* contextHook(request(plan, messages))
+      const reminder = messages[0]?.content[0]
+      expect(reminder?.type === "text" && reminder.text).toContain("/plans")
+      expect(Permission.evaluate("edit", "/plans/work.md", planAgent.permissions).effect).toBe("allow")
+      expect(Permission.evaluate("edit", "/home/plan-test/.opencode/plan/work.md", planAgent.permissions).effect).toBe(
+        "deny",
+      )
+      const event = toolError(
+        "edit",
+        new ToolFailure({
+          message: "Unable to modify file",
+          error: new Permission.BlockedError({ rules: [], permission: "edit", resources: ["source.ts"] }),
+        }),
+      )
+      yield* toolHook(event)
+      expect(event.error.message).toBe("Cannot use edit to modify files outside the Plan directory: /plans")
+    }),
+  )
+
+  it.effect("expands a home-relative directory from plugin options", () =>
+    Effect.gen(function* () {
+      const { planAgent, contextHook } = yield* run([], { options: { directory: "~/plans" } })
+      const messages = [Message.user("where do plans go?")]
+      yield* contextHook(request(plan, messages))
+      const reminder = messages[0]?.content[0]
+      expect(reminder?.type === "text" && reminder.text).toContain("/home/plan-test/plans")
+      expect(Permission.evaluate("edit", "/home/plan-test/plans/work.md", planAgent.permissions).effect).toBe("allow")
+    }),
+  )
+
+  it.effect("resolves a relative directory against the project root", () =>
+    Effect.gen(function* () {
+      const { planAgent, contextHook } = yield* run([], {
+        options: { directory: ".opencode/plans" },
+        location: new Location.Info({
+          directory: AbsolutePath.make("/workspace/packages/app"),
+          project: {
+            id: Project.ID.global,
+            directory: AbsolutePath.make("/workspace"),
+            canonical: AbsolutePath.make("/workspace/canonical"),
+          },
+        }),
+      })
+      const messages = [Message.user("where do plans go?")]
+      yield* contextHook(request(plan, messages))
+      const reminder = messages[0]?.content[0]
+      expect(reminder?.type === "text" && reminder.text).toContain("/workspace/.opencode/plans")
+      expect(Permission.evaluate("edit", "../../.opencode/plans/work.md", planAgent.permissions).effect).toBe("allow")
+      expect(Permission.evaluate("edit", "src/index.ts", planAgent.permissions).effect).toBe("deny")
+    }),
+  )
+
+  it.effect("allows the default directory when the location is the home directory", () =>
+    Effect.gen(function* () {
+      const { planAgent } = yield* run([], {
+        location: new Location.Info({
+          directory: AbsolutePath.make(home),
+          project: { id: Project.ID.global, directory: AbsolutePath.make(home), canonical: AbsolutePath.make(home) },
+        }),
+      })
+      expect(Permission.evaluate("edit", ".opencode/plan/work.md", planAgent.permissions).effect).toBe("allow")
+      expect(Permission.evaluate("edit", "notes.md", planAgent.permissions).effect).toBe("deny")
+    }),
+  )
+
+  it.effect("falls back to the default directory when options are invalid", () =>
+    Effect.gen(function* () {
+      for (const options of [{ directory: 42 }, { directory: " " }]) {
+        const { planAgent } = yield* run([], { options })
+        expect(Permission.evaluate("edit", "/home/plan-test/.opencode/plan/work.md", planAgent.permissions).effect).toBe(
+          "allow",
+        )
+      }
     }),
   )
 })

@@ -135,7 +135,7 @@ OpenCode includes these visible agents:
 | Agent | Mode | Purpose |
 | --- | --- | --- |
 | **Build** (`build`) | `primary` | Default coding agent. Tools are allowed by default; sensitive environment-file reads and access outside the workspace ask for approval. |
-| **Plan** (`plan`) | `primary` | Explores and plans without editing normal project files. It may write OpenCode plan files when asked, and shell commands remain permission-controlled. |
+| **Plan** (`plan`) | `primary` | Explores and plans without editing normal project files. It may write plan files to the [plan directory](/agents#plan-directory) when asked, and shell commands remain permission-controlled. |
 | **General** (`general`) | `subagent` | Handles research and multi-step work with broad tool access, but cannot launch more subagents. |
 | **Explore** (`explore`) | `subagent` | Searches and reads code or web sources without editing files. |
 
@@ -154,6 +154,22 @@ Override a built-in by using the same ID:
 ```
 
 Hidden `compaction`, `title`, and `summary` agents perform maintenance and cannot be selected directly. V2 has no built-in `scout` agent.
+
+### Plan directory
+
+The Plan agent writes plan files to `~/.opencode/plan` and cannot edit other files. Set the `directory` option of the built-in `opencode.plan` plugin to use another directory.
+
+```jsonc
+{
+  "plugins": [{ "package": "opencode.plan", "options": { "directory": ".opencode/plans" } }],
+}
+```
+
+- Relative paths resolve against the root of the current checkout, in global and project configuration alike. Each linked worktree gets its own plan directory.
+- Outside version control, relative paths resolve against the opened directory.
+- Absolute paths are used as-is, and `~/` resolves against your home directory.
+
+Changing the directory does not move existing plan files.
 
 ## Merging
 

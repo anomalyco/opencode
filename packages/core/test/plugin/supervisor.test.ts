@@ -258,4 +258,71 @@ describe("PluginSupervisor", () => {
       expect(source.activations).toBe(2)
     }),
   )
+
+  it.effect("passes exact add options to a non-package plugin and restarts it when they change", () =>
+    Effect.gen(function* () {
+      const seen = new Array<Record<string, unknown>>()
+      const sdk = yield* SdkPlugins.Service
+      yield* sdk.register(
+        define({
+          id: "options-probe",
+          effect: (ctx) => Effect.sync(() => seen.push(ctx.options)),
+        }),
+      )
+      source.activations = 0
+      source.operations = [{ type: "add", target: "options-probe", options: { directory: "/plans" } }]
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        expect(seen).toEqual([{ directory: "/plans" }])
+
+        source.operations = [{ type: "add", target: "options-probe", options: { directory: "/srv/plans" } }]
+        yield* sdk.register(define({ id: "options-reload", effect: () => Effect.void }))
+        yield* advance(() => source.activations === 2)
+        yield* plugins.awaitActivation
+        expect(seen).toEqual([{ directory: "/plans" }, { directory: "/srv/plans" }])
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          source.operations = []
+        }),
+      ),
+    ),
+  )
+
+  it.effect("ignores options from a wildcard selector", () =>
+    Effect.gen(function* () {
+      const seen = new Array<Record<string, unknown>>()
+      const sdk = yield* SdkPlugins.Service
+      yield* sdk.register(
+        define({
+          id: "options-probe",
+          effect: (ctx) => Effect.sync(() => seen.push(ctx.options)),
+        }),
+      )
+      source.operations = [{ type: "add", target: "*", options: { directory: "/plans" } }]
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        expect(seen).toEqual([{}])
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+    }).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          source.operations = []
+        }),
+      ),
+    ),
+  )
 })

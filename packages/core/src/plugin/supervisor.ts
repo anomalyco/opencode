@@ -28,6 +28,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   const definitions = [...pre, ...post]
   const enabled = new Set(definitions.map((plugin) => plugin.id))
   const packages = new Map<string, Plugin.Generation>()
+  const options = new Map<string, Record<string, unknown>>()
   const pending = new Set<string>()
   const failures = new Map<
     string,
@@ -52,6 +53,7 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
       operation.target.startsWith("opencode.")
     if (selectsPlugins) {
       matched.forEach((plugin) => enabled.add(plugin.id))
+      if (definitions.some((plugin) => plugin.id === operation.target)) options.set(operation.target, operation.options)
       continue
     }
 
@@ -88,10 +90,19 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     enabled.add(plugin.id)
   }
 
+  const withOptions = (plugin: Plugin.Generation): Plugin.Generation => {
+    const selected = options.get(plugin.id)
+    if (!selected || Object.keys(selected).length === 0) return plugin
+    return {
+      ...plugin,
+      revision: JSON.stringify([plugin.revision, selected]),
+      effect: (host) => plugin.effect({ ...host, options: selected }),
+    }
+  }
   const ordered = [
-    ...pre.filter((plugin) => enabled.has(plugin.id)),
+    ...pre.filter((plugin) => enabled.has(plugin.id)).map(withOptions),
     ...[...packages.values()].filter((plugin) => enabled.has(plugin.id)),
-    ...post.filter((plugin) => enabled.has(plugin.id)),
+    ...post.filter((plugin) => enabled.has(plugin.id)).map(withOptions),
   ]
   // Registry activation dies on a duplicate ID, which would drop the whole generation including builtins.
   // Keep the first occurrence in boot order and report later ones like any other plugin setup failure.
