@@ -505,6 +505,72 @@ Use native v2 fields.`,
     ),
   )
 
+  it.live("rejects node_modules Markdown while discovering legitimate agents", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          const global = path.join(tmp.path, "global")
+          const external = path.join(tmp.path, "external")
+          yield* Effect.promise(async () => {
+            // Project source uses the plural root; global uses the singular one.
+            const projectAgent = path.join(project, "agents")
+            const globalAgent = path.join(global, "agent")
+            await fs.mkdir(path.join(projectAgent, "node_modules", "probe"), { recursive: true })
+            // Reported layout: a dependency tree nested below .opencode/agent.
+            await fs.mkdir(path.join(projectAgent, ".opencode", "node_modules", "probe"), { recursive: true })
+            // A dependency directory named plainly, deeper than one segment.
+            await fs.mkdir(path.join(projectAgent, "team", "node_modules", "pkg"), { recursive: true })
+            // Legitimate nested and hidden agent directories.
+            await fs.mkdir(path.join(projectAgent, "team"), { recursive: true })
+            await fs.mkdir(path.join(projectAgent, ".hidden"), { recursive: true })
+            await fs.mkdir(globalAgent, { recursive: true })
+            // A supported symlinked agent directory and file.
+            await fs.mkdir(path.join(external, "linked"), { recursive: true })
+
+            await fs.writeFile(path.join(projectAgent, "root.md"), "Root agent.")
+            await fs.writeFile(path.join(projectAgent, "team", "helper.md"), "Team helper.")
+            await fs.writeFile(path.join(projectAgent, ".hidden", "secret.md"), "Hidden agent.")
+            await fs.writeFile(path.join(globalAgent, "global.md"), "Global agent.")
+            await fs.writeFile(path.join(external, "linked.md"), "Linked file agent.")
+            await fs.writeFile(path.join(external, "linked", "nested.md"), "Linked directory agent.")
+
+            // The reported anomaly: a dependency README with no frontmatter, which
+            // otherwise decodes as a real agent named after its path.
+            await fs.writeFile(path.join(projectAgent, "node_modules", "probe", "README.md"), "Dependency readme.")
+            await fs.writeFile(
+              path.join(projectAgent, ".opencode", "node_modules", "probe", "README.md"),
+              "Nested dependency readme.",
+            )
+            await fs.writeFile(path.join(projectAgent, "team", "node_modules", "pkg", "README.md"), "Deep dep readme.")
+
+            await fs.symlink(path.join(external, "linked.md"), path.join(projectAgent, "linked.md"))
+            await fs.symlink(path.join(external, "linked"), path.join(projectAgent, "linked"))
+          })
+
+          const agents = yield* Agent.Service
+          yield* ConfigAgentPlugin.Plugin.effect(host({ agent: agentHost(agents) })).pipe(
+            Effect.provide(Config.testLayer([directoryEntry(project), directoryEntry(global)])),
+          )
+
+          // Plain Markdown without frontmatter and nested/hidden agents are preserved.
+          expect(yield* agents.get(Agent.ID.make("root"))).toMatchObject({ system: "Root agent." })
+          expect(yield* agents.get(Agent.ID.make("team/helper"))).toMatchObject({ system: "Team helper." })
+          expect(yield* agents.get(Agent.ID.make(".hidden/secret"))).toMatchObject({ system: "Hidden agent." })
+          // Singular and plural roots, and multiple directory entries, both load.
+          expect(yield* agents.get(Agent.ID.make("global"))).toMatchObject({ system: "Global agent." })
+          // Supported symlinked agent files and directories still resolve.
+          expect(yield* agents.get(Agent.ID.make("linked"))).toMatchObject({ system: "Linked file agent." })
+          expect(yield* agents.get(Agent.ID.make("linked/nested"))).toMatchObject({ system: "Linked directory agent." })
+          // Dependency Markdown never surfaces as an agent.
+          expect(yield* agents.get(Agent.ID.make("node_modules/probe/README"))).toBeUndefined()
+          expect(yield* agents.get(Agent.ID.make(".opencode/node_modules/probe/README"))).toBeUndefined()
+          expect(yield* agents.get(Agent.ID.make("team/node_modules/pkg/README"))).toBeUndefined()
+        }),
+      ),
+    ),
+  )
+
   for (const testCase of sourceCases()) {
     it.effect(`rebuilds agents when a source file is ${testCase.name}`, () =>
       Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
