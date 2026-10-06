@@ -44,6 +44,7 @@ import type {
   ComposerSuggestion,
 } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
+import { ComposerVoice, createComposerVoice } from "./voice"
 import { isAttachment } from "../prompt-parts"
 import "../attachments/attachments.css"
 import "./editor.css"
@@ -95,6 +96,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const i18n = useI18n()
   const state = props.controller.state
   const view = props.controller.view
+  const voice = createComposerVoice({ controller: props.controller })
   let editor: HTMLDivElement | undefined
   let viewport: HTMLDivElement | undefined
   let controlsViewport!: HTMLDivElement
@@ -268,6 +270,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 event.preventDefault()
 
                 if (event.repeat) return
+
+                if (voice.recording()) {
+                  void voice.stopSend()
+
+                  return
+                }
+
                 props.controller.submit(mod ? { alternate: true } : undefined)
               }
             }}
@@ -395,13 +404,27 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 </span>
               </Button>
             </Show>
+            <Show when={state.mode === "normal"}>
+              <ComposerVoice voice={voice} />
+            </Show>
             <ComposerEditorSubmitButton
               mode={state.mode}
               stopping={view.submit.stopping()}
-              disabled={!props.controller.canSubmit()}
-              sendLabel={i18n.t("ui.promptInput.send")}
+              disabled={voice.transcribing() || (!voice.recording() && !props.controller.canSubmit())}
+              sendLabel={voice.recording() ? voice.sendLabel() : i18n.t("ui.promptInput.send")}
               stopLabel={i18n.t("ui.promptInput.stop")}
-              onSubmit={() => props.controller.submit()}
+              onSubmit={() => {
+                // While recording, the composer button stops the recording,
+                // transcribes, appends the text to whatever is already in the
+                // prompt, and sends the whole message.
+                if (voice.recording()) {
+                  void voice.stopSend()
+
+                  return
+                }
+
+                props.controller.submit()
+              }}
               onStop={props.controller.stop}
             />
           </div>

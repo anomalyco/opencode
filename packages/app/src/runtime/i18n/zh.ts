@@ -937,6 +937,33 @@ export const dict = {
   "workspace.delete.confirm": "删除“{{name}}”吗？",
   "workspace.delete.location": "位置",
   "settings.search.empty.query": "“{{query}}”",
+
+  "prompt.voice.tooltip": "语音输入",
+  "prompt.voice.insert": "停止并插入",
+  "prompt.voice.send": "停止并发送",
+  "prompt.voice.cancel": "取消录音",
+  "prompt.voice.retry": "重试转写",
+  "prompt.voice.discard": "丢弃录音",
+  "prompt.voice.cancelled": "转写已取消",
+  "prompt.voice.failed.title": "转写失败",
+  "prompt.voice.offline.description": "无法连接服务器。请确认 OpenCode 仍在运行。",
+  "prompt.voice.empty.title": "未检测到语音",
+  "prompt.voice.empty.description": "请重试录音或检查语音设置。",
+  "prompt.voice.micDenied.title": "麦克风已被阻止",
+  "prompt.voice.micDenied.description": "请允许访问麦克风以录音。",
+  "prompt.voice.noAudio.title": "未捕获音频",
+  "prompt.voice.noAudio.description": "请重试录音。",
+  "settings.voice.section.title": "语音",
+  "settings.voice.url.title": "服务器 URL",
+  "settings.voice.url.description": "兼容 OpenAI 的转写端点。留空可禁用语音输入。",
+  "settings.voice.url.placeholder": "http://127.0.0.1:8797/v1/audio/transcriptions",
+  "settings.voice.apiKey.title": "API 密钥",
+  "settings.voice.apiKey.description": "以 Bearer 令牌发送。本地服务器可留空。",
+  "settings.voice.apiKey.placeholder": "本地服务器可留空",
+  "settings.voice.model.title": "模型",
+  "settings.voice.model.description": "发送到端点的模型名称。默认：whisper-1。",
+  "settings.voice.model.placeholder": "whisper-1",
+
 } satisfies Partial<Record<Keys, string>>
 
 export default dict

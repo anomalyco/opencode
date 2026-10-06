@@ -181,6 +181,30 @@ export const serverSettings: Entry<SettingsServerTab>[] = [
     description: "settings.server.preferences.websearch.description",
     keywords: "web search provider",
   },
+  {
+    tab: "general",
+    label: "settings.voice.url.title",
+    target: "settings-voice-url",
+    section: "settings.voice.section.title",
+    description: "settings.voice.url.description",
+    keywords: "voice transcription speech dictation stt whisper parakeet endpoint microphone",
+  },
+  {
+    tab: "general",
+    label: "settings.voice.apiKey.title",
+    target: "settings-voice-api-key",
+    section: "settings.voice.section.title",
+    description: "settings.voice.apiKey.description",
+    keywords: "voice transcription token bearer key",
+  },
+  {
+    tab: "general",
+    label: "settings.voice.model.title",
+    target: "settings-voice-model",
+    section: "settings.voice.section.title",
+    description: "settings.voice.model.description",
+    keywords: "voice transcription model whisper parakeet",
+  },
 ]
 
 export const projectSettings: Entry<SettingsProjectTab>[] = [

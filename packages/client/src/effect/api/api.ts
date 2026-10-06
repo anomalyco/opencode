@@ -2379,14 +2379,40 @@ export type ConfigShellsOutput = ReadonlyArray<{
 }>
 export type ConfigShellsOperation<E = never> = () => Effect.Effect<ConfigShellsOutput, E>
 
-export type ConfigUpdateInput = { readonly shell: string | null }
+export type ConfigUpdateInput = {
+  readonly shell?: string | null | undefined
+  readonly voice?:
+    | { readonly url?: string | undefined; readonly apiKey?: string | undefined; readonly model?: string | undefined }
+    | null
+    | undefined
+}
 export type ConfigUpdateOutput = void
-export type ConfigUpdateOperation<E = never> = (input: ConfigUpdateInput) => Effect.Effect<ConfigUpdateOutput, E>
+export type ConfigUpdateOperation<E = never> = (input?: ConfigUpdateInput) => Effect.Effect<ConfigUpdateOutput, E>
 
 export interface ConfigApi<E = never> {
   readonly get: ConfigGetOperation<E>
   readonly shells: ConfigShellsOperation<E>
   readonly update: ConfigUpdateOperation<E>
+}
+
+export type VoiceTranscribeInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly audio: string
+  readonly mime: string
+  readonly prompt?: string | undefined
+}
+export type VoiceTranscribeOutput = { readonly text: string }
+export type VoiceTranscribeOperation<E = never> = (
+  input: VoiceTranscribeInput,
+) => Effect.Effect<VoiceTranscribeOutput, E>
+
+export type VoiceRecordingInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type VoiceRecordingOutput = void
+export type VoiceRecordingOperation<E = never> = (input?: VoiceRecordingInput) => Effect.Effect<VoiceRecordingOutput, E>
+
+export interface VoiceApi<E = never> {
+  readonly transcribe: VoiceTranscribeOperation<E>
+  readonly recording: VoiceRecordingOperation<E>
 }
 
 export interface AppApi<E = never> {
@@ -2420,4 +2446,5 @@ export interface AppApi<E = never> {
   readonly migration: MigrationApi<E>
   readonly websearch: WebsearchApi<E>
   readonly config: ConfigApi<E>
+  readonly voice: VoiceApi<E>
 }

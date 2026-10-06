@@ -146,6 +146,25 @@ export const Info = Schema.Struct({
       }),
     }),
   ).annotate({ description: "Prompt input behavior" }),
+  voice: Schema.optional(
+    Schema.Struct({
+      url: Schema.optional(Schema.String).annotate({
+        description: "OpenAI-compatible transcription endpoint (voice input is disabled while unset)",
+      }),
+      api_key: Schema.optional(Schema.String).annotate({
+        description: "API key sent as a Bearer token; leave empty for local servers",
+      }),
+      model: Schema.optional(Schema.String).annotate({
+        description: "Model name sent to the transcription endpoint",
+      }),
+      command: Schema.optional(Schema.Array(Schema.String)).annotate({
+        description: "Custom recorder command; {output} is replaced with the output file path",
+      }),
+      mime: Schema.optional(Schema.String).annotate({
+        description: "Audio mime type for recordings produced by a custom command",
+      }),
+    }),
+  ).annotate({ description: "Voice input settings" }),
   session: Schema.optional(
     Schema.Struct({
       sidebar: Schema.optional(Schema.Literals(["auto", "hide"])).annotate({
