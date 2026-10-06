@@ -66,9 +66,9 @@ Todas las optimizaciones fueron diseñadas bajo Clean Architecture, tipado estri
 
 ### A. Tareas Técnicas Locales
 
-- [ ] **Skeleton Automático por Umbral:**
+- [x] **Skeleton Automático por Umbral:**
   - *Objetivo:* En `ReadToolFileSystem`, cuando `page.view` no esté especificado pero el archivo a leer supere las 800 líneas y no se haya provisto `offset`/`limit`, activar automáticamente `view: "skeleton"`.
-  - *Beneficio:* Evita que un modelo sature involuntariamente su ventana de contexto volcando archivos gigantescos en lecturas exploratorias.
+  - *Beneficio:* Evita que un modelo sature involuntariamente su ventana de contexto volcando archivos gigantescos en lecturas exploratorias. Implementado y testeado con TDD (`tool-read-skeleton.test.ts`).
 - [ ] **Token Telemetry en Core V2:**
   - *Objetivo:* Integrar en los metadatos de eventos de herramientas de Core V2 (`tool-output-store.ts` / `runner`) los contadores de `rawBytes`, `prunedBytes`, `rawTokens` y `tokensSaved`.
   - *Beneficio:* Visibilidad forense directa en la TUI de los tokens ahorrados por cada invocación.

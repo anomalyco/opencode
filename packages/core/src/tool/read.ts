@@ -25,7 +25,7 @@ const LocationInput = Schema.Struct({
   }),
   view: ReadToolFileSystem.PageInput.fields.view.annotate({
     description:
-      "When set to 'skeleton', extracts interfaces, types and function/method signatures, omitting implementation bodies. Recommended for large files to save tokens.",
+      "When set to 'skeleton', extracts interfaces, types and function/method signatures, omitting implementation bodies. Automatically activated for supported files exceeding 800 lines when view and pagination are omitted.",
   }),
 })
 const Input = LocationInput

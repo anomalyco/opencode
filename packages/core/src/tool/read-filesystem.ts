@@ -12,6 +12,7 @@ import { Skeleton } from "../skeleton"
 export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
 export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
+export const AUTO_SKELETON_THRESHOLD_LINES = 800
 const MAX_LINE_LENGTH = 2_000
 const MAX_LINE_SUFFIX = `... (line truncated to ${MAX_LINE_LENGTH} chars)`
 
@@ -216,53 +217,6 @@ export const read = Effect.fn("ReadTool.read")(function* (
       }
       if (startsWith(first, [0x25, 0x50, 0x44, 0x46]) || extensions.has(path.extname(resource).toLowerCase()))
         return yield* Effect.fail(new BinaryFileError({ resource }))
-      if (page.view === "skeleton") {
-        const skeletonOpt = yield* Effect.serviceOption(Skeleton.Service)
-        if (Option.isSome(skeletonOpt) && skeletonOpt.value.supports(real)) {
-          if (binary(resource, first)) return yield* Effect.fail(new BinaryFileError({ resource }))
-          const decoder = new TextDecoder("utf-8", { fatal: true })
-          const text = [yield* decodeUtf8(resource, decoder, first)]
-          while (true) {
-            const chunk = yield* file.readAlloc(64 * 1024)
-            if (Option.isNone(chunk)) break
-            text.push(yield* decodeChunk(resource, decoder, chunk.value))
-          }
-          text.push(yield* decodeUtf8(resource, decoder))
-          const fullContent = text.join("")
-          const pruned = yield* skeletonOpt.value.prune(real, fullContent)
-          if (pruned.pruned) {
-            return new TextPage({
-              type: "text-page",
-              content: pruned.content,
-              mime: FSUtil.mimeType(real),
-              offset: 1,
-              truncated: false,
-              view: "skeleton",
-              originalLines: pruned.originalLines,
-              skeletonLines: pruned.skeletonLines,
-            })
-          }
-        }
-      }
-      const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
-      if (!paged) {
-        if (binary(resource, first)) return yield* Effect.fail(new BinaryFileError({ resource }))
-        const decoder = new TextDecoder("utf-8", { fatal: true })
-        const text = [yield* decodeUtf8(resource, decoder, first)]
-        while (true) {
-          const chunk = yield* file.readAlloc(64 * 1024)
-          if (Option.isNone(chunk)) break
-          text.push(yield* decodeChunk(resource, decoder, chunk.value))
-        }
-        text.push(yield* decodeUtf8(resource, decoder))
-        return {
-          uri: pathToFileURL(real).href,
-          name: path.basename(real),
-          content: text.join(""),
-          encoding: "utf8" as const,
-          mime: FSUtil.mimeType(real),
-        }
-      }
       const offset = page.offset ?? 1
       const limit = Math.min(page.limit ?? MAX_READ_LINES, MAX_READ_LINES)
       const lines: string[] = []
@@ -313,6 +267,80 @@ export const read = Effect.fn("ReadTool.read")(function* (
           if (!append(current.endsWith("\r") ? current.slice(0, -1) : current)) return false
         }
         return true
+      }
+      const shouldCheckSkeleton =
+        page.view === "skeleton" ||
+        (page.view === undefined && page.offset === undefined && page.limit === undefined && info.size >= 800)
+      if (shouldCheckSkeleton) {
+        const skeletonOpt = yield* Effect.serviceOption(Skeleton.Service)
+        if (Option.isSome(skeletonOpt) && skeletonOpt.value.supports(real)) {
+          if (binary(resource, first)) return yield* Effect.fail(new BinaryFileError({ resource }))
+          const text = [yield* decodeUtf8(resource, decoder, first)]
+          while (true) {
+            const chunk = yield* file.readAlloc(64 * 1024)
+            if (Option.isNone(chunk)) break
+            text.push(yield* decodeChunk(resource, decoder, chunk.value))
+          }
+          text.push(yield* decodeUtf8(resource, decoder))
+          const fullContent = text.join("")
+          const lineCount = (fullContent.match(/\n/g)?.length ?? 0) + 1
+          const isExplicitSkeleton = page.view === "skeleton"
+          const isAutoSkeleton = page.view === undefined && lineCount >= AUTO_SKELETON_THRESHOLD_LINES
+          if (isExplicitSkeleton || isAutoSkeleton) {
+            const pruned = yield* skeletonOpt.value.prune(real, fullContent)
+            if (pruned.pruned) {
+              return new TextPage({
+                type: "text-page",
+                content: pruned.content,
+                mime: FSUtil.mimeType(real),
+                offset: 1,
+                truncated: false,
+                view: "skeleton",
+                originalLines: pruned.originalLines,
+                skeletonLines: pruned.skeletonLines,
+              })
+            }
+          }
+          const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
+          if (!paged) {
+            return {
+              uri: pathToFileURL(real).href,
+              name: path.basename(real),
+              content: fullContent,
+              encoding: "utf8" as const,
+              mime: FSUtil.mimeType(real),
+            }
+          }
+          consume(fullContent)
+          if (!discard && pending) append(pending.endsWith("\r") ? pending.slice(0, -1) : pending)
+          if (lines.length === 0 && offset !== 1) return yield* Effect.fail(new OffsetOutOfRangeError({ offset }))
+          return new TextPage({
+            type: "text-page",
+            content: lines.join("\n"),
+            mime: FSUtil.mimeType(real),
+            offset,
+            truncated: next !== undefined,
+            ...(next === undefined ? {} : { next }),
+          })
+        }
+      }
+      const paged = info.size > MAX_READ_BYTES || page.offset !== undefined || page.limit !== undefined
+      if (!paged) {
+        if (binary(resource, first)) return yield* Effect.fail(new BinaryFileError({ resource }))
+        const text = [yield* decodeUtf8(resource, decoder, first)]
+        while (true) {
+          const chunk = yield* file.readAlloc(64 * 1024)
+          if (Option.isNone(chunk)) break
+          text.push(yield* decodeChunk(resource, decoder, chunk.value))
+        }
+        text.push(yield* decodeUtf8(resource, decoder))
+        return {
+          uri: pathToFileURL(real).href,
+          name: path.basename(real),
+          content: text.join(""),
+          encoding: "utf8" as const,
+          mime: FSUtil.mimeType(real),
+        }
       }
       const consumeChunk = Effect.fnUntraced(function* (chunk: Uint8Array) {
         let start = 0

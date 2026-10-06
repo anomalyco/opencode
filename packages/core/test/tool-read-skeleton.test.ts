@@ -130,4 +130,111 @@ export type Role = "admin" | "user"
       expect(result.content).toBe(code)
     }),
   )
+
+  it.effect("automatically activates skeleton view when file exceeds 800 lines and pagination/view are omitted", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "large-service.ts")
+
+      // Generate a TypeScript file with > 800 lines (850 lines)
+      const parts: string[] = ["export interface CommonConfig { id: string }"]
+      for (let i = 1; i <= 280; i++) {
+        parts.push(`export function handler${i}(param: number): string {
+  const calculation = param * 2 + ${i}
+  return "result: " + calculation
+}`)
+      }
+      const code = parts.join("\n\n") + "\n"
+      yield* files.writeFileString(file, code)
+
+      // Read without options (no view, no offset, no limit)
+      const result = yield* ReadToolFileSystem.read(fs, file, "large-service.ts")
+
+      expect(result).toHaveProperty("type", "text-page")
+      if ("type" in result && result.type === "text-page") {
+        expect(result.view).toBe("skeleton")
+        expect(result.content).toContain("export interface CommonConfig")
+        expect(result.content).toContain("export function handler1(param: number): string { /* body omitted */ }")
+        expect(result.content).not.toContain("const calculation =")
+        expect(result.originalLines).toBeGreaterThanOrEqual(800)
+        expect(result.skeletonLines).toBeLessThan(result.originalLines!)
+      }
+    }),
+  )
+
+  it.effect("does not activate auto-skeleton when file exceeds 800 lines but view is explicitly full", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "large-full.ts")
+
+      const parts: string[] = ["export interface FullConfig { id: string }"]
+      for (let i = 1; i <= 280; i++) {
+        parts.push(`export function fullHandler${i}(param: number): string {
+  const calculation = param * 2 + ${i}
+  return "result: " + calculation
+}`)
+      }
+      const code = parts.join("\n\n") + "\n"
+      yield* files.writeFileString(file, code)
+
+      const result = yield* ReadToolFileSystem.read(fs, file, "large-full.ts", { view: "full" })
+
+      if ("view" in result) {
+        expect(result.view).toBeUndefined()
+      }
+      expect(result.content).toContain("const calculation =")
+      expect(result.content).not.toContain("/* body omitted */")
+    }),
+  )
+
+  it.effect("does not activate auto-skeleton when file exceeds 800 lines but pagination offset/limit is specified", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "large-paged.ts")
+
+      const parts: string[] = ["export interface PagedConfig { id: string }"]
+      for (let i = 1; i <= 280; i++) {
+        parts.push(`export function pagedHandler${i}(param: number): string {
+  const calculation = param * 2 + ${i}
+  return "result: " + calculation
+}`)
+      }
+      const code = parts.join("\n\n") + "\n"
+      yield* files.writeFileString(file, code)
+
+      const result = yield* ReadToolFileSystem.read(fs, file, "large-paged.ts", { offset: 1, limit: 10 })
+
+      expect(result).toHaveProperty("type", "text-page")
+      if ("type" in result && result.type === "text-page") {
+        expect(result.view).toBeUndefined()
+        expect(result.offset).toBe(1)
+        expect(result.content).not.toContain("/* body omitted */")
+      }
+    }),
+  )
+
+  it.effect("does not activate auto-skeleton when file has fewer than 800 lines and view is omitted", () =>
+    Effect.gen(function* () {
+      const { fs, files, directory } = yield* fixture
+      const file = path.join(directory, "under-threshold.ts")
+
+      const parts: string[] = ["export interface SmallConfig { id: string }"]
+      for (let i = 1; i <= 30; i++) {
+        parts.push(`export function smallHandler${i}(param: number): string {
+  const value = param + ${i}
+  return "small: " + value
+}`)
+      }
+      const code = parts.join("\n\n") + "\n"
+      yield* files.writeFileString(file, code)
+
+      const result = yield* ReadToolFileSystem.read(fs, file, "under-threshold.ts")
+
+      expect(result.content).toBe(code)
+      if ("view" in result) {
+        expect(result.view).toBeUndefined()
+      }
+    }),
+  )
 })
+
