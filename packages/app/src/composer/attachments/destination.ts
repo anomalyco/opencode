@@ -51,6 +51,7 @@ function write(url: URL, file: File, password: string | undefined, report: (load
     xhr.upload.addEventListener("progress", (event) => report(event.loaded))
     xhr.addEventListener("load", () => {
       if (xhr.status !== 200) return reject(new Error(`Upload failed with status ${xhr.status}`))
+      // SAFETY: a 200 from `fs.write` is its declared success body, `Location.response(FileSystem.Write)`.
       resolve((xhr.response as { data: { path: string } }).data.path)
     })
     xhr.addEventListener("error", () => reject(new Error("Upload failed")))
