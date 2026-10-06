@@ -1,7 +1,7 @@
 import { expect, story } from "../../storybook/playwright/story"
 
 story("spaces an error between a shell result and expanded updates", async ({ mount }) => {
-  const timeline = await mount("current-session-timeline-rows--error-and-updates")
+  const timeline = await mount("current-session-error-spacing--error-and-updates")
   const shell = timeline.locator('[data-component="bash-output"]')
   const error = timeline.locator('[data-kind="session-error-card"]')
   const updates = timeline.locator('[data-component="collapsed-tool-group"] [data-slot="collapsible-trigger"]')

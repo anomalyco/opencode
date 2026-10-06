@@ -213,43 +213,45 @@ export function createSessionTimelineRowRenderer(input: {
       const key = () => `context:${row().group.key}`
 
       return (
-        <SessionContextToolGroup
-          parts={parts()}
-          patchGroupKey={(tools) => {
-            const parts = tools.map((tool) => patchPartKeys.get(tool)!)
+        <div class="contents" data-notices-only={parts().every((part) => part.type === "notice") ? "" : undefined}>
+          <SessionContextToolGroup
+            parts={parts()}
+            patchGroupKey={(tools) => {
+              const parts = tools.map((tool) => patchPartKeys.get(tool)!)
 
-            // After a split, only the subgroup with the earliest surviving member keeps the old anchor.
-            const key =
-              parts
-                .map((part) => patchGroupKeys.get(part))
-                .find((key) => key !== undefined && parts.includes(patchOwners().get(key)!)) ?? parts[0]!
+              // After a split, only the subgroup with the earliest surviving member keeps the old anchor.
+              const key =
+                parts
+                  .map((part) => patchGroupKeys.get(part))
+                  .find((key) => key !== undefined && parts.includes(patchOwners().get(key)!)) ?? parts[0]!
 
-            parts.forEach((part) => patchGroupKeys.set(part, key))
+              parts.forEach((part) => patchGroupKeys.set(part, key))
 
-            return key
-          }}
-          reasoningDefaultOpen={
-            input.timelineDetail
-              ? input.timelineDetail().thinking.details === "expanded"
-              : input.reasoningMode() === "full"
-          }
-          reasoningOpen={(id) => input.disclosure.value(id)}
-          onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
-          toolDefaultOpen={(tool) => (input.timelineDetail ? contentDefaultOpen(tool) : false)}
-          toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
-          onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
-          fileOpen={(path) =>
-            input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
-          }
-          onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
-          open={input.disclosure.value(key()) === true}
-          busy={
-            workingTurn(row().userMessageID) &&
-            input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key
-          }
-          onOpenChange={(open) => input.disclosure.set(key(), open)}
-          onSizeChange={onSizeChange}
-        />
+              return key
+            }}
+            reasoningDefaultOpen={
+              input.timelineDetail
+                ? input.timelineDetail().thinking.details === "expanded"
+                : input.reasoningMode() === "full"
+            }
+            reasoningOpen={(id) => input.disclosure.value(id)}
+            onReasoningOpenChange={(id, open) => input.disclosure.set(id, open)}
+            toolDefaultOpen={(tool) => (input.timelineDetail ? contentDefaultOpen(tool) : false)}
+            toolOpen={(id) => input.disclosure.value(`${row().group.key}:tool:${id}`)}
+            onToolOpenChange={(id, open) => input.disclosure.set(`${row().group.key}:tool:${id}`, open)}
+            fileOpen={(path) =>
+              input.disclosure.value(`patch:${path}`) ?? input.timelineDetail?.().edit.details === "expanded"
+            }
+            onFileOpenChange={(path, open) => input.disclosure.set(`patch:${path}`, open)}
+            open={input.disclosure.value(key()) === true}
+            busy={
+              workingTurn(row().userMessageID) &&
+              input.projection.lastAssistantGroupKey().get(row().userMessageID) === row().group.key
+            }
+            onOpenChange={(open) => input.disclosure.set(key(), open)}
+            onSizeChange={onSizeChange}
+          />
+        </div>
       )
     }
 

@@ -277,21 +277,6 @@
   }
 }
 
-[data-component="session-timeline"]
-  > [data-timeline-row="Error"]
-  + :is([data-timeline-row="AssistantPart"], [data-timeline-row="Notice"]) {
-  padding-top: 16px;
-}
-
-[data-component="session-timeline"]
-  > [data-timeline-row="Error"]
-  + :is(
-    [data-timeline-row="AssistantPart"]:has([data-notices-only]),
-    [data-timeline-row="Notice"]:has([data-slot="session-timeline-notice"])
-  ) {
-  padding-top: 8px;
-}
-
 [data-slot="session-turn-list"] {
   gap: 24px;
 }

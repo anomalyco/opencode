@@ -688,7 +688,7 @@
   }
 }
 
-[data-component="collapsed-tool-group"][data-notices-only] > [data-component="collapsible"].tool-collapsible {
+[data-notices-only] > [data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
   --tool-content-gap: 0px;
 }
 
@@ -1589,7 +1589,8 @@
   background: var(--v2-background-bg-layer-02);
 }
 
-:root body
+:root
+  body
   [data-workspace-session]
   [data-component="user-message"]:not([data-pending])
   [data-slot="user-message-text"] {
