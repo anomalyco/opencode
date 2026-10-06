@@ -159,6 +159,63 @@ describe("session messages endpoint", () => {
   )
 
   it.instance(
+    "drops tool attachment data for clients that ask to omit tool media",
+    withoutWatcher(
+      Effect.gen(function* () {
+        const tmp = yield* TestInstance
+        const session = yield* sessionScoped
+        const sessions = yield* SessionNs.Service
+        const [messageID] = yield* fill(session.id, 1)
+        const url = "data:image/png;base64," + "A".repeat(1_000)
+        yield* sessions.updatePart({
+          id: PartID.ascending(),
+          sessionID: session.id,
+          messageID: messageID!,
+          type: "tool",
+          callID: "call_read",
+          tool: "read",
+          state: {
+            status: "completed",
+            input: { filePath: "shot.png" },
+            output: "Image read successfully",
+            title: "shot.png",
+            metadata: {},
+            time: { start: 1, end: 2 },
+            attachments: [
+              {
+                id: PartID.ascending(),
+                sessionID: session.id,
+                messageID: messageID!,
+                type: "file",
+                mime: "image/png",
+                filename: "shot.png",
+                url,
+              },
+            ],
+          },
+        } satisfies SessionV1.ToolPart)
+        const attachment = (body: SessionV1.WithParts[]) => {
+          const part = body[0]?.parts.find((part) => part.type === "tool")
+          return part?.type === "tool" && part.state.status === "completed" ? part.state.attachments?.[0] : undefined
+        }
+
+        const full = yield* request(`/session/${session.id}/message?limit=10`)
+        expect(attachment(yield* json<SessionV1.WithParts[]>(full))?.url).toBe(url)
+
+        const lean = yield* requestInDirectory(`/session/${session.id}/message?limit=10`, tmp.directory, {
+          headers: { [MessageV2.OMIT_TOOL_MEDIA_HEADER]: "1" },
+        })
+        expect(attachment(yield* json<SessionV1.WithParts[]>(lean))).toMatchObject({
+          mime: "image/png",
+          filename: "shot.png",
+          url: "",
+        })
+      }),
+    ),
+    { git: true },
+  )
+
+  it.instance(
     "accepts directory query used by workspace routing",
     withoutWatcher(
       Effect.gen(function* () {

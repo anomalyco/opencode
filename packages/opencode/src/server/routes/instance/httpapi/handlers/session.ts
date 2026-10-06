@@ -1,6 +1,6 @@
 import { PermissionV1 } from "@opencode-ai/core/v1/permission"
 import { Agent } from "@/agent/agent"
-import { SessionV1 } from "@opencode-ai/core/v1/session"
+import { SessionV1, type WithParts } from "@opencode-ai/core/v1/session"
 import { EventV2Bridge } from "@/event-v2-bridge"
 import { Command } from "@/command"
 import { Permission } from "@/permission"
@@ -116,8 +116,13 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
         })
       }
       yield* requireSession(ctx.params.sessionID)
+      const request = yield* HttpServerRequest.HttpServerRequest
+      const lean = (items: WithParts[]) =>
+        request.headers[MessageV2.OMIT_TOOL_MEDIA_HEADER]
+          ? items.map((item) => ({ ...item, parts: item.parts.map(MessageV2.omitToolMedia) }))
+          : items
       if (ctx.query.limit === undefined || ctx.query.limit === 0) {
-        return yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID }))
+        return lean(yield* SessionError.mapStorageNotFound(session.messages({ sessionID: ctx.params.sessionID })))
       }
 
       const page = yield* SessionError.mapStorageNotFound(
@@ -127,15 +132,15 @@ export const sessionHandlers = HttpApiBuilder.group(InstanceHttpApi, "session", 
           before: ctx.query.before,
         }),
       )
-      if (!page.cursor) return page.items
+      const items = lean(page.items)
+      if (!page.cursor) return items
 
-      const request = yield* HttpServerRequest.HttpServerRequest
       // toURL() honors the Host + x-forwarded-proto headers, so the Link
       // header echoes the real origin instead of a hard-coded localhost.
       const url = Option.getOrElse(HttpServerRequest.toURL(request), () => new URL(request.url, "http://localhost"))
       url.searchParams.set("limit", ctx.query.limit.toString())
       url.searchParams.set("before", page.cursor)
-      return HttpServerResponse.jsonUnsafe(page.items, {
+      return HttpServerResponse.jsonUnsafe(items, {
         headers: {
           "Access-Control-Expose-Headers": "Link, X-Next-Cursor",
           Link: `<${url.toString()}>; rel="next"`,

@@ -7,7 +7,9 @@ import { disposeAllInstancesAndEmitGlobalDisposed } from "@/server/global-lifecy
 import { InstallationVersion } from "@opencode-ai/core/installation/version"
 import { Effect, Queue } from "effect"
 import * as Stream from "effect/Stream"
-import { HttpServerResponse } from "effect/unstable/http"
+import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { MessageV2 } from "@/session/message-v2"
+import type { Part } from "@opencode-ai/core/v1/session"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import * as Sse from "effect/unstable/encoding/Sse"
 import { RootHttpApi } from "../api"
@@ -22,11 +24,38 @@ function eventData(data: unknown): Sse.Event {
   }
 }
 
+/**
+ * Sent by a client that ignores `sync` events, the durable copies of each event that workspaces
+ * replicate from. Leaving them out halves what such a client receives and parses.
+ */
+export const OMIT_SYNC_EVENTS_HEADER = "x-opencode-omit-sync-events"
+
+function omitToolMedia(event: GlobalBusEvent): GlobalBusEvent {
+  const payload = event.payload
+  if (payload?.type === MessageV2.Event.PartUpdated.type) {
+    const properties = payload.properties as { part: Part }
+    const part = MessageV2.omitToolMedia(properties.part)
+    if (part === properties.part) return event
+    return { ...event, payload: { ...payload, properties: { ...properties, part } } }
+  }
+  const sync = payload?.type === "sync" ? (payload.syncEvent as { type: string; data: { part?: Part } }) : undefined
+  if (!sync?.type.startsWith(MessageV2.Event.PartUpdated.type) || !sync.data.part) return event
+  const part = MessageV2.omitToolMedia(sync.data.part)
+  if (part === sync.data.part) return event
+  return { ...event, payload: { ...payload, syncEvent: { ...sync, data: { ...sync.data, part } } } }
+}
+
 function eventResponse() {
   return Effect.gen(function* () {
     yield* Effect.logInfo("global event connected")
+    const request = yield* HttpServerRequest.HttpServerRequest
+    const lean = Boolean(request.headers[MessageV2.OMIT_TOOL_MEDIA_HEADER])
+    const skipSync = Boolean(request.headers[OMIT_SYNC_EVENTS_HEADER])
     const events = Stream.callback<GlobalBusEvent>((queue) => {
-      const handler = (event: GlobalBusEvent) => Queue.offerUnsafe(queue, event)
+      const handler = (event: GlobalBusEvent) => {
+        if (skipSync && event.payload?.type === "sync") return
+        Queue.offerUnsafe(queue, lean ? omitToolMedia(event) : event)
+      }
       return Effect.acquireRelease(
         Effect.sync(() => GlobalBus.on("event", handler)),
         () => Effect.sync(() => GlobalBus.off("event", handler)),

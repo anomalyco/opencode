@@ -60,6 +60,23 @@ export const Event = {
   PartRemoved: SessionV1.Event.PartRemoved,
 }
 
+/**
+ * Sent by a client that never shows the files a tool returned, such as the TUI. Responses and events
+ * for it keep each attachment's type and name but drop its data, a base64 image of a megabyte or more.
+ */
+export const OMIT_TOOL_MEDIA_HEADER = "x-opencode-omit-tool-media"
+
+export function omitToolMedia(part: Part): Part {
+  if (part.type !== "tool" || part.state.status !== "completed" || !part.state.attachments?.length) return part
+  return {
+    ...part,
+    state: {
+      ...part.state,
+      attachments: part.state.attachments.map((attachment) => ({ ...attachment, url: "" })),
+    },
+  }
+}
+
 const Cursor = Schema.Struct({
   id: MessageID,
   time: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)),
