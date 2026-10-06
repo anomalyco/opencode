@@ -37,6 +37,7 @@ import { Tool } from "@opencode/core/tool"
 import { ToolOutput } from "@opencode/core/tool-output"
 import {
   Context,
+  Cause,
   Deferred,
   Effect,
   Exit,
@@ -91,6 +92,7 @@ function resourceServer(
     resources?: boolean
     listChanged?: boolean
     emptyElicitation?: boolean
+    formElicitation?: boolean
     urlElicitation?: boolean
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
   } = {},
@@ -181,7 +183,30 @@ function resourceServer(
             }
           })
         }
-        if (!input.emptyElicitation && !input.urlElicitation) {
+        if (input.formElicitation) {
+          protocol.setRequestHandler("tools/call", async (request, ctx) => {
+            const params = {
+              mode: "form" as const,
+              message: String(request.params.arguments?.label ?? "Confirm"),
+              requestedSchema: {
+                type: "object" as const,
+                properties: { confirmed: { type: "boolean" as const } },
+                required: ["confirmed"],
+              },
+            }
+            const responses = ctx.mcpReq.inputResponses
+            if (input.modern && !responses)
+              return inputRequired({ inputRequests: { confirm: inputRequired.elicit(params) } })
+            const response = inputResponse(responses, "confirm")
+            const result = input.modern
+              ? response.kind === "elicit"
+                ? { action: response.action, content: response.content }
+                : { action: "cancel" }
+              : await protocol.elicitInput(params, { relatedRequestId: ctx.mcpReq.id, signal: ctx.mcpReq.signal })
+            return { content: [{ type: "text", text: JSON.stringify(result) }], structuredContent: result }
+          })
+        }
+        if (!input.emptyElicitation && !input.urlElicitation && !input.formElicitation) {
           protocol.setRequestHandler("tools/call", (request) => {
             state.toolCalls.push({
               name: request.params.name,
@@ -222,7 +247,7 @@ function resourceServer(
         const protocol = server()
         const transport = new WebStandardStreamableHTTPServerTransport({
           sessionIdGenerator: () => crypto.randomUUID(),
-          enableJsonResponse: true,
+          enableJsonResponse: !input.formElicitation,
         })
         await protocol.connect(transport)
         return { protocol, transport }
@@ -321,7 +346,8 @@ function resourceMcpLayer(
             } as Payload<typeof definition>
             overrides?.published?.push(event.type)
             if (event.type !== Form.Event.Created.type || !onFormCreated) return Effect.succeed(event)
-            return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(data).form).pipe(Effect.as(event))
+            const encoded = Schema.encodeUnknownSync(Form.Event.Created.data)(data as { readonly form: Form.Info })
+            return onFormCreated(Schema.decodeUnknownSync(Form.Event.Created.data)(encoded).form).pipe(Effect.as(event))
           },
         }),
         Layer.mock(Integration.Service, {
@@ -1310,9 +1336,13 @@ test("acknowledges completed MCP URL elicitations without returning internal con
         const result = yield* Effect.gen(function* () {
           const service = yield* Mcp.Service
           const forms = yield* Form.Service
-          const call = yield* service.callTool({ server: "resources", name: "url-elicitation" }).pipe(Effect.forkScoped)
+          const sessionID = Session.ID.make("ses_url_elicitation")
+          const call = yield* service
+            .callTool({ server: "resources", name: "url-elicitation", sessionID })
+            .pipe(Effect.forkScoped)
 
           const form = yield* Deferred.await(created)
+          expect(form.sessionID).toBe(sessionID)
           expect(form.fields).toEqual([{ key: "elicitation", type: "external", url: "https://example.com/authorize" }])
 
           yield* Effect.promise(server.completeElicitation)
@@ -1338,9 +1368,13 @@ test("settles modern MCP URL elicitations when the user confirms", async () => {
         const result = yield* Effect.gen(function* () {
           const service = yield* Mcp.Service
           const forms = yield* Form.Service
-          const call = yield* service.callTool({ server: "resources", name: "url-elicitation" }).pipe(Effect.forkScoped)
+          const sessionID = Session.ID.make("ses_url_elicitation")
+          const call = yield* service
+            .callTool({ server: "resources", name: "url-elicitation", sessionID })
+            .pipe(Effect.forkScoped)
 
           const form = yield* Deferred.await(created)
+          expect(form.sessionID).toBe(sessionID)
           expect(form.metadata).not.toHaveProperty("elicitationID")
           yield* forms.reply({ id: form.id, answer: { elicitation: true } })
           return yield* Fiber.join(call)
@@ -1354,6 +1388,129 @@ test("settles modern MCP URL elicitations when the user confirms", async () => {
         )
 
         expect(result.structured).toEqual({ action: "accept" })
+      }),
+    ),
+  )
+})
+
+describe.each([
+  { era: "legacy", modern: false },
+  { era: "modern", modern: true },
+])("$era MCP form elicitation", (protocol) => {
+  test.each([
+    { mode: "cancellation", interrupt: false },
+    { mode: "interruption", interrupt: true },
+  ])("isolates concurrent sessions on $mode", async (cancellation) => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const server = yield* resourceServer({ modern: protocol.modern, resources: false, formElicitation: true })
+          const createdA = yield* Deferred.make<Form.Info>()
+          const createdB = yield* Deferred.make<Form.Info>()
+          yield* Effect.gen(function* () {
+            const service = yield* Mcp.Service
+            const forms = yield* Form.Service
+            const sessionA = Session.ID.make("ses_elicitation_a")
+            const sessionB = Session.ID.make("ses_elicitation_b")
+            const callA = yield* service
+              .callTool({ server: "resources", name: "confirm", args: { label: "A" }, sessionID: sessionA })
+              .pipe(Effect.forkScoped)
+            const formA = yield* Deferred.await(createdA)
+            const callB = yield* service
+              .callTool({ server: "resources", name: "confirm", args: { label: "B" }, sessionID: sessionB })
+              .pipe(Effect.forkScoped)
+            const formB = yield* Deferred.await(createdB)
+
+            expect(formA.sessionID).toBe(sessionA)
+            expect(formB.sessionID).toBe(sessionB)
+            expect(formA.id).not.toBe(formB.id)
+            expect((yield* forms.list({ sessionID: sessionA })).map((form) => form.id)).toEqual([formA.id])
+            expect((yield* forms.list({ sessionID: sessionB })).map((form) => form.id)).toEqual([formB.id])
+
+            expect((yield* forms.reply({ id: formA.id, answer: {} }).pipe(Effect.flip))._tag).toBe(
+              "Form.InvalidAnswerError",
+            )
+            expect(yield* forms.state(formA.id)).toEqual({ status: "pending" })
+
+            if (cancellation.interrupt) {
+              yield* Fiber.interrupt(callB)
+              const exit = yield* Fiber.await(callB)
+              expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+              yield* forms.state(formB.id).pipe(
+                Effect.filterOrFail((state) => state.status === "cancelled"),
+                Effect.retry({ times: 100, schedule: Schedule.spaced("10 millis") }),
+              )
+              expect(yield* forms.state(formA.id)).toEqual({ status: "pending" })
+              expect(callA.pollUnsafe()).toBeUndefined()
+            }
+            yield* forms.reply({ id: formA.id, answer: { confirmed: true } })
+            expect((yield* Fiber.join(callA)).structured).toEqual({ action: "accept", content: { confirmed: true } })
+            if (!cancellation.interrupt) {
+              expect(yield* forms.state(formB.id)).toEqual({ status: "pending" })
+              expect(callB.pollUnsafe()).toBeUndefined()
+              yield* forms.cancel(formB.id)
+              expect((yield* Fiber.join(callB)).structured).toEqual({ action: "cancel" })
+            }
+            expect(yield* forms.state(formB.id)).toEqual({ status: "cancelled" })
+            expect(yield* forms.list()).toEqual([])
+          }).pipe(
+            Effect.provide(
+              resourceMcpLayer(
+                new ConfigMCP.Remote({
+                  type: "remote",
+                  url: server.url,
+                  oauth: false,
+                  ...(protocol.modern ? { protocol: "2026-07-28" as const } : {}),
+                }),
+                (form) =>
+                  Deferred.succeed(form.metadata?.message === "A" ? createdA : createdB, form).pipe(Effect.asVoid),
+              ),
+            ),
+          )
+        }),
+      ),
+    )
+  })
+})
+
+test("routes a lone stdio elicitation and cancels an ambiguous concurrent request", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const created = yield* Deferred.make<Form.Info>()
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          const forms = yield* Form.Service
+          const sessionID = Session.ID.make("ses_stdio_elicitation_a")
+          const call = yield* service
+            .callTool({ server: "resources", name: "confirm", args: { label: "A" }, sessionID })
+            .pipe(Effect.forkScoped)
+          const form = yield* Deferred.await(created)
+          expect(form.sessionID).toBe(sessionID)
+          const result = yield* service.callTool({
+            server: "resources",
+            name: "confirm",
+            args: { label: "B" },
+            sessionID: Session.ID.make("ses_stdio_elicitation_b"),
+          })
+          expect(result.structured).toEqual({ action: "cancel" })
+          expect((yield* forms.list()).map((form) => form.id)).toEqual([form.id])
+          expect(yield* forms.state(form.id)).toEqual({ status: "pending" })
+          expect(call.pollUnsafe()).toBeUndefined()
+          yield* forms.reply({ id: form.id, answer: { confirmed: true } })
+          expect((yield* Fiber.join(call)).structured).toEqual({ action: "accept", content: { confirmed: true } })
+          expect(yield* forms.list()).toEqual([])
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(
+              new ConfigMCP.Local({
+                type: "local",
+                command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-elicitation.ts")],
+              }),
+              (form) => Deferred.succeed(created, form).pipe(Effect.asVoid),
+            ),
+          ),
+        )
       }),
     ),
   )
