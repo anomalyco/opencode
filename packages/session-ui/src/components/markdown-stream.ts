@@ -1,5 +1,6 @@
-import { marked, type Tokens } from "marked"
+import { Marked, type Tokens } from "marked"
 import remend from "remend"
+import { markdownMath } from "@opencode/ui/context/marked-parser"
 import { completedProjection } from "./markdown-projection"
 
 export type Block = {
@@ -14,6 +15,9 @@ export type Projection = {
   text: string
   blocks: Block[]
 }
+
+// Split with the renderer's math syntax so a display block is never cut into separately rendered pieces.
+const lexer = new Marked(...markdownMath)
 
 function refs(text: string) {
   if (!text.includes("]:")) return false
@@ -61,7 +65,7 @@ export function stream(text: string, live: boolean): Block[] {
   if (!live) return completedProjection(text).blocks
 
   if (refs(text)) return [{ raw: text, src: heal(text), mode: "live" }] satisfies Block[]
-  const tokens = marked.lexer(text)
+  const tokens = lexer.lexer(text)
   const tail = tokens.findLastIndex((token) => token.type !== "space")
 
   if (tail < 0) return [{ raw: text, src: heal(text), mode: "live" }] satisfies Block[]
