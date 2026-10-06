@@ -298,7 +298,7 @@ jobs:
             **What needs to be fixed:**
             ${issues.map(i => `- ${i}`).join('\n')}
 
-            Please edit this PR description to address the above within **2 hours**, or it will be automatically closed.
+            Please edit this PR description to address the above within **72 hours**, or it will be automatically closed.
 
             If you believe this was flagged incorrectly, please let a maintainer know.`;
 

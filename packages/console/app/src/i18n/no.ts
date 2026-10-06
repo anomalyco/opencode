@@ -3,6 +3,10 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
+  "go.referral.ended.label": "Advarsel",
+  "go.referral.ended":
+    "Henvisningsprogrammet er avsluttet. Henvisningslenker gir ikke lenger kreditt til deg eller den som delte dem.",
+  "go.graph.bonus": "{{count}}× bruk",
   "nav.github": "GitHub",
   "nav.docs": "Dokumentasjon",
   "nav.changelog": "Endringslogg",
@@ -258,10 +262,10 @@ export const dict = {
   "zen.privacy.exceptionsLink": "følgende unntak",
 
   "go.title": "OpenCode Go | Rimelige kodemodeller for alle",
-  "go.banner.text": "GLM-5.3-Flash får 2x bruksgrense i en begrenset periode",
   "go.meta.description":
     "Go koster $10/måned, med sjenerøse bruksgrenser og pålitelig tilgang til ledende kodemodeller.",
   "go.hero.title": "Rimelige kodemodeller for alle",
+  "go.hero.tagline": "Bruk med hvilken som helst agent. Fyll på kreditt ved behov. Avslutt når som helst.",
   "go.hero.body":
     "Go bringer agent-koding til programmerere over hele verden. Med rause grenser og pålitelig tilgang til de mest kapable åpen kildekode-modellene, kan du bygge med kraftige agenter uten å bekymre deg for kostnader eller tilgjengelighet.",
 
@@ -269,11 +273,31 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Abonner på Go",
   "go.cta.price": "$10/måned",
+  "go.plans.month": "per måned",
+  "go.plans.plus.cta": "Abonner på Go Plus",
+  "go.plans.plus.description": "Go Plus koster $40/måned og gir høyere bruksgrenser.",
+  "go.plans.go.feature1": "Utvalgte, rimelige modeller",
+  "go.plans.go.feature2": "Testet for agentbasert koding",
+  "go.plans.go.feature3": "Romslige grenser og pålitelig tilgang",
+  "go.plans.plus.feature1": "Alt i Go er inkludert",
+  "go.plans.plus.feature2": "Høyere grenser for lengre, fokuserte kodeøkter",
+  "go.plans.plus.feature3": "For større, krevende prosjekter",
+  "go.plans.limits": "Grenser",
+  "go.plans.description": "Anslåtte forespørsler per 5 timer og månedlige grenser per modell",
+  "go.plans.legend": "Abonnementer",
   "go.pricing.body": "Bruk med hvilken som helst agent. $10/måned. Fyll på kreditt ved behov. Avslutt når som helst.",
   "go.graph.free": "Gratis",
   "go.graph.freePill": "Big Pickle og gratis modeller",
   "go.graph.go": "Go",
   "go.graph.label": "Forespørsler per 5 timer",
+  "go.graph.period": "Bruk",
+  "go.graph.model": "Modell",
+  "go.graph.requests": "Estimerte forespørsler / 5 timer",
+  "go.graph.allowance": "Månedlig bruk",
+  "go.graph.new": "Ny",
+  "go.graph.scale": "Ikke-lineær skala for forespørsler",
+  "go.graph.showAll": "Vis alle {{count}} modeller",
+  "go.graph.showLess": "Vis færre modeller",
   "go.graph.limitedRegions": "begrensede regioner",
   "go.graph.limitedTime": "begrenset periode",
   "go.graph.usageLimits": "Bruksgrenser",
@@ -373,7 +397,7 @@ export const dict = {
 
   "go.faq.q9": "Hva er forskjellen mellom gratis modeller og Go?",
   "go.faq.a9":
-    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller som er tilgjengelige på det tidspunktet, med en kvote på 200 forespørsler/dag. Go tilbyr et kuratert modellutvalg med høyere forespørselskvoter som håndheves over rullerende vinduer (5 timer, ukentlig og månedlig), omtrent tilsvarende basiskvoter på $12 per 5 timer, $30 per uke og $60 per måned; modellspesifikke kvoter kan variere (faktiske forespørselsantall varierer etter modell og bruk).",
+    "Gratis modeller inkluderer Big Pickle pluss kampanjemodeller som er tilgjengelige på det tidspunktet, med en kvote på 200 forespørsler/dag. Go tilbyr et kuratert modellutvalg med høyere forespørselskvoter i rullerende perioder: 20 % av den månedlige kvoten per 5 timer, 50 % per uke og 100 % per måned. Modellspesifikke kvoter kan variere (faktisk antall forespørsler varierer etter modell og bruk).",
   "go.faq.q10": "Kan jeg få refusjon?",
   "go.faq.a10":
     "Du kan ha rett på refusjon hvis belastningen ble gjort i løpet av de siste 14 dagene og du ikke har brukt noe av Go-kvoten i den faktureringsperioden. {{contact}} for å be om refusjon.",
@@ -640,7 +664,6 @@ export const dict = {
   "workspace.payments.type.subscription": "abonnement",
   "workspace.payments.view": "Vis",
 
-  "workspace.black.loading": "Laster...",
   "workspace.black.time.day": "dag",
   "workspace.black.time.days": "dager",
   "workspace.black.time.hour": "time",
@@ -650,7 +673,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "noen få sekunder",
   "workspace.black.subscription.title": "Abonnement",
   "workspace.black.subscription.message": "Du abonnerer på OpenCode Black for ${{plan}} per måned.",
-  "workspace.black.subscription.manage": "Administrer abonnement",
+  "workspace.black.subscription.ending":
+    "OpenCode Black avsluttes med gjeldende faktureringsperiode og fornyes ikke. Vi flytter deg til den nye konsollen.",
   "workspace.black.subscription.rollingUsage": "5-timers bruk",
   "workspace.black.subscription.weeklyUsage": "Ukentlig bruk",
   "workspace.black.subscription.resetsIn": "Nullstilles om",

@@ -1,16 +1,19 @@
 import { DateTime, Effect } from "effect"
 import { Resource } from "sst/resource"
 import { DatabaseError } from "./database"
+import { loadCatalogIdentity } from "./domain/catalog-identity"
 import { GeoStatRepo, rowsFromAggregates as geoRowsFromAggregates } from "./domain/geo"
 import {
   buildRetentionQueries,
   buildStatsQueries,
+  hiddenStatModels,
   toGeoAggregate,
   toModelAggregate,
   toProviderAggregate,
   toRetentionAggregate,
 } from "./domain/inference"
 import { ModelStatRepo, rowsFromAggregates as modelRowsFromAggregates } from "./domain/model"
+import { statProvider } from "./domain/model-normalization"
 import { ProviderStatRepo, rowsFromAggregates as providerRowsFromAggregates } from "./domain/provider"
 import { RetentionStatRepo, rowsFromAggregates as retentionRowsFromAggregates } from "./domain/retention"
 import { startOfIsoWeek, startOfUtcDay } from "./domain/stat"
@@ -44,18 +47,50 @@ export const syncStats: (options?: {
     const providerStats = yield* ProviderStatRepo
     const geoStats = yield* GeoStatRepo
     const retentionStats = yield* RetentionStatRepo
+    const identity = yield* Effect.promise(loadCatalogIdentity)
+    const catalog = identity.catalog
+    if (identity.stale)
+      yield* Effect.logWarning(
+        catalog
+          ? "model catalog unavailable; using cached identity"
+          : "model catalog unavailable; using legacy stats attribution",
+      )
 
     yield* logRuntimeCheck()
 
-    const rows = yield* Effect.forEach(buildStatsQueries(periodStart, periodEnd), r2Sql.query, {
-      concurrency: 4,
-    }).pipe(Effect.map((batches) => batches.flat()))
-    const modelRows = modelRowsFromAggregates(rows.filter((row) => row.dimension === "model").flatMap(toModelAggregate))
+    const queries = buildStatsQueries(periodStart, periodEnd, undefined, catalog)
+    yield* Effect.logInfo(
+      `stats sync started ${JSON.stringify({ full: options?.full ?? false, periodStart, periodEnd, queries: queries.length })}`,
+    )
+    const rows = yield* Effect.forEach(
+      queries,
+      (query, index) =>
+        r2Sql.query(query, ["dimension", "tier", "provider", "model", "country"]).pipe(
+          Effect.tap((rows) =>
+            Effect.logInfo(
+              `stats query complete ${JSON.stringify({ index, total: queries.length, rows: rows.length })}`,
+            ),
+          ),
+          Effect.tapError((error) =>
+            Effect.logError(
+              `stats query failed ${JSON.stringify({ index, total: queries.length, error: error.message })}`,
+            ),
+          ),
+        ),
+      {
+        concurrency: 4,
+      },
+    ).pipe(Effect.map((batches) => batches.flat()))
+    const modelRows = modelRowsFromAggregates(
+      rows.filter((row) => row.dimension === "model").flatMap((row) => toModelAggregate(row, catalog)),
+    )
     const providerRows = providerRowsFromAggregates(
-      rows.filter((row) => row.dimension === "provider").flatMap(toProviderAggregate),
+      rows.filter((row) => row.dimension === "provider").flatMap((row) => toProviderAggregate(row, catalog)),
     )
     const geoRows = geoRowsFromAggregates(
-      rows.filter((row) => row.dimension === "geo" || row.dimension === "geo_model").flatMap(toGeoAggregate),
+      rows
+        .filter((row) => row.dimension === "geo" || row.dimension === "geo_model")
+        .flatMap((row) => toGeoAggregate(row, catalog)),
     )
     const retentionAvailable = yield* retentionStats.available()
     const retentionQueries = retentionAvailable
@@ -66,14 +101,36 @@ export const syncStats: (options?: {
                 Math.max(startOfUtcDay(periodEnd).getTime() - RETENTION_INCREMENTAL_LOOKBACK_MS, STATS_DATA_START_MS),
               ),
           startOfUtcDay(periodEnd),
+          undefined,
+          catalog,
         )
       : []
+    yield* Effect.logInfo(`stats sync querying retention ${JSON.stringify({ queries: retentionQueries.length })}`)
     const retentionRows = retentionRowsFromAggregates(
-      yield* Effect.forEach(retentionQueries, (item) => r2Sql.query(item.query), { concurrency: 4 }).pipe(
-        Effect.map((batches) => batches.flatMap((batch) => batch.flatMap(toRetentionAggregate))),
+      yield* Effect.forEach(
+        retentionQueries,
+        (item) =>
+          r2Sql.query(item.query).pipe(
+            Effect.tap((rows) =>
+              Effect.logInfo(
+                `retention query complete ${JSON.stringify({ cohortDates: item.cohortDates, rows: rows.length })}`,
+              ),
+            ),
+            Effect.tapError((error) =>
+              Effect.logError(
+                `retention query failed ${JSON.stringify({ cohortDates: item.cohortDates, error: error.message })}`,
+              ),
+            ),
+          ),
+        { concurrency: 4 },
+      ).pipe(
+        Effect.map((batches) => batches.flatMap((batch) => batch.flatMap((row) => toRetentionAggregate(row, catalog)))),
       ),
     )
 
+    yield* Effect.logInfo(
+      `stats sync writing aggregates ${JSON.stringify({ modelRows: modelRows.length, providerRows: providerRows.length, geoRows: geoRows.length, retentionRows: retentionRows.length })}`,
+    )
     yield* Effect.all(
       [
         modelStats.upsert(modelRows),
@@ -92,9 +149,30 @@ export const syncStats: (options?: {
     )
     yield* Effect.all(
       [
-        modelStats.deleteRetiredDimensions(modelRows),
+        modelStats.deleteRetiredDimensions(modelRows, hiddenStatModels()),
         providerStats.deleteRetiredDimensions(providerRows),
-        geoStats.deleteRetiredDimensions(geoRows),
+        geoStats.deleteRetiredDimensions(geoRows, hiddenStatModels()),
+      ],
+      { concurrency: "unbounded", discard: true },
+    )
+    yield* Effect.all(
+      [
+        modelStats.deleteUnknownDimensions(
+          modelRows.filter(
+            (row) =>
+              row.provider !== "unknown" &&
+              (catalog?.models.get(row.model) ?? statProvider(row.model, "", "unknown")) === row.provider,
+          ),
+        ),
+        geoStats.deleteUnknownDimensions(
+          geoRows.filter(
+            (row) =>
+              row.model !== "all" &&
+              row.provider !== "unknown" &&
+              (catalog?.models.get(row.model ?? "all") ?? statProvider(row.model ?? "all", "", "unknown")) ===
+                row.provider,
+          ),
+        ),
       ],
       { concurrency: "unbounded", discard: true },
     )

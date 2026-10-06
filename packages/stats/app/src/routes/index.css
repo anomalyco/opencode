@@ -92,16 +92,17 @@ body {
   display: none !important;
 }
 
+/* Hidden text sits inside styled lists whose descendant rules are more specific, so it must win outright. */
 [data-page="stats"] [data-slot="visually-hidden"] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-  border: 0;
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 [data-page="stats"][data-layout="compare-detail"] {
@@ -1212,6 +1213,10 @@ body {
   cursor: pointer;
 }
 
+[data-page="stats"] [data-slot="top-models-bar"][data-active="true"] {
+  z-index: 2;
+}
+
 [data-page="stats"] [data-slot="top-models-bar"]::before {
   position: absolute;
   top: 0;
@@ -1545,6 +1550,25 @@ body {
   background: var(--stats-layer-2);
 }
 
+[data-page="stats"] [data-slot="leaderboard-period"] {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+  color: var(--stats-muted);
+  font-size: 13px;
+}
+
+[data-page="stats"] [data-slot="leaderboard-period"] [data-component="usage-filter"] button {
+  width: auto;
+  padding: 0 8px;
+}
+
+[data-page="stats"] [data-slot="leaderboard-period"] + [data-component="leaderboard"] {
+  margin-top: 12px;
+}
+
 [data-page="stats"] [data-component="chart-tooltip"] {
   position: absolute;
   right: auto;
@@ -1553,7 +1577,7 @@ body {
   gap: 8px;
   min-width: 220px;
   padding: 16px;
-  background: #fffffff2;
+  background: #ffffff;
   border: 1px solid var(--stats-line-strong);
   box-shadow:
     0 8px 16px #0000000a,
@@ -1621,7 +1645,7 @@ body {
   width: 192px;
   min-width: 192px;
   padding: 0;
-  background: #fffffff2;
+  background: #ffffff;
   border: 0;
   box-shadow:
     0 0 0 0.5px #00000024,
@@ -1740,6 +1764,7 @@ body {
     [data-section="retention"],
     [data-section="market-share"],
     [data-section="geo-breakdown"],
+    [data-section="methodology"],
     [data-section="token-cost"],
     [data-section="cache-ratio"],
     [data-section="session-cost"]
@@ -1782,8 +1807,25 @@ body {
   margin-top: 40px;
 }
 
+/* Zero specificity: clears browser table-cell defaults without overriding the cell styles below. */
+:where([data-page="stats"] [data-component="retention-chart"]) :where(th, td) {
+  padding: 0;
+  font: inherit;
+  text-align: inherit;
+}
+
+[data-page="stats"] [data-component="retention-chart"] > thead {
+  display: block;
+}
+
+[data-page="stats"] [data-component="retention-chart"] > tbody {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
 [data-page="stats"] [data-slot="retention-heading"],
-[data-page="stats"] [data-component="retention-chart"] a {
+[data-page="stats"] [data-slot="retention-row"] {
   display: grid;
   grid-template-columns: 40px minmax(160px, 260px) minmax(180px, 1fr) 64px 84px;
   align-items: center;
@@ -1803,49 +1845,49 @@ body {
   text-transform: uppercase;
 }
 
-[data-page="stats"] [data-slot="retention-heading"] :is(strong, b, em, i) {
-  font: inherit;
-  font-style: normal;
-}
-
-[data-page="stats"] [data-slot="retention-heading"] :is(b, em) {
+[data-page="stats"] [data-slot="retention-heading"] > :is([data-column="rate"], [data-column="eligible"]) {
   text-align: right;
 }
 
-[data-page="stats"] [data-component="retention-chart"] ol {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-[data-page="stats"] [data-component="retention-chart"] a {
+[data-page="stats"] [data-slot="retention-row"] {
+  position: relative;
+  isolation: isolate;
   box-sizing: border-box;
   min-height: 48px;
   padding: 8px 12px;
   border: 1px solid var(--stats-line);
   color: var(--stats-text);
   background: var(--stats-layer);
-  text-decoration: none;
 }
 
-[data-page="stats"] [data-component="retention-chart"] a:hover,
-[data-page="stats"] [data-component="retention-chart"] a:focus-visible,
-[data-page="stats"] [data-component="retention-chart"] a[data-active="true"] {
+[data-page="stats"] [data-slot="retention-row"]:hover,
+[data-page="stats"] [data-slot="retention-row"]:has(a:focus-visible),
+[data-page="stats"] [data-slot="retention-row"][data-active="true"] {
   border-color: var(--stats-line-strong);
   background: var(--stats-layer-2);
+}
+
+[data-page="stats"] [data-slot="retention-row"] a {
+  color: inherit;
+  text-decoration: none;
   outline: none;
 }
 
-[data-page="stats"] [data-component="retention-chart"] a > span {
+/* The row's only link covers the whole row, so every cell stays clickable. */
+[data-page="stats"] [data-slot="retention-row"] a::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  content: "";
+}
+
+[data-page="stats"] [data-slot="retention-row"] > [data-column="rank"] {
   color: var(--stats-faint);
   font-size: 13px;
   font-weight: 400;
 }
 
-[data-page="stats"] [data-component="retention-chart"] a > strong {
+[data-page="stats"] [data-slot="retention-row"] > [data-column="model"] {
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: 13px;
@@ -1853,8 +1895,7 @@ body {
   line-height: 18px;
 }
 
-[data-page="stats"] [data-component="retention-chart"] a > b,
-[data-page="stats"] [data-component="retention-chart"] a > em {
+[data-page="stats"] [data-slot="retention-row"] > :is([data-column="rate"], [data-column="eligible"]) {
   font-size: 13px;
   font-style: normal;
   font-weight: 500;
@@ -1862,7 +1903,39 @@ body {
   white-space: nowrap;
 }
 
-[data-page="stats"] [data-component="retention-chart"] a > em {
+[data-page="stats"] [data-slot="retention-row"] > [data-column="eligible"] {
+  color: var(--stats-muted);
+}
+
+/* Methodology rows share the retention table's row style. */
+[data-page="stats"] [data-component="methodology-list"] {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+}
+
+[data-page="stats"] [data-component="methodology-list"] > div {
+  display: grid;
+  grid-template-columns: minmax(160px, 260px) minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+  box-sizing: border-box;
+  min-height: 48px;
+  padding: 14px 12px;
+  border: 1px solid var(--stats-line);
+  background: var(--stats-layer);
+  font-size: 13px;
+  line-height: 20px;
+}
+
+[data-page="stats"] [data-component="methodology-list"] dt {
+  color: var(--stats-text);
+  font-weight: 600;
+}
+
+[data-page="stats"] [data-component="methodology-list"] dd {
+  margin: 0;
   color: var(--stats-muted);
 }
 
@@ -2371,7 +2444,7 @@ body {
   min-width: 228px;
   padding: 0;
   border: 0;
-  background: #fffffff2;
+  background: #ffffff;
   box-shadow:
     0 0 0 0.5px #00000024,
     0 8px 16px #0000000f,
@@ -4230,6 +4303,17 @@ body {
     linear-gradient(var(--stats-line), var(--stats-line)) 1040px 0 / 1px 100% no-repeat;
 }
 
+[data-page="stats"] [data-slot="lab-model-table-track"] > :is(thead, tbody) {
+  display: grid;
+}
+
+/* Zero specificity: clears browser table-cell defaults without overriding the cell styles below. */
+:where([data-page="stats"] [data-slot="lab-model-table-track"]) :where(th, td) {
+  padding: 0;
+  font: inherit;
+  text-align: inherit;
+}
+
 [data-page="stats"] [data-slot="lab-model-table-head"],
 [data-page="stats"] [data-component="lab-model-row"] {
   position: relative;
@@ -4249,12 +4333,12 @@ body {
   text-transform: uppercase;
 }
 
-[data-page="stats"] [data-slot="lab-model-table-head"] span,
+[data-page="stats"] [data-slot="lab-model-table-head"] th,
 [data-page="stats"] [data-slot="lab-model-cell"] {
   min-width: 0;
 }
 
-[data-page="stats"] [data-slot="lab-model-table-head"] span:not([data-column="model"]) {
+[data-page="stats"] [data-slot="lab-model-table-head"] th:not([data-column="model"]) {
   padding-left: 40px;
 }
 
@@ -4266,33 +4350,33 @@ body {
   isolation: isolate;
 }
 
+/* Painted under the cells inside the row's stacking context, so cells stay unpositioned and the link
+   overlay below can span the whole row. */
 [data-page="stats"] [data-component="lab-model-row"]::before {
   position: absolute;
   top: 8px;
   right: calc(var(--lab-model-row-bleed) * -1);
   bottom: 8px;
   left: calc(var(--lab-model-row-bleed) * -1);
-  z-index: 0;
+  z-index: -1;
   content: "";
   background: transparent;
   pointer-events: none;
 }
 
 [data-page="stats"] [data-component="lab-model-row"]:hover,
-[data-page="stats"] [data-component="lab-model-row"]:focus-visible {
+[data-page="stats"] [data-component="lab-model-row"]:has([data-slot="lab-model-link"]:focus-visible) {
   color: var(--stats-text);
   outline: none;
   text-decoration: none;
 }
 
 [data-page="stats"] [data-component="lab-model-row"]:hover::before,
-[data-page="stats"] [data-component="lab-model-row"]:focus-visible::before {
+[data-page="stats"] [data-component="lab-model-row"]:has([data-slot="lab-model-link"]:focus-visible)::before {
   background: var(--stats-layer);
 }
 
 [data-page="stats"] [data-slot="lab-model-cell"] {
-  position: relative;
-  z-index: 1;
   display: flex;
   align-items: center;
   height: 24px;
@@ -4334,14 +4418,33 @@ body {
   height: 15px;
 }
 
-[data-page="stats"] [data-slot="lab-model-cell"] strong {
+[data-page="stats"] [data-slot="lab-model-link"] {
   min-width: 0;
   overflow: hidden;
   color: var(--stats-text);
   font-size: inherit;
   font-weight: 500;
   line-height: inherit;
+  text-decoration: none;
   text-overflow: ellipsis;
+  outline: none;
+}
+
+/* The row's only link covers the whole row, so every cell stays clickable. */
+[data-page="stats"] [data-slot="lab-model-link"]::after {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  content: "";
+}
+
+/* Rows show keyboard focus through :has(); without it, outline the link itself. */
+@supports not selector(:has(*)) {
+  [data-page="stats"] [data-slot="retention-row"] a:focus-visible,
+  [data-page="stats"] [data-slot="lab-model-link"]:focus-visible {
+    outline: 1px solid var(--stats-accent);
+    outline-offset: 2px;
+  }
 }
 
 [data-page="stats"] [data-component="lab-model-tooltip"] {
@@ -6291,8 +6394,7 @@ body {
   vector-effect: non-scaling-stroke;
 }
 
-[data-page="stats"] [data-slot="compare-radar-area"],
-[data-page="stats"] [data-slot="compare-radar-line"] {
+[data-page="stats"] [data-slot="compare-radar-area"] {
   stroke: currentColor;
   stroke-width: 1.5px;
   stroke-linejoin: round;
@@ -6304,15 +6406,15 @@ body {
   fill-opacity: 0.09;
 }
 
-[data-page="stats"] [data-slot="compare-radar-line"] {
-  fill: none;
-}
-
 [data-page="stats"] [data-slot="compare-radar-point"] {
   fill: currentColor;
   stroke: currentColor;
   stroke-width: 1px;
   vector-effect: non-scaling-stroke;
+}
+
+[data-page="stats"] [data-slot="compare-radar-point"][data-fallback="true"] {
+  fill: var(--stats-bg);
 }
 
 [data-page="stats"] [data-slot="compare-radar-point-hit"] {
@@ -6902,8 +7004,13 @@ body {
 
 @media (max-width: 74rem) {
   [data-page="stats"] [data-slot="retention-heading"],
-  [data-page="stats"] [data-component="retention-chart"] a {
+  [data-page="stats"] [data-slot="retention-row"] {
     grid-template-columns: 40px minmax(140px, 220px) minmax(140px, 1fr) 60px 76px;
+    gap: 12px;
+  }
+
+  [data-page="stats"] [data-component="methodology-list"] > div {
+    grid-template-columns: minmax(140px, 220px) minmax(0, 1fr);
     gap: 12px;
   }
 }
@@ -6913,11 +7020,17 @@ body {
     margin-top: 28px;
   }
 
-  [data-page="stats"] [data-slot="retention-heading"] {
-    display: none;
+  /* Hidden visually but kept for screen readers; absolute positioning keeps it out of the grid gap. */
+  [data-page="stats"] [data-component="retention-chart"] > thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
   }
 
-  [data-page="stats"] [data-component="retention-chart"] a {
+  [data-page="stats"] [data-slot="retention-row"] {
     grid-template-columns: 28px minmax(0, 1fr) 58px 62px;
     grid-template-rows: auto 16px;
     gap: 8px 10px;
@@ -6925,29 +7038,35 @@ body {
     padding: 10px;
   }
 
-  [data-page="stats"] [data-component="retention-chart"] a > span {
+  [data-page="stats"] [data-slot="retention-row"] > [data-column="rank"] {
     grid-column: 1;
     grid-row: 1;
   }
 
-  [data-page="stats"] [data-component="retention-chart"] a > strong {
+  [data-page="stats"] [data-slot="retention-row"] > [data-column="model"] {
     grid-column: 2;
     grid-row: 1;
   }
 
-  [data-page="stats"] [data-component="retention-marker"] {
+  [data-page="stats"] [data-slot="retention-row"] > [data-column="marker"] {
     grid-column: 2 / -1;
     grid-row: 2;
   }
 
-  [data-page="stats"] [data-component="retention-chart"] a > b {
+  [data-page="stats"] [data-slot="retention-row"] > [data-column="rate"] {
     grid-column: 3;
     grid-row: 1;
   }
 
-  [data-page="stats"] [data-component="retention-chart"] a > em {
+  [data-page="stats"] [data-slot="retention-row"] > [data-column="eligible"] {
     grid-column: 4;
     grid-row: 1;
+  }
+
+  [data-page="stats"] [data-component="methodology-list"] > div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    padding: 10px;
   }
 }
 
@@ -7307,7 +7426,7 @@ body {
 
 [data-page="stats"][data-theme="dark"] [data-component="chart-tooltip"],
 :root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
-  background: #242424f2;
+  background: #242424;
 }
 
 [data-page="stats"][data-theme="dark"]
@@ -7322,7 +7441,7 @@ body {
   [data-page="stats"]:not([data-theme="light"])
   :is([data-section="top-models"], [data-section="unique-users"])
   [data-component="chart-tooltip"] {
-  background: #242424f2;
+  background: #242424;
   box-shadow:
     0 0 0 0.5px #ffffff24,
     0 8px 16px #0000003d,
@@ -7485,14 +7604,14 @@ body {
   }
 
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
-    background: #242424f2;
+    background: #242424;
   }
 
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-section="top-models"]
     [data-component="chart-tooltip"] {
-    background: #242424f2;
+    background: #242424;
     box-shadow:
       0 0 0 0.5px #ffffff24,
       0 8px 16px #0000003d,
@@ -7656,6 +7775,7 @@ body {
   [data-page="stats"] [data-section="retention"],
   [data-page="stats"] [data-section="market-share"],
   [data-page="stats"] [data-section="geo-breakdown"],
+  [data-page="stats"] [data-section="methodology"],
   [data-page="stats"] [data-section="token-cost"],
   [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"],
@@ -7961,6 +8081,7 @@ body {
   [data-page="stats"] [data-section="retention"],
   [data-page="stats"] [data-section="market-share"],
   [data-page="stats"] [data-section="geo-breakdown"],
+  [data-page="stats"] [data-section="methodology"],
   [data-page="stats"] [data-section="token-cost"],
   [data-page="stats"] [data-section="cache-ratio"],
   [data-page="stats"] [data-section="session-cost"],

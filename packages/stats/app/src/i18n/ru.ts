@@ -61,6 +61,7 @@ export const dict = {
   "range.2W": "2 недели",
   "range.1M": "1 месяц",
   "range.2M": "2 месяца",
+  "chart.weekly": "Еженедельно",
   "chart.daily": "Ежедневно",
   "chart.input": "Ввод",
   "chart.output": "Вывод",
@@ -78,11 +79,15 @@ export const dict = {
   "chart.leaderboardAria": "Рейтинг моделей по токенам",
   "chart.scrollableLeaderboardAria": "Прокручиваемый рейтинг моделей по токенам",
   "chart.byAuthor": "автор: {{author}}",
+  "chart.vsPreviousWeek": "к предыдущей неделе",
+  "chart.date": "Дата",
   "home.updated": "Обновлено",
   "home.noRows": "Строк пока нет",
   "home.justNow": "только что",
   "home.heroCopy":
     "Посмотрите, какие модели выигрывают в реальном использовании, как меняется состав и что это значит для стоимости.",
+  "home.summary":
+    "По состоянию на {{date}} за последние 7 дней по использованию OpenCode лидировала модель {{first}} с {{firstTokens}} токенов, за ней следуют {{second}} ({{secondTokens}}) и {{third}} ({{thirdTokens}}).",
   "home.loadingTitle": "Загрузка данных",
   "home.loadingDescription": "Читаем агрегаты моделей.",
   "home.usageTitle": "Использование",
@@ -128,6 +133,8 @@ export const dict = {
   "lab.title": "Использование и рейтинги ИИ-моделей {{lab}} | OpenCode Data",
   "lab.description":
     "Сравните модели {{lab}}, используемые в OpenCode: использование токенов, рейтинги моделей, контекстные окна, даты релизов, стоимость и данные конкретных моделей.",
+  "lab.summary":
+    "За последние два месяца модели {{lab}} обработали {{tokens}} токенов в OpenCode — {{share}} всего использования. Самой используемой моделью {{lab}} была {{model}}.",
   "lab.loadingTitle": "Лаборатория моделей",
   "lab.loadingDescription": "Читаем доступность моделей и недавнее использование OpenCode.",
   "lab.notFound": "Нет моделей, соответствующих этой лаборатории.",
@@ -155,6 +162,10 @@ export const dict = {
   "model.title": "Использование, стоимость и ранг {{model}} | OpenCode Data",
   "model.description":
     "Посмотрите данные использования {{model}} в OpenCode: объем токенов, недельный ранг, состав токенов, стоимость, долю кэша, сеансы, географические разрезы и похожие модели.",
+  "model.summary":
+    "На прошлой неделе модель {{model}} заняла #{{rank}} место по токенам в OpenCode; за последние два месяца на нее пришлось {{share}} токенов.",
+  "model.summaryUnranked": "За последние два месяца на модель {{model}} пришлось {{share}} токенов в OpenCode.",
+  "model.summaryPrice": "{{model}} стоит {{input}} за 1M входных токенов и {{output}} за 1M выходных токенов.",
   "model.loadingTitle": "Данные модели",
   "model.loadingDescription": "Читаем агрегаты модели.",
   "model.loadingProfile": "Читаем профиль модели.",
@@ -228,4 +239,20 @@ export const dict = {
   "model.pdf": "PDF",
   "format.users": "пользователи",
   "format.tokens": "токены",
+  "methodology.title": "Методология",
+  "methodology.description": "Как собираются эти данные.",
+  "methodology.updatesLabel": "Обновления",
+  "methodology.updates": "Данные агрегируются каждый час. Дни и недели считаются по UTC.",
+  "methodology.tokensLabel": "Токены",
+  "methodology.tokens": "Входные и выходные токены, токены рассуждений и кэшированные токены каждого запроса.",
+  "methodology.usersLabel": "Пользователи и сеансы",
+  "methodology.users": "Приблизительное число уникальных пользователей и сеансов OpenCode.",
+  "methodology.costLabel": "Стоимость",
+  "methodology.cost":
+    "Стоимость сеанса — средняя стоимость за сеанс OpenCode. Цены токенов — официальные цены из каталога моделей OpenCode.",
+  "methodology.retentionLabel": "Удержание",
+  "methodology.retention": "Доля пользователей модели за неделю, которые снова используют ее на следующей неделе.",
+  "methodology.citeLabel": "Цитирование",
+  "methodology.cite":
+    "При цитировании указывайте OpenCode Data (opencode.ai/data) и время обновления, показанное вверху страницы.",
 } as const
