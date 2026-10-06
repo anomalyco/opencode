@@ -507,6 +507,7 @@ const lowerReasoning = (part: ReasoningPart, providerMetadataKey: string): OpenR
     typeof metadata.reasoningEncryptedContent === "string" || metadata.reasoningEncryptedContent === null
       ? metadata.reasoningEncryptedContent
       : undefined
+  if (part.text.length === 0 && !encryptedContent) return undefined
   return {
     type: "reasoning",
     ...(id === undefined ? {} : { id }),
@@ -761,12 +762,7 @@ const lowerMessages = Effect.fnUntraced(function* (
     }
   }
 
-  return input.filter(
-    (item) =>
-      item.type !== "reasoning" ||
-      (Array.isArray(item.summary) && item.summary.length > 0) ||
-      (typeof item.encrypted_content === "string" && item.encrypted_content.length > 0),
-  )
+  return input
 })
 
 export const lowerConversation = Effect.fnUntraced(function* (
