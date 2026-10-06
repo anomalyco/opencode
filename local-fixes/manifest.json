@@ -80,7 +80,7 @@
     {
       "id": "empty-assistant-guard",
       "title": "Drop assistant messages with no provider content (fix5)",
-      "commit": "79542ac1e9fd1f520932fa178891fa68ace1b511",
+      "commit": "d6ac80bb70d30ae69dae9bea6fab447910110103",
       "patch": "local-fixes/patches/empty-assistant-guard.patch",
       "test": "packages/opencode/src/session/message-v2.fix5.test.ts",
       "markers": [],
