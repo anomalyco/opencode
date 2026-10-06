@@ -109,6 +109,14 @@ describe("session.system", () => {
     }
   })
 
+  test("selects the DeepSeek prompt for DeepSeek model IDs", () => {
+    for (const id of ["deepseek-chat", "deepseek-reasoner", "deepseek-r1", "deepseek-v3"]) {
+      const prompt = SystemPrompt.provider({ api: { id } } as Provider.Model)[0]
+      expect(prompt).toContain("powered by DeepSeek,")
+      expect(prompt).toContain("# Prompt and Tool Use")
+    }
+  })
+
   it.effect("skills output is sorted by name and stable across calls", () =>
     Effect.gen(function* () {
       const prompt = yield* SystemPrompt.Service
