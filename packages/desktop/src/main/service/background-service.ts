@@ -34,6 +34,9 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   const desktopCli = yield* DesktopCli.Service
   const runFork = Effect.runForkWith(yield* Effect.context())
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
+  // Packaged builds and the isolated dev server both run a staged CLI copy under userData, so both
+  // should prune stale stages; a non-isolated dev app runs the repo binary in place.
+  const staged = app.isPackaged || isolated
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
 
@@ -76,7 +79,7 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
     ...endpoint(url.origin),
   })
 
-  if (mode === "initial" && isolated && cli.binary) yield* cleanStages(cli.binary).pipe(Effect.orDie)
+  if (mode === "initial" && staged && cli.binary) yield* cleanStages(cli.binary).pipe(Effect.orDie)
   const ready = { url: url.origin, password: service.auth.password } satisfies SidecarCredentials.Data
   SidecarCredentials.set(ready)
 
