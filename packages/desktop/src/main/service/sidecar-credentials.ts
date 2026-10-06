@@ -25,6 +25,8 @@ export function ready(data: Data): ServerReadyData {
 /** The Basic credential for a request to the sidecar origin, or undefined for any other URL. */
 export function authorization(sidecar: Data | undefined, url: string) {
   if (!sidecar?.password || !URL.canParse(url)) return
+
   if (new URL(url).origin !== sidecar.url) return
+
   return `Basic ${Buffer.from(`opencode:${sidecar.password}`).toString("base64")}`
 }

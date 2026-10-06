@@ -4,28 +4,30 @@ import type { Session } from "@opencode/schema/session"
 import type { SessionError } from "@opencode/schema/session-error"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import { TokenUsage } from "@opencode/schema/token-usage"
+import { ACPChild } from "./child"
 import { ACPCompaction } from "./compaction"
-import { partsToContentChunks, type ReplayPart } from "./content"
 import { ACPError } from "./error"
-import type { ACPService } from "./service"
-import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate, type ToolInput } from "./tool"
+import {
+  completedToolUpdate,
+  errorToolUpdate,
+  pendingToolCall,
+  runningToolUpdate,
+  type DiffSource,
+  type ToolInput,
+} from "./tool"
 
-export const ChildSessionUpdatesCapability = "opencode/child-session-updates"
-export const ChildSessionUpdateMethod = "opencode/session/child_update"
 const RetryMeta = "opencode/retry"
 
 export type TurnStart = { readonly type: "input" | "compaction"; readonly id: SessionMessage.ID }
 
 export type Terminal = "succeeded" | "failed" | "interrupted"
 
-export type Context = {
+export type TurnContext = {
   readonly sessionID: Session.ID
   readonly cwd: string
   readonly start: TurnStart
   readonly childUpdates: boolean
   readonly compaction: boolean
-  /** Background mode follows open children after the turn ends and never writes `session/update`. */
-  readonly mode: "turn" | "background"
 }
 
 type Tool = {
@@ -42,37 +44,14 @@ type RetryStatus = {
   readonly error: SessionError.Error
 }
 
-export type ChildSession = {
-  readonly id: string
-  readonly parentID: string
-  readonly depth: number
-  readonly title?: string
-}
-
-type ChildSessionEvent =
-  | { readonly type: "update"; readonly update: SessionUpdate }
-  | {
-      readonly type: "status"
-      readonly status: "created" | "running" | "completed" | "failed" | "interrupted"
-      readonly error?: { readonly type: string; readonly message: string }
-    }
-
-export type ChildSessionUpdate = {
-  readonly rootSessionId: string
-  readonly childSessionId: string
-  readonly parentSessionId: string
-  readonly depth: number
-  readonly title?: string
-} & ChildSessionEvent
-
 export type TurnState = {
   readonly started: boolean
   readonly tools: ReadonlyMap<string, Tool>
   readonly retries: ReadonlyMap<string, RetryStatus>
   readonly compactions: ACPCompaction.Tracked
-  readonly children: ReadonlyMap<string, ChildSession>
+  readonly children: ReadonlyMap<string, ACPChild.Session>
   readonly openChildren: ReadonlySet<string>
-  readonly forms: ReadonlySet<string>
+  readonly asks: ReadonlySet<string>
   readonly finish?: SessionMessage.Assistant["finish"]
   readonly usage?: { readonly turn: TokenUsage.Info; readonly last: TokenUsage.Info }
   readonly stepError?: SessionError.Error
@@ -81,25 +60,21 @@ export type TurnState = {
 
 type PermissionEvent = Extract<OpenCodeEvent, { type: "permission.asked" }>
 type FormEvent = Extract<OpenCodeEvent, { type: "form.created" }>
+type CreatedEvent = Extract<OpenCodeEvent, { type: "session.created" }>
 
 export type Output =
-  | { readonly _tag: "SessionUpdate"; readonly update: SessionUpdate }
-  | { readonly _tag: "ChildUpdate"; readonly update: ChildSessionUpdate }
+  | { readonly _tag: "SessionUpdate"; readonly update: SessionUpdate; readonly diff?: DiffSource }
+  | { readonly _tag: "ChildUpdate"; readonly update: ACPChild.Update; readonly diff?: DiffSource }
   | {
       readonly _tag: "PermissionAsk"
       readonly event: PermissionEvent
       readonly tool?: Tool
-      readonly child?: ChildSession
+      readonly child?: ACPChild.Session
     }
-  | {
-      readonly _tag: "FormAsk"
-      readonly form: FormEvent["data"]["form"]
-      readonly child?: ChildSession
-      readonly toolCallSent: boolean
-    }
-  | { readonly _tag: "FormSettled"; readonly formID: string }
+  | { readonly _tag: "FormAsk"; readonly form: FormEvent["data"]["form"]; readonly child?: ACPChild.Session }
+  | { readonly _tag: "AskSettled"; readonly id: string }
 
-export type Step = {
+export type Folded = {
   readonly state: TurnState
   readonly outputs: ReadonlyArray<Output>
   readonly terminal?: Terminal
@@ -112,70 +87,183 @@ export const initial: TurnState = {
   compactions: new Map(),
   children: new Map(),
   openChildren: new Set(),
-  forms: new Set(),
+  asks: new Set(),
 }
 
-export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step {
-  if (event.type === "session.created") {
-    const parentID = event.data.parentID
-    if (!parentID) return { state, outputs: [] }
-    const parent = parentID === ctx.sessionID ? undefined : state.children.get(parentID)
-    if (!parent && (ctx.mode === "background" || parentID !== ctx.sessionID)) return { state, outputs: [] }
-    const child = { id: event.data.sessionID, parentID, depth: parent ? parent.depth + 1 : 1, title: event.data.title }
-    return {
-      state: {
-        ...state,
-        children: new Map(state.children).set(child.id, child),
-        openChildren: new Set(state.openChildren).add(child.id),
-      },
-      outputs: childStatus(ctx, child, { type: "status", status: "created" }),
-    }
-  }
+export function fold(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): Folded {
+  if (event.type === "session.created") return childCreated(state, event, ctx)
 
-  const eventSessionID = sessionIDFromEvent(event)
-  const child = eventSessionID ? state.children.get(eventSessionID) : undefined
-  if (ctx.mode === "background" && !child) return { state, outputs: [] }
-  const send = (update: SessionUpdate) => route(ctx, child, update)
+  const sessionID = sessionIDFromEvent(event)
+  const child = sessionID ? state.children.get(sessionID) : undefined
 
   if (event.type === "permission.asked" && (event.data.sessionID === ctx.sessionID || child)) {
     const tool = event.data.source?.id
       ? state.tools.get(toolKey(event.data.sessionID, event.data.source.id))
       : undefined
-    return { state, outputs: [{ _tag: "PermissionAsk", event, tool, child }] }
+    return {
+      state: { ...state, asks: new Set(state.asks).add(event.data.id) },
+      outputs: [{ _tag: "PermissionAsk", event, tool, child }],
+    }
   }
   if (event.type === "form.created" && (event.data.form.sessionID === ctx.sessionID || child)) {
     return {
-      state: { ...state, forms: new Set(state.forms).add(event.data.form.id) },
-      outputs: [
-        {
-          _tag: "FormAsk",
-          form: event.data.form,
-          child,
-          toolCallSent: ctx.mode === "turn" && (!child || !ctx.childUpdates),
-        },
-      ],
+      state: { ...state, asks: new Set(state.asks).add(event.data.form.id) },
+      outputs: [{ _tag: "FormAsk", form: event.data.form, child }],
     }
   }
-  if ((event.type === "form.replied" || event.type === "form.cancelled") && state.forms.has(event.data.id)) {
-    const forms = new Set(state.forms)
-    forms.delete(event.data.id)
-    return { state: { ...state, forms }, outputs: [{ _tag: "FormSettled", formID: event.data.id }] }
+  const settledID =
+    event.type === "permission.replied"
+      ? event.data.requestID
+      : event.type === "form.replied" || event.type === "form.cancelled"
+        ? event.data.id
+        : undefined
+  if (settledID && state.asks.has(settledID)) {
+    const asks = new Set(state.asks)
+    asks.delete(settledID)
+    return { state: { ...state, asks }, outputs: [{ _tag: "AskSettled", id: settledID }] }
   }
-  if (!eventSessionID || (eventSessionID !== ctx.sessionID && !child)) return { state, outputs: [] }
-  if (matchesStart(event, ctx.start)) return { state: { ...state, started: true }, outputs: [] }
+  if (!sessionID || (sessionID !== ctx.sessionID && !child)) return { state, outputs: [] }
+  if (event.type === "session.inbox.delivered" && event.data.inboxID === ctx.start.id)
+    return { state: { ...state, started: true }, outputs: [] }
   if (!state.started) return { state, outputs: [] }
+  return child ? childEvent(state, event, ctx, child) : rootEvent(state, event, ctx)
+}
 
+export function fromTrackedChild(state: TurnState, event: OpenCodeEvent) {
+  const sessionID = event.type === "session.created" ? event.data.parentID : sessionIDFromEvent(event)
+  return sessionID !== undefined && state.children.has(sessionID)
+}
+
+export function failure(state: TurnState) {
+  const error = state.stepError ?? state.executionError
+  if (error?.type === "provider.auth") return new ACPError.AuthRequiredError()
+  if (error && error.type !== "aborted" && error.type !== "provider.content-filter") {
+    return new ACPError.ServiceFailureError({
+      safeMessage: error.message || "OpenCode prompt failed",
+      service: "session",
+      errorName: error.type,
+    })
+  }
+  return undefined
+}
+
+export function response(state: TurnState, sessionID: string, terminal: Terminal): PromptResponse {
+  const tokens = state.usage?.turn
+  const usage = tokens
+    ? {
+        inputTokens: tokens.input,
+        outputTokens: tokens.output,
+        totalTokens: TokenUsage.total(tokens),
+        ...(tokens.reasoning > 0 ? { thoughtTokens: tokens.reasoning } : {}),
+        ...(tokens.cache.read > 0 ? { cachedReadTokens: tokens.cache.read } : {}),
+        ...(tokens.cache.write > 0 ? { cachedWriteTokens: tokens.cache.write } : {}),
+      }
+    : undefined
+  const error = (state.stepError ?? state.executionError)?.type
+  const stopReason = resolveStopReason({ terminal, finish: state.finish, error })
+  // Interruption clears the projected retry, so a retry pending at interrupt is reported here.
+  const retry = state.retries.get(sessionID)
+  return { stopReason, ...(usage ? { usage } : {}), _meta: retry ? { [RetryMeta]: retry } : {} }
+}
+
+// Child compactions are left to the background consumer.
+export function abandon(state: TurnState, ctx: TurnContext): Folded {
+  const compaction = state.compactions.get(ctx.sessionID)
+  return {
+    state: { ...state, tools: new Map(), compactions: without(state.compactions, ctx.sessionID) },
+    outputs: [
+      ...[...state.tools.values()].flatMap((tool) =>
+        route(ctx, state.children.get(tool.sessionID), {
+          sessionUpdate: "tool_call_update",
+          ...errorToolUpdate({
+            toolCallId: tool.id,
+            toolName: tool.name,
+            input: tool.input,
+            metadata: tool.metadata,
+            content: [],
+            error: "Cancelled",
+            cwd: ctx.cwd,
+          }),
+        }),
+      ),
+      ...(compaction
+        ? route(ctx, undefined, ACPCompaction.abandon(compaction, ACPCompaction.usesStandardUpdates(ctx, false)))
+        : []),
+    ],
+  }
+}
+
+export function reasoningMessageID(messageID: string, ordinal: number) {
+  return `${messageID}:reasoning:${ordinal}`
+}
+
+function childCreated(state: TurnState, event: CreatedEvent, ctx: TurnContext): Folded {
+  const parentID = event.data.parentID
+  if (!parentID) return { state, outputs: [] }
+  const parent = parentID === ctx.sessionID ? undefined : state.children.get(parentID)
+  if (!parent && parentID !== ctx.sessionID) return { state, outputs: [] }
+  const child = { id: event.data.sessionID, parentID, depth: parent ? parent.depth + 1 : 1, title: event.data.title }
+  return {
+    state: {
+      ...state,
+      children: new Map(state.children).set(child.id, child),
+      openChildren: new Set(state.openChildren).add(child.id),
+    },
+    outputs: childStatus(ctx, child, { type: "status", status: "created" }),
+  }
+}
+
+function rootEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext): Folded {
+  switch (event.type) {
+    case "session.step.started":
+      return sessionEvent({ ...state, stepError: undefined }, event, ctx, undefined)
+    case "session.step.ended":
+      return { state: { ...recordStep(state, event.data.tokens), finish: event.data.finish }, outputs: [] }
+    case "session.step.failed": {
+      const recorded = event.data.tokens ? recordStep(state, event.data.tokens) : state
+      return { state: { ...recorded, stepError: event.data.error }, outputs: [] }
+    }
+    case "session.execution.succeeded":
+      return { state, outputs: [], terminal: "succeeded" }
+    case "session.execution.interrupted":
+      return { state, outputs: [], terminal: "interrupted" }
+    case "session.execution.failed":
+      return { state: { ...state, executionError: event.data.error }, outputs: [], terminal: "failed" }
+    default:
+      return sessionEvent(state, event, ctx, undefined)
+  }
+}
+
+function childEvent(state: TurnState, event: OpenCodeEvent, ctx: TurnContext, child: ACPChild.Session): Folded {
   switch (event.type) {
     case "session.execution.started":
-      return { state, outputs: child ? childStatus(ctx, child, { type: "status", status: "running" }) : [] }
-    case "session.step.started": {
-      const next = child ? state : { ...state, stepError: undefined }
-      if (!state.retries.has(eventSessionID)) return { state: next, outputs: [] }
+      return { state, outputs: childStatus(ctx, child, { type: "status", status: "running" }) }
+    case "session.execution.succeeded":
+      return childEnded(state, ctx, child, { type: "status", status: "completed" })
+    case "session.execution.interrupted":
+      return childEnded(state, ctx, child, { type: "status", status: "interrupted" })
+    case "session.execution.failed":
+      return childEnded(state, ctx, child, { type: "status", status: "failed", error: event.data.error })
+    default:
+      return sessionEvent(state, event, ctx, child)
+  }
+}
+
+function sessionEvent(
+  state: TurnState,
+  event: OpenCodeEvent,
+  ctx: TurnContext,
+  child: ACPChild.Session | undefined,
+): Folded {
+  const sessionID = child?.id ?? ctx.sessionID
+  const send = (update: SessionUpdate) => route(ctx, child, update)
+  switch (event.type) {
+    case "session.step.started":
+      if (!state.retries.has(sessionID)) return { state, outputs: [] }
       return {
-        state: { ...next, retries: without(state.retries, eventSessionID) },
+        state: { ...state, retries: without(state.retries, sessionID) },
         outputs: send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: null } }),
       }
-    }
     case "session.retry.scheduled": {
       const retry = {
         attempt: event.data.attempt,
@@ -183,7 +271,7 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
         error: event.data.error,
       }
       return {
-        state: { ...state, retries: new Map(state.retries).set(eventSessionID, retry) },
+        state: { ...state, retries: new Map(state.retries).set(sessionID, retry) },
         outputs: send({ sessionUpdate: "session_info_update", _meta: { [RetryMeta]: retry } }),
       }
     }
@@ -199,7 +287,7 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
     }
     case "session.compaction.delta": {
       const update = ACPCompaction.chunk(
-        state.compactions.get(eventSessionID),
+        state.compactions.get(sessionID),
         event.data.text,
         ACPCompaction.usesStandardUpdates(ctx, child !== undefined),
       )
@@ -219,7 +307,7 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
         state,
         outputs: send({
           sessionUpdate: "agent_thought_chunk",
-          messageId: `${event.data.assistantMessageID}:reasoning:${event.data.ordinal}`,
+          messageId: reasoningMessageID(event.data.assistantMessageID, event.data.ordinal),
           content: { type: "text", text: event.data.delta },
         }),
       }
@@ -293,7 +381,10 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
             content: event.data.content,
             cwd: ctx.cwd,
           }),
-        }),
+        }).map((output) => ({
+          ...output,
+          diff: { toolName: tool.name, input: tool.input, metadata: event.data.metadata },
+        })),
       }
     }
     case "session.tool.failed": {
@@ -315,171 +406,8 @@ export function step(state: TurnState, event: OpenCodeEvent, ctx: Context): Step
         }),
       }
     }
-    case "session.step.ended":
-      if (child) return { state, outputs: [] }
-      return { state: { ...recordStep(state, event.data.tokens), finish: event.data.finish }, outputs: [] }
-    case "session.step.failed": {
-      if (child) return { state, outputs: [] }
-      const recorded = event.data.tokens ? recordStep(state, event.data.tokens) : state
-      return { state: { ...recorded, stepError: event.data.error }, outputs: [] }
-    }
-    case "session.execution.succeeded":
-      if (!child) return { state, outputs: [], terminal: "succeeded" }
-      return childEnded(state, ctx, child, { type: "status", status: "completed" }, "succeeded")
-    case "session.execution.interrupted":
-      if (!child) return { state, outputs: [], terminal: "interrupted" }
-      return childEnded(state, ctx, child, { type: "status", status: "interrupted" }, "interrupted")
-    case "session.execution.failed":
-      if (!child) return { state: { ...state, executionError: event.data.error }, outputs: [], terminal: "failed" }
-      return childEnded(state, ctx, child, { type: "status", status: "failed", error: event.data.error }, "failed")
     default:
       return { state, outputs: [] }
-  }
-}
-
-export function failure(state: TurnState) {
-  const error = state.stepError ?? state.executionError
-  if (error?.type === "provider.auth") return new ACPError.AuthRequiredError()
-  if (error && error.type !== "aborted" && error.type !== "provider.content-filter") {
-    return new ACPError.ServiceFailureError({
-      safeMessage: error.message || "OpenCode prompt failed",
-      service: "session",
-      errorName: error.type,
-    })
-  }
-  return undefined
-}
-
-export function response(state: TurnState, sessionID: string, terminal: Terminal): PromptResponse {
-  const tokens = state.usage?.turn
-  const usage = tokens
-    ? {
-        inputTokens: tokens.input,
-        outputTokens: tokens.output,
-        totalTokens: TokenUsage.total(tokens),
-        ...(tokens.reasoning > 0 ? { thoughtTokens: tokens.reasoning } : {}),
-        ...(tokens.cache.read > 0 ? { cachedReadTokens: tokens.cache.read } : {}),
-        ...(tokens.cache.write > 0 ? { cachedWriteTokens: tokens.cache.write } : {}),
-      }
-    : undefined
-  const error = (state.stepError ?? state.executionError)?.type
-  const stopReason = resolveStopReason({ terminal, finish: state.finish, error })
-  // Interruption clears the projected retry, so a retry pending at interrupt is reported here.
-  const retry = state.retries.get(sessionID)
-  return { stopReason, ...(usage ? { usage } : {}), _meta: retry ? { [RetryMeta]: retry } : {} }
-}
-
-// Child compactions are left to the background consumer.
-export function abandon(state: TurnState, ctx: Context): Step {
-  const compaction = state.compactions.get(ctx.sessionID)
-  return {
-    state: { ...state, tools: new Map(), compactions: without(state.compactions, ctx.sessionID) },
-    outputs: [
-      ...[...state.tools.values()].flatMap((tool) =>
-        route(ctx, state.children.get(tool.sessionID), {
-          sessionUpdate: "tool_call_update",
-          ...errorToolUpdate({
-            toolCallId: tool.id,
-            toolName: tool.name,
-            input: tool.input,
-            metadata: tool.metadata,
-            content: [],
-            error: "Cancelled",
-            cwd: ctx.cwd,
-          }),
-        }),
-      ),
-      ...(compaction
-        ? route(ctx, undefined, ACPCompaction.abandon(compaction, ACPCompaction.usesStandardUpdates(ctx, false)))
-        : []),
-    ],
-  }
-}
-
-export function* replayMessage(
-  message: SessionMessage.Info,
-  cwd: string,
-  capabilities: ACPService.Capabilities,
-): Generator<SessionUpdate> {
-  if (message.type === "user") {
-    yield { sessionUpdate: "user_message_chunk", messageId: message.id, content: { type: "text", text: message.text } }
-    const files: ReplayPart[] = (message.files ?? []).map((file) => ({
-      type: "file",
-      url: file.source.type === "uri" ? file.source.uri : `data:${file.mime};base64,${file.data}`,
-      filename: file.name,
-      mime: file.mime,
-    }))
-    for (const chunk of partsToContentChunks(files))
-      yield { sessionUpdate: "user_message_chunk", messageId: message.id, ...chunk }
-    return
-  }
-  if (message.type === "compaction") {
-    const update = ACPCompaction.replay(message, capabilities.compaction)
-    if (update) yield update
-    return
-  }
-  if (message.type !== "assistant") return
-  // Live reasoning ordinals count only reasoning parts, not the mixed content array.
-  let reasoningOrdinal = 0
-  for (const part of message.content) {
-    if (part.type === "text") {
-      yield { sessionUpdate: "agent_message_chunk", messageId: message.id, content: { type: "text", text: part.text } }
-      continue
-    }
-    if (part.type === "reasoning") {
-      yield {
-        sessionUpdate: "agent_thought_chunk",
-        messageId: `${message.id}:reasoning:${reasoningOrdinal++}`,
-        content: { type: "text", text: part.text },
-      }
-      continue
-    }
-    yield {
-      sessionUpdate: "tool_call",
-      ...pendingToolCall({
-        toolCallId: part.id,
-        toolName: part.name,
-        state: { input: part.state.status === "streaming" ? {} : part.state.input },
-        cwd,
-      }),
-    }
-    switch (part.state.status) {
-      case "completed":
-        yield {
-          sessionUpdate: "tool_call_update",
-          ...completedToolUpdate({
-            toolCallId: part.id,
-            toolName: part.name,
-            input: part.state.input,
-            metadata: part.state.metadata,
-            content: part.state.content,
-            cwd,
-          }),
-        }
-        break
-      case "running":
-        yield {
-          sessionUpdate: "tool_call_update",
-          ...runningToolUpdate({ toolCallId: part.id, toolName: part.name, state: { input: part.state.input }, cwd }),
-        }
-        break
-      case "error":
-        yield {
-          sessionUpdate: "tool_call_update",
-          ...errorToolUpdate({
-            toolCallId: part.id,
-            toolName: part.name,
-            input: part.state.input,
-            metadata: part.state.metadata,
-            content: part.state.content,
-            error: part.state.error.message,
-            cwd,
-          }),
-        }
-        break
-      case "streaming":
-        break
-    }
   }
 }
 
@@ -487,44 +415,22 @@ function newTool(sessionID: string, id: string, name = "tool"): Tool {
   return { sessionID, id, name, input: {}, metadata: {} }
 }
 
-function route(ctx: Context, child: ChildSession | undefined, update: SessionUpdate): Output[] {
-  if (!child) return ctx.mode === "turn" ? [{ _tag: "SessionUpdate", update }] : []
-  const projected = projectChildUpdate(update, child)
+function route(ctx: TurnContext, child: ACPChild.Session | undefined, update: SessionUpdate): Output[] {
+  if (!child) return [{ _tag: "SessionUpdate", update }]
+  const projected = ACPChild.project(update, child)
   if (ctx.childUpdates) return childStatus(ctx, child, { type: "update", update: projected })
-  return ctx.mode === "turn" ? [{ _tag: "SessionUpdate", update: projected }] : []
+  return [{ _tag: "SessionUpdate", update: projected }]
 }
 
-function childStatus(ctx: Context, child: ChildSession, value: ChildSessionEvent): Output[] {
+function childStatus(ctx: TurnContext, child: ACPChild.Session, event: ACPChild.Event): Output[] {
   if (!ctx.childUpdates) return []
-  return [
-    {
-      _tag: "ChildUpdate",
-      update: {
-        rootSessionId: ctx.sessionID,
-        childSessionId: child.id,
-        parentSessionId: child.parentID,
-        depth: child.depth,
-        ...(child.title ? { title: child.title } : {}),
-        ...value,
-      },
-    },
-  ]
+  return [{ _tag: "ChildUpdate", update: ACPChild.update(ctx.sessionID, child, event) }]
 }
 
-function childEnded(
-  state: TurnState,
-  ctx: Context,
-  child: ChildSession,
-  status: ChildSessionEvent,
-  terminal: Terminal,
-): Step {
+function childEnded(state: TurnState, ctx: TurnContext, child: ACPChild.Session, status: ACPChild.Event): Folded {
   const openChildren = new Set(state.openChildren)
   openChildren.delete(child.id)
-  return {
-    state: { ...state, openChildren },
-    outputs: childStatus(ctx, child, status),
-    ...(ctx.mode === "background" && openChildren.size === 0 ? { terminal } : {}),
-  }
+  return { state: { ...state, openChildren }, outputs: childStatus(ctx, child, status) }
 }
 
 function recordStep(state: TurnState, tokens: TokenUsage.Info): TurnState {
@@ -559,31 +465,6 @@ function sessionIDFromEvent(event: OpenCodeEvent) {
 
 function toolKey(sessionID: string, id: string) {
   return `${sessionID}:${id}`
-}
-
-function projectChildUpdate(update: SessionUpdate, child: ChildSession) {
-  const projected = { ...update }
-  projected._meta = { ...projected._meta, ...childSessionMeta(child) }
-  if (projected.sessionUpdate === "tool_call" || projected.sessionUpdate === "tool_call_update") {
-    projected.toolCallId = `${child.id}:${projected.toolCallId}`
-    if (projected.title && child.title) projected.title = `${child.title}: ${projected.title}`
-  }
-  return projected
-}
-
-export function childSessionMeta(child: ChildSession) {
-  return {
-    "opencode/child-session": {
-      id: child.id,
-      parentID: child.parentID,
-      depth: child.depth,
-      ...(child.title ? { title: child.title } : {}),
-    },
-  }
-}
-
-function matchesStart(event: OpenCodeEvent, start: TurnStart) {
-  return event.type === "session.inbox.delivered" && event.data.inboxID === start.id
 }
 
 function resolveStopReason(input: {

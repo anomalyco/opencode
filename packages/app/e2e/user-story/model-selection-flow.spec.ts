@@ -77,10 +77,13 @@ test("creates a session in a new project and selects its model", async ({ page }
   await addProject.click()
   const picker = page.getByRole("dialog", { name: "Open project", exact: true })
   await expect(picker.getByRole("combobox")).toHaveValue("C:\\OpenCode\\NewProject")
+
   const listing = page.waitForRequest((request) => {
     const url = new URL(request.url())
+
     return url.pathname === "/api/fs/list" && url.searchParams.get("path") === "C:/OpenCode"
   })
+
   await picker.getByRole("button", { name: "Parent", exact: true }).click()
   expect(new URL((await listing).url()).searchParams.get("location[directory]")).toBe(directory)
   const directoryItem = picker.getByRole("treeitem", { name: "NewProject", exact: true })
@@ -119,6 +122,7 @@ test("restores each existing session's model and variant when switching tabs", a
     title: `Model ${name}`,
     model: { id: `model-${name}`, providerID: "opencode", variant: "balanced" },
   }))
+
   await openSession(page, {
     name: "ModelSelection",
     sessions,

@@ -4,10 +4,14 @@ import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, session } from 
 import { mockRemoteServer, mockWorkspace, openSettings, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/Projects/settings-demo"
+
 const projectID = "proj_settings_demo"
+
 const sandboxes = Array.from({ length: 12 }, (_, index) => `${directory}/workspace-${index + 1}`)
+
 const override =
   "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='red'/%3E%3C/svg%3E"
+
 const contributors = "https://api.github.com/repos/anomalyco/opencode/contributors?anon=1&per_page=1"
 
 test.use({ serviceWorkers: "block" })
@@ -92,10 +96,12 @@ test("a settings page survives refresh", async ({ page }) => {
 test("another server's settings page survives refresh", async ({ page }) => {
   await mockRemoteServer(page, { directory: "/remote/settings-demo" })
   const { settings } = await open(page)
+
   const url = (value: URL) =>
     value.pathname === "/settings" &&
     value.searchParams.get("server") === REMOTE_SERVER &&
     value.searchParams.get("tab") === "providers"
+
   await page.goto(`/settings?server=${encodeURIComponent(REMOTE_SERVER)}&tab=providers`)
   await expect(settings.getByRole("heading", { name: "Providers", exact: true })).toBeVisible()
   await expect(page).toHaveURL(url)
@@ -108,6 +114,7 @@ test("single-server settings expose scoped pages without a server picker", async
   const { settings } = await open(page)
   await expect(settings.getByRole("tab", { name: "Server", exact: true })).toBeVisible()
   await expect(settings.getByRole("tab", { name: "Servers", exact: true })).toHaveCount(0)
+
   for (const name of ["Projects", "Worktrees", "Providers", "Models", "Extensions"]) {
     await settings.getByRole("tab", { name, exact: true }).click()
     await expect(settings.getByRole("tab", { name, exact: true })).toHaveAttribute("aria-selected", "true")
@@ -117,9 +124,11 @@ test("single-server settings expose scoped pages without a server picker", async
   await settings.getByRole("tab", { name: "Server", exact: true }).click()
   await expect(settings.getByText("Terminal shell", { exact: true })).toBeVisible()
   await settings.getByText("zsh", { exact: true }).click()
+
   const updated = page.waitForRequest(
     (request) => request.method() === "PATCH" && new URL(request.url()).pathname === "/api/experimental/config",
   )
+
   await page.getByRole("option", { name: "bash", exact: true }).click()
   expect((await updated).postDataJSON()).toEqual({ shell: "bash" })
 })
@@ -128,6 +137,7 @@ test("project list menus rename, close, edit, add, and stay inside the scrollpor
   const projects = ["rebase", "dinocms", "opencode", "Playground"].map((name, index) =>
     project({ id: `project-${index}`, directory: `/projects/${name}`, name }),
   )
+
   const { settings } = await open(page, {
     name: "rebase",
     directory: "/projects/rebase",
@@ -137,6 +147,7 @@ test("project list menus rename, close, edit, add, and stay inside the scrollpor
     fileList: () => [],
     seed: { projects: { local: projects.map((item) => ({ worktree: item.worktree, expanded: true })) } },
   })
+
   await settings.getByRole("tab", { name: "Projects", exact: true }).click()
   const panel = settings.getByRole("tabpanel")
   const list = panel.getByRole("list")
@@ -157,11 +168,13 @@ test("project list menus rename, close, edit, add, and stay inside the scrollpor
       card.evaluate((row) => {
         const bounds = row.getBoundingClientRect()
         const clips = []
+
         for (let parent = row.parentElement; parent; parent = parent.parentElement) {
           if (getComputedStyle(parent).overflowX === "visible") continue
           const clip = parent.getBoundingClientRect()
           clips.push(bounds.left - clip.left, clip.right - bounds.right)
         }
+
         return Math.min(...clips)
       }),
     )
@@ -182,9 +195,11 @@ test("project list menus rename, close, edit, add, and stay inside the scrollpor
   const rename = panel.getByRole("textbox", { name: "Rename", exact: true })
   await expect(rename).toBeFocused()
   await rename.fill("Renamed project")
+
   const renamed = page.waitForRequest(
     (request) => request.method() === "PATCH" && new URL(request.url()).pathname === "/api/project/project-0",
   )
+
   await rename.press("Enter")
   expect((await renamed).postDataJSON()).toEqual({ name: "Renamed project" })
   await expect(panel.getByRole("button", { name: "Renamed project", exact: true })).toBeVisible()
@@ -217,11 +232,13 @@ test("project settings open as a nested view that keeps its route", async ({ pag
 
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
+
   const route = (url: URL) =>
     url.pathname === "/settings" &&
     url.searchParams.get("server") === SERVER &&
     url.searchParams.get("project") === directory &&
     url.searchParams.get("tab") === "workspaces"
+
   await expect(page).toHaveURL(route)
   await page.reload()
   await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
@@ -257,13 +274,17 @@ for (const field of [
     const { settings } = await open(page, {
       project: { icon: { color: "orange" }, commands: { start: "echo setup" }, sandboxes },
     })
+
     await openProject(page)
     const hold = await holdRoute(page, (url) => url.pathname === `/api/project/${projectID}`, { method: "PATCH" })
+
     const edit = async (value: string) => {
       if (field.name === "color") {
         await settings.getByRole("button", { name: `Select ${value} color`, exact: true }).click()
+
         return
       }
+
       const input = settings.getByRole("textbox", { name: field.label, exact: true })
       await input.fill(value)
       await input.blur()
@@ -279,13 +300,16 @@ for (const field of [
 
     await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
     await settings.getByRole("tab", { name: "General", exact: true }).click()
+
     if (field.name === "color") {
       await expect(settings.getByRole("button", { name: "Select orange color", exact: true })).toHaveAttribute(
         "aria-pressed",
         "true",
       )
+
       return
     }
+
     await expect(settings.getByRole("textbox", { name: field.label, exact: true })).toHaveValue(field.initial)
   })
 }
@@ -345,10 +369,12 @@ test.describe("pages open before slow data", () => {
   test("worktrees", async ({ page }) => {
     const { settings } = await open(page)
     const inventory = await holdRoute(page, (url) => url.pathname === "/api/worktree", { method: "GET" })
+
     const sessions = await holdRoute(
       page,
       (url) => url.pathname === "/api/session" && url.searchParams.has("directory"),
     )
+
     await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
     await inventory.arrived
     await expect(settings.getByRole("heading", { name: "Worktrees", exact: true })).toBeVisible()
@@ -390,6 +416,7 @@ test.describe("pages open before slow data", () => {
       const gate = Promise.withResolvers<void>()
       await page.route(contributors, async (route) => {
         await gate.promise
+
         if (fails) return route.abort("failed")
         await route.fulfill({
           json: [],
@@ -409,9 +436,11 @@ test.describe("pages open before slow data", () => {
 
       const website = settings.getByRole("link", { name: "www.opencode.ai", exact: true })
       await website.focus()
+
       const settled = fails
         ? page.waitForEvent("requestfailed", (request) => request.url() === contributors)
         : page.waitForResponse(contributors)
+
       gate.resolve()
       await settled
       await expect(settings.getByRole("link", { name: fails ? "935 others" : "988 others", exact: true })).toBeVisible()
@@ -423,10 +452,12 @@ test.describe("pages open before slow data", () => {
 test("worktrees follow inventory events, wait for session counts, and delete by project", async ({ page }) => {
   const empty = `${directory}/empty-workspace`
   const discovered = `${directory}/discovered-workspace`
+
   const inventory: WorktreeDirectory[] = [
     { directory },
     ...[...sandboxes, empty].map((item) => ({ directory: item, strategy: "git" })),
   ]
+
   const view = await open(page, {
     project: { sandboxes: [...sandboxes, empty] },
     worktrees: () => inventory,
@@ -437,12 +468,15 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
       )
     },
   })
+
   const settings = view.settings
+
   // Holding every directory would fill the request budget; hold only the worktree without sessions.
   const sessions = await holdRoute(
     page,
     (url) => url.pathname === "/api/session" && url.searchParams.get("directory") === empty,
   )
+
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   const row = settings.locator(".settings-workspaces-row").filter({ has: page.getByLabel(empty, { exact: true }) })
   await expect(row).toContainText("Loading messages")
@@ -455,10 +489,13 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
   const listed = page.waitForResponse(
     (response) => new URL(response.url()).pathname === "/api/worktree" && response.request().method() === "GET",
   )
+
   const read = page.waitForResponse((response) => {
     const url = new URL(response.url())
+
     return url.pathname === "/api/session" && url.searchParams.get("directory") === discovered
   })
+
   // Home never listed this session, so only the new worktree's directory read can show it.
   view.sessions.push(session({ id: "ses_discovered", directory: discovered, title: "Discovered session", projectID }))
   inventory.push({ directory: discovered, strategy: "git" })
@@ -473,9 +510,11 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
   await openProject(page)
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await settings.getByRole("button", { name: "Delete “workspace-1”?", exact: true }).click()
+
   const deleting = page.waitForRequest(
     (request) => new URL(request.url()).pathname === "/api/worktree" && request.method() === "DELETE",
   )
+
   await page
     .getByRole("dialog", { name: "Delete “workspace-1”?", exact: true })
     .getByRole("button", { name: "Delete worktree", exact: true })
@@ -504,7 +543,9 @@ test.describe("worktrees prefetch", () => {
       const sessions: string[] = []
       page.on("request", (request) => {
         const url = new URL(request.url())
+
         if (url.pathname === "/api/worktree/refresh") refreshes.push(request.postDataJSON().projectID)
+
         if (url.pathname === "/api/session" && url.searchParams.has("directory"))
           sessions.push(url.searchParams.get("directory")!)
       })
@@ -524,9 +565,11 @@ test.describe("worktrees prefetch", () => {
           "requestfinished",
           (request) => new URL(request.url()).pathname === "/api/worktree",
         )
+
         inventory.release()
         await finished
       }
+
       await worktrees.click()
       await expect(worktrees).toHaveAttribute("aria-selected", "true")
       inventory.release()
@@ -556,15 +599,18 @@ test.describe("worktrees prefetch", () => {
       async (route) => {
         const requested = new URL(route.request().url()).searchParams.get("projectID") ?? ""
         calls.worktrees.push(requested)
+
         if (requested === other.id) return route.fulfill({ json: [{ directory: other.worktree }] })
         await route.fallback()
       },
     )
     const worktrees = settings.getByRole("tab", { name: "Worktrees", exact: true })
+
     const fetched = page.waitForEvent(
       "requestfinished",
       (request) => new URL(request.url()).pathname === "/api/project",
     )
+
     await worktrees.hover()
     await fetched
     await worktrees.focus()
@@ -603,6 +649,7 @@ for (const row of ["configured", "disabled", "failure"] as const) {
       (url) => url.pathname === "/api/config",
       async (route) => {
         await gate.promise
+
         if (state.fail) return route.fulfill({ status: 404, json: {} })
         await route.fulfill({ json: row === "disabled" ? [{ type: "document", info: { lsp: false } }] : lsp })
       },
@@ -617,13 +664,16 @@ for (const row of ["configured", "disabled", "failure"] as const) {
     if (row === "disabled") {
       await expect(panel.getByText("Language servers disabled", { exact: true })).toBeVisible()
       await expect(panel.locator(".project-settings-extension-row")).toHaveCount(0)
+
       return
     }
+
     if (row === "failure") {
       await expect(panel.getByText("Could not load language server configuration", { exact: true })).toBeVisible()
       state.fail = false
       await panel.getByRole("button", { name: "Retry", exact: true }).click()
     }
+
     const rows = panel.locator(".project-settings-extension-row")
     await expect(rows.filter({ hasText: "typescript" })).toContainText("Disabled in config")
     await expect(rows.filter({ hasText: "typescript" })).toContainText(".ts, .tsx")
@@ -682,10 +732,13 @@ for (const row of [
         { id: "anthropic", name: "Anthropic", methods: [{ type: "key" }], connections: [] },
       ],
     })
+
     await settings.getByRole("tab", { name: "Providers", exact: true }).click()
     await expect(settings.getByRole("heading", { name: "Popular providers" })).toBeVisible()
     const connected = settings.locator('[data-component="connected-providers-section"]')
+
     if (row.paid) await expect(connected.getByText("OpenCode Zen", { exact: true })).toBeVisible()
+
     if (!row.paid) await expect(settings.getByText("No connected providers")).toBeVisible()
     // Anthropic only exists in the integration fixture, so its row proves the integration list has loaded.
     await expect(settings.getByText("Anthropic", { exact: true })).toBeVisible()
@@ -741,11 +794,13 @@ for (const viewport of [
     await page.setViewportSize(viewport)
     const panel = settings.locator(".settings-content > .settings-panel:visible")
     const main = page.getByRole("main")
+
     if (viewport.bottom) {
       const toggle = settings.locator('[data-action="settings-mobile-titlebar-bottom"]')
       await toggle.locator('[data-slot="switch-control"]').click()
       await expect(toggle.getByRole("switch")).toBeChecked()
     }
+
     // Wheel over the outer gutter must not move the entire settings screen.
     await main.hover({ position: { x: 1, y: 200 } })
     await page.mouse.wheel(0, 10000)
@@ -764,23 +819,30 @@ for (const viewport of [
       "Server",
       "About",
     ]
+
     for (const [index, name] of pages.entries()) {
       if (viewport.width >= 816) await settings.getByRole("tab", { name, exact: true }).click()
+
       if (viewport.width < 816) {
         await settings.getByRole("button", { name: pages[Math.max(0, index - 1)], exact: true }).click()
         await page.getByRole("menuitemradio", { name, exact: true }).click()
       }
+
       if (name === "About") await expect(panel.getByText("Released under the MIT License")).toBeVisible()
+
       if (name !== "About")
         await expect(
           panel.getByRole("heading", { name: name === "Shortcuts" ? "Keyboard shortcuts" : name, exact: true }),
         ).toBeVisible()
+
       if (name === "Worktrees") {
         const last = settings.getByText("Workspace 12 session", { exact: true })
         await last.scrollIntoViewIfNeeded()
         await expect(last).toBeInViewport()
+
         if (!viewport.bottom) await expect(settings.getByRole("button", { name: "Back to app" })).toBeInViewport()
       }
+
       await panel.hover()
       await page.mouse.wheel(0, 10000)
       await expect
@@ -791,6 +853,7 @@ for (const viewport of [
           () =>
             panel.evaluate((element) => {
               const body = element.querySelector(".settings-tab-body, .settings-about-content")!
+
               return element.getBoundingClientRect().bottom - body.lastElementChild!.getBoundingClientRect().bottom
             }),
           { message: `${name} bottom clearance` },

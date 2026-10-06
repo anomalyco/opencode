@@ -63,7 +63,6 @@ function Group(props: GroupProps) {
 function GroupContent(props: GroupProps) {
   const ctx = use()
   const theme = useTheme()
-  const renderer = useRenderer()
   const disclosure = useDisclosure(props)
   const id = disclosure.id
   const expanded = disclosure.expanded
@@ -127,7 +126,6 @@ function GroupContent(props: GroupProps) {
     )
     return `${completed() ? "Explored" : "Exploring"}: ${names.join(", ")}`
   })
-  const failed = () => tools().some((part) => part.state.status === "error")
   const toggle = disclosure.toggle
   const children = (mode: "normal" | "thought" | "tool") => (
     <Children {...props} nodes={props.node.children} mode={mode} />
@@ -144,7 +142,7 @@ function GroupContent(props: GroupProps) {
           <Show when={grouped()} fallback={children("normal")}>
             <Show when={tools().length > 0}>
               <InlineToolRow
-                icon={failed() ? "✗" : completed() ? "→" : "✱"}
+                icon={completed() ? "→" : "✱"}
                 color={hover() ? theme.text.base : theme.text.muted}
                 complete={completed()}
                 pending={label()}

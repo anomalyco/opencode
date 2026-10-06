@@ -1,9 +1,11 @@
 import type { JSX } from "solid-js"
 import type { ChangeKind } from "../review/contract"
-import { Service, type SessionView } from "../sdk"
+import { Contract, type MountedSession, type SessionScreen } from "../sdk"
 
 export interface FileTreeProps {
-  readonly session: SessionView
+  /** The session screen that owns the rendered files. */
+  readonly screen: SessionScreen
+  readonly session: MountedSession
   /** The files to show, as a tree of only these paths. */
   readonly allowed: readonly string[]
   readonly kinds?: ReadonlyMap<string, ChangeKind>
@@ -12,7 +14,9 @@ export interface FileTreeProps {
 }
 
 export interface FileListProps {
-  readonly session: SessionView
+  /** The session screen that owns the rendered files. */
+  readonly screen: SessionScreen
+  readonly session: MountedSession
   readonly files: readonly string[]
   readonly kinds?: ReadonlyMap<string, ChangeKind>
   readonly active?: string
@@ -27,4 +31,18 @@ export interface FileTree {
   List(props: FileListProps): JSX.Element
 }
 
-export const FileTree = Service.define<FileTree>("file.tree")
+export const FileTree = Contract.define<FileTree, "file.tree">("file.tree")
+
+export interface OpenInAppProps {
+  /** The session screen whose workspace opens. */
+  readonly screen: SessionScreen
+  readonly session: MountedSession
+}
+
+/** The desktop "Open in" button, for a panel header that shows it in place of the tab strip's. */
+export interface OpenInApp {
+  /** Renders nothing on the web or for a remote server. While it is mounted, the tab strip leaves out its own. */
+  Button(props: OpenInAppProps): JSX.Element
+}
+
+export const OpenInApp = Contract.define<OpenInApp, "file.openInApp">("file.openInApp")

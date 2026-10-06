@@ -55,22 +55,35 @@ export class ServerUnavailableError extends Schema.TaggedError<ServerUnavailable
   {},
 ) {}
 
-const Errors = Schema.Union([
-  SessionNotFoundError,
-  SessionDirectoryMismatchError,
-  InvalidConfigOptionError,
-  InvalidModelError,
-  InvalidEffortError,
-  InvalidModeError,
-  InvalidAdditionalDirectoryError,
-  AuthRequiredError,
-  UnknownAuthMethodError,
-  InvalidRequestError,
-  ServiceFailureError,
-  ServerUnavailableError,
-])
+export class CatalogNotReadyError extends Schema.TaggedError<CatalogNotReadyError>()("ACPCatalogNotReadyError", {
+  reason: Schema.Literals(["models", "agents"]),
+}) {
+  override get message() {
+    return this.reason === "models" ? "No models are available" : "No primary agents are available"
+  }
+}
 
-export type Error = typeof Errors.Type
+export class CatalogLoadError extends Schema.TaggedError<CatalogLoadError>()("ACPCatalogLoadError", {
+  cause: Schema.Defect(),
+}) {}
+
+export type CatalogError = CatalogNotReadyError | CatalogLoadError
+
+export type Error =
+  | SessionNotFoundError
+  | SessionDirectoryMismatchError
+  | InvalidConfigOptionError
+  | InvalidModelError
+  | InvalidEffortError
+  | InvalidModeError
+  | InvalidAdditionalDirectoryError
+  | AuthRequiredError
+  | UnknownAuthMethodError
+  | InvalidRequestError
+  | ServiceFailureError
+  | ServerUnavailableError
+
+export type Failure = Error | RequestError | CatalogError
 
 export function toRequestError(error: Error): RequestError {
   switch (error._tag) {
@@ -118,9 +131,9 @@ export function toRequestError(error: Error): RequestError {
   return exhaustive
 }
 
-export function fromUnknown(error: unknown, service?: string) {
+export function fromUnknown(error: unknown) {
   const errorName = error instanceof Error ? error.name : undefined
-  return new ServiceFailureError({ safeMessage: "Internal service failure", service, errorName })
+  return new ServiceFailureError({ safeMessage: "Internal service failure", errorName })
 }
 
 export * as ACPError from "./error"

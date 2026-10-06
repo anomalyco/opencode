@@ -6,11 +6,14 @@ import { rankSettings } from "./search-results"
 import type { SettingsView } from "./surface"
 
 const strings: Record<string, string> = { ...dict, ...en }
+
 const project = { id: "proj_opencode", name: "OpenCode", worktree: "/projects/opencode", expanded: false }
+
 const servers: SettingsSearchServer[] = [
   { key: "local", name: "Local server", connected: true, projects: [project] },
   { key: "remote", name: "Build server", connected: true, projects: [project] },
 ]
+
 const root: SettingsView = { type: "root", tab: "general" }
 
 function index(input: Partial<Parameters<typeof settingsSearchIndex>[0]> = {}) {
@@ -133,6 +136,7 @@ describe("settings search ranking", () => {
       tab: "general",
       parent: "server",
     }
+
     expect(rankSettings("opencode name", index(), origin).map((item) => item.server)).toEqual(["remote", "local"])
   })
 

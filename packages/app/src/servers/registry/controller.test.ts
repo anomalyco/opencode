@@ -10,6 +10,7 @@ describe("sortServerConnections", () => {
     const offline = server("http://offline")
     const preferred = server("http://preferred")
     const unknown = server("http://unknown")
+
     const result = sortServerConnections({
       servers: [first, offline, preferred, unknown],
       health: {

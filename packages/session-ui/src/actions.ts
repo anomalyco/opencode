@@ -28,4 +28,10 @@ export type SessionUserAttachmentReference = {
 export type SessionUserActions = {
   openAttachment?: (file: PromptFileAttachment) => void
   revert?: (input: { sessionID: string; messageID: string }) => Promise<void> | void
+  /** A steer the server has not delivered yet. Like the TUI, it can move to the queue or be deleted. */
+  pending?: {
+    steer: (messageID: string) => boolean
+    queue: (input: { sessionID: string; messageID: string }) => Promise<void>
+    remove: (input: { sessionID: string; messageID: string }) => Promise<void>
+  }
 }

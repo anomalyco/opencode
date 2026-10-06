@@ -1,15 +1,25 @@
-import type { PermissionOption, ToolCallLocation } from "@agentclientprotocol/sdk"
+import type { PermissionOption, SessionUpdate } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import type { Permission } from "@opencode/schema/permission"
 import type { Session } from "@opencode/schema/session"
 import { Patch } from "@opencode/util/patch"
-import { applyPatch } from "diff"
-import { Cause, Effect, Option, Schema } from "effect"
+import { applyPatch, parsePatch, reversePatch, structuredPatch, type StructuredPatch } from "diff"
+import { Effect, Option, Schema } from "effect"
+import { ACPChild } from "./child"
 import { ACPClient } from "./client"
 import type { ACPConnection } from "./connection"
-import { ACPTranslate } from "./translate"
-import { absolutePath, filePath, patchHunks, pendingToolCall, stringValue, toLocations, type ToolInput } from "./tool"
+import {
+  absolutePath,
+  canonicalName,
+  filePath,
+  patchHunks,
+  pendingToolCall,
+  stringValue,
+  toLocations,
+  type DiffSource,
+  type ToolInput,
+} from "./tool"
 
 type PermissionEvent = Extract<OpenCodeEvent, { type: "permission.asked" }>
 type Tool = { readonly id: string; readonly name: string; readonly input: ToolInput }
@@ -23,7 +33,7 @@ type Input = {
   readonly clientSessionID: string
   readonly cwd: string
   readonly tool?: Tool
-  readonly child?: ACPTranslate.ChildSession
+  readonly child?: ACPChild.Session
 }
 
 const options: PermissionOption[] = [
@@ -34,41 +44,28 @@ const options: PermissionOption[] = [
 
 const decodeFiles = Schema.decodeUnknownOption(Schema.Array(FileDiff.Info))
 
-export const reply = Effect.fn("cli.acp.permission.reply")(function* (input: Input, cancelled: Effect.Effect<void>) {
-  yield* Effect.uninterruptibleMask((restore) =>
-    // The race starts racers in order and stops once one is done, so an earlier cancel never starts the ask.
-    restore(cancelled.pipe(Effect.as("reject" as const), Effect.raceFirst(ask(input)))).pipe(
-      Effect.tapCauseIf(Cause.hasDies, (cause) => Effect.logWarning("ACP permission ask failed", cause)),
-      Effect.catchCause(() => Effect.succeed("reject" as const)),
-      Effect.flatMap((decision) => respond(input, decision)),
-    ),
-  )
-})
-
-const ask = Effect.fnUntraced(function* (input: Input) {
+export const ask = Effect.fnUntraced(function* (input: Input) {
   const toolName = input.tool?.name ?? input.event.data.action
   const toolInput = input.tool?.input ?? input.event.data.metadata ?? {}
   const previews = yield* permissionPreviews(toolName, toolInput, input.event.data.metadata, input.cwd).pipe(
     Effect.orElseSucceed((): Preview[] => []),
   )
-  const toolCallID = input.tool?.id ?? input.event.data.id
+  const title = permissionTitle(toolName, toolInput, previews)
   const toolCall = pendingToolCall({
-    toolCallId: input.child ? `${input.child.id}:${toolCallID}` : toolCallID,
+    toolCallId: ACPChild.toolCallID(input.child, input.tool?.id ?? input.event.data.id),
     toolName,
-    state: {
-      input: toolInput,
-      title: prefixedTitle(input.child?.title, permissionTitle(toolName, toolInput, previews)),
-    },
+    state: { input: toolInput, title: title ? ACPChild.prefixTitle(input.child, title) : input.child?.title },
     cwd: input.cwd,
   })
   const result = yield* input.connection.requestPermission({
     sessionId: input.clientSessionID,
     toolCall: {
       ...toolCall,
+      name: input.tool?.name,
       rawInput: input.tool ? toolCall.rawInput : undefined,
       locations: permissionLocations(toolName, toolInput, input.event.data, input.cwd),
       ...(previews.length > 0 ? { content: previews } : {}),
-      ...(input.child ? { _meta: ACPTranslate.childSessionMeta(input.child) } : {}),
+      ...(input.child ? { _meta: ACPChild.meta(input.child) } : {}),
     },
     options,
   })
@@ -76,16 +73,50 @@ const ask = Effect.fnUntraced(function* (input: Input) {
   return selected === "once" || selected === "always" ? selected : "reject"
 })
 
-function respond(input: Input, decision: Permission.Reply) {
-  return input.client.permission
-    .reply({ sessionID: input.sessionID, requestID: input.event.data.id, decision })
-    .pipe(Effect.catch(ACPClient.classify))
+export function respond(input: Input, decision: Permission.Reply) {
+  return input.client.permission.reply({ sessionID: input.sessionID, requestID: input.event.data.id, decision }).pipe(
+    Effect.catchTag("PermissionNotFoundError", () => Effect.void),
+    Effect.catch(ACPClient.classify),
+  )
 }
 
-function prefixedTitle(prefix: string | undefined, title: string | undefined) {
-  if (!prefix) return title
-  if (!title) return prefix
-  return `${prefix}: ${title}`
+export const withCompletedDiffs = Effect.fnUntraced(function* (
+  update: SessionUpdate,
+  source: DiffSource | undefined,
+  cwd: string,
+) {
+  if (!source || update.sessionUpdate !== "tool_call_update") return update
+  const hunks = canonicalName(source.toolName) === "patch" ? patchHunks(source.input) : []
+  const diffs = yield* Effect.forEach(
+    Option.getOrElse(decodeFiles(source.metadata?.files), () => []),
+    (file) =>
+      Effect.gen(function* () {
+        const path = absolutePath(file.file, cwd)
+        const newText = file.status === "deleted" ? "" : yield* Effect.tryPromise(() => Bun.file(path).text())
+        if (file.status === "added") return [diff(path, null, newText)]
+        const recorded = parsePatch(file.patch)[0]
+        if (!recorded) return []
+        const oldText = yield* Effect.try(() => applyPatch(newText, reversePatch(recorded)))
+        if (oldText !== false) return [diff(path, oldText, newText)]
+        // Core trims indentation from patch-tool diffs, so rebuild those from its hunks and keep them if the ranges agree.
+        const hunk = hunks.find(
+          (item) => item.type === "update" && absolutePath(item.movePath ?? item.path, cwd) === path,
+        )
+        if (hunk?.type !== "update" || hunk.chunks.some((chunk) => !chunk.oldLines.length || !chunk.newLines.length))
+          return []
+        const chunks = hunk.chunks.map((chunk) => ({ ...chunk, oldLines: chunk.newLines, newLines: chunk.oldLines }))
+        const rebuilt = (yield* Effect.try(() => Patch.derive(hunk.path, chunks, newText))).content
+        return ranges(structuredPatch(path, path, rebuilt, newText)) === ranges(recorded)
+          ? [diff(path, rebuilt, newText)]
+          : []
+      }).pipe(Effect.orElseSucceed((): Preview[] => [])),
+    { concurrency: "unbounded" },
+  ).pipe(Effect.map((items) => items.flat()))
+  return diffs.length === 0 ? update : { ...update, content: [...(update.content ?? []), ...diffs] }
+})
+
+function ranges(patch: StructuredPatch) {
+  return patch.hunks.map((hunk) => `${hunk.oldStart},${hunk.oldLines},${hunk.newStart},${hunk.newLines}`).join(" ")
 }
 
 // Core trims the patch tool's diffs for display, which breaks `applyPatch`, so its previews come from its own hunks.
@@ -95,8 +126,7 @@ const permissionPreviews = Effect.fnUntraced(function* (
   metadata: ToolInput | undefined,
   cwd: string,
 ) {
-  const tool = toolName.toLocaleLowerCase()
-  if (tool === "patch" || tool === "apply_patch") return yield* patchPreviews(input, cwd)
+  if (canonicalName(toolName) === "patch") return yield* patchPreviews(input, cwd)
   const files = Option.getOrElse(decodeFiles(metadata?.files), () => [])
   const previews = yield* Effect.forEach(
     files,
@@ -104,7 +134,7 @@ const permissionPreviews = Effect.fnUntraced(function* (
       Effect.gen(function* () {
         const path = absolutePath(file.file, cwd)
         const oldText = file.status === "added" ? null : yield* Effect.tryPromise(() => Bun.file(path).text())
-        const newText = applyPatch(oldText ?? "", file.patch)
+        const newText = yield* Effect.try(() => applyPatch(oldText ?? "", file.patch))
         return newText === false ? [] : [diff(path, oldText, newText)]
       }),
     { concurrency: "unbounded" },
@@ -137,7 +167,7 @@ function diff(path: string, oldText: string | null, newText: string) {
 
 function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyArray<Preview>) {
   if (previews.length > 1) return `${previews.length} files`
-  switch (toolName.toLocaleLowerCase()) {
+  switch (canonicalName(toolName)) {
     case "external_directory":
       return stringValue(input.description) ?? stringValue(input.command) ?? stringValue(input.parentDir)
     case "webfetch":
@@ -151,19 +181,13 @@ function permissionTitle(toolName: string, input: ToolInput, previews: ReadonlyA
     case "edit":
     case "write":
     case "patch":
-    case "apply_patch":
       return filePath(input) ?? previews[0]?.path
     default:
       return undefined
   }
 }
 
-function permissionLocations(
-  toolName: string,
-  input: ToolInput,
-  ask: PermissionEvent["data"],
-  cwd: string,
-): ToolCallLocation[] {
+function permissionLocations(toolName: string, input: ToolInput, ask: PermissionEvent["data"], cwd: string) {
   const locations = toLocations(toolName, input, cwd)
   if (locations.length > 0 || !PathActions.has(ask.action)) return locations
   const paths = ask.resources.flatMap((resource) => {

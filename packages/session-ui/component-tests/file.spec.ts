@@ -6,9 +6,11 @@ for (const split of [false, true]) {
       const root = await mount("components-session-review--inline-changes", { args: { split }, globals: { theme } })
       const diffs = root.locator("diffs-container")
       await expect(diffs).toHaveCount(2)
+
       for (const diff of await diffs.all()) {
         await expect(diff.locator('[data-line] [style*="--syntax-"]')).not.toHaveCount(0)
       }
+
       const additions = root.locator('[data-line-type="change-addition"] [data-diff-span]')
       await expect(additions).toHaveText(["select-text"])
       await expect(root.locator('[data-line-type="context"] [data-diff-span]')).toHaveCount(0)

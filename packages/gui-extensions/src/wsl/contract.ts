@@ -1,8 +1,10 @@
 import { Schema } from "effect"
-import { Remote } from "../sdk"
+import { Ipc } from "../sdk"
 
 export const WslServerConfig = Schema.Struct({ id: Schema.String, distro: Schema.String })
+
 export type WslServerConfig = typeof WslServerConfig.Type
+
 export const WslServerRuntime = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("starting") }),
   Schema.Struct({
@@ -13,7 +15,9 @@ export const WslServerRuntime = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("failed"), message: Schema.String }),
   Schema.Struct({ kind: Schema.Literal("stopped") }),
 ])
+
 export type WslServerRuntime = typeof WslServerRuntime.Type
+
 export const WslJob = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("runtime"), startedAt: Schema.Number }),
   Schema.Struct({ kind: Schema.Literal("distros"), startedAt: Schema.Number }),
@@ -26,21 +30,29 @@ export const WslJob = Schema.Union([
   }),
   Schema.Struct({ kind: Schema.Literal("install-opencode"), distro: Schema.String, startedAt: Schema.Number }),
 ])
+
 export type WslJob = typeof WslJob.Type
+
 export const WslRuntimeCheck = Schema.Struct({
   available: Schema.Boolean,
   version: Schema.NullOr(Schema.String),
   error: Schema.NullOr(Schema.String),
 })
+
 export type WslRuntimeCheck = typeof WslRuntimeCheck.Type
+
 export const WslInstalledDistro = Schema.Struct({
   name: Schema.String,
   version: Schema.NullOr(Schema.Number),
   isDefault: Schema.Boolean,
 })
+
 export type WslInstalledDistro = typeof WslInstalledDistro.Type
+
 export const WslOnlineDistro = Schema.Struct({ name: Schema.String, label: Schema.String })
+
 export type WslOnlineDistro = typeof WslOnlineDistro.Type
+
 export const WslDistroProbe = Schema.Struct({
   name: Schema.String,
   canExecute: Schema.Boolean,
@@ -48,7 +60,9 @@ export const WslDistroProbe = Schema.Struct({
   hasCurl: Schema.Boolean,
   error: Schema.NullOr(Schema.String),
 })
+
 export type WslDistroProbe = typeof WslDistroProbe.Type
+
 export const WslOpencodeCheck = Schema.Struct({
   distro: Schema.String,
   resolvedPath: Schema.NullOr(Schema.String),
@@ -57,9 +71,13 @@ export const WslOpencodeCheck = Schema.Struct({
   matchesDesktop: Schema.NullOr(Schema.Boolean),
   error: Schema.NullOr(Schema.String),
 })
+
 export type WslOpencodeCheck = typeof WslOpencodeCheck.Type
+
 export const WslServerItem = Schema.Struct({ config: WslServerConfig, runtime: WslServerRuntime })
+
 export type WslServerItem = typeof WslServerItem.Type
+
 export const WslServersState = Schema.Struct({
   runtime: Schema.NullOr(WslRuntimeCheck),
   installed: Schema.Array(WslInstalledDistro),
@@ -70,13 +88,15 @@ export const WslServersState = Schema.Struct({
   servers: Schema.Array(WslServerItem),
   job: Schema.NullOr(WslJob),
 })
+
 export type WslServersState = typeof WslServersState.Type
 
 const Name = Schema.Struct({ name: Schema.NonEmptyString })
+
 const Id = Schema.Struct({ id: Schema.NonEmptyString })
 
 /** WSL runtime, distros, and the OpenCode servers the main process runs inside them. */
-export const Wsl = Remote.define({
+export const Wsl = Ipc.define({
   id: "wsl",
   state: WslServersState,
   methods: {

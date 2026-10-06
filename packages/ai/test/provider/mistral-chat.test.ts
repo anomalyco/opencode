@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test"
 import { ConfigProvider, Effect } from "effect"
 import { HttpClientRequest } from "effect/unstable/http"
-import { LLM, LLMEvent, Message, ToolDefinition, Media } from "../../src/index.js"
+import { LLM, LLMEvent, Message, SystemPart, ToolDefinition, Media } from "../../src/index.js"
 import { Mistral } from "../../src/providers/index.js"
 import { MistralChat } from "../../src/protocols/index.js"
 import { LLMClient } from "../../src/route.js"
@@ -41,7 +41,7 @@ describe("Mistral Chat", () => {
       const prepared = yield* compileRequest(
         LLM.request({
           model,
-          system: "Initial",
+          system: [SystemPart.make("Initial\nKeep this newline."), SystemPart.make("Second instructions.")],
           messages: [
             Message.system("Updated"),
             Message.user([
@@ -105,7 +105,13 @@ describe("Mistral Chat", () => {
         reasoning_effort: "high",
       })
       expect(prepared.body.messages.slice(0, 4)).toMatchObject([
-        { role: "system", content: "Initial" },
+        {
+          role: "system",
+          content: [
+            { type: "text", text: "Initial\nKeep this newline." },
+            { type: "text", text: "Second instructions." },
+          ],
+        },
         { role: "user", content: "<system-update>\nUpdated\n</system-update>" },
         {
           role: "user",

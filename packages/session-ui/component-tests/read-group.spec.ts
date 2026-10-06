@@ -14,6 +14,7 @@ story("collapses each run of reads inside a Used group into one row", async ({ m
   const reads = group.locator('[data-component="read-tool-group"]')
   await expect(reads).toHaveCount(9)
   await expect(reads.locator('[data-slot="basic-tool-tool-subtitle"]').first()).toHaveText(runs[0]!)
+
   for (const [index, text] of runs.entries())
     await expect(reads.nth(index).locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText(text)
   await expect(reads.first().locator('[data-slot="read-tool-group-file"]')).toHaveCount(5)
@@ -24,11 +25,13 @@ story("collapses each run of reads inside a Used group into one row", async ({ m
   await expect(group.locator('[data-slot="context-tool-group-item"]').nth(1)).toHaveText(/^Thought/)
 
   const thought = group.locator('[data-component="reasoning-part"]').first()
+
   const color = (locator: typeof thought, slot: string) =>
     locator
       .locator(`[data-slot="${slot}"]`)
       .first()
       .evaluate((node) => getComputedStyle(node).color)
+
   expect(await color(reads.first(), "basic-tool-tool-title")).toBe(await color(thought, "basic-tool-tool-title"))
   expect(await color(reads.first(), "basic-tool-tool-subtitle")).toBe(await color(thought, "basic-tool-tool-subtitle"))
   const box = await reads.first().boundingBox()
@@ -62,6 +65,7 @@ story("merges adjacent reads when tools render outside a Used group", async ({ m
   await expect(root.locator('[data-component="collapsed-tool-group"]')).toHaveCount(0)
   const reads = root.locator('[data-timeline-row="AssistantPart"] [data-component="read-tool-group"]')
   await expect(reads).toHaveCount(9)
+
   for (const [index, text] of runs.entries())
     await expect(reads.nth(index).locator('[data-slot="basic-tool-tool-subtitle"]')).toHaveText(text)
   await expect(root.locator('[data-component="reasoning-part"]')).toHaveCount(8)

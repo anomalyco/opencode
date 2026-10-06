@@ -8,17 +8,12 @@ import {
   type SurfaceName,
 } from "@opencode/theme/tui"
 import {
-  DEFAULT_THEMES,
-  addTheme,
   allThemes,
   hasTheme,
   parseTheme,
-  selectedForeground,
   setCustomThemes,
   setSystemTheme,
   subscribeThemes,
-  upsertTheme,
-  type Theme,
   type ThemeDocumentSource,
 } from "../theme"
 import { generateSystem, terminalMode } from "../theme/system"
@@ -78,19 +73,6 @@ export const createThemeSource = (config: string): ThemeSource => ({
     return () => process.off("SIGUSR2", refresh)
   },
 })
-
-export { discoverThemes } from "../theme/discovery"
-
-export {
-  DEFAULT_THEMES,
-  addTheme,
-  allThemes,
-  generateSyntax,
-  hasTheme,
-  selectedForeground,
-  upsertTheme,
-  type Theme,
-} from "../theme"
 
 const THEME_REFRESH_DELAYS = [250, 1000] as const
 

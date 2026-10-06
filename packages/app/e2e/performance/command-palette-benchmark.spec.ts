@@ -20,13 +20,16 @@ for (const home of [false, true]) {
         "input",
         () => {
           performance.mark("palette-input")
+
           const observer = new MutationObserver(() => {
             if (document.querySelectorAll('[role="dialog"] [role="option"]').length !== 1) return
             const selected = document.querySelector('[role="dialog"] [role="option"][aria-selected="true"]')
+
             if (!selected?.textContent?.includes(title)) return
             performance.measure("palette-result", "palette-input")
             observer.disconnect()
           })
+
           observer.observe(document, { subtree: true, childList: true, attributes: true, characterData: true })
         },
         { once: true, capture: true },
@@ -38,9 +41,11 @@ for (const home of [false, true]) {
       "aria-selected",
       "true",
     )
+
     const result = await page.evaluate(() =>
       performance.getEntriesByName("palette-result").map((entry) => entry.duration),
     )
+
     expect(result).toHaveLength(1)
     report({ inputToResultMs: result[0] }, { home, query, data: "fixture; immediate server responses" })
   })

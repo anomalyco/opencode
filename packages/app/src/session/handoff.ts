@@ -4,14 +4,17 @@ import { createStore } from "solid-js/store"
 const MAX = 40
 
 const [messages, setMessages] = createStore<Record<string, SessionMessageUser | undefined>>({})
+
 const messageOrder = new Map<string, true>()
 
 export const setSessionMessageHandoff = (key: string, message: SessionMessageUser) => {
   messageOrder.delete(key)
   messageOrder.set(key, true)
   setMessages(key, message)
+
   while (messageOrder.size > MAX) {
     const first = messageOrder.keys().next().value
+
     if (first === undefined) return
     messageOrder.delete(first)
     setMessages(first, undefined)

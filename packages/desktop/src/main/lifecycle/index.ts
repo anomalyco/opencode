@@ -35,24 +35,33 @@ const runtime = Layer.effect(
     const pendingDeepLinks: string[] = []
     let shutdownReady = false
     const prepareToRestart = shutdown.run.pipe(Effect.ensuring(Effect.sync(() => (shutdownReady = true))))
+
     const focusWindow = (win: BrowserWindow | null) => {
       if (!win) return
+
       if (win.isMinimized()) win.restore()
       win.show()
       win.focus()
     }
+
     const emitDeepLinks = (urls: string[]) => {
       if (!urls.length) return
       pendingDeepLinks.push(...urls)
+
       const target = urls.flatMap((url) => {
         const id = consoleReturnWindow(url)
         const win = id ? getWindowByID(id) : null
+
         return win ? [win] : []
       })[0]
+
       const win = target ?? getLastFocusedWindow()
+
       if (win) emitIpcEvent(win.webContents, new DeepLinksOpened({ urls }))
+
       return win
     }
+
     const relaunch = () => {
       setAppQuitting()
       runFork(
@@ -66,32 +75,41 @@ const runtime = Layer.effect(
         ),
       )
     }
+
     const secondInstance = (_event: Event, argv: string[]) => {
       const urls = argv.filter((arg) => arg.startsWith("opencode://"))
+
       if (urls.length) {
         runFork(Effect.logInfo("deep link received via second-instance", { urls }))
         focusWindow(emitDeepLinks(urls) ?? null)
       }
+
       if (!urls.length) focusWindow(getLastFocusedWindow())
     }
+
     const openUrl = (event: Event, url: string) => {
       event.preventDefault()
       runFork(Effect.logInfo("deep link received via open-url", { url }))
       focusWindow(emitDeepLinks([url]) ?? null)
     }
+
     const beforeQuit = (event: Event) => {
       setAppQuitting()
+
       if (shutdownReady) return
       event.preventDefault()
       runFork(prepareToRestart.pipe(Effect.ensuring(Effect.sync(() => app.quit()))))
     }
+
     const willQuit = () => {
       setAppQuitting()
       runFork(shutdown.run)
     }
+
     const childProcessGone = (_event: Event, details: Electron.Details) => {
       runFork(scoped("utility", Effect.logError("child process gone", { details })))
     }
+
     const renderProcessGone = (
       _event: Event,
       webContents: Electron.WebContents,
@@ -101,16 +119,20 @@ const runtime = Layer.effect(
         scoped("window", Effect.logError("app render process gone", { url: safeWebContentsURL(webContents), details })),
       )
     }
+
     const signal = () => {
       setAppQuitting()
       runFork(prepareToRestart.pipe(Effect.ensuring(Effect.sync(() => app.quit()))))
     }
+
     const windowAllClosed = () => {
       if (process.platform !== "darwin") app.quit()
     }
+
     const activate = () => {
       if (BrowserWindow.getAllWindows().length === 0) restoreWindows()
     }
+
     const resetRelaunchHandler = setRelaunchHandler(relaunch)
     let windowsWired = false
 
@@ -149,6 +171,7 @@ const runtime = Layer.effect(
           app.on("window-all-closed", windowAllClosed)
           app.on("activate", activate)
         }
+
         return restoreWindows()
       },
     })
@@ -169,6 +192,7 @@ export const layer = Layer.unwrap(
     // otherwise read as evidence of an earlier launch on a fresh install.
     yield* initializeFirstLaunchOnboarding(app.getPath("userData"))
     marks.onboarding = Date.now()
+
     return runtime.pipe(Layer.provideMerge(platform))
   }),
 )

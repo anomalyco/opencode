@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { currentValue } from "./select-options"
-import { rpcError, secondModel, startSession } from "./wire-fixture"
+import { rpcError, secondModel, startWire } from "./wire-fixture"
 
 describe("acp catalog and config options over the wire", () => {
   test("switches model, effort, and mode against the warm catalog", async () => {
-    await using acp = await startSession()
-    const sessionId = acp.sessionId
+    await using acp = await startWire()
+    acp.server.catalog.models.push({ ...secondModel, providerID: "test/sub" })
+    await acp.initialize()
+    const sessionId = (await acp.newSession()).sessionId
     const set = (configId: string, value: string) =>
       acp.request("session/set_config_option", { sessionId, configId, value })
 
@@ -32,5 +34,38 @@ describe("acp catalog and config options over the wire", () => {
       code: -32602,
       data: { modelId: "test/missing-model" },
     })
+    const overlap = "test/sub/second-model"
+    expect(currentValue(await set("model", overlap), "model")).toBe(overlap)
+    expect(currentValue(await set("model", `${overlap}/low`), "effort")).toBe("low")
+  })
+
+  test("answers the first session after a cold location activates its plugins (#52729, #52472)", async () => {
+    await using acp = await startWire()
+    const plugins = acp.server.catalog.plugins.splice(0)
+    acp.server.catalog.models.splice(1)
+    await acp.initialize()
+    const activated = Bun.sleep(200).then(() => {
+      acp.server.catalog.plugins.push(...plugins)
+      acp.server.catalog.models.push(secondModel)
+    })
+
+    const session = await acp.newSession()
+    const selected = await acp.request("session/set_config_option", {
+      sessionId: session.sessionId,
+      configId: "model",
+      value: "test/second-model",
+    })
+    await activated
+
+    expect(session.configOptions).toContainEqual(
+      expect.objectContaining({
+        id: "model",
+        options: [
+          { value: "test/second-model", name: "test/Second Model" },
+          { value: "test/test-model", name: "test/Test Model" },
+        ],
+      }),
+    )
+    expect(currentValue(selected, "model")).toBe("test/second-model")
   })
 })

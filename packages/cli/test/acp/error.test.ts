@@ -18,26 +18,34 @@ describe("acp errors", () => {
 })
 
 describe("acp error boundary over the wire", () => {
-  test.each<[string, (acp: Wire) => void]>([
-    ["ends", (acp) => acp.server.closeEvents()],
-    ["drops its connection", (acp) => acp.server.dropEvents()],
-  ])("reports an unavailable server when the event stream %s mid-turn and once the server stops", async (_, lose) => {
-    await using acp = await startSession({
-      onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), textDelta(sessionID, "msg_held", "working")],
-    })
-    const unavailable = {
-      code: -32603,
-      message: "Internal error: OpenCode server is unavailable",
-      data: { errorName: "ServerUnavailable" },
-    }
+  test.each<[string, (acp: Wire) => void, string[]]>([
+    ["ends", (acp) => acp.server.closeEvents(), []],
+    [
+      "drops its connection",
+      (acp) => acp.server.dropEvents(),
+      ["ACP catalog event stream failed", "ACP selection event stream failed"],
+    ],
+  ])(
+    "reports an unavailable server when the event stream %s mid-turn and once the server stops",
+    async (_, lose, logs) => {
+      await using acp = await startSession({
+        onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), textDelta(sessionID, "msg_held", "working")],
+      })
+      const unavailable = {
+        code: -32603,
+        message: "Internal error: OpenCode server is unavailable",
+        data: { errorName: "ServerUnavailable" },
+      }
 
-    const prompt = acp.prompt(acp.sessionId, "hold")
-    await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
-    await acp.request("session/set_mode", { sessionId: acp.sessionId, modeId: "build" })
-    lose(acp)
+      const prompt = acp.prompt(acp.sessionId, "hold")
+      await acp.waitForUpdate((item) => item.update.sessionUpdate === "agent_message_chunk")
+      await acp.request("session/set_mode", { sessionId: acp.sessionId, modeId: "build" })
+      lose(acp)
 
-    expect(await rpcError(prompt)).toEqual(unavailable)
-    await acp.server.stop()
-    expect(await rpcError(acp.request("session/list", {}))).toEqual(unavailable)
-  })
+      expect(await rpcError(prompt)).toEqual(unavailable)
+      await acp.server.stop()
+      expect(await rpcError(acp.request("session/list", {}))).toEqual(unavailable)
+      expect(acp.logs.map((log) => String(log.message)).toSorted()).toEqual(logs)
+    },
+  )
 })

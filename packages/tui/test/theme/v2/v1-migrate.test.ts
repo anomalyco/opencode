@@ -13,7 +13,6 @@ import type { ThemeV1Json } from "@opencode/theme/tui/v1"
 
 const opencodeV1 = opencodeSource as ThemeV1Json
 const opencodeLight = resolveThemeDocument(getOpenCodeTheme(), "light")
-const opencodeDark = resolveThemeDocument(getOpenCodeTheme(), "dark")
 const opencodeLightHues = allHues(opencodeLight)
 
 test("migrates resolved V1 modes into V2 tokens", () => {

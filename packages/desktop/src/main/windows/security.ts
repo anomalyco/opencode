@@ -14,7 +14,9 @@ export function allowRendererPermissions(win: BrowserWindow) {
   })
   win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin, details) => {
     if (!rendererPermissions.has(permission)) return false
+
     if (webContents && webContents.id !== webContentsId) return false
+
     return isRendererUrl(details.requestingUrl) || isRendererUrl(requestingOrigin)
   })
 }
@@ -22,6 +24,7 @@ export function allowRendererPermissions(win: BrowserWindow) {
 export function wireNavigationPolicy(win: BrowserWindow, openExternalURL: (url: string) => unknown) {
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (!isRendererUrl(url)) openExternalURL(url)
+
     return { action: "deny" }
   })
   win.webContents.on("will-navigate", (event, url) => {
@@ -45,9 +48,11 @@ export function wireRendererHeaders(win: BrowserWindow) {
       const frame = details.frame
       const renderer = !!frame && frame.parent === null && isRendererUrl(frame.url)
       const authorization = renderer && SidecarCredentials.authorization(SidecarCredentials.get(), details.url)
+
       if (authorization && !hasHeader(details.requestHeaders, "Authorization")) {
         upsertHeader(details.requestHeaders, "Authorization", authorization)
       }
+
       callback({ requestHeaders: details.requestHeaders })
     },
   )

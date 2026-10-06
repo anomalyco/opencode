@@ -123,7 +123,6 @@ export const dict = {
   "session.view.select": "Sessionsvy",
   "session.background.moveRunning": "Flytta till bakgrunden",
   "session.timeline.working": "Arbetar",
-  "session.review.wrapLines": "Radbryt rader",
   "session.websearch.title": "Webbsökning från tredje part",
   "session.websearch.description": "Välj sökleverantören som agenter använder för att söka på webben",
   "session.websearch.provider": "Sökleverantör",
@@ -182,8 +181,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Underagenter",
   "settings.timeline.category.notices": "Meddelanden",
   "settings.timeline.category.tools": "Andra verktyg",
-  "settings.general.row.mobileDiffWrap.description":
-    "Radbryt långa rader i mobila diffar i stället för att rulla vågrätt",
   "toast.migration.progress.clearingOldEvents": "Rensar gamla händelser",
   "toast.migration.progress.migratingSessions": "Migrerar sessioner",
   "session.new.workspace.existingLabel": "Worktree",
@@ -506,10 +503,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Välj färgen {{color}}",
   "dialog.project.edit.worktree.startup": "Startskript för arbetsyta",
   "dialog.project.edit.worktree.startup.placeholder": "t.ex. bun install",
-  "dialog.releaseNotes.action.getStarted": "Kom igång",
-  "dialog.releaseNotes.action.next": "Nästa",
-  "dialog.releaseNotes.action.hideFuture": "Visa inte dessa i framtiden",
-  "dialog.releaseNotes.media.alt": "Förhandsvisning av version",
   "dialog.usageExceeded.dontShowAgain": "Visa inte igen",
 
   "toast.permissions.autoaccept.on.title": "Autoaccepterar behörigheter",

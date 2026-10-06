@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "Mise à jour prête",
   "dialog.restart": "Redémarrer",
   "dialog.later": "Plus tard",
+  "releaseNotes.action.getStarted": "Commencer",
+  "releaseNotes.action.next": "Suivant",
+  "releaseNotes.action.hideFuture": "Ne plus afficher à l'avenir",
+  "releaseNotes.media.alt": "Aperçu de la version",
 }

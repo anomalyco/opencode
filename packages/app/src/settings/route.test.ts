@@ -10,6 +10,7 @@ describe("settings route", () => {
   test("round trips root, server, and project pages", () => {
     const root: SettingsView = { type: "root", tab: "appearance" }
     const server: SettingsView = { type: "server", server: "wsl:Debian", tab: "models" }
+
     const project: SettingsView = {
       type: "project",
       server: "local",
@@ -66,6 +67,7 @@ describe("settings route", () => {
       parent: "server",
       tab: "general",
     }
+
     const local = { key: "local", connected: true, starting: false }
 
     expect(

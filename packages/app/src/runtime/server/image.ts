@@ -20,10 +20,13 @@ export async function readLocalImage(
   signal: AbortSignal,
 ): Promise<Blob | undefined> {
   const drive = /^[a-z]:\//i.test(path)
+
   if (/^[\\/]{2}/.test(path) || (!drive && /^[a-z][a-z\d+.-]*:/i.test(path))) return
   const type = types.get(path.match(/\.([^./]+)$/)?.[1]?.toLowerCase() ?? "")
+
   if (!type) return
   const absolute = drive || path.startsWith("/")
+
   // Scope absolute images to their parent, including files outside the project.
   const bytes = await api.file.read(
     {
@@ -32,5 +35,6 @@ export async function readLocalImage(
     },
     { signal },
   )
+
   return new Blob([new Uint8Array(bytes)], { type })
 }

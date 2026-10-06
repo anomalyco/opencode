@@ -24,6 +24,7 @@ const runIpc = Effect.fn("Desktop.runIpc")(function* () {
   // list, and menu items they contribute are present at startup. Their heavy modules load lazily on
   // first use.
   yield* Effect.forkScoped(extensions.start)
+
   if (lifecycle.restoreWindows().length) ipc.installMenu()
   // The first window's renderer now has its IPC port and is hydrating its stores over it. The crash
   // reporter (spawns a process) and the context menu (a dependency tree) are not worth answering late.
@@ -34,6 +35,7 @@ const runIpc = Effect.fn("Desktop.runIpc")(function* () {
   yield* Effect.callback<void>((resume) => {
     const quit = () => resume(Effect.void)
     app.once("will-quit", quit)
+
     return Effect.sync(() => app.off("will-quit", quit))
   })
 })

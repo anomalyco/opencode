@@ -69,6 +69,13 @@ function fixture(
       log: path.join(root, "log"),
       repos: path.join(root, "repos"),
     })
+    // Windows locates the installer's Git Bash through `git --exec-path`; answer it with a fixture install.
+    const git = path.join(root, "Git")
+    const bash = process.platform === "win32" ? path.join(git, "bin", "bash.exe") : "bash"
+    if (process.platform === "win32") {
+      yield* fs.makeDirectory(path.dirname(bash), { recursive: true })
+      yield* fs.writeFileString(bash, "bash")
+    }
     const commands: string[][] = []
     const updater = yield* Updater.Service.pipe(
       Effect.provide(Updater.layer),
@@ -100,8 +107,11 @@ function fixture(
           run: (command) =>
             Effect.suspend(() => {
               if (command._tag !== "StandardCommand") return Effect.die("Unexpected piped install command")
-              commands.push([command.command, ...command.args])
-              const result = respond(command)
+              const lookup = command.command === "git" && command.args[0] === "--exec-path"
+              if (!lookup) commands.push([command.command, ...command.args])
+              const result = lookup
+                ? { stdout: Buffer.from(`${path.join(git, "mingw64", "libexec", "git-core")}\n`) }
+                : respond(command)
               if (result.error) return Effect.fail(result.error)
               return Effect.succeed({
                 command: command.command,
@@ -117,7 +127,7 @@ function fixture(
         }),
       ),
     )
-    return { updater, commands, requests, global, fs, executable }
+    return { updater, commands, requests, global, fs, executable, bash }
   })
 }
 
@@ -197,7 +207,11 @@ it.live("bun ignores install cache cleanup failures", () =>
         const installer = command.command === "curl" ? command.args[2] : command.args[0]
         expect(existsSync(path.dirname(installer))).toBe(true)
         return {
-          exitCode: command.command === (failure === "download" ? "curl" : failure === "install" ? "bash" : "") ? 1 : 0,
+          exitCode:
+            path.basename(command.command, ".exe") ===
+            (failure === "download" ? "curl" : failure === "install" ? "bash" : "")
+              ? 1
+              : 0,
           stderr: Buffer.from(`${failure} failed`),
         }
       })
@@ -206,7 +220,7 @@ it.live("bun ignores install cache cleanup failures", () =>
       expect(installer).toStartWith(path.join(test.global.cache, "update-"))
       expect(test.commands).toEqual([
         ["curl", "-fsSL", "-o", installer, "https://opencode.ai/v2/install"],
-        ...(failure === "download" ? [] : [["bash", installer, "--version", "2.3.4-beta.1", "--no-modify-path"]]),
+        ...(failure === "download" ? [] : [[test.bash, installer, "--version", "2.3.4-beta.1", "--no-modify-path"]]),
       ])
       expect(yield* test.fs.readDirectory(test.global.cache)).toEqual([])
       expect(result._tag).toBe(failure === "success" ? "None" : "Some")
@@ -390,7 +404,7 @@ windows("windows links the curl binary before the installer replaces it", () =>
   Effect.gen(function* () {
     const layout = { executable: "", cache: "" }
     const test = yield* fixture((command) => {
-      if (command.command === "bash") {
+      if (path.basename(command.command, ".exe") === "bash") {
         expect(readFileSync(layout.executable, "utf8")).toBe("binary")
         expect(upgradeLinks(layout.cache)).toHaveLength(1)
       }
@@ -405,7 +419,7 @@ windows("windows links the curl binary before the installer replaces it", () =>
     yield* Effect.addFinalizer(() => Effect.sync(() => (process.execPath = original)))
     expect(yield* test.updater.method()).toBe("curl")
     yield* test.updater.upgrade("curl", "2.3.4")
-    expect(test.commands.map((command) => command[0])).toEqual(["curl", "bash"])
+    expect(test.commands.map((command) => command[0])).toEqual(["curl", test.bash])
     expect(yield* test.fs.readFileString(layout.executable)).toBe("binary")
     expect(links(test.global.cache)).toEqual([])
   }),

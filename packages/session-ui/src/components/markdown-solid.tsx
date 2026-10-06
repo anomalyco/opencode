@@ -17,10 +17,12 @@ type MarkdownNode =
 export function createMarkdownRenderer(root: HTMLDivElement, html: string, words: boolean) {
   const [nodes, setNodes] = createStore(parseMarkdownNodes(html, words))
   let ready = false
+
   const dispose = render(
     () => <For each={nodes}>{(node) => <MarkdownDomNode node={node} animate={() => ready} />}</For>,
     root,
   )
+
   ready = true
 
   return {
@@ -33,22 +35,27 @@ export function createMarkdownRenderer(root: HTMLDivElement, html: string, words
 
 function MarkdownDomNode(props: { node: MarkdownNode; animate: () => boolean }) {
   const node = props.node
+
   if (node.type === "text") return node.text
+
   if (node.type === "word") {
     let ref: HTMLSpanElement | undefined
     onMount(() => {
       if (props.animate() && node.animate) ref?.setAttribute("data-markdown-enter", "")
     })
+
     return (
       <span ref={ref} data-markdown-word="">
         {node.text}
       </span>
     )
   }
+
   let ref: HTMLElement | undefined
   onMount(() => {
     if (props.animate() && node.animate) ref?.setAttribute("data-markdown-enter", "")
   })
+
   return (
     <Dynamic component={node.tag} ref={ref} {...node.attributes}>
       <For each={node.children}>{(node) => <MarkdownDomNode node={node} animate={props.animate} />}</For>
@@ -59,19 +66,25 @@ function MarkdownDomNode(props: { node: MarkdownNode; animate: () => boolean }) 
 export function parseMarkdownNodes(html: string, words: boolean, animate = false) {
   const template = document.createElement("template")
   template.innerHTML = html
+
   return Array.from(template.content.childNodes).flatMap((node, index) => parseNode(node, `${index}`, words, animate))
 }
 
 function parseNode(node: Node, key: string, words: boolean, animate: boolean, inlineCode = false): MarkdownNode[] {
   if (node instanceof Text) {
     if (!words) return [{ key, type: "text", text: node.data }]
+
     return (inlineCode ? Array.from(node.data) : node.data.split(/(\s+)/)).flatMap((text, index): MarkdownNode[] => {
       if (!text) return []
+
       if (/^\s+$/.test(text)) return [{ key: `${key}:${index}`, type: "text", text }]
+
       return [{ key: `${key}:${index}`, type: "word", text, ...(animate ? { animate: true as const } : {}) }]
     })
   }
+
   if (!(node instanceof Element)) return []
+
   return [
     {
       key,

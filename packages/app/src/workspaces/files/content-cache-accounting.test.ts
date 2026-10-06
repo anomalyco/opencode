@@ -6,6 +6,7 @@ const chunk = 8 * 1024 * 1024
 function evict(keep?: Set<string>) {
   const evicted: string[] = []
   evictContentLru(keep, (path) => evicted.push(path))
+
   return evicted
 }
 

@@ -24,11 +24,13 @@ export function TitlebarRightProvider(props: ParentProps) {
 
 export function createTitlebarRightSlot(): TitlebarRightSlot {
   const [store, setStore] = createStore<{ mount?: HTMLElement; registrations: symbol[] }>({ registrations: [] })
+
   return {
     mount: () => store.mount,
     setMount: (mount) => setStore("mount", mount),
     createRegistration() {
       const id = Symbol()
+
       return {
         active: () => store.registrations.at(-1) === id,
         register: () => setStore("registrations", (items) => [...items, id]),
@@ -40,6 +42,7 @@ export function createTitlebarRightSlot(): TitlebarRightSlot {
 
 export function TitlebarRightMount(props: { vertical?: boolean }) {
   const slot = useTitlebarRightSlot()
+
   return (
     <div
       ref={slot.setMount}
@@ -66,6 +69,8 @@ export function TitlebarRight(props: ParentProps) {
 
 function useTitlebarRightSlot() {
   const slot = useContext(TitlebarRightContext)
+
   if (!slot) throw new Error("TitlebarRight must be used within TitlebarRightProvider")
+
   return slot
 }

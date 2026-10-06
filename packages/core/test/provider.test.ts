@@ -22,6 +22,7 @@ describe("Provider", () => {
       "@opencode/ai/providers/groq",
       "@opencode/ai/providers/mistral",
       "@opencode/ai/providers/togetherai",
+      "@opencode/ai/providers/vercel-ai-gateway",
     ]
 
     for (const specifier of packages) {

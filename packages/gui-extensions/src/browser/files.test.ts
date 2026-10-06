@@ -7,6 +7,7 @@ import { createBrowserFiles } from "./files"
 test("files distinguish pending, failed, unknown and missing desktop copies", async () => {
   const files = createBrowserFiles(() => ["https://example.com"])
   await files.ready
+
   try {
     const pending = files.add("download.txt", "text/plain")
     expect(() => files.get(pending.id)).toThrow("do not start a duplicate download")

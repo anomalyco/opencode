@@ -1,14 +1,16 @@
 import { isDeepStrictEqual } from "node:util"
-import type { McpServer, RequestError, SessionConfigOption } from "@agentclientprotocol/sdk"
+import type { McpServer, SessionConfigOption } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import { Mcp } from "@opencode/schema/mcp"
 import type { Session } from "@opencode/schema/session"
-import { Context, Deferred, Effect, Exit, Queue, Ref, Scope, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Queue, Ref, Scope, Stream } from "effect"
 import type { ACPCatalog, Catalog } from "./catalog"
 import { ACPClient } from "./client"
-import { availableCommands, configOptions, type Selection } from "./config-option"
+import { availableCommands, configOptions, type Change, type Selection } from "./config-option"
 import { ACPConnection } from "./connection"
 import { ACPError } from "./error"
+
+export type SupportedMcpServer = Exclude<McpServer, { readonly type: "acp" | "sse" }>
 
 export type Attached = {
   readonly id: Session.ID
@@ -20,22 +22,19 @@ export interface Interface {
   readonly attach: (
     session: Session.Info,
     cwd: string,
-    mcpServers: readonly McpServer[],
-  ) => Effect.Effect<
-    { readonly attached: Attached; readonly configOptions: SessionConfigOption[] },
-    ACPError.Error | RequestError | ACPCatalog.Error
-  >
+    mcpServers: readonly SupportedMcpServer[],
+  ) => Effect.Effect<{ readonly attached: Attached; readonly configOptions: SessionConfigOption[] }, ACPError.Failure>
   readonly detach: (sessionID: string) => Effect.Effect<void>
+  readonly release: (attached: Attached) => Effect.Effect<void>
   readonly require: (sessionID: string) => Effect.Effect<Attached, ACPError.SessionNotFoundError>
   readonly fork: (attached: Attached, effect: Effect.Effect<void>) => Effect.Effect<void, ACPError.SessionNotFoundError>
+  readonly select: (attached: Attached, change: Change) => Effect.Effect<void, ACPError.Error>
 }
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/cli/acp/Sessions") {}
 
 type Entry = {
   readonly attached: Attached
   readonly scope: Scope.Closeable
-  readonly selected: Queue.Queue<Selection>
+  readonly selected: Queue.Queue<Change>
 }
 
 type SelectedEvent = Extract<OpenCodeEvent, { type: "session.model.selected" | "session.agent.selected" }>
@@ -48,7 +47,7 @@ export const make = Effect.fnUntraced(function* (input: {
   const scope = yield* Effect.scope
   const sessions = new Map<string, Entry>()
   // Outlives entries so re-attaching does not re-add servers.
-  const registeredMcp = new Map<string, Set<string>>()
+  const registeredMcpBySession = new Map<string, Map<string, Mcp.ServerConfig>>()
   const connected = yield* Deferred.make<void>()
 
   // Subscribe before any attach so a switch right after `sessions.set` reaches the session.
@@ -66,7 +65,9 @@ export const make = Effect.fnUntraced(function* (input: {
         event.type === "session.model.selected" ? { model: event.data.model } : { modeID: event.data.agent },
       )
     }),
-    Effect.ignore,
+    Effect.catchCause((cause) =>
+      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP selection event stream failed", cause),
+    ),
     Effect.ensuring(Deferred.succeed(connected, undefined)),
     Effect.forkScoped,
   )
@@ -89,21 +90,20 @@ export const make = Effect.fnUntraced(function* (input: {
     if (!isDeepStrictEqual(next.commands, previous.commands)) yield* sendCommands(attached.id, next)
   })
 
-  const registerMcp = (attached: Attached, servers: readonly McpServer[]) =>
+  const registerMcp = (attached: Attached, servers: readonly SupportedMcpServer[]) =>
     Effect.suspend(() => {
-      const registered = registeredMcp.get(attached.id) ?? new Set<string>()
-      registeredMcp.set(attached.id, registered)
+      const registered = registeredMcpBySession.get(attached.id) ?? new Map<string, Mcp.ServerConfig>()
+      registeredMcpBySession.set(attached.id, registered)
       return Effect.forEach(
         servers,
         (server) =>
           Effect.suspend(() => {
             const config = mcpConfig(server)
-            const key = `${server.name}:${stableStringify(config)}`
-            if (registered.has(key)) return Effect.void
-            registered.add(key)
+            if (isDeepStrictEqual(registered.get(server.name), config)) return Effect.void
+            registered.set(server.name, config)
             return input.client.mcp.add({ server: server.name, location: { directory: attached.cwd }, config }).pipe(
               Effect.catch(ACPClient.classify),
-              Effect.onError(() => Effect.sync(() => registered.delete(key))),
+              Effect.onError(() => Effect.sync(() => registered.delete(server.name))),
               Effect.uninterruptible,
             )
           }),
@@ -115,12 +115,12 @@ export const make = Effect.fnUntraced(function* (input: {
     Effect.suspend(() => {
       if (sessions.get(sessionID) === entry) {
         sessions.delete(sessionID)
-        registeredMcp.delete(sessionID)
+        registeredMcpBySession.delete(sessionID)
       }
       return Scope.close(entry.scope, Exit.void)
     })
 
-  return Service.of({
+  return {
     attach: Effect.fn("cli.acp.sessions.attach")(function* (session, cwd, mcpServers) {
       yield* Deferred.await(connected)
       const current = yield* input.catalog.get(cwd)
@@ -131,7 +131,7 @@ export const make = Effect.fnUntraced(function* (input: {
           selection: yield* Ref.make<Selection>({ model: session.model, modeID: session.agent }),
         },
         scope: Scope.forkUnsafe(scope),
-        selected: yield* Queue.unbounded<Selection>(),
+        selected: yield* Queue.unbounded<Change>(),
       }
       // Swap synchronously so concurrent attaches of one ID cannot both keep a scope.
       const replaced = sessions.get(session.id)
@@ -166,7 +166,11 @@ export const make = Effect.fnUntraced(function* (input: {
       const entry = sessions.get(sessionID)
       if (entry) yield* remove(sessionID, entry)
     }),
-    require: Effect.fn("cli.acp.sessions.require")(function* (sessionID) {
+    release: Effect.fn("cli.acp.sessions.release")(function* (attached) {
+      const entry = sessions.get(attached.id)
+      if (entry?.attached === attached) yield* remove(attached.id, entry)
+    }),
+    require: Effect.fnUntraced(function* (sessionID) {
       const entry = sessions.get(sessionID)
       if (!entry) return yield* new ACPError.SessionNotFoundError({ sessionId: sessionID })
       return entry.attached
@@ -176,12 +180,20 @@ export const make = Effect.fnUntraced(function* (input: {
       if (entry?.attached !== attached) return yield* new ACPError.SessionNotFoundError({ sessionId: attached.id })
       yield* Effect.forkIn(effect, entry.scope, { startImmediately: true })
     }),
-  })
+    // Update selection before switching so the echoed event is a no-op.
+    select: Effect.fnUntraced(function* (attached, change) {
+      yield* Ref.update(attached.selection, (selection) => ({ ...selection, ...change }))
+      yield* (
+        "model" in change
+          ? input.client.session.switchModel({ sessionID: attached.id, model: change.model })
+          : input.client.session.switchAgent({ sessionID: attached.id, agent: change.modeID })
+      ).pipe(Effect.catch(ACPClient.classify))
+    }),
+  } satisfies Interface
 })
 
-function mcpConfig(server: McpServer) {
+function mcpConfig(server: SupportedMcpServer) {
   if ("type" in server) {
-    if (server.type === "acp") throw new Error("MCP-over-ACP is not supported")
     return new Mcp.RemoteConfig({
       type: "remote",
       url: server.url,
@@ -194,15 +206,6 @@ function mcpConfig(server: McpServer) {
     command: [server.command, ...server.args],
     environment: Object.fromEntries(server.env.map((entry) => [entry.name, entry.value])),
   })
-}
-
-function stableStringify(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`
-  if (!value || typeof value !== "object") return JSON.stringify(value)
-  return `{${Object.entries(value)
-    .toSorted(([a], [b]) => a.localeCompare(b))
-    .map(([key, item]) => `${JSON.stringify(key)}:${stableStringify(item)}`)
-    .join(",")}}`
 }
 
 export * as ACPSessions from "./sessions"

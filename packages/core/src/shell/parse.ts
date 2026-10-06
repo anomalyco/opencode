@@ -12,7 +12,8 @@ import { Wildcard } from "../util/wildcard.js"
 
 type Part = { type: string; text: string }
 const CWD = new Set(["cd", "chdir", "popd", "pushd", "push-location", "set-location"])
-const POWERSHELL_PATH_FLAGS = new Set(["-literalpath", "-path"])
+const POWERSHELL_PATH_FLAG_RE =
+  /^-(?:p(?:ath|at|a)?|lp|l(?:i(?:t(?:e(?:r(?:a(?:l(?:p(?:a(?:t(?:h)?)?)?)?)?)?)?)?)?)?|psp(?:a(?:t(?:h)?)?)?):?$/i
 
 export type Result = {
   commands: Array<{ resource: string; save: string }>
@@ -210,7 +211,10 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
     catch: (cause) => new Error(`Portable shell scanner failed to load: ${cause}`, { cause }),
   })
   const powershell = ShellSelect.ps(shell)
-  const result = powershell ? ShellScan.scanPowerShell(command) : ShellScan.scan(command)
+  const name = ShellSelect.name(shell)
+  const result = powershell
+    ? ShellScan.scanPowerShell(command)
+    : ShellScan.scan(command, name === "bash" || name === "zsh" ? name : "posix")
   if (result.kind === "opaque")
     return yield* Effect.fail(new Error(`Portable shell scanner cannot analyze command: ${result.reason}`))
 
@@ -219,21 +223,39 @@ export const scanPortable = Effect.fnUntraced(function* (command: string, shell:
     // The legacy command walk skips declarations, not the substitutions within them.
     if (item.declaration) continue
     const words = item.redirectWordCount === undefined ? item.rawWords : item.rawWords.slice(0, item.redirectWordCount)
-    // The shipped PowerShell grammar treats bare statement-head foreach prefixes as control flow.
-    if (powershell && item.statementHead && /^foreach(?:-|$)/i.test(words[0] ?? "")) continue
+    // The shipped PowerShell grammar treats bare statement-head foreach blocks as control flow.
+    if (
+      powershell &&
+      item.statementHead &&
+      /^foreach(?:-|$)/i.test(words[0] ?? "") &&
+      words.length > 1 &&
+      words.slice(1).every((word) => word.startsWith("{"))
+    )
+      continue
     const name = powershell ? words[0]?.toLowerCase() : words[0]
     if (CWD.has(name)) {
       output.directories.push(
         ...directoryArgs(
-          words.flatMap((text): Part[] => {
-            const parameter = powershell ? /^(-(?:literalpath|path)):(.*)$/i.exec(text) : undefined
-            if (parameter)
-              return [
-                { type: "command_parameter", text: parameter[1] },
-                { type: "word", text: parameter[2] },
-              ]
-            return [{ type: powershell && text.startsWith("-") ? "command_parameter" : "word", text }]
-          }),
+          powershell
+            ? words.flatMap((raw, index): Part[] => {
+                const text =
+                  !raw.includes("`$") && /['"`]/.test(raw) ? (item.words[index] ?? raw) : raw.replaceAll("`$", "\0")
+                if (!/^-[A-Za-z_?][\w?-]*(?::|$)/.test(raw)) return [{ type: "word", text }]
+                const colon = text.indexOf(":")
+                if (colon >= 0)
+                  return colon + 1 < text.length
+                    ? [
+                        { type: "command_parameter", text: text.slice(0, colon) },
+                        { type: "word", text: text.slice(colon + 1) },
+                      ]
+                    : [{ type: "command_parameter", text: text.slice(0, colon) }]
+                return [{ type: "command_parameter", text }]
+              })
+            : item.rawWords.map((text, index) => ({
+                type: "word",
+                // Only literal quoting resolves to a static directory.
+                text: text.startsWith("$'") || (!/[$`~\\]/.test(text) && /['"]/.test(text)) ? item.words[index] : text,
+              })),
           powershell,
           cwd,
           shell,
@@ -290,15 +312,20 @@ function directoryArgs(command: Part[], powershell: boolean, cwd: string, shell:
 
   const directories: string[] = []
   let path = false
+  let endOfParameters = false
   for (const part of command.slice(1)) {
+    if (!endOfParameters && part.text === "--") {
+      endOfParameters = true
+      continue
+    }
     if (path) {
       const value = directoryArgument(part.text, powershell, cwd, shell)
       if (value) directories.push(value)
       path = false
       continue
     }
-    if (part.type === "command_parameter") {
-      path = POWERSHELL_PATH_FLAGS.has(part.text.toLowerCase())
+    if (!endOfParameters && part.type === "command_parameter") {
+      path = POWERSHELL_PATH_FLAG_RE.test(part.text)
       continue
     }
     const value = directoryArgument(part.text, powershell, cwd, shell)
@@ -318,9 +345,10 @@ function directoryArgument(value: string, powershell: boolean, cwd: string, shel
     text
       .replace(/\$\{env:([^}]+)\}/gi, (_, key: string) => environment(key) ?? "")
       .replace(/\$env:([A-Za-z_][A-Za-z0-9_]*)/gi, (_, key: string) => environment(key) ?? "")
-      .replace(/\$(HOME|PWD|PSHOME)(?=$|[\\/])/gi, (_, key: string) => {
-        if (key.toUpperCase() === "HOME") return os.homedir()
-        if (key.toUpperCase() === "PWD") return cwd
+      .replace(/\$(?:\{(HOME|PWD|PSHOME)\}|(HOME|PWD|PSHOME)(?=$|[\\/]))/gi, (_, braced?: string, bare?: string) => {
+        const key = (braced ?? bare ?? "").toUpperCase()
+        if (key === "HOME") return os.homedir()
+        if (key === "PWD") return cwd
         return path.dirname(shell)
       }),
   )
@@ -329,11 +357,12 @@ function directoryArgument(value: string, powershell: boolean, cwd: string, shel
 function expandKnownDirectory(value: string) {
   // Unknown shell expressions cannot be resolved safely during permission analysis.
   if (value.includes("$") || value.includes("`") || value.startsWith("(")) return
-  if (value === "~") return os.homedir()
-  if (value.startsWith("~/") || (process.platform === "win32" && value.startsWith("~\\"))) {
-    return path.join(os.homedir(), value.slice(2))
+  const resolved = value.replaceAll("\0", "$")
+  if (resolved === "~") return os.homedir()
+  if (resolved.startsWith("~/") || (process.platform === "win32" && resolved.startsWith("~\\"))) {
+    return path.join(os.homedir(), resolved.slice(2))
   }
-  return value
+  return resolved
 }
 
 function environment(key: string) {

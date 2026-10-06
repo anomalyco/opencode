@@ -59,11 +59,13 @@ benchmark("loads only the selected restored tab's transcript", async ({ page, re
     sessionIDs: [fixture.sourceID, fixture.targetID, fixture.childID],
   })
   await installTimelineSettings(page)
+
   const attention = Promise.all(
     [fixture.targetID, fixture.childID].map((id) =>
       page.waitForResponse((response) => new URL(response.url()).pathname === `/api/session/${id}/form`),
     ),
   )
+
   await page.goto(sessionHref(fixture.sourceID))
   await expectSessionTitle(page, fixture.expected.sourceTitle)
 

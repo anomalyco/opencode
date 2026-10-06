@@ -9,5 +9,6 @@ export function trackPageErrors(page: Page) {
   page.on("response", (response) => {
     if (response.status() >= 400) errors.push(`${response.status()} ${response.url()}`)
   })
+
   return errors
 }

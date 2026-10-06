@@ -553,6 +553,16 @@ describe("Provider and Model", () => {
         editor.models.update(providerID, Model.ID.make("new"), (model) => {
           model.time.released = 2000
         })
+        editor.models.update(providerID, Model.ID.make("newest-video"), (model) => {
+          model.capabilities.input = ["text", "image"]
+          model.capabilities.output = ["video"]
+          model.time.released = 3000
+        })
+        editor.models.update(providerID, Model.ID.make("newest-stt"), (model) => {
+          model.capabilities.input = ["audio"]
+          model.capabilities.output = ["text"]
+          model.time.released = 4000
+        })
       })
 
       expect((yield* models.default())?.id).toMatch("new")

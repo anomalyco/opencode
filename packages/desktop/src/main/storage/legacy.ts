@@ -3,9 +3,11 @@ import type { Database } from "./database"
 import { state } from "./schema"
 
 const DRAFT_RETENTION_MS = 30 * 24 * 60 * 60 * 1000
+
 const DRAFT_KEEP_RECENT = 100
 
 const Entries = Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown))
+
 const decode = Schema.decodeUnknownOption(Entries)
 
 type Candidate = { name: string; path: string; modified: number; entries: Record<string, unknown> }
@@ -20,19 +22,25 @@ export const importLegacyStores = Effect.fn("DesktopStorage.importLegacyStores")
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
   const names = (yield* fs.readDirectory(userData).pipe(Effect.orElseSucceed(() => []))).filter(isStoreFile)
+
   const files = yield* Effect.forEach(
     names,
     Effect.fnUntraced(function* (name) {
       const file = path.join(userData, name)
       const stats = yield* fs.stat(file).pipe(Effect.orElseSucceed(() => undefined))
+
       if (stats?.type !== "File") return
       const raw = yield* fs.readFileString(file).pipe(Effect.orElseSucceed(() => undefined))
+
       if (raw === undefined) return
       const entries = decode(raw)
+
       if (Option.isNone(entries)) {
         yield* Effect.logWarning("legacy store is not readable, leaving it in place", { name })
+
         return
       }
+
       return {
         name,
         path: file,
@@ -42,7 +50,9 @@ export const importLegacyStores = Effect.fn("DesktopStorage.importLegacyStores")
     }),
     { concurrency: 5 },
   )
+
   const candidates = files.filter((file) => !!file)
+
   const kept = new Set(
     candidates
       .filter((file) => isDraft(file.name) && Object.keys(file.entries).length > 0)
@@ -51,6 +61,7 @@ export const importLegacyStores = Effect.fn("DesktopStorage.importLegacyStores")
       .slice(0, DRAFT_KEEP_RECENT)
       .map((file) => file.name),
   )
+
   const rows = candidates
     .filter((file) => !isDraft(file.name) || kept.has(file.name))
     .flatMap((file) =>
@@ -61,16 +72,19 @@ export const importLegacyStores = Effect.fn("DesktopStorage.importLegacyStores")
         updated_at: file.modified,
       })),
     )
+
   // Existing rows win: a file left behind by an interrupted import must not overwrite newer state.
   if (rows.length > 0) {
     db.transaction((tx) => {
       rows.forEach((row) => tx.insert(state).values(row).onConflictDoNothing().run())
     })
   }
+
   yield* Effect.forEach(candidates, (file) => fs.remove(file.path, { force: true }), {
     concurrency: "unbounded",
     discard: true,
   })
+
   return { imported: rows.length, removed: candidates.map((file) => file.name) }
 })
 

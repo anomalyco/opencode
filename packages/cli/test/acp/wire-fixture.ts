@@ -24,11 +24,13 @@ import type { Command } from "@opencode/schema/command"
 import { Form } from "@opencode/schema/form"
 import type { Location } from "@opencode/schema/location"
 import type { Model } from "@opencode/schema/model"
+import type { Plugin } from "@opencode/schema/plugin"
 import type { Session } from "@opencode/schema/session"
 import type { SessionMessage } from "@opencode/schema/session-message"
 import type { TokenUsage } from "@opencode/schema/token-usage"
 import type { BunRequest } from "bun"
-import { Duration, Effect, Exit, Option, Schema, Scope } from "effect"
+import { createTwoFilesPatch } from "diff"
+import { Duration, Effect, Exit, Logger, Option, Schema, Scope } from "effect"
 import { FetchHttpClient } from "effect/unstable/http"
 import { ACP } from "../../src/acp/agent"
 import { ACPTurn } from "../../src/acp/turn"
@@ -40,6 +42,7 @@ type CommandInfo = typeof Command.Info.Encoded
 type LocationRef = typeof Location.PublicRef.Encoded
 type ModelInfo = typeof Model.Info.Encoded
 type ModelRef = typeof Model.Ref.Encoded
+type PluginInfo = typeof Plugin.Info.Encoded
 type SessionInfo = typeof Session.Info.Encoded
 type SessionMessageInfo = typeof SessionMessage.Info.Encoded
 type TokenUsageInfo = typeof TokenUsage.Info.Encoded
@@ -155,6 +158,7 @@ type Catalog = {
   models: ModelInfo[]
   agents: AgentInfo[]
   commands: CommandInfo[]
+  plugins: PluginInfo[]
 }
 
 export type InitializeOptions = {
@@ -337,6 +341,15 @@ export function toolProgress(sessionID: string, id: string, metadata: EventData<
   return ephemeralEvent("session.tool.progress", { sessionID, assistantMessageID: "msg_tools", id, metadata })
 }
 
+export function fileDiff(
+  file: string,
+  before: string,
+  after: string,
+  status: "added" | "deleted" | "modified" = "modified",
+) {
+  return { file, patch: createTwoFilesPatch(file, file, before, after), additions: 1, deletions: 1, status }
+}
+
 export function toolSucceeded(
   sessionID: string,
   id: string,
@@ -412,6 +425,7 @@ export async function startWire(options: WireOptions = {}) {
 
   const clientToAgent = new TransformStream<Uint8Array, Uint8Array>()
   const agentToClient = new TransformStream<Uint8Array, Uint8Array>()
+  const logs: Array<Pick<Logger.Options<unknown>, "message" | "cause">> = []
   const agentScope = Scope.makeUnsafe()
   const agentConnection = await Effect.runPromise(
     OpenCode.make({ baseUrl: server.url }).pipe(
@@ -422,6 +436,7 @@ export async function startWire(options: WireOptions = {}) {
         options.cancelDrainTimeout === undefined
           ? effect
           : Effect.provideService(effect, ACPTurn.CancelDrainTimeout, options.cancelDrainTimeout),
+      Effect.provide(Logger.layer([Logger.make((log) => logs.push({ message: log.message, cause: log.cause }))])),
     ),
   )
   const clientStream = ndJsonStream(clientToAgent.writable, agentToClient.readable)
@@ -505,6 +520,7 @@ export async function startWire(options: WireOptions = {}) {
     permissions,
     childUpdates,
     elicitations,
+    logs,
     request,
     until,
     initialize,
@@ -556,6 +572,14 @@ function startServer(options: WireOptions, changed: () => void) {
     models: [testModel, secondModel],
     agents: [buildAgent, planAgent],
     commands: [reviewCommand],
+    plugins: [
+      {
+        id: "opencode.models.dev",
+        source: { type: "builtin" },
+        features: { server: true },
+        state: { status: "active" },
+      },
+    ],
   }
   const requests: ServerRequest[] = []
   const submissions: Submission[] = []
@@ -694,6 +718,7 @@ function startServer(options: WireOptions, changed: () => void) {
       "/api/model/default": { GET: catalogRoute(() => catalog.models[0] ?? null) },
       "/api/agent": { GET: catalogRoute(() => catalog.agents) },
       "/api/command": { GET: catalogRoute(() => catalog.commands) },
+      "/api/plugin": { GET: catalogRoute(() => catalog.plugins) },
       "/api/session": {
         GET: route((_req, query) => {
           const sessions = [...fake.sessions.values()]
@@ -726,6 +751,9 @@ function startServer(options: WireOptions, changed: () => void) {
           })
           return noContent()
         }),
+        DELETE: route((req) =>
+          fake.sessions.delete(req.params.sessionID) ? noContent() : notFound(req.params.sessionID),
+        ),
       },
       "/api/session/:sessionID/fork": {
         POST: route((req) => {

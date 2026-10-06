@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test"
 import { Effect } from "effect"
-import { LLM, LLMClient, LLMEvent, Media, Message, isRetryable } from "../../src/index.js"
+import { LLM, LLMClient, LLMEvent, Media, Message, SystemPart, isRetryable } from "../../src/index.js"
 import { Cohere } from "../../src/providers/cohere.js"
 import { compileRequest } from "../../src/route/client.js"
 import { it } from "../lib/effect.js"
@@ -23,7 +23,7 @@ it.effect("Cohere lowers native history, thinking, tools, and sampling", () =>
     const prepared = yield* compileRequest(
       LLM.request({
         model: cohere.model("command-a-reasoning-08-2025"),
-        system: "Be concise.",
+        system: [SystemPart.make("Be concise.\nKeep this newline."), SystemPart.make("Second instructions.")],
         messages: [
           Message.user("Lookup Paris"),
           Message.assistant([{ type: "tool-call", id: "lookup-1", name: "lookup", input: { city: "Paris" } }]),
@@ -44,7 +44,13 @@ it.effect("Cohere lowers native history, thinking, tools, and sampling", () =>
       thinking: { type: "enabled", token_budget: 128 },
       tool_choice: "REQUIRED",
       messages: [
-        { role: "system", content: "Be concise." },
+        {
+          role: "system",
+          content: [
+            { type: "text", text: "Be concise.\nKeep this newline." },
+            { type: "text", text: "Second instructions." },
+          ],
+        },
         { role: "user", content: [{ type: "text", text: "Lookup Paris" }] },
         {
           role: "assistant",

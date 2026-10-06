@@ -1,10 +1,14 @@
 import { Schema } from "effect"
-import { Remote } from "../sdk"
+import { Ipc } from "../sdk"
 
 export const SshConfig = Schema.Struct({ id: Schema.String, target: Schema.String, name: Schema.String })
+
 export type SshConfig = typeof SshConfig.Type
+
 export const SshHttp = Schema.Struct({ url: Schema.String, password: Schema.String })
+
 export type SshHttp = typeof SshHttp.Type
+
 export const SshStage = Schema.Literals([
   "disconnected",
   "connecting",
@@ -17,11 +21,13 @@ export const SshStage = Schema.Literals([
   "incompatible",
   "failed",
 ])
+
 export const SshPrompt = Schema.Struct({
   id: Schema.String,
   text: Schema.String,
   confirm: Schema.Boolean,
 })
+
 export const SshItem = Schema.Struct({
   config: SshConfig,
   saved: Schema.Boolean,
@@ -45,10 +51,14 @@ export const SshItem = Schema.Struct({
     ]),
   ),
 })
+
 export type SshItem = typeof SshItem.Type
+
 /** `revision` grows with every push, so a caller can wait for the state that follows its request. */
 export const SshState = Schema.Struct({ servers: Schema.Array(SshItem), revision: Schema.Number })
+
 export type SshState = typeof SshState.Type
+
 export const SshStart = Schema.Struct({
   id: Schema.String,
   target: Schema.String,
@@ -56,12 +66,13 @@ export const SshStart = Schema.Struct({
   replace: Schema.optional(Schema.Boolean),
   background: Schema.optional(Schema.Boolean),
 })
+
 export type SshStart = typeof SshStart.Type
 
 const Id = Schema.Struct({ id: Schema.String })
 
 /** SSH connections, owned by the main process. Prompts reach only the window that started the attempt. */
-export const Ssh = Remote.define({
+export const Ssh = Ipc.define({
   id: "ssh",
   state: SshState,
   methods: {

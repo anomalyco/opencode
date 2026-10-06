@@ -627,10 +627,6 @@ export const dict = {
   "workspace.delete.confirm": 'Удалить рабочее пространство "{{name}}"?',
   "workspace.delete.button": "Удалить рабочее пространство",
   "common.open": "Открыть",
-  "dialog.releaseNotes.action.getStarted": "Начать",
-  "dialog.releaseNotes.action.next": "Далее",
-  "dialog.releaseNotes.action.hideFuture": "Больше не показывать",
-  "dialog.releaseNotes.media.alt": "Предварительный просмотр выпуска",
   "toast.project.reloadFailed.title": "Не удалось перезагрузить {{project}}",
   "error.server.invalidConfiguration": "Недопустимая конфигурация",
   "common.moreCountSuffix": " (ещё {{count}})",
@@ -791,7 +787,6 @@ export const dict = {
   "session.view.select": "Просмотр сеанса",
   "session.background.moveRunning": "Перейти на задний план",
   "session.timeline.working": "Работает",
-  "session.review.wrapLines": "Переносить строки",
   "session.websearch.title": "Сторонний веб-поиск",
   "session.websearch.description":
     "Выберите поставщика услуг поиска, который используют агенты для поиска в Интернете.",
@@ -854,8 +849,6 @@ export const dict = {
   "settings.timeline.category.subagents": "Субагенты",
   "settings.timeline.category.notices": "Уведомления",
   "settings.timeline.category.tools": "Другие инструменты",
-  "settings.general.row.mobileDiffWrap.description":
-    "Перенос длинных строк в мобильных различиях вместо горизонтальной прокрутки",
   "session.background.shell.few": "{{count}} оболочки",
   "session.background.shell.many": "{{count}} оболочек",
   "session.background.subagent.few": "{{count}} субагента",

@@ -25,6 +25,7 @@ test.describe("timeline tool state stability", () => {
     page,
   }, testInfo) => {
     const ids = ["webfetch", "websearch", "subagent", "skill", "custom"] as const
+
     const inputs = {
       webfetch: { url: "https://example.com/docs" },
       websearch: { query: "timeline stability" },
@@ -32,6 +33,7 @@ test.describe("timeline tool state stability", () => {
       skill: { name: "stability" },
       custom: { target: "timeline", depth: 2 },
     }
+
     const names = {
       webfetch: "webfetch",
       websearch: "websearch",
@@ -39,21 +41,27 @@ test.describe("timeline tool state stability", () => {
       skill: "skill",
       custom: "mcp_probe",
     }
+
     const questionID = "prt_state_question"
     const todoID = "prt_state_todo"
+
     const initial = [
       ...ids.map((id) => toolPart(`prt_state_${id}`, names[id], "streaming", inputs[id])),
       toolPart(questionID, "question", "streaming", questionInput()),
       toolPart(todoID, "todowrite", "streaming", { todos: [{ content: "Hidden", status: "pending" }] }),
       textPart("prt_state_following", "Following lightweight tools"),
     ]
+
     const childID = "ses_timeline_child"
+
     const timeline = await setupTimeline(page, {
       messages: [userMessage(), assistantMessage(initial, { completed: false })],
       sessions: [session(), session({ id: childID, parentID: sessionID, title: "Inspect timeline" })],
       cpuRate: 4,
     })
+
     await timeline.send(status("busy"), 120)
+
     for (const id of ids) await timeline.waitForPart(`prt_state_${id}`)
     await expect(page.locator(`[data-timeline-part-id="${renderedPartID(questionID)}"]`)).toHaveCount(0)
     await expect(page.locator(`[data-timeline-part-id="${renderedPartID(todoID)}"]`)).toHaveCount(0)
@@ -65,6 +73,7 @@ test.describe("timeline tool state stability", () => {
       "prt_state_skill",
       "prt_state_custom",
     ] as const
+
     const regions = defineVisualRegions({
       prt_state_webfetch: toolRegion(regionIDs[0]),
       prt_state_websearch: toolRegion(regionIDs[1]),
@@ -72,13 +81,16 @@ test.describe("timeline tool state stability", () => {
       prt_state_skill: toolRegion(regionIDs[3]),
       prt_state_custom: toolRegion(regionIDs[4]),
     })
+
     await startVisualProbe(page, regions)
+
     for (const [index, id] of ids.entries()) {
       await timeline.send(
         partUpdated(toolPart(`prt_state_${id}`, names[id], "running", inputs[id])),
         [80, 240, 100, 360, 140][index],
       )
     }
+
     for (const [index, id] of ["skill", "webfetch", "custom", "subagent", "websearch"].entries()) {
       const key = id as (typeof ids)[number]
       const metadata = key === "subagent" ? { sessionID: childID } : key === "websearch" ? { provider: "exa" } : {}
@@ -88,6 +100,7 @@ test.describe("timeline tool state stability", () => {
         [110, 70, 280, 130, 420][index],
       )
     }
+
     await timeline.send(
       partUpdated(
         toolPart(questionID, "question", "completed", questionInput(), { metadata: { answers: [["Keep it stable"]] } }),
@@ -126,13 +139,16 @@ test.describe("timeline tool state stability", () => {
   }, testInfo) => {
     const ids = ["prt_ctx_01_read", "prt_ctx_02_glob", "prt_ctx_03_grep", "prt_ctx_04_list"]
     const tools = ["read", "glob", "grep", "list"]
+
     const inputs = [
       { path: "src/a.ts", offset: 0, limit: 120 },
       { path: directory, pattern: "**/*.ts" },
       { path: directory, pattern: "stability", include: "*.ts" },
       { path: "src" },
     ]
+
     const context = ids.map((id, index) => toolPart(id, tools[index]!, "streaming", inputs[index]!))
+
     const timeline = await setupTimeline(page, {
       messages: [
         userMessage(),
@@ -140,6 +156,7 @@ test.describe("timeline tool state stability", () => {
       ],
       cpuRate: 4,
     })
+
     await timeline.send(status("busy"), 100)
     const groupSelector = `[data-timeline-part-ids="${ids.join(",")}"]`
     const group = page.locator(groupSelector)
@@ -158,10 +175,13 @@ test.describe("timeline tool state stability", () => {
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+
     await startVisualProbe(page, regions)
+
     for (const [index, delay] of [90, 260, 70, 380].entries()) {
       await timeline.send(partUpdated(toolPart(ids[index]!, tools[index]!, "running", inputs[index]!)), delay)
     }
+
     await timeline.send(partUpdated(toolPart(ids[1]!, tools[1]!, "completed", inputs[1]!)), 130)
     await timeline.send(partUpdated(toolPart(ids[3]!, tools[3]!, "completed", inputs[3]!)), 210)
     await timeline.send(
