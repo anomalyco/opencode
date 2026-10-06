@@ -286,7 +286,13 @@ const AnthropicThinkingEnabled = Schema.Struct({
 })
 const AnthropicThinkingAdaptive = Schema.Struct({ type: Schema.tag("adaptive"), ...AnthropicThinkingFields })
 const AnthropicThinkingDisabled = Schema.Struct({ type: Schema.tag("disabled") })
-const AnthropicThinking = Schema.Union([AnthropicThinkingEnabled, AnthropicThinkingAdaptive, AnthropicThinkingDisabled])
+const AnthropicThinkingBetweenTools = Schema.Struct({ type: Schema.tag("between_tools") })
+const AnthropicThinking = Schema.Union([
+  AnthropicThinkingEnabled,
+  AnthropicThinkingAdaptive,
+  AnthropicThinkingDisabled,
+  AnthropicThinkingBetweenTools,
+])
 type AnthropicThinking = typeof AnthropicThinking.Type
 
 // SDK OutputConfig:2684 {effort?: "low"|"medium"|"high"|"xhigh"|"max"|null, format?: JSONOutputFormat:2399}
@@ -332,7 +338,20 @@ const ThinkingEnabledInput = Schema.Union([
     encode: SchemaGetter.passthrough({ strict: false }),
   }),
 )
-const Thinking = Schema.Union([ThinkingEnabledInput, AnthropicThinkingAdaptive, AnthropicThinkingDisabled])
+// Retain unsupported extra fields through decoding so we can reject them instead of silently stripping them.
+const ThinkingBetweenToolsInput = Schema.Struct({
+  type: Schema.tag("between_tools"),
+  display: Schema.optional(Schema.String),
+  block_binding: Schema.optional(AnthropicThinkingBlockBinding),
+  budget_tokens: Schema.optional(Schema.Number),
+  budgetTokens: Schema.optional(Schema.Number),
+})
+const Thinking = Schema.Union([
+  ThinkingEnabledInput,
+  AnthropicThinkingAdaptive,
+  AnthropicThinkingDisabled,
+  ThinkingBetweenToolsInput,
+])
 
 const OutputConfigInput = Schema.Struct({
   effort: optionalNull(Schema.String),
@@ -1012,7 +1031,7 @@ const supportsEffortUpdates = (model: LLMRequest["model"]) => {
 }
 
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
-  if (thinking?.type === "disabled") return thinking
+  if (thinking?.type === "disabled" || thinking?.type === "between_tools") return thinking
   if (!supportsThinkingBlockBinding(model)) return thinking
   return {
     ...(thinking ?? { type: "adaptive" as const }),
@@ -1039,12 +1058,51 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   const format = outputConfig?.format ?? undefined
   const updates = resolveEffortUpdates(request, options.effort ?? outputConfig?.effort ?? undefined)
   const generation = request.generation
+  const version = claudeVersion(request.model.id)
+  const sonnet55 = version?.family === "sonnet" && version.major === 5 && version.minor === 5
+  if (options.thinking?.type === "between_tools") {
+    if (!sonnet55) return yield* invalid("Anthropic Messages between_tools thinking requires Claude Sonnet 5.5")
+    if (options.thinking.display !== undefined) return yield* invalid("between_tools does not support display")
+    if (options.thinking.block_binding !== undefined)
+      return yield* invalid("between_tools does not support block_binding")
+    if (options.thinking.budget_tokens !== undefined || options.thinking.budgetTokens !== undefined)
+      return yield* invalid("between_tools does not support thinking budgets")
+    if (updates.effort === "xhigh" || updates.effort === "max")
+      return yield* invalid("Claude Sonnet 5.5 between_tools requires effort high or below")
+    if (
+      updates.request.messages.some((message) => {
+        const update = effortUpdate(message)
+        return update !== undefined && (update.effort ?? DEFAULT_EFFORT) !== (updates.effort ?? DEFAULT_EFFORT)
+      })
+    )
+      return yield* invalid("Claude Sonnet 5.5 between_tools cannot change effort mid-conversation")
+  }
+  if (sonnet55) {
+    if (options.thinking?.type === "disabled")
+      return yield* invalid(
+        "Claude Sonnet 5.5 does not support disabled thinking; use between_tools at high effort or below",
+      )
+    if (options.thinking?.type === "enabled")
+      return yield* invalid("Claude Sonnet 5.5 does not support thinking budgets; use adaptive thinking and effort")
+    if (generation?.temperature !== undefined && generation.temperature !== 1)
+      return yield* invalid("Claude Sonnet 5.5 does not support non-default sampling parameters")
+    if (generation?.topP !== undefined && generation.topP < 0.99)
+      return yield* invalid("Claude Sonnet 5.5 does not support non-default sampling parameters")
+    if (generation?.topK !== undefined)
+      return yield* invalid("Claude Sonnet 5.5 does not support top_k sampling; omit topK")
+  }
   // Allocate the 4-breakpoint budget in invalidation order: tools → system →
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
   const flattened = ProviderShared.flattenToolRequest(updates.request)
   const tools = flattened.tools.length === 0 ? undefined : flattened.tools.map((tool) => lowerTool(breakpoints, tool))
+  if (
+    sonnet55 &&
+    tools !== undefined &&
+    (request.toolChoice?.type === "required" || request.toolChoice?.type === "tool")
+  )
+    return yield* invalid("Claude Sonnet 5.5 does not support forced tool choice; use auto or none")
   // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
   const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
   const systemParts = request.system.filter((part) => part.text.length > 0)
@@ -1077,7 +1135,10 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
     top_p: generation?.topP,
     top_k: generation?.topK,
     stop_sequences: generation?.stop,
-    thinking: applyThinkingBindingDefault(request.model, fitThinking(options.thinking, maxTokens)),
+    thinking: applyThinkingBindingDefault(
+      request.model,
+      options.thinking?.type === "between_tools" ? { type: "between_tools" } : fitThinking(options.thinking, maxTokens),
+    ),
     output_config,
     // top-level passthrough per SDK MessageCreateParamsBase:4638,4643,4649,4654,4670
     cache_control: options.cache_control ?? options.cacheControl,
@@ -1653,7 +1714,8 @@ function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "con
     betas.push("mid-conversation-output-config-2026-07-01")
 
   const thinking = body.thinking
-  if (thinking && thinking.type !== "disabled" && thinking.block_binding) betas.push(THINKING_BINDING_BETA)
+  if (thinking && (thinking.type === "adaptive" || thinking.type === "enabled") && thinking.block_binding)
+    betas.push(THINKING_BINDING_BETA)
   return betas
 }
 
