@@ -50,7 +50,7 @@ export type SearchMatch = {
 }
 
 export type SearchStyle = {
-  match: { fg: RGBA; bg: RGBA }
+  match: { fg: RGBA; bg: RGBA; underline?: boolean }
   current: { fg: RGBA; bg: RGBA }
 }
 
@@ -138,8 +138,9 @@ export function createSessionSearch(input: { scroll: () => ScrollBoxRenderable |
   const [query, setQuery] = createSignal("")
   const [matches, setMatches] = createSignal<SearchMatch[]>([])
   const [current, setCurrent] = createSignal(-1)
+  // Themes often give primary and warning similar hues, so other matches stay subtle and only the current one is loud.
   const style = createMemo(() => ({
-    match: { fg: theme.background, bg: theme.warning },
+    match: { fg: theme.text, bg: theme.backgroundElement, underline: true },
     current: { fg: theme.background, bg: theme.primary },
   }))
   const timers = new Set<ReturnType<typeof setTimeout>>()
