@@ -220,6 +220,12 @@ const Group = HttpApiGroup.make("mock")
     }),
   )
   .add(
+    HttpApiEndpoint.delete("shellRemove", "/api/shell/:id", {
+      params: { id: Schema.String },
+      success: NoContent,
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("ptyList", "/api/pty", {
       success: Json,
       error: MockNotFound.pipe(HttpApiSchema.status(404)),
@@ -322,6 +328,13 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(
     HttpApiEndpoint.post("sessionPrompt", "/api/session/:sessionID/prompt", {
+      params: SessionParams,
+      payload: JsonPayload,
+      success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.post("sessionCompact", "/api/session/:sessionID/compact", {
       params: SessionParams,
       payload: JsonPayload,
       success: Json,

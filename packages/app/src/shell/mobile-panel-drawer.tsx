@@ -30,6 +30,7 @@ export function MobilePanelDrawer(
       },
     ),
   )
+
   const navigation = {
     close: () => props.onOpenChange(false),
     open: (view: DrawerView) => setStore("view", view),
@@ -39,6 +40,7 @@ export function MobilePanelDrawer(
       trigger?.focus()
     },
   }
+
   return (
     <DrawerContext.Provider value={navigation}>
       <MobileDrawer

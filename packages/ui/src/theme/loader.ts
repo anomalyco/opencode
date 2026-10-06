@@ -3,16 +3,20 @@ import { resolveThemeVariant, themeToCss } from "./resolve"
 import { resolveThemeVariantV2, themeV2ToCss } from "./v2/resolve"
 
 let activeTheme: DesktopTheme | null = null
+
 const THEME_STYLE_ID = "opencode-theme"
 
 function ensureLoaderStyleElement(): HTMLStyleElement {
   const existing = document.getElementById(THEME_STYLE_ID) as HTMLStyleElement | null
+
   if (existing) {
     return existing
   }
+
   const element = document.createElement("style")
   element.id = THEME_STYLE_ID
   document.head.appendChild(element)
+
   return element
 }
 
@@ -77,29 +81,36 @@ html[data-theme="${themeId}"] {
 
 export async function loadThemeFromUrl(url: string): Promise<DesktopTheme> {
   const response = await fetch(url)
+
   if (!response.ok) {
     throw new Error(`Failed to load theme from ${url}: ${response.statusText}`)
   }
+
   return response.json()
 }
 
 export function getActiveTheme(): DesktopTheme | null {
   const activeId = document.documentElement.getAttribute("data-theme")
+
   if (!activeId) {
     return null
   }
+
   if (activeTheme?.id === activeId) {
     return activeTheme
   }
+
   return null
 }
 
 export function removeTheme(): void {
   activeTheme = null
   const existingElement = document.getElementById(THEME_STYLE_ID)
+
   if (existingElement) {
     existingElement.remove()
   }
+
   document.documentElement.removeAttribute("data-theme")
 }
 

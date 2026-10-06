@@ -2,6 +2,7 @@ import type { ServerCtx } from "@/runtime/server/runtime"
 
 export function addProjects(context: ServerCtx, directories: string[]) {
   const directory = directories[0]
+
   if (!directory) return
 
   directories.forEach((item) => {
@@ -15,5 +16,6 @@ export function addProjects(context: ServerCtx, directories: string[]) {
     context.projects.open(item)
   })
   context.projects.touch(directory)
+
   return directory
 }

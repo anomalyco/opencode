@@ -5,6 +5,7 @@ import { useServerRowItems } from "@/runtime/extension/servers"
 /** Extension "server.row" menu items for one server, placed inside that row's menu. */
 export function ServerRowItems(props: { server: string }) {
   const items = useServerRowItems(() => props.server)
+
   return (
     <For each={items()}>
       {(item) => (

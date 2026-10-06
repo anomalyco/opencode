@@ -16,21 +16,28 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
 
   const format = (progress: Progress | undefined) => {
     if (!progress) return ""
+
     if (progress.label === "Clearing old events") return language.t("toast.migration.progress.clearingOldEvents")
+
     if (progress.label === "Migrating sessions") {
       if (progress.numerator === undefined) return language.t("toast.migration.progress.migratingSessions")
+
       if (progress.denominator === undefined)
         return language.t("toast.migration.progress.migratingSessions.current", { current: progress.numerator })
+
       return language.t("toast.migration.progress.migratingSessions.progress", {
         current: progress.numerator,
         total: progress.denominator,
       })
     }
+
     if (progress.numerator === undefined) return language.tDynamic("toast.migration.progress.working", progress.label)
+
     if (progress.denominator === undefined)
       return language.tDynamic("toast.migration.progress.working.current", `${progress.label} ${progress.numerator}`, {
         current: progress.numerator,
       })
+
     return language.tDynamic(
       "toast.migration.progress.working.progress",
       `${progress.label} ${progress.numerator}/${progress.denominator}`,
@@ -52,6 +59,7 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
         createRoot((dispose) => {
           disposeToast?.()
           disposeToast = dispose
+
           return (
             <Toast toastId={toastId}>
               <div data-slot="toast-v2-header" class="col-span-full">
@@ -71,6 +79,7 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
 
   onMount(async () => {
     await wait(1_000, abort.signal)
+
     if (abort.signal.aborted) return
 
     // The main process credentials sidecar requests; see `wireRendererHeaders`.
@@ -80,9 +89,12 @@ export function MigrationStatus(props: { server: ServerReadyData }) {
       while (true) {
         const status = await client.migration.v1.status({ signal: abort.signal })
         setProgress(status.status === "running" ? status.progress : undefined)
+
         if (status.status === "running") show()
         else hide()
+
         if (status.status === "completed") return
+
         if (status.status === "error") throw new Error(status.error)
         await wait(1_000, abort.signal)
       }
@@ -110,6 +122,7 @@ function wait(delay: number, signal: AbortSignal) {
   return new Promise<void>((resolve) => {
     const timer = setTimeout(done, delay)
     signal.addEventListener("abort", done, { once: true })
+
     function done() {
       clearTimeout(timer)
       signal.removeEventListener("abort", done)

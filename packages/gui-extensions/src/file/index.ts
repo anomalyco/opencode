@@ -3,14 +3,14 @@ import { Browser } from "../browser/contract"
 import { Changes } from "../review/contract"
 import { Extension, Store } from "../sdk"
 import { OpenAppPreferences } from "./apps"
-import { FileTree } from "./contract"
+import { FileTree, OpenInApp } from "./contract"
 import en from "./i18n/en"
 
 const TreeState = Schema.Struct({ tab: Schema.Literals(["changes", "all"]) })
 
 export default Extension.define({
   id: "file",
-  provides: { tree: FileTree },
+  provides: { tree: FileTree, openIn: OpenInApp },
   // Without review the tree lists only the workspace files; without the browser, HTML opens as a file tab.
   uses: { changes: Changes, browser: Browser },
   stores: {

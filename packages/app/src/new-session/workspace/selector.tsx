@@ -23,51 +23,73 @@ export function PromptWorkspaceSelector(props: {
 }) {
   const language = useLanguage()
   const summary = () => props.variant === "summary"
+
   const placement = createMemo(() =>
     summary() ? (language.direction() === "rtl" ? "right-start" : "left-start") : "bottom",
   )
+
   const [search, setSearch] = createStore({ workspaces: "", branches: "" })
   let searchInput: HTMLInputElement | undefined
   let branchSearchInput: HTMLInputElement | undefined
   let focusSearch = false
   const branchTruncation = createTruncatedText()
+
   const focusWorktreeSearch = () =>
     requestAnimationFrame(() => requestAnimationFrame(() => searchInput?.focus({ preventScroll: true })))
+
   let pending: { type: "select"; value: string } | { type: "create"; branch: string } | { type: "viewAll" } | undefined
   const selected = () => (sameDirectory(props.value, props.projectRoot) ? "main" : props.value)
+
   const workspaces = createMemo(() => {
     const query = search.workspaces.trim().toLowerCase()
+
     if (!query) return props.workspaces
+
     return props.workspaces.filter((workspace) => getFilename(workspace).toLowerCase().includes(query))
   })
+
   const icon = () => {
     if (selected() === "main") return "monitor"
+
     if (selected() === "create") return "plus"
+
     return "outline-worktree"
   }
+
   const select = (value: string) => {
     pending = { type: "select", value }
   }
+
   const onOpenChange = (open: boolean) => {
     if (open) {
       setSearch({ workspaces: "", branches: "" })
       props.onSearch("")
+
       return
     }
+
     const action = pending
     pending = undefined
+
     if (action?.type === "select") props.onChange(action.value)
+
     if (action?.type === "create") props.onCreate(action.branch)
+
     if (action?.type === "viewAll") {
       props.onViewAll()
+
       return
     }
+
     props.onDone?.()
   }
+
   const label = () => {
     if (selected() === "main")
       return language.t(summary() ? "session.new.workspace.local" : "session.new.workspace.triggerLocal")
+
     if (props.value === "create") return language.t("workspace.new")
+
     return getFilename(props.value)
   }
 
@@ -173,8 +195,10 @@ export function PromptWorkspaceSelector(props: {
                   onOpenChange={(open) => {
                     if (!open) {
                       focusSearch = false
+
                       return
                     }
+
                     if (!focusSearch || props.workspaces.length < 10) return
                     focusSearch = false
                     focusWorktreeSearch()
@@ -371,16 +395,22 @@ export function PromptWorkspaceSelector(props: {
 export function PromptGitStatus(props: { branch?: string; noGit?: boolean; from?: boolean; class?: string }) {
   const language = useLanguage()
   const truncation = createTruncatedText()
+
   const label = () => {
     if (props.noGit) return language.t("session.new.git.none")
+
     if (!props.branch) return undefined
+
     if (props.from) return language.t("session.new.workspace.fromBranch", { branch: props.branch })
+
     return props.branch
   }
 
   const icon = () => {
     if (props.noGit) return "monitor"
+
     if (props.from) return "branch-out"
+
     return "branch"
   }
 
@@ -408,6 +438,7 @@ export function PromptGitStatus(props: { branch?: string; noGit?: boolean; from?
 
 function createTruncatedText() {
   const [truncated, setTruncated] = createSignal(false)
+
   return {
     truncated,
     observe: (element: HTMLSpanElement) =>

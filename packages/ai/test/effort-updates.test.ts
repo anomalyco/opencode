@@ -171,6 +171,33 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
+  it.effect("releases a held system update next to an effort marker as one valid section", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model: opus5,
+          messages: [
+            Message.user("Fix it."),
+            Message.assistant("Done."),
+            lowFromHigh,
+            Message.system("Update."),
+            Message.user("Next."),
+          ],
+          providerOptions: { effort: "low" },
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages).toEqual([
+        { role: "user", content: [{ type: "text", text: "Fix it." }] },
+        { role: "assistant", content: [{ type: "text", text: "Done." }] },
+        { role: "system", content: [], output_config: { effort: "low" } },
+        { role: "user", content: [{ type: "text", text: "Next." }] },
+        { role: "system", content: [{ type: "text", text: "Update.", cache_control: undefined }] },
+      ])
+    }),
+  )
+
   it.effect("falls back to a plain top-level effort when history drifted from the current effort", () =>
     Effect.gen(function* () {
       const drifted = yield* compileRequest(
@@ -266,20 +293,28 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
-  it.effect("strips markers on the Vertex Anthropic route, whose protocol wrapper does not forward support", () =>
+  it.effect("lowers markers on the Vertex Anthropic route for models that support them", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(
+      const vertex = GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" })
+      const opus5 = yield* compileRequest(
         LLM.request({
-          model: GoogleVertexMessages.configure({ accessToken: "test", location: "global", project: "test" }).model(
-            "claude-opus-5",
-          ),
+          model: vertex.model("claude-opus-5"),
+          messages: conversation,
+          providerOptions: { effort: "low" },
+        }),
+      )
+      const opus48 = yield* compileRequest(
+        LLM.request({
+          model: vertex.model("claude-opus-4-8"),
           messages: conversation,
           providerOptions: { effort: "low" },
         }),
       )
 
-      expect(systemMessages(prepared.body)).toHaveLength(0)
-      expect(prepared.body.output_config).toEqual({ effort: "low" })
+      expect(systemMessages(opus5.body)).toEqual([{ role: "system", content: [], output_config: { effort: "low" } }])
+      expect(opus5.body.output_config).toEqual({ effort: "high" })
+      expect(systemMessages(opus48.body)).toHaveLength(0)
+      expect(opus48.body.output_config).toEqual({ effort: "low" })
     }),
   )
 })

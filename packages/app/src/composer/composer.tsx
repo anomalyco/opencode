@@ -68,6 +68,7 @@ function ComposerModelControl(props: {
 }) {
   const shouldAnimate = createMemo<boolean>((previous) => previous ?? props.loading)
   const mobile = createMediaQuery("(max-width: 767px)")
+
   const content = () => (
     <>
       <Show when={props.provider}>
@@ -84,6 +85,7 @@ function ComposerModelControl(props: {
       </span>
     </>
   )
+
   return (
     <Show when={!props.loading}>
       <Tooltip

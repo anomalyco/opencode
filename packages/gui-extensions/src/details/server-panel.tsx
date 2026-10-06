@@ -458,7 +458,11 @@ function ServicePopover(props: ServiceMenuProps & ServiceBodyProps & { empty: bo
   // In a narrow-screen drawer the service list replaces the drawer's view instead of opening a popover over it.
   if (props.mobile && drawer) {
     const content = children(() => (
-      <div class="session-summary-card session-service-drawer" data-service={props.service.type} aria-busy={props.loading}>
+      <div
+        class="session-summary-card session-service-drawer"
+        data-service={props.service.type}
+        aria-busy={props.loading}
+      >
         <ServiceBody {...props} />
       </div>
     ))

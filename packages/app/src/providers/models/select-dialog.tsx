@@ -36,6 +36,7 @@ import "./select-dialog.css"
 
 const MobilePanelDrawer = lazy(async () => {
   const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
+
   return { default: MobilePanelDrawer }
 })
 
@@ -43,9 +44,11 @@ const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
 type ModelState = ModelSelection
+
 type ModelItem = ReturnType<ModelState["list"]>[number]
 
 const modelKey = (model: ModelItem) => `${model.provider.id}:${model.id}`
+
 const manageKey = "action:manage"
 
 const sortModelGroups = (a: { category: string; items: ModelItem[] }, b: { category: string; items: ModelItem[] }) => {
@@ -55,8 +58,11 @@ const sortModelGroups = (a: { category: string; items: ModelItem[] }, b: { categ
   const bPopular = bIndex >= 0
 
   if (aPopular && !bPopular) return -1
+
   if (!aPopular && bPopular) return 1
+
   if (aPopular && bPopular) return aIndex - bIndex
+
   return a.items[0].provider.name.localeCompare(b.items[0].provider.name)
 }
 
@@ -68,16 +74,19 @@ const ModelList: Component<{
   model?: ModelState
 }> = (props) => {
   const language = useLanguage()
+
   const controller = createModelSelectorController({
     model: props.model,
     provider: () => props.provider,
     onSelect: props.onSelect,
   })
-  const [store, setStore] = createStore({
+
+  const [store, setStore] = createStore<{ search: string; active: string; collapsed: Record<string, boolean> }>({
     search: "",
     active: props.mobile ? (controller.current() ?? "") : "",
-    collapsed: {} as Record<string, boolean>,
+    collapsed: {},
   })
+
   createEffect(
     on(
       () => props.open,
@@ -92,18 +101,22 @@ const ModelList: Component<{
   const managed = createMemo(() => consoleModelGroup(controller.all()))
   const expanded = (provider: string) => store.search.length > 0 || !store.collapsed[provider]
   const managedIDs = createMemo(() => new Set(managed()?.providers.map((provider) => provider.id) ?? []))
+
   const visibleModels = () =>
     models().filter(
       (item) => expanded(item.provider.id) && (!managedIDs().has(item.provider.id) || expanded(CONSOLE_GROUP_KEY)),
     )
+
   let scrollRef: HTMLDivElement | undefined
 
   const setSearch = (value: string) => {
     const first = controller.models(value).find((item) => value.length > 0 || !store.collapsed[item.provider.id])
     setStore({ search: value, active: first ? modelKey(first) : "" })
   }
+
   const moveActive = (delta: number) => {
     const keys = visibleModels().map(modelKey)
+
     if (keys.length === 0) return
     const index = keys.indexOf(store.active)
     const start = index === -1 ? (delta > 0 ? -1 : 0) : index
@@ -114,8 +127,10 @@ const ModelList: Component<{
         ?.scrollIntoView({ block: "nearest" })
     })
   }
+
   const selectActive = () => {
     const item = visibleModels().find((item) => modelKey(item) === store.active)
+
     if (item) controller.select(item)
   }
 
@@ -186,16 +201,21 @@ const ModelList: Component<{
             onInput={(event) => setSearch(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.altKey || event.metaKey) return
+
               if (event.key === "ArrowDown") {
                 event.preventDefault()
                 moveActive(1)
+
                 return
               }
+
               if (event.key === "ArrowUp") {
                 event.preventDefault()
                 moveActive(-1)
+
                 return
               }
+
               if (event.key === "Enter" && !event.isComposing) {
                 event.preventDefault()
                 selectActive()
@@ -242,7 +262,9 @@ const ModelList: Component<{
 }
 
 type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Popover.Trigger>, "as" | "ref">
+
 type ModelSelectorTrigger = (props: ModelSelectorTriggerProps) => JSX.Element
+
 export function ModelSelectorPopover(props: {
   provider?: string
   model?: ModelState
@@ -254,22 +276,28 @@ export function ModelSelectorPopover(props: {
   const mobile = createMediaQuery("(max-width: 767px)")
   const data = useData()
   const location = useWorkspaceLocation()
+
   const controller = createModelSelectorController({
     model: props.model,
     provider: () => props.provider,
     onSelect: () => props.onClose?.(),
   })
+
   const chatgptPlan = () => {
     if (!controller.current()?.startsWith("openai:")) return false
+
     const connection = data.location.integration
       .list(location().ref)
       ?.find((integration) => integration.id === "openai")?.connections[0]
+
     return connection?.type === "credential" && connection.method === "oauth"
   }
+
   const manage = async () => {
     const { DialogManageModels } = await import("./manage")
     void dialog.show(() => <DialogManageModels />)
   }
+
   const connect = async () => {
     const { DialogConnectProvider } = await import("@/providers/connect/dialog")
     void dialog.show(() => <DialogConnectProvider directory={location().directory} />)
@@ -314,14 +342,21 @@ function ModelSelectorDrawer(props: {
   onConnect?: () => void
 }) {
   const language = useLanguage()
-  const [store, setStore] = createStore({
+
+  const [store, setStore] = createStore<{
+    open: boolean
+    loaded: boolean
+    restoreTrigger: boolean
+    action?: "select" | "manage" | "connect"
+  }>({
     open: false,
     loaded: false,
     restoreTrigger: true,
-    action: undefined as "select" | "manage" | "connect" | undefined,
   })
+
   let trigger: HTMLDivElement | undefined
   let content: HTMLDivElement | undefined
+
   return (
     <>
       <div ref={trigger} class="min-w-0">
@@ -349,14 +384,19 @@ function ModelSelectorDrawer(props: {
               if (present) return
               const action = store.action
               setStore("action", undefined)
+
               if (action === "manage") {
                 props.onManage()
+
                 return
               }
+
               if (action === "connect") {
                 props.onConnect?.()
+
                 return
               }
+
               if (action === "select") queueMicrotask(props.onClose)
             }}
           >
@@ -422,6 +462,7 @@ function createModelSelectorController(input: {
   onSelect: () => void
 }) {
   const model = input.model ?? useLocal().model
+
   const allModels = createMemo(() =>
     model
       .list()
@@ -433,20 +474,25 @@ function createModelSelectorController(input: {
     all: () => model.list().filter((item) => (input.provider() ? item.provider.id === input.provider() : true)),
     models: (search: string) => {
       const query = search.trim()
+
       const filtered = query
         ? allModels().filter((item) => matchesModelSearch(query, [item.name, item.id, item.provider.name]))
         : allModels()
+
       return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
     },
     groups: (models: ModelItem[]) => {
       const byProvider = new Map<string, ModelItem[]>()
+
       for (const item of models) {
         byProvider.set(item.provider.id, [...(byProvider.get(item.provider.id) ?? []), item])
       }
+
       return Array.from(byProvider, ([category, items]) => ({ category, items })).sort(sortModelGroups)
     },
     current: () => {
       const value = model.current()
+
       return value ? modelKey(value) : undefined
     },
     select: (item: ModelItem) => {
@@ -475,14 +521,19 @@ export function ModelSelectorPopoverView(props: {
   const models = createMemo(() => props.models(store.search))
   const groups = createMemo(() => props.groups(models()))
   const keys = () => [...groups().flatMap((group) => group.items.map(modelKey)), manageKey]
+
   const initialActive = () => {
     const selected = props.current
     const options = keys()
+
     if (selected && options.includes(selected)) return selected
+
     return options[0] ?? ""
   }
+
   const activeItem = () =>
     store.active ? contentRef?.querySelector<HTMLElement>(`[data-option-key="${CSS.escape(store.active)}"]`) : undefined
+
   const setOpen = (open: boolean) => {
     if (open) {
       dismiss.allowTriggerRestore()
@@ -493,36 +544,47 @@ export function ModelSelectorPopoverView(props: {
           activeItem()?.scrollIntoView({ block: "nearest" })
         }),
       )
+
       return
     }
+
     setStore({ open: false, search: "", active: "" })
   }
+
   const selectModel = (item: ModelItem) => {
     dismiss.preventTriggerRestore()
     setOpen(false)
     dismiss.afterClose(() => props.select(item))
   }
+
   const manage = () => {
     dismiss.preventTriggerRestore()
     setOpen(false)
     dismiss.afterClose(props.onManage)
   }
+
   const selectActive = () => {
     const item = models().find((item) => modelKey(item) === store.active)
+
     if (item) {
       selectModel(item)
+
       return
     }
+
     if (store.active === manageKey) manage()
   }
+
   const moveActive = (delta: number) => {
     const options = keys()
+
     if (options.length === 0) return
     const index = options.indexOf(store.active)
     const start = index === -1 ? 0 : index
     setStore("active", options[(start + delta + options.length) % options.length])
     queueMicrotask(() => activeItem()?.scrollIntoView({ block: "nearest" }))
   }
+
   const setSearch = (value: string) => {
     const first = props.models(value)[0]
     setStore({ search: value, active: first ? modelKey(first) : manageKey })
@@ -566,24 +628,32 @@ export function ModelSelectorPopoverView(props: {
                 onKeyDown={(event) => {
                   if (event.key === "Tab") return
                   event.stopPropagation()
+
                   if (event.key === "Escape") {
                     event.preventDefault()
                     dismiss.preventTriggerRestore()
                     setOpen(false)
                     dismiss.afterClose(props.onClose)
+
                     return
                   }
+
                   if (event.altKey || event.metaKey) return
+
                   if (event.key === "ArrowDown") {
                     event.preventDefault()
                     moveActive(1)
+
                     return
                   }
+
                   if (event.key === "ArrowUp") {
                     event.preventDefault()
                     moveActive(-1)
+
                     return
                   }
+
                   if (event.key === "Enter" && !event.isComposing) {
                     event.preventDefault()
                     selectActive()

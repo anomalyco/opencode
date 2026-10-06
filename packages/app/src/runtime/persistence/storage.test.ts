@@ -19,11 +19,13 @@ describe("persist targets", () => {
   test("removes workspace storage aliases and draft storage when removing persisted targets", () => {
     const workspace = Persist.workspace("C:\\Users\\foo", "terminal")
     const draft = Persist.draft("draft-a", "prompt")
+
     const keys = [
       `${workspace.storage}:${workspace.key}`,
       `${workspace.workspaceStorageAliases![0]}:${workspace.key}`,
       `${draft.storage}:${draft.key}`,
     ]
+
     keys.forEach((key) => localStorage.setItem(key, '{"value":1}'))
 
     removePersisted(workspace)

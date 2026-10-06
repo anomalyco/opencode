@@ -3,8 +3,6 @@ export default {
   tooltip: "Özet",
   "command.toggle": "Özeti değiştir",
   noBranch: "Dal yok",
-  "background.tasksRunning.one": "{{count}} arka plan görevi çalışıyor",
-  "background.tasksRunning.other": "{{count}} arka plan görevleri çalışıyor",
   "move.title": "Çalışma alanına taşı",
   "move.menu": "Oturumu şuraya taşı",
   "move.failed": "Oturum çalışma alanına taşınamadı",

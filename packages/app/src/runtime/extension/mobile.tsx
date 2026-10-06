@@ -78,11 +78,13 @@ export function MobileViewTabs(props: {
   })
 
   const drawer = createMemo(() => (store.drawer ? props.views.find(store.drawer) : undefined))
+
   const tab = createMemo(() =>
     props.current === "session" || props.views.tabs().some((entry) => entry.key === props.current)
       ? props.current
       : "more",
   )
+
   let trigger: HTMLButtonElement | undefined
 
   return (

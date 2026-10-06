@@ -2,6 +2,7 @@ import type { Browser } from "@opencode/plugin-browser/rpc"
 
 export function protocolError(method: string, error: unknown) {
   const detail = message(error)
+
   const recovery =
     method === "DOM.setFileInputFiles" && /not.*file input/i.test(detail)
       ? "Target is not a file input. Call browser.snapshot({tabID}) and choose an input[type=file] ref for browser.files.upload, or use browser.files.drop for a drop area."
@@ -14,6 +15,7 @@ export function protocolError(method: string, error: unknown) {
             : /wasn't found|method not found|not implemented|not allowed/i.test(detail)
               ? "This Chromium target does not support or allow the operation. Check desktop/plugin compatibility and report it; do not retry unchanged or disable browser security."
               : "Inspect browser.tabs.list({}) and the target tab before deciding to retry; a partially completed action is not automatically safe to repeat."
+
   return new Error(`${recovery} Chromium command ${method} failed: ${detail}`, { cause: error })
 }
 
@@ -21,6 +23,7 @@ export function browserFailure(action: Browser.Action, error: unknown): Extract<
   const detail = message(error, 1_700)
   const navigation = ["tabs.open", "navigate", "back", "forward", "reload"].includes(action.type)
   const network = navigation ? detail.match(/\bERR_[A-Z_]+\b/)?.[0] : undefined
+
   const hint =
     network === "ERR_CONNECTION_REFUSED"
       ? "The browser could not connect to the site. Check its hostname/port on the connected server. localhost means that server, not the desktop."
@@ -35,6 +38,7 @@ export function browserFailure(action: Browser.Action, error: unknown): Extract<
               : action.type === "screenshot" && /UnknownVizError|capture.*(?:failed|unavailable)/i.test(detail)
                 ? "Chromium could not capture a rendered frame. Call browser.tabs.focus({tabID}) and keep the desktop window visible. If it is already visible, report the capture failure instead of repeating it unchanged."
                 : undefined
+
   return {
     type: "failure",
     code: network ? "navigation_failed" : "operation_failed",

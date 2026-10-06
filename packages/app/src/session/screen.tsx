@@ -35,6 +35,7 @@ import { TimelineSearchBar } from "./timeline/search-bar"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
+import { SessionRunningMenu } from "./header/session-running-menu"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createTimelineCache } from "./timeline/cache"
 
@@ -263,6 +264,7 @@ function SessionScreenContent(props: {
           setContentRef={timeline.view.setContentRef}
           anchor={timeline.view.anchor}
           setRevealMessage={timeline.view.setRevealMessage}
+          reveal={timeline.view.reveal}
           setScrollToEnd={timeline.view.setScrollToEnd}
           search={
             <Show when={active()}>
@@ -338,7 +340,15 @@ function SessionScreenContent(props: {
           </Match>
           <Match when={session.identity.params.id}>
             <Show when={isDesktop() && !messagesReady()}>
-              <SessionIdentityHeader sessionID={session.identity.params.id ?? ""} session={session.data.info()} />
+              <SessionIdentityHeader sessionID={session.identity.params.id ?? ""} session={session.data.info()}>
+                <SessionRunningMenu
+                  sessionID={session.identity.params.id}
+                  owner={composer.requests.background.running.sessionID()}
+                  blocking={composer.requests.background.running.blocking()}
+                  tasks={composer.requests.background.running.tasks()}
+                  title={session.data.parentID() ? session.data.info()?.title : undefined}
+                />
+              </SessionIdentityHeader>
             </Show>
             <Show when={messagesReady() && session.identity.params.id}>{timelineView()}</Show>
           </Match>
@@ -346,7 +356,9 @@ function SessionScreenContent(props: {
       </div>
 
       <Show when={composer.active()} keyed>
-        {(model) => <ActiveSessionComposerRegion model={model} suggestionBoundary={timeline.scroller} />}
+        {(model) => (
+          <ActiveSessionComposerRegion session={session} model={model} suggestionBoundary={timeline.scroller} />
+        )}
       </Show>
       <Show when={!isDesktop() && !!session.identity.params.id && bottomMobileTabs()}>{mobileTabs()}</Show>
     </>

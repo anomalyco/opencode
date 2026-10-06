@@ -65,7 +65,7 @@ const ExtraContent = Schema.Struct({
 })
 const decodeExtraContent = (value: unknown) => Option.getOrUndefined(Schema.decodeUnknownOption(ExtraContent)(value))
 
-const OpenAIChatAssistantToolCall = Schema.Struct({
+export const OpenAIChatAssistantToolCall = Schema.Struct({
   id: Schema.String,
   type: Schema.tag("function"),
   function: Schema.Struct({
@@ -134,7 +134,7 @@ const OpenAIChatUserContent = Schema.Union([
 ])
 type OpenAIChatUserContent = Schema.Schema.Type<typeof OpenAIChatUserContent>
 
-const OpenAIChatMessage = Schema.Union([
+export const OpenAIChatMessage = Schema.Union([
   Schema.Struct({
     role: Schema.Literal("system"),
     content: Schema.Union([Schema.String, Schema.Array(OpenAIChatUserContent)]),
@@ -200,7 +200,7 @@ export type OpenAIChatBody = Schema.Schema.Type<typeof OpenAIChatBody>
 // The event schema is one decoded SSE `data:` payload. `Framing.sse` splits the
 // byte stream into strings, then `Protocol.jsonEvent` decodes each string into
 // this provider-native event shape.
-const OpenAIChatUsage = Schema.StructWithRest(
+export const OpenAIChatUsage = Schema.StructWithRest(
   Schema.Struct({
     prompt_tokens: optionalNull(Schema.Number),
     completion_tokens: optionalNull(Schema.Number),
@@ -238,7 +238,7 @@ const OpenAIChatToolCallDeltaFunction = Schema.Struct({
   arguments: optionalNull(Schema.String),
 })
 
-const OpenAIChatToolCallDelta = Schema.Struct({
+export const OpenAIChatToolCallDelta = Schema.Struct({
   index: optionalNull(Schema.Number),
   id: optionalNull(Schema.String),
   function: optionalNull(OpenAIChatToolCallDeltaFunction),
@@ -246,7 +246,7 @@ const OpenAIChatToolCallDelta = Schema.Struct({
 })
 type OpenAIChatToolCallDelta = Schema.Schema.Type<typeof OpenAIChatToolCallDelta>
 
-const OpenAIChatDelta = Schema.StructWithRest(
+export const OpenAIChatDelta = Schema.StructWithRest(
   Schema.Struct({
     content: optionalNull(Schema.String),
     refusal: optionalNull(Schema.String),
@@ -259,7 +259,7 @@ const OpenAIChatDelta = Schema.StructWithRest(
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
 
-const OpenAIChatChoice = Schema.StructWithRest(
+export const OpenAIChatChoice = Schema.StructWithRest(
   Schema.Struct({
     delta: optionalNull(OpenAIChatDelta),
     finish_reason: optionalNull(Schema.String),
@@ -326,6 +326,8 @@ export interface ParserState {
 interface LoweringOptions {
   readonly cacheControl?: (cache: CacheHint | undefined) => OpenAIChatCacheControl | undefined
   readonly toolCallID?: (id: string) => string
+  /** Project provider-specific fields from the exact source, even when other messages are dropped during lowering. */
+  readonly assistant?: (source: LLMRequest["messages"][number], message: OpenAIChatMessage) => OpenAIChatMessage
 }
 
 const lowerTool = (tool: ToolDefinition, options: LoweringOptions, supportsStrictMode: boolean): OpenAIChatTool => ({
@@ -539,8 +541,10 @@ const lowerMessage = Effect.fnUntraced(function* (
   options: LoweringOptions & { readonly providerMetadataKey: string },
 ) {
   if (message.role === "user") return [yield* lowerUserMessage(message, options)]
-  if (message.role === "assistant")
-    return [yield* lowerAssistantMessage(message, reasoningField, requireReasoning, options)]
+  if (message.role === "assistant") {
+    const lowered = yield* lowerAssistantMessage(message, reasoningField, requireReasoning, options)
+    return [options.assistant?.(message, lowered) ?? lowered]
+  }
   return (yield* lowerToolMessages(message, options)).messages
 })
 
@@ -1214,7 +1218,7 @@ const step = (state: ParserState, event: OpenAIChatEvent) =>
     ] as const
   })
 
-const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
+export const finishEvents = Effect.fnUntraced(function* (state: ParserState) {
   if (state.finishReason === undefined && state.requireFinishReason)
     return yield* new AIError({
       reason: new InvalidProviderOutputError({

@@ -31,6 +31,7 @@ import { ProgressCircle } from "@opencode/ui/progress-circle"
 import type { Upload } from "../attachments/uploads"
 import { CommentCard } from "@opencode/session-ui/comment-card"
 import { typeLabel } from "@opencode/session-ui/message-file"
+import { getFilename } from "@opencode/util/path"
 import { Skill } from "@opencode/schema/skill"
 import type {
   ComposerAgentPart,
@@ -49,6 +50,7 @@ import "./editor.css"
 
 const MobilePanelDrawer = lazy(async () => {
   const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
+
   return { default: MobilePanelDrawer }
 })
 
@@ -203,6 +205,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             attachments={props.controller.attachments()}
             uploads={props.controller.uploads()}
             comments={props.controller.comments()}
+            files={props.controller.files()}
             activeCommentID={state.activeContextID}
             removeLabel={i18n.t("ui.promptInput.removeAttachment")}
             onAttachmentClick={props.controller.openAttachment}
@@ -210,6 +213,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             onUploadCancel={(upload) => props.controller.cancelUpload(upload.id)}
             onCommentClick={(comment) => props.controller.toggleContext(comment.key)}
             onCommentRemove={(comment) => props.controller.removeContext(comment.key)}
+            onFileRemove={(file) => props.controller.removeContext(file.key)}
           />
         </Show>
 
@@ -576,6 +580,8 @@ export function ComposerAttachments(props: {
   attachments: ComposerAttachment[]
   uploads?: Upload[]
   comments?: ComposerComment[]
+  // Files attached without a mention, such as one restored from a prompt another client sent.
+  files?: Extract<ComposerComment, { type: "file" }>[]
   activeCommentID?: string
   removeLabel: string
   onAttachmentClick?: (attachment: ComposerAttachment) => void
@@ -583,12 +589,20 @@ export function ComposerAttachments(props: {
   onUploadCancel?: (upload: Upload) => void
   onCommentClick?: (comment: ComposerComment) => void
   onCommentRemove?: (comment: ComposerComment) => void
+  onFileRemove?: (file: Extract<ComposerComment, { type: "file" }>) => void
 }) {
   const i18n = useI18n()
   const percent = (upload: Upload) => (upload.size === 0 ? 100 : Math.floor((upload.loaded / upload.size) * 100))
 
   return (
-    <Show when={props.attachments.length > 0 || (props.uploads?.length ?? 0) > 0 || (props.comments?.length ?? 0) > 0}>
+    <Show
+      when={
+        props.attachments.length > 0 ||
+        (props.uploads?.length ?? 0) > 0 ||
+        (props.comments?.length ?? 0) > 0 ||
+        (props.files?.length ?? 0) > 0
+      }
+    >
       <div data-component="composer-attachments" data-slot="composer-attachments" class="relative">
         <div
           data-slot="composer-attachments-scroll"
@@ -617,6 +631,35 @@ export function ComposerAttachments(props: {
                 <button
                   type="button"
                   onClick={() => props.onCommentRemove?.(comment)}
+                  class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
+                  aria-label={props.removeLabel}
+                >
+                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                </button>
+              </div>
+            )}
+          </For>
+          <For each={props.files ?? []}>
+            {(file) => (
+              <div class="relative group shrink-0" data-slot="composer-context-file">
+                <Tooltip value={file.path} placement="top" contentClass="break-all">
+                  <AttachmentCard title={file.name ?? getFilename(file.path)} surface="base">
+                    <FileIcon node={{ path: file.path, type: "file" }} />
+                    <span>
+                      {typeLabel(file.name ?? file.path, "text/plain", i18n.t("ui.common.file"))}
+                      <Show when={file.selection}>
+                        {(selection) =>
+                          selection().startLine === selection().endLine
+                            ? `:${selection().startLine}`
+                            : `:${selection().startLine}-${selection().endLine}`
+                        }
+                      </Show>
+                    </span>
+                  </AttachmentCard>
+                </Tooltip>
+                <button
+                  type="button"
+                  onClick={() => props.onFileRemove?.(file)}
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
@@ -812,14 +855,18 @@ export function ComposerEditorSelect(props: {
   const mobile = createMediaQuery("(max-width: 767px)")
   const [store, setStore] = createStore({ open: false, loaded: false })
   let trigger: HTMLButtonElement | undefined
+
   const setOpen = (open: boolean) => {
     setStore("open", open)
+
     if (open) setStore("loaded", true)
     props.onOpenChange?.(open)
   }
+
   createEffect(() => {
     if (!mobile() && store.open) setOpen(false)
   })
+
   const content = () => (
     <>
       {props.currentIcon}
@@ -831,6 +878,7 @@ export function ComposerEditorSelect(props: {
       </span>
     </>
   )
+
   return (
     <Tooltip
       inactive={props.mobileDrawer && mobile()}

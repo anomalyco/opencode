@@ -3,9 +3,11 @@ import { afterAll, beforeAll, expect, test } from "bun:test"
 import { markSessionLinks, setupSessionLinks } from "./markdown-session-links"
 
 const first = "ses_0123456789abcdefghijklmnop"
+
 const second = "ses_abcdefghijklmnopqrstuvwxyz"
 
 beforeAll(() => GlobalRegistrator.register())
+
 afterAll(() => GlobalRegistrator.unregister())
 
 test("links complete IDs in prose and inline code without changing fenced code or existing links", () => {

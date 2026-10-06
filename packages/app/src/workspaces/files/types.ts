@@ -8,6 +8,7 @@ export const FileSelection = Persistence.struct({
   endLine: Schema.Number,
   endChar: Schema.Number,
 })
+
 export type FileSelection = typeof FileSelection.Type
 
 export const SelectedLineRange = Persistence.struct({
@@ -16,6 +17,7 @@ export const SelectedLineRange = Persistence.struct({
   side: Persistence.optional(Schema.Literals(["additions", "deletions"])),
   endSide: Persistence.optional(Schema.Literals(["additions", "deletions"])),
 })
+
 export type SelectedLineRange = typeof SelectedLineRange.Type
 
 export type FileViewState = {
@@ -37,6 +39,7 @@ export type FileState = {
 export function selectionFromLines(range: SelectedLineRange): FileSelection {
   const startLine = Math.min(range.start, range.end)
   const endLine = Math.max(range.start, range.end)
+
   return {
     startLine,
     endLine,

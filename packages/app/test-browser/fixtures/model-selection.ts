@@ -9,8 +9,11 @@ import { ServerScope } from "@/runtime/server/scope"
 // Bun does not compile Solid JSX. Compile the real context provider with the
 // same presets as Vite instead of replacing LocalProvider's implementation.
 const require = createRequire(import.meta.url)
+
 const solid = createRequire(require.resolve("vite-plugin-solid"))
+
 const { transformSync } = solid("@babel/core")
+
 Bun.plugin({
   name: "selection-solid-context",
   setup(build) {
@@ -25,13 +28,18 @@ Bun.plugin({
 })
 
 type Commit = { agent?: string; model?: { providerID: string; id: string; variant?: string } }
+
 type Event = { data: { sessionID: string } }
+
 type ConfigModel = string | { providerID: string; model: string; variant?: string }
+
 const key = (modelID: string): ModelKey => ({ providerID: "provider", modelID })
+
 const durable = (modelID: string, variant?: string, agent = "build"): Commit => ({
   agent,
   model: { providerID: "provider", id: modelID, variant },
 })
+
 const agent = (name: string, model?: ModelKey, variant?: string): Agent => ({
   name,
   mode: "primary",
@@ -42,16 +50,25 @@ const agent = (name: string, model?: ModelKey, variant?: string): Agent => ({
 })
 
 let active: ReturnType<typeof fixture>
+
 mock.module("@solidjs/router", () => ({ useParams: () => active.state.route }))
+
 mock.module("@/runtime/server/current", () => ({ useData: () => active.data }))
+
 mock.module("@/runtime/server/client", () => ({ useServerSDK: () => active.sdk }))
+
 mock.module("@/runtime/server/runtime", () => ({ useGlobal: () => ({ models: active.preferences }) }))
+
 mock.module("@/workspaces/location", () => ({ useWorkspaceLocation: () => () => ({ directory: active.directory }) }))
+
 mock.module("@/settings/model", () => ({
   useSettings: () => ({ visibility: { customAgents: () => active.state.visible } }),
 }))
+
 mock.module("@/composer/persistence", () => ({ useComposerState: () => active.prompt }))
+
 mock.module("@/shell/state/layout", () => ({ useLayout: () => undefined }))
+
 mock.module("@/runtime/platform/platform", () => ({
   usePlatform: () => ({
     platform: "web",
@@ -62,12 +79,17 @@ mock.module("@/runtime/platform/platform", () => ({
 }))
 
 const { LocalProvider, useLocal } = await import("@/providers/models/selection")
+
 const { ModelsProvider } = await import("@/providers/models/models")
+
 const { Persist } = await import("@/runtime/persistence/storage")
+
 const { createMemoryComposerState } = await import("@/composer/state")
+
 const { createComposerModelSelection } = await import("@/composer/selection")
 
 const cleanups: Array<() => void> = []
+
 afterEach(() =>
   cleanups
     .splice(0)
@@ -77,6 +99,7 @@ afterEach(() =>
 
 function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigModel; preferred?: string } = {}) {
   const directory = `/selection-test/${crypto.randomUUID()}`
+
   const [state, set] = createStore({
     visible: true,
     configLoaded: true,
@@ -102,13 +125,16 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
       limit: { context: 128_000, output: 8192 },
     })),
   })
+
   const [preferences, setPreferences] = createStore({
     user: [] as Array<ModelKey & { visibility: "show" | "hide" }>,
     recent: [] as ModelKey[],
     variant: (input.preferred ? { "provider/a": input.preferred } : {}) as Record<string, string>,
   })
+
   const events = new Map<string, Set<(event: Event) => void>>()
   const configLoads: string[] = []
+
   const result = {
     prompt: createMemoryComposerState(),
     directory,
@@ -139,6 +165,7 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
           const handlers = events.get(type) ?? new Set()
           events.set(type, handlers)
           handlers.add(handler)
+
           return () => handlers.delete(handler)
         },
       },
@@ -151,6 +178,7 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
       active = result
       let local!: ReturnType<typeof useLocal>
       let composer: ReturnType<typeof createComposerModelSelection> | undefined
+
       const dispose = createRoot((dispose) => {
         createComponent(ModelsProvider, {
           directory,
@@ -158,20 +186,27 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
             return createComponent(LocalProvider, {
               get children() {
                 local = useLocal()
+
                 if (draft) composer = createComposerModelSelection({ agent: local.agent.current })
+
                 return null
               },
             })
           },
         })
+
         return dispose
       })
+
       cleanups.push(dispose)
+
       return { local, composer, dispose }
     },
   }
+
   const target = Persist.serverWorkspace(ServerScope.local, directory, "model-selection")
   cleanups.push(() => localStorage.removeItem(`${target.storage}:${target.key}`))
+
   return result
 }
 
@@ -217,6 +252,7 @@ test("new-session drafts remember each agent's model and hand off inactive choic
   const f = fixture({ agents: [agent("build", key("a")), agent("plan", key("b"))] })
   f.set("route", "id", undefined)
   const { local, composer } = f.mount(true)
+
   if (!composer) throw new Error("missing draft composer")
   composer.set(key("c"))
   composer.variant.set("high")
@@ -295,6 +331,7 @@ test("restores durable selection ahead of agent, global, and saved variant defau
     config: { providerID: "provider", model: "c", variant: "high" },
     preferred: "high",
   })
+
   const { local } = f.mount()
   expect(selection(local)).toEqual({ agent: "plan", model: "a", variant: "low" })
   local.session.restore({ sessionID: "ses_a", agent: "build", model: key("c") })
@@ -319,6 +356,7 @@ test("invalid durable models fall through agent, global, recent, and connected d
     agents: [agent("build", key("b"), "low")],
     config: "provider/c",
   })
+
   const { local } = f.mount()
   expect(selection(local)).toEqual({ agent: "build", model: "b", variant: "low" })
   f.set("agents", [agent("build", key("removed"))])
@@ -353,6 +391,7 @@ test("durable and explicitly selected Default override a saved variant preferenc
     preferred: "high",
     config: { providerID: "provider", model: "a", variant: "low" },
   })
+
   const { local } = f.mount()
   expect(local.model.variant.current()).toBeUndefined()
   local.model.variant.set(undefined)

@@ -37,18 +37,23 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
     const owner = sessionOwnership.capture()
     const editor = document.querySelector<HTMLElement>('[data-component="composer-editor"]')
     const selection = window.getSelection()
+
     const cursor =
       editor && selection?.rangeCount && editor.contains(selection.anchorNode) ? getCursorPosition(editor) : null
+
     const restoreComposer = () => {
       // Kobalte restores focus during its teardown effect; defer past it so the
       // composer keeps focus and the caret returns to where the user left it.
       requestAnimationFrame(() => {
         const editor = document.querySelector<HTMLElement>('[data-component="composer-editor"]')
+
         if (!editor) return
         editor.focus()
+
         if (cursor !== null) setCursorPosition(editor, cursor)
       })
     }
+
     const { DialogSelectModel } = await import("@/providers/models/select-dialog")
     owner.run(() => {
       void dialog.show(() => <DialogSelectModel model={model} />, restoreComposer)

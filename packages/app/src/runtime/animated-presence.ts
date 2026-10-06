@@ -8,6 +8,7 @@ export function createAnimatedPresence<T>(
   minimumDuration = 0,
 ) {
   const [tick, setTick] = createSignal(0)
+
   const animation = createMemo<{
     identity?: unknown
     show: boolean
@@ -20,13 +21,17 @@ export function createAnimatedPresence<T>(
     const current = value()
     const same = !identity || previous?.identity === currentIdentity
     const started = same && previous?.show ? previous.started : performance.now()
+
     const remaining =
       current === undefined && same && previous?.show ? minimumDuration - (performance.now() - started) : 0
+
     const show = current !== undefined || remaining > 0
+
     if (remaining > 0) {
       const timer = setTimeout(() => setTick((value) => value + 1), remaining)
       onCleanup(() => clearTimeout(timer))
     }
+
     return {
       identity: currentIdentity,
       show,
@@ -35,7 +40,9 @@ export function createAnimatedPresence<T>(
       value: current ?? (same ? previous?.value : undefined),
     }
   })
+
   const presence = createPresence({ show: () => animation().show, element })
+
   return {
     ...presence,
     show: () => animation().show,

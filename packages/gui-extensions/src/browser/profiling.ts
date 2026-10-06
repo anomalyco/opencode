@@ -25,6 +25,7 @@ export function createProfiling(
   let trace: Promise<{ id: Browser.FileID; durationMs: number; incomplete: boolean }> | undefined
   let traceResources = new Set<string>()
   let traceID = ""
+
   let cpu:
     | {
         started: number
@@ -34,15 +35,20 @@ export function createProfiling(
         result?: Promise<{ id: Browser.FileID; durationMs: number }>
       }
     | undefined
+
   let takingHeap = false
   cdp.on("Page.frameNavigated", ({ frame }) => {
     if (shared.recording?.owner === contents) traceResources.add(frame.url)
+
     if (cpu && !cpu.result) cpu.resources.add(frame.url)
   })
+
   const json = async (id: Browser.FileID) => {
     const file = await files.transfer(id)
+
     try {
       const data = Buffer.from(file.data)
+
       return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Unknown))(
         (file.name.endsWith(".gz") ? gunzipSync(data, { maxOutputLength: 128 * 1024 * 1024 }) : data).toString("utf8"),
       )
@@ -53,6 +59,7 @@ export function createProfiling(
       )
     }
   }
+
   const stopCpu = () => {
     if (!cpu)
       return Promise.reject(
@@ -60,6 +67,7 @@ export function createProfiling(
           "No CPU profile has been started in this tab. Call browser.cpu.start({tabID}), perform the interaction to inspect, then browser.cpu.stop({tabID}).",
         ),
       )
+
     if (cpu.result) return cpu.result
     const resources = cpu.resources
     clearTimeout(cpu.timer)
@@ -69,8 +77,10 @@ export function createProfiling(
       ]),
       durationMs: (profile.endTime - profile.startTime) / 1000,
     }))
+
     return cpu.result
   }
+
   return {
     target(type: "trace" | "cpu"): Browser.Target {
       return {
@@ -87,6 +97,7 @@ export function createProfiling(
         )
       const complete = Promise.withResolvers<{ stream?: string; dataLossOccurred: boolean }>()
       const off = cdp.on("Tracing.tracingComplete", (event) => complete.resolve(event))
+
       const owner = {
         owner: contents,
         pid: contents.getOSProcessId(),
@@ -98,6 +109,7 @@ export function createProfiling(
             clearTimeout(owner.timer)
             const durationMs = performance.now() - owner.started
             const deadline = Promise.withResolvers<never>()
+
             const timeout = setTimeout(
               () =>
                 deadline.reject(
@@ -107,40 +119,48 @@ export function createProfiling(
                 ),
               10_000,
             )
+
             try {
               const result = await Promise.race([
                 cdp.send("Tracing.end").then(() => complete.promise),
                 deadline.promise,
               ])
+
               if (!result.stream)
                 throw new Error(
                   "Chromium stopped tracing without returning a trace stream. No export is available. Check desktop/plugin compatibility and report the failure; repeating trace.stop cannot recover a missing stream.",
                 )
               const chunks: Buffer[] = []
               let bytes = 0
+
               try {
                 while (true) {
                   const part = await cdp.send("IO.read", { handle: result.stream, size: 256 * 1024 })
                   const buffer = Buffer.from(part.data, part.base64Encoded ? "base64" : "utf8")
                   bytes += buffer.byteLength
+
                   if (bytes > 64 * 1024 * 1024)
                     throw new Error(
                       "Trace exceeded its 64 MiB desktop capture limit. Record a shorter interaction with a smaller durationMs in browser.trace.start; do not repeat the same recording unchanged.",
                     )
                   chunks.push(buffer)
+
                   if (part.eof) break
                 }
               } finally {
                 await cdp.send("IO.close", { handle: result.stream })
               }
+
               const raw = Schema.decodeUnknownSync(
                 Schema.fromJsonString(
                   Schema.Struct({ traceEvents: Schema.Array(Schema.Record(Schema.String, Schema.Json)) }),
                 ),
               )(Buffer.concat(chunks).toString("utf8"))
+
               // A CDP trace is browser-wide. Export only this renderer process, never
               // the application renderer or another session's process metadata.
               const traceEvents = raw.traceEvents.filter((event) => event.pid === owner.pid)
+
               const id = await files.save(
                 "trace.json.gz",
                 "application/gzip",
@@ -152,6 +172,7 @@ export function createProfiling(
                 ),
                 [...traceResources],
               )
+
               return {
                 id,
                 durationMs,
@@ -161,16 +182,20 @@ export function createProfiling(
             } finally {
               clearTimeout(timeout)
               off()
+
               if (shared.recording === owner) shared.recording = undefined
             }
           })()
+
           return trace
         },
       }
+
       shared.recording = owner
       trace = undefined
       traceResources = new Set(source())
       traceID = crypto.randomUUID()
+
       try {
         await cdp.send("Tracing.start", {
           transferMode: "ReturnAsStream",
@@ -193,13 +218,16 @@ export function createProfiling(
         }, durationMs)
       } catch (error) {
         off()
+
         if (shared.recording === owner) shared.recording = undefined
         throw error
       }
     },
     stopTrace() {
       if (shared.recording?.owner === contents) return shared.recording.finish()
+
       if (trace) return trace
+
       return Promise.reject(
         new Error(
           "This tab has no performance trace to stop. Call browser.trace.start({tabID}), perform the interaction to inspect, then browser.trace.stop({tabID}).",
@@ -229,11 +257,15 @@ export function createProfiling(
       const chunks: string[] = []
       let size = 0
       let overflow = false
+
       const off = cdp.on("HeapProfiler.addHeapSnapshotChunk", ({ chunk }) => {
         size += Buffer.byteLength(chunk)
+
         if (size > 128 * 1024 * 1024) overflow = true
+
         if (!overflow) chunks.push(chunk)
       })
+
       try {
         await cdp.send("HeapProfiler.enable")
         await cdp.send("HeapProfiler.takeHeapSnapshot", { reportProgress: false })
@@ -241,10 +273,12 @@ export function createProfiling(
         takingHeap = false
         off()
       }
+
       if (overflow)
         throw new Error(
           "Heap snapshot exceeded the 128 MiB desktop capture limit. Use a smaller page/test case or ask the user to inspect the heap with desktop developer tools; this tool has no size override.",
         )
+
       return files.save("heap.heapsnapshot.gz", "application/gzip", gzipSync(chunks.join("")), [
         ...resources,
         ...source(),
@@ -259,6 +293,7 @@ export function createProfiling(
       if (action.type === "heap.compare") {
         const before = parseHeap(await json(action.before)).classes
         const after = parseHeap(await json(action.after)).classes
+
         return {
           classes: Array.from(new Set([...before.keys(), ...after.keys()]))
             .map((name) => ({
@@ -271,16 +306,23 @@ export function createProfiling(
             .slice(0, action.limit ?? 100),
         }
       }
+
       const value = await json(action.fileID)
+
       if (action.type === "trace.analyze") return analyzeTrace(value, action.limit)
+
       if (action.type === "cpu.analyze") return analyzeCpu(value, action.limit)
       const heap = parseHeap(value)
+
       if (action.type === "heap.summary") return heap.summary(action.limit)
+
       if (action.type === "heap.query") return heap.query(action.name, action.limit)
+
       return heap.object(action.id, action.limit)
     },
     async dispose() {
       if (shared.recording?.owner === contents) await shared.recording.finish().catch(() => undefined)
+
       if (cpu && !cpu.result) await stopCpu().catch(() => undefined)
     },
   }

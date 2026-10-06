@@ -5,8 +5,11 @@ import { mockWorkspace } from "../utils/workspace"
 import { expectSessionTitle } from "../utils/waits"
 
 const directory = "C:\\OpenCode\\main"
+
 const workspace = "C:\\OpenCode\\worktree"
+
 const sessionID = "ses_mcp_workspace"
+
 const title = "Workspace MCP routing"
 
 type Surface = "popover" | "dialog"
@@ -18,6 +21,7 @@ async function open(page: Page, input: { surface: Surface } & Pick<MockServerCon
   const requests: { path: string; directory: string }[] = []
   page.on("request", (request) => {
     const url = new URL(request.url())
+
     if (request.method() === "OPTIONS" || !/^\/api\/(?:experimental\/)?mcp(?:\/|$)/.test(url.pathname)) return
     requests.push({ path: url.pathname, directory: url.searchParams.get("location[directory]") || directory })
   })
@@ -35,13 +39,16 @@ async function open(page: Page, input: { surface: Surface } & Pick<MockServerCon
   await expectSessionTitle(page, title)
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
   const panel = page.getByRole("dialog", { name: input.surface === "popover" ? "MCP" : "MCPs", exact: true })
+
   const show = async () => {
     if (input.surface === "dialog") return page.keyboard.press("Control+;")
     await page.getByRole("button", { name: "Session details", exact: true }).click()
     await page.getByRole("button", { name: "MCP", exact: true }).click()
   }
+
   await show()
   await expect(panel.getByText("figma-desktop", { exact: true })).toBeVisible()
+
   return { requests, panel, show, toggle: panel.getByRole("switch") }
 }
 
@@ -50,12 +57,14 @@ for (const shared of [true, false]) {
     page,
   }) => {
     const actions: Parameters<NonNullable<MockServerConfig["onMcpAction"]>>[0][] = []
+
     const view = await open(page, {
       surface: "popover",
       mcp: (target) =>
         !shared && target !== workspace ? [] : [{ name: "figma-desktop", status: { status: "disabled" } }],
       onMcpAction: (action) => void actions.push(action),
     })
+
     await expect(view.toggle).not.toBeChecked()
     await expect(view.toggle).toBeEnabled()
     view.requests.length = 0
@@ -88,6 +97,7 @@ for (const surface of ["popover", "dialog"] as const) {
   test(`shows connection failures from the MCP ${surface} and allows reconnecting`, async ({ page }) => {
     const error = "Streamable HTTP error: Error POSTing to endpoint: 404 Not Found"
     const state = { fail: true }
+
     const view = await open(page, {
       surface,
       mcp: (target) => [
@@ -99,21 +109,25 @@ for (const surface of ["popover", "dialog"] as const) {
       // Connection failures are reported by the refreshed status, not the HTTP response.
       onMcpAction: (input) => (input.action === "connect" && state.fail ? { status: "failed", error } : undefined),
     })
+
     // A failed server shows as enabled in the popover; switch it off first.
     const reset = async () => {
       if (surface !== "popover") return
       await expect(view.toggle).toBeChecked()
       await view.panel.getByText("figma-desktop", { exact: true }).click()
     }
+
     await reset()
     await expect(view.toggle).not.toBeChecked()
     await expect(view.toggle).toBeEnabled()
     view.requests.length = 0
 
     await view.panel.locator('[data-slot="switch-control"]').click()
+
     const toast = page
       .getByRole("listitem", { includeHidden: true })
       .filter({ has: page.getByText("Request failed", { exact: true }) })
+
     await expect(toast.getByText(`figma-desktop: ${error}`, { exact: true })).toBeVisible()
     await expect(view.toggle).toBeChecked({ checked: surface === "popover" })
     await expect(view.toggle).toBeEnabled()
@@ -123,6 +137,7 @@ for (const surface of ["popover", "dialog"] as const) {
     expect(view.requests.every((request) => request.directory === workspace)).toBe(true)
 
     if (surface === "popover") await page.keyboard.press("Escape")
+
     if (surface === "dialog") await view.panel.getByRole("button", { name: "Close", exact: true }).click()
     await expect(view.panel).toBeHidden()
     await toast.getByRole("button", { name: "Dismiss", exact: true }).click()

@@ -364,6 +364,53 @@ describe("ConfigInstructionPlugin.Plugin", () => {
     ),
   )
 
+  // A client CWD can spell the drive `c:` while git reports the project root as `C:`.
+  ;(process.platform === "win32" ? it.live : it.live.skip)(
+    "stops at the project root when the location drive letter differs in case",
+    () =>
+      Effect.acquireRelease(
+        Effect.promise(() => tmpdir()),
+        (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
+      ).pipe(
+        Effect.flatMap((tmp) => {
+          const global = path.join(tmp.path, "global")
+          const home = path.join(tmp.path, "home")
+          const project = path.join(tmp.path, "repo")
+          const directory = project[0].toLowerCase() + project.slice(1)
+          return Effect.gen(function* () {
+            yield* Effect.promise(() => fs.mkdir(project, { recursive: true }))
+            yield* Effect.promise(() => fs.writeFile(path.join(project, "AGENTS.md"), "project"))
+            yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "AGENTS.md"), "outside"))
+            const discovery = yield* start()
+            const watcher = yield* Watcher.Test
+            expect(yield* watcher.subscriptions()).toEqual([
+              { path: path.join(global, "AGENTS.md"), type: "file" },
+              { path: path.join(directory, "AGENTS.md"), type: "file" },
+            ])
+            expect((yield* readInitial(yield* discovery.load())).text).toBe(
+              `Instructions from: ${path.join(directory, "AGENTS.md")}\nproject`,
+            )
+          }).pipe(
+            Effect.provide(
+              instructionLayer({
+                config: global,
+                home,
+                locationServiceLayer: Layer.succeed(
+                  Location.Service,
+                  Location.Service.of(
+                    location(
+                      { directory: AbsolutePath.make(directory) },
+                      { projectDirectory: AbsolutePath.make(project) },
+                    ),
+                  ),
+                ),
+              }),
+            ),
+          )
+        }),
+      ),
+  )
+
   it.effect("isolates source failure without failing activation", () => {
     const failingFS = Layer.effect(
       FSUtil.Service,

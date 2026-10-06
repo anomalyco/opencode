@@ -18,11 +18,14 @@ export function createRefreshQueue(input: QueueInput) {
   const take = (count: number) => {
     if (queued.size === 0) return [] as string[]
     const items: string[] = []
+
     for (const [id, directory] of queued) {
       queued.delete(id)
       items.push(directory)
+
       if (items.length >= count) break
     }
+
     return items
   }
 
@@ -37,12 +40,14 @@ export function createRefreshQueue(input: QueueInput) {
   const push = (directory: string) => {
     if (!directory) return
     queued.set(key(directory), directory)
+
     if (input.paused()) return
     schedule()
   }
 
   const refresh = () => {
     root = true
+
     if (input.paused()) return
     schedule()
   }
@@ -50,24 +55,30 @@ export function createRefreshQueue(input: QueueInput) {
   async function drain() {
     if (running) return
     running = true
+
     try {
       while (true) {
         if (input.paused()) return
+
         if (root) {
           root = false
           await input.bootstrap()
           await tick()
           continue
         }
+
         const dirs = take(2)
+
         if (dirs.length === 0) return
         await Promise.all(dirs.map((dir) => input.bootstrapInstance(dir)))
         await tick()
       }
     } finally {
       running = false
+
       // oxlint-disable-next-line no-unsafe-finally -- intentional: early return skips schedule() when paused
       if (input.paused()) return
+
       if (root || queued.size) schedule()
     }
   }

@@ -3,8 +3,6 @@ export default {
   tooltip: "Zusammenfassung",
   "command.toggle": "Zusammenfassung umschalten",
   noBranch: "Kein Branch",
-  "background.tasksRunning.one": "{{count}} Hintergrundaufgabe wird ausgeführt",
-  "background.tasksRunning.other": "{{count}} Hintergrundaufgaben werden ausgeführt",
   "move.title": "Wechseln Sie zum Arbeitsbereich",
   "move.menu": "Sitzung verschieben nach",
   "move.failed": "Sitzung konnte nicht verschoben werden",

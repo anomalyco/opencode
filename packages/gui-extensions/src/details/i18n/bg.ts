@@ -3,8 +3,6 @@ export default {
   tooltip: "Обобщение",
   "command.toggle": "Превключване на обобщението",
   noBranch: "Няма клон",
-  "background.tasksRunning.one": "{{count}} фонова задача се изпълнява",
-  "background.tasksRunning.other": "{{count}} фонови задачи се изпълняват",
   "move.title": "Преместете се в работното пространство",
   "move.menu": "Преместване на сесията към",
   "move.failed": "Преместването на сесията не бе успешно",

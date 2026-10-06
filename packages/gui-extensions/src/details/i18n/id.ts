@@ -3,8 +3,6 @@ export default {
   tooltip: "Ringkasan",
   "command.toggle": "Beralih ringkasan",
   noBranch: "Tanpa cabang",
-  "background.tasksRunning.one": "{{count}} tugas latar belakang berjalan",
-  "background.tasksRunning.other": "{{count}} tugas latar belakang berjalan",
   "move.title": "Pindahkan ke ruang kerja",
   "move.menu": "Pindahkan sesi ke",
   "move.failed": "Gagal memindahkan sesi",

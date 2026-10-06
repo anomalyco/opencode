@@ -54,6 +54,7 @@ for (const direction of ["ltr", "rtl"] as const) {
             const row = element.querySelector('[data-component="settings-row"]')!.getBoundingClientRect()
             const searchClip = element.querySelector('[data-slot="mobile-panel-content"]')!.getBoundingClientRect()
             const rowClip = element.querySelector(".settings-models")!.getBoundingClientRect()
+
             return {
               searchStart: Math.round(search.left - drawer.left),
               searchEnd: Math.round(drawer.right - search.right),
@@ -101,14 +102,17 @@ for (const direction of ["ltr", "rtl"] as const) {
       await page.locator('[data-slot="mobile-drawer-overlay"]').click({ position: { x: 10, y: 10 } })
       await expect(models).toBeHidden()
       await expect(model).toBeFocused()
+
       if (paid) {
         await model.click()
         await models.getByRole("button", { name: "Manage models", exact: true }).click()
         await expect(models).toBeHidden()
         await expect(page.getByRole("dialog", { name: "Manage models", exact: true })).toBeVisible()
         await expect(page.getByRole("dialog")).toHaveCount(1)
+
         return
       }
+
       await model.click()
       await models.getByRole("button", { name: "Connect provider", exact: true }).click()
       await expect(models).toBeHidden()

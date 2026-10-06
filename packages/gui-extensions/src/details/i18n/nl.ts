@@ -3,8 +3,6 @@ export default {
   tooltip: "Samenvatting",
   "command.toggle": "Samenvatting schakelen",
   noBranch: "Geen branch",
-  "background.tasksRunning.one": "{{count}} achtergrondtaak wordt uitgevoerd",
-  "background.tasksRunning.other": "{{count}} achtergrondtaken worden uitgevoerd",
   "move.title": "Verplaats naar werkruimte",
   "move.menu": "Sessie verplaatsen naar",
   "move.failed": "Kan sessie niet verplaatsen",

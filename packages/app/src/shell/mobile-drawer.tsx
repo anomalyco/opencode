@@ -34,6 +34,7 @@ export const MobileDrawerTrigger = Drawer.Trigger
 
 export function MobileDrawerContent(props: ParentProps) {
   const language = useLanguage()
+
   return (
     <Drawer.Portal forceMount>
       <Drawer.Overlay data-slot="mobile-drawer-overlay" />
@@ -48,4 +49,5 @@ export function MobileDrawerContent(props: ParentProps) {
 }
 
 export const MobileDrawerLabel = Drawer.Label
+
 export const MobileDrawerClose = Drawer.Close

@@ -31,9 +31,11 @@ for (const position of ["top", "bottom"] as const) {
     const more = tabs.getByRole("tab", { name: "More...", exact: true })
     const views = page.getByRole("dialog", { name: "More options", exact: true })
     const picker = tabs.getByRole("tab", { selected: true })
+
     const message = page.locator(
       `[data-timeline-row="UserMessage"][data-message-id="${fixture.expected.targetMessageIDs.at(-1)}"]`,
     )
+
     const composer = page.getByRole("textbox", { name: "Prompt", exact: true })
     await expect(picker).toHaveText("Session")
     await expect(navigation).toHaveCount(1)
@@ -45,6 +47,7 @@ for (const position of ["top", "bottom"] as const) {
     await expect
       .poll(async () => {
         const bounds = await navigation.boundingBox()
+
         return !!bounds && bounds.x >= 1 && bounds.x <= 2 && bounds.width >= 386 && bounds.width <= 388
       })
       .toBe(true)
@@ -54,9 +57,12 @@ for (const position of ["top", "bottom"] as const) {
         const input = await composer.boundingBox()
         const dock = await page.locator('[data-component="session-composer-dock"]').boundingBox()
         const panel = await page.locator('[data-slot="session-chat-panel"]').boundingBox()
+
         if (!bar || !input || !dock || !panel) return false
+
         if (position === "bottom")
           return bar.y >= dock.y + dock.height && Math.abs(bar.y + bar.height - panel.y - panel.height) <= 1
+
         return Math.abs(bar.y - panel.y) <= 1 && bar.y + bar.height <= input.y
       })
       .toBe(true)
@@ -79,6 +85,7 @@ for (const position of ["top", "bottom"] as const) {
     await more.click()
     await expect(views).toBeVisible()
     await expect(more).toHaveAttribute("aria-expanded", "true")
+
     for (const name of ["Files", "Terminal", "Usage", "Session details"])
       await expect(views.getByRole("button", { name, exact: true })).toBeVisible()
     await expect(views).not.toHaveAttribute("data-transitioning")
@@ -180,16 +187,19 @@ for (const position of ["top", "bottom"] as const) {
 
     // The view resets to Session whenever the routed session changes, including through Home.
     const trigger = page.locator('[data-slot="mobile-tabs-trigger"]')
+
     const openTabs = async () => {
       await trigger.click()
       await expect(drawer).not.toHaveAttribute("data-transitioning")
     }
+
     const openTab = async (title: string) => {
       await openTabs()
       await drawer.locator('[data-slot="tab-link"]').filter({ hasText: title }).click()
       await expect(drawer).toBeHidden()
       await expect(trigger).toContainText(title)
     }
+
     await more.click()
     await views.getByRole("button", { name: "Usage", exact: true }).click()
     await expect(page.getByText("Total Cost", { exact: true })).toBeVisible()
@@ -375,6 +385,7 @@ test.describe("touch", () => {
       .poll(async () => {
         const navigation = await settings.getByRole("button", { name: "Models", exact: true }).boundingBox()
         const content = await panel.boundingBox()
+
         return !!navigation && !!content && navigation.y + navigation.height <= content.y
       })
       .toBe(true)

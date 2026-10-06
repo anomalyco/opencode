@@ -3,6 +3,7 @@ import { afterAll, beforeAll, expect, test } from "bun:test"
 import { parseMarkdownNodes } from "./markdown-solid"
 
 beforeAll(() => GlobalRegistrator.register())
+
 afterAll(() => GlobalRegistrator.unregister())
 
 test("assigns stable paths to elements and individual words", () => {

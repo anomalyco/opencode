@@ -8,10 +8,15 @@ import { ServerScope } from "@/runtime/server/scope"
 import type { Tab } from "@/shell/tabs/tabs"
 
 const server = "local\nhttp://localhost:4096" as ServerConnection.Key
+
 const session = { id: "session-1", title: "Test session", location: { directory: "/project" } }
+
 const alerts: string[] = []
+
 const tabs: { store: Tab[] } = { store: [] }
+
 let createServerNotificationState: typeof import("./notification").createServerNotificationState
+
 let storage: typeof import("@/runtime/persistence/storage")
 
 beforeAll(async () => {
@@ -40,6 +45,7 @@ beforeAll(async () => {
     ...storage,
     persisted: () => {
       const [store, setStore] = createStore({ list: [] })
+
       return [store, setStore, undefined, () => false]
     },
   }))
@@ -55,6 +61,7 @@ test.each([
   alerts.length = 0
   tabs.store = [{ type: "session", server, sessionId: "another-session" }]
   let listener: ((event: unknown) => void) | undefined
+
   const dispose = createRoot((dispose) => {
     const state = createServerNotificationState({
       key: server,
@@ -63,6 +70,7 @@ test.each([
         event: {
           listen: (fn: typeof listener) => {
             listener = fn
+
             return () => {}
           },
         },
@@ -70,6 +78,7 @@ test.each([
       data: { session: { get: () => session } } as unknown as Data,
       coordinator: { system: async (_id: string, fn: () => Promise<void>) => fn() },
     } as Parameters<typeof createServerNotificationState>[0])
+
     return { dispose, state }
   })
 

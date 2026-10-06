@@ -10,20 +10,25 @@ test.skipIf(process.platform !== "win32")(
     const config = (await import("../electron-builder.config")).default
     const compiler = await getMakeNsisPath(config.toolsets?.nsis, config.nsis?.customNsisBinary)
     const dir = await mkdtemp(path.join(os.tmpdir(), "opencode-installer-"))
+
     const run = async (cmd: string[]) => {
       const result = Bun.spawn(cmd, {
         env: { ...process.env, ...compiler.env, OPENCODE_INSTALLER_TEST_ROOT: dir },
         stdout: "pipe",
         stderr: "pipe",
       })
+
       const [stdout, stderr, code] = await Promise.all([
         new Response(result.stdout).text(),
         new Response(result.stderr).text(),
         result.exited,
       ])
+
       expect(code, `${stdout}\n${stderr}`).toBe(0)
+
       return stdout.trim()
     }
+
     const acl = (file: string) =>
       run([
         "pwsh",

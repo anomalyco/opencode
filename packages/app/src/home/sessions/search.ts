@@ -15,6 +15,7 @@ type HomeSessionSearchSource = Pick<HomeSessionsController, "data" | "session">
 export function createHomeSessionSearchController(home: HomeController, sessions: HomeSessionSearchSource) {
   const command = useCommand()
   const language = useLanguage()
+
   const [state, setState] = createStore({
     value: "",
     focused: false,
@@ -22,33 +23,48 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     exact: undefined as HomeSessionRecord | undefined,
     lookingUp: false,
   })
+
   let lookup = 0
   let root: HTMLDivElement | undefined
   let input: HTMLInputElement | undefined
   let list: HTMLDivElement | undefined
   const query = createMemo(() => state.value.trim())
+
   const results = createMemo(() => {
     const value = query().toLowerCase()
+
     if (!value) return []
+
     const records = sessions.data
       .searchRecords()
       .filter((record) => `${sessionLabel(record.session)} ${record.projectName}`.toLowerCase().includes(value))
+
     if (!state.exact || records.some((record) => record.session.id === state.exact?.session.id)) return records
+
     return [state.exact, ...records]
   })
+
   const active = createMemo(() => {
     const records = results()
+
     if (records.some((record) => homeSessionSearchKey(record) === state.highlighted)) return state.highlighted
+
     return records[0] ? homeSessionSearchKey(records[0]) : ""
   })
+
   const open = createMemo(() => state.focused && query().length > 0)
+
   const placeholder = createMemo(() => {
     const project = home.project.selected()
+
     if (project) return language.t("home.sessions.search.placeholder.scoped", { scope: displayName(project) })
+
     if (home.server.list().length > 1) {
       const conn = home.server.focused()
+
       if (conn) return language.t("home.sessions.search.placeholder.scoped", { scope: serverName(conn) })
     }
+
     return language.t("home.sessions.search.placeholder")
   })
 
@@ -56,6 +72,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     makeEventListener(document, "pointerdown", (event) => {
       if (!open()) return
       const target = event.target
+
       if (!(target instanceof Node) || root?.contains(target)) return
       close()
     }),
@@ -86,6 +103,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
     const current = ++lookup
     const sessionID = value.trim()
     setState({ value, highlighted: "", exact: undefined, lookingUp: false })
+
     if (!looksLikeSessionID(sessionID)) return
     setState("lookingUp", true)
     void sessions.session.lookup(sessionID).then(
@@ -102,6 +120,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
 
   function select(record: HomeSessionRecord, options?: { background?: boolean }) {
     sessions.session.open(record.session, options)
+
     if (!options?.background) close()
   }
 
@@ -122,6 +141,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       highlight: (record: HomeSessionRecord) => setState("highlighted", homeSessionSearchKey(record)),
       move: (delta: number) => {
         const records = results()
+
         if (records.length === 0) return
         const index = records.findIndex((record) => homeSessionSearchKey(record) === active())
         const next = ((index === -1 ? 0 : index) + delta + records.length) % records.length
@@ -131,6 +151,7 @@ export function createHomeSessionSearchController(home: HomeController, sessions
       select,
       selectActive: () => {
         const record = results().find((item) => homeSessionSearchKey(item) === active())
+
         if (record) select(record)
       },
     },

@@ -8,7 +8,9 @@ import type { Data } from "@opencode/client/solid"
 import type { persisted } from "@/runtime/persistence/storage"
 
 let createChildStoreManager: typeof import("./child-store").createChildStoreManager
+
 const querySingles: Array<() => { queryKey?: unknown[]; enabled?: boolean }> = []
+
 const persist: typeof persisted = (_target, _schema, initial) => [
   ...createStore(initial),
   null,
@@ -16,6 +18,7 @@ const persist: typeof persisted = (_target, _schema, initial) => [
 ]
 
 const path = { state: "", config: "", worktree: "", directory: "", home: "" }
+
 const data = {
   location: {
     info: () => undefined,
@@ -57,9 +60,12 @@ function setup(input: { connected?: () => boolean } = {}) {
   const bootstraps: string[] = []
   const mcpLoads: string[] = []
   const offset = querySingles.length
+
   return createRoot((dispose) => {
     const owner = getOwner()
+
     if (!owner) throw new Error("owner required")
+
     const manager = createChildStoreManager({
       owner,
       connected: input.connected ?? (() => true),
@@ -75,6 +81,7 @@ function setup(input: { connected?: () => boolean } = {}) {
       data,
       global: { path },
     })
+
     return { manager, bootstraps, mcpLoads, queries: () => querySingles.slice(offset), dispose }
   })
 }
@@ -83,6 +90,7 @@ beforeAll(async () => {
   mock.module("@tanstack/solid-query", () => ({
     useQuery: (options: () => { queryKey?: unknown[]; enabled?: boolean }) => {
       querySingles.push(options)
+
       return {
         get isLoading() {
           return options().queryKey?.[1] === "path"
@@ -95,8 +103,11 @@ beforeAll(async () => {
         },
         get data() {
           if (options().queryKey?.[1] === "path") throw new Error("pending path data read")
+
           if (options().queryKey?.[1] === "mcp") return options().enabled ? { demo: { status: "disabled" } } : undefined
+
           if (options().queryKey?.[1] === "lsp") return []
+
           return undefined
         },
       }
@@ -109,6 +120,7 @@ beforeAll(async () => {
 describe("createChildStoreManager", () => {
   test("does not evict the active directory during mark", () => {
     const { manager, dispose } = setup()
+
     try {
       Array.from({ length: 30 }, (_, index) => `/pinned-${index}`).forEach((directory) => {
         manager.children[directory] = createStore({} as State)
@@ -126,6 +138,7 @@ describe("createChildStoreManager", () => {
 
   test("starts new child stores as loading and bootstraps them on first access", () => {
     const { manager, bootstraps, dispose } = setup()
+
     try {
       const [store] = manager.child("/project")
 
@@ -138,6 +151,7 @@ describe("createChildStoreManager", () => {
 
   test("provides the requested directory while the path query is pending", () => {
     const { manager, dispose } = setup()
+
     try {
       const [store] = manager.child("/project", { bootstrap: false })
 
@@ -150,6 +164,7 @@ describe("createChildStoreManager", () => {
 
   test("syncs MCP only when requested for the directory", () => {
     const { manager, mcpLoads, queries, dispose } = setup()
+
     try {
       const [, setStore] = manager.child("/project", { bootstrap: false })
       expect(queries()).toHaveLength(1)
@@ -167,6 +182,7 @@ describe("createChildStoreManager", () => {
 
   test("keeps non-bootstrapping children passive until a real directory access", () => {
     const { manager, bootstraps, queries, dispose } = setup()
+
     try {
       const [store] = manager.child("/project", { bootstrap: false })
 
@@ -191,6 +207,7 @@ describe("createChildStoreManager", () => {
   test("does not enable location queries before the event handshake", () => {
     const connection = { connected: false }
     const { manager, queries, dispose } = setup({ connected: () => connection.connected })
+
     try {
       manager.child("/handshake")
       expect(queries()[0]?.().enabled).toBe(false)

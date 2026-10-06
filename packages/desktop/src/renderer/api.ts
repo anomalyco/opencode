@@ -9,6 +9,7 @@ type Mutable<Value> =
       : Value
 
 const mutable = <Value>(value: Value) => value as Mutable<Value>
+
 const toArrayBuffer = (value: Uint8Array) =>
   value.buffer.slice(value.byteOffset, value.byteOffset + value.byteLength) as ArrayBuffer
 
@@ -31,8 +32,10 @@ export const api: ElectronAPI = {
   storeItems: (name) =>
     seeded.then((snapshot) => {
       const item = snapshot.get(name)
+
       if (!item) return invoke("StorageItems", { name }).then(mutable)
       snapshot.delete(name)
+
       return item
     }),
   storeUpdate: (name, insert, remove) => invoke("StorageUpdate", { name, insert, remove }),

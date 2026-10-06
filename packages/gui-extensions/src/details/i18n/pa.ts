@@ -3,8 +3,6 @@ export default {
   tooltip: "خلاصہ",
   "command.toggle": "خلاصہ ٹوگل کرو۔",
   noBranch: "کوئی برانچ نئیں",
-  "background.tasksRunning.one": "⁨{{count}}⁩ بیک گراؤنڈ کم چل رہیا اے",
-  "background.tasksRunning.other": "⁨{{count}}⁩ بیک گراؤنڈ کم چل رہے نیں",
   "move.title": "ورک سپیس چ لے جاؤ",
   "move.menu": "سیشن ایتھے لے جاؤ",
   "move.failed": "سیشن لے جان چ ناکامی ہوئی",

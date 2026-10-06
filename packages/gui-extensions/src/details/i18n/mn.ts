@@ -3,8 +3,6 @@ export default {
   tooltip: "Товчоо",
   "command.toggle": "Хураангуйг сэлгэх",
   noBranch: "Салаа байхгүй",
-  "background.tasksRunning.one": "{{count}} арын даалгавар ажиллаж байна",
-  "background.tasksRunning.other": "{{count}} арын даалгавар ажиллаж байна",
   "move.title": "Ажлын талбар руу шилжүүлэх",
   "move.menu": "Сессийг шилжүүлэх газар",
   "move.failed": "Сессийг шилжүүлж чадсангүй",

@@ -3,8 +3,6 @@ export default {
   tooltip: "概要",
   "command.toggle": "概要を切り替える",
   noBranch: "ブランチなし",
-  "background.tasksRunning.one": "{{count}}件のバックグラウンドタスクが実行中",
-  "background.tasksRunning.other": "{{count}}件のバックグラウンドタスクが実行中",
   "move.title": "ワークスペースに移動",
   "move.menu": "セッションの移動先",
   "move.failed": "セッションの移動に失敗しました",

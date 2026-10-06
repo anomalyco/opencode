@@ -18,18 +18,23 @@ for (const { width, direction } of [
     await expect(editor).toBeEditable()
     await editor.fill("Please check focus after sending.")
     await expect(editor).toBeFocused()
+
     const admitted = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === `/api/session/${fixture.targetID}/prompt`,
     )
+
     await editor.press("Enter")
     expect((await admitted).ok()).toBe(true)
     await expect(editor).toBeEmpty()
+
     if (width < 768) {
       await expect(editor).not.toBeFocused()
+
       return
     }
+
     await expect(editor).toBeFocused()
   })
 }
@@ -43,11 +48,13 @@ test.describe("touch submission", () => {
     await expect(editor).toBeEditable()
     await editor.fill("Please dismiss the keyboard after sending.")
     await expect(editor).toBeFocused()
+
     const admitted = page.waitForResponse(
       (response) =>
         response.request().method() === "POST" &&
         new URL(response.url()).pathname === `/api/session/${fixture.targetID}/prompt`,
     )
+
     await page.getByRole("button", { name: "Send", exact: true }).tap()
     expect((await admitted).ok()).toBe(true)
     await expect(editor).toBeEmpty()

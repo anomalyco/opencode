@@ -9,6 +9,7 @@ const consent: FormCreated["data"]["form"] = {
   metadata: { kind: "websearch.provider" },
   fields: [{ key: "choice", type: "string", required: true, custom: false }],
 }
+
 const provider: FormCreated["data"]["form"] = {
   ...consent,
   id: "frm_provider",
@@ -31,6 +32,7 @@ function fixture() {
   const replies: SessionFormReplyInput[] = []
   const abort = new AbortController()
   const emit = (event: OpenCodeEvent) => listeners.forEach((listener) => listener(event))
+
   return {
     form: consent,
     signal: abort.signal,
@@ -40,6 +42,7 @@ function fixture() {
     events: {
       listen(listener: (event: OpenCodeEvent) => void) {
         listeners.add(listener)
+
         return () => {
           listeners.delete(listener)
         }
@@ -84,6 +87,7 @@ describe("web search desktop consent", () => {
       selection: "parallel",
       reply: async (answer) => {
         input.replies.push(answer)
+
         if (answer.answer.choice === "choose") input.create()
       },
     })
@@ -131,8 +135,11 @@ describe("web search desktop consent", () => {
   test.each(["cancel", "other-client", "abort"])("ends a pending handoff on %s", async (action) => {
     const input = fixture()
     const pending = replyWebSearch({ ...input, selection: "exa" })
+
     if (action === "cancel") input.cancel(consent.id)
+
     if (action === "other-client") input.answer(consent.id, { choice: "disable" })
+
     if (action === "abort") input.abort.abort()
     await pending
     input.create()

@@ -48,7 +48,7 @@ const setup: Setup<typeof Details> = (ctx) => {
     ),
   })
 
-  // The narrow-screen details drawer, offered for root sessions of a project.
+  // The narrow-screen details drawer, offered for sessions of a project, subagents included.
   const panel: Panel = {
     id: "main",
     region: "side",
@@ -111,7 +111,7 @@ const setup: Setup<typeof Details> = (ctx) => {
   ctx.add(Panel, () => {
     const session = sessions.current()
 
-    if (!session?.project || session.server.data.session.get(session.id)?.parentID) return
+    if (!session?.project) return
 
     return panel
   })

@@ -28,6 +28,7 @@ for (const scheme of ["light", "dark"] as const) {
       const details = page.getByRole("dialog", { name: "Session details", exact: true })
       await expect(details.getByRole("button", { name: "MCP", exact: true })).toBeVisible()
       await details.evaluate((element) => element.setAttribute("data-drawer-probe", "single"))
+
       for (const [name, empty] of [
         ["MCP", "No MCP servers configured"],
         ["Plugins", "No plugins configured"],
@@ -48,6 +49,7 @@ for (const scheme of ["light", "dark"] as const) {
         await expect(details.getByRole("button", { name: "MCP", exact: true })).toBeVisible()
         await expect(trigger).toBeFocused()
       }
+
       await details.getByRole("button", { name: "Skills", exact: true }).click()
       await expect(
         page.getByRole("dialog", { name: "Skills", exact: true }).getByText("No skills configured", { exact: true }),
@@ -76,7 +78,9 @@ test("mobile extension drawers keep configured lists, retry, refresh, and MCP to
     (url) => url.pathname === "/api/plugin",
     (route) => {
       if (route.request().method() === "OPTIONS") return route.fallback()
+
       if (state.fail) return route.fulfill({ status: 500, json: { message: "Unavailable" } })
+
       return route.fulfill({
         json: {
           location: { directory: fixture.directory },
@@ -124,10 +128,13 @@ test("mobile extension drawers keep configured lists, retry, refresh, and MCP to
     (route) => {
       if (route.request().method() === "OPTIONS") return route.fallback()
       const path = new URL(route.request().url()).pathname
+
       if (path.endsWith("/disconnect")) {
         state.enabled = false
+
         return route.fulfill({ status: 204 })
       }
+
       return route.fulfill({
         json: {
           location: { directory: fixture.directory },
@@ -162,6 +169,7 @@ test("mobile extension drawers keep configured lists, retry, refresh, and MCP to
   await details.getByRole("button", { name: "Plugins", exact: true }).click()
   await expect(plugins.getByText("extra-plugin", { exact: true })).toBeVisible()
   await plugins.getByRole("button", { name: "Navigate back", exact: true }).click()
+
   for (const [name, item] of [
     ["Skills", "drawer-skill"],
     ["LSP", "drawer-lsp"],
@@ -171,6 +179,7 @@ test("mobile extension drawers keep configured lists, retry, refresh, and MCP to
     await expect(extension.getByText(item, { exact: true })).toBeVisible()
     await extension.getByRole("button", { name: "Navigate back", exact: true }).click()
   }
+
   await details.getByRole("button", { name: "MCP", exact: true }).click()
   const mcp = page.getByRole("dialog", { name: "MCP", exact: true })
   await expect(mcp.getByRole("switch")).toHaveCount(30)
@@ -187,9 +196,11 @@ test("mobile extension drawers keep configured lists, retry, refresh, and MCP to
   await mcp.getByRole("switch", { name: "mcp-00", exact: true }).press("Space")
   await disconnect
   await expect(mcp.getByRole("switch", { name: "mcp-00", exact: true })).not.toBeChecked()
+
   const last = mcp
     .locator(".session-mcp-row")
     .filter({ has: page.getByRole("switch", { name: "mcp-29", exact: true }) })
+
   await last.scrollIntoViewIfNeeded()
   await expect(last).toBeInViewport()
   await mcp.getByRole("switch", { name: "mcp-29", exact: true }).focus()

@@ -8,6 +8,7 @@ export function createMarkdownParser(highlight: (code: string, language: string)
 }
 
 const inlineMathRegex = /^\\\(((?:\\.|[^\\\n])*?)\\\)/
+
 const blockMathRegex = /^\$\$\n([\s\S]+?)\n\$\$(?:\n|$)/
 
 const katexExtension: MarkedExtension = {
@@ -17,12 +18,16 @@ const katexExtension: MarkedExtension = {
       level: "inline",
       start(src) {
         const index = src.indexOf("\\(")
+
         if (index === -1) return
+
         return index
       },
       tokenizer(src) {
         const match = src.match(inlineMathRegex)
+
         if (!match) return
+
         return {
           type: "inlineKatex",
           raw: match[0],
@@ -37,7 +42,9 @@ const katexExtension: MarkedExtension = {
       level: "block",
       tokenizer(src) {
         const match = src.match(blockMathRegex)
+
         if (!match) return
+
         return {
           type: "blockKatex",
           raw: match[0],

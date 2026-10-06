@@ -4,7 +4,7 @@ import type { Schema } from "effect"
 import type { JSX } from "solid-js"
 import type { Store } from "solid-js/store"
 import type { Cleanup, OS, Persisted, StoreFrom } from "./core"
-import type { IconName, Link } from "./points"
+import type { IconName, Link } from "./registries"
 
 /**
  * A server the app lists. One ref per id that follows the live connection: read `client`, `data` and `url` from it

@@ -17,6 +17,7 @@ export function Home() {
   const sessions = createHomeSessionsController(home)
   const search = createHomeSessionSearchController(home, sessions)
   const scroll = createHomeScrollController(sessions.data.groups)
+
   return (
     <div
       data-slot="home-panel"

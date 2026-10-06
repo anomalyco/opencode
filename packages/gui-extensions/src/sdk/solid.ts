@@ -96,7 +96,7 @@ export interface PanelFrame {
   readonly reserve: Accessor<boolean>
   /** Plays size animations; false while the user drags a region edge. */
   readonly animate: Accessor<boolean>
-  /** One inner sidebar preference shared by every side panel, toggled from the tab strip. */
+  /** One inner sidebar preference shared by every side panel; a panel with a sidebar renders its own toggle. */
   readonly sidebar: PanelSidebar
   /** This extension's tab ids stored in the session's side strip (the ids `list` receives as `open`). */
   readonly open: Accessor<readonly string[]>

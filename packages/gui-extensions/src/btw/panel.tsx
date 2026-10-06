@@ -10,10 +10,10 @@ import { Markdown } from "@opencode/session-ui/markdown"
 import { useExtension, type MountedSession } from "../sdk"
 import type { BtwModel } from "./model"
 
-export default function SessionBtwPanel(props: { btw: BtwModel; session: MountedSession }) {
+export default function SessionBtwPanel(props: { btw: BtwModel; session: MountedSession; id: string }) {
   const ctx = useExtension()
   const system = ctx.system
-  const answer = () => props.btw.answer(props.session)
+  const answer = () => props.btw.answer(props.session, props.id)
   // A new token for each answer, so the copied mark clears when the answer changes.
   const shown = createMemo(on(answer, () => ({})))
   const [copiedAnswer, setCopiedAnswer] = createSignal<object>()
@@ -32,7 +32,7 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
   return (
     <div class="flex h-full min-h-0 flex-col bg-v2-background-bg-base" data-slot="session-btw-panel">
       <div class="flex shrink-0 items-start justify-between gap-3 border-b border-v2-border-border-base px-5 py-4">
-        <div class="min-w-0 text-13-regular text-text-weak">{props.btw.question(props.session)}</div>
+        <div class="min-w-0 text-13-regular text-text-weak">{props.btw.question(props.session, props.id)}</div>
         <Show when={answer()}>
           <Tooltip value={copied() ? ctx.t("common.copied") : ctx.t("copy")}>
             <IconButton
@@ -48,7 +48,7 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
 
       <div class="relative min-h-0 flex-1">
         <Switch>
-          <Match when={props.btw.pending(props.session)}>
+          <Match when={props.btw.pending(props.id)}>
             <div
               data-component="session-working"
               role="status"
@@ -57,20 +57,22 @@ export default function SessionBtwPanel(props: { btw: BtwModel; session: Mounted
               <TextShimmer text={ctx.t("session.timeline.working")} active />
             </div>
           </Match>
-          <Match when={props.btw.error(props.session)}>
+          <Match when={props.btw.error(props.session, props.id)}>
             <div class="flex h-full flex-col items-center justify-center gap-3 px-8 pb-24 text-center">
               <div class="text-13-regular text-text-weak">{ctx.t("error")}</div>
-              <Button size="small" variant="outline" onClick={() => props.btw.retry(props.session)}>
+              <Button size="small" variant="outline" onClick={() => props.btw.retry(props.session, props.id)}>
                 {ctx.t("retry")}
               </Button>
             </div>
           </Match>
           <Match when={answer()}>
-            <ScrollView class="absolute inset-0">
-              <div class="px-5 py-4 pb-8">
-                <Markdown text={answer()} class="text-14-regular" />
-              </div>
-            </ScrollView>
+            {(text) => (
+              <ScrollView class="absolute inset-0">
+                <div class="px-5 py-4 pb-8">
+                  <Markdown text={text()} class="text-14-regular" />
+                </div>
+              </ScrollView>
+            )}
           </Match>
         </Switch>
       </div>

@@ -14,25 +14,35 @@ export function ExtensionServerCover(props: ParentProps) {
   const servers = useExtensionServers()
   const route = useCurrentRoute()
   const tabs = useTabs()
+
   const covered = createMemo(() => {
     const current = route()
+
     const key =
       current.type === "session"
         ? current.server
         : current.type === "draft"
           ? tabs.store.find((tab) => tab.type === "draft" && tab.draftID === current.draftID)?.server
           : undefined
+
     if (!key) return
     const source = servers.entry(key)
+
     if (!source?.entry.cover || source.entry.state === "ready") return
+
     return source.key
   })
+
   const tab = () => {
     const current = route()
+
     if (current.type === "session") return `${current.server}:${current.sessionId}`
+
     if (current.type === "draft") return current.draftID
+
     return ""
   }
+
   return (
     <div class="relative flex size-full min-h-0 min-w-0 flex-col">
       {/* Keep the route mounted so reconnecting preserves its draft and local UI state. */}
@@ -48,7 +58,9 @@ export function ExtensionServerCover(props: ParentProps) {
         {(key) => {
           const source = servers.entry(key)
           const cover = source?.entry.cover
+
           if (!source || !cover) return null
+
           return (
             <div class="absolute inset-0">
               <Contribution extension={source.extension}>
@@ -72,6 +84,7 @@ export function ExtensionServerCover(props: ParentProps) {
 export function ExtensionServerEndpoints() {
   const servers = useServers()
   const bridge = usePlatform().extensions
+
   if (bridge) {
     const sent = { value: "" }
     createEffect(() => {
@@ -79,13 +92,17 @@ export function ExtensionServerEndpoints() {
         // Main knows the built-in server first-hand; a contributed server has no endpoint until it is ready.
         if (conn.type === "sidecar" || (conn.type === "extension" && conn.state !== "ready")) return []
         const password = conn.http.password
+
         return [{ id: ServerConnection.key(conn), url: conn.http.url, ...(password ? { password } : {}) }]
       })
+
       const value = JSON.stringify(endpoints)
+
       if (value === sent.value) return
       sent.value = value
       bridge.configure(endpoints)
     })
   }
+
   return null
 }

@@ -3,7 +3,7 @@ import { useSettingsSurface } from "@/settings/surface"
 import { useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { useSettingsServers } from "@/settings/servers/inventory"
 import { useSearchParams } from "@solidjs/router"
-import { createEffect, createMemo, createResource, untrack } from "solid-js"
+import { createEffect, createMemo, createResource, on, untrack } from "solid-js"
 import { createComposerModel } from "@/composer/model"
 import { useComposerCommands } from "@/composer/commands"
 import { createNewSessionComposerAdapter } from "./composer-adapter"
@@ -18,17 +18,23 @@ export default function NewSessionPage(props: { draftId: string }) {
   const tabs = useTabs()
   const servers = useSettingsServers()
   const settingsSurface = useSettingsSurface()
+
   const draftTab = createMemo(() =>
     tabs.store.find((tab): tab is DraftTab => tab.type === "draft" && tab.draftID === search.draftId),
   )
+
   const openWorkspaces = () => {
     const draft = draftTab()
+
     if (servers().length > 1 && draft) {
       settingsSurface.openServer(draft.server, "workspaces")
+
       return
     }
+
     settingsSurface.open("workspaces")
   }
+
   const workspace = createNewSessionWorkspaceController({
     selectedWorktree: () => draftTab()?.worktree,
     selectedBranch: () => draftTab()?.branch,
@@ -40,7 +46,9 @@ export default function NewSessionPage(props: { draftId: string }) {
     },
     onViewAll: openWorkspaces,
   })
+
   const mcp = createDraftMcpControls({ draftID: props.draftId, worktree: workspace.selection.value })
+
   const composer = createNewSessionComposerAdapter({
     draftID: props.draftId,
     worktree: workspace.selection.value,
@@ -48,12 +56,15 @@ export default function NewSessionPage(props: { draftId: string }) {
     submitted: workspace.selection.remember,
     mcp,
   })
+
   const model = createComposerModel(composer.adapter)
   useComposerCommands({ model: composer.model })
+
   const project = createPromptProjectController({
     controls: composer.project,
     onDone: model.restoreFocus,
   })
+
   useNewSessionCommands({
     restoreFocus: model.restoreFocus,
     project: {
@@ -65,20 +76,25 @@ export default function NewSessionPage(props: { draftId: string }) {
       cycle: workspace.selection.cycle,
     },
   })
-  createEffect(() => {
-    if (!composer.ready()) return
-    model.restoreFocus()
-  })
+  // Focus once the draft loads. restoreFocus reads the stored cursor, so tracking it here would reapply
+  // a stale cursor a frame after every key-up and yank the caret from a key pressed in that frame.
+  createEffect(
+    on(composer.ready, (ready) => {
+      if (ready) model.restoreFocus()
+    }),
+  )
   createEffect(() => {
     if (!composer.ready()) return
     untrack(() => {
       const text = search.prompt
+
       if (!text) return
       composer.adapter.state.set([{ type: "text", content: text, start: 0, end: text.length }], text.length)
       setSearch({ ...search, prompt: undefined })
     })
   })
   const ready = Promise.resolve()
+
   const [suspendUntilPromptReady] = createResource(
     () => composer.ready.promise ?? ready,
     (promise) => promise.then(() => true),

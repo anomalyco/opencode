@@ -39,14 +39,17 @@ function Fixture(props: {
           }
         : undefined,
   }
+
   onCleanup(() => clearTimeout(state.timer))
   const listeners = new Set<(state: SshState) => void>()
   const snapshot = (): SshState => ({ servers: state.item ? [state.item] : [] })
+
   const update = (changes: Partial<SshItem>) => {
     if (!state.item) return
     state.item = { ...state.item, ...changes }
     listeners.forEach((listener) => listener(snapshot()))
   }
+
   const prompts = [
     {
       id: "host-key",
@@ -56,10 +59,12 @@ function Fixture(props: {
     { id: "password", text: "brendon@dev.example.com's password:", confirm: false },
     { id: "otp", text: "Verification code:", confirm: false },
   ]
+
   const api: SshPlatform = {
     getState: async () => snapshot(),
     subscribe(callback) {
       listeners.add(callback)
+
       return () => {
         listeners.delete(callback)
       }
@@ -76,19 +81,25 @@ function Fixture(props: {
         detail: "",
         destination: "brendon@dev.example.com:22",
       }
+
       if (props.initial === "connecting") return
+
       if (props.incompatible && !input.replace) {
         update({ stage: "incompatible", error: "version" })
+
         return
       }
+
       if (props.connectionDelay) {
         update({ stage: "connecting" })
         state.timer = setTimeout(
           () => update(props.keyOnly ? { stage: "ready" } : { stage: "authentication", prompt: prompts[state.step] }),
           props.connectionDelay,
         )
+
         return
       }
+
       update(
         props.initial === "failure"
           ? {
@@ -108,6 +119,7 @@ function Fixture(props: {
             : { stage: "ready", prompt: undefined },
         )
       }
+
       if (!props.responseDelay) return next()
       update({ stage: "connecting", prompt: undefined })
       state.timer = setTimeout(next, props.responseDelay)
@@ -128,6 +140,7 @@ function Fixture(props: {
     },
     openConfig: async () => {},
   }
+
   return (
     <PlatformProvider
       value={{
@@ -180,6 +193,7 @@ function AuthenticationSettings() {
 
 function AuthenticationSession() {
   const ssh = useSsh()
+
   return (
     <div style={{ height: "70vh" }}>
       <Show when={ssh.servers[0]}>
@@ -201,6 +215,7 @@ function AuthenticationHome() {
   const language = useLanguage()
   const ssh = useSsh()
   const authenticate = useSshAuthenticate()
+
   const server: ServerConnection.Ssh = {
     type: "ssh",
     id: "story",
@@ -215,7 +230,9 @@ function AuthenticationHome() {
       return ssh.servers[0]?.stage === "connecting"
     },
   }
+
   const projects = [{ worktree: "/home/user/project", expanded: true }]
+
   return (
     <div style={{ width: "min(100%, 340px)" }}>
       <HomeProjectsView
@@ -269,6 +286,7 @@ function AuthenticationHome() {
 
 function Open(props: { initial?: string }) {
   const dialog = useDialog()
+
   const open = () =>
     dialog.show(() => (
       <DialogSsh
@@ -276,20 +294,34 @@ function Open(props: { initial?: string }) {
         connect={!!props.initial}
       />
     ))
+
   onMount(open)
+
   return <Button onClick={open}>Open SSH connection</Button>
 }
 
 export default { title: "App/Dialogs/SSH", id: "app-dialog-ssh" }
+
 export const AuthenticationRequired = { render: () => <Fixture initial="required" /> }
+
 export const SettingsReconnect = { render: () => <Fixture initial="required" settings connectionDelay={200} /> }
+
 export const IncompatibleHost = { render: () => <Fixture incompatible /> }
+
 export const IncompatibleSession = { render: () => <Fixture initial="required" session incompatible /> }
+
 export const InactiveSession = { render: () => <Fixture initial="required" session connectionDelay={3000} /> }
+
 export const KeyReconnect = { render: () => <Fixture initial="required" session keyOnly connectionDelay={3000} /> }
+
 export const Host = { render: () => <Fixture /> }
+
 export const Connecting = { render: () => <Fixture initial="connecting" /> }
+
 export const Password = { render: () => <Fixture initial="password" /> }
+
 export const SlowPassword = { render: () => <Fixture initial="password" responseDelay={5000} /> }
+
 export const Confirmation = { render: () => <Fixture initial="confirmation" /> }
+
 export const Failure = { render: () => <Fixture initial="failure" /> }

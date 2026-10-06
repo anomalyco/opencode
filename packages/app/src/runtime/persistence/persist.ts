@@ -48,23 +48,29 @@ export function persistStore<T extends object>(input: {
     clearTimeout(timer)
     timer = undefined
     pending.delete(save)
+
     if (!dirty) return
     dirty = false
     const held = remote
     remote = undefined
     const next = untrack(() => input.serialize(input.store))
+
     if (next === last) {
       if (held !== undefined && held !== last) hydrate(held)
+
       return
     }
+
     last = next
     input.sync?.[1](input.name, next)
+
     if (input.write) return input.write(input.store, next)
     void input.storage.setItem(input.name, next)
   }
 
   // Solid's setter overloads are too deep to spread generically; the wrapper only forwards.
   const apply = input.setStore as unknown as (...values: unknown[]) => void
+
   const setStore = ((...values: unknown[]) => {
     apply(...values)
     dirty = true
@@ -77,22 +83,28 @@ export function persistStore<T extends object>(input: {
     last = raw
     input.setStore(reconcile(input.deserialize(raw)))
   }
+
   const init = input.storage.getItem(input.name)
+
   // A value the user already changed is newer than whatever storage held.
   if (init instanceof Promise) void init.then((raw) => raw && !touched && hydrate(raw))
   else if (init) hydrate(init)
 
   input.sync?.[0]((data) => {
     if (data.key !== input.name || (data.url ?? location.href) !== location.href) return
+
     if (!data.newValue) return
+
     // A real unsaved local change wins over another window's write, as in VS Code's storage
     // service; whether the change is real is only known when the store is serialized. Every
     // remote value replaces the held one, including a revert to `last`, so the save sees the
     // other window's final state rather than an intermediate one.
     if (dirty) {
       remote = data.newValue
+
       return
     }
+
     if (data.newValue === last) return
     hydrate(data.newValue)
   })
