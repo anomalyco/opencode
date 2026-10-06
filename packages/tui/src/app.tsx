@@ -902,6 +902,15 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
         },
       },
       {
+        name: "app.toggle.footer_hints",
+        title: kv.get("footer_hints_enabled", true) ? "Hide footer hints" : "Show footer hints",
+        category: "System",
+        run: () => {
+          kv.set("footer_hints_enabled", !kv.get("footer_hints_enabled", true))
+          dialog.clear()
+        },
+      },
+      {
         name: "app.toggle.file_context",
         title: kv.get("file_context_enabled", true) ? "Disable file context" : "Enable file context",
         category: "System",
