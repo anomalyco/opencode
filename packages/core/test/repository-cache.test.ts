@@ -111,6 +111,12 @@ describe("RepositoryCache", () => {
         const invalidBranch = yield* Effect.flip(cache.ensure({ reference: fixture.reference, branch: "../unsafe" }))
         expect(invalidBranch).toBeInstanceOf(RepositoryCache.InvalidBranchError)
 
+        const invalidLockBranch = yield* Effect.flip(cache.ensure({ reference: fixture.reference, branch: "topic.lock" }))
+        expect(invalidLockBranch).toBeInstanceOf(RepositoryCache.InvalidBranchError)
+
+        const invalidTrailingSlash = yield* Effect.flip(cache.ensure({ reference: fixture.reference, branch: "topic/" }))
+        expect(invalidTrailingSlash).toBeInstanceOf(RepositoryCache.InvalidBranchError)
+
         const cloneFailure = yield* Effect.flip(
           cache.ensure({
             reference: { ...fixture.reference, remote: pathToFileURL(path.join(fixture.root, "missing.git")).href },
