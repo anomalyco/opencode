@@ -287,6 +287,48 @@ it.live("applies custom CORS origins to HTTP responses and PTY ticket checks", (
       ).then((response) => response.json()),
     )
     expect(loaded).toEqual([{ directory: process.cwd() }])
+
+    const created = (yield* Effect.promise(() =>
+      handler(
+        new Request("http://opencode.local/api/pty", {
+          method: "POST",
+          headers: {
+            authorization: `Basic ${btoa("opencode:secret")}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({ command: "/bin/sh", args: ["-c", "sleep 30"] }),
+        }),
+      ).then((response) => response.json()),
+    )) as { data: { id: string } }
+    const issued = (yield* Effect.promise(() =>
+      handler(
+        new Request(`http://opencode.local/api/pty/${created.data.id}/connect-token`, {
+          method: "POST",
+          headers: {
+            authorization: `Basic ${btoa("opencode:secret")}`,
+            "x-opencode-ticket": "1",
+          },
+        }),
+      ).then((response) => response.json()),
+    )) as { data: { ticket: string } }
+    yield* Effect.promise(() =>
+      handler(
+        new Request(`http://opencode.local/api/pty/${created.data.id}`, {
+          method: "DELETE",
+          headers: { authorization: `Basic ${btoa("opencode:secret")}` },
+        }),
+      ),
+    )
+
+    const consumed = yield* Effect.promise(() =>
+      handler(new Request(`http://opencode.local/api/pty/${created.data.id}/connect?ticket=${issued.data.ticket}`)),
+    )
+    expect(consumed.status).toBe(404)
+
+    const replayed = yield* Effect.promise(() =>
+      handler(new Request(`http://opencode.local/api/pty/${created.data.id}/connect?ticket=${issued.data.ticket}`)),
+    )
+    expect(replayed.status).toBe(403)
   }).pipe(Effect.scoped),
 )
 
