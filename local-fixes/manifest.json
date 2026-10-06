@@ -80,11 +80,11 @@
     {
       "id": "empty-assistant-guard",
       "title": "Drop assistant messages with no provider content (fix5)",
-      "commit": "ac73b30f5a",
+      "commit": "79542ac1e9fd1f520932fa178891fa68ace1b511",
       "patch": "local-fixes/patches/empty-assistant-guard.patch",
       "test": "packages/opencode/src/session/message-v2.fix5.test.ts",
       "markers": [],
-      "orderNote": "markers: [] because the fix is a pure conversion-condition change with no new runtime strings; verification is the bundled test file (6 cases). Prevents strict providers (Kimi 400 must-not-be-empty) from wedging sessions via step-start/empty-text-only assistant messages."
+      "orderNote": "markers: [] (pure conversion-condition change, no runtime strings); verification = message-v2.fix5.test.ts (11 cases) + existing message-v2 suite 39/39. Single squashed commit 79542ac1e9 (initial + review hardening F1/F2/F3). Upstream: anomalyco/opencode#53571 / PR #53575."
     }
   ],
   "build": {
