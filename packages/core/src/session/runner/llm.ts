@@ -22,6 +22,7 @@ import { SessionMessageTable } from "../sql.js"
 import { SessionTitle } from "../title.js"
 import { toSessionError } from "../to-session-error.js"
 import { DrainResult, Service, type Interface } from "./index.js"
+import { Permission } from "../../permission.js"
 import { Snapshot } from "../../snapshot.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { llmClient } from "../../effect/app-node-platform.js"
@@ -207,6 +208,9 @@ const layer = Layer.effect(
       const sessionID = first.session.id
       let assistantMessageID = SessionMessage.ID.create()
       const retry = yield* SessionRunnerRetry.make(bus, sessionID)
+      // Stream activity persists across this step's attempts so the stall watchdog also sees
+      // silence that began in an earlier attempt.
+      const stall = { lastEventAt: undefined }
       let initial: SessionContext.Loaded | undefined = first
       let recoverOverflow = true
       let recoverContinuation = true
@@ -266,6 +270,7 @@ const layer = Layer.effect(
                   .pipe(Effect.map((result) => result.status === "completed"))
               : Effect.succeed(false),
           ),
+          stall,
         })
         const completed = yield* SessionStep.Outcome.$match(outcome, {
           Completed: (outcome) => Effect.succeed(outcome.needsContinuation),
@@ -366,6 +371,7 @@ export const node = makeLocationNode({
     SessionModelTransport.node,
     SessionStore.node,
     SessionCompaction.node,
+    Permission.node,
     Plugin.node,
     SessionTitle.node,
     Snapshot.node,

@@ -606,6 +606,7 @@ export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, inp
     failUnsettledTools,
     hasProviderError: () => providerFailed,
     hasStarted: () => stepStarted,
+    hasPendingTools: () => Iterable.some(tools.values(), (tool) => tool.called && !tool.settled),
     /** Immutable snapshot of everything recorded for this step so far. */
     record: (): StepRecord => ({
       outputStarted,

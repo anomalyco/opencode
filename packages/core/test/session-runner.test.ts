@@ -76,7 +76,7 @@ import { SessionSystemPrompt } from "@opencode/core/session/system-prompt"
 import { ID, Model } from "@opencode/core/model"
 import { Location } from "@opencode/core/location"
 import { Provider } from "@opencode/core/provider"
-import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Queue, Schema, Scope, Stream } from "effect"
+import { Cause, Context, DateTime, Deferred, Effect, Exit, Fiber, Layer, Option, Queue, Schema, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, desc, eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -603,6 +603,9 @@ const RETRY_GAPS = [2_000, 4_000, 8_000, ...Array<number>(7).fill(10_000)]
 // Longest possible gap per retry (+20% jitter); advancing the clock by these always fires the retry.
 const RETRY_GAPS_MAX = RETRY_GAPS.map((gap) => gap * 1.2)
 const RETRY_ATTEMPTS = RETRY_GAPS.map((_, index) => index + 2)
+// The stall watchdog polls on this interval and fires once the stream has been silent this long.
+const STALL_TIMEOUT = "90 seconds"
+const STALL_CHECK_INTERVAL = "5 seconds"
 
 // Subscribe before resuming; model requests can arrive before retry backoff is scheduled.
 const subscribeRetries = (s: Scenario) =>
@@ -5935,6 +5938,108 @@ describe("SessionRunnerLLM", () => {
       ...RETRY_GAPS.map(() => ({ type: "session.step.started.1" })),
       { type: "session.step.started.1" },
       { type: "session.step.failed.1" },
+    ])
+  })
+
+  scenario("recovers when the provider stream goes silent before output", function* (s) {
+    yield* s.admit("Stall recovery")
+    yield* s.llm.push(TestLLM.hangAfter(LLMEvent.stepStart({ index: 0 })))
+    yield* s.llm.push(TestLLM.text("Recovered after stall", "stall-recovery"))
+
+    // The silence window starts when the stream emits its first event, so wait for Step.Started.
+    const started = yield* Queue.unbounded<SessionMessage.ID>()
+    yield* s.bus.subscribe(SessionEvent.Step.Started).pipe(
+      Stream.filter((event) => event.data.sessionID === sessionID),
+      Stream.runForEach((event) => Queue.offer(started, event.data.assistantMessageID)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    const scheduled = yield* subscribeRetries(s)
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* Queue.take(started)
+    yield* TestClock.adjust(STALL_TIMEOUT)
+    yield* Queue.take(scheduled)
+    yield* TestClock.adjust("2400 millis")
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(2)
+    expect(
+      (yield* recordedEventTypes(sessionID)).filter((type) => type === "session.retry.scheduled.1"),
+    ).toHaveLength(1)
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Stall recovery"),
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered after stall")]),
+    ])
+  })
+
+  scenario("excludes tool execution silence and fires once tools settle", function* (s) {
+    yield* s.admit("Stall waits for tools")
+    const tools = yield* s.blockTools()
+    yield* s.llm.push(
+      TestLLM.hangAfter(
+        LLMEvent.stepStart({ index: 0 }),
+        LLMEvent.toolCall({ id: "call-stall", name: "echo", input: { text: "waited" } }),
+      ),
+    )
+    yield* s.llm.push(TestLLM.text("Recovered after tool stall", "tool-stall-recovery"))
+
+    const settled = yield* Queue.unbounded<SessionMessage.ID>()
+    yield* s.bus.subscribe(SessionEvent.Tool.Success).pipe(
+      Stream.filter((event) => event.data.sessionID === sessionID),
+      Stream.runForEach((event) => Queue.offer(settled, event.data.assistantMessageID)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    const scheduled = yield* subscribeRetries(s)
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    // The tool-call event is published before execution starts, arming the silence window.
+    yield* tools.started
+    yield* TestClock.adjust(STALL_TIMEOUT)
+    expect(Option.isNone(yield* Queue.poll(scheduled))).toBeTrue()
+    expect(s.requests).toHaveLength(1)
+
+    yield* tools.release
+    yield* Queue.take(settled)
+    yield* Effect.yieldNow
+    // Silence accumulated while the tool ran still counts once no tool call is pending.
+    yield* TestClock.adjust(STALL_CHECK_INTERVAL)
+    yield* Queue.take(scheduled)
+    yield* TestClock.adjust("2400 millis")
+    yield* Fiber.join(run)
+
+    expect(s.executions).toEqual(["waited"])
+    expect(s.requests).toHaveLength(2)
+    expect(
+      (yield* recordedEventTypes(sessionID)).filter((type) => type === "session.retry.scheduled.1"),
+    ).toHaveLength(1)
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Stall waits for tools"),
+      Expected.assistant({ finish: "error", error: { type: "provider.invalid-output" } }, [
+        Expected.completedTool({ id: "call-stall" }, { content: [Expected.text("waited")] }),
+      ]),
+      { type: "synthetic", text: INCOMPLETE_STREAM_CONTINUATION },
+      Expected.assistant({ finish: "stop" }, [Expected.text("Recovered after tool stall")]),
+    ])
+  })
+
+  scenario("does not treat silence before the first event as a stall", function* (s) {
+    yield* s.admit("Slow first token")
+    const gate = yield* s.llm.gate
+    yield* s.llm.push(TestLLM.text("Answer after slow start", "slow-start"))
+
+    const scheduled = yield* subscribeRetries(s)
+    const run = yield* s.resume.pipe(Effect.forkChild)
+    yield* gate.started
+    // Time to first token is not a stall: with no stream event the watchdog never fires.
+    yield* TestClock.adjust("300 seconds")
+    expect(Option.isNone(yield* Queue.poll(scheduled))).toBeTrue()
+    expect(s.requests).toHaveLength(1)
+
+    yield* gate.release
+    yield* Fiber.join(run)
+
+    expect(s.requests).toHaveLength(1)
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Slow first token"),
+      Expected.assistant({ finish: "stop" }, [Expected.text("Answer after slow start")]),
     ])
   })
 

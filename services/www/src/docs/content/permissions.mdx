@@ -119,6 +119,7 @@ currently use these actions and resources:
 | `webfetch`           | Requested URL                                                               |
 | `websearch`          | Search query                                                                |
 | `external_directory` | Canonical external directory boundary, normally ending in `/*`              |
+| `doom_loop`          | Tool name of the thrice-repeated identical call within one turn             |
 | `<server>_<tool>`    | `*` for an MCP tool; unsupported characters in both names become `_`        |
 | `execute`            | `*`; controls Code Mode availability, while nested tools enforce their rules |
 
@@ -133,7 +134,13 @@ For example, allow one skill and deny all other skills:
 }
 ```
 
-`doom_loop` and `lsp` are not current V2 Core permission actions.
+`doom_loop` is checked when a turn repeats the same tool call: three
+consecutive identical calls ask for `doom_loop` with the tool name as their
+resource. The base policy asks, so the repeating call waits for approval; a
+configured `deny` warns the model once, and only a repeat after that warning
+stops the turn.
+
+`lsp` is not a current V2 Core permission action.
 
 ## Directories
 
@@ -201,6 +208,7 @@ Every agent, including custom agents, starts with this ordered base policy:
 ```jsonc
 [
   { "action": "*", "resource": "*", "effect": "allow" },
+  { "action": "doom_loop", "resource": "*", "effect": "ask" },
   { "action": "external_directory", "resource": "*", "effect": "ask" },
   { "action": "read", "resource": "*.env", "effect": "ask" },
   { "action": "read", "resource": "*.env.*", "effect": "ask" },
