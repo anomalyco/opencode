@@ -544,7 +544,7 @@ export function make(input: {
       }
 
       const known = snapshot.availableCommands.find((item) => item.name === command.name)
-      if (known) {
+      if (known && known.source !== "builtin") {
         const response = yield* request(
           () =>
             runUntilIdle(current.id, () =>
@@ -567,7 +567,7 @@ export function make(input: {
         return yield* promptResponse(response.info, params.messageId)
       }
 
-      if (command.name === "compact") {
+      if (known?.source === "builtin" && known.name === "compact") {
         yield* request(
           () =>
             runUntilIdle(current.id, () =>
@@ -997,15 +997,10 @@ function sendAvailableCommands(
         sessionId,
         update: {
           sessionUpdate: "available_commands_update",
-          availableCommands: [
-            ...snapshot.availableCommands.map((command) => ({
-              name: command.name,
-              description: command.description ?? "",
-            })),
-            ...(snapshot.availableCommands.some((command) => command.name === "compact")
-              ? []
-              : [{ name: "compact", description: "Compact the session" }]),
-          ],
+          availableCommands: snapshot.availableCommands.map((command) => ({
+            name: command.name,
+            description: command.description ?? "",
+          })),
         },
       })
     }, 0)

@@ -160,7 +160,12 @@ describe("ACP directory snapshot", () => {
       const directory = yield* Directory.Service
       const alpha = yield* directory.get("alpha")
 
-      expect(alpha.availableCommands.map((item) => item.name)).toEqual(["init-alpha", "review-alpha"])
+      expect(alpha.availableCommands.map((item) => item.name)).toEqual(["compact", "init-alpha", "review-alpha"])
+      expect(alpha.availableCommands[0]).toEqual({
+        name: "compact",
+        description: "Compact the session",
+        source: "builtin",
+      })
       expect(alpha.availableModes).toEqual([
         { id: "build", name: "build-alpha" },
         { id: "plan", name: "plan-alpha", description: "plan first" },

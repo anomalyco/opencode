@@ -30,6 +30,12 @@ export type DefaultModel = {
   readonly modelID: ModelV2.ID
 }
 
+export type BuiltinCommand = {
+  readonly name: "compact"
+  readonly description: string
+  readonly source: "builtin"
+}
+
 export type Snapshot = {
   readonly directory: string
   readonly providers: Record<ProviderV2.ID, Provider.Info>
@@ -37,7 +43,7 @@ export type Snapshot = {
   readonly variantsByModel: Readonly<Record<string, ModelVariants>>
   readonly availableModes: readonly ModeOption[]
   readonly defaultModeID: string
-  readonly availableCommands: readonly Command.Info[]
+  readonly availableCommands: readonly (Command.Info | BuiltinCommand)[]
   readonly defaultModel?: DefaultModel
 }
 
@@ -99,7 +105,12 @@ export const build = (input: {
     defaultModeID: input.modes.some((mode) => mode.id === input.defaultModeID)
       ? input.defaultModeID
       : (input.modes[0]?.id ?? input.defaultModeID),
-    availableCommands: input.commands,
+    availableCommands: [
+      ...input.commands,
+      ...(input.commands.some((command) => command.name === "compact")
+        ? []
+        : [{ name: "compact", description: "Compact the session", source: "builtin" } as const]),
+    ].toSorted((a, b) => a.name.localeCompare(b.name)),
     ...(input.defaultModel ? { defaultModel: input.defaultModel } : {}),
   }
 }

@@ -380,10 +380,10 @@ describe("ACP service sessions", () => {
   })
 
   it("preserves an existing compact command without advertising a duplicate", async () => {
-    const { service, updates } = makeService([], {
+    const { service, updates, commands, summarizes } = makeService([], {
       commands: [{ name: "compact", description: "Custom compact", source: "command", template: "custom", hints: [] }],
     })
-    await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+    const session = await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
 
     await new Promise((resolve) => setTimeout(resolve, 5))
 
@@ -395,6 +395,12 @@ describe("ACP service sessions", () => {
         { name: "review-skill", description: "Review" },
       ],
     })
+    await Effect.runPromise(
+      service.prompt({ sessionId: session.sessionId, prompt: [{ type: "text", text: "/compact" }] }),
+    )
+    expect(commands).toHaveLength(1)
+    expect(commands[0]).toMatchObject({ command: "compact" })
+    expect(summarizes).toEqual([])
   })
 
   it("loads a session and restores model variant and mode from messages", async () => {
