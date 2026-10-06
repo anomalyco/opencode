@@ -526,6 +526,29 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
+  it.effect("maps DeepSeek prompt_cache_hit/miss_tokens to cache usage", () =>
+    Effect.gen(function* () {
+      const body = sseEvents(
+        deltaChunk({ role: "assistant", content: "Hi" }),
+        deltaChunk({}, "stop"),
+        usageChunk({
+          prompt_tokens: 10,
+          completion_tokens: 2,
+          total_tokens: 12,
+          prompt_cache_hit_tokens: 8,
+          prompt_cache_miss_tokens: 2,
+        }),
+      )
+      const response = yield* LLMClient.generate(request).pipe(Effect.provide(fixedResponse(body)))
+
+      expect(response.usage).toMatchObject({
+        inputTokens: 10,
+        nonCachedInputTokens: 2,
+        cacheReadInputTokens: 8,
+      })
+    }),
+  )
+
   it.effect("parses OpenAI-compatible reasoning content deltas", () =>
     Effect.gen(function* () {
       const body = sseEvents(
