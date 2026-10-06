@@ -22,12 +22,21 @@ export const ClientInfo = Schema.Struct({
 })
 export type ClientInfo = Schema.Schema.Type<typeof ClientInfo>
 
+export const DiscoveryState = Schema.Struct({
+  authorizationServerUrl: Schema.mutableKey(Schema.String),
+  resourceMetadataUrl: Schema.mutableKey(Schema.optional(Schema.String)),
+  authorizationServerMetadata: Schema.mutableKey(Schema.optional(Schema.Any)),
+  resourceMetadata: Schema.mutableKey(Schema.optional(Schema.Any)),
+})
+export type DiscoveryState = Schema.Schema.Type<typeof DiscoveryState>
+
 export const Entry = Schema.Struct({
   tokens: Schema.mutableKey(Schema.optional(Tokens)),
   clientInfo: Schema.mutableKey(Schema.optional(ClientInfo)),
   codeVerifier: Schema.mutableKey(Schema.optional(Schema.String)),
   oauthState: Schema.mutableKey(Schema.optional(Schema.String)),
   serverUrl: Schema.mutableKey(Schema.optional(Schema.String)),
+  discoveryState: Schema.mutableKey(Schema.optional(DiscoveryState)),
 })
 export type Entry = Schema.Schema.Type<typeof Entry>
 
@@ -45,6 +54,7 @@ export interface Interface {
   readonly remove: (mcpName: string) => Effect.Effect<void>
   readonly updateTokens: (mcpName: string, tokens: Tokens, serverUrl?: string) => Effect.Effect<void>
   readonly updateClientInfo: (mcpName: string, clientInfo: ClientInfo, serverUrl?: string) => Effect.Effect<void>
+  readonly updateDiscoveryState: (mcpName: string, state: DiscoveryState, serverUrl?: string) => Effect.Effect<void>
   readonly updateCodeVerifier: (mcpName: string, codeVerifier: string) => Effect.Effect<void>
   readonly clearCodeVerifier: (mcpName: string) => Effect.Effect<void>
   readonly updateOAuthState: (mcpName: string, oauthState: string) => Effect.Effect<void>
@@ -131,6 +141,7 @@ const layer = Layer.effect(
 
     const updateTokens = updateField("tokens", "updateTokens")
     const updateClientInfo = updateField("clientInfo", "updateClientInfo")
+    const updateDiscoveryState = updateField("discoveryState", "updateDiscoveryState")
     const updateCodeVerifier = updateField("codeVerifier", "updateCodeVerifier")
     const updateOAuthState = updateField("oauthState", "updateOAuthState")
     const clearCodeVerifier = clearField("codeVerifier", "clearCodeVerifier")
@@ -149,6 +160,7 @@ const layer = Layer.effect(
       remove,
       updateTokens,
       updateClientInfo,
+      updateDiscoveryState,
       updateCodeVerifier,
       clearCodeVerifier,
       updateOAuthState,

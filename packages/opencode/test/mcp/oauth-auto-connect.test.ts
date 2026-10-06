@@ -22,36 +22,49 @@ const mcpTest = testEffect(
 
 interface OAuthMcpOptions {
   capabilities?: "tools" | "resources"
+  /**
+   * Google-style deferred auth: `initialize`, `notifications/*`, `ping` and
+   * `tools/list` are served without credentials and only `tools/call`
+   * returns 401, with the OAuth challenge advertised only via the
+   * WWW-Authenticate header (no RFC 9728 metadata at the standard path).
+   */
+  deferredAuth?: boolean
 }
 
 function serveOAuthMcp(options: OAuthMcpOptions = {}) {
   return Effect.acquireRelease(
     Effect.promise(async () => {
       const capabilities = options.capabilities ?? "tools"
-      const protocol = new Server(
-        { name: "oauth-auto-connect", version: "1.0.0" },
-        { capabilities: capabilities === "tools" ? { tools: {} } : { resources: {} } },
-      )
-      const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
-        enableJsonResponse: true,
-      })
+      const deferredAuth = options.deferredAuth ?? false
+      // Stateless, like Google's MCP endpoints: each request is handled by
+      // a fresh server instance with no session state, so multiple clients
+      // can initialize independently.
+      const handleStateless = async (request: Request) => {
+        const statelessProtocol = new Server(
+          { name: "oauth-auto-connect", version: "1.0.0" },
+          { capabilities: capabilities === "tools" ? { tools: {} } : { resources: {} } },
+        )
+        if (capabilities === "tools") {
+          statelessProtocol.setRequestHandler(ListToolsRequestSchema, () => {
+            listToolsCalls++
+            return Promise.resolve({ tools: [{ name: "test_tool", inputSchema: { type: "object" } }] })
+          })
+        }
+        if (capabilities === "resources") {
+          statelessProtocol.setRequestHandler(ListResourcesRequestSchema, () =>
+            Promise.resolve({ resources: [{ name: "docs", uri: "docs://readme" }] }),
+          )
+        }
+        const statelessTransport = new WebStandardStreamableHTTPServerTransport({
+          sessionIdGenerator: undefined,
+          enableJsonResponse: true,
+        })
+        await statelessProtocol.connect(statelessTransport)
+        return statelessTransport.handleRequest(request)
+      }
       let listToolsCalls = 0
       let requiresAuth = true
 
-      if (capabilities === "tools") {
-        protocol.setRequestHandler(ListToolsRequestSchema, () => {
-          listToolsCalls++
-          return Promise.resolve({ tools: [{ name: "test_tool", inputSchema: { type: "object" } }] })
-        })
-      }
-      if (capabilities === "resources") {
-        protocol.setRequestHandler(ListResourcesRequestSchema, () =>
-          Promise.resolve({ resources: [{ name: "docs", uri: "docs://readme" }] }),
-        )
-      }
-
-      await protocol.connect(transport)
       const http = Bun.serve({
         port: 0,
         async fetch(request) {
@@ -66,7 +79,7 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
               scopes_supported: ["mcp"],
             })
           }
-          if (url.pathname === "/.well-known/oauth-protected-resource") {
+          if (!deferredAuth && url.pathname === "/.well-known/oauth-protected-resource") {
             return Response.json({
               resource: mcpUrl,
               authorization_servers: [origin],
@@ -103,15 +116,32 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
           if (url.pathname !== "/mcp") return new Response("Not found", { status: 404 })
 
           if (request.method === "GET") return new Response(null, { status: 405 })
-          if (requiresAuth && request.headers.get("authorization") !== "Bearer replacement-token") {
-            return new Response("Unauthorized", {
+          const challenge = () =>
+            new Response("Unauthorized", {
               status: 401,
               headers: {
-                "WWW-Authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource", scope="mcp"`,
+                "WWW-Authenticate": `Bearer resource_metadata="${origin}/.well-known/oauth-protected-resource/mcp", scope="mcp"`,
               },
             })
+          if (deferredAuth) {
+            const message = (await request.clone().json().catch(() => undefined)) as
+              | { method?: string }
+              | undefined
+            const method = message?.method
+            // Google-style: everything except tool execution is public
+            if (
+              method === "tools/call" &&
+              requiresAuth &&
+              request.headers.get("authorization") !== "Bearer replacement-token"
+            ) {
+              return challenge()
+            }
+            return handleStateless(request)
           }
-          return transport.handleRequest(request)
+          if (requiresAuth && request.headers.get("authorization") !== "Bearer replacement-token") {
+            return challenge()
+          }
+          return handleStateless(request)
         },
       })
 
@@ -123,7 +153,6 @@ function serveOAuthMcp(options: OAuthMcpOptions = {}) {
         listToolsCalls: () => listToolsCalls,
         close: async () => {
           await http.stop(true)
-          await protocol.close()
         },
       }
     }),
@@ -268,18 +297,36 @@ mcpTest.instance("auth status only reports credentials stored for the configured
   }),
 )
 
-mcpTest.instance("authenticate() stores a connected client when auth completes without redirect", () =>
+mcpTest.instance("authenticate() stores a connected client when the server never required auth", () =>
+  Effect.gen(function* () {
+    yield* stopOAuthCallback
+    const server = yield* serveOAuthMcp()
+    server.allowAnonymous()
+    const mcp = yield* MCP.Service
+    const name = "test-oauth-connect"
+    const added = yield* mcp.add(name, remote(server.url))
+    expect((added.status as Record<string, { status: string }>)[name]?.status).toBe("connected")
+
+    expect((yield* mcp.authenticate(name)).status).toBe("connected")
+    expect((yield* mcp.status())[name]?.status).toBe("connected")
+  }),
+)
+
+mcpTest.instance("authenticate() triggers the OAuth flow after a stored 401 challenge", () =>
   Effect.gen(function* () {
     yield* stopOAuthCallback
     const server = yield* serveOAuthMcp()
     const mcp = yield* MCP.Service
-    const name = "test-oauth-connect"
+    const name = "test-oauth-connect-challenge"
     const added = yield* mcp.add(name, remote(server.url))
     expect((added.status as Record<string, { status: string }>)[name]?.status).toBe("needs_auth")
 
-    server.allowAnonymous()
-    expect((yield* mcp.authenticate(name)).status).toBe("connected")
-    expect((yield* mcp.status())[name]?.status).toBe("connected")
+    // The earlier challenge is remembered, so an explicit authenticate()
+    // starts the OAuth flow instead of silently connecting without
+    // credentials.
+    const result = yield* mcp.startAuth(name)
+    expect(result.authorizationUrl).toContain("/authorize")
+    expect((yield* mcp.finishAuth(name, "valid-code")).status).toBe("connected")
   }),
 )
 
@@ -287,14 +334,74 @@ mcpTest.instance("authenticate() connects a resource-only server without listing
   Effect.gen(function* () {
     yield* stopOAuthCallback
     const server = yield* serveOAuthMcp({ capabilities: "resources" })
+    server.allowAnonymous()
     const mcp = yield* MCP.Service
     const name = "test-oauth-resources"
     const added = yield* mcp.add(name, remote(server.url))
-    expect((added.status as Record<string, { status: string }>)[name]?.status).toBe("needs_auth")
+    expect((added.status as Record<string, { status: string }>)[name]?.status).toBe("connected")
 
-    server.allowAnonymous()
     expect((yield* mcp.authenticate(name)).status).toBe("connected")
     expect(server.listToolsCalls()).toBe(0)
     expect(Object.keys(yield* mcp.resources())).toEqual([`${name}:docs://readme`])
+  }),
+)
+
+mcpTest.instance("server that only enforces auth on tool calls flips to needs_auth after a failed call", () =>
+  Effect.gen(function* () {
+    yield* stopOAuthCallback
+    const server = yield* serveOAuthMcp({ deferredAuth: true })
+    const mcp = yield* MCP.Service
+    const name = "test-oauth-deferred"
+    const added = yield* mcp.add(name, remote(server.url))
+    // initialize and tools/list are public, so the server appears connected
+    expect((added.status as Record<string, { status: string }>)[name]?.status).toBe("connected")
+
+    const client = (yield* mcp.clients())[name]!
+    // the tool call hits the deferred 401; the challenge metadata is
+    // persisted and the server flips to needs_auth instead of dead-ending
+    yield* Effect.promise(() => client.callTool({ name: "test_tool", arguments: {} }).catch(() => {}))
+
+    expect((yield* mcp.status())[name]?.status).toBe("needs_auth")
+    const entry = yield* McpAuth.use.get(name)
+    expect(entry?.discoveryState?.authorizationServerUrl).toBe(new URL(server.url).origin)
+  }),
+)
+
+mcpTest.instance("startAuth() triggers the OAuth flow for servers that only enforce auth on tool calls", () =>
+  Effect.gen(function* () {
+    yield* stopOAuthCallback
+    const server = yield* serveOAuthMcp({ deferredAuth: true })
+    const mcp = yield* MCP.Service
+    const name = "test-oauth-deferred-auth"
+    yield* mcp.add(name, remote(server.url))
+    const client = (yield* mcp.clients())[name]!
+    yield* Effect.promise(() => client.callTool({ name: "test_tool", arguments: {} }).catch(() => {}))
+    expect((yield* mcp.status())[name]?.status).toBe("needs_auth")
+
+    const result = yield* mcp.startAuth(name)
+    expect(result.authorizationUrl).toContain("/authorize")
+
+    expect((yield* mcp.finishAuth(name, "valid-code")).status).toBe("connected")
+    expect((yield* McpAuth.use.get(name))?.tokens?.accessToken).toBe("replacement-token")
+    expect((yield* mcp.status())[name]?.status).toBe("connected")
+  }),
+)
+
+mcpTest.instance("startAuth() works for deferred-auth servers with a configured authorizationServerUrl", () =>
+  Effect.gen(function* () {
+    yield* stopOAuthCallback
+    const server = yield* serveOAuthMcp({ deferredAuth: true })
+    const mcp = yield* MCP.Service
+    const name = "test-oauth-deferred-config"
+    const added = yield* mcp.add(name, {
+      type: "remote",
+      url: server.url,
+      oauth: { authorizationServerUrl: new URL(server.url).origin },
+    })
+    expect((added.status as Record<string, { status: string }>)[name]?.status).toBe("connected")
+
+    const result = yield* mcp.startAuth(name)
+    expect(result.authorizationUrl).toContain("/authorize")
+    expect((yield* mcp.finishAuth(name, "valid-code")).status).toBe("connected")
   }),
 )

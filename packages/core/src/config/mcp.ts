@@ -29,6 +29,7 @@ export class OAuth extends Schema.Class<OAuth>("ConfigV2.MCP.OAuth")({
   scope: Schema.String.pipe(Schema.optional),
   callback_port: Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65535 })).pipe(Schema.optional),
   redirect_uri: Schema.String.pipe(Schema.optional),
+  authorization_server_url: Schema.String.pipe(Schema.optional),
 }) {}
 
 export class Remote extends Schema.Class<Remote>("ConfigV2.MCP.Remote")({

@@ -38,6 +38,10 @@ export const OAuth = Schema.Struct({
   redirectUri: Schema.optional(Schema.String).annotate({
     description: "OAuth redirect URI (default: http://127.0.0.1:19876/mcp/oauth/callback).",
   }),
+  authorizationServerUrl: Schema.optional(Schema.String).annotate({
+    description:
+      "Authorization server URL (RFC 8414 metadata is fetched from it). Needed for servers that require OAuth but don't advertise discovery metadata, e.g. Google's MCP servers.",
+  }),
 }).annotate({ identifier: "McpOAuthConfig" })
 export type OAuth = Schema.Schema.Type<typeof OAuth>
 

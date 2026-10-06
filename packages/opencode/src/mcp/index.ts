@@ -7,7 +7,7 @@ import { Client, type ClientOptions } from "@modelcontextprotocol/sdk/client/ind
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js"
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
-import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js"
+import { UnauthorizedError, auth as sdkAuth } from "@modelcontextprotocol/sdk/client/auth.js"
 import {
   ListRootsRequestSchema,
   type LoggingMessageNotification,
@@ -247,6 +247,7 @@ const layer = Layer.effect(
         }
       }
       let authProvider: McpOAuthProvider | undefined
+      const authBridge = yield* EffectBridge.make()
 
       if (!oauthDisabled) {
         authProvider = new McpOAuthProvider(
@@ -258,9 +259,34 @@ const layer = Layer.effect(
             scope: oauthConfig?.scope,
             callbackPort: oauthConfig?.callbackPort,
             redirectUri: oauthConfig?.redirectUri,
+            authorizationServerUrl: oauthConfig?.authorizationServerUrl,
           },
           {
-            onRedirect: async () => {},
+            onRedirect: async () => {
+              // A request hit a 401 and the SDK wants to start an
+              // authorization flow: the server only enforces auth at request
+              // time (e.g. Google's MCP endpoints accept `initialize`
+              // unauthenticated). Surface it as needs_auth instead of
+              // dead-ending every tool call as "Unauthorized".
+              try {
+                await authBridge.promise(
+                  Effect.gen(function* () {
+                    const s = yield* InstanceState.get(state)
+                    if (s.status[key]?.status !== "connected") return
+                    s.status[key] = { status: "needs_auth" }
+                    yield* closeClient(s, key)
+                    yield* events
+                      .publish(TuiEvent.ToastShow, {
+                        title: "MCP Authentication Required",
+                        message: `Server "${key}" requires authentication. Run: opencode mcp auth ${key}`,
+                        variant: "warning",
+                        duration: 8000,
+                      })
+                      .pipe(Effect.ignore)
+                  }),
+                )
+              } catch {}
+            },
           },
           auth,
         )
@@ -834,6 +860,7 @@ const layer = Layer.effect(
           clientSecret: oauthConfig?.clientSecret,
           scope: oauthConfig?.scope,
           redirectUri: effectiveRedirectUri,
+          authorizationServerUrl: oauthConfig?.authorizationServerUrl,
         },
         {
           onRedirect: async (url) => {
@@ -842,6 +869,19 @@ const layer = Layer.effect(
         },
         auth,
       )
+
+      // Only start the flow below when there is evidence the server
+      // requires OAuth: an explicitly configured authorization server, or
+      // discovery state persisted from an earlier 401 challenge. Mere
+      // discoverability is not enough - some servers expose OAuth endpoints
+      // but work without authentication.
+      const resolveAuthServer = async () => {
+        const cached = await authProvider.discoveryState()
+        if (!cached) return undefined
+        if (oauthConfig?.authorizationServerUrl) return cached
+        if (cached.authorizationServerMetadata || cached.resourceMetadata) return cached
+        return undefined
+      }
 
       const transport = new StreamableHTTPClientTransport(url, {
         authProvider,
@@ -853,6 +893,23 @@ const layer = Layer.effect(
         try: () => {
           const client = createClient(directory)
           return client.connect(transport).then(async () => {
+            // Some servers (e.g. Google's MCP endpoints) accept the
+            // `initialize` handshake without credentials and only enforce
+            // auth on later requests, so the 401 that normally triggers the
+            // OAuth flow never fires during connect (#26195). When the
+            // server has no usable tokens but there is evidence it requires
+            // OAuth, start the authorization flow explicitly instead of
+            // silently "connecting" without any credentials.
+            const stored = await Effect.runPromise(auth.getForUrl(mcpName, mcpConfig.url)).catch(() => undefined)
+            const tokensUsable =
+              !!stored?.tokens && (!stored.tokens.expiresAt || stored.tokens.expiresAt > Date.now() / 1000)
+            if (!tokensUsable && (await resolveAuthServer()) !== undefined) {
+              const result = await sdkAuth(authProvider, { serverUrl: url })
+              if (result === "REDIRECT" && capturedUrl) {
+                pendingOAuthTransports.set(mcpName, { transport, provider: authProvider })
+                return { authorizationUrl: capturedUrl.toString(), oauthState, client } satisfies AuthResult
+              }
+            }
             await authProvider.commit()
             return { authorizationUrl: "", oauthState, client } satisfies AuthResult
           })

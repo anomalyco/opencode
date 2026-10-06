@@ -1,4 +1,4 @@
-import type { OAuthClientProvider } from "@modelcontextprotocol/sdk/client/auth.js"
+import type { OAuthClientProvider, OAuthDiscoveryState } from "@modelcontextprotocol/sdk/client/auth.js"
 import type {
   OAuthClientMetadata,
   OAuthTokens,
@@ -17,6 +17,7 @@ export interface McpOAuthConfig {
   scope?: string
   callbackPort?: number
   redirectUri?: string
+  authorizationServerUrl?: string
 }
 
 export interface McpOAuthCallbacks {
@@ -118,6 +119,36 @@ export class McpOAuthProvider implements OAuthClientProvider {
           refreshToken: tokens.refresh_token,
           expiresAt: tokens.expires_in ? Date.now() / 1000 + tokens.expires_in : undefined,
           scope: tokens.scope,
+        },
+        this.serverUrl,
+      ),
+    )
+  }
+
+  async discoveryState(): Promise<OAuthDiscoveryState | undefined> {
+    // An explicitly configured authorization server always wins
+    if (this.config.authorizationServerUrl) {
+      return { authorizationServerUrl: this.config.authorizationServerUrl }
+    }
+    const entry = await Effect.runPromise(this.auth.getForUrl(this.mcpName, this.serverUrl))
+    return entry?.discoveryState as OAuthDiscoveryState | undefined
+  }
+
+  async saveDiscoveryState(state: OAuthDiscoveryState): Promise<void> {
+    if (this.config.authorizationServerUrl) return
+    // Skip persisting states that only contain the RFC 9728 fallback
+    // (the MCP server URL itself used as the authorization server) without
+    // any metadata: those are indistinguishable from a failed discovery and
+    // would poison later token refreshes.
+    if (!state.authorizationServerMetadata && !state.resourceMetadata) return
+    await Effect.runPromise(
+      this.auth.updateDiscoveryState(
+        this.mcpName,
+        {
+          authorizationServerUrl: state.authorizationServerUrl,
+          resourceMetadataUrl: state.resourceMetadataUrl,
+          authorizationServerMetadata: state.authorizationServerMetadata,
+          resourceMetadata: state.resourceMetadata,
         },
         this.serverUrl,
       ),

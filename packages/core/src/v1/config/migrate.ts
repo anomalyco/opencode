@@ -156,6 +156,7 @@ function migrateMcp(info: ConfigMCPV1.Info) {
       scope: info.oauth.scope,
       callback_port: info.oauth.callbackPort,
       redirect_uri: info.oauth.redirectUri,
+      authorization_server_url: info.oauth.authorizationServerUrl,
     },
     disabled,
     timeout: info.timeout === undefined ? undefined : { request: info.timeout },
