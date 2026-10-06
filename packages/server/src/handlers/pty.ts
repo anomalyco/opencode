@@ -2,6 +2,7 @@ import { Pty } from "@opencode/core/pty"
 import { PtyProtocol } from "@opencode/core/pty/protocol"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { Location } from "@opencode/core/location"
+import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Effect, Queue } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder, HttpApiSchema } from "effect/unstable/httpapi"
@@ -14,7 +15,7 @@ import {
   PTY_CONNECT_TOKEN_HEADER,
   PTY_CONNECT_TOKEN_HEADER_VALUE,
 } from "@opencode/protocol/groups/pty"
-import { response } from "../location"
+import { locationErrors, requestRef, response } from "../location"
 import { PtyEnvironment } from "../pty-environment"
 import { runPtySocket } from "./pty-socket"
 
@@ -25,6 +26,7 @@ const ticketScope = Effect.gen(function* () {
 
 export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
   Effect.gen(function* () {
+    const locations = yield* LocationServiceMap.Service
     const tickets = yield* PtyTicket.Service
     const cors = yield* CorsConfig
     const environment = yield* PtyEnvironment.Service
@@ -142,21 +144,29 @@ export const PtyHandler = HttpApiBuilder.group(Api, "server.pty", (handlers) =>
       .handleRaw(
         "pty.connect",
         Effect.fn("PtyHandler.connect")(function* (ctx) {
-          const pty = yield* Pty.Service
+          if (!isAllowedRequestOrigin(ctx.request.headers.origin, ctx.request.headers.host, cors))
+            return HttpServerResponse.empty({ status: 403 })
+
+          const ref = LocationServiceMap.canonical(requestRef(ctx.request))
+          const url = new URL(ctx.request.url, "http://localhost")
+          const ticket = url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
+          if (
+            ticket &&
+            !(yield* tickets.consume({
+              ticket,
+              ptyID: ctx.params.ptyID,
+              directory: ref.directory,
+              workspaceID: ref.workspaceID,
+            }))
+          )
+            return HttpServerResponse.empty({ status: 403 })
+
+          const pty = yield* Pty.Service.pipe(Effect.provide(locations.get(ref)), locationErrors)
           const exists = yield* pty.get(ctx.params.ptyID).pipe(
             Effect.as(true),
             Effect.catchTag("Pty.NotFoundError", () => Effect.succeed(false)),
           )
           if (!exists) return HttpServerResponse.empty({ status: 404 })
-
-          const url = new URL(ctx.request.url, "http://localhost")
-          const ticket = url.searchParams.get(PTY_CONNECT_TICKET_QUERY)
-          if (ticket) {
-            const valid = isAllowedRequestOrigin(ctx.request.headers.origin, ctx.request.headers.host, cors)
-              ? yield* tickets.consume({ ticket, ptyID: ctx.params.ptyID, ...(yield* ticketScope) })
-              : false
-            if (!valid) return HttpServerResponse.empty({ status: 403 })
-          }
           const parsedCursor = url.searchParams.get("cursor")
           const cursorNumber = parsedCursor === null ? undefined : Number(parsedCursor)
           const cursor =
