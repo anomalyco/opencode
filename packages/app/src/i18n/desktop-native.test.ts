@@ -16,6 +16,7 @@ describe("desktop native translations", () => {
   test("uses native language names independent of the active locale", () => {
     expect(DESKTOP_NATIVE_LOCALES.map((locale) => DESKTOP_NATIVE_LABELS[locale])).toEqual([
       "English",
+      "Taqbaylit",
       "简体中文",
       "繁體中文",
       "한국어",

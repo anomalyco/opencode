@@ -1,5 +1,6 @@
 export const DESKTOP_NATIVE_LOCALES = [
   "en",
+  "kab",
   "zh",
   "zht",
   "ko",
@@ -67,6 +68,7 @@ export type DesktopNativeLocale = (typeof DESKTOP_NATIVE_LOCALES)[number]
 
 export const DESKTOP_NATIVE_LABELS: Record<DesktopNativeLocale, string> = {
   en: "English",
+  kab: "Taqbaylit",
   zh: "简体中文",
   zht: "繁體中文",
   ko: "한국어",
@@ -132,6 +134,7 @@ export const DESKTOP_NATIVE_LABELS: Record<DesktopNativeLocale, string> = {
 
 export const DESKTOP_NATIVE_LOCALE_TAGS: Record<DesktopNativeLocale, string> = {
   en: "en",
+  kab: "kab",
   zh: "zh-Hans",
   zht: "zh-Hant",
   ko: "ko",
