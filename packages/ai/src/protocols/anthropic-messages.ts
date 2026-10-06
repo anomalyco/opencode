@@ -940,19 +940,9 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
             continue
           }
           if (typeof signature !== "string" || signature.trim().length === 0) {
-            if (part.text.trim().length === 0) continue
-            if (!requireThinkingSignature(request)) {
-              content.push({ type: "thinking", thinking: part.text, signature: "" })
-              continue
-            }
-            // Without a signature this cannot be a valid thinking block per
-            // the SDK ThinkingBlockParam:3217 — demote to text so the
-            // conversation remains sendable.
-            content.push({
-              type: "text",
-              text: part.text,
-              cache_control: cacheControl(breakpoints, part.cache),
-            })
+            // Unsigned thinking cannot be replayed as Claude output; keep it out of text blocks.
+            if (part.text.trim().length === 0 || requireThinkingSignature(request)) continue
+            content.push({ type: "thinking", thinking: part.text, signature: "" })
             continue
           }
           content.push({ type: "thinking", thinking: part.text, signature })

@@ -166,7 +166,8 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
         },
       ]
     // Let the destination adapter handle readable reasoning after a model/provider switch.
-    if (item.type === "reasoning")
+    if (item.type === "reasoning") {
+      if (message.error !== undefined) return []
       return reuseProviderMetadata
         ? [
             {
@@ -176,8 +177,9 @@ const assistant = (message: SessionMessage.Assistant, model: Model.Ref, provider
             },
           ]
         : item.text.length > 0
-          ? [{ type: message.error === undefined ? "reasoning" : "text", text: item.text }]
+          ? [{ type: "reasoning", text: item.text }]
           : []
+    }
     // Call-side metadata is model-scoped proof of generation (Gemini thought
     // signatures, OpenAI encrypted reasoning): only the producing model may
     // replay it.

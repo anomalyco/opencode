@@ -935,7 +935,7 @@ Earlier work
     ])
   })
 
-  test("lowers failed assistant reasoning to text", () => {
+  test("omits failed reasoning while retaining assistant text and hosted tools", () => {
     const messages = toLLMMessages(
       [
         SessionMessage.Assistant.make({
@@ -949,6 +949,7 @@ Earlier work
               text: "Partial thought",
               state: { itemId: "rs_failed", reasoningEncryptedContent: null },
             }),
+            SessionMessage.AssistantText.make({ type: "text", text: "Public partial response" }),
             SessionMessage.AssistantTool.make({
               type: "tool",
               id: "hosted-completed",
@@ -987,7 +988,7 @@ Earlier work
     )
 
     expect(messages[0]?.content).toEqual([
-      { type: "text", text: "Partial thought" },
+      { type: "text", text: "Public partial response", providerMetadata: undefined },
       {
         type: "tool-call",
         id: "hosted-completed",
@@ -1031,6 +1032,32 @@ Earlier work
         providerMetadata: { provider: { itemId: "result_failed" } },
       },
     ])
+  })
+
+  test("omits reasoning-only refused messages even when the thinking is signed", () => {
+    const messages = toLLMMessages(
+      [
+        SessionMessage.Assistant.make({
+          id: id("assistant-refused"),
+          type: "assistant",
+          agent: build,
+          model,
+          content: [
+            SessionMessage.AssistantReasoning.make({
+              type: "reasoning",
+              text: "Refused thought",
+              state: { signature: "signed" },
+            }),
+          ],
+          finish: "content-filter",
+          error: { type: "provider.content-filter", message: "Provider blocked the response" },
+          time: { created, completed: created },
+        }),
+      ],
+      model,
+    )
+
+    expect(messages).toEqual([])
   })
 
   test("drops model-scoped continuation metadata after a model switch but keeps hosted result payloads", () => {

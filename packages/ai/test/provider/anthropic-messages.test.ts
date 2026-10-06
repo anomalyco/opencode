@@ -923,12 +923,35 @@ describe("Anthropic Messages route", () => {
     }),
   )
 
-  it.effect("demotes unsigned reasoning when signatures are required", () =>
+  it.effect("omits unsigned reasoning when signatures are required", () =>
     Effect.gen(function* () {
       const prepared = yield* compileUnsignedReasoning(model)
 
-      expect(prepared.body.messages).toEqual([
-        { role: "assistant", content: [{ type: "text", text: "unsigned reasoning" }] },
+      expect(prepared.body.messages).toEqual([])
+    }),
+  )
+
+  it.effect("omits unsigned reasoning without dropping assistant text or tool calls", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        LLM.request({
+          model,
+          messages: [
+            Message.assistant([
+              { type: "reasoning", text: "Unsigned thought" },
+              { type: "reasoning", text: "Empty signature", providerMetadata: { anthropic: { signature: " " } } },
+              { type: "text", text: "Reading the file" },
+              ToolCallPart.make({ id: "call_read", name: "read", input: { path: "README.md" } }),
+            ]),
+            Message.tool({ id: "call_read", name: "read", result: "File contents" }),
+          ],
+          cache: "none",
+        }),
+      )
+
+      expect(prepared.body.messages[0]?.content).toEqual([
+        { type: "text", text: "Reading the file" },
+        { type: "tool_use", id: "call_read", name: "read", input: { path: "README.md" } },
       ])
     }),
   )
@@ -976,9 +999,7 @@ describe("Anthropic Messages route", () => {
         .model({ id: "k3", compatibility: { requireSignature: true } })
       const prepared = yield* compileUnsignedReasoning(compatible)
 
-      expect(prepared.body.messages).toEqual([
-        { role: "assistant", content: [{ type: "text", text: "unsigned reasoning" }] },
-      ])
+      expect(prepared.body.messages).toEqual([])
     }),
   )
 

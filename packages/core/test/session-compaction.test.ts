@@ -124,6 +124,59 @@ it.effect("compaction describes tool media without embedding base64", () =>
   }),
 )
 
+it.effect("compaction recent context retains assistant text and tool output without reasoning", () =>
+  Effect.gen(function* () {
+    const session = yield* insertSession(Session.ID.make("ses_compact_reasoning"))
+    const created = DateTime.makeUnsafe(0)
+    expect(
+      yield* compactManually(session, [
+        SessionMessage.User.make({
+          id: SessionMessage.ID.create(),
+          type: "user",
+          text: "Earlier question",
+          time: { created },
+        }),
+        SessionMessage.User.make({
+          id: SessionMessage.ID.create(),
+          type: "user",
+          text: "Read the file",
+          time: { created },
+        }),
+        SessionMessage.Assistant.make({
+          id: SessionMessage.ID.create(),
+          type: "assistant",
+          agent: Agent.defaultID,
+          model: resolved.ref,
+          content: [
+            SessionMessage.AssistantReasoning.make({ type: "reasoning", text: "Private reasoning" }),
+            SessionMessage.AssistantText.make({ type: "text", text: "Reading the file" }),
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "call_read",
+              name: "read",
+              state: SessionMessage.ToolStateCompleted.make({
+                status: "completed",
+                input: {},
+                content: [{ type: "text", text: "File contents" }],
+              }),
+              time: { created, completed: created },
+            }),
+          ],
+          time: { created, completed: created },
+        }),
+      ]),
+    ).toEqual({ status: "completed" })
+    const store = yield* SessionStore.Service
+    const stored = (yield* store.context(session.id))[0]
+    expect(stored?.type).toBe("compaction")
+    const recent = stored?.type === "compaction" && stored.status === "completed" ? stored.recent : ""
+    expect(recent).toContain("[Assistant]: Reading the file")
+    expect(recent).toContain("[Tool result]: File contents")
+    expect(recent).not.toContain("Private reasoning")
+    expect(recent).not.toContain("[Assistant reasoning]")
+  }),
+)
+
 it.effect("compaction truncation does not split surrogate pairs", () =>
   Effect.gen(function* () {
     const prefix = "a".repeat(1_249)
