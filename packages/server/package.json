@@ -32,7 +32,6 @@
     "@opencode/schema": "workspace:*",
     "@opencode/simulation": "workspace:*",
     "@opencode/util": "workspace:*",
-    "drizzle-orm": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {

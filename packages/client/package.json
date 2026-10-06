@@ -55,7 +55,6 @@
     "@types/bun": "catalog:",
     "@typescript/native-preview": "catalog:",
     "effect": "catalog:",
-    "solid-js": "catalog:",
-    "zod": "catalog:"
+    "solid-js": "catalog:"
   }
 }

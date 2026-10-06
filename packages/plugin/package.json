@@ -33,9 +33,7 @@
     "@opencode/protocol": "workspace:*",
     "@opencode/schema": "workspace:*",
     "@opencode/util": "workspace:*",
-    "@standard-schema/spec": "catalog:",
-    "effect": "catalog:",
-    "zod": "catalog:"
+    "effect": "catalog:"
   },
   "peerDependencies": {
     "@opencode/theme": "workspace:*",
