@@ -52,6 +52,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       reload: () => Effect.die("unused provider.reload"),
     },
     model: overrides.model ?? {
+      beforeRead: () => Effect.die("unused model.beforeRead"),
       list: () => Effect.die("unused model.list"),
       default: () => Effect.die("unused model.default"),
       transform: () => Effect.die("unused model.transform"),
@@ -230,13 +231,15 @@ export function providerHost(providers: Provider.Interface): Plugin.Context["pro
   return {
     list: () => providers.available().pipe(Effect.map(located)),
     get: (input) =>
-      providers.get(Provider.ID.make(input.providerID)).pipe(
-        Effect.flatMap((provider) =>
-          provider === undefined
-            ? Effect.fail(new Error(`Provider not found: ${input.providerID}`))
-            : Effect.succeed(located(provider)),
+      providers
+        .get(Provider.ID.make(input.providerID))
+        .pipe(
+          Effect.flatMap((provider) =>
+            provider === undefined
+              ? Effect.fail(new Error(`Provider not found: ${input.providerID}`))
+              : Effect.succeed(located(provider)),
+          ),
         ),
-      ),
     reload: providers.reload,
     transform: (callback) =>
       providers.transform((editor) =>
@@ -267,6 +270,7 @@ export const noProviders: Plugin.Context["provider"] = {
 
 export function modelHost(models: Model.Interface): Plugin.Context["model"] {
   return {
+    beforeRead: models.beforeRead,
     list: () => models.available().pipe(Effect.map(located)),
     default: () => models.default().pipe(Effect.map(located)),
     reload: models.reload,

@@ -142,6 +142,7 @@ const keyLogin = Effect.fn("cli.auth.login.key")(function* (
   yield* request((signal) =>
     client.integration.connect.key({ integrationID: integration.id, key, answer, location }, { signal }),
   ).pipe(
+    Effect.andThen(request((signal) => client.model.list({ location }, { signal }))),
     Effect.tap(() => Effect.sync(() => progress.stop(`Connected to ${integration.name}`))),
     Effect.tapCause(() => Effect.sync(() => progress.stop("Authentication failed", 1))),
   )

@@ -1,7 +1,7 @@
 import { Model } from "@opencode/schema/model"
 import { Provider } from "./provider.js"
 import type { DeepMutable } from "./schema.js"
-import { Context, Effect, Layer, Stream } from "effect"
+import { Context, Effect, Layer, Scope, Stream } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { Bus } from "./bus.js"
 import { State } from "./state.js"
@@ -82,6 +82,10 @@ export interface Editor {
 }
 
 export interface Interface extends State.Transformable<Editor> {
+  /** Await scoped readiness work before public reads; internal notifications do not invoke it. */
+  readonly beforeRead: (
+    effect: Effect.Effect<void>,
+  ) => Effect.Effect<{ readonly dispose: Effect.Effect<void> }, never, Scope.Scope>
   readonly get: (providerID: Provider.ID, modelID: ID) => Effect.Effect<Info | undefined>
   readonly all: () => Effect.Effect<readonly Info[]>
   readonly available: () => Effect.Effect<readonly Info[]>
@@ -267,22 +271,34 @@ const layer = Layer.effect(
       Stream.runForEach(() => notify),
       Effect.forkScoped({ startImmediately: true }),
     )
+    const readiness = new Set<Effect.Effect<void>>()
+    const publicRead = () =>
+      Effect.forEach(readiness, (effect) => effect, { discard: true }).pipe(Effect.andThen(read()))
     return Service.of({
+      beforeRead: (effect) =>
+        Effect.gen(function* () {
+          readiness.add(effect)
+          const dispose = Effect.sync(() => {
+            readiness.delete(effect)
+          })
+          yield* Effect.addFinalizer(() => dispose)
+          return { dispose }
+        }),
       transform: (update) => prepare.pipe(Effect.andThen(state.transform(update))),
       reload,
       get: Effect.fn("Model.get")((providerID, modelID) =>
-        read().pipe(Effect.map((value) => value.byProvider.get(providerID)?.get(modelID))),
+        publicRead().pipe(Effect.map((value) => value.byProvider.get(providerID)?.get(modelID))),
       ),
-      all: Effect.fn("Model.all")(() => read().pipe(Effect.map((value) => value.all))),
-      available: Effect.fn("Model.available")(() => read().pipe(Effect.map((value) => value.available))),
+      all: Effect.fn("Model.all")(() => publicRead().pipe(Effect.map((value) => value.all))),
+      available: Effect.fn("Model.available")(() => publicRead().pipe(Effect.map((value) => value.available))),
       default: Effect.fn("Model.default")(function* () {
-        const value = yield* read()
+        const value = yield* publicRead()
         const requested = value.data.defaultModel
         const model = requested && value.byProvider.get(requested.providerID)?.get(requested.modelID)
         return model?.enabled ? model : value.available[0]
       }),
       small: Effect.fn("Model.small")(function* (providerID) {
-        const value = yield* read()
+        const value = yield* publicRead()
         const models = value.available.filter(
           (model) =>
             model.providerID === providerID &&

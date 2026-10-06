@@ -2,8 +2,10 @@ import { define } from "@opencode/plugin/effect/plugin"
 import type { Entry } from "@opencode/schema/config"
 import { ConfigProvider } from "@opencode/schema/config/provider"
 import { NonNegativeInt, PositiveInt } from "@opencode/schema/schema"
-import { Duration, Effect, Schedule, Schema, Stream } from "effect"
+import { Duration, Effect, Schedule, Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
+import { Bus } from "../../bus.js"
+import { Credential } from "../../credential.js"
 import { Config } from "../../config.js"
 import { Integration } from "../../integration.js"
 import { Model } from "../../model.js"
@@ -47,6 +49,8 @@ export function make(interval: Duration.Input = "30 seconds") {
       >()
       const settings = { current: configured(yield* config.entries()) }
       const generations = new Map<string, number>()
+      const attempts = new Map<string, { signature: string; pending: boolean; run: Effect.Effect<void> }>()
+      const loading = Semaphore.makeUnsafe(1)
 
       yield* ctx.provider.transform((providers) => {
         for (const [id, result] of loaded) {
@@ -132,13 +136,24 @@ export function make(interval: Duration.Input = "30 seconds") {
         })
       })
 
-      const refresh = Effect.fn("ModelDiscovery.refresh")(function* () {
+      const refresh = Effect.fn("ModelDiscovery.refresh")(function* (force = false) {
+        const next = configured(yield* config.entries())
+        for (const [id, source] of next) {
+          const previous = settings.current.get(id)
+          if (JSON.stringify(previous) === JSON.stringify(source) && previous) next.set(id, previous)
+        }
+        settings.current = next
+        for (const id of attempts.keys()) if (!next.has(id)) attempts.delete(id)
+        for (const [id, result] of loaded) {
+          if (JSON.stringify(next.get(id)) === JSON.stringify(result.source)) continue
+          loaded.delete(id)
+          attempts.delete(id)
+          yield* ctx.provider.reload()
+        }
         yield* Effect.forEach(
           settings.current,
           ([id, source]) =>
             Effect.gen(function* () {
-              const generation = (generations.get(id) ?? 0) + 1
-              generations.set(id, generation)
               const baseURL = source.settings?.baseURL
               if (typeof baseURL !== "string" || !URL.canParse(baseURL)) return
               const endpoint = new URL(baseURL)
@@ -148,8 +163,7 @@ export function make(interval: Duration.Input = "30 seconds") {
               endpoint.hash = ""
               const connection = yield* ctx.integration.connection.active(Integration.ID.make(id))
               const active = connection ? yield* ctx.integration.connection.resolve(connection) : undefined
-              // This plugin starts before config registers environment methods. Resolve their configured
-              // names through the same integration boundary so the first catalog request is authenticated.
+              // Configured environment methods may not be registered during plugin startup yet.
               const credential =
                 active ??
                 (yield* Effect.forEach(source.env ?? [], (name) =>
@@ -161,49 +175,76 @@ export function make(interval: Duration.Input = "30 seconds") {
                   : credential?.type === "key"
                     ? credential.key
                     : undefined
-              if (settings.current.get(id) !== source || generations.get(id) !== generation) return
-              // Account-scoped discovery must not survive a credential switch when the new account rejects access.
-              if (loaded.has(id) && loaded.get(id)?.apiKey !== apiKey) {
-                loaded.delete(id)
-                yield* ctx.provider.reload()
-              }
-              const request = HttpClientRequest.get(endpoint.toString()).pipe(
-                HttpClientRequest.acceptJson,
-                HttpClientRequest.setHeaders(source.headers ?? {}),
+              if (settings.current.get(id) !== source) return
+              const signature = JSON.stringify([source, apiKey])
+              const run = yield* loading.withPermit(
+                Effect.gen(function* () {
+                  const previous = attempts.get(id)
+                  if (previous?.signature === signature && (!force || previous.pending)) return previous.run
+                  const generation = (generations.get(id) ?? 0) + 1
+                  generations.set(id, generation)
+                  const attempt = { signature, pending: true, run: Effect.void }
+                  attempt.run = yield* Effect.cached(
+                    Effect.gen(function* () {
+                      if (loaded.has(id) && loaded.get(id)?.apiKey !== apiKey) {
+                        loaded.delete(id)
+                        yield* ctx.provider.reload()
+                      }
+                      const request = HttpClientRequest.get(endpoint.toString()).pipe(
+                        HttpClientRequest.acceptJson,
+                        HttpClientRequest.setHeaders(source.headers ?? {}),
+                      )
+                      const response = yield* http
+                        .execute(apiKey ? HttpClientRequest.bearerToken(request, apiKey) : request)
+                        .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Response)), Effect.timeout("5 seconds"))
+                      if (settings.current.get(id) !== source || generations.get(id) !== generation) return
+                      const models = response.data
+                      if (new Set(models.map((model) => model.id)).size !== models.length) return
+                      if (JSON.stringify(loaded.get(id)?.models) === JSON.stringify(models)) return
+                      loaded.set(id, { source, apiKey, models })
+                      yield* ctx.provider.reload()
+                    }).pipe(
+                      Effect.catchCause(() =>
+                        Effect.logWarning("Model discovery failed; retaining the last valid inventory", {
+                          providerID: id,
+                        }),
+                      ),
+                      Effect.ensuring(
+                        Effect.sync(() => {
+                          attempt.pending = false
+                        }),
+                      ),
+                    ),
+                  )
+                  attempts.set(id, attempt)
+                  return attempt.run
+                }),
               )
-              const response = yield* http
-                .execute(apiKey ? HttpClientRequest.bearerToken(request, apiKey) : request)
-                .pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Response)), Effect.timeout("5 seconds"))
-              if (settings.current.get(id) !== source || generations.get(id) !== generation) return
-              const models = response.data
-              if (new Set(models.map((model) => model.id)).size !== models.length) return
-              if (JSON.stringify(loaded.get(id)?.models) === JSON.stringify(models)) return
-              loaded.set(id, { source, apiKey, models })
-              yield* ctx.provider.reload()
-            }).pipe(Effect.ignore),
+              yield* run
+            }).pipe(
+              Effect.catchCause(() =>
+                Effect.logWarning("Model discovery failed; retaining the last valid inventory", { providerID: id }),
+              ),
+            ),
           { discard: true },
         )
       })
       // Preserve the last valid metadata during transient errors. A changed configuration starts a new catalog.
       yield* refresh()
+      yield* ctx.model.beforeRead(refresh())
       yield* Effect.sleep(interval).pipe(
-        Effect.andThen(refresh()),
+        Effect.andThen(refresh(true)),
         Effect.repeat(Schedule.spaced(interval)),
         Effect.forkScoped,
       )
+      const bus = yield* Bus.Service
+      yield* bus.subscribe([Credential.Event.Updated, Credential.Event.Switched]).pipe(
+        Stream.runForEach(() => refresh()),
+        Effect.forkScoped({ startImmediately: true }),
+      )
       yield* ctx.event.subscribe().pipe(
         Stream.filter((event) => event.type === "config.updated" || event.type === "integration.updated"),
-        Stream.runForEach(() =>
-          Effect.gen(function* () {
-            settings.current = configured(yield* config.entries())
-            for (const [id, result] of loaded) {
-              if (JSON.stringify(settings.current.get(id)) === JSON.stringify(result.source)) continue
-              loaded.delete(id)
-            }
-            yield* ctx.provider.reload()
-            yield* refresh()
-          }),
-        ),
+        Stream.runForEach(() => refresh()),
         Effect.forkScoped({ startImmediately: true }),
       )
     }),

@@ -1,3 +1,4 @@
+import { Credential } from "@opencode/core/credential"
 import { Config } from "@opencode/core/config"
 import { Bus } from "@opencode/core/bus"
 import { ConfigProviderPlugin } from "@opencode/core/config/plugin/provider"
@@ -219,6 +220,117 @@ describe("OpenAI-compatible model discovery", () => {
       ),
     ),
   )
+  it.live("bootstraps the first model read immediately after saving a key", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => {
+        const state = { authenticated: 0 }
+        return {
+          state,
+          server: Bun.serve({
+            port: 0,
+            fetch: async (request) => {
+              if (request.headers.get("authorization") !== "Bearer saved-fixture-key")
+                return new Response(null, { status: 401 })
+              state.authenticated++
+              await Bun.sleep(30)
+              return Response.json({ data: [remote] })
+            },
+          }),
+        }
+      }),
+      ({ state, server }) =>
+        Effect.gen(function* () {
+          const config = yield* Config.Test
+          yield* config.setEntries([
+            new Document({
+              type: "document",
+              info: decode({
+                providers: {
+                  gateway: { settings: { baseURL: `${server.url.origin}/v1`, modelDiscovery: true } },
+                },
+              }),
+            }),
+          ])
+          const host = yield* PluginHost.make(yield* Plugin.Service)
+          yield* make("1 hour").effect(host)
+          yield* ConfigProviderPlugin.Plugin.effect(host)
+          const integrations = yield* Integration.Service
+          yield* integrations.connection.key({
+            integrationID: Integration.ID.make("gateway"),
+            key: "saved-fixture-key",
+          })
+          const models = yield* Model.Service
+          const reads = yield* Effect.all([models.available(), models.available()], { concurrency: "unbounded" })
+          for (const value of reads)
+            expect(value.find((model) => model.providerID === "gateway" && model.id === remote.id)?.limit.context).toBe(
+              remote.context_window,
+            )
+          expect(state.authenticated).toBe(1)
+        }),
+      ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+  for (const mode of ["saved", "timeout"] as const) {
+    it.live(
+      `bootstraps saved credentials and bounds failed discovery: ${mode}`,
+      () =>
+        Effect.acquireUseRelease(
+          Effect.sync(() => {
+            const state = { requests: 0 }
+            return {
+              state,
+              server: Bun.serve({
+                port: 0,
+                fetch: async (request) => {
+                  state.requests++
+                  if (mode === "timeout") await new Promise<void>(() => {})
+                  return request.headers.get("authorization") === "Bearer saved-fixture-key"
+                    ? Response.json({ data: [remote] })
+                    : new Response(null, { status: 401 })
+                },
+              }),
+            }
+          }),
+          ({ state, server }) =>
+            Effect.gen(function* () {
+              const credentials = yield* Credential.Service
+              yield* credentials.create({
+                integrationID: Integration.ID.make("gateway"),
+                value: Credential.Key.make({ type: "key", key: "saved-fixture-key" }),
+              })
+              const config = yield* Config.Test
+              yield* config.setEntries([
+                new Document({
+                  type: "document",
+                  info: decode({
+                    providers: {
+                      gateway: { settings: { baseURL: `${server.url.origin}/v1`, modelDiscovery: true } },
+                      ordinary: { settings: { apiKey: "ordinary-fixture-key" }, models: { legacy: {} } },
+                    },
+                  }),
+                }),
+              ])
+              const started = Date.now()
+              const host = yield* PluginHost.make(yield* Plugin.Service)
+              yield* make("1 hour").effect(host)
+              yield* ConfigProviderPlugin.Plugin.effect(host)
+              const models = yield* Model.Service
+              const first = yield* models.available()
+              const second = yield* models.available()
+              expect(first).toEqual(second)
+              expect(first.find((model) => model.providerID === "ordinary" && model.id === "legacy")).toBeDefined()
+              expect(first.some((model) => model.providerID === "gateway" && model.id === remote.id)).toBe(
+                mode === "saved",
+              )
+              expect(state.requests).toBe(1)
+              expect((yield* credentials.list(Integration.ID.make("gateway"))).length).toBe(1)
+              expect(Date.now() - started).toBeLessThan(8000)
+            }),
+          ({ server }) => Effect.promise(() => server.stop(true)),
+        ),
+      15000,
+    )
+  }
   it.live("authenticates the first cold-start discovery request using configured environment credentials", () =>
     withEnv({ OPENCODE_DISCOVERY_FIXTURE_KEY: "env-fixture-key" }, () =>
       Effect.acquireUseRelease(

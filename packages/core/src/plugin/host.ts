@@ -225,6 +225,7 @@ export const make = Effect.fn("PluginHost.make")(function* (
         }),
     },
     model: {
+      beforeRead: models.beforeRead,
       list: () => response(models.available()),
       default: () => response(models.default()),
       reload: models.reload,
