@@ -1,10 +1,13 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect, spyOn } from "bun:test"
 import { Effect, FileSystem } from "effect"
 import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { testEffect } from "../lib/effect"
 import path from "path"
+import { realpathSync } from "fs"
+import { mkdir, symlink } from "fs/promises"
+import { tmpdir } from "../fixture/tmpdir"
 
 const live = LayerNode.compile(LayerNode.group([FSUtil.node, LayerNodePlatform.filesystem]))
 const { effect: it } = testEffect(live)
@@ -382,6 +385,36 @@ describe("FSUtil", () => {
       expect(FSUtil.overlaps("/a", "/b")).toBe(false)
       expect(FSUtil.overlaps("/a/b", "/a/bad")).toBe(false)
       if (process.platform === "win32") expect(FSUtil.overlaps("C:\\a", "D:\\b")).toBe(false)
+    })
+
+    // Windows: the JS realpath lstats the drive root, which fails with EPERM in an AppContainer
+    test("resolve goes through the native realpath on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const target = path.join(tmp.path, "real")
+      await mkdir(target)
+      const link = path.join(tmp.path, "link")
+      await symlink(target, link, "junction")
+      const native = spyOn(realpathSync, "native")
+      try {
+        expect(FSUtil.resolve(link)).toBe(FSUtil.normalizePath(target))
+        expect(native.mock.calls[0]?.[0]).toBe(path.resolve(link))
+      } finally {
+        native.mockRestore()
+      }
+    })
+
+    test("resolve falls back to the JS realpath when the native call fails on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const native = spyOn(realpathSync, "native").mockImplementationOnce(() => {
+        throw Object.assign(new Error("EISDIR: illegal operation on a directory"), { code: "EISDIR" })
+      })
+      try {
+        expect(FSUtil.resolve(tmp.path)).toBe(FSUtil.normalizePath(tmp.path))
+      } finally {
+        native.mockRestore()
+      }
     })
   })
 })

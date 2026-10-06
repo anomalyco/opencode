@@ -137,10 +137,23 @@ export function normalizePathPattern(p: string): string {
 export function resolve(p: string): string {
   const resolved = pathResolve(windowsPath(p))
   try {
-    return normalizePath(realpathSync(resolved))
+    return normalizePath(realpath(resolved))
   } catch (e) {
     if (isEnoent(e)) return normalizePath(resolved)
     throw e
+  }
+}
+
+// On Windows the JS realpath lstats every ancestor from the drive root, which fails with EPERM when the
+// root is unreadable (e.g. an AppContainer). The native call opens only the target; other native failures
+// (e.g. drives without final-path support) keep the JS fallback.
+function realpath(p: string): string {
+  if (process.platform !== "win32") return realpathSync(p)
+  try {
+    return realpathSync.native(p)
+  } catch (e) {
+    if (isEnoent(e)) throw e
+    return realpathSync(p)
   }
 }
 

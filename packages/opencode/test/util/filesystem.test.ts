@@ -1,6 +1,7 @@
-import { describe, test, expect } from "bun:test"
+import { describe, test, expect, spyOn } from "bun:test"
 import path from "path"
 import fs from "fs/promises"
+import { realpathSync } from "fs"
 import { Filesystem } from "@/util/filesystem"
 import { tmpdir } from "../fixture/fixture"
 
@@ -642,6 +643,36 @@ describe("filesystem", () => {
       const file = path.join(tmp.path, "not-a-directory")
       await fs.writeFile(file, "x")
       expect(() => Filesystem.resolve(path.join(file, "child"))).toThrow()
+    })
+
+    // Windows: the JS realpath lstats the drive root, which fails with EPERM in an AppContainer
+    test("resolves through the native realpath on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const target = path.join(tmp.path, "real")
+      await fs.mkdir(target)
+      const link = path.join(tmp.path, "link")
+      await fs.symlink(target, link, "junction")
+      const native = spyOn(realpathSync, "native")
+      try {
+        expect(Filesystem.resolve(link)).toBe(Filesystem.normalizePath(target))
+        expect(native.mock.calls[0]?.[0]).toBe(path.resolve(link))
+      } finally {
+        native.mockRestore()
+      }
+    })
+
+    test("falls back to the JS realpath when the native call fails on Windows", async () => {
+      if (process.platform !== "win32") return
+      await using tmp = await tmpdir()
+      const native = spyOn(realpathSync, "native").mockImplementationOnce(() => {
+        throw Object.assign(new Error("EISDIR: illegal operation on a directory"), { code: "EISDIR" })
+      })
+      try {
+        expect(Filesystem.resolve(tmp.path)).toBe(Filesystem.normalizePath(tmp.path))
+      } finally {
+        native.mockRestore()
+      }
     })
   })
 
