@@ -1,4 +1,5 @@
-import { TextAttributes } from "@opentui/core"
+import { ScrollBoxRenderable, TextareaRenderable, TextAttributes } from "@opentui/core"
+import { useTerminalDimensions } from "@opentui/solid"
 import type {
   ConnectionInfo,
   IntegrationCommandConnectOutput,
@@ -12,7 +13,8 @@ import type {
   LocationRef,
 } from "@opencode/client"
 import { openUrl } from "@opencode/util/open"
-import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show } from "solid-js"
+import { createStore } from "solid-js/store"
 import { useClipboard } from "../context/clipboard"
 import { useData } from "../context/data"
 import { useClient } from "../context/client"
@@ -25,7 +27,15 @@ import { DialogSelect } from "../ui/dialog-select"
 import { Link } from "../ui/link"
 import { useToast } from "../ui/toast"
 import { errorMessage } from "../util/error"
-import { formLabel, formToggleMultiselect, formValidateValue, type FormAnswerField } from "../util/form"
+import {
+  formInitialValues,
+  formLabel,
+  formRows,
+  formSelected,
+  formToggleMultiselect,
+  formValidateValue,
+  type FormAnswerField,
+} from "../util/form"
 
 const INTEGRATION_PRIORITY: Record<string, number> = {
   "opencode-go": 0,
@@ -813,6 +823,13 @@ async function selectAnswer(
   title: string,
   field: Extract<FormAnswerField, { type: "boolean" | "string" }>,
 ): Promise<FormValue | undefined | typeof CANCELLED> {
+  if (field.type === "string" && field.custom)
+    return new Promise((resolve) => {
+      dialog.replace(
+        () => <StringChoiceField field={field} onSubmit={resolve} />,
+        () => resolve(CANCELLED),
+      )
+    })
   const options =
     field.type === "boolean"
       ? field.default === false
@@ -829,18 +846,12 @@ async function selectAnswer(
           value: option.value as FormValue,
           description: option.description,
         }))
-  const choice = await new Promise<FormValue | typeof CUSTOM | undefined | typeof CANCELLED>((resolve) => {
+  return new Promise<FormValue | undefined | typeof CANCELLED>((resolve) => {
     dialog.replace(
       () => (
-        <DialogSelect<FormValue | typeof CUSTOM | undefined>
+        <DialogSelect<FormValue | undefined>
           title={formLabel(field) || title}
-          options={[
-            ...options,
-            ...(field.type === "string" && field.custom
-              ? [{ title: "Type your own answer", value: CUSTOM as typeof CUSTOM }]
-              : []),
-            ...(!field.required ? [{ title: "Skip", value: undefined }] : []),
-          ]}
+          options={[...options, ...(!field.required ? [{ title: "Skip", value: undefined }] : [])]}
           current={field.type === "string" ? field.default : undefined}
           onSelect={(option) => resolve(option.value)}
         />
@@ -848,11 +859,158 @@ async function selectAnswer(
       () => resolve(CANCELLED),
     )
   })
-  if (choice === CUSTOM) {
-    if (field.type !== "string") return CANCELLED
-    return textAnswer(dialog, title, field, "")
+}
+
+function StringChoiceField(props: {
+  field: Extract<FormAnswerField, { type: "string" }>
+  onSubmit: (value: string | undefined) => void
+}) {
+  const dialog = useDialog()
+  const theme = useTheme().surface("dialog")
+  const dimensions = useTerminalDimensions()
+  const rows = formRows(props.field)
+  const count = rows.length + (props.field.required ? 1 : 2)
+  const [store, setStore] = createStore({
+    selected: formSelected(props.field, props.field.default),
+    editing: false,
+    text: formInitialValues([props.field]).custom[props.field.key] ?? "",
+    error: "",
+  })
+  const [textarea, setTextarea] = createSignal<TextareaRenderable>()
+  let scroll: ScrollBoxRenderable | undefined
+  createEffect(() => {
+    const row = scroll?.getChildren()[store.selected]
+    if (row) scroll?.scrollChildIntoView(row.id)
+  })
+  const fg = (index: number) => (store.selected === index ? theme.text.formfield.focused : theme.text.formfield.base)
+  const submit = (value: string | undefined) => {
+    const invalid = formValidateValue(props.field, value)
+    if (invalid) return setStore("error", invalid)
+    props.onSubmit(value)
   }
-  return choice
+  const select = (index: number) => {
+    setStore({ selected: index, error: "" })
+    if (index === rows.length) return setStore("editing", true)
+    submit(index < rows.length ? String(rows[index].value) : undefined)
+  }
+  const back = () => setStore({ editing: false, text: textarea()?.plainText ?? store.text, error: "" })
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    enabled: !store.editing,
+    commands: [
+      {
+        id: "dialog.select.prev",
+        title: "Previous answer",
+        group: "Form",
+        run: () => setStore("selected", (store.selected + count - 1) % count),
+      },
+      {
+        id: "dialog.select.next",
+        title: "Next answer",
+        group: "Form",
+        run: () => setStore("selected", (store.selected + 1) % count),
+      },
+      { id: "dialog.select.submit", title: "Select answer", group: "Form", run: () => select(store.selected) },
+    ],
+  }))
+  Keymap.createLayer(() => ({
+    mode: "modal",
+    priority: 1,
+    target: textarea,
+    enabled: store.editing,
+    commands: [
+      {
+        id: "dialog.prompt.submit",
+        title: "Submit answer",
+        group: "Form",
+        run: () => submit(textarea()?.plainText.trim() || undefined),
+      },
+      { bind: "escape", title: "Back to answers", group: "Form", run: back },
+    ],
+  }))
+  return (
+    <box paddingLeft={4} paddingRight={4} paddingBottom={1} gap={1}>
+      <box flexDirection="row" justifyContent="space-between">
+        <text fg={theme.text.base} attributes={TextAttributes.BOLD}>
+          {formLabel(props.field)}
+        </text>
+        <text fg={theme.text.muted} onMouseUp={() => (store.editing ? back() : dialog.clear())}>
+          esc
+        </text>
+      </box>
+      <Show when={props.field.description}>{(description) => <text fg={theme.text.muted}>{description()}</text>}</Show>
+      <scrollbox
+        gap={1}
+        height={Math.min(
+          count + rows.filter((row) => row.description).length,
+          Math.max(3, Math.floor(dimensions().height / 2) - 6),
+        )}
+        scrollbarOptions={{ visible: false }}
+        ref={(value: ScrollBoxRenderable) => {
+          scroll = value
+        }}
+      >
+        <For each={rows}>
+          {(row, index) => (
+            <box onMouseUp={() => select(index())}>
+              <text fg={fg(index())}>
+                {index() + 1}. {row.label}
+              </text>
+              <Show when={row.description}>
+                {(description) => (
+                  <text paddingLeft={3} fg={theme.text.muted}>
+                    {description()}
+                  </text>
+                )}
+              </Show>
+            </box>
+          )}
+        </For>
+        <box flexDirection="row" gap={1} onMouseUp={() => select(rows.length)}>
+          <text fg={fg(rows.length)}>{rows.length + 1}.</text>
+          <Show
+            when={store.editing}
+            fallback={<text fg={fg(rows.length)}>{store.text || "Type your own answer"}</text>}
+          >
+            <textarea
+              height={1}
+              flexGrow={1}
+              wrapMode="none"
+              initialValue={store.text}
+              placeholder={props.field.placeholder ?? "Type your own answer"}
+              placeholderColor={theme.text.muted}
+              textColor={theme.text.formfield.focused}
+              focusedTextColor={theme.text.formfield.focused}
+              cursorColor={theme.text.formfield.focused}
+              ref={(value: TextareaRenderable) => {
+                setTextarea(value)
+                value.traits = { status: "ANSWER" }
+                queueMicrotask(() => {
+                  if (value.isDestroyed) return
+                  value.focus()
+                  value.gotoLineEnd()
+                })
+              }}
+              onContentChange={() => {
+                const text = textarea()?.plainText ?? ""
+                setStore("text", text)
+                if (store.error && !formValidateValue(props.field, text.trim() || undefined)) setStore("error", "")
+              }}
+            />
+          </Show>
+        </box>
+        <Show when={!props.field.required}>
+          <text fg={fg(rows.length + 1)} onMouseUp={() => select(rows.length + 1)}>
+            {rows.length + 2}. Skip
+          </text>
+        </Show>
+      </scrollbox>
+      <Show when={store.error}>{(error) => <text fg={theme.text.feedback.error.base}>{error()}</text>}</Show>
+      <text fg={theme.text.muted}>
+        {store.editing ? "enter submit · esc back" : "↑/↓ select · enter confirm · esc cancel"}
+      </text>
+    </box>
+  )
 }
 
 function textAnswer(
