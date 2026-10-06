@@ -1,8 +1,7 @@
 export * as OwnedFetch from "./fetch"
 
 export function make(handler: (request: Request) => Promise<Response>, dispose: () => Promise<void>) {
-  const requests = new Set<Promise<void>>()
-  const shutdown = new AbortController()
+  const requests = new Map<AbortController, Promise<void>>()
   const closed = new Error("OpenCode host is closed")
   let closePromise: Promise<void> | undefined
   const fetch = Object.assign(
@@ -10,22 +9,17 @@ export function make(handler: (request: Request) => Promise<Response>, dispose: 
       if (closePromise) return Promise.reject(closed)
       const source = new Request(input, init)
       if (source.signal.aborted) return Promise.reject(source.signal.reason)
-      // Detach both signals when the response finishes: a long-lived shutdown signal
-      // can otherwise retain completed embedded Web requests through AbortSignal.any.
       const controller = new AbortController()
-      const abortSource = () => controller.abort(source.signal.reason)
-      const abortShutdown = () => controller.abort(shutdown.signal.reason)
-      source.signal.addEventListener("abort", abortSource, { once: true })
-      shutdown.signal.addEventListener("abort", abortShutdown, { once: true })
+      const abort = () => controller.abort(source.signal.reason)
+      source.signal.addEventListener("abort", abort, { once: true })
       const request = new Request(source, { signal: controller.signal })
       const lifetime = Promise.withResolvers<void>()
       const finish = () => {
-        source.signal.removeEventListener("abort", abortSource)
-        shutdown.signal.removeEventListener("abort", abortShutdown)
-        requests.delete(lifetime.promise)
+        source.signal.removeEventListener("abort", abort)
+        requests.delete(controller)
         lifetime.resolve()
       }
-      requests.add(lifetime.promise)
+      requests.set(controller, lifetime.promise)
 
       const handled = handler(request)
       return rejectOnAbort(handled, request.signal).then(
@@ -41,8 +35,8 @@ export function make(handler: (request: Request) => Promise<Response>, dispose: 
   const close = () => {
     if (closePromise) return closePromise
     closePromise = Promise.resolve().then(async () => {
-      shutdown.abort(closed)
-      await Promise.allSettled(requests)
+      requests.forEach((_, controller) => controller.abort(closed))
+      await Promise.allSettled(requests.values())
       await dispose()
     })
     return closePromise

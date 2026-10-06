@@ -32,8 +32,9 @@ it.live("releases completed embedded requests while the host stays open", () =>
   }),
 )
 
-it.live("releases failed embedded requests while the host stays open", () =>
+it.live("releases failed embedded requests while the host and caller signal stay open", () =>
   Effect.promise(async () => {
+    const caller = new AbortController()
     const requests: WeakRef<Request>[] = []
     const transport = OwnedFetch.make(
       async (request) => {
@@ -45,15 +46,18 @@ it.live("releases failed embedded requests while the host stays open", () =>
     )
 
     for (let index = 0; index < 120; index++) {
-      expect(await transport.fetch(`http://opencode.local/${index}`).catch((cause: unknown) => cause)).toMatchObject({
+      expect(
+        await transport
+          .fetch(`http://opencode.local/${index}`, { signal: caller.signal })
+          .catch((cause: unknown) => cause),
+      ).toMatchObject({
         message: "handler failed",
       })
     }
 
-    for (let round = 0; round < 12; round++) {
-      fullGC()
-      await Bun.sleep(10)
-    }
+    await Bun.sleep(50)
+    fullGC()
+    expect(caller.signal.aborted).toBe(false)
     expect(requests.filter((ref) => ref.deref() !== undefined).length).toBeLessThanOrEqual(3)
     await transport.close()
   }),
