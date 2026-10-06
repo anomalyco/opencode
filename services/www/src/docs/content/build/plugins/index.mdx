@@ -484,14 +484,6 @@ const connection = await ctx.integration.connection.active("github")
 const credential = connection ? await ctx.integration.connection.resolve(connection) : undefined
 ```
 
-Activate another saved account. The credential becomes the active connection of its integration for every session.
-
-```ts
-const { data } = await ctx.integration.get({ integrationID: "anthropic" })
-const next = data.connections.find((connection) => connection.type === "credential" && connection.label === "work")
-if (next?.type === "credential") await ctx.integration.connection.activate(next.id)
-```
-
 Connect integrations with an API key.
 
 ```ts
@@ -583,7 +575,6 @@ interface IntegrationContext {
   connection: {
     active(integrationID: string): Promise<ConnectionInfo | undefined>
     resolve(connection: ConnectionInfo): Promise<CredentialValue | undefined>
-    activate(credentialID: string): Promise<void>
   }
 }
 
@@ -597,6 +588,24 @@ interface IntegrationEditor {
     update(input: IntegrationMethodRegistration): void
     remove(integrationID: string, method: IntegrationMethod): void
   }
+}
+```
+
+### Credentials
+
+Activate another saved account. The credential becomes the active connection of its integration for every session.
+
+```ts
+const { data } = await ctx.integration.get({ integrationID: "anthropic" })
+const next = data.connections.find((connection) => connection.type === "credential" && connection.label === "work")
+if (next?.type === "credential") await ctx.credential.activate({ credentialID: next.id })
+```
+
+#### Reference
+
+```ts
+interface CredentialContext {
+  activate(input: CredentialActivateInput, requestOptions?: RequestOptions): Promise<void>
 }
 ```
 

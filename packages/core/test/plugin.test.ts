@@ -629,11 +629,16 @@ it.effect("activates a saved credential through the context", () =>
 
     yield* plugins.activate([
       {
-        id: "activate-credential",
+        ...fromPromise({
+          id: "activate-credential",
+          async setup(ctx) {
+            await ctx.credential.activate({ credentialID: first.id })
+          },
+        }),
         revision: "1",
-        effect: (ctx) => ctx.integration.connection.activate(first.id),
       },
     ])
+    yield* plugins.awaitActivation
 
     expect(yield* plugins.list()).toMatchObject([{ id: "activate-credential", state: { status: "active" } }])
     expect(yield* integrations.connection.active(integrationID)).toMatchObject({ id: first.id, label: "First" })

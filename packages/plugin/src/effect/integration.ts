@@ -93,8 +93,6 @@ export interface IntegrationDomain extends Omit<IntegrationApi<unknown>, "wellkn
   readonly connection: {
     readonly active: (integrationID: string) => Effect.Effect<ConnectionInfo | undefined>
     readonly resolve: (connection: ConnectionInfo) => Effect.Effect<Credential.Value | undefined, unknown>
-    /** Makes a saved credential the active connection of its integration. */
-    readonly activate: (credentialID: string) => Effect.Effect<void>
     /** Reports a problem with a connection, such as a required sign-in; `undefined` clears it. */
     readonly status: (input: {
       readonly integrationID: string

@@ -252,6 +252,9 @@ export const make = Effect.fn("PluginHost.make")(function* (
       reload: commands.reload,
       transform: commands.transform,
     },
+    credential: {
+      activate: (input) => integration.connection.activate(input.credentialID),
+    },
     event: {
       subscribe: () =>
         bus
@@ -345,7 +348,6 @@ export const make = Effect.fn("PluginHost.make")(function* (
           integration.connection.resolve(
             connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
           ),
-        activate: (credentialID) => integration.connection.activate(Credential.ID.make(credentialID)),
         status: (input) =>
           integration.connection.status({
             integrationID: Integration.ID.make(input.integrationID),

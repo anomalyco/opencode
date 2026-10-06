@@ -62,6 +62,9 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       transform: () => Effect.die("unused command.transform"),
       reload: () => Effect.die("unused command.reload"),
     },
+    credential: overrides.credential ?? {
+      activate: () => Effect.die("unused credential.activate"),
+    },
     event: overrides.event ?? {
       subscribe: () => Stream.empty,
     },
@@ -95,7 +98,6 @@ export function host(overrides: Overrides = {}): Plugin.Context {
       connection: {
         active: () => Effect.die("unused integration.connection.active"),
         resolve: () => Effect.die("unused integration.connection.resolve"),
-        activate: () => Effect.die("unused integration.connection.activate"),
         status: () => Effect.die("unused integration.connection.status"),
       },
     },
@@ -317,7 +319,6 @@ export function integrationHost(integration: Integration.Interface): Plugin.Cont
         integration.connection.resolve(
           connection.type === "credential" ? { ...connection, id: Credential.ID.make(connection.id) } : connection,
         ),
-      activate: (credentialID) => integration.connection.activate(Credential.ID.make(credentialID)),
       status: (input) =>
         integration.connection.status({
           integrationID: Integration.ID.make(input.integrationID),
