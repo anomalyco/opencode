@@ -10,9 +10,18 @@ export function make(handler: (request: Request) => Promise<Response>, dispose: 
       if (closePromise) return Promise.reject(closed)
       const source = new Request(input, init)
       if (source.signal.aborted) return Promise.reject(source.signal.reason)
-      const request = new Request(source, { signal: AbortSignal.any([source.signal, shutdown.signal]) })
+      // Detach both signals when the response finishes: a long-lived shutdown signal
+      // can otherwise retain completed embedded Web requests through AbortSignal.any.
+      const controller = new AbortController()
+      const abortSource = () => controller.abort(source.signal.reason)
+      const abortShutdown = () => controller.abort(shutdown.signal.reason)
+      source.signal.addEventListener("abort", abortSource, { once: true })
+      shutdown.signal.addEventListener("abort", abortShutdown, { once: true })
+      const request = new Request(source, { signal: controller.signal })
       const lifetime = Promise.withResolvers<void>()
       const finish = () => {
+        source.signal.removeEventListener("abort", abortSource)
+        shutdown.signal.removeEventListener("abort", abortShutdown)
         requests.delete(lifetime.promise)
         lifetime.resolve()
       }
