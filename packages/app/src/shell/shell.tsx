@@ -33,9 +33,9 @@ export default function Layout(props: ParentProps) {
         style={{
           // Mobile panels only need clearance for their outer border.
           "--shell-inline-inset": mobile() ? "1px" : "8px",
-          // Mobile safe-area clearance is already applied by the titlebar or main.
-          // Native Windows chrome supplies the gap; retain outer-outline clearance.
-          "--shell-top-inset": mobile()
+          // A bottom mobile titlebar leaves main's top edge to the safe area. Native Windows chrome supplies the gap;
+          // retain outer-outline clearance.
+          "--shell-top-inset": bottomTitlebar()
             ? "0px"
             : platform.platform === "desktop" && platform.os === "windows"
               ? "1px"
@@ -79,7 +79,6 @@ export default function Layout(props: ParentProps) {
               "--settings-bottom-inset": bottomTitlebar()
                 ? "40px"
                 : "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))",
-              "--settings-top-inset": mobile() && !bottomTitlebar() ? "0px" : "var(--shell-top-inset, 8px)",
             }}
           >
             <ExtensionServerCover>

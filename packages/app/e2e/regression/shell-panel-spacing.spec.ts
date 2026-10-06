@@ -45,7 +45,9 @@ for (const direction of ["ltr", "rtl"] as const) {
     },
     { name: "settings", href: () => "/settings", panel: (page: Page) => page.getByTestId("settings-screen") },
   ]) {
-    test(`${screen.name} keeps only border clearance on mobile in ${direction}`, async ({ page }) => {
+    test(`${screen.name} keeps an 8px top gutter and only inline border clearance on mobile in ${direction}`, async ({
+      page,
+    }) => {
       await page.setViewportSize({ width: 390, height: 844 })
       await mockStressTimeline(page)
 
@@ -56,7 +58,7 @@ for (const direction of ["ltr", "rtl"] as const) {
       const panel = screen.panel(page)
 
       await expect(panel).toBeVisible()
-      await expect(panel).toHaveCSS("--shell-top-inset", "0px")
+      await expect(panel).toHaveCSS("--shell-top-inset", "8px")
       await expect
         .poll(async () => {
           const bounds = await panel.boundingBox()
@@ -64,7 +66,7 @@ for (const direction of ["ltr", "rtl"] as const) {
 
           return bounds && main && bounds.y - main.y
         })
-        .toBe(0)
+        .toBe(8)
       await expect
         .poll(async () => {
           const bounds = await panel.boundingBox()

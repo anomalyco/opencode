@@ -31,7 +31,6 @@
 @media (max-width: 767px) {
   .settings-screen {
     --settings-mobile-inner-inset: 8px;
-    margin-block-start: var(--settings-top-inset, var(--shell-top-inset, 8px));
   }
 }
 
