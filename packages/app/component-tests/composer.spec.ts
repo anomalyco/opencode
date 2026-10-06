@@ -95,7 +95,14 @@ for (const direction of ["ltr", "rtl"]) {
           Math.abs((direction === "ltr" ? action.x - last.x - last.width : last.x - action.x - action.width) - 12),
         ).toBeLessThan(1)
         await page.keyboard.press("Enter")
-        await expect(page.getByRole("menuitemradio", { name: "high", exact: true })).toBeVisible()
+        // Below the mobile breakpoint the variant picker opens in a bottom drawer instead of a menu.
+        await expect(
+          width < 768
+            ? page
+                .getByRole("dialog", { name: "Choose model variant", exact: true })
+                .getByRole("button", { name: "high", exact: true })
+            : page.getByRole("menuitemradio", { name: "high", exact: true }),
+        ).toBeVisible()
         await page.keyboard.press("Escape")
         await expect(variant).toBeFocused()
         await expect(submit).toBeInViewport()
