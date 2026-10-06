@@ -1,0 +1,124 @@
+From ac73b30f5ac97bb243704b358c005f0ec6d43557 Mon Sep 17 00:00:00 2001
+From: "Mohamed R. Khalil" <m.radwan.khalil@gmail.com>
+Date: Tue, 6 Oct 2026 20:25:11 +0300
+Subject: [PATCH] fix(session): drop assistant messages with no provider
+ content (empty-assistant-guard)
+
+Strict providers (Kimi) reject assistant messages carrying no content with
+400 "must not be empty", permanently wedging the session: every retry
+persists another error husk and the session can never send again. The
+conversion only guarded parts.length > 0, so messages with only step-start
+or empty-text parts shipped as empty provider messages. Now a message is
+emitted only when it contributes non-empty text, a tool call, or non-empty
+reasoning. The Anthropic signed-reasoning separator shape stays eligible
+through its reasoning parts.
+---
+ .../src/session/message-v2.fix5.test.ts       | 70 +++++++++++++++++++
+ packages/opencode/src/session/message-v2.ts   | 14 +++-
+ 2 files changed, 83 insertions(+), 1 deletion(-)
+ create mode 100644 packages/opencode/src/session/message-v2.fix5.test.ts
+
+diff --git a/packages/opencode/src/session/message-v2.fix5.test.ts b/packages/opencode/src/session/message-v2.fix5.test.ts
+new file mode 100644
+index 0000000000..90ddffefed
+--- /dev/null
++++ b/packages/opencode/src/session/message-v2.fix5.test.ts
+@@ -0,0 +1,70 @@
++import { describe, expect, test } from "bun:test"
++import { toModelMessages } from "./message-v2"
++
++// fix5-empty-assistant-guard regression tests
++const model = {
++  providerID: "kimi-for-coding",
++  id: "k3-256k",
++  api: { id: "openai-compatible", npm: "@ai-sdk/openai-compatible" },
++} as never
++
++function assistant(parts: any[], info: Record<string, unknown> = {}) {
++  return {
++    info: {
++      id: "msg_" + Math.random().toString(36).slice(2, 10),
++      role: "assistant",
++      providerID: "kimi-for-coding",
++      modelID: "k3-256k",
++      ...info,
++    },
++    parts,
++  }
++}
++function user(text: string) {
++  return { info: { id: "msg_u" + Math.random().toString(36).slice(2, 10), role: "user" }, parts: [{ type: "text", text }] }
++}
++
++describe("fix5-empty-assistant-guard", () => {
++  test("assistant with only a step-start part is dropped", async () => {
++    const out = await toModelMessages([user("hi"), assistant([{ type: "step-start" }]), user("again")], model)
++    const roles = out.map((m: any) => m.role)
++    expect(roles).toEqual(["user", "user"])
++  })
++
++  test("assistant with only an empty text part is dropped", async () => {
++    const out = await toModelMessages([user("hi"), assistant([{ type: "text", text: "" }])], model)
++    expect(out.length).toBe(1)
++  })
++
++  test("assistant with non-empty text is kept", async () => {
++    const out = await toModelMessages([assistant([{ type: "text", text: "hello" }])], model)
++    expect(out.length).toBe(1)
++  })
++
++  test("assistant with a completed tool call is kept", async () => {
++    const out = await toModelMessages([
++      assistant([
++        { type: "step-start" },
++        { type: "tool", tool: "bash", callID: "c1", state: { status: "completed", input: {}, output: "ok", time: {} } },
++      ]),
++    ], model)
++    // tool turns convert to assistant(tool-call) + tool(result) messages
++    expect(out.length).toBe(2)
++  })
++
++  test("signed-reasoning separator shape (non-empty reasoning + ' ' text) is kept", async () => {
++    const out = await toModelMessages([
++      assistant([
++        { type: "step-start" },
++        { type: "reasoning", text: "thinking about it", metadata: { anthropic: { signature: "sig123" } } },
++        { type: "text", text: " ", metadata: {} },
++      ]),
++    ], model)
++    expect(out.length).toBe(1)
++  })
++
++  test("zero-part assistant is dropped (pre-existing behavior preserved)", async () => {
++    const out = await toModelMessages([user("hi"), assistant([])], model)
++    expect(out.length).toBe(1)
++  })
++})
+diff --git a/packages/opencode/src/session/message-v2.ts b/packages/opencode/src/session/message-v2.ts
+index 2bd0e51715..80ef17f514 100644
+--- a/packages/opencode/src/session/message-v2.ts
++++ b/packages/opencode/src/session/message-v2.ts
+@@ -379,7 +379,19 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
+           })
+         }
+       }
+-      if (assistantMessage.parts.length > 0) {
++      // fix5-empty-assistant-guard: strict providers (e.g. Kimi) reject assistant
++      // messages that carry no content with 400 "must not be empty", permanently
++      // wedging the session. A non-zero part count is not sufficient: step-start
++      // and empty-text parts carry no provider content. Only emit messages that
++      // contribute non-empty text, a tool call, or non-empty reasoning.
++      // The signed-reasoning separator shape (step-start + reasoning(sig) + text(" "))
++      // stays eligible via its reasoning parts.
++      const hasProviderContent = assistantMessage.parts.some((part) => {
++        if (part.type === "text") return part.text.trim().length > 0
++        if (part.type === "reasoning") return part.text.trim().length > 0
++        return part.type.startsWith("tool-")
++      })
++      if (hasProviderContent) {
+         result.push(assistantMessage)
+         // Inject pending media as a user message for providers that don't support
+         // media (images, PDFs) in tool results
+-- 
+2.55.0.windows.3
+

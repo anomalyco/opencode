@@ -379,7 +379,39 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
           })
         }
       }
-      if (assistantMessage.parts.length > 0) {
+      // fix5-empty-assistant-guard: strict providers (e.g. Kimi) reject assistant
+      // messages that carry no content with 400 "must not be empty", permanently
+      // wedging the session. Two conditions must hold:
+      // (a) the message must contribute provider content: non-empty text, a tool
+      //     call, non-empty reasoning, or same-model reasoning carrying a
+      //     replayable signed/redacted payload (Anthropic adaptive thinking
+      //     persists signature-bearing reasoning with empty text; dropping it
+      //     would break signed-thinking replay).
+      // (b) each step-split block must contribute content: the SDK splits
+      //     multi-step messages at step-start boundaries into separate provider
+      //     messages, so an empty sibling step still serializes as content: "".
+      //     Empty step blocks (including their step-start marker) are dropped
+      //     here, before conversion.
+      const isReplayableReasoning = (part: { type: string; text?: string; providerMetadata?: any }) => {
+        if (part.type !== "reasoning") return false
+        if (typeof part.text === "string" && part.text.trim().length > 0) return true
+        if (differentModel) return false
+        const md = part.providerMetadata?.anthropic ?? part.providerMetadata
+        return Boolean(md && (md.signature != null || md.redactedData != null || md.redactedContent != null))
+      }
+      const partHasContent = (part: { type: string; text?: string; providerMetadata?: any }) => {
+        if (part.type === "text") return typeof part.text === "string" && part.text.trim().length > 0
+        if (part.type === "reasoning") return isReplayableReasoning(part)
+        return part.type.startsWith("tool-")
+      }
+      const stepBlocks: Array<typeof assistantMessage.parts> = [[]]
+      for (const part of assistantMessage.parts) {
+        if (part.type === "step-start") stepBlocks.push([])
+        stepBlocks[stepBlocks.length - 1]!.push(part)
+      }
+      const keptParts = stepBlocks.filter((block) => block.some((part) => partHasContent(part))).flat()
+      if (keptParts.length > 0) {
+        assistantMessage.parts = keptParts
         result.push(assistantMessage)
         // Inject pending media as a user message for providers that don't support
         // media (images, PDFs) in tool results
