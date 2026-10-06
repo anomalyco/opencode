@@ -60,25 +60,28 @@ story("aligns the retry icon with the error label", async ({ mount }) => {
   expect(iconY).toBe(labelY)
 })
 
-story("aligns provider error icons with the first line at narrow widths", async ({ mount, page }) => {
-  await page.setViewportSize({ width: 540, height: 800 })
-  const timeline = await mount("current-session-timeline-rows--provider-errors")
+story("centers the error icon on the first line of short and wrapped errors", async ({ mount }) => {
+  const timeline = await mount("current-session-error-card--provider-errors")
   const cards = timeline.locator('[data-kind="session-error-card"]')
+
   await expect(cards).toHaveCount(2)
 
-  for (const card of await cards.all()) {
-    const icon = card.locator('[data-slot="icon-svg"]')
-    const text = card.locator("strong")
-    await expect(icon).toBeVisible()
-    await expect(icon).toHaveAttribute("height", "14")
-    await expect(text).toBeVisible()
-    const [iconY, textY] = await Promise.all([
-      icon.evaluate((element) => element.getBoundingClientRect().y),
-      text.evaluate((element) => element.getBoundingClientRect().y),
-    ])
-    expect(Math.abs(iconY - textY)).toBeLessThanOrEqual(1)
-  }
-  await expect(cards.nth(1)).toHaveCSS("line-height", "16px")
+  const geometry = await cards.evaluateAll((elements) =>
+    elements.map((card) => {
+      const icon = card.querySelector('[data-slot="icon-svg"]')!.getBoundingClientRect()
+      const message = card.querySelector('[data-slot="icon-svg"] + div')!
+      const line = parseFloat(getComputedStyle(message).lineHeight)
+      const box = message.getBoundingClientRect()
+
+      return {
+        lines: Math.round(box.height / line),
+        offset: icon.top + icon.height / 2 - (box.top + line / 2),
+      }
+    }),
+  )
+
+  expect(geometry.map((card) => card.lines > 1)).toEqual([false, true])
+  geometry.forEach((card) => expect(card.offset).toBeCloseTo(0, 0))
 })
 
 // Moved from packages/app/e2e/regression/session-timeline-context-state.spec.ts
