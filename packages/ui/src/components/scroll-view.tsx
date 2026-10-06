@@ -430,31 +430,34 @@ export function ScrollView(props: ScrollViewProps) {
     if (!next) return
     const scrollAmount = viewportRef.clientHeight * 0.8
     const lineAmount = 40
+    // A new smooth scroll restarts the animation from the current offset, so smoothing every
+    // auto-repeat of a held key would only ever play the slow start of each animation.
+    const behavior = e.repeat ? "instant" : "smooth"
 
     switch (next) {
       case "page-down":
         e.preventDefault()
-        viewportRef.scrollBy({ top: scrollAmount, behavior: "smooth" })
+        viewportRef.scrollBy({ top: scrollAmount, behavior })
         break
       case "page-up":
         e.preventDefault()
-        viewportRef.scrollBy({ top: -scrollAmount, behavior: "smooth" })
+        viewportRef.scrollBy({ top: -scrollAmount, behavior })
         break
       case "home":
         e.preventDefault()
-        viewportRef.scrollTo({ top: 0, behavior: "smooth" })
+        viewportRef.scrollTo({ top: 0, behavior })
         break
       case "end":
         e.preventDefault()
-        viewportRef.scrollTo({ top: viewportRef.scrollHeight, behavior: "smooth" })
+        viewportRef.scrollTo({ top: viewportRef.scrollHeight, behavior })
         break
       case "up":
         e.preventDefault()
-        viewportRef.scrollBy({ top: -lineAmount, behavior: "smooth" })
+        viewportRef.scrollBy({ top: -lineAmount, behavior })
         break
       case "down":
         e.preventDefault()
-        viewportRef.scrollBy({ top: lineAmount, behavior: "smooth" })
+        viewportRef.scrollBy({ top: lineAmount, behavior })
         break
     }
   }
