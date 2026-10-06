@@ -283,7 +283,7 @@ const lowerToolConfig = (toolChoice: NonNullable<LLMRequest["toolChoice"]>) =>
     tool: (name) => ({ functionCallingConfig: { mode: "ANY" as const, allowedFunctionNames: [name] } }),
   })
 
-const lowerContentPart = Effect.fn("Gemini.lowerContentPart")(function* (part: TextPart | MediaPart) {
+const lowerContentPart = Effect.fnUntraced(function* (part: TextPart | MediaPart) {
   if (part.type === "text") return { text: part.text }
   return yield* GeminiGenerateContent.mediaPart("Gemini", part.media)
 })
@@ -302,7 +302,7 @@ const lowerToolCall = (part: ToolCallPart, omitIds: boolean, metadataKey: string
   thoughtSignature: thoughtSignature(part.providerMetadata, metadataKey),
 })
 
-const lowerMessages = Effect.fn("Gemini.lowerMessages")(function* (request: LLMRequest) {
+const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest) {
   const contents: GeminiContent[] = []
   const metadataKey = request.model.route.providerMetadataKey ?? String(request.model.provider)
   const omitCallIds = omitsFunctionCallIds(request.model.id)
@@ -475,7 +475,7 @@ const fromRequest = Effect.fn("Gemini.fromRequest")(function* (request: LLMReque
     safetySettings: options.safetySettings,
     serviceTier: options.serviceTier,
     systemInstruction:
-      request.system.length === 0 ? undefined : { parts: [{ text: ProviderShared.joinText(request.system) }] },
+      request.system.length === 0 ? undefined : { parts: request.system.map((part) => ({ text: part.text })) },
     tools: hasTools
       ? [
           {

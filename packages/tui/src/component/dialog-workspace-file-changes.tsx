@@ -13,7 +13,7 @@ const options = ["no", "yes"] as const
 
 export type WorkspaceFileChangesChoice = (typeof options)[number]
 
-function statusLabel(status: VcsFileStatus["status"]) {
+export function statusLabel(status: VcsFileStatus["status"]) {
   if (status === "added") return "A"
   if (status === "deleted") return "D"
   return "M"

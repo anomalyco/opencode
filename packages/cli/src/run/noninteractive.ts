@@ -67,6 +67,9 @@ type FormRequest = Extract<V2Event, { type: "form.created" }>["data"]["form"]
 // attached client must not cancel input that may belong to another session.
 const GLOBAL_FORM_SESSION_ID = "global"
 
+const QUESTION_CANCELLED_FEEDBACK =
+  "This non-interactive run cannot ask the user questions, so the question was cancelled. Continue without an answer; make reasonable assumptions and state them."
+
 const PERMISSION_REJECTED_FEEDBACK =
   "This non-interactive run cannot ask the user for permission, so the request was rejected. Continue without this action."
 
@@ -182,15 +185,23 @@ export async function runNonInteractivePrompt(input: Input) {
     }
   }
 
-  const cancelForm = async (request: Pick<FormRequest, "id" | "sessionID">) => {
+  const cancelForm = async (request: Pick<FormRequest, "id" | "sessionID" | "metadata">) => {
+    // Nobody can answer a question here. Outside V1 compatibility, cancel it with a message so the
+    // question tool fails as ordinary model-visible output and the model continues without an answer.
+    const continuing = request.metadata?.kind === "question" && input.compatibility !== "v1"
     try {
       await input.client.session.form.cancel(
-        { sessionID: request.sessionID, formID: request.id },
+        {
+          sessionID: request.sessionID,
+          formID: request.id,
+          ...(continuing ? { message: QUESTION_CANCELLED_FEEDBACK } : {}),
+        },
         ...formRequestOptions(request.sessionID === GLOBAL_FORM_SESSION_ID ? input.location : undefined),
       )
     } catch (error) {
       if (!formAlreadySettled(error)) throw error
     }
+    if (continuing) return
     formCancelled = true
     if (input.compatibility !== "v1") process.exitCode = 1
   }

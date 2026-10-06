@@ -15,11 +15,13 @@ test("bootstraps projects through the native store setter and preserves subseque
     fetch: Object.assign(
       async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = new URL(new Request(input, init).url)
+
         if (url.pathname === "/api/location")
           return Response.json({
             directory: "/repo",
             project: { id: "project", directory: "/repo", canonical: "/repo" },
           })
+
         if (url.pathname === "/api/project")
           return Response.json([{ id: "project", canonical: "/repo", time: { created: 1, updated: 1 }, sandboxes: [] }])
         throw new Error(`Unexpected request: ${url.pathname}`)
@@ -27,6 +29,7 @@ test("bootstraps projects through the native store setter and preserves subseque
       { preconnect() {} },
     ),
   })
+
   const [store, setStore] = createStore<ServerSync["data"]>({
     path: { state: "", config: "", worktree: "", directory: "", home: "" },
     project: [],
@@ -34,6 +37,7 @@ test("bootstraps projects through the native store setter and preserves subseque
     config: {},
     reload: undefined,
   })
+
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
 
   try {
@@ -71,6 +75,7 @@ test("recovers project metadata after the connection to the server is dropped", 
   const body = JSON.stringify([{ id: "project", canonical: "/repo", time: { created: 1, updated: 1 }, sandboxes: [] }])
   let dropped = 0
   const requests: string[] = []
+
   const server = Bun.listen({
     hostname: "127.0.0.1",
     port: 0,
@@ -88,12 +93,14 @@ test("recovers project metadata after the connection to the server is dropped", 
       },
     },
   })
+
   const transport = createServerTransport({ http: { url: `http://127.0.0.1:${server.port}` } })
 
   try {
     const result = await new QueryClient({ defaultOptions: { queries: { retry: false } } }).fetchQuery(
       loadProjectsQuery(ServerScope.local, transport.api.project),
     )
+
     expect(dropped).toBe(2)
     // happy-dom's fetch adds a CORS preflight; only the GET is the retried API call.
     expect(requests.filter((method) => method === "GET")).toHaveLength(1)
@@ -104,24 +111,23 @@ test("recovers project metadata after the connection to the server is dropped", 
 })
 
 describe("query keys", () => {
-  test("partitions identical directories by server scope", () => {
-    const location = {} as ServerApi["location"]
-    const remote = "https://debian.example" as typeof ServerScope.local
-
-    expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual(["local", "/repo", "path"])
-    expect([...loadPathQuery(remote, "/repo", location).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
-  })
-
-  test("loads current location metadata", async () => {
+  test("partitions identical directories by server scope and loads current location metadata", async () => {
     const calls: unknown[] = []
-    const api = {
+
+    const location = {
       get: async (input: unknown) => {
         calls.push(input)
+
         return { directory: "/repo/subpath", project: { id: "project", directory: "/repo" } }
       },
     } as ServerApi["location"]
 
-    const result = await new QueryClient().fetchQuery(loadPathQuery(ServerScope.local, "/repo/subpath", api))
+    const remote = "https://debian.example" as typeof ServerScope.local
+
+    expect([...loadPathQuery(ServerScope.local, "/repo", location).queryKey]).toEqual(["local", "/repo", "path"])
+    expect([...loadPathQuery(remote, "/repo", location).queryKey]).toEqual(["https://debian.example", "/repo", "path"])
+
+    const result = await new QueryClient().fetchQuery(loadPathQuery(ServerScope.local, "/repo/subpath", location))
 
     expect(calls).toEqual([{ location: { directory: "/repo/subpath" } }])
     expect(result).toMatchObject({ directory: "/repo/subpath", worktree: "/repo" })
@@ -129,13 +135,16 @@ describe("query keys", () => {
 
   test("loads project metadata without enumerating any project's worktrees", async () => {
     const requests: string[] = []
+
     const api = OpenCode.make({
       baseUrl: "http://localhost:3000",
       fetch: Object.assign(
         async (input: RequestInfo | URL, init?: RequestInit) => {
           const url = new URL(new Request(input, init).url)
           requests.push(url.pathname)
+
           if (url.pathname !== "/api/project") throw new Error(`Unexpected request: ${url}`)
+
           return Response.json([
             ...Array.from({ length: 300 }, (_, index) => ({
               id: `historical-${index.toString().padStart(3, "0")}`,

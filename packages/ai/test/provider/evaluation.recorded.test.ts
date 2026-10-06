@@ -52,7 +52,6 @@ describe("experimental Evaluation recorded", () => {
   typesafe.effect("evaluates choice score and boolean questions", () =>
     assertEvaluation(
       TypeSafeAI.configure({ apiKey: process.env.TYPESAFE_API_KEY ?? "fixture" }).experimental.evaluation("jev-latest"),
-      "typesafe",
     ),
   )
 
@@ -61,7 +60,6 @@ describe("experimental Evaluation recorded", () => {
       OpenCodeZen.configure({ apiKey: process.env.OPENCODE_API_KEY ?? "fixture" }).experimental.evaluation(
         "jev-1.13-free",
       ),
-      "opencode",
     ),
   )
 
@@ -70,15 +68,11 @@ describe("experimental Evaluation recorded", () => {
       OpenRouter.configure({ apiKey: process.env.OPENROUTER_API_KEY ?? "fixture" }).experimental.evaluation(
         "typesafe/jev-1.13",
       ),
-      "openrouter",
     ),
   )
 })
 
-const assertEvaluation = <Options extends EvaluationOptions>(
-  model: EvaluationModel<Options>,
-  metadataKey: "typesafe" | "opencode" | "openrouter",
-) =>
+const assertEvaluation = <Options extends EvaluationOptions>(model: EvaluationModel<Options>) =>
   Effect.gen(function* () {
     const response = yield* Evaluation.run({ model, state, questions })
     expect(response.model).toContain("jev-")

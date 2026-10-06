@@ -45,16 +45,19 @@ export const DialogServer: Component<{
   const language = useLanguage()
   const platform = usePlatform()
   const camera = createCameraAvailability()
+
   const form = createFormController({
     onSelect: (server) => {
       props.onSave?.(server)
       dialog.close()
     },
   })
+
   const [opened, setOpened] = createSignal(false)
 
   onMount(() => {
     if (props.mode === "add") form.start.add()
+
     if (props.mode === "edit" && props.server) form.start.edit(props.server)
     setOpened(true)
   })
@@ -65,6 +68,7 @@ export const DialogServer: Component<{
 
   createEffect(() => {
     if (!opened()) return
+
     if (form.state.open()) return
     dialog.close()
   })
@@ -80,7 +84,9 @@ export const DialogServer: Component<{
 
   const submitLabel = () => {
     if (form.state.busy()) return language.t("dialog.server.add.checking")
+
     if (props.mode === "add") return language.t("dialog.server.add.button")
+
     return language.t("common.save")
   }
 
@@ -203,6 +209,7 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
   const language = useLanguage()
   const checkServerHealth = useCheckServerHealth()
   const healthPreview = createServerHealthPreview(checkServerHealth)
+
   const [store, setStore] = createStore({
     mode: "list" as FormMode,
     originalUrl: undefined as string | undefined,
@@ -225,13 +232,17 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
       status: undefined,
     })
   }
+
   const allServers = () => {
     return server.list
   }
+
   const editing = createMemo(() =>
     allServers().find((item) => item.type === "http" && item.http.url === store.originalUrl),
   )
+
   const add = (connection: ServerConnection.Http) => server.add(connection)
+
   const replace = (originalKey: ServerConnection.Key, next: ServerConnection.Http) =>
     replaceServerConnection(originalKey, next, {
       removeTabs: (key) => tabs.removeServer(key),
@@ -242,15 +253,19 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
   const request = useMutation(() => ({
     mutationFn: async () => {
       const normalized = normalizeServerUrl(store.values.url)
+
       if (!normalized) {
         reset()
+
         return
       }
 
       const original = store.mode === "edit" ? editing() : undefined
+
       if (store.mode === "edit" && !original) return
       const name = store.values.name.trim() || undefined
       const password = store.values.password || undefined
+
       if (
         original?.type === "http" &&
         normalized === original.http.url &&
@@ -258,6 +273,7 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
         password === original.http.password
       ) {
         reset()
+
         return
       }
 
@@ -269,7 +285,9 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
           password,
         },
       }
+
       const result = await checkServerHealth(connection.http)
+
       if (!result.healthy) {
         setStore(
           "error",
@@ -279,13 +297,17 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
               : "dialog.server.add.error",
           ),
         )
+
         return
       }
+
       if (original?.type === "http") {
         if (normalized === original.http.url) add(connection)
+
         if (normalized !== original.http.url) replace(ServerConnection.key(original), connection)
         options.onSelect?.(connection)
         reset()
+
         return
       }
 
@@ -296,16 +318,20 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
   }))
 
   const preview = () => void healthPreview.preview(store.values, (status) => setStore("status", status))
+
   const change = (field: keyof ServerFormValues, value: string) => {
     if (request.isPending) return
     setStore("values", field, value)
     setStore("error", "")
+
     if (field !== "name") preview()
   }
+
   const startAdd = () => {
     reset()
     setStore("mode", "add")
   }
+
   const startEdit = (connection: ServerConnection.Http) => {
     reset()
     setStore({
@@ -320,11 +346,13 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
       status: global.servers.health[ServerConnection.key(connection)]?.healthy,
     })
   }
+
   const submit = () => {
     if (store.mode === "list" || request.isPending) return
     setStore("error", "")
     request.mutate()
   }
+
   const pair = (pairing: Pairing) => {
     healthPreview.cancel()
     setStore({
@@ -337,6 +365,7 @@ function createFormController(options: { onSelect?: (server: ServerConnection.Ht
 
   createEffect(() => {
     if (store.mode !== "edit") return
+
     if (editing()) return
     reset()
   })

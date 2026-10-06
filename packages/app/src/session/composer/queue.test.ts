@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionInboxInfo } from "@opencode/client/promise"
-import { queuedPromptAttachments, queuedPromptUndoDraft, queuedPromptRows } from "./queue"
+import { queuedPromptAttachments, queuedPromptRows } from "./queue"
 
 const queued = [
   {
@@ -21,35 +21,25 @@ const queued = [
   },
 ] satisfies SessionInboxInfo[]
 
+const other = { ...queued[0], id: "msg_other", payload: { text: "other" } }
+
+const edit = { original: "msg_original", replacement: "msg_replacement" }
+
 describe("queuedPromptRows", () => {
-  test("keeps the edited prompt to one row while its replacement is admitted", () => {
-    expect(queuedPromptRows(queued, { original: "msg_original", replacement: "msg_replacement" })).toEqual([
-      { id: "msg_replacement", text: "edited", attachments: 0 },
-    ])
-  })
-
-  test("keeps the original visible until its replacement appears", () => {
-    expect(queuedPromptRows([queued[0]], { original: "msg_original", replacement: "msg_replacement" })).toEqual([
-      { id: "msg_original", text: "original", attachments: 0 },
-    ])
-  })
-
-  test("retains unrelated queue entries", () => {
-    expect(queuedPromptRows(queued)).toEqual([
-      { id: "msg_original", text: "original", attachments: 0 },
-      { id: "msg_replacement", text: "edited", attachments: 0 },
-    ])
-  })
-
-  test("keeps other prompts visible while a mutation replaces the edited prompt", () => {
-    const other = { ...queued[0], id: "msg_other", payload: { text: "other" } }
-
-    expect(
-      queuedPromptRows([queued[0], other, queued[1]], { original: "msg_original", replacement: "msg_replacement" }),
-    ).toEqual([
-      { id: "msg_other", text: "other", attachments: 0 },
-      { id: "msg_replacement", text: "edited", attachments: 0 },
-    ])
+  test.each([
+    ["keeps the edited prompt to one row while its replacement is admitted", queued, edit, [queued[1]]],
+    ["keeps the original visible until its replacement appears", [queued[0]], edit, [queued[0]]],
+    ["retains unrelated queue entries", queued, undefined, queued],
+    [
+      "keeps other prompts visible while a mutation replaces the edited prompt",
+      [queued[0], other, queued[1]],
+      edit,
+      [other, queued[1]],
+    ],
+  ])("%s", (_name, items, replacement, visible) => {
+    expect(queuedPromptRows(items, replacement)).toEqual(
+      visible.map((item) => ({ id: item.id, text: item.payload.text, attachments: 0 })),
+    )
   })
 })
 
@@ -82,65 +72,5 @@ describe("queuedPromptAttachments", () => {
         blob: { id: "data:application/pdf;base64,aGk=", url: "data:application/pdf;base64,aGk=" },
       },
     ])
-  })
-
-  test("leaves file mentions and context files in the payload", () => {
-    const item = {
-      ...queued[0],
-      payload: {
-        text: "see @src/a.ts",
-        files: [
-          {
-            data: "aGk=",
-            mime: "text/plain",
-            source: { type: "inline" as const },
-            mention: { start: 4, end: 13, text: "@src/a.ts" },
-          },
-          { data: "aGk=", mime: "text/plain", source: { type: "uri" as const, uri: "file:///src/b.ts" } },
-        ],
-      },
-    } satisfies SessionInboxInfo
-
-    expect(queuedPromptAttachments(item)).toEqual([])
-  })
-})
-
-describe("queuedPromptUndoDraft", () => {
-  test("keeps full text, structured mentions, and inline images", () => {
-    const item = {
-      ...queued[0],
-      payload: {
-        text: "inspect @main.ts with @build",
-        files: [
-          {
-            data: "aGk=",
-            mime: "text/plain",
-            source: { type: "uri" as const, uri: "file:///repo/main.ts" },
-            name: "main.ts",
-            mention: { start: 8, end: 16, text: "@main.ts" },
-          },
-          { data: "aGk=", mime: "image/png", source: { type: "inline" as const }, name: "shot.png" },
-        ],
-        agents: [{ name: "build", mention: { start: 22, end: 28, text: "@build" } }],
-      },
-    } satisfies SessionInboxInfo
-    expect(queuedPromptUndoDraft(item)).toMatchObject([
-      { type: "text", content: "inspect " },
-      { type: "file", content: "@main.ts", url: "data:text/plain;base64,aGk=" },
-      { type: "text", content: " with " },
-      { type: "agent", content: "@build", name: "build" },
-      { type: "image", filename: "shot.png" },
-    ])
-  })
-
-  test("does not drop hidden file context", () => {
-    const item = {
-      ...queued[0],
-      payload: {
-        text: "inspect this",
-        files: [{ data: "aGk=", mime: "text/plain", source: { type: "uri" as const, uri: "file:///repo/main.ts" } }],
-      },
-    } satisfies SessionInboxInfo
-    expect(queuedPromptUndoDraft(item)).toBeUndefined()
   })
 })

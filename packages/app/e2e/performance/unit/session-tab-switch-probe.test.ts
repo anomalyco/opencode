@@ -4,6 +4,7 @@ import { measureSessionSwitch } from "../timeline/session-tab-switch-probe"
 
 function testPage(waitFailure?: Error) {
   const stops: unknown[] = []
+
   const page = {
     evaluate: async (_callback: unknown, input?: unknown) => {
       if (input) return
@@ -13,6 +14,7 @@ function testPage(waitFailure?: Error) {
       if (waitFailure) throw waitFailure
     },
   } as unknown as Page
+
   return { page, stops }
 }
 

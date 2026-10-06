@@ -30,17 +30,22 @@ export const DialogManageModels: Component = () => {
   const handleConnectProvider = () => {
     void dialog.show(() => <DialogConnectProvider directory={directory()} />)
   }
+
   const providerList = (providerID: string) => local.model.list().filter((x) => x.provider.id === providerID)
+
   const providerVisible = (providerID: string) =>
     providerList(providerID).every((x) => local.model.visible({ modelID: x.id, providerID: x.provider.id }))
+
   const setProviderVisibility = (providerID: string, checked: boolean) => {
     providerList(providerID).forEach((x) => {
       local.model.setVisibility({ modelID: x.id, providerID: x.provider.id }, checked)
     })
   }
+
   const setModelVisibility = (item: ModelItem, checked: boolean) => {
     local.model.setVisibility({ modelID: item.id, providerID: item.provider.id }, checked)
   }
+
   const list = useFilteredList<ModelItem>({
     items: () => local.model.list(),
     key: (x) => `${x.provider.id}:${x.id}`,
@@ -52,12 +57,17 @@ export const DialogManageModels: Component = () => {
       const bRank = popularProviders.indexOf(b.category)
       const aPopular = aRank >= 0
       const bPopular = bRank >= 0
+
       if (aPopular && !bPopular) return -1
+
       if (!aPopular && bPopular) return 1
+
       if (aPopular && bPopular) return aRank - bRank
+
       return a.items[0].provider.name.localeCompare(b.items[0].provider.name)
     },
   })
+
   const managed = createMemo(() => consoleModelGroup(local.model.list()))
   const searching = () => list.filter().length > 0
   const expanded = (key: string) => searching() || !store.collapsed[key]

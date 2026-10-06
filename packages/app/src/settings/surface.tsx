@@ -4,13 +4,16 @@ import { createStore } from "solid-js/store"
 import { createSimpleContext } from "@opencode/ui/context"
 import { useLayout, type LayoutRoute } from "@/shell/state/layout"
 import { useCommand } from "@/shell/commands/command"
+import { createSettingsPages } from "@/runtime/extension/settings-pages"
 import { useSettingsServers } from "./servers/inventory"
 import {
+  isExtensionTab,
   isProjectTab,
   isRootTab,
   isServerTab,
   parseSettingsView,
   settingsViewUrl,
+  type SettingsExtensionTab,
   type SettingsProjectTab,
   type SettingsRootTab,
   type SettingsServerTab,
@@ -18,7 +21,14 @@ import {
   type SettingsView,
 } from "./route"
 
-export type { SettingsProjectTab, SettingsRootTab, SettingsServerTab, SettingsView } from "./route"
+export type {
+  SettingsExtensionTab,
+  SettingsHostView,
+  SettingsProjectTab,
+  SettingsRootTab,
+  SettingsServerTab,
+  SettingsView,
+} from "./route"
 
 export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = createSimpleContext({
   name: "SettingsSurface",
@@ -28,25 +38,41 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
     const layout = useLayout()
     const command = useCommand()
     const servers = useSettingsServers()
+
     const location = useLocation<{
       settings?: { route: Exclude<LayoutRoute, { type: "settings" }>; view?: SettingsTransientView }
     }>()
+
+    const extensions = createSettingsPages()
     const open = () => layout.route().type === "settings"
     const source = () => location.state?.settings?.route ?? { type: "home" as const }
-    const view = () => parseSettingsView(location.search, servers().length > 1, location.state?.settings?.view)
-    const [search, setSearch] = createStore({
+
+    const view = () =>
+      parseSettingsView(location.search, servers().length > 1, location.state?.settings?.view, extensions.tabs())
+
+    const [search, setSearch] = createStore<{
+      query: string
+      origin: SettingsView | undefined
+      selected: string
+      highlighted: string
+      scrollTop: number
+      activation: number
+      expanded: boolean
+    }>({
       query: "",
-      origin: undefined as SettingsView | undefined,
+      origin: undefined,
       selected: "",
       highlighted: "",
       scrollTop: 0,
       activation: 0,
       expanded: true,
     })
+
     let focus: HTMLElement | undefined
 
     const show = (view: SettingsView) => {
       const route = layout.route()
+
       if (route.type !== "settings" && document.activeElement instanceof HTMLElement) focus = document.activeElement
       navigate(settingsViewUrl(view), {
         replace: route.type === "settings",
@@ -65,6 +91,7 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
         (value) => {
           if (value) return
           setSearch({ query: "", origin: undefined, selected: "", highlighted: "", scrollTop: 0, expanded: true })
+
           if (focus?.isConnected) focus.focus({ preventScroll: true })
           focus = undefined
         },
@@ -76,11 +103,13 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
       active: open,
       route: source,
       view,
+      extensions,
       search: {
         state: search,
         input(query: string) {
           if (!search.query.trim() && query.trim()) setSearch("origin", { ...view(), target: undefined })
           setSearch({ query, highlighted: "", scrollTop: 0, expanded: true })
+
           if (!query.trim()) setSearch({ selected: "", origin: undefined })
         },
         expand() {
@@ -105,10 +134,11 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
           if (!search.query.trim() || !search.selected || !search.origin) return false
           show(search.origin)
           setSearch({ selected: "", expanded: true })
+
           return true
         },
       },
-      open(tab: SettingsRootTab = "general") {
+      open(tab: SettingsRootTab | SettingsExtensionTab = "general") {
         show({ type: "root", tab })
       },
       openServer(server: string, tab: SettingsServerTab = "general") {
@@ -127,14 +157,16 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
       },
       select(tab: string) {
         const current = view()
+
         const next: SettingsView =
-          current.type === "root" && isRootTab(tab)
+          current.type === "root" && (isRootTab(tab) || isExtensionTab(tab, extensions.tabs()))
             ? { ...current, tab }
             : current.type === "server" && isServerTab(tab)
               ? { ...current, tab }
               : current.type === "project" && isProjectTab(tab)
                 ? { ...current, tab }
                 : current
+
         show({ ...next, target: undefined, subtab: undefined })
       },
       subtab(subtab: SettingsView["subtab"]) {
@@ -142,14 +174,18 @@ export const { use: useSettingsSurface, provider: SettingsSurfaceProvider } = cr
       },
       back() {
         const current = view()
+
         if (current.type === "root") {
           command.trigger("common.goBack")
+
           return
         }
+
         const parent: SettingsView =
           current.type === "server" || current.parent === "root"
             ? { type: "root", tab: current.type === "server" ? "general" : "projects" }
             : { type: "server", server: current.server, tab: "projects" }
+
         show(parent)
       },
       close() {

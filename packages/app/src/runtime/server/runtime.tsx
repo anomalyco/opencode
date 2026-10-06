@@ -25,10 +25,12 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
   name: "Global",
   init: () => {
     const server = useServers()
+
     const serverHealth = useServerHealth(
       () => server.list,
       () => true,
     )
+
     const models = createGlobalModels()
     const notificationCoordinator = createNotificationCoordinator()
 
@@ -36,17 +38,23 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
     const serverCtxDisposers = new Map<ServerConnection.Key, () => void>()
 
     const owner = getOwner()
+
     if (!owner) throw new Error("Global provider requires a Solid owner")
 
     const ensureServerCtx = (conn: ServerConnection.Any) => {
       const key = ServerConnection.key(conn)
       const existing = serverCtxs.get(key)
+
       if (existing) return existing
+
       const serverCtx = createRoot((dispose) => {
         serverCtxDisposers.set(key, dispose)
+
         return createServerController(conn, server.scope(key), server.projects.forServer(key), notificationCoordinator)
       }, owner)
+
       serverCtxs.set(key, serverCtx)
+
       return serverCtx
     }
 
@@ -78,6 +86,14 @@ export const { use: useGlobal, provider: GlobalProvider } = createSimpleContext(
       ensureServerCtx(conn: ServerConnection.Any) {
         return ensureServerCtx(conn)
       },
+      /** The live controller of a server, or undefined while it is unlisted or rejects our credentials. Reactive. */
+      serverCtx(key: ServerConnection.Key) {
+        const conn = server.list.find((item) => ServerConnection.key(item) === key)
+
+        if (!conn || serverHealth[key]?.unauthorized) return
+
+        return ensureServerCtx(conn)
+      },
     }
   },
 })
@@ -88,10 +104,12 @@ function createGlobalModels() {
     recent: [],
     variant: {},
   })
+
   // Suspend readers only until persisted state loads. Refetching on every change would put the
   // session route into its Suspense fallback, detaching the screen and resetting the timeline scroll.
   const [loaded] = createResource(async () => {
     await ready.promise
+
     return true
   })
 
@@ -101,6 +119,7 @@ function createGlobalModels() {
     ready,
     recent: () => {
       loaded()
+
       return store.recent
     },
     // Marks models visible in the picker regardless of the "latest per family" default.
@@ -109,10 +128,12 @@ function createGlobalModels() {
       batch(() => {
         for (const model of models) {
           const index = seen.get(`${model.providerID}:${model.modelID}`)
+
           if (index !== undefined) {
             setStore("user", index, "visibility", "show")
             continue
           }
+
           seen.set(`${model.providerID}:${model.modelID}`, store.user.length)
           setStore("user", store.user.length, {
             providerID: model.providerID,
@@ -135,6 +156,7 @@ function createServerController(
   const settings = useSettings()
   const connKey = ServerConnection.key(conn)
   const sdk = createServerSdkContext(conn, scope)
+
   const source = createData({
     api: () => sdk.api,
     initialMessageLimit: () => (timelinePreset(settings.general.timelineDetail())?.id === "compact" ? 40 : 20),
@@ -152,10 +174,12 @@ function createServerController(
       })
     },
   })
+
   const data = createDesktopData({
     data: source,
     remove: (sessionID) => sdk.api.session.remove({ sessionID }),
   })
+
   const sync = createServerSyncContext(sdk, data)
   createPermissionAutoApprover({ sdk, data })
   const notification = createServerNotificationState({ sdk, data, key: connKey, coordinator: notificationCoordinator })
@@ -163,6 +187,7 @@ function createServerController(
   function enrich(project: { worktree: string; expanded: boolean }) {
     const [childStore] = sync.child(project.worktree, { bootstrap: false })
     const projectID = childStore.project
+
     const metadata = projectID
       ? sync.data.project.find((x) => x.id === projectID)
       : sync.data.project.find((x) => x.worktree === project.worktree)
@@ -175,22 +200,30 @@ function createServerController(
       ...(!metadata || metadata.id === "global" ? childStore.projectMeta : undefined),
       ...project,
     }
+
     if (childStore.icon) {
       return { ...base, icon: { ...base.icon, override: childStore.icon } }
     }
+
     return base
   }
 
   const projectsList = createMemo(() => projects.list().map(enrich))
+
   const forSession = (session: SessionInfo) => {
     const project = resolveProjectForSession(session, projectsList(), sync.data.project)
+
     if (!project) return
+
     return "expanded" in project ? project : { ...project, expanded: false }
   }
+
   const detailsForSession = (session: SessionInfo) =>
     resolveSessionDetailsProject(session, projectsList(), sync.data.project)
+
   const recentlyClosedList = createMemo(() => {
     const known = new Set(sync.data.project.map((project) => pathKey(project.worktree)))
+
     return projects
       .recentlyClosed()
       .filter((worktree) => known.has(pathKey(worktree)))
@@ -222,8 +255,10 @@ export function useServerCtx(server: Accessor<ServerConnection.Any>): Accessor<S
 export function useServerCtx(server: Accessor<ServerConnection.Any | undefined>): Accessor<ServerCtx | undefined>
 export function useServerCtx(server: Accessor<ServerConnection.Any | undefined>) {
   const global = useGlobal()
+
   return () => {
     const s = server()
+
     if (s) return global.ensureServerCtx(s)
   }
 }
@@ -232,5 +267,6 @@ export type ServerCtx = ReturnType<typeof createServerController>
 
 function isLocalHost(url: string) {
   const host = url.replace(/^https?:\/\//, "").split(":")[0]
+
   if (host === "localhost" || host === "127.0.0.1") return "local"
 }

@@ -17,7 +17,6 @@ export interface Resolved {
   readonly version: string
   readonly command: readonly string[]
   readonly binary?: string
-  readonly wslBuild?: { readonly script: string; readonly output: string }
 }
 
 export interface Interface {
@@ -31,17 +30,22 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const path = yield* Path.Path
+
     const resolve = yield* Effect.cached(
       make().pipe(Effect.provide(yield* Effect.context<FileSystem.FileSystem | Path.Path>()), Effect.orDie),
     )
+
     const install = Effect.gen(function* () {
       if (process.platform !== "darwin") return yield* Effect.fail(new Error("CLI installation requires macOS"))
       const cli = yield* resolve
+
       if (!cli.binary) return yield* Effect.fail(new Error("Bundled CLI executable is unavailable"))
       const home = app.getPath("home")
       yield* runInstaller(cli.binary, home)
+
       return path.join(home, ".opencode", "bin", "opencode")
     })
+
     return Service.of({ resolve, install })
   }),
 )
@@ -49,6 +53,7 @@ export const layer = Layer.effect(
 const make = Effect.fn("DesktopCli.resolve")(function* () {
   const development = !app.isPackaged && process.env.OPENCODE_DESKTOP_CLI_DEV
   const version = process.env.OPENCODE_VERSION ?? "local"
+
   const cli = development
     ? {
         version,
@@ -63,27 +68,22 @@ const make = Effect.fn("DesktopCli.resolve")(function* () {
         binary: undefined,
       }
     : yield* resolveBundledCli(!app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1")
-  return {
-    ...cli,
-    wslBuild:
-      app.isPackaged || !process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD || !process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT
-        ? undefined
-        : {
-            script: process.env.OPENCODE_DESKTOP_WSL_CLI_BUILD,
-            output: process.env.OPENCODE_DESKTOP_WSL_CLI_OUTPUT,
-          },
-  } satisfies Resolved
+
+  return cli satisfies Resolved
 })
 
 const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isolated: boolean) {
   const path = yield* Path.Path
   const paths = yield* DesktopPaths.resolve
+
   const bundled = app.isPackaged
     ? path.join(process.resourcesPath, executableName())
     : path.join(paths.developmentResourcesRoot, isolated ? developmentExecutableName() : executableName())
+
   yield* Effect.logInfo("v2 CLI executable resolved", { bundled, packaged: app.isPackaged })
   const version = yield* bundledVersion(bundled)
   const binary = app.isPackaged || isolated ? yield* installCli(bundled, version) : bundled
+
   return { version, binary, command: [binary] }
 })
 
@@ -94,6 +94,7 @@ const resolveBundledCli = Effect.fn("DesktopCli.resolveBundled")(function* (isol
 const bundledVersion = Effect.fn("DesktopCli.bundledVersion")(function* (bundled: string) {
   const fs = yield* FileSystem.FileSystem
   const path = yield* Path.Path
+
   // Synchronous on purpose: this sits on the path to the first window's IPC port, and a queued
   // async read waits behind everything else the main thread is doing at that moment.
   const shipped = yield* Effect.sync(() => {
@@ -103,20 +104,28 @@ const bundledVersion = Effect.fn("DesktopCli.bundledVersion")(function* (bundled
       return ""
     }
   })
+
   if (shipped) {
     yield* Effect.logInfo("v2 CLI version bundled", { version: shipped })
+
     return shipped
   }
+
   const stat = yield* fs.stat(bundled).pipe(Effect.orElseSucceed(() => undefined))
   const identity = stat ? `${stat.size}:${Option.getOrUndefined(stat.mtime)?.getTime() ?? ""}` : undefined
   const store = getStore()
   const cached = store.get(BUNDLED_CLI_VERSION_KEY)
+
   if (identity && isVersionCache(cached) && cached.path === bundled && cached.identity === identity) {
     yield* Effect.logInfo("v2 CLI version reused", { version: cached.version })
+
     return cached.version
   }
+
   const version = parseCliVersion(yield* run(bundled, ["--version"]))
+
   if (identity) store.set(BUNDLED_CLI_VERSION_KEY, { path: bundled, identity, version } satisfies VersionCache)
+
   return version
 })
 
@@ -125,6 +134,7 @@ type VersionCache = { path: string; identity: string; version: string }
 function isVersionCache(value: unknown): value is VersionCache {
   if (!value || typeof value !== "object") return false
   const cache = value as Record<string, unknown>
+
   return typeof cache.path === "string" && typeof cache.identity === "string" && typeof cache.version === "string"
 }
 
@@ -138,8 +148,10 @@ export const cleanStages = Effect.fn("DesktopCli.cleanStages")(function* (binary
     entries,
     Effect.fnUntraced(function* (entry) {
       const target = path.join(root, entry)
+
       if (target === current) return
       const stat = yield* fs.stat(target).pipe(Effect.orElseSucceed(() => undefined))
+
       if (stat?.type !== "Directory") return
       yield* fs
         .remove(target, { recursive: true, force: true })
@@ -154,27 +166,33 @@ const installCli = Effect.fn("DesktopCli.install")(function* (source: string, ve
   const path = yield* Path.Path
   const directory = path.join(app.getPath("userData"), "cli", version.replace(/[^a-zA-Z0-9._-]/g, "-"))
   const destination = path.join(directory, executableName())
+
   if (existsSync(destination)) {
     yield* Effect.logInfo("v2 CLI staged executable reused", { path: destination, version })
+
     return destination
   }
 
   const temp = destination + `.${process.pid}.tmp`
   yield* fs.makeDirectory(directory, { recursive: true })
   yield* fs.copyFile(source, temp)
+
   if (process.platform !== "win32") yield* fs.chmod(temp, 0o755)
   yield* fs
     .rename(temp, destination)
     .pipe(Effect.catch((error) => fs.remove(temp, { force: true }).pipe(Effect.andThen(Effect.fail(error)))))
   yield* Effect.logInfo("v2 CLI executable staged", { source, path: destination, version })
+
   return destination
 })
 
 const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[]) {
   yield* Effect.logInfo("v2 CLI command started", { binary, args })
+
   const result = yield* Effect.tryPromise(() => execFileAsync(binary, args, { windowsHide: true })).pipe(
     Effect.tapError((error) => {
       const output = error as { stdout?: string; stderr?: string }
+
       return Effect.logError("v2 CLI command failed", {
         args,
         error: error instanceof Error ? error.message : String(error),
@@ -183,9 +201,11 @@ const run = Effect.fn("DesktopCli.run")(function* (binary: string, args: string[
       })
     }),
   )
+
   const stdout = result.stdout.trim()
   const stderr = result.stderr.trim()
   yield* Effect.logInfo("v2 CLI command completed", { args, stdout, stderr })
+
   return stdout
 })
 
@@ -197,6 +217,7 @@ const runInstaller = Effect.fn("DesktopCli.installForUser")(function* (binary: s
           env: { ...process.env, HOME: home },
           stdio: ["pipe", "ignore", "pipe"],
         })
+
         let stderr = ""
         child.stderr.on("data", (chunk) => (stderr += chunk))
         child.on("error", reject)

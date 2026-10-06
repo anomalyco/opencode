@@ -1092,6 +1092,7 @@ describe("ModelResolver", () => {
         ["@ai-sdk/openai-compatible", "@opencode/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode/ai/providers/openrouter", "api-model"],
         ["@ai-sdk/togetherai", "@opencode/ai/providers/togetherai", "api-model"],
+        ["@ai-sdk/gateway", "@opencode/ai/providers/vercel-ai-gateway", "openai/gpt-5.4"],
         ["@ai-sdk/xai", "@opencode/ai/providers/xai", "api-model"],
         ["ai-gateway-provider", "@opencode/ai/providers/cloudflare-ai-gateway", "xai/grok-4.6"],
       ] as const
@@ -1330,8 +1331,8 @@ describe("ModelResolver", () => {
         }),
       )
       const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/cohere"), {
-          modelID: "cohere-api-model",
+        model(Provider.aisdk("@ai-sdk/perplexity"), {
+          modelID: "perplexity-api-model",
           settings: { project: "test" },
           headers: { "x-aisdk": "header" },
           body: { custom: true },
@@ -1346,9 +1347,9 @@ describe("ModelResolver", () => {
             Effect.sync(() => {
               expect(runtime).toMatchObject({
                 id: "test-model",
-                modelID: "cohere-api-model",
+                modelID: "perplexity-api-model",
                 providerID: "test-provider",
-                package: Provider.aisdk("@ai-sdk/cohere"),
+                package: Provider.aisdk("@ai-sdk/perplexity"),
                 settings: { project: "test", apiKey: "fallback-secret", accountId: "account" },
                 headers: { "x-aisdk": "header" },
                 body: { custom: true },
@@ -1362,7 +1363,7 @@ describe("ModelResolver", () => {
         },
       )
 
-      expect(resolved).toMatchObject({ id: "cohere-api-model", provider: "test-provider" })
+      expect(resolved).toMatchObject({ id: "perplexity-api-model", provider: "test-provider" })
     }),
   )
 
@@ -1370,7 +1371,7 @@ describe("ModelResolver", () => {
     withEnv({ REQUIRED_HOST: undefined }, () =>
       Effect.gen(function* () {
         const failure = yield* ModelResolver.fromCatalogModel(
-          model(Provider.aisdk("@ai-sdk/cohere"), {
+          model(Provider.aisdk("@ai-sdk/perplexity"), {
             settings: { baseURL: "https://${REQUIRED_HOST}/v1" },
           }),
           undefined,
@@ -1389,7 +1390,7 @@ describe("ModelResolver", () => {
     withEnv({ PROVIDER_HOST: "${MISSING_HOST}", MISSING_HOST: undefined }, () =>
       Effect.gen(function* () {
         const failure = yield* ModelResolver.fromCatalogModel(
-          model(Provider.aisdk("@ai-sdk/cohere"), {
+          model(Provider.aisdk("@ai-sdk/perplexity"), {
             settings: { baseURL: "https://${PROVIDER_HOST}/v1" },
           }),
           undefined,
@@ -1426,8 +1427,8 @@ describe("ModelResolver", () => {
   it.effect("rejects AISDK packages without an available loader", () =>
     Effect.gen(function* () {
       const failure = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/cohere"), {
-          settings: { baseURL: "https://cohere.example/v1" },
+        model(Provider.aisdk("@ai-sdk/perplexity"), {
+          settings: { baseURL: "https://perplexity.example/v1" },
         }),
       ).pipe(Effect.flip)
 
@@ -1435,9 +1436,9 @@ describe("ModelResolver", () => {
         _tag: "SessionRunnerModel.UnsupportedPackageError",
         providerID: "test-provider",
         modelID: "test-model",
-        package: "aisdk:@ai-sdk/cohere",
+        package: "aisdk:@ai-sdk/perplexity",
       })
-      expect(failure.message).toBe("Unsupported package for test-provider/test-model: aisdk:@ai-sdk/cohere")
+      expect(failure.message).toBe("Unsupported package for test-provider/test-model: aisdk:@ai-sdk/perplexity")
     }),
   )
 
@@ -1501,18 +1502,18 @@ describe("ModelResolver", () => {
         detail: "Provider package @opencode/ai/providers/custom is broken",
       })
 
-      const init = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/cohere")), undefined, {
+      const init = yield* ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/perplexity")), undefined, {
         loadAISDK: (runtime) =>
           Effect.fail(
-            new AISDK.InitError({ providerID: runtime.providerID, cause: new Error("Cohere plugin failed") }),
+            new AISDK.InitError({ providerID: runtime.providerID, cause: new Error("Perplexity plugin failed") }),
           ),
       }).pipe(Effect.flip)
       expect(init).toMatchObject({
         _tag: "SessionRunnerModel.ModelInitializationError",
         phase: "init",
-        detail: "Cohere plugin failed",
+        detail: "Perplexity plugin failed",
       })
-      expect(init.message).toBe("Cannot initialize test-provider/test-model: Cohere plugin failed")
+      expect(init.message).toBe("Cannot initialize test-provider/test-model: Perplexity plugin failed")
     }),
   )
 
@@ -1524,8 +1525,8 @@ describe("ModelResolver", () => {
         }),
       )
       yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/cohere"), {
-          settings: { apiKey: "", baseURL: "https://cohere.example/v1" },
+        model(Provider.aisdk("@ai-sdk/perplexity"), {
+          settings: { apiKey: "", baseURL: "https://perplexity.example/v1" },
         }),
         undefined,
         {

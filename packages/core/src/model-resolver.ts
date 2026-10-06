@@ -1,7 +1,7 @@
 export * as ModelResolver from "./model-resolver.js"
 
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { LanguageModel, ProviderConfigurationError } from "@opencode/ai"
+import { HttpOptions, LanguageModel, mergeHttpOptions, ProviderConfigurationError } from "@opencode/ai"
 import { Auth } from "@opencode/ai/route"
 import { Context, Effect, Layer, Schema, Struct } from "effect"
 import { AISDK } from "./aisdk.js"
@@ -122,8 +122,8 @@ export interface Resolved {
   readonly compaction?: Provider.Compaction
   /** Provider transport policy; omitted means HTTP. */
   readonly transport?: Provider.Transport
-  /** Milliseconds without streamed data before a WebSocket exchange fails. */
-  readonly chunkTimeout?: number
+  /** Milliseconds without streamed data before a WebSocket exchange fails; `false` disables the limit. */
+  readonly chunkTimeout?: number | false
 }
 
 export interface Interface {
@@ -237,6 +237,11 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, resolved.compatibility)
           : runtime.compatibility,
+        // Timeouts are transport policy, so they land on the route's HTTP defaults instead of package settings.
+        defaults: {
+          ...runtime.defaults,
+          http: mergeHttpOptions(runtime.defaults?.http, new HttpOptions(Provider.timeouts(configured))),
+        },
       })
     },
     catch: (cause) =>
@@ -390,7 +395,7 @@ export const layer = Layer.effect(
         limit: selected.limit,
         compaction: runtimeInfo.settings?.compaction,
         transport: provider?.settings?.transport,
-        chunkTimeout: provider?.settings?.chunkTimeout,
+        chunkTimeout: Provider.timeout(provider?.settings?.chunkTimeout),
       }
     })
     return Service.of({
@@ -403,7 +408,9 @@ export const layer = Layer.effect(
                 Effect.flatMap((model) =>
                   model && hasPackage(model)
                     ? Effect.succeed(model)
-                    : Effect.map(models.available(), (models) => models.find(hasPackage)),
+                    : Effect.map(models.available(), (models) =>
+                        models.find((model) => hasPackage(model) && Model.supportsText(model)),
+                      ),
                 ),
               )
         if (!selected) return undefined
@@ -448,9 +455,11 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@opencode/ai/providers/fireworks" ||
     name === "@opencode/ai/providers/openai-compatible" ||
     name === "@opencode/ai/providers/google" ||
+    name === "@opencode/ai/providers/google/interactions" ||
     name === "@opencode/ai/providers/groq" ||
     name === "@opencode/ai/providers/mistral" ||
     name === "@opencode/ai/providers/togetherai" ||
+    name === "@opencode/ai/providers/vercel-ai-gateway" ||
     name === "@opencode/ai/providers/xai" ||
     name === "@opencode/ai/providers/openrouter" ||
     name === "@opencode/ai/providers/azure" ||

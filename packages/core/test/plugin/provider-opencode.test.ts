@@ -1072,6 +1072,30 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.effect("releases unread Console config responses when the fetch completes", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const signals: AbortSignal[] = []
+      const state = { status: 404 }
+      const http = HttpClient.make((request, _url, signal) => {
+        signals.push(signal)
+        return Effect.succeed(HttpClientResponse.fromWeb(request, new Response("unavailable", state)))
+      })
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
+      })
+      yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, http))
+      yield* drain
+      state.status = 503
+      yield* TestClock.adjust("1 minute")
+      yield* drain
+
+      // An unreleased response is only aborted when garbage collected, which fails outside a request on workerd.
+      expect(signals.map((signal) => signal.aborted)).toEqual([true, true])
+    }),
+  )
+
   it.effect("reports a rejected Console refresh token as signed out without removing the credential", () =>
     Effect.acquireUseRelease(
       Effect.sync(() =>

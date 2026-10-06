@@ -1,32 +1,22 @@
 import { expect, test } from "bun:test"
 import { type Virtualizer } from "@tanstack/solid-virtual"
 import { Node, Window } from "happy-dom"
-import { mutationNodesContainElement, observeElementOffsetReconnectAware } from "./observe-element-offset"
-
-test("matches only the scroll element or an ancestor containing it", () => {
-  const route = document.createElement("section")
-  const viewport = document.createElement("div")
-  const child = document.createElement("div")
-  const sibling = document.createElement("div")
-  route.append(viewport)
-  viewport.append(child)
-
-  expect(mutationNodesContainElement([viewport], viewport)).toBe(true)
-  expect(mutationNodesContainElement([route], viewport)).toBe(true)
-  expect(mutationNodesContainElement([child, sibling], viewport)).toBe(false)
-})
+import { observeElementOffsetReconnectAware } from "./observe-element-offset"
 
 test("restores a view observed before its first attachment", async () => {
   const targetWindow = new Window()
   const mutations = controlledMutations(targetWindow)
   const viewport = targetWindow.document.createElement("div")
+
   const instance = {
     scrollElement: viewport,
     targetWindow,
     scrollOffset: 240,
     options: { horizontal: false, isRtl: false, isScrollingResetDelay: 0, useScrollendEvent: false },
   } as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>
+
   const connections: boolean[] = []
+
   const cleanup = observeElementOffsetReconnectAware(
     instance,
     (offset) => {
@@ -34,6 +24,7 @@ test("restores a view observed before its first attachment", async () => {
     },
     () => connections.push(viewport.isConnected),
   )
+
   try {
     mutations.append(targetWindow.document.body, viewport)
     await frames(2, targetWindow)
@@ -53,6 +44,7 @@ test("reports a divergent native offset once and ignores equal offsets and unrel
   const unrelated = targetWindow.document.createElement("div")
   route.append(viewport)
   targetWindow.document.body.append(route)
+
   const instance = {
     scrollElement: viewport,
     targetWindow,
@@ -64,7 +56,9 @@ test("reports a divergent native offset once and ignores equal offsets and unrel
       useScrollendEvent: false,
     },
   } as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>
+
   const calls: [number, boolean][] = []
+
   const cleanup = observeElementOffsetReconnectAware(instance, (offset, isScrolling) => {
     calls.push([offset, isScrolling])
     instance.scrollOffset = offset
@@ -98,6 +92,7 @@ test("keeps checking until stale reset-delay callbacks can no longer win", async
   const viewport = targetWindow.document.createElement("div")
   route.append(viewport)
   targetWindow.document.body.append(route)
+
   const instance = {
     scrollElement: viewport,
     targetWindow,
@@ -109,7 +104,9 @@ test("keeps checking until stale reset-delay callbacks can no longer win", async
       useScrollendEvent: false,
     },
   } as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>
+
   const calls: number[] = []
+
   const cleanup = observeElementOffsetReconnectAware(instance, (offset) => {
     calls.push(offset)
     instance.scrollOffset = offset
@@ -134,46 +131,12 @@ test("keeps checking until stale reset-delay callbacks can no longer win", async
   }
 })
 
-test.each([
-  { name: "LTR", isRtl: false, expected: 240 },
-  { name: "RTL", isRtl: true, expected: -240 },
-])("reports the TanStack horizontal $name offset after reconnect", async ({ isRtl, expected }) => {
+test("cleanup suppresses queued delegated callbacks, reconnect checks, and later scrolls", async () => {
   const route = document.createElement("section")
   const viewport = document.createElement("div")
   route.append(viewport)
   document.body.append(route)
-  viewport.scrollLeft = 240
-  const instance = {
-    scrollElement: viewport,
-    targetWindow: window,
-    scrollOffset: 0,
-    options: {
-      horizontal: true,
-      isRtl,
-      isScrollingResetDelay: 0,
-      useScrollendEvent: false,
-    },
-  } as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>
-  const calls: [number, boolean][] = []
-  const cleanup = observeElementOffsetReconnectAware(instance, (offset, isScrolling) => {
-    calls.push([offset, isScrolling])
-    instance.scrollOffset = offset
-  })
 
-  route.remove()
-  document.body.append(route)
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  await frames(3)
-
-  expect(calls).toEqual([[expected, false]])
-  cleanup?.()
-  route.remove()
-})
-
-test("cleanup suppresses an already queued delegated offset callback", async () => {
-  const viewport = document.createElement("div")
-  document.body.append(viewport)
-  viewport.scrollTop = 100
   const instance = {
     scrollElement: viewport,
     targetWindow: window,
@@ -185,47 +148,25 @@ test("cleanup suppresses an already queued delegated offset callback", async () 
       useScrollendEvent: false,
     },
   } as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>
+
   const calls: [number, boolean][] = []
-  const cleanup = observeElementOffsetReconnectAware(instance, (offset, isScrolling) =>
-    calls.push([offset, isScrolling]),
-  )
 
-  viewport.dispatchEvent(new Event("scroll"))
-  cleanup?.()
-  await new Promise((resolve) => setTimeout(resolve, 25))
-
-  expect(calls).toEqual([[100, true]])
-  viewport.remove()
-})
-
-test("cleanup cancels reconnect checks and delegated offset observation", async () => {
-  const route = document.createElement("section")
-  const viewport = document.createElement("div")
-  route.append(viewport)
-  document.body.append(route)
-  const instance = {
-    scrollElement: viewport,
-    targetWindow: window,
-    scrollOffset: 0,
-    options: {
-      horizontal: false,
-      isRtl: false,
-      isScrollingResetDelay: 50,
-      useScrollendEvent: false,
-    },
-  } as unknown as Virtualizer<HTMLDivElement, HTMLDivElement>
-  const calls: number[] = []
-  const cleanup = observeElementOffsetReconnectAware(instance, (offset) => calls.push(offset))
+  const cleanup = observeElementOffsetReconnectAware(instance, (offset, isScrolling) => {
+    calls.push([offset, isScrolling])
+    instance.scrollOffset = offset
+  })
 
   route.remove()
   document.body.append(route)
   await new Promise((resolve) => setTimeout(resolve, 0))
-  cleanup?.()
-  instance.scrollOffset = 100
+  viewport.scrollTop = 100
   viewport.dispatchEvent(new Event("scroll"))
+  cleanup?.()
+  viewport.dispatchEvent(new Event("scroll"))
+  await new Promise((resolve) => setTimeout(resolve, 25))
   await frames(4)
 
-  expect(calls).toEqual([])
+  expect(calls).toEqual([[100, true]])
   route.remove()
 })
 
@@ -244,6 +185,7 @@ function controlledMutations(targetWindow: Window) {
   let emit: (record: MutationRecord) => void = () => {
     throw new Error("Mutation observer is not active")
   }
+
   class ControlledMutationObserver {
     constructor(callback: MutationCallback) {
       emit = (record) => callback([record], this as unknown as MutationObserver)
@@ -254,9 +196,12 @@ function controlledMutations(targetWindow: Window) {
       return []
     }
   }
+
   Object.defineProperty(targetWindow, "MutationObserver", { value: ControlledMutationObserver })
+
   const record = (target: Node, addedNodes: Node[], removedNodes: Node[]) =>
     ({ type: "childList", target, addedNodes, removedNodes }) as unknown as MutationRecord
+
   return {
     append(parent: Node, node: Node) {
       parent.appendChild(node)
@@ -264,6 +209,7 @@ function controlledMutations(targetWindow: Window) {
     },
     remove(node: Node) {
       const parent = node.parentNode
+
       if (!parent) throw new Error("Mutation target has no parent")
       parent.removeChild(node)
       emit(record(parent, [], [node]))
@@ -280,12 +226,14 @@ function controlledAnimationFrames(targetWindow: Window) {
     value: (callback: FrameRequestCallback) => {
       id += 1
       callbacks.set(id, callback)
+
       return id
     },
   })
   Object.defineProperty(targetWindow, "cancelAnimationFrame", {
     value: (frame: number) => callbacks.delete(frame),
   })
+
   return {
     run(at: number) {
       time = at

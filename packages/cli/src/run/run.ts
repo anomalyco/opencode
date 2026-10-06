@@ -1,5 +1,5 @@
 import { Service, type Endpoint } from "@opencode/client/effect/service"
-import { OpenCode, type OpenCodeClient, type SessionMessageAssistantTool } from "@opencode/client/promise"
+import { OpenCode, type SessionMessageAssistantTool } from "@opencode/client/promise"
 import { FSUtil } from "@opencode/util/fs-util"
 import { open } from "node:fs/promises"
 import path from "node:path"

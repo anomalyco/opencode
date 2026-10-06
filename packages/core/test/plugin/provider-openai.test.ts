@@ -3,7 +3,7 @@ import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/core/session"
 import { OpenAIResponses } from "@opencode/ai/protocols/openai-responses"
 import { describe, expect } from "bun:test"
-import { ConfigProvider, DateTime, Effect } from "effect"
+import { DateTime, Effect } from "effect"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
@@ -73,12 +73,12 @@ describe("OpenAIPlugin", () => {
         {
           id: Integration.MethodID.make("chatgpt-browser"),
           type: "oauth",
-          label: "ChatGPT Pro/Plus (browser)",
+          label: "Codex browser (legacy)",
         },
         {
           id: Integration.MethodID.make("chatgpt-headless"),
           type: "oauth",
-          label: "ChatGPT Pro/Plus (headless)",
+          label: "Codex device code (legacy)",
         },
       ])
     }),

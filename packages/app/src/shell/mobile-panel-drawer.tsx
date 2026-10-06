@@ -13,6 +13,7 @@ export function MobilePanelDrawer(
   }>,
 ) {
   const language = useLanguage()
+
   return (
     <MobileDrawer
       open={props.open}

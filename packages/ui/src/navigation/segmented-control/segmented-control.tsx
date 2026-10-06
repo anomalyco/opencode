@@ -26,7 +26,9 @@ const SegmentedControlContext = createContext<SegmentedControlContextValue>()
 
 function useSegmentedControlContext() {
   const ctx = useContext(SegmentedControlContext)
+
   if (!ctx) throw new Error("SegmentedControlItem must be used inside SegmentedControl")
+
   return ctx
 }
 
@@ -45,6 +47,7 @@ export type SegmentedControlProps = Omit<ComponentProps<"div">, "onChange"> &
 export function SegmentedControl(props: SegmentedControlProps) {
   const isControlled = createMemo(() => Object.hasOwn(props as object, "value"))
   const merged = mergeProps({ allowDeselect: false, disabled: false }, props)
+
   const [local, rest] = splitProps(merged, [
     "class",
     "classList",
@@ -77,10 +80,13 @@ export function SegmentedControl(props: SegmentedControlProps) {
 
   const focusNext = (from: HTMLButtonElement, direction: 1 | -1) => {
     const root = from.closest(`[data-slot="segmented-control-v2"]`)
+
     if (!root) return
+
     const buttons = Array.from(
       root.querySelectorAll<HTMLButtonElement>(`button[data-slot="segmented-control-v2-item"]`),
     ).filter((b) => !b.disabled)
+
     const i = buttons.indexOf(from)
     const next = buttons[i + direction]
     next?.focus()
@@ -96,6 +102,7 @@ export function SegmentedControl(props: SegmentedControlProps) {
 
   const assignRef = (el: HTMLDivElement | undefined) => {
     const r = local.ref
+
     if (typeof r === "function") (r as (el: HTMLDivElement | undefined) => void)(el)
     else if (r != null && typeof r === "object" && "value" in r) (r as { value: HTMLDivElement | undefined }).value = el
   }
@@ -134,6 +141,7 @@ function invokeButtonHandler<E extends Event>(
 
 export function SegmentedControlItem(props: SegmentedControlItemProps) {
   const merged = mergeProps({ disabled: false }, props)
+
   const [local, rest] = splitProps(merged, [
     "class",
     "classList",
@@ -143,6 +151,7 @@ export function SegmentedControlItem(props: SegmentedControlItemProps) {
     "onClick",
     "onKeyDown",
   ])
+
   const ctx = useSegmentedControlContext()
 
   const pressed = createMemo(() => ctx.selected() === local.value)
@@ -150,13 +159,16 @@ export function SegmentedControlItem(props: SegmentedControlItemProps) {
 
   const onClick: JSX.EventHandlerUnion<HTMLButtonElement, MouseEvent> = (e) => {
     invokeButtonHandler(local.onClick, e)
+
     if (e.defaultPrevented || disabled()) return
+
     if (pressed()) ctx.clearIfAllowed(local.value)
     else ctx.select(local.value)
   }
 
   const onKeyDown: JSX.EventHandlerUnion<HTMLButtonElement, KeyboardEvent> = (e) => {
     invokeButtonHandler(local.onKeyDown, e)
+
     if (e.defaultPrevented || disabled()) return
     const t = e.currentTarget
     const horizontal = t.closest(`[data-slot="segmented-control-v2"]`)?.matches(":dir(rtl)") ? -1 : 1
@@ -173,16 +185,20 @@ export function SegmentedControlItem(props: SegmentedControlItemProps) {
     else if (e.key === "Home") {
       e.preventDefault()
       const root = t.closest(`[data-slot="segmented-control-v2"]`)
+
       const first = root?.querySelector<HTMLButtonElement>(
         `button[data-slot="segmented-control-v2-item"]:not(:disabled)`,
       )
+
       first?.focus()
     } else if (e.key === "End") {
       e.preventDefault()
       const root = t.closest(`[data-slot="segmented-control-v2"]`)
+
       const buttons = root?.querySelectorAll<HTMLButtonElement>(
         `button[data-slot="segmented-control-v2-item"]:not(:disabled)`,
       )
+
       const last = buttons?.[buttons.length - 1]
       last?.focus()
     }

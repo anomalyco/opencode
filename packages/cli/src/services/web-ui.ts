@@ -58,8 +58,10 @@ function isRouteNotFound(error: unknown) {
   return error instanceof HttpServerError.HttpServerError && error.reason._tag === "RouteNotFound"
 }
 
+// qr-scanner decodes in a worker it creates from a blob: URL whenever the browser has no BarcodeDetector (Safari, desktop
+// Chrome on Windows and Linux). Without worker-src that worker falls under script-src 'self' and never starts.
 function csp(hash = "") {
-  return `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; media-src 'self' data:; connect-src * data: blob:`
+  return `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; media-src 'self' data:; connect-src * data: blob:; worker-src 'self' blob:`
 }
 
 function cspForHtml(body: string) {

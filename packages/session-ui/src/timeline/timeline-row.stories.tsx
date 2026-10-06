@@ -81,6 +81,7 @@ function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; to
       : []),
     ...(props.text ? [{ type: "text" as const, text: props.text }] : []),
   ] satisfies SessionMessageAssistant["content"]
+
   const document = {
     sessionID: CURRENT_SESSION_ID,
     messages: [
@@ -97,6 +98,7 @@ function AgentReasoningStory(props: { mode: ReasoningMode; reasoning: string; to
     status: { type: "busy" },
     diffs: [],
   } satisfies SessionDocument
+
   return (
     <section class="mx-auto w-full max-w-[720px] p-6">
       <CurrentSessionProviders document={document}>
@@ -116,9 +118,11 @@ const AgentReasoning = {
 
 function HiddenReasoningStory() {
   const [state, setState] = createStore({ phase: "thinking" })
+
   const document = createMemo(() => {
     const finished = state.phase === "idle"
     const running = state.phase === "running"
+
     return {
       sessionID: CURRENT_SESSION_ID,
       messages: [
@@ -160,6 +164,7 @@ function HiddenReasoningStory() {
       diffs: [],
     } satisfies SessionDocument
   })
+
   return (
     <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
       <div class="flex gap-3">
@@ -181,9 +186,11 @@ const WorkingWithoutReasoningDetails = { render: () => <HiddenReasoningStory /> 
 
 function RetryAndRecoverStory() {
   const [state, setState] = createStore({ phase: "thinking" })
+
   const document = createMemo(() => {
     const retry = state.phase === "retry"
     const finished = state.phase === "idle"
+
     return {
       sessionID: CURRENT_SESSION_ID,
       messages: [
@@ -210,6 +217,7 @@ function RetryAndRecoverStory() {
       diffs: [],
     } satisfies SessionDocument
   })
+
   return (
     <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
       <div class="flex gap-3">
@@ -244,6 +252,7 @@ export const ProviderRetry = {
 }
 
 const noticeUser = { id: "msg_notice_user", type: "user", text: "Run it", time: { created: STORY_TIME } } as const
+
 const noticeAssistant = {
   id: "msg_notice_assistant",
   type: "assistant",
@@ -298,9 +307,11 @@ const AgentActivityNotices = {
 
 function CompactSessionStory() {
   const [state, setState] = createStore({ phase: "running", summary: "", second: false })
+
   const document = createMemo(() => {
     const failed = state.phase === "failed"
     const completed = state.phase === "completed"
+
     const message = {
       id: "msg_notice_compaction",
       type: "compaction" as const,
@@ -316,6 +327,7 @@ function CompactSessionStory() {
         : { summary: state.summary, recent: "" }),
       time: { created: STORY_TIME + 10 },
     }
+
     const cancelled = {
       id: "msg_notice_compaction_cancelled",
       type: "compaction" as const,
@@ -324,6 +336,7 @@ function CompactSessionStory() {
       error: { type: "aborted", message: "Cancellation detail should stay hidden." },
       time: { created: STORY_TIME + 20 },
     }
+
     return {
       sessionID: CURRENT_SESSION_ID,
       messages: [noticeUser, noticeAssistant, message, ...(state.second ? [cancelled] : [])],
@@ -331,6 +344,7 @@ function CompactSessionStory() {
       diffs: [],
     } satisfies SessionDocument
   })
+
   return (
     <section class="mx-auto flex w-full max-w-[760px] flex-col gap-4 p-6">
       <div class="flex flex-wrap gap-3">
@@ -597,6 +611,7 @@ export const Conversation = {
   },
   render: (args: { scenario: string; mode: ReasoningMode; reasoning: string; tool: boolean; text: string }) => {
     if (args.scenario === "reasoning") return <AgentReasoningStory {...args} />
+
     return conversationScenarios[args.scenario as Exclude<keyof typeof conversationScenarios, "reasoning">].render()
   },
 }
