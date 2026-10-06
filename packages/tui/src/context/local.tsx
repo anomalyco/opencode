@@ -24,6 +24,11 @@ export type LocalTheme = {
   info: RGBA
 }
 
+export function contextSelection(variant?: string) {
+  const parts = variant?.split("@")
+  return { effort: parts?.[0] ?? "default", tier: parts?.[1] === "long" ? ("long" as const) : ("default" as const) }
+}
+
 export function parseModel(model: string) {
   const [providerID, ...rest] = model.split("/")
   return {
@@ -360,11 +365,25 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           })
         },
         variant: {
+          raw() {
+            const m = currentModel()
+            if (!m) return undefined
+            return modelStore.variant[`${m.providerID}/${m.modelID}`]
+          },
+          restore(value: string | undefined) {
+            const m = currentModel()
+            if (!m) return
+            setModelStore("variant", `${m.providerID}/${m.modelID}`, value ?? "default")
+            save()
+          },
           selected() {
             const m = currentModel()
             if (!m) return undefined
             const key = `${m.providerID}/${m.modelID}`
-            return modelStore.variant[key]
+            const info = sync.data.provider.find((p) => p.id === m.providerID)?.models[m.modelID]
+            return info?.options.copilotContext
+              ? contextSelection(modelStore.variant[key]).effort
+              : modelStore.variant[key]
           },
           current() {
             const v = this.selected()
@@ -378,13 +397,21 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
             const provider = sync.data.provider.find((item) => item.id === m.providerID)
             const info = provider?.models[m.modelID]
             if (!info?.variants) return []
-            return Object.keys(info.variants)
+            return Object.keys(info.variants).filter(
+              (variant) => !info.options.copilotContext || !variant.includes("@"),
+            )
           },
           set(value: string | undefined) {
             const m = currentModel()
             if (!m) return
             const key = `${m.providerID}/${m.modelID}`
-            setModelStore("variant", key, value ?? "default")
+            const info = sync.data.provider.find((p) => p.id === m.providerID)?.models[m.modelID]
+            if (!info?.options.copilotContext) {
+              this.restore(value)
+              return
+            }
+            const context = contextSelection(modelStore.variant[key]).tier
+            setModelStore("variant", key, `${value ?? "default"}@${context}`)
             save()
           },
           cycle() {
@@ -401,6 +428,28 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               return
             }
             this.set(variants[index + 1])
+          },
+        },
+        context: {
+          budgets() {
+            const m = currentModel()
+            if (!m) return undefined
+            const info = sync.data.provider.find((p) => p.id === m.providerID)?.models[m.modelID]
+            const budgets = info?.options.copilotContext
+            if (!budgets || typeof budgets !== "object" || !("default" in budgets) || !("long" in budgets)) return
+            if (typeof budgets.default !== "number" || typeof budgets.long !== "number") return
+            return { default: budgets.default, long: budgets.long }
+          },
+          current() {
+            return contextSelection(modelStore.variant[`${currentModel()?.providerID}/${currentModel()?.modelID}`]).tier
+          },
+          set(value: "default" | "long") {
+            const m = currentModel()
+            if (!m || !this.budgets()) return
+            const key = `${m.providerID}/${m.modelID}`
+            const effort = contextSelection(modelStore.variant[key]).effort
+            setModelStore("variant", key, `${effort}@${value}`)
+            save()
           },
         },
       }

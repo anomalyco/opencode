@@ -81,6 +81,7 @@ import {
 
 import type { EventSource } from "./context/sdk"
 import { DialogVariant } from "./component/dialog-variant"
+import { DialogContext } from "./component/dialog-context"
 import { createTuiAttention } from "./attention"
 import * as TuiAudio from "./audio"
 import { win32DisableProcessedInput, win32FlushInputBuffer } from "./terminal-win32"
@@ -727,6 +728,14 @@ function App(props: { onSnapshot?: () => Promise<string[]>; pluginHost: TuiPlugi
           }
           dialog.replace(() => <DialogVariant />)
         },
+      },
+      {
+        name: "context.list",
+        title: "Switch context window",
+        category: "Agent",
+        hidden: !local.model.context.budgets(),
+        slashName: "context-window",
+        run: () => dialog.replace(() => <DialogContext />),
       },
       {
         name: "agent.cycle.reverse",

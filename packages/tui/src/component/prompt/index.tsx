@@ -326,7 +326,7 @@ export function Prompt(props: PromptProps) {
         if (!args.agent) local.agent.set(msg.agent)
         if (msg.model) {
           local.model.set(msg.model)
-          local.model.variant.set(msg.model.variant)
+          local.model.variant.restore(msg.model.variant)
         }
       }
     }
@@ -986,7 +986,7 @@ export function Prompt(props: PromptProps) {
       return false
     }
 
-    const variant = local.model.variant.current()
+    const variant = local.model.variant.raw()
     let sessionID = props.sessionID
     let finishMoveProgress = false
     if (sessionID == null) {
@@ -1469,6 +1469,9 @@ export function Prompt(props: PromptProps) {
                                 {local.model.variant.current()}
                               </span>
                             </text>
+                          </Show>
+                          <Show when={local.model.context.budgets()}>
+                            <text fg={theme.textMuted}>· {local.model.context.current()} context</text>
                           </Show>
                         </box>
                       </Show>

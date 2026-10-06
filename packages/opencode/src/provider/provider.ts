@@ -2075,7 +2075,6 @@ export function sort<T extends { id: string }>(models: T[]) {
     models,
     [(model) => priority.findIndex((filter) => model.id.includes(filter)), "desc"],
     [(model) => (model.id.includes("latest") ? 0 : 1), "asc"],
-    [(model) => (/--long$/.test(model.id) ? 1 : 0), "asc"],
     [(model) => model.id, "desc"],
   )
 }

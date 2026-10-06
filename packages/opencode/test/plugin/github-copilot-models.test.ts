@@ -494,7 +494,7 @@ test("remaps fallback oauth model urls to the enterprise host", async () => {
 test.each([
   [undefined, "https://api.githubcopilot.com"],
   ["ghe.example.com", "https://copilot-api.ghe.example.com"],
-])("discovers selectable context tiers with OAuth for %s", async (enterpriseUrl, host) => {
+])("discovers independent context variants on one OAuth model for %s", async (enterpriseUrl, host) => {
   globalThis.fetch = mock((request, init) => {
     expect(String(request)).toBe(`${host}/models`)
     expect(new Headers(init?.headers).get("Authorization")).toBe("Bearer test-token")
@@ -537,12 +537,42 @@ test.each([
   const models = await hooks.provider!.models!({ id: "github-copilot", models: {} } as never, {
     auth: { type: "oauth", refresh: "test-token", access: "different-access-token", expires: 0, enterpriseUrl },
   })
-  expect(Object.keys(models)).toEqual(["gpt-test", "gpt-test--long"])
-  expect(models["gpt-test"].limit.input).toBe(272_000)
-  expect(models["gpt-test--long"].limit.input).toBe(922_000)
-  for (const model of Object.values(models)) {
-    expect(model.api.url).toBe(host)
-    expect(model.api.id).toBe("gpt-test")
-    expect(model.variants?.high).toMatchObject({ reasoningEffort: "high" })
+  expect(Object.keys(models)).toEqual(["gpt-test"])
+  const model = models["gpt-test"]
+  expect(model.name).toBe("GPT Test")
+  expect(model.api).toMatchObject({ id: "gpt-test", url: host, npm: "@ai-sdk/github-copilot" })
+  expect("endpoint" in model.api ? model.api.endpoint : undefined).toBe("responses")
+  expect(model.options.copilotContext).toEqual({ default: 272_000, long: 922_000 })
+  expect(model.cost).toEqual({
+    input: 2,
+    output: 10,
+    cache: { read: 0.1, write: 0 },
+    tiers: [{ input: 4, output: 15, cache: { read: 0.2, write: 0 }, tier: { type: "context", size: 272_000 } }],
+  })
+  expect(Object.keys(model.variants ?? {}).sort()).toEqual([
+    "default@default",
+    "default@long",
+    "high",
+    "high@default",
+    "high@long",
+    "medium",
+    "medium@default",
+    "medium@long",
+  ])
+  expect(model.variants?.high).toEqual({
+    reasoningEffort: "high",
+    reasoningSummary: "auto",
+    include: ["reasoning.encrypted_content"],
+  })
+  for (const tier of ["default", "long"]) {
+    expect(model.variants?.[`high@${tier}`]).toEqual({ copilotContextTier: tier })
+    expect(model.variants?.[`default@${tier}`]).toEqual({ copilotContextTier: tier })
+    expect(CopilotModels.context(model, `high@${tier}`).limit).toEqual({
+      context: tier === "long" ? 1_050_000 : 400_000,
+      input: tier === "long" ? 922_000 : 272_000,
+      output: 128_000,
+    })
   }
+  expect(CopilotModels.context(model).limit.input).toBe(272_000)
+  expect(model.limit.input).toBe(922_000)
 })

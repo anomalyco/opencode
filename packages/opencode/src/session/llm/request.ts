@@ -77,9 +77,11 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
     system.push(header, rest.join("\n"))
   }
 
+  const selectedVariant = input.user.model.variant
+  const reasoningVariant = input.model.options.copilotContext ? selectedVariant?.split("@")[0] : selectedVariant
   const variant =
     !input.small && input.model.variants && input.user.model.variant
-      ? input.model.variants[input.user.model.variant]
+      ? mergeOptions(input.model.variants[reasoningVariant ?? ""] ?? {}, input.model.variants[input.user.model.variant])
       : {}
   const base = input.small
     ? ProviderTransform.smallOptions(input.model)
@@ -89,6 +91,8 @@ export const prepare = Effect.fn("LLMRequestPrep.prepare")(function* (input: Pre
         providerOptions: input.provider.options,
       })
   const options = mergeOptions(mergeOptions(mergeOptions(base, input.model.options), input.agent.options), variant)
+  delete options.copilotContext
+  delete options.copilotContextTier
   if (
     input.model.api.npm === "@ai-sdk/azure" &&
     (input.provider.options.useCompletionUrls || input.model.options.useCompletionUrls || options.useCompletionUrls)

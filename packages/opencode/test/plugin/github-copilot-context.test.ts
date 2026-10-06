@@ -1,7 +1,7 @@
 import { expect, test } from "bun:test"
 import { CopilotModels } from "@/plugin/github-copilot/models"
 import { Provider } from "@/provider/provider"
-import { usable } from "@/session/overflow"
+import { isOverflow, usable } from "@/session/overflow"
 
 function model(id = "gpt-test", messages = false) {
   return {
@@ -58,25 +58,67 @@ test.each([false, true])(
       },
     })
     const result = await CopilotModels.get(server.url.origin, { Authorization: "Bearer test-token" })
+    expect(Object.keys(result.models)).toEqual([remote.id])
+    expect([...result.pickerEnabled]).toEqual([remote.id])
     const standard = result.models[remote.id]
-    expect(standard.limit).toEqual({ context: 400_000, input: 272_000, output: 128_000 })
+    expect(standard.name).toBe(remote.name)
+    expect(standard.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
+    expect(standard.options.copilotContext).toEqual({ default: 272_000, long: 922_000 })
     expect(standard.cost).toEqual({
       input: 2,
       output: 10,
       cache: { read: 0.1, write: 2.5 },
       tiers: [{ input: 4, output: 15, cache: { read: 0.2, write: 5 }, tier: { type: "context", size: 272_000 } }],
     })
-    expect(result.models[`${remote.id}--long`].limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
-    expect(result.models[`${remote.id}--long`].name).toContain("Long 922K | $4/$15 per 1M in/out")
-    for (const entry of Object.values(result.models)) {
-      expect(entry.api.id).toBe(remote.id)
-      expect(entry.api.url).toBe(`${server.url.origin}${messages ? "/v1" : ""}`)
-      expect(entry.api.npm).toBe(messages ? "@ai-sdk/anthropic" : "@ai-sdk/github-copilot")
-      expect(entry.variants).toEqual(standard.variants)
-      expect(entry.cost).toEqual(standard.cost)
-      expect(result.pickerEnabled.has(entry.api.id)).toBe(true)
+    expect(standard.api).toMatchObject({
+      id: remote.id,
+      url: `${server.url.origin}${messages ? "/v1" : ""}`,
+      npm: messages ? "@ai-sdk/anthropic" : "@ai-sdk/github-copilot",
+    })
+    expect("endpoint" in standard.api ? standard.api.endpoint : undefined).toBe(messages ? "messages" : "responses")
+    expect(Object.keys(standard.variants ?? {}).sort()).toEqual([
+      "default@default",
+      "default@long",
+      "high",
+      "high@default",
+      "high@long",
+      "low",
+      "low@default",
+      "low@long",
+      "medium",
+      "medium@default",
+      "medium@long",
+    ])
+    for (const effort of ["low", "medium", "high"]) {
+      const reasoning = messages
+        ? { thinking: { type: "adaptive", display: "summarized" }, effort }
+        : { reasoningEffort: effort, reasoningSummary: "auto", include: ["reasoning.encrypted_content"] }
+      expect(standard.variants?.[effort]).toEqual(reasoning)
+      for (const tier of ["default", "long"] as const) {
+        expect(standard.variants?.[`${effort}@${tier}`]).toEqual({ copilotContextTier: tier })
+        const effective = CopilotModels.context(standard, `${effort}@${tier}`)
+        expect(effective.limit).toEqual({
+          context: tier === "long" ? 1_050_000 : 400_000,
+          input: tier === "long" ? 922_000 : 272_000,
+          output: 128_000,
+        })
+        expect(effective.api).toEqual(standard.api)
+        expect(effective.cost).toEqual(standard.cost)
+        expect(effective.name).toBe(remote.name)
+      }
     }
-    expect(standard.variants?.medium).toMatchObject(messages ? { effort: "medium" } : { reasoningEffort: "medium" })
+    for (const tier of ["default", "long"]) {
+      expect(standard.variants?.[`default@${tier}`]).toEqual({ copilotContextTier: tier })
+    }
+    for (const variant of [undefined, "medium", "default@default", "unknown"]) {
+      expect(CopilotModels.context(standard, variant).limit).toEqual({
+        context: 400_000,
+        input: 272_000,
+        output: 128_000,
+      })
+    }
+    expect(CopilotModels.context(standard, "default@long").limit.input).toBe(922_000)
+    expect(standard.limit.input).toBe(922_000)
   },
 )
 
@@ -101,6 +143,62 @@ test("retains models with old pricing and no context tier metadata", async () =>
   expect(Object.keys(result.models)).toEqual([remote.id])
   expect(result.models[remote.id].limit.input).toBe(922_000)
   expect(result.models[remote.id].cost).toEqual({ input: 4, output: 20, cache: { read: 0.2, write: 0 } })
+  expect(result.models[remote.id].options.copilotContext).toBeUndefined()
+  expect(Object.keys(result.models[remote.id].variants ?? {})).toEqual(["low", "medium", "high"])
+  expect(CopilotModels.context(result.models[remote.id], "medium@long")).toBe(result.models[remote.id])
+})
+
+test("does not add context choices without long-context pricing", async () => {
+  const remote = model()
+  using server = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({
+        data: [
+          {
+            ...remote,
+            billing: { token_prices: { batch_size: 1_000_000, default: remote.billing.token_prices.default } },
+          },
+        ],
+      }),
+  })
+  const result = await CopilotModels.get(server.url.origin)
+  const entry = result.models[remote.id]
+  expect(Object.keys(result.models)).toEqual([remote.id])
+  expect(entry.name).toBe(remote.name)
+  expect(entry.options.copilotContext).toBeUndefined()
+  expect(entry.cost.tiers).toBeUndefined()
+  expect(CopilotModels.context(entry, "default@long")).toBe(entry)
+})
+
+test("preserves explicit thinking budgets in both context choices", async () => {
+  const remote = model("claude-budget", true)
+  using server = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({
+        data: [
+          {
+            ...remote,
+            capabilities: {
+              ...remote.capabilities,
+              supports: { tool_calls: true, min_thinking_budget: 1024, max_thinking_budget: 32_000 },
+            },
+          },
+        ],
+      }),
+  })
+  const entry = (await CopilotModels.get(server.url.origin)).models[remote.id]
+  for (const [effort, budgetTokens] of [
+    ["high", 16_000],
+    ["max", 31_999],
+  ] as const) {
+    expect(entry.variants?.[effort]).toEqual({ thinking: { type: "enabled", budgetTokens } })
+    for (const tier of ["default", "long"]) {
+      expect(entry.variants?.[`${effort}@${tier}`]).toEqual({ copilotContextTier: tier })
+      expect(CopilotModels.context(entry, `${effort}@${tier}`).limit.input).toBe(tier === "long" ? 922_000 : 272_000)
+    }
+  }
 })
 
 test("supports alternate cache-read and context boundary fields", async () => {
@@ -125,7 +223,7 @@ test("supports alternate cache-read and context boundary fields", async () => {
     },
   })
   const result = await CopilotModels.get(server.url.origin)
-  expect(result.models[remote.id].limit.input).toBe(272_000)
+  expect(CopilotModels.context(result.models[remote.id]).limit.input).toBe(272_000)
   expect(result.models[remote.id].cost.cache.read).toBe(0.1)
   expect(result.models[remote.id].cost.tiers?.[0].tier.size).toBe(272_000)
 })
@@ -145,6 +243,8 @@ test("does not expose extra context choices for disabled or utility models", asy
   const result = await CopilotModels.get(server.url.origin)
   expect(Object.keys(result.models)).toEqual(["utility"])
   expect(result.pickerEnabled.size).toBe(0)
+  expect(result.models.utility.options.copilotContext).toBeUndefined()
+  expect(Object.keys(result.models.utility.variants ?? {})).toEqual(["low", "medium", "high"])
 })
 
 test("preserves fast mode routing and uses its own advertised prices", async () => {
@@ -174,13 +274,17 @@ test("preserves fast mode routing and uses its own advertised prices", async () 
       },
     },
   )
-  for (const id of [fast.id, `${fast.id}--long`]) {
-    expect(result.models[id].api.id).toBe(regular.id)
-    expect(result.models[id].options).toEqual({ speed: "fast" })
-    expect(result.models[id].headers).toEqual({ "anthropic-beta": "fast-mode" })
-    expect(result.models[id].cost.input).toBe(10)
-    expect(result.models[id].cost.output).toBe(50)
-    expect(result.models[id].name).toContain("Claude Fast")
+  expect(Object.keys(result.models).sort()).toEqual([regular.id, fast.id].sort())
+  for (const tier of ["default", "long"]) {
+    const entry = CopilotModels.context(result.models[fast.id], `medium@${tier}`)
+    expect(entry.api.id).toBe(regular.id)
+    expect(entry.options).toEqual({ speed: "fast", copilotContext: { default: 272_000, long: 922_000 } })
+    expect(entry.headers).toEqual({ "anthropic-beta": "fast-mode" })
+    expect(entry.cost.input).toBe(10)
+    expect(entry.cost.output).toBe(50)
+    expect(entry.cost.tiers?.[0]).toMatchObject({ input: 10, output: 50 })
+    expect(entry.name).toBe("Claude Fast")
+    expect(entry.limit.input).toBe(tier === "long" ? 922_000 : 272_000)
   }
 })
 
@@ -204,38 +308,66 @@ test("clamps default input budgets and only creates supported choices", async ()
   const result = await CopilotModels.get(server.url.origin)
   expect(Object.keys(result.models)).toEqual([remote.id])
   expect(result.models[remote.id].limit.input).toBe(80_000)
+  expect(result.models[remote.id].options.copilotContext).toBeUndefined()
+  expect(Object.keys(result.models[remote.id].variants ?? {})).toEqual(["low", "medium", "high"])
 })
 
-test("refreshes choices without accumulating aliases and removes unsupported tiers", async () => {
+test("refreshes choices without accumulating variants and removes unsupported tiers", async () => {
   const remote = model()
   using server = Bun.serve({ port: 0, fetch: () => Response.json({ data: [remote] }) })
   const first = await CopilotModels.get(server.url.origin)
   const second = await CopilotModels.get(server.url.origin, {}, first.models)
   expect(second).toEqual(first)
+  expect(await CopilotModels.get(server.url.origin, {}, second.models)).toEqual(first)
   remote.capabilities.limits.max_prompt_tokens = 80_000
   const reduced = await CopilotModels.get(server.url.origin, {}, second.models)
   expect(Object.keys(reduced.models)).toEqual([remote.id])
   expect(reduced.models[remote.id].limit.input).toBe(80_000)
+  expect(reduced.models[remote.id].options.copilotContext).toBeUndefined()
+  expect(Object.keys(reduced.models[remote.id].variants ?? {})).toEqual(["low", "medium", "high"])
+  expect(CopilotModels.context(reduced.models[remote.id], "high@long").limit.input).toBe(80_000)
 })
 
-test("prefers Default in automatic model selection and applies each compaction budget", async () => {
+test("keeps one automatic model choice and applies the selected context compaction budget", async () => {
   const remote = model()
   using server = Bun.serve({ port: 0, fetch: () => Response.json({ data: [remote] }) })
   const result = await CopilotModels.get(server.url.origin)
   expect(Provider.sort(Object.values(result.models))[0].id).toBe(remote.id)
-  for (const [id, budget] of [
-    [remote.id, 252_000],
-    [`${remote.id}--long`, 902_000],
+  expect(Provider.sort(Object.values(result.models))).toHaveLength(1)
+  for (const [variant, budget] of [
+    [undefined, 252_000],
+    ["high", 252_000],
+    ["default@default", 252_000],
+    ["high@default", 252_000],
+    ["default@long", 902_000],
+    ["high@long", 902_000],
   ] as const) {
-    expect(usable({ cfg: {}, model: result.models[id] as Provider.Model })).toBe(budget)
+    const effective = CopilotModels.context(result.models[remote.id], variant) as Provider.Model
+    expect(usable({ cfg: {}, model: effective })).toBe(budget)
+    expect(usable({ cfg: { compaction: { reserved: 10_000 } }, model: effective })).toBe(budget + 10_000)
+    for (const [total, overflow] of [
+      [budget - 1, false],
+      [budget, true],
+    ] as const) {
+      expect(
+        isOverflow({
+          cfg: {},
+          model: effective,
+          tokens: { total, input: total, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+        }),
+      ).toBe(overflow)
+    }
   }
 })
 
-test("does not overwrite endpoint models whose IDs collide with context suffixes", async () => {
+test("keeps endpoint model IDs verbatim without generating context aliases", async () => {
   const remote = model()
   const collision = { ...model(`${remote.id}--long`), billing: undefined }
   using server = Bun.serve({ port: 0, fetch: () => Response.json({ data: [remote, collision] }) })
   const first = await CopilotModels.get(server.url.origin)
+  expect(Object.keys(first.models)).toEqual([remote.id, collision.id])
+  expect(first.models[remote.id].name).toBe(remote.name)
+  expect(first.models[collision.id].name).toBe(collision.name)
   expect(first.models[collision.id].api.id).toBe(collision.id)
   expect(first.models[collision.id].limit.input).toBe(922_000)
   expect(await CopilotModels.get(server.url.origin, {}, first.models)).toEqual(first)
@@ -260,4 +392,6 @@ test("retains catalog fast-mode prices when the API only advertises the regular 
   expect(result.models[fast.id].cost).toEqual(fast.cost)
   expect(result.models[`${fast.id}--long`]).toBeUndefined()
   expect(result.models[fast.id].name).toBe("Claude Fast")
+  expect(result.models[fast.id].options).toEqual({ speed: "fast" })
+  expect(Object.keys(result.models[fast.id].variants ?? {})).toEqual(["low", "medium", "high"])
 })

@@ -156,7 +156,7 @@ function build(
     },
     // existing wins
     family: prev?.family ?? remote.capabilities.family,
-    name: prev?.name?.replace(/ \| (?:Default|Long) [\d.]+K \| .*$/, "") ?? remote.name,
+    name: prev?.name ?? remote.name,
     cost:
       billing === null && prev
         ? prev.cost
@@ -188,7 +188,7 @@ function build(
                 }
               : {}),
           },
-    options: prev?.options ?? {},
+    options: Object.fromEntries(Object.entries(prev?.options ?? {}).filter(([key]) => key !== "copilotContext")),
     headers: prev?.headers ?? {},
     release_date:
       prev?.release_date ??
@@ -273,11 +273,6 @@ export async function get(
 
   // prune existing models whose api.id isn't in the endpoint response
   for (const [key, model] of Object.entries(result)) {
-    const source = key.replace(/--long$/, "")
-    if (source !== key && !remote.has(key) && existing[source]?.api.id === model.api.id) {
-      delete result[key]
-      continue
-    }
     const m = remote.get(model.api.id)
     if (!m) {
       delete result[key]
@@ -306,29 +301,45 @@ export async function get(
     const boundary = prices?.default.context_max ?? prices?.default.max_prompt_tokens
     if (!m?.model_picker_enabled || !prices || !boundary || boundary <= 0) continue
     const input = model.limit.input ?? model.limit.context
-    const budget = Math.min(boundary, input)
-    const rates = (cost: Model["cost"]) => `$${cost.input}/$${cost.output} per 1M in/out`
-    const choice = (id: string, label: string, size: number, pricing: string): Model => ({
+    if (!prices.long_context || input <= boundary) continue
+    const variants = model.variants ?? {}
+    result[key] = {
       ...model,
-      id,
-      name: `${model.name} | ${label} ${size / 1000}K | ${pricing}`,
-      limit: {
-        ...model.limit,
-        input: size,
-        context: Math.min(model.limit.context, size + model.limit.output),
+      options: { ...model.options, copilotContext: { default: Math.min(boundary, input), long: input } },
+      variants: {
+        ...variants,
+        ...Object.fromEntries(
+          ["default", "long"].flatMap((context) =>
+            Object.keys({ default: {}, ...variants }).map((effort) => [
+              `${effort}@${context}`,
+              { copilotContextTier: context },
+            ]),
+          ),
+        ),
       },
-    })
-    result[key] = choice(key, "Default", budget, rates(model.cost))
-    if (prices.long_context && input > budget) {
-      const id = `${key}--long`
-      const cost = model.cost.tiers?.[0]
-      if (!(id in result) && cost) result[id] = choice(id, "Long", input, rates(cost))
     }
   }
 
   return {
     models: result,
     pickerEnabled: new Set([...remote].filter(([, item]) => item.model_picker_enabled).map(([id]) => id)),
+  }
+}
+
+export function context<T extends Model>(model: T, variant?: string): T {
+  const budgets = model.options.copilotContext
+  if (!budgets || typeof budgets !== "object" || !("default" in budgets) || !("long" in budgets)) return model
+  const tier =
+    variant?.endsWith("@long") || model.variants?.[variant ?? ""]?.copilotContextTier === "long" ? "long" : "default"
+  const input = budgets[tier]
+  if (typeof input !== "number" || !Number.isFinite(input) || input <= 0) return model
+  return {
+    ...model,
+    limit: {
+      ...model.limit,
+      input,
+      context: Math.min(model.limit.context, input + model.limit.output),
+    },
   }
 }
 

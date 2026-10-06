@@ -8,6 +8,7 @@ import { Auth } from "@/auth"
 import { Plugin } from "@/plugin"
 import { CopilotModels } from "@/plugin/github-copilot/models"
 import { Provider } from "@/provider/provider"
+import { usable } from "@/session/overflow"
 import { testEffect } from "../lib/effect"
 
 const it = testEffect(
@@ -79,12 +80,14 @@ const it = testEffect(
 )
 
 it.instance(
-  "model config preserves discovered Copilot long-context routing, pricing, and budget",
+  "model config preserves Copilot context variants, live pricing, and endpoint",
   Effect.gen(function* () {
     const provider = yield* Provider.Service
-    const model = yield* provider.getModel(ProviderV2.ID.githubCopilot, ModelV2.ID.make("mai-test--long"))
+    const model = yield* provider.getModel(ProviderV2.ID.githubCopilot, ModelV2.ID.make("mai-test"))
+    expect(Object.keys((yield* provider.list())[ProviderV2.ID.githubCopilot].models)).toEqual(["mai-test"])
 
-    expect(model.options).toEqual({ custom: true })
+    expect(model.name).toBe("MAI Test")
+    expect(model.options).toEqual({ custom: true, copilotContext: { default: 272_000, long: 922_000 } })
     expect(model.api).toMatchObject({ id: "mai-test", npm: "@ai-sdk/github-copilot", endpoint: "responses" })
     expect(model.limit).toEqual({ context: 1_050_000, input: 922_000, output: 128_000 })
     expect(model.cost).toEqual({
@@ -93,6 +96,35 @@ it.instance(
       cache: { read: 0, write: 0 },
       tiers: [{ input: 4, output: 15, cache: { read: 0, write: 0 }, tier: { type: "context", size: 272_000 } }],
     })
+    expect(model.variants).toEqual({
+      "default@default": { copilotContextTier: "default" },
+      "default@long": { copilotContextTier: "long", reasoningEffort: "high", reasoningSummary: "detailed" },
+    })
+    for (const tier of ["default", "long"]) {
+      const effective = CopilotModels.context(model, `default@${tier}`) as Provider.Model
+      expect(effective.limit).toEqual({
+        context: tier === "long" ? 1_050_000 : 400_000,
+        input: tier === "long" ? 922_000 : 272_000,
+        output: 128_000,
+      })
+      expect(effective.cost).toEqual(model.cost)
+      expect(effective.api).toEqual(model.api)
+      expect(usable({ cfg: {}, model: effective })).toBe(tier === "long" ? 902_000 : 252_000)
+    }
+    expect(CopilotModels.context(model).limit.input).toBe(272_000)
   }),
-  { config: { provider: { "github-copilot": { models: { "mai-test--long": { options: { custom: true } } } } } } },
+  {
+    config: {
+      provider: {
+        "github-copilot": {
+          models: {
+            "mai-test": {
+              options: { custom: true },
+              variants: { "default@long": { reasoningEffort: "high", reasoningSummary: "detailed" } },
+            },
+          },
+        },
+      },
+    },
+  },
 )
