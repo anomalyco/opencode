@@ -4,7 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -71,25 +71,17 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       if (registration.service !== undefined) {
         pool.serviceAnswered()
         const service = registration.service
-        const versionMatches = matchesVersion(service.version, options)
-        const compatible = service.compatible && versionMatches
-        if (!service.compatible && versionMatches)
-          throw new Error(
-            "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
-          )
-        if (compatible && service.state === "ready") {
+        const decision = decide(service, options)
+        if (decision._tag === "fail") throw decision.error
+        if (decision._tag === "reuse") {
           await PtyHandoff.complete(options.file ?? fallback(), service.info)
           return service.endpoint
         }
-        if (compatible && service.state === "failed") throw new Error("Background service failed to start")
-        if (!compatible) {
+        if (decision._tag === "replace") {
           announce("version-mismatch", service.version)
           if (service.state !== "ready")
             console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
-          await stop({
-            file: options.file,
-            pty: service.state === "ready" ? "handoff" : "clear",
-          }).catch(() => undefined)
+          await stop({ file: options.file, pty: decision.pty }).catch(() => undefined)
           pool.evict(service.info.pid)
         }
       } else {

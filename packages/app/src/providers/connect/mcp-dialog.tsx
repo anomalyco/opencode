@@ -56,17 +56,25 @@ export const DialogSelectMcp: Component = () => {
             const mcpStatus = () =>
               data.location.mcp.server.list({ directory: sdk().directory })?.find((server) => server.name === i.name)
                 ?.status
+
             const status = () => mcpStatus()?.status
+
             const statusLabel = () => {
               const key = status() ? statusLabels[status() as keyof typeof statusLabels] : undefined
+
               if (!key) return
+
               return language.t(key)
             }
+
             const error = () => {
               const s = mcpStatus()
+
               if (s?.status === "failed") return s.error
             }
+
             const enabled = () => status() === "connected"
+
             return (
               <div class="w-full flex items-center justify-between gap-x-3">
                 <div class="flex flex-col gap-0.5 min-w-0">

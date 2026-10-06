@@ -43,6 +43,7 @@ test("patch file borders retain a full CSS pixel at 390px on high-density displa
   const trigger = patch.getByRole("button", { name: /patch-border.ts/ })
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await expect(trigger).toHaveCSS("height", "32px")
+
   for (const side of ["top", "right", "bottom", "left"]) {
     await expect(trigger).toHaveCSS(`border-${side}-width`, "1px")
   }
@@ -57,9 +58,11 @@ test("patch file borders retain a full CSS pixel at 390px on high-density displa
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
   const content = patch.locator('[data-slot="accordion-content"]')
   await expect(content).toBeVisible()
+
   for (const side of ["left", "right", "bottom"]) {
     await expect(content).toHaveCSS(`border-${side}-width`, "1px")
   }
+
   await expect(content).toHaveCSS("border-top-width", "0px")
   await trigger.press("Enter")
   await expect(trigger).toHaveAttribute("aria-expanded", "false")

@@ -16,13 +16,17 @@ type PromptState = {
 
 export const syncPromptModel = (local: ModelSelection, prompt: PromptState) => {
   const model = local.model.current()
+
   if (!model) return
+
   const next = {
     providerID: model.provider.id,
     modelID: model.id,
     variant: local.model.variant.current(),
   }
+
   const current = prompt.model.current()
+
   if (current?.providerID === next.providerID && current.modelID === next.modelID && current.variant === next.variant)
     return
   prompt.model.set(next)

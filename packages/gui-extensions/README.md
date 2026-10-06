@@ -13,7 +13,7 @@ flowchart LR
   end
   subgraph window["Each window (desktop or web)"]
     wh["window host<br/>packages/app/src/runtime/extension"] --> we["renderer.tsx entries"]
-    we -- "ctx.add(Point, item)" --> wh
+    we -- "ctx.add(Registry, item)" --> wh
     we -- "Contract (in process)" --> other["other extensions"]
   end
   me -- "Ipc: methods, state, events<br/>(schemas over the bridge)" --> we
@@ -24,7 +24,7 @@ flowchart LR
 ```text
 src/pairing/
 ├── index.ts          Extension.define: id, provides, uses, requires, stores, i18n
-├── contract.ts       tokens other code may import: Ipc, Contract, Point
+├── contract.ts       tokens other code may import: Ipc, Contract, Registry
 ├── renderer.tsx      window entry, default export Setup<typeof definition>
 ├── main.ts           main entry, default export MainSetup<typeof definition> (desktop only)
 ├── page.tsx          heavy UI, loaded with lazy()
@@ -54,20 +54,20 @@ Unit tests of logic that carries a contract sit beside the code as `*.test.ts`, 
 
 Setup receives one context. Components read the same object with `useExtension<typeof definition>()`.
 
-| Member                | Window                                                                                      | Main                                   |
-| --------------------- | ------------------------------------------------------------------------------------------- | -------------------------------------- |
-| Host APIs             | `ctx.layout`, `ctx.sessions`, `ctx.storage`, `ctx.desktop`, … (see the [catalog](#catalog)) | `ctx.storage`, `ctx.windows`, …        |
-| Optional dependencies | `ctx.uses.name`: `Accessor<Live<T>>`, `provides` included                                   |                                        |
-| Hard dependencies     | `ctx.requires.name`: `T`                                                                    |                                        |
-| Declared stores       | `ctx.stores.name`: `Persisted`, or `(session) => Persisted`                                 | `ctx.stores.name`: `Persisted`, loaded |
-| Contribute to a point | `ctx.add(Point, item)`                                                                      | `ctx.add(MenubarItem, item)`           |
-| Provide a dependency  | `ctx.provide(Contract, impl)`                                                               | `ctx.provide(Ipc, impl)`               |
-| Lifetime              | Solid's `onCleanup` and `ctx.signal`                                                        | `ctx.scope` (`signal`, `addFinalizer`) |
-| Copy                  | `ctx.t(key, params)`, `ctx.plural(key, count)`                                              | the same                               |
+| Member                   | Window                                                                                      | Main                                   |
+| ------------------------ | ------------------------------------------------------------------------------------------- | -------------------------------------- |
+| Host APIs                | `ctx.layout`, `ctx.sessions`, `ctx.storage`, `ctx.desktop`, … (see the [catalog](#catalog)) | `ctx.storage`, `ctx.windows`, …        |
+| Optional dependencies    | `ctx.uses.name`: `Accessor<Live<T>>`, `provides` included                                   |                                        |
+| Hard dependencies        | `ctx.requires.name`: `T`                                                                    |                                        |
+| Declared stores          | `ctx.stores.name`: `Persisted`, or `(session) => Persisted`                                 | `ctx.stores.name`: `Persisted`, loaded |
+| Contribute to a registry | `ctx.add(Registry, item)`                                                                   | `ctx.add(MenubarItem, item)`           |
+| Provide a dependency     | `ctx.provide(Contract, impl)`                                                               | `ctx.provide(Ipc, impl)`               |
+| Lifetime                 | Solid's `onCleanup` and `ctx.signal`                                                        | `ctx.scope` (`signal`, `addFinalizer`) |
+| Copy                     | `ctx.t(key, params)`, `ctx.plural(key, count)`                                              | the same                               |
 
 - Host APIs are getters: an API you never read costs nothing.
 - No host API throws before the app interface mounts: reads return their documented defaults (`ctx.layout.ready()` is false), and writes such as `ctx.layout.open` wait, then apply in call order. A dialog `ctx.dialogs.open` opens meanwhile shows after the interface's first render.
-- Points and contracts are tokens: `ctx.add(Command, …)`, `ctx.provide(FileTree, …)`.
+- Registries and contracts are tokens: `ctx.add(Command, …)`, `ctx.provide(FileTree, …)`.
 - Reading a token you did not declare is a compile error. A key that names one token in `provides` and another in `uses` is one too.
 - Bind each contract component with `bindExtension` during the provider's setup so `useExtension` reads the provider's context, not the consumer's. Props retain their getters. Leave data methods such as `Changes.diffs()` unwrapped.
 
@@ -163,7 +163,7 @@ ctx.add(Command, {
 | ------------------------------------------------ | ----------------------------------------------------------------------------------- |
 | `Extension.define(definition)`                   | The manifest, typed so `Setup<typeof definition>` sees the declarations             |
 | `Extension.compose(...definitions)`              | A process's list; rejects repeated extension ids and missing or duplicate providers |
-| `Point.define<T>(id)`                            | A place your extension renders and others contribute to                             |
+| `Registry.define<T>(id)`                         | A list your extension owns and others contribute to                                 |
 | `Contract.define<T, Id>(id)`                     | An in-process API one extension provides to others                                  |
 | `Ipc.define(spec)` / `Ipc.ref<typeof T>(id)`     | The main ↔ window contract, or a reference to it that loads no schemas             |
 | `Store.global` / `Store.session` / `Store.main`  | Declared window state the host loads before you read it, and main state             |
@@ -203,20 +203,20 @@ Each line links to the file whose TSDoc covers every field.
 
 SDK icon fields use `IconName` from `@opencode/ui/icons/catalog`, a dependency-free module with no Solid or CSS imports. The UI renderer reads that same catalog: there is no copied name list or dependency on a UI component's props, and no artwork in the general-purpose util package.
 
-### Points
+### Registries
 
-| Point                               | Process | What an item is                                                                             |
-| ----------------------------------- | ------- | ------------------------------------------------------------------------------------------- |
-| [`Command`](src/sdk/points.ts)      | window  | A palette command with an optional keybind and slash command                                |
-| [`MenuItem`](src/sdk/points.ts)     | window  | An item of a host menu: the side panel + menu, Add server, a server row                     |
-| [`Panel`](src/sdk/points.ts)        | window  | Tabs in the session's side region, or the dock                                              |
-| [`SettingsPage`](src/sdk/points.ts) | window  | A settings page, a section on a host page, or rows in a host section                        |
-| [`Server`](src/sdk/points.ts)       | window  | A source of servers, such as SSH hosts                                                      |
-| [`LinkHandler`](src/sdk/points.ts)  | window  | Opens local links, such as file paths in messages                                           |
-| [`TitlebarItem`](src/sdk/points.ts) | window  | A titlebar pill, or the dev channel badge as a toggle                                       |
-| [`Slot`](src/sdk/points.ts)         | window  | Content for `window.bottom`, `session.header`, `session.panel.end`, `session.panel.sidebar` |
-| [`Style`](src/sdk/points.ts)        | window  | CSS imported with `?inline`                                                                 |
-| [`MenubarItem`](src/sdk/main.ts)    | main    | An item of the native app menu                                                              |
+| Registry                                | Process | What an item is                                                                             |
+| --------------------------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| [`Command`](src/sdk/registries.ts)      | window  | A palette command with an optional keybind and slash command                                |
+| [`MenuItem`](src/sdk/registries.ts)     | window  | An item of a host menu: the side panel + menu, Add server, a server row                     |
+| [`Panel`](src/sdk/registries.ts)        | window  | Tabs in the session's side region, or the dock                                              |
+| [`SettingsPage`](src/sdk/registries.ts) | window  | A settings page, a section on a host page, or rows in a host section                        |
+| [`Server`](src/sdk/registries.ts)       | window  | A source of servers, such as SSH hosts                                                      |
+| [`LinkHandler`](src/sdk/registries.ts)  | window  | Opens local links, such as file paths in messages                                           |
+| [`TitlebarItem`](src/sdk/registries.ts) | window  | A titlebar pill, or the dev channel badge as a toggle                                       |
+| [`Slot`](src/sdk/registries.ts)         | window  | Content for `window.bottom`, `session.header`, `session.panel.end`, `session.panel.sidebar` |
+| [`Style`](src/sdk/registries.ts)        | window  | CSS imported with `?inline`                                                                 |
+| [`MenubarItem`](src/sdk/main.ts)        | main    | An item of the native app menu                                                              |
 
 ### Host APIs
 
@@ -425,7 +425,7 @@ legacy: ["summary"],
 | Gate                       | Where                                                                                                            | Catches                                                                                                                                     |
 | -------------------------- | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
 | Composition compile checks | [`sdk/compose.typecheck.ts`](src/sdk/compose.typecheck.ts), [`builtins.typecheck.ts`](src/builtins.typecheck.ts) | Duplicate extension ids, missing or duplicate providers, wrong-process stores, readonly drafts, panel and slot inputs, no-input Ipc options |
-| Point compile checks       | [`sdk/points.typecheck.ts`](src/sdk/points.typecheck.ts)                                                         | A `MenuItem` field its menu ignores                                                                                                         |
+| Registry compile checks    | [`sdk/registries.typecheck.ts`](src/sdk/registries.typecheck.ts)                                                 | A `MenuItem` field its menu ignores                                                                                                         |
 | Graph matrix               | `packages/app/component-tests/extension-graph.spec.ts`                                                           | A `requires` cycle; a consumer that fails when one optional provider is disabled                                                            |
 | Keeper suites              | `packages/app/e2e/regression/`                                                                                   | What the user sees, per product area                                                                                                        |
 | Unit tests                 | `*.test.ts` beside the code                                                                                      | Pure logic with a contract: paths, migrations, protocols                                                                                    |
@@ -655,7 +655,7 @@ Your own extension takes the same steps:
 
 1. **Pick the id.** It prefixes your commands, panel keys, stored keys and Ipc ids. A later rename needs the migrations under [Stored state](#stored-state).
 2. **Define it.** Create `src/<id>/index.ts` with `Extension.define({ id, i18n: { en } })`, and `src/<id>/i18n/en.ts` with your copy.
-3. **Declare the tokens.** Put any token another extension or your main entry needs in `contract.ts`: a `Contract`, a `Point` or an `Ipc`. Your own tokens go in `provides`. What others provide goes in `uses`, or in `requires` only if the extension is meaningless without it.
+3. **Declare the tokens.** Put any token another extension or your main entry needs in `contract.ts`: a `Contract`, a `Registry` or an `Ipc`. Your own tokens go in `provides`. What others provide goes in `uses`, or in `requires` only if the extension is meaningless without it.
 4. **Write the window entry.** In `renderer.tsx`, a `Setup<typeof definition>` contributes with `ctx.add`, branches each action on `ctx.uses.<name>()`, runs side work in `createKeyed`, and keeps heavy UI behind `lazy()` with an `onIdle` preload.
 5. **Write the main entry, if you need Node or Electron.** In `main.ts`, a `MainSetup<typeof definition>` provides your Ipc with `ctx.provide` and tears down with `ctx.scope.addFinalizer`.
 6. **Declare your state.** Use `Store.global`, `Store.session` or `Store.main`, with a `from` for every older home of the value.

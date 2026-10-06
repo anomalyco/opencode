@@ -26,6 +26,7 @@ import { isProjectDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
 import { sessionHref } from "@/shell/routes/session"
 import { showToast } from "@/shell/notifications/toast"
 import { sessionTitle } from "./title"
+import { SessionWorkingIndicator } from "./header/session-working-indicator"
 import "./session-identity-header.css"
 
 export function SessionTitleHeader(props: ParentProps) {
@@ -253,16 +254,16 @@ export function SessionAncestorTrail(props: {
                 data-slot={ancestor.direct ? "session-title-parent" : "session-title-ancestor"}
                 data-session-id={ancestor.id}
                 title={ancestor.title}
-                dir="auto"
-                class="max-w-[min(200px,40vw)] shrink-0 truncate pl-2 text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
+                class="max-w-[min(200px,40vw)] shrink-0 truncate text-[13px] font-[530] leading-4 tracking-[-0.04px] text-v2-text-text-faint transition-colors hover:text-v2-text-text-muted"
+                classList={{ "ps-1": index() === 0, "ps-2": index() > 0 }}
                 onClick={() => open(props.sessionID, ancestor.id)}
               >
-                {ancestor.title}
+                <bdi dir="auto">{ancestor.title}</bdi>
               </button>
               <Show when={index() < ancestors().length - 1}>
                 <span
                   data-slot="session-title-separator"
-                  class="-translate-y-[0.5px] shrink-0 pl-2 pr-1 text-[11px] font-medium text-v2-text-text-faint"
+                  class="-translate-y-[0.5px] shrink-0 ps-2 pe-1 text-[11px] font-medium text-v2-text-text-faint"
                   aria-hidden="true"
                 >
                   /
@@ -275,7 +276,7 @@ export function SessionAncestorTrail(props: {
       <Show when={props.trailing}>
         <span
           data-slot="session-title-separator"
-          class="-translate-y-[0.5px] shrink-0 pl-2 pr-1 text-[11px] font-medium text-v2-text-text-faint"
+          class="-translate-y-[0.5px] shrink-0 ps-2 pe-1 text-[11px] font-medium text-v2-text-text-faint"
           aria-hidden="true"
         >
           /
@@ -305,7 +306,7 @@ export function useOpenSessionRoute() {
   }
 }
 
-export function SessionIdentityHeader(props: { sessionID: string; session?: SessionInfo }) {
+export function SessionIdentityHeader(props: ParentProps<{ sessionID: string; session?: SessionInfo }>) {
   const server = useServer()
   const tabs = useTabs()
   const language = useLanguage()
@@ -394,7 +395,11 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
                   />
                 )}
               </Show>
-              <Show when={title()}>
+              <Show when={parentID() && props.children}>{props.children}</Show>
+              <Show when={!parentID() || !props.children}>
+                <SessionWorkingIndicator sessionID={props.sessionID} />
+              </Show>
+              <Show when={(!parentID() || !props.children) && title()}>
                 {(value) => (
                   <h1
                     data-slot={parentID() ? "session-title-child" : undefined}
@@ -406,6 +411,7 @@ export function SessionIdentityHeader(props: { sessionID: string; session?: Sess
                   </h1>
                 )}
               </Show>
+              <Show when={!parentID()}>{props.children}</Show>
             </div>
           </div>
         </div>

@@ -15,6 +15,7 @@ export const ServerRowMenu: Component<{
 }> = (props) => {
   const language = useLanguage()
   const key = ServerConnection.key(props.server)
+
   return (
     <ServerRowMenuView
       server={props.server}
@@ -68,6 +69,7 @@ export const ServerRowMenuView: Component<{
 }> = (props) => {
   const builtin = () => ServerConnection.builtin(props.server)
   const httpServer = () => (props.server.type === "http" ? props.server : undefined)
+
   return (
     <Menu gutter={6} modal={false} placement="bottom-end" open={props.open} onOpenChange={props.onOpenChange}>
       <Menu.Trigger
@@ -85,6 +87,7 @@ export const ServerRowMenuView: Component<{
               disabled={builtin() || !httpServer()}
               onSelect={() => {
                 const server = httpServer()
+
                 if (server) props.onEdit(server)
               }}
             >

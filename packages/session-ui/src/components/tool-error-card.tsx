@@ -21,12 +21,15 @@ export interface ToolErrorCardProps extends Omit<ComponentProps<typeof Card>, "c
 
 export function ToolErrorCard(props: ToolErrorCardProps) {
   const i18n = useI18n()
+
   const [state, setState] = createStore({
     open: props.defaultOpen ?? false,
     copied: false,
   })
+
   const open = () => props.open ?? state.open
   const copied = () => state.copied
+
   const [split, rest] = splitProps(props, [
     "tool",
     "error",
@@ -38,12 +41,15 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
     "href",
     "onSubtitleClick",
   ])
+
   const setOpen = (value: boolean) => {
     if (props.open === undefined) setState("open", value)
     props.onOpenChange?.(value)
   }
+
   const name = createMemo(() => {
     if (split.title) return split.title
+
     const map: Record<string, string> = {
       read: "ui.tool.read",
       list: "ui.tool.list",
@@ -57,33 +63,46 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
       patch: "ui.tool.patch",
       question: "ui.tool.questions",
     }
+
     const key = map[split.tool]
+
     if (!key) return split.tool
+
     if (!key.includes(".")) return key
+
     return i18n.t(key)
   })
+
   const cleaned = createMemo(() => split.error.replace(/^Error:\s*/, "").trim())
+
   const tail = createMemo(() => {
     const value = cleaned()
     const prefix = `${split.tool} `
+
     if (value.startsWith(prefix)) return value.slice(prefix.length)
+
     return value
   })
 
   const summary = createMemo(() => {
     const head = (tail().split(": ")[0] ?? "").trim()
+
     if (!head) return i18n.t("ui.toolErrorCard.failed")
+
     return head[0].toUpperCase() + head.slice(1)
   })
 
   const detail = createMemo(() => {
     const parts = tail().split(": ")
+
     if (parts.length <= 1) return ""
+
     return parts.slice(1).join(": ").trim()
   })
 
   const copy = async () => {
     const text = cleaned()
+
     if (!text) return
     await navigator.clipboard.writeText(text)
     setState("copied", true)

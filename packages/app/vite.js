@@ -5,15 +5,20 @@ import tailwindcss from "@tailwindcss/vite"
 import { fileURLToPath } from "url"
 
 const theme = fileURLToPath(new URL("./public/oc-theme-preload.js", import.meta.url))
+
 const themeScript = readFileSync(theme, "utf8")
+
 const tailwind = tailwindcss()
+
 const tailwindGenerate = tailwind.find((plugin) => plugin.name === "@tailwindcss/vite:generate:serve")
+
 const tailwindHotUpdate = tailwindGenerate?.hotUpdate
 
 // Tailwind 4.3.3 expects a server that Vite's bundled dev hook does not provide.
 if (tailwindGenerate && typeof tailwindHotUpdate === "function") {
   tailwindGenerate.hotUpdate = function (context) {
     if (!context.server) return
+
     return tailwindHotUpdate.call(this, context)
   }
 }
@@ -28,6 +33,7 @@ const bundleNestedWorkerDeps = {
   name: "opencode-desktop:bundle-nested-worker-deps",
   resolveId(id, importer) {
     if (!importer || !workerDeps.includes(id) || !importer.includes("node_modules")) return
+
     try {
       return createRequire(importer).resolve(id)
     } catch {
@@ -38,8 +44,11 @@ const bundleNestedWorkerDeps = {
 
 export const channel = (() => {
   const raw = process.env.OPENCODE_CHANNEL
+
   if (raw === "local" || raw === "dev" || raw === "beta" || raw === "prod") return raw
+
   if (process.env.OPENCODE_CHANNEL === "latest") return "prod"
+
   return "dev"
 })()
 

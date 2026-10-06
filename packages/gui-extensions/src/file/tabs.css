@@ -5,6 +5,12 @@
   padding-inline-end: 4px;
 }
 
+/* The pill's padding sets the file icon's inset; the trigger clips anything pulled past its edge. */
+:root body #review-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"] [data-slot="tabs-list"] [data-slot="tabs-trigger-wrapper"][data-value^="file://"]
+{
+  padding-inline-start: 8px;
+}
+
 :root body #review-panel [data-component="tabs"][data-variant="normal"][data-orientation="horizontal"] [data-slot="tabs-list"] [data-slot="tabs-trigger-wrapper"]:is([data-value="file:open"], [data-value^="file://"]) [data-slot="tabs-trigger-close-button"]
 {
   margin-inline-start: 0;

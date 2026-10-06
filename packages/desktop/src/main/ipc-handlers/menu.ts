@@ -10,6 +10,7 @@ export const menuHandlers = MenuRpcs.toLayer(
   Effect.gen(function* () {
     const handoff = yield* IpcPortHandoff
     const lifecycle = yield* ApplicationLifecycle.Service
+
     return MenuRpcs.of({
       MenuRunAction: ({ action }, context) =>
         Effect.sync(() =>

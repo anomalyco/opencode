@@ -32,6 +32,7 @@ describe("isWorkspaceDirectory", () => {
   })
 
   const root = "C:/OpenCode/WorkspaceAccent"
+
   const inventoried = withWorktreeInventory(
     normalizeProjectInfo({
       id: "project",
@@ -162,6 +163,7 @@ test("reports every workspace deletion condition", () => {
 test("groups nested non-archived workspace sessions by latest activity", () => {
   const session = (id: string, directory: string, updated: number, archived?: number) =>
     ({ id, location: { directory }, time: { created: 1, updated, archived } }) as SessionInfo
+
   const sessions = sessionsForWorkspace(
     [
       session("old", "/workspace", 2),
@@ -171,6 +173,7 @@ test("groups nested non-archived workspace sessions by latest activity", () => {
     ],
     "/workspace",
   )
+
   expect(sessions.map((item) => item.id)).toEqual(["nested", "old"])
 })
 

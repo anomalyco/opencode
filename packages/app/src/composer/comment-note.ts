@@ -10,9 +10,11 @@ export type PromptFileComment = {
   preview?: string
   origin?: "review" | "file"
 }
+
 export type PromptComment = PromptFileComment | NoteComment
 
 const decodeNoteComment = Schema.decodeUnknownOption(NoteComment)
+
 const decodeLegacyBrowserNote = Schema.decodeUnknownOption(LegacyBrowserNote)
 
 /** An attachment the model receives as a path on the server rather than inline bytes. */
@@ -28,7 +30,9 @@ function selection(selection: unknown) {
   const startChar = Number((selection as FileSelection).startChar)
   const endLine = Number((selection as FileSelection).endLine)
   const endChar = Number((selection as FileSelection).endChar)
+
   if (![startLine, startChar, endLine, endChar].every(Number.isFinite)) return undefined
+
   return {
     startLine,
     startChar,
@@ -52,12 +56,15 @@ export function createCommentMetadata(input: PromptFileComment) {
 export function readCommentMetadata(value: unknown) {
   if (!value || typeof value !== "object") return
   const meta = (value as { opencodeComment?: unknown }).opencodeComment
+
   if (!meta || typeof meta !== "object") return
   const path = (meta as { path?: unknown }).path
   const comment = (meta as { comment?: unknown }).comment
+
   if (typeof path !== "string" || typeof comment !== "string") return
   const preview = (meta as { preview?: unknown }).preview
   const origin = (meta as { origin?: unknown }).origin
+
   return {
     path,
     selection: selection((meta as { selection?: unknown }).selection),
@@ -71,8 +78,10 @@ export function readPromptPresentation(value: unknown) {
   if (!value || typeof value !== "object") return
   const displayText = (value as { displayText?: unknown }).displayText
   const comments = (value as { comments?: unknown }).comments
+
   if (typeof displayText !== "string" || !Array.isArray(comments)) return
   const attachments = (value as { attachments?: unknown }).attachments
+
   return {
     displayText,
     attachments: (Array.isArray(attachments) ? attachments : []).flatMap((item): PromptAttachmentReference[] => {
@@ -80,18 +89,24 @@ export function readPromptPresentation(value: unknown) {
       const name = (item as { name?: unknown }).name
       const mime = (item as { mime?: unknown }).mime
       const path = (item as { path?: unknown }).path
+
       if (typeof name !== "string" || typeof mime !== "string" || typeof path !== "string") return []
+
       return [{ name, mime, path }]
     }),
     comments: comments.flatMap((item): PromptComment[] => {
       if (!item || typeof item !== "object") return []
+
       if ((item as { type?: unknown }).type === "note") return Option.toArray(decodeNoteComment(item))
+
       if ((item as { type?: unknown }).type === "browser") return Option.toArray(decodeLegacyBrowserNote(item))
       const path = (item as { path?: unknown }).path
       const comment = (item as { comment?: unknown }).comment
+
       if (typeof path !== "string" || typeof comment !== "string") return []
       const preview = (item as { preview?: unknown }).preview
       const origin = (item as { origin?: unknown }).origin
+
       return [
         {
           path,
@@ -118,6 +133,7 @@ export function formatNoteComment(input: NoteComment) {
 export function commentContextItem(comment: PromptComment): ContextItem {
   // The message may predate this app process, so a note's live references can no longer be trusted.
   if (comment.type === "note") return { ...durableNote(comment), commentID: crypto.randomUUID() }
+
   return {
     type: "file",
     path: comment.path,
@@ -131,12 +147,14 @@ export function commentContextItem(comment: PromptComment): ContextItem {
 export function formatCommentNote(input: { path: string; selection?: FileSelection; comment: string }) {
   const start = input.selection ? Math.min(input.selection.startLine, input.selection.endLine) : undefined
   const end = input.selection ? Math.max(input.selection.startLine, input.selection.endLine) : undefined
+
   const range =
     start === undefined || end === undefined
       ? "this file"
       : start === end
         ? `line ${start}`
         : `lines ${start} through ${end}`
+
   return `The user made the following comment regarding ${range} of ${input.path}: ${input.comment}`
 }
 
@@ -144,9 +162,11 @@ export function parseCommentNote(text: string) {
   const match = text.match(
     /^The user made the following comment regarding (this file|line (\d+)|lines (\d+) through (\d+)) of (.+?): ([\s\S]+)$/,
   )
+
   if (!match) return
   const start = match[2] ? Number(match[2]) : match[3] ? Number(match[3]) : undefined
   const end = match[2] ? Number(match[2]) : match[4] ? Number(match[4]) : undefined
+
   return {
     path: match[5],
     selection:

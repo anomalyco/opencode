@@ -24,6 +24,7 @@ test("wslArgs bypasses the distro default shell", () => {
 // Exercise the real wsl.exe argv path: with `--`, WSL routes the command line through the distro's
 // default shell, which expands `$cli` to "" before `sh` runs the script (#48640).
 const runtime = createWslRuntime((key) => key)
+
 const distro =
   process.platform === "win32" && (await runtime.probeRuntime()).available
     ? (await runtime.listInstalled().catch(() => [])).find((item) => item.isDefault)?.name

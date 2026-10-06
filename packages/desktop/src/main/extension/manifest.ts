@@ -2,6 +2,7 @@ import { Schema } from "effect"
 import { ExtensionError } from "./error"
 
 const text = (maximum: number) => Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(maximum))
+
 const path = text(1_024)
 
 /** `manifest.json` at the root of an installed extension archive. */
@@ -21,6 +22,7 @@ export const Manifest = Schema.Struct({
     main: Schema.optionalKey(Schema.Array(Schema.String)),
   }),
 })
+
 export type Manifest = typeof Manifest.Type
 
 export const decodeManifest = Schema.decodeUnknownOption(Schema.fromJsonString(Manifest))
@@ -36,5 +38,6 @@ export function archivePath(value: string) {
     value.split("/").some((part) => !part || part === "." || part === "..")
   )
     throw new ExtensionError("invalidPath")
+
   return value
 }

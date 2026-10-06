@@ -104,23 +104,29 @@ const parts = steps.flatMap<ContextGroupPart>((step, index) => {
         time: { created: STORY_TIME, completed: STORY_TIME + step.thought * 1000 },
       },
     ]
+
   if ("shell" in step)
     return [storyTool(`read_group_shell_${index}`, "shell", "completed", { command: step.shell }, { output: "ok" })]
+
   return step.map((read, item) => {
     const [path, args] = typeof read === "string" ? [read, {}] : read
+
     return storyTool(`read_group_read_${index}_${item}`, "read", "completed", { path, ...args })
   })
 })
 
 const content = parts.flatMap<SessionMessageAssistant["content"][number]>((part) => {
   if (part.type === "tool") return [part]
+
   if (part.type === "reasoning") return [{ type: "reasoning", text: part.text, time: part.time }]
+
   return []
 })
 
 export const UsedGroup = {
   render: (args: { width: number }) => {
     const [open, setOpen] = createSignal(true)
+
     return (
       <section style={{ width: "100%", "max-width": `${args.width}px`, padding: "16px" }}>
         <CurrentSessionProviders document={storyDocument(content)}>
@@ -134,6 +140,7 @@ export const UsedGroup = {
 export const WithoutUsedGroup = {
   render: (args: { width: number }) => {
     const document = storyDocument(content)
+
     return (
       <section style={{ width: "100%", "max-width": `${args.width}px`, padding: "16px" }}>
         <CurrentSessionProviders document={document}>

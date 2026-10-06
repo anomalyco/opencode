@@ -115,6 +115,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
     draftElement: lineCommentDraftElementV2,
     renderComment: (comment) => {
       const edit = () => note.openEditor(comment.id, comment.selection, comment.comment)
+
       const remove = () => {
         note.reset()
         props.onDelete?.(comment)
@@ -185,6 +186,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
     label: props.label,
     getSelectedRange: () => {
       if (note.opened()) return null
+
       return note.selected()
     },
     onOpenDraft: note.openDraft,
@@ -194,6 +196,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
     if (!range) {
       note.select(null)
       note.cancelDraft()
+
       return
     }
 
@@ -203,6 +206,7 @@ export function createLineCommentControllerV2<T extends LineCommentShape>(props:
   const onLineSelectionEnd = (range: SelectedLineRange | null) => {
     if (!range) {
       note.cancelDraft()
+
       return
     }
 

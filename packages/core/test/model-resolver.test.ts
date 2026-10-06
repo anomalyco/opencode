@@ -1092,6 +1092,7 @@ describe("ModelResolver", () => {
         ["@ai-sdk/openai-compatible", "@opencode/ai/providers/openai-compatible", "api-model"],
         ["@openrouter/ai-sdk-provider", "@opencode/ai/providers/openrouter", "api-model"],
         ["@ai-sdk/togetherai", "@opencode/ai/providers/togetherai", "api-model"],
+        ["@ai-sdk/gateway", "@opencode/ai/providers/vercel-ai-gateway", "openai/gpt-5.4"],
         ["@ai-sdk/xai", "@opencode/ai/providers/xai", "api-model"],
         ["ai-gateway-provider", "@opencode/ai/providers/cloudflare-ai-gateway", "xai/grok-4.6"],
       ] as const

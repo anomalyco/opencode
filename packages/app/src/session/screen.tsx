@@ -34,6 +34,7 @@ import { TimelineSearchBar } from "./timeline/search-bar"
 import { ActiveSessionComposerRegion, createActiveSessionRegion } from "./composer/region"
 import { SessionIdentityHeader } from "./session-identity-header"
 import { SessionReviewToggle } from "./header/session-header-actions"
+import { SessionRunningMenu } from "./header/session-running-menu"
 import { createAnimatedPresence } from "@/runtime/animated-presence"
 import { createTimelineCache } from "./timeline/cache"
 
@@ -333,7 +334,15 @@ function SessionScreenContent(props: {
           </Match>
           <Match when={session.identity.params.id}>
             <Show when={isDesktop() && !messagesReady()}>
-              <SessionIdentityHeader sessionID={session.identity.params.id ?? ""} session={session.data.info()} />
+              <SessionIdentityHeader sessionID={session.identity.params.id ?? ""} session={session.data.info()}>
+                <SessionRunningMenu
+                  sessionID={session.identity.params.id}
+                  owner={composer.requests.background.running.sessionID()}
+                  blocking={composer.requests.background.running.blocking()}
+                  tasks={composer.requests.background.running.tasks()}
+                  title={session.data.parentID() ? session.data.info()?.title : undefined}
+                />
+              </SessionIdentityHeader>
             </Show>
             <Show when={messagesReady() && session.identity.params.id}>{timelineView()}</Show>
           </Match>

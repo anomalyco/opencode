@@ -11,6 +11,7 @@ export function useIntegrations(directory: Accessor<string | undefined>) {
     const value = directory()
     void (async () => {
       const ref = value ? { directory: value } : undefined
+
       if (!ref) await data.location.syncInfo()
       await data.location.integration.sync(ref ?? data.location.default())
     })().catch(() => undefined)
@@ -18,6 +19,7 @@ export function useIntegrations(directory: Accessor<string | undefined>) {
 
   const location = () => {
     const value = directory()
+
     return value ? { directory: value } : undefined
   }
 

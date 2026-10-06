@@ -126,7 +126,7 @@ export const { use: useSessionTabs, provider: SessionTabsProvider } = createSimp
     const family = (sessionID: string) => {
       const session = root(sessionID)
       const members = data.session.family(session)
-      return members.length > 0 ? members : [session]
+      return members.includes(session) ? members : [session, ...members]
     }
     const normalize = (value: TabsState) => ({
       tabs: value.tabs.reduce<SessionTab[]>((tabs, tab) => {

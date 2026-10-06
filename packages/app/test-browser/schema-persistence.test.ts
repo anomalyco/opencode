@@ -11,7 +11,9 @@ const Current = Schema.Struct({
   enabled: Schema.Boolean,
   label: Schema.String,
 })
+
 const initial = { enabled: true, label: "default" }
+
 const Stored = Persistence.migrate(
   Current,
   Schema.Struct({ oldLabel: Schema.optional(Schema.String), label: Schema.optional(Schema.String) }).pipe(
@@ -33,6 +35,7 @@ const web: Platform = {
 
 function desktop() {
   const values = new Map<string, string>()
+
   const platform: Platform = {
     ...web,
     platform: "desktop",
@@ -44,6 +47,7 @@ function desktop() {
       removeItem: async (key) => void values.delete(`${name}:${key}`),
     }),
   }
+
   return { values, platform }
 }
 
@@ -54,6 +58,7 @@ describe("schema-backed persistence", () => {
     localStorage.setItem(key, JSON.stringify({ key: "session-tab" }))
     createRoot((dispose) => {
       const [state, setState] = persisted(target, TabStorage.Recent, { key: undefined }, web)
+
       try {
         expect(state.key).toBe("session-tab")
         setState("key", undefined)
@@ -109,6 +114,7 @@ describe("schema-backed persistence", () => {
   test("relocates and canonicalizes desktop state before becoming ready", async () => {
     const storage = desktop()
     storage.values.set("undefined:old-schema", JSON.stringify({ oldLabel: "desktop" }))
+
     const root = createRoot((dispose) => ({
       dispose,
       state: persisted(
@@ -118,6 +124,7 @@ describe("schema-backed persistence", () => {
         storage.platform,
       ),
     }))
+
     try {
       expect(root.state[3]()).toBe(false)
       await root.state[3].promise
@@ -146,10 +153,12 @@ describe("schema-backed persistence", () => {
       setItem: async () => undefined,
       removeItem: async () => undefined,
     })
+
     const root = createRoot((dispose) => ({
       dispose,
       state: persisted(Persist.global("schema-late"), Stored, initial, storage.platform),
     }))
+
     try {
       root.state[1]("label", "new edit")
       pending.resolve(JSON.stringify({ oldLabel: "old state" }))
@@ -167,6 +176,7 @@ describe("schema-backed persistence", () => {
     const direct = "schema-storage-direct"
     const values = new Map<string, string>()
     const attempts: string[] = []
+
     const storage: Storage = {
       get length() {
         return values.size
@@ -176,22 +186,28 @@ describe("schema-backed persistence", () => {
       getItem: (key) => values.get(key) ?? null,
       setItem: (key, value) => {
         attempts.push(key)
+
         if (key.startsWith(`${full.storage}:`)) throw new DOMException("quota", "QuotaExceededError")
+
         if (key.startsWith(`${failing.storage}:`)) throw new Error("storage set failed")
         values.set(key, value)
       },
       removeItem: (key) => void values.delete(key),
     }
+
     const original = Object.getOwnPropertyDescriptor(globalThis, "localStorage")!
     Object.defineProperty(globalThis, "localStorage", { value: storage, configurable: true })
+
     try {
       createRoot((dispose) => {
         const [, setFull] = persisted(full, Current, initial, web)
         const [, setFailing] = persisted(failing, Current, initial, web)
+
         const count = () => ({
           full: attempts.filter((key) => key === `${full.storage}:${full.key}`).length,
           failing: attempts.filter((key) => key === `${failing.storage}:${failing.key}`).length,
         })
+
         setFull("label", "full")
         setFailing("label", "first")
         flushPersisted()
@@ -230,14 +246,18 @@ describe("schema-backed persistence", () => {
     const channel = new BroadcastChannel(`opencode.persist:${target.storage}:${target.key}`)
     const received = Promise.withResolvers<void>()
     const values: unknown[] = []
+
     const root = createRoot((dispose) => {
       const [state] = persisted(target, Stored, initial, web)
       createComputed(() => {
         values.push({ enabled: state.enabled, label: state.label })
+
         if (state.label === "from another window") received.resolve()
       })
+
       return { dispose, state }
     })
+
     try {
       channel.postMessage({ key: target.key, newValue: JSON.stringify({ enabled: "false", label: "recovered" }) })
       channel.postMessage({ key: target.key, newValue: JSON.stringify({ oldLabel: "from another window" }) })

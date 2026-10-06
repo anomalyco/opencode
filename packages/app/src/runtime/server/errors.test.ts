@@ -5,9 +5,12 @@ import { formatServerError, isSessionNotFoundError, parseReadableConfigInvalidEr
 
 function fill(text: string, vars?: Record<string, string | number>) {
   if (!vars) return text
+
   return text.replace(/{{\s*(\w+)\s*}}/g, (_, key: string) => {
     const value = vars[key]
+
     if (value === undefined) return ""
+
     return String(value)
   })
 }
@@ -21,10 +24,13 @@ function useLanguageMock() {
     "error.chain.didYouMean": "Voce quis dizer: {{suggestions}}",
     "error.chain.checkConfig": "Revise provider/model no config",
   }
+
   return {
     t(key: string, vars?: Record<string, string | number>) {
       const text = dict[key]
+
       if (!text) return key
+
       return fill(text, vars)
     },
   }

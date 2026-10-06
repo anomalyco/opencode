@@ -1,4 +1,4 @@
-// Type-level contract of the points, checked by `bun typecheck`. Nothing imports this file. Each `@ts-expect-error`
+// Type-level contract of the registries, checked by `bun typecheck`. Nothing imports this file. Each `@ts-expect-error`
 // fails the typecheck if its line stops being an error.
 import { Extension, MenuItem, TitlebarItem, type Setup } from "./index"
 

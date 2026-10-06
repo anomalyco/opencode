@@ -64,6 +64,7 @@ export const Default = {
 export const Editor = {
   render: () => {
     const [value, setValue] = createSignal("Add context for this change.")
+
     return (
       <div
         style={{
