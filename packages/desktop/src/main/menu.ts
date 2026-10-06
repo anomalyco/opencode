@@ -19,7 +19,22 @@ type Deps = {
 }
 
 export function createMenu(deps: Deps) {
-  if (process.platform !== "darwin") return
+  if (process.platform !== "darwin") {
+    // Electron installs a default application menu while none is set, and its window
+    // menu binds the `close` role to CommandOrControl+W, which closes the whole window
+    // before the renderer's `tab.close` (mod+w) keybind can run. The menu bar is hidden
+    // on Windows/Linux (see `autoHideMenuBar`), so this exists only for the other
+    // accelerators; reinstall an equivalent menu without the window-close accelerator.
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        { role: "fileMenu" },
+        { role: "editMenu" },
+        { role: "viewMenu" },
+        { label: nativeT("desktop.menu.window"), submenu: [{ role: "minimize" }] },
+      ]),
+    )
+    return
+  }
 
   const template = DESKTOP_MENU.filter((menu) => desktopMenuVisible(menu, "macos")).map((menu) => {
     if (menu.role) return { role: nativeRole(menu.role), label: nativeT(menu.labelKey) }
