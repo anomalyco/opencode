@@ -10,7 +10,7 @@ import { isPairingConnectURL } from "@opencode/protocol/groups/server"
 import { Global } from "@opencode/util/global"
 import { Cause, Context, Effect, Exit, Latch, Layer, Option, Ref, Scope } from "effect"
 import { HttpMiddleware, HttpRouter, HttpServer, HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
-import { createServer } from "node:http"
+import { createServer, type Server } from "node:http"
 import { ServerAuth } from "./auth"
 import { isAllowedCorsOrigin } from "./cors"
 import { authorizedRequest, unauthorizedResponse } from "./middleware/authorization"
@@ -150,6 +150,7 @@ function bind(hostname: string, port: number) {
     const parentScope = yield* Scope.Scope
     const serverScope = yield* Scope.fork(parentScope)
     const server = createServer()
+    bridgeSseDisconnect(server)
     return yield* Effect.gen(function* () {
       const http = yield* NodeHttpServer.make(() => server, { port, host: hostname })
       yield* Effect.addFinalizer(() => Effect.sync(() => server.closeAllConnections()))
@@ -158,6 +159,22 @@ function bind(hostname: string, port: number) {
       Effect.provideService(Scope.Scope, serverScope),
       Effect.onError((cause) => Scope.close(serverScope, Exit.failCause(cause))),
     )
+  })
+}
+
+/**
+ * Bun 1.3.14 does not emit `ServerResponse` "close" when an SSE client disconnects
+ * (oven-sh/bun#14697). `@effect/platform-node` waits for that event to interrupt the request fiber,
+ * so the server-side event stream stays alive writing heartbeats into a dead socket, pinning one CPU
+ * core and making the server unresponsive (issue #36311). Destroying the response from the request
+ * "aborted" event makes Bun emit the missing "close" so Effect can release the stream.
+ */
+export function bridgeSseDisconnect(server: Server) {
+  if (typeof process.versions.bun !== "string") return
+  server.on("request", (request, response) => {
+    request.once("aborted", () => {
+      if (!response.writableEnded && !response.destroyed) response.destroy()
+    })
   })
 }
 
