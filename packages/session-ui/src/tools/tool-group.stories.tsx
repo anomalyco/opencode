@@ -14,6 +14,7 @@ export default {
 export const MixedTools = {
   render: () => {
     const [open, setOpen] = createSignal(true)
+
     const tools = [
       storyTool(
         "group_shell",
@@ -26,6 +27,7 @@ export const MixedTools = {
       storyTool("group_general", "subagent", "completed", { agent: "general", description: "Inspect grouped tools" }),
       storyTool("group_explore", "subagent", "completed", { agent: "explore", description: "Check card geometry" }),
     ]
+
     return (
       <section style={{ width: "100%", "max-width": "720px", padding: "24px" }}>
         <CurrentSessionProviders document={storyDocument(tools)}>
@@ -40,6 +42,7 @@ export const NoticesOnly = {
   render: () => {
     const [open, setOpen] = createStore({ tools: false, notices: false })
     const tools = [storyTool("notice_read", "read", "completed", { path: "AGENTS.md" })]
+
     return (
       <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
         <CurrentSessionProviders document={storyDocument(tools)}>
@@ -68,6 +71,7 @@ export const MixedReasoning = {
   render: (args: { reasoningDefaultOpen: boolean }) => {
     const [open, setOpen] = createSignal(true)
     const [appended, setAppended] = createSignal(false)
+
     const parts = createMemo<ContextGroupPart[]>(() => [
       storyTool("reasoning_read", "read", "completed", { path: "src/group.ts" }),
       {
@@ -85,6 +89,7 @@ export const MixedReasoning = {
       storyTool("reasoning_skill_third", "skill", "completed", { id: "rtl-aware-development" }),
       ...(appended() ? [storyTool("reasoning_read_next", "read", "completed", { path: "src/group.test.ts" })] : []),
     ])
+
     return (
       <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">
         <button type="button" onClick={() => setAppended((value) => !value)}>
@@ -113,11 +118,13 @@ const stickyCommands = [
   'git show 09c318094c:packages/app/src/session/review/model.ts | Select-String "ChangeMode ="',
   "git show 09c318094c:packages/app/src/session/review/model.ts | Select-String -Pattern 'turn' -Context 0,0",
 ]
+
 const stickySource = (lines: number, changed: boolean) =>
   Array.from(
     { length: lines },
     (_, index) => `export const value${index} = ${changed && index % 3 === 0 ? index + 1 : index}\n`,
   ).join("")
+
 const stickyParts: ContextGroupPart[] = [
   storyTool("sticky_write", "write", "completed", { path: "graph.js", content: stickySource(137, false) }),
   ...Array.from({ length: 36 }, (_, index): ContextGroupPart[] => [
@@ -162,6 +169,7 @@ export const StickyHeader = {
   argTypes: { height: { control: { type: "range", min: 320, max: 1200, step: 20 } } },
   render: (args: { height: number }) => {
     const [state, setState] = createStore({ open: true, files: {} as Record<string, boolean> })
+
     return (
       <section
         data-story="sticky-header-scroll"
@@ -198,6 +206,7 @@ export const PatchFollowUps = {
   argTypes: { separator: { control: "select", options: ["none", "shell", "error", "reasoning"] } },
   render: (args: { separator: string }) => {
     const [state, setState] = createStore({ phase: "initial", open: true, reasoning: true })
+
     const file = (path: string, before: number, after: number) => ({
       file: path,
       status: "modified",
@@ -213,6 +222,7 @@ export const PatchFollowUps = {
         { context: Infinity },
       ),
     })
+
     const parts = createMemo<ContextGroupPart[]>(() => [
       storyTool("patch_shell", "shell", "completed", { command: "printf checked" }, { output: "checked" }),
       storyTool(
@@ -253,6 +263,7 @@ export const PatchFollowUps = {
             ),
           ]),
     ])
+
     return (
       <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">
         <div class="flex flex-wrap gap-3">

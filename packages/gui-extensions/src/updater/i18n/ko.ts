@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "업데이트 준비 완료",
   "dialog.restart": "다시 시작",
   "dialog.later": "나중에",
+  "releaseNotes.action.getStarted": "시작하기",
+  "releaseNotes.action.next": "다음",
+  "releaseNotes.action.hideFuture": "다시 보지 않기",
+  "releaseNotes.media.alt": "릴리스 미리보기",
 }

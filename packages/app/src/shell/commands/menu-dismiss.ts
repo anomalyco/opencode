@@ -20,10 +20,13 @@ export function createMenuDismissController(content: () => HTMLElement | undefin
       const complete = () => {
         if (content()?.isConnected) {
           requestAnimationFrame(complete)
+
           return
         }
+
         requestAnimationFrame(() => requestAnimationFrame(callback))
       }
+
       requestAnimationFrame(complete)
     },
   }

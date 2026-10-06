@@ -4,8 +4,10 @@ import { nativeImage } from "electron"
 // pixels outside the bottom arcs; never resize or style the page itself.
 export function createCornerImages(color: readonly [number, number, number, number], radius: number, scale: number) {
   const size = Math.max(1, Math.round(radius * scale))
+
   return [false, true].map((right) => {
     const pixels = Buffer.alloc(size * size * 4)
+
     for (let y = 0; y < size; y++) {
       for (let x = 0; x < size; x++) {
         const distance = Math.hypot(right ? x + 0.5 : size - x - 0.5, y + 0.5)
@@ -18,6 +20,7 @@ export function createCornerImages(color: readonly [number, number, number, numb
         pixels[offset + 3] = alpha
       }
     }
+
     return nativeImage.createFromBitmap(pixels, { width: size, height: size, scaleFactor: scale })
   })
 }

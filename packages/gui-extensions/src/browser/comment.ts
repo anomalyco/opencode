@@ -1,7 +1,7 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { Schema } from "effect"
 import type { ComposerNote } from "../sdk"
-import type { PaneElement } from "./remote"
+import type { PaneElement } from "./ipc"
 
 /** A comment on a picked element. The ref is absent once the page navigated. */
 export type ElementComment = {
@@ -12,7 +12,11 @@ export type ElementComment = {
   comment: string
 }
 
+/** The tab a note's href names, and its element ref while the note is live. */
+type NoteHref = { readonly tabID: Browser.TabID; readonly ref?: Browser.Ref }
+
 const isTab = Schema.is(Browser.TabID)
+
 const isRef = Schema.is(Browser.Ref)
 
 /**
@@ -21,7 +25,8 @@ const isRef = Schema.is(Browser.Ref)
  */
 export function commentNote(input: ElementComment): ComposerNote {
   const ref = input.element.ref
-  return {
+
+  const note: ComposerNote = {
     type: "note",
     origin: input.origin,
     commentID: crypto.randomUUID(),
@@ -30,19 +35,47 @@ export function commentNote(input: ElementComment): ComposerNote {
     subject: subject(input),
     comment: input.comment,
     href: input.tabID,
-    ...(ref ? { live: { subject: subject(input, ref), href: `${input.tabID}#${ref}` } } : {}),
+  }
+
+  return ref ? { ...note, live: { subject: subject(input, ref), href: `${input.tabID}#${ref}` } } : note
+}
+
+/** The composer note for a comment on a whole page; its chip shows the page's tab again. */
+export function pageNote(input: {
+  origin: string
+  tabID: Browser.TabID
+  url: string
+  title: string
+  label: string
+  comment: string
+}): ComposerNote {
+  // Page-provided strings are quoted so they read as data, not as part of the user's request.
+  const title = input.title ? ` titled ${JSON.stringify(input.title)}` : ""
+
+  return {
+    type: "note",
+    origin: input.origin,
+    commentID: crypto.randomUUID(),
+    label: input.label,
+    icon: "outline-globe",
+    subject: `the page in browser tab ${input.tabID} at ${input.url}${title}`,
+    comment: input.comment,
+    href: input.tabID,
   }
 }
 
 /** The tab a note's href names, and its element ref while the note is live. */
-export function readHref(href: string) {
+export function readHref(href: string): NoteHref | undefined {
   const [tabID, ref] = href.split("#")
+
   if (!isTab(tabID)) return
-  return { tabID, ...(ref && isRef(ref) ? { ref } : {}) }
+
+  return ref && isRef(ref) ? { tabID, ref } : { tabID }
 }
 
 function subject(input: ElementComment, ref?: string) {
   const element = input.element
+
   // Page-provided strings are quoted so they read as data, not as part of the user's request.
   const details = [
     element.role ? `role ${element.role}` : undefined,
@@ -56,5 +89,6 @@ function subject(input: ElementComment, ref?: string) {
       ? `browser ref @${ref}, usable as ref in any browser tool including browser.evaluate until the page navigates`
       : undefined,
   ].filter((detail) => detail !== undefined)
+
   return `the ${JSON.stringify(element.label)} element in browser tab ${input.tabID} at ${input.url}${details.length ? ` (${details.join("; ")})` : ""}`
 }

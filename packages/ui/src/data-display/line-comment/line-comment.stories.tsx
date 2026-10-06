@@ -64,6 +64,7 @@ export const DisplayWithoutActions = {
 export const Editor = {
   render: () => {
     const [value, setValue] = createSignal("")
+
     return (
       <div style={{ width: "400px" }}>
         <LineCommentEditor
@@ -81,6 +82,7 @@ export const Editor = {
 export const EditorFilled = {
   render: () => {
     const [value, setValue] = createSignal("Use a sentinel or early return when the list is empty.")
+
     return (
       <div style={{ width: "400px" }}>
         <LineCommentEditor

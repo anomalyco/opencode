@@ -5,6 +5,7 @@ import { createComposerSubmission } from "@/composer/submission-state"
 describe("prompt submission state", () => {
   test("keeps failed submission restoration with the prompt where it started", () => {
     const target = createMemoryComposerState()
+
     const submission = createComposerSubmission({
       target,
       prompt: [{ type: "text", content: "prompt-A", start: 0, end: 8 }],
@@ -21,6 +22,7 @@ describe("prompt submission state", () => {
   test("moves first-submit restoration and context to the promoted session", () => {
     const draft = createMemoryComposerState()
     const session = createMemoryComposerState()
+
     const submission = createComposerSubmission({
       target: draft,
       prompt: [{ type: "text", content: "first prompt", start: 0, end: 12 }],
@@ -42,6 +44,7 @@ describe("prompt submission state", () => {
     const workspace = createMemoryComposerState()
     const session = createMemoryComposerState()
     workspace.set([{ type: "text", content: "first prompt", start: 0, end: 12 }])
+
     const submission = createComposerSubmission({
       target: workspace,
       prompt: workspace.current(),
@@ -58,6 +61,7 @@ describe("prompt submission state", () => {
   test("does not restore over a prompt edited after submission", () => {
     const target = createMemoryComposerState()
     target.set([{ type: "text", content: "submitted", start: 0, end: 9 }])
+
     const submission = createComposerSubmission({
       target,
       prompt: target.current(),

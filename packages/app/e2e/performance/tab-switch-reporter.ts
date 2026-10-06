@@ -31,20 +31,24 @@ export default class TabSwitchReporter implements Reporter {
 
   async onEnd(result: FullResult) {
     const file = path.join(this.output, "tab-switch-benchmark.jsonl")
+
     try {
       await mkdir(this.output, { recursive: true })
       await writeFile(file, this.results.flatMap((entry) => entry.records.map((raw) => `${raw}\n`)).join(""), "utf8")
     } catch (error) {
       console.error("Could not save tab-switch benchmark records:", error)
+
       return { status: "failed" as const }
     }
 
     console.log(`\nTab-switch benchmark: ${result.status}`)
     Array.from(new Set(this.tests.map((test) => test.title))).forEach((name) => {
       const results = this.results.filter((entry) => entry.test.title === name)
+
       const unrun = this.tests.filter(
         (test) => test.title === name && !results.some((entry) => entry.test.id === test.id),
       ).length
+
       const records = results.flatMap((entry) =>
         entry.records.map((raw) => {
           try {
@@ -54,7 +58,9 @@ export default class TabSwitchReporter implements Reporter {
           }
         }),
       )
+
       const passed = records.filter((entry) => entry.status === "passed" && entry.record?.status === "passed")
+
       const valid = passed
         .map((entry) => ({
           firstCorrectObservedMs: entry.record?.metrics?.firstCorrectObservedMs,
@@ -77,10 +83,13 @@ export default class TabSwitchReporter implements Reporter {
       )
       ;(["firstCorrectObservedMs", "stableObservedMs"] as const).forEach((metric) => {
         const values = valid.map((entry) => entry[metric]).sort((a, b) => a - b)
+
         if (values.length === 0) {
           console.log(`  ${metric}: n=0, median=n/a, p95=n/a`)
+
           return
         }
+
         const median = (values[Math.floor((values.length - 1) / 2)] + values[Math.floor(values.length / 2)]) / 2
         const p95 = values[Math.ceil(values.length * 0.95) - 1]
         console.log(`  ${metric}: n=${values.length}, median=${median.toFixed(2)} ms, p95=${p95.toFixed(2)} ms`)

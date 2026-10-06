@@ -25,6 +25,7 @@ export const SettingsServerGeneral: Component<{
   const language = useLanguage()
   const controller = useServerCollectionController()
   const health = createMemo(() => controller.collection.health()[props.entry.key])
+
   const edit = (server: ServerConnection.Http) =>
     void dialog.push(() => <DialogServer mode="edit" server={server} onSave={props.onServerChange} />)
 
@@ -95,6 +96,7 @@ export const SettingsServerGeneral: Component<{
 function ServerShell(props: { server: ServerConnection.Any }) {
   const language = useLanguage()
   const controller = createServerShellController(() => props.server)
+
   return (
     <section class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.tab.preferences")}</h3>

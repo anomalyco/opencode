@@ -321,10 +321,6 @@ export const dict = {
   "dialog.project.edit.color.select": "Vyberte farbu {{color}}",
   "dialog.project.edit.worktree.startup": "Štartovací skript pracovného priestoru",
   "dialog.project.edit.worktree.startup.placeholder": "napr. bun install",
-  "dialog.releaseNotes.action.getStarted": "Začať",
-  "dialog.releaseNotes.action.next": "Ďalej",
-  "dialog.releaseNotes.action.hideFuture": "Nabudúce nezobrazovať",
-  "dialog.releaseNotes.media.alt": "Ukážka vydania",
   "toast.permissions.autoaccept.on.title": "Automatické schvaľovanie povolení",
   "toast.permissions.autoaccept.on.description": "Žiadosti o povolenie budú automaticky schválené",
   "toast.permissions.autoaccept.off.title": "Automatické schvaľovanie povolení zastavené",
@@ -739,7 +735,6 @@ export const dict = {
   "session.view.select": "Zobrazenie relácie",
   "session.background.moveRunning": "Presun na pozadie",
   "session.timeline.working": "Pracuje",
-  "session.review.wrapLines": "Zalamovať riadky",
   "session.websearch.title": "Webové vyhľadávanie tretích strán",
   "session.websearch.description":
     "Vyberte poskytovateľa vyhľadávania, ktorého agenti používajú na vyhľadávanie na webe",
@@ -799,8 +794,6 @@ export const dict = {
   "settings.timeline.category.subagents": "subagenty",
   "settings.timeline.category.notices": "Oznámenia",
   "settings.timeline.category.tools": "Ostatné náradie",
-  "settings.general.row.mobileDiffWrap.description":
-    "Zabaľte dlhé riadky do mobilných rozdielov namiesto vodorovného posúvania",
   "provider.connect.error.unsupportedFields": "Tento overovací formulár obsahuje nepodporované polia",
   "settings.about.writtenByNames": "Napísal {{names}}",
   "settings.about.illustratedByNames": "Ilustroval {{names}}",

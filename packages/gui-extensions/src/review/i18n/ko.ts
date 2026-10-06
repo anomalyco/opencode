@@ -10,4 +10,6 @@ export default {
   "git.description": "이 프로젝트의 변경 사항을 추적, 검토 및 실행 취소",
   loadingChanges: "변경 사항 로드 중…",
   noChanges: "변경 없음",
+  "settings.wrapLines.title": "줄 바꿈",
+  "settings.wrapLines.description": "가로로 스크롤하는 대신 모바일 diff에 긴 줄을 넣습니다.",
 }

@@ -17,20 +17,25 @@ export function createComposerProjectControls(props: { draftId: string; worktree
   const pickDirectory = useDirectoryPicker()
   const projectServer = () => serverSDK.server
   const projectServerCtx = useServerCtx(projectServer)
+
   const projects = createMemo(() => {
     if (servers.list.length <= 1) return projectServerCtx().projects.list()
+
     return servers.list.flatMap((connection) => {
       const server = { key: ServerConnection.key(connection), name: serverName(connection) }
+
       return global
         .ensureServerCtx(connection)
         .projects.list()
         .map((project) => ({ ...project, server }))
     })
   })
+
   const selectProject = (worktree: string, serverKey?: string) => {
     const connection = serverKey
       ? servers.list.find((connection) => ServerConnection.key(connection) === serverKey)
       : projectServer()
+
     if (!connection) return
 
     const target = global.ensureServerCtx(connection)
@@ -43,10 +48,12 @@ export function createComposerProjectControls(props: { draftId: string; worktree
       branch: undefined,
     })
   }
+
   const addProject = (title: string, serverKey?: string) => {
     const connection = serverKey
       ? servers.list.find((connection) => ServerConnection.key(connection) === serverKey)
       : projectServer()
+
     if (!connection) return
     pickDirectory({
       server: connection,
@@ -54,6 +61,7 @@ export function createComposerProjectControls(props: { draftId: string; worktree
       title,
       onSelect: (result) => {
         const directory = Array.isArray(result) ? result[0] : result
+
         if (directory) selectProject(directory, serverKey)
       },
     })

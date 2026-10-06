@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "अपडेट तयार",
   "dialog.restart": "पुन: सुरु गर्नुहोस्",
   "dialog.later": "पछि",
+  "releaseNotes.action.getStarted": "सुरु गर्नुहोस्",
+  "releaseNotes.action.next": "अर्को",
+  "releaseNotes.action.hideFuture": "भविष्यमा यी नदेखाउनुहोस्",
+  "releaseNotes.media.alt": "रिलिज पूर्वावलोकन",
 }

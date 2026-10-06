@@ -12,4 +12,7 @@ export default {
   "git.description": "Feu un seguiment, reviseu i desfer els canvis en aquest projecte",
   loadingChanges: "S'estan carregant els canvis…",
   noChanges: "Sense canvis",
+  "settings.wrapLines.title": "Ajusta les línies",
+  "settings.wrapLines.description":
+    "Ajustar les línies llargues en diffs mòbils en lloc de desplaçar-se horitzontalment",
 }

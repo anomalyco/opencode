@@ -15,6 +15,42 @@ test("renders inline and block math", async () => {
   expect(await parser.parse("$$\nx^2\n$$\n")).toContain('<span class="katex-display">')
 })
 
+test.each(["Energy is $E = mc^2$.", "因此 $x^2$ 是正数", "$a_1$ and $b_1$."])(
+  "renders dollar inline math: %s",
+  async (text) => {
+    const html = await parser.parse(text)
+    expect(html).toContain('<span class="katex">')
+    expect(html).not.toContain("$")
+  },
+)
+
+test.each(["$$E = mc^2$$", "Inline $$x$$ display", "$$\na\n\nb\n$$\n"])(
+  "renders dollar display math: %s",
+  async (text) => {
+    const html = await parser.parse(text)
+    expect(html).toContain('<span class="katex-display">')
+    expect(html).not.toContain("$$")
+  },
+)
+
+test.each([
+  "It costs $5 and $10.",
+  "From $5-$10 a month",
+  "It costs $5, originally $10, ranging from $1,000 to $2,000.",
+  "Use $HOME and $PATH",
+  "Use `$x$` as a placeholder",
+])("leaves prices, shell variables, and code as text: %s", async (text) => {
+  expect(await parser.parse(text)).not.toContain("katex")
+})
+
+// marked-katex-extension requires a space or line start before `$` and a space or punctuation after the closing `$`.
+test.each(["where (i.e. $x$) holds", "the $x$-axis", "因此$x^2$是正数"])(
+  "leaves tight dollar math as text: %s",
+  async (text) => {
+    expect(await parser.parse(text)).not.toContain("katex")
+  },
+)
+
 test("uses the configured code highlighter", async () => {
   expect(await parser.parse("```ts\nconst value = 1\n```\n")).toBe('<pre data-language="ts">const value = 1</pre>\n')
 })
@@ -51,6 +87,7 @@ test.each([
   "foo\n```",
   "\\(x^2\\)",
   "$$\nx^2\n$$\n",
+  "Energy is $E = mc^2$.",
   "a".repeat(1025),
 ])("leaves code, math, and large Markdown to the worker: %s", (text) => {
   expect(parseSmallMarkdown(text)).toBeUndefined()

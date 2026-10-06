@@ -16,6 +16,7 @@ export const useSessionKey = () => {
   const directory = createMemo(() => base64Encode(sdk().directory))
   const workspaceKey = createMemo(() => SessionStateKey.from(scope(), SessionRouteKey.fromRoute(directory())))
   const sessionKey = createMemo(() => SessionStateKey.from(scope(), SessionRouteKey.fromRoute(directory(), params.id)))
+
   return { params, sessionKey, workspaceKey }
 }
 
@@ -24,29 +25,34 @@ export const useSessionLayout = () => {
   const tabs = useTabs()
   const { params, sessionKey, workspaceKey } = useSessionKey()
   const serverSDK = useServerSDK()
+
   const currentTab = createMemo(() => {
     if (!params.id) return
+
     return findSessionTab(tabs.store, ServerConnection.key(serverSDK.server), params.id)
   })
-  const panes = {
-    dockOpened: () => tabs.pane(currentTab(), "dock"),
-    setDockOpened: (opened: boolean) => tabs.setPane(currentTab(), "dock", opened),
-    dockHeight: () => tabs.paneSize(currentTab(), "dockHeight"),
-    setDockHeight: (height: number) => tabs.setPaneSize(currentTab(), "dockHeight", height),
-    sideOpened: () => tabs.pane(currentTab(), "side"),
-    setSideOpened: (opened: boolean) => tabs.setPane(currentTab(), "side", opened),
-    sessionWidth: () => tabs.paneSize(currentTab(), "sessionWidth"),
-    setSessionWidth: (width: number) => tabs.setPaneSize(currentTab(), "sessionWidth", width),
+
+  const regions = {
+    dockOpened: () => tabs.region(currentTab(), "dock"),
+    setDockOpened: (opened: boolean) => tabs.setRegion(currentTab(), "dock", opened),
+    dockHeight: () => tabs.regionSize(currentTab(), "dockHeight"),
+    setDockHeight: (height: number) => tabs.setRegionSize(currentTab(), "dockHeight", height),
+    sideOpened: () => tabs.region(currentTab(), "side"),
+    setSideOpened: (opened: boolean) => tabs.setRegion(currentTab(), "side", opened),
+    sessionWidth: () => tabs.regionSize(currentTab(), "sessionWidth"),
+    setSessionWidth: (width: number) => tabs.setRegionSize(currentTab(), "sessionWidth", width),
   }
+
   return {
     params,
     sessionKey,
     workspaceKey,
     tabKey: createMemo(() => {
       const tab = currentTab()
+
       return tab && tabKey(tab)
     }),
     tabs: createMemo(() => layout.tabs(sessionKey)),
-    view: createMemo(() => layout.view(sessionKey, panes)),
+    view: createMemo(() => layout.view(sessionKey, regions)),
   }
 }

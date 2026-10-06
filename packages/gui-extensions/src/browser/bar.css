@@ -1,0 +1,240 @@
+/* The browser bar's address field: the whole URL at rest, and an editable address with a focus border while the
+   field has focus. */
+[data-component="browser-address"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 28px;
+  padding-inline: 8px;
+  border-radius: 6px;
+  background-color: var(--v2-background-bg-layer-01);
+  box-shadow: inset 0 0 0 0.5px transparent;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+  cursor: text;
+
+  &[data-site] {
+    padding-inline-start: 6px;
+  }
+
+  &:hover:not([data-editing]) {
+    background-image: linear-gradient(var(--v2-overlay-simple-overlay-hover), var(--v2-overlay-simple-overlay-hover));
+  }
+
+  &[data-editing] {
+    padding-inline-start: 8px;
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-focus);
+  }
+
+  /* A focused page address sits where it sat at rest, 32px in; typed text and the placeholder sit at 30px. */
+  &[data-editing][data-address] {
+    gap: 8px;
+  }
+
+  [data-slot="browser-address-text"] {
+    position: relative;
+    flex: 1 1 0;
+    min-width: 0;
+    height: 100%;
+  }
+
+  [data-slot="browser-address-input"] {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    padding: 0;
+    border: none;
+    outline: none;
+    background: transparent;
+    font: inherit;
+    letter-spacing: inherit;
+    color: transparent;
+
+    &::placeholder {
+      color: var(--v2-text-text-faint);
+    }
+  }
+
+  &[data-editing] [data-slot="browser-address-input"] {
+    color: var(--v2-text-text-base);
+  }
+
+  /* Focus leaving the window (or into the page) ends editing but keeps the input's selection, which Chromium paints
+     over transparent text. At rest only the drawn address shows. */
+  &:not([data-editing]) [data-slot="browser-address-input"]::selection {
+    color: transparent;
+    background-color: transparent;
+  }
+
+  [data-slot="browser-address-display"],
+  [data-slot="browser-address-hint"] {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+    white-space: pre;
+    pointer-events: none;
+  }
+
+  [data-slot="browser-address-hint"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  /* One line of the whole URL, ending in an ellipsis where the field ends. The scheme and the path are muted around
+     the host, and so is the ellipsis, which takes the line's color and almost always cuts the path. An address
+     without a host, such as a workspace file, keeps its path at full strength. */
+  [data-slot="browser-address-url"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    &[data-host] {
+      color: var(--v2-text-text-faint);
+    }
+  }
+
+  [data-slot="browser-address-muted"] {
+    color: var(--v2-text-text-faint);
+  }
+
+  [data-slot="browser-address-host"] {
+    color: var(--v2-text-text-base);
+  }
+
+  /* Page actions show on hover and while the field has focus. */
+  [data-slot="browser-address-actions"] {
+    display: none;
+    flex: none;
+    align-items: center;
+    gap: 8px;
+  }
+
+  &:is(:hover, :focus-within) [data-slot="browser-address-actions"] {
+    display: flex;
+  }
+}
+
+/* Suggestions from the browsing history, under the address field. */
+[data-component="browser-suggestions"] {
+  z-index: 60;
+  width: calc(var(--kb-popper-anchor-width) + 16px);
+  padding: 8px;
+  border-radius: 12px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-floating);
+  outline: none;
+  transform-origin: var(--kb-popover-content-transform-origin);
+}
+
+[data-component="browser-page-row"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 28px;
+  padding-inline: 8px;
+  border-radius: 6px;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+  text-align: start;
+  cursor: default;
+
+  &:hover {
+    background: var(--v2-overlay-simple-overlay-hover);
+  }
+
+  &[aria-selected="true"] {
+    background: var(--v2-overlay-simple-overlay-pressed);
+  }
+
+  [data-slot="browser-page-row-text"] {
+    display: flex;
+    flex: 1 1 0;
+    gap: 4px;
+    min-width: 0;
+    white-space: pre;
+  }
+
+  [data-slot="browser-page-row-title"] {
+    flex: none;
+    max-width: 60%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  [data-slot="browser-page-row-url"] {
+    flex: 1 1 0;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    color: var(--v2-text-text-muted);
+  }
+
+  mark {
+    background: none;
+    color: inherit;
+    font-weight: 530;
+  }
+}
+
+/* Suggestions read the address at full strength; the new tab page mutes it. */
+[data-component="browser-suggestions"] [data-slot="browser-page-row-url"] {
+  color: var(--v2-text-text-base);
+}
+
+/* Site information under the site button. */
+[data-component="browser-site"] {
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 320px;
+  padding: 12px;
+  border-radius: 12px;
+  background: var(--v2-background-bg-base);
+  box-shadow: var(--v2-elevation-floating);
+  outline: none;
+  color: var(--v2-text-text-base);
+  font-size: 13px;
+  font-weight: 440;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+  transform-origin: var(--kb-popover-content-transform-origin);
+
+  [data-slot="browser-site-host"] {
+    min-width: 0;
+    margin: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: inherit;
+    font-weight: 530;
+  }
+
+  [data-slot="browser-site-row"] {
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+    color: var(--v2-icon-icon-muted);
+  }
+
+  /* An action beside a row's text, centered on it. */
+  [data-slot="browser-site-row"] > [data-component="button-v2"] {
+    flex: none;
+    align-self: center;
+  }
+
+  [data-slot="browser-site-detail"] {
+    color: var(--v2-text-text-muted);
+  }
+}

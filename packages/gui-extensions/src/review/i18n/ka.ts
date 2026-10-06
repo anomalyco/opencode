@@ -10,4 +10,6 @@ export default {
   "git.description": "თვალყური ადევნეთ, გადახედეთ და გააუქმეთ ცვლილებები ამ პროექტში",
   loadingChanges: "ცვლილებების ჩატვირთვა…",
   noChanges: "ცვლილებები არ არის",
+  "settings.wrapLines.title": "სტრიქონების გადატანა",
+  "settings.wrapLines.description": "მობილურ diff-ებში გრძელი სტრიქონების გადატანა ჰორიზონტალური გადახვევის ნაცვლად",
 }

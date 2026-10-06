@@ -10,4 +10,6 @@ export default {
   "git.description": "इस प्रोजेक्ट में परिवर्तनों को ट्रैक करें, समीक्षा करें और पूर्ववत करें",
   loadingChanges: "परिवर्तन लोड हो रहे हैं…",
   noChanges: "कोई परिवर्तन नहीं",
+  "settings.wrapLines.title": "पंक्तियाँ लपेटें",
+  "settings.wrapLines.description": "मोबाइल डिफ़ में लंबी पंक्तियों को क्षैतिज रूप से स्क्रॉल करने के बजाय लपेटें",
 }

@@ -10,5 +10,6 @@ export const BUILTINS_UPDATED = "opencode:gui-extensions-updated"
 if (import.meta.hot)
   import.meta.hot.accept("@opencode/gui-extensions/renderer", (module) => {
     const next: readonly Definition[] | undefined = module?.builtins
+
     if (next) window.dispatchEvent(new CustomEvent(BUILTINS_UPDATED, { detail: next }))
   })

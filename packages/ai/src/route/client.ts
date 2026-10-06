@@ -358,7 +358,6 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
   input: MakeTransportInput<Body, Prepared, Frame, Event, State>,
 ): Route<Body, Prepared> {
   const protocol = input.protocol
-  const encodeBody = Schema.encodeSync(Schema.fromJsonString(protocol.body.schema))
   const decodeEventEffect = Schema.decodeUnknownEffect(protocol.stream.event)
   const decodeEvent = (route: string) => (frame: Frame) =>
     decodeEventEffect(frame).pipe(
@@ -417,7 +416,7 @@ function makeFromTransport<Body, Prepared, Frame, Event, State>(
           request,
           endpoint: routeInput.endpoint,
           auth: routeInput.auth ?? Auth.none,
-          encodeBody,
+          encodeBody: ProviderShared.encodeJson,
           middleware: options?.http,
           webSocket: options?.webSocket,
         }),
@@ -576,9 +575,7 @@ const compile = Effect.fn("LLM.compile")(function* (request: LLMRequest, options
   const resolved = prepareRequest(request)
   const route = resolved.model.route
 
-  const body = yield* route.body
-    .from(resolved)
-    .pipe(Effect.flatMap(ProviderShared.validateWith(Schema.decodeUnknownEffect(route.body.schema))))
+  const body = yield* route.body.from(resolved)
   const prepared = yield* route.prepareTransport(body, resolved, options)
 
   return {

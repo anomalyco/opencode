@@ -25,4 +25,8 @@ export default {
   "dialog.ready.title": "به روز رسانی آماده است",
   "dialog.restart": "راه اندازی مجدد",
   "dialog.later": "بعدا",
+  "releaseNotes.action.getStarted": "شروع کنید",
+  "releaseNotes.action.next": "بعدی",
+  "releaseNotes.action.hideFuture": "اینها را در آینده نشان ندهید",
+  "releaseNotes.media.alt": "پیش نمایش انتشار",
 }

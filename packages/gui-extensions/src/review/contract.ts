@@ -1,5 +1,5 @@
 import type { FileDiffInfo } from "@opencode/client/promise"
-import { Service, type SessionRef, type SessionView } from "../sdk"
+import { Contract, type SessionRef, type SessionScreen } from "../sdk"
 
 export type ChangeKind = "add" | "del" | "mix"
 
@@ -14,7 +14,7 @@ export interface Changes {
   /** The file the review panel shows. */
   active(session: SessionRef): string | undefined
   /**
-   * The session directory's uncommitted changes, independent of the review mode (the summary's changes row).
+   * The session directory's uncommitted changes, independent of the review mode (the session details' changes row).
    * Loads only while a `details` watch holds; undefined until loaded, empty when the load fails.
    */
   details(session: SessionRef): readonly FileDiffInfo[] | undefined
@@ -26,11 +26,14 @@ export interface Changes {
    * Keeps the changes of the view the caller renders loaded while it shows them, across the view's session
    * switches. A `tree` is a persistent change list: opening the side region refreshes the changes it shows.
    * `details` loads `details(session)`.
+   *
+   * @param screen - The owning screen from the panel or session-slot input, available even before publication.
+   * @param source - The view's demand: a tree, file markers or session details.
    */
-  watch(session: SessionView, source: "tree" | "files" | "details"): () => void
+  watch(screen: SessionScreen, source: "tree" | "files" | "details"): () => void
   /** Runs when review reveals a change (e.g. from a composer comment), so change lists can show theirs. */
   onReveal(listener: () => void): () => void
 }
 
-/** Provided by the review extension. The summary's changes row reads the same data. */
-export const Changes = Service.define<Changes>("review.changes")
+/** The review extension provides this. The session details' changes row reads the same data. */
+export const Changes = Contract.define<Changes, "review.changes">("review.changes")

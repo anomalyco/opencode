@@ -91,7 +91,8 @@ if (Script.release && !Script.preview) {
   await $`git checkout -B v2 origin/v2`
   await prepareReleaseFiles()
   if ((await $`git diff --quiet`.nothrow()).exitCode !== 0) {
-    await $`git commit -am "sync release versions for ${tag}"`
+    // The release already published this code; a push-triggered dev publish of a version bump is wasted work.
+    await $`git commit -am ${`sync release versions for ${tag} [skip ci]`}`
     await $`git push origin HEAD:v2 --no-verify`
   }
 }

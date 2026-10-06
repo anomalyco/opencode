@@ -4,7 +4,7 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
 import { Show } from "solid-js"
-import { useExtension, type RemoteClient, type ServerRow } from "../sdk"
+import { useExtension, type IpcClient, type ServerRow } from "../sdk"
 import type { Wsl, WslServersState } from "./contract"
 import { wslOpencodeAction } from "./model"
 
@@ -12,17 +12,20 @@ export default function WslRow(props: {
   row: ServerRow
   distro: string
   state: () => WslServersState | undefined
-  api: () => RemoteClient<(typeof Wsl)["spec"]> | undefined
+  api: () => IpcClient<(typeof Wsl)["spec"]> | undefined
   pending: (key: string) => boolean
-  request: (key: string, action: () => Promise<unknown>) => void
+  request: <T>(key: string, action: () => Promise<T>) => void
 }) {
   const extension = useExtension()
   const check = () => props.state()?.opencodeChecks[props.distro]
   const opencodeAction = () => wslOpencodeAction(check())
+
   const busy = () => {
     const job = props.state()?.job
+
     return job?.kind === "install-opencode" && job.distro === props.distro
   }
+
   return (
     <Show when={props.api()}>
       {(api) => (

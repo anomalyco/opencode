@@ -35,16 +35,21 @@ export function prependHistoryEntry(
     .map((part) => ("content" in part ? part.content : ""))
     .join("")
     .trim()
+
   const hasAttachments = prompt.some(isAttachment)
   const hasComments = comments.some((comment) => !!comment.comment.trim())
+
   if (!text && !hasAttachments && !hasComments) return entries
 
   const entry = {
     prompt: clonePrompt(prompt),
     comments: clonePromptHistoryComments(comments),
   } satisfies PromptHistoryEntry
+
   const last = entries[0]
+
   if (last && isPromptEqual(last, entry)) return entries
+
   return [entry, ...entries].slice(0, max)
 }
 
@@ -57,6 +62,7 @@ export function removeHistoryEntry(
 ) {
   const entry = { prompt, comments } satisfies PromptHistoryEntry
   const next = entries.filter((item) => !isPromptEqual(item, entry))
+
   return next.length === entries.length ? entries : next
 }
 
@@ -75,15 +81,20 @@ function isCommentEqual(commentA: PromptHistoryComment, commentB: PromptHistoryC
 
 function isPromptEqual(entryA: PromptHistoryStoredEntry, entryB: PromptHistoryStoredEntry) {
   if (entryA.prompt.length !== entryB.prompt.length) return false
+
   for (let i = 0; i < entryA.prompt.length; i++) {
     const partA = entryA.prompt[i]
     const partB = entryB.prompt[i]
+
     if (partA.type !== partB.type) return false
+
     if (partA.type === "text" && partA.content !== (partB.type === "text" ? partB.content : "")) return false
+
     if (partA.type === "file") {
       if (partA.path !== (partB.type === "file" ? partB.path : "")) return false
       const a = partA.selection
       const b = partB.type === "file" ? partB.selection : undefined
+
       const sameSelection =
         (!a && !b) ||
         (!!a &&
@@ -92,19 +103,27 @@ function isPromptEqual(entryA: PromptHistoryStoredEntry, entryB: PromptHistorySt
           a.startChar === b.startChar &&
           a.endLine === b.endLine &&
           a.endChar === b.endChar)
+
       if (!sameSelection) return false
     }
+
     if (partA.type === "agent" && partA.name !== (partB.type === "agent" ? partB.name : "")) return false
+
     if (partA.type === "skill") {
       if (partB.type !== "skill" || partA.id !== partB.id || partA.name !== partB.name) return false
     }
+
     if (isAttachment(partA) && partA.id !== (isAttachment(partB) ? partB.id : "")) return false
   }
+
   if (entryA.comments.length !== entryB.comments.length) return false
+
   for (let i = 0; i < entryA.comments.length; i++) {
     const commentA = entryA.comments[i]
     const commentB = entryB.comments[i]
+
     if (!commentA || !commentB || !isCommentEqual(commentA, commentB)) return false
   }
+
   return true
 }

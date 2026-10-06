@@ -15,21 +15,25 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
 
   function Fixture() {
     const [state, setState] = createStore({ pinned: true, ready: false })
+
     const rows = Array.from(
       { length: input.count },
       (_, index) => new TimelineRow.UserMessage({ userMessageID: `message-${index}` }),
     )
+
     const rowByKey = new Map(rows.map((row) => [TimelineRow.key(row), row]))
     const indexes = new Map(rows.map((row, index) => [row.userMessageID, index]))
     let viewport!: HTMLDivElement
     let content!: HTMLDivElement
     let container!: HTMLDivElement
+
     const timeline = createTimelineVirtualizer({
       sessionKey: () => "cold-reveal-fixture",
       projection: {
         rows: () => rows,
         rowByKey: () => rowByKey,
         activeMessageID: () => undefined,
+        messageByID: () => new Map(),
         messageRowIndex: () => indexes,
         messageLastRowIndex: () => indexes,
       },
@@ -62,6 +66,7 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
       host.dataset.observedHeight = String(entries[0].borderBoxSize[0].blockSize)
       host.dataset.viewportResizes = String(Number(host.dataset.viewportResizes) + 1)
     })
+
     const reveal = new MutationObserver(() => {
       if (content.style.visibility === "hidden" || host.dataset.firstReveal) return
       // Capture the first reveal, not a later frame after geometry has recovered.
@@ -71,11 +76,14 @@ export function mountTimelineVirtualizer(input: { count: number; rowHeight: numb
         pendingMarkdown: content.querySelectorAll('[data-component="markdown"]:not([data-markdown-ready])').length,
         viewportHeight: viewport.clientHeight,
         scrollTop: viewport.scrollTop,
-        clipped: mounted
-          .filter((element) => element.firstElementChild!.getBoundingClientRect().height > element.offsetHeight + 1)
-          .map((element) => element.dataset.timelineKey),
+        clipped: mounted.flatMap((element) =>
+          element.firstElementChild!.getBoundingClientRect().height > element.offsetHeight + 1
+            ? [element.dataset.timelineKey]
+            : [],
+        ),
       })
     })
+
     onCleanup(() => {
       resize.disconnect()
       reveal.disconnect()

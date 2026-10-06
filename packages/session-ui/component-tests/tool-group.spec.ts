@@ -56,12 +56,15 @@ for (const reasoningDefaultOpen of [false, true]) {
         "aria-expanded",
         String(reasoningDefaultOpen),
       )
+
       if (reasoningDefaultOpen) {
         await expect(
           first.getByText("The renderer groups adjacent tools. Check the relevant skills before changing it."),
         ).toBeHidden()
+
         return
       }
+
       await expect(
         first.getByText("The renderer groups adjacent tools. Check the relevant skills before changing it."),
       ).toBeVisible()
@@ -87,16 +90,21 @@ story("summarizes subagents as Agent while retaining their card titles", async (
   expect(await prefix.locator("..").evaluate((node) => getComputedStyle(node).columnGap)).toBe("4px")
   expect(await title.locator("..").evaluate((node) => getComputedStyle(node).columnGap)).toBe("4px")
   expect(await count.evaluate((node) => getComputedStyle(node).fontVariantNumeric)).toBe("tabular-nums")
+
   const colors = await Promise.all(
     [prefix, count, title].map((part) => part.evaluate((node) => getComputedStyle(node).color)),
   )
+
   expect(colors[1]).toBe(colors[2])
   expect(colors[0]).not.toBe(colors[1])
+
   const gap = await group.evaluate((element) => {
     const title = element.querySelector('[data-component="context-tool-group-trigger"]')!.getBoundingClientRect()
     const arrow = element.querySelector('[data-slot="collapsible-arrow-icon"]')!.getBoundingClientRect()
+
     return arrow.left - title.right
   })
+
   expect(gap).toBeLessThanOrEqual(8)
   await expect(group.locator('[data-component="task-tool-title"]')).toHaveText(["General", "Explore"])
 })
@@ -111,18 +119,23 @@ for (const width of [840, 390]) {
     await expect(header).toHaveAttribute("aria-label", "Used 4 Shell, Read, Agent")
     await expect(header.locator('[data-component="tag"]')).toHaveCount(0)
     await expect(trigger).toHaveAttribute("aria-expanded", "true")
+
     for (const action of ["click", "Enter", "Space"] as const) {
       if (action === "click") await trigger.click()
+
       if (action !== "click") await trigger.press(action)
       await expect(trigger).toHaveAttribute("aria-expanded", "false")
       await expect(group.locator('[data-component="context-tool-group-list"]')).toBeHidden()
       await expect(trigger).toBeFocused()
+
       if (action === "click") await trigger.click()
+
       if (action !== "click") await trigger.press(action)
       await expect(trigger).toHaveAttribute("aria-expanded", "true")
       await expect(group.locator('[data-component="context-tool-group-list"]')).toBeVisible()
       await expect(trigger).toBeFocused()
     }
+
     const cards = group.locator('[data-component="task-tool-surface"]')
     await expect(cards).toHaveCount(2)
     await expect
@@ -132,6 +145,7 @@ for (const width of [840, 390]) {
             const card = node.getBoundingClientRect()
             const trigger = node.closest('[data-component="tool-trigger"]')!.getBoundingClientRect()
             const item = node.closest('[data-slot="context-tool-group-item"]')!.getBoundingClientRect()
+
             return (
               card.height === 36 &&
               card.top >= trigger.top &&
@@ -153,6 +167,7 @@ for (const width of [840, 390]) {
         shell.evaluate((node) => {
           const card = node.querySelector('[data-component="bash-output"]')!.getBoundingClientRect()
           const item = node.closest('[data-slot="context-tool-group-item"]')!.getBoundingClientRect()
+
           return card.top >= item.top && card.bottom <= item.bottom
         }),
       )

@@ -10,6 +10,7 @@ describe("SSH connection commands", () => {
       method: "spawn",
       pathOrDescriptor: "ssh",
     })
+
     expect(SshFailure.from(error).code).toBe("ssh-missing")
   })
   test("forwarding overrides bootstrap persistence before reusing the control socket", () => {
@@ -21,6 +22,7 @@ describe("SSH connection commands", () => {
       1234,
       { host: "127.0.0.1", port: 5678 },
     )
+
     expect(args.slice(0, 4)).toEqual(["-o", "ControlMaster=no", "-o", "ControlPersist=no"])
     expect(args).toContain("ControlPath=/test/socket")
     expect(args.slice(-4)).toEqual(["-L", "127.0.0.1:1234:127.0.0.1:5678", "devbox", "sh -c 'exec cat >/dev/null'"])
@@ -65,6 +67,7 @@ describe("SSH connection commands", () => {
     ]) {
       expect(() => parseTarget(input)).toThrow()
     }
+
     expect(quote("a'b")).toBe("'a'\\''b'")
   })
 })

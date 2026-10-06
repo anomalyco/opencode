@@ -3,6 +3,7 @@ import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } 
 import { enrichLeadingTurn, loadOlderTimeline } from "./model"
 
 const user = (id: string): SessionMessageUser => ({ id, type: "user", text: id, time: { created: 1 } })
+
 const assistant = (id: string): SessionMessageAssistant => ({
   id,
   type: "assistant",
@@ -27,7 +28,9 @@ describe("timeline model", () => {
       loading: () => false,
       loadMore: async () => {
         calls.push("load")
+
         if (outcome === "switch") sessionID = "ses_new"
+
         if (outcome === "fail") throw new Error("history failed")
       },
       before: () => calls.push("before"),

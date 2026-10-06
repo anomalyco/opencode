@@ -3,6 +3,7 @@ import { pathToFileUrl } from "./path"
 const buildDragImage = (target: HTMLElement) => {
   const icon = target.querySelector('[data-component="file-icon"]') ?? target.querySelector("svg")
   const text = target.querySelector("span")
+
   if (!icon || !text) return
 
   const image = document.createElement("div")
@@ -11,11 +12,13 @@ const buildDragImage = (target: HTMLElement) => {
   image.style.position = "absolute"
   image.style.top = "-1000px"
   image.innerHTML = (icon as SVGElement).outerHTML + (text as HTMLSpanElement).outerHTML
+
   return image
 }
 
 const withFileDragImage = (event: DragEvent) => {
   const image = buildDragImage(event.currentTarget as HTMLElement)
+
   if (!image) return
   document.body.appendChild(image)
   event.dataTransfer?.setDragImage(image, 0, 12)
@@ -26,6 +29,7 @@ const withFileDragImage = (event: DragEvent) => {
 export function startFileDrag(event: DragEvent, path: string) {
   event.dataTransfer?.setData("text/plain", `file:${path}`)
   event.dataTransfer?.setData("text/uri-list", pathToFileUrl(path))
+
   if (event.dataTransfer) event.dataTransfer.effectAllowed = "copy"
   withFileDragImage(event)
 }

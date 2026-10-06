@@ -29,6 +29,7 @@ export default {
   "error.host-key":
     "The host’s identity could not be verified. Verify its fingerprint before updating your SSH known hosts.",
   "error.ssh-missing": "OpenSSH was not found. Install an OpenSSH client and ensure ssh is available on PATH.",
+  "error.unavailable": "SSH is unavailable",
   "action.authenticate": "Authenticate",
   "stage.connecting": "Connecting over SSH…",
   "stage.authentication": "Authentication required",

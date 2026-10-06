@@ -10,11 +10,14 @@ type Sidecar = {
   readonly expiresAt: number
 }
 
-/** Publish the ticket before stopping its owner so every replacement contender can adopt it. */
+/**
+ * Publish the ticket before stopping its owner so every replacement contender can adopt it.
+ * Never throws: terminals are best-effort, so any failure replaces the service without a handoff.
+ */
 export async function prepare(file: string, info: Info, timeout: number) {
   const existing = await read(file)
   if (existing !== undefined && existing.expiresAt > Date.now() && same(existing.source, info)) return
-  const { ClientError, OpenCode } = await import("./promise/index.js")
+  const { OpenCode } = await import("./promise/index.js")
   const client = OpenCode.make({
     baseUrl: info.url,
     headers:
@@ -22,43 +25,30 @@ export async function prepare(file: string, info: Info, timeout: number) {
         ? undefined
         : { authorization: "Basic " + Buffer.from(`opencode:${info.password}`).toString("base64") },
   })
-  const missing = (error: unknown) =>
-    error instanceof ClientError &&
-    error.reason === "UnexpectedStatus" &&
-    typeof error.cause === "object" &&
-    error.cause !== null &&
-    "status" in error.cause &&
-    error.cause.status === 404
-  const result = await client.experimental.persistentPty.handoff({ signal: AbortSignal.timeout(timeout) }).then(
-    (value) => ({ value }),
-    (cause: unknown) => ({ cause }),
+  const handoff = await client.experimental.persistentPty
+    .handoff({ signal: AbortSignal.timeout(timeout) })
+    .then(parse)
+    .catch(async (cause: unknown) => {
+      // Another caller may already have prepared and stopped this server.
+      const concurrent = await read(file)
+      if (concurrent !== undefined && concurrent.expiresAt > Date.now() && same(concurrent.source, info)) return
+      console.warn("Background service cannot hand off persistent terminals; shutting them down before replacement", cause)
+      await client.experimental.persistentPty.shutdown({ signal: AbortSignal.timeout(timeout) }).catch(() => {})
+      return null
+    })
+  if (handoff === undefined) return
+  await publish(file, info, handoff).catch((cause: unknown) =>
+    console.warn("Failed to publish persistent terminal handoff", cause),
   )
-  if ("cause" in result) {
-    // Another caller may already have prepared and stopped this server.
-    const concurrent = await read(file)
-    if (concurrent !== undefined && concurrent.expiresAt > Date.now() && same(concurrent.source, info)) return
-    if (!missing(result.cause))
-      throw new Error("Failed to prepare persistent terminals for service replacement", { cause: result.cause })
-    console.warn("Background service cannot hand off persistent terminals; shutting them down before replacement")
-    await client.experimental.persistentPty
-      .shutdown({ signal: AbortSignal.timeout(timeout) })
-      .catch((cause: unknown) => {
-        if (missing(cause)) return
-        throw new Error("Failed to shut down persistent terminals before service replacement", { cause })
-      })
-    await publish(file, info, null)
-    return
-  }
-  const body: unknown = result.value
+}
+
+function parse(body: unknown) {
   if (typeof body !== "object" || body === null || !("handoff" in body))
     throw new Error("Invalid persistent terminal handoff response")
-  if (body.handoff === null) {
-    await publish(file, info, null)
-    return
-  }
+  if (body.handoff === null) return null
   if (!isHandoff(body.handoff) || body.handoff.expiresAt <= Date.now())
     throw new Error("Invalid or expired persistent terminal handoff")
-  await publish(file, info, body.handoff)
+  return body.handoff
 }
 
 async function publish(file: string, info: Info, handoff: PersistentPty.Handoff | null) {

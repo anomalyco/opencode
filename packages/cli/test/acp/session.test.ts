@@ -10,6 +10,10 @@ describe("acp session lifecycle over the wire", () => {
 
     const plain = await acp.initialize()
     const terminal = await acp.initialize({ terminalAuth: true, childSessionUpdates: true })
+    const standard = await acp.request("initialize", {
+      protocolVersion: 1,
+      clientCapabilities: { auth: { terminal: true } },
+    })
 
     expect(plain).toMatchObject({
       protocolVersion: 1,
@@ -28,6 +32,15 @@ describe("acp session lifecycle over the wire", () => {
     expect(terminal.authMethods?.[0]?._meta).toEqual({
       "terminal-auth": { command: "opencode", args: ["auth", "login"], label: "OpenCode Login" },
     })
+    expect(standard.authMethods).toEqual([
+      {
+        id: "opencode-login",
+        name: "Login with opencode",
+        description: "Run `opencode auth login` in the terminal",
+        type: "terminal",
+        args: ["--login"],
+      },
+    ])
     expect(await acp.request("authenticate", { methodId: "opencode-login" })).toEqual({})
     expect(await rpcError(acp.request("authenticate", { methodId: "missing" }))).toMatchObject({
       code: -32602,
@@ -165,7 +178,7 @@ describe("acp session lifecycle over the wire", () => {
       config: { type: "remote", url: "https://example.com/mcp", headers: { Authorization: "Bearer x" }, oauth: false },
     })
   })
-  test("rejects MCP-over-ACP and SSE servers before creating or loading a session", async () => {
+  test("rejects relative cwds, MCP-over-ACP, and SSE servers before creating or loading a session", async () => {
     await using acp = await startWire()
     acp.server.sessions.set("ses_saved", makeSession("ses_saved"))
     await acp.initialize()
@@ -177,12 +190,26 @@ describe("acp session lifecycle over the wire", () => {
       message: "Invalid params: Only stdio and HTTP MCP servers are supported",
       data: { field: "mcpServers" },
     }
+    const relative = {
+      code: -32602,
+      message: "Invalid params: cwd must be an absolute path: workspace",
+      data: { field: "cwd" },
+    }
 
     expect(await rpcError(acp.newSession("/workspace", mcpServers))).toEqual(invalid)
     expect(await rpcError(acp.newSession("/workspace", sse))).toEqual(invalid)
     expect(
       await rpcError(acp.request("session/load", { cwd: "/workspace", sessionId: "ses_saved", mcpServers })),
     ).toEqual(invalid)
+    expect(await rpcError(acp.newSession("workspace"))).toEqual(relative)
+    expect(
+      await rpcError(acp.request("session/load", { cwd: "workspace", sessionId: "ses_saved", mcpServers: [] })),
+    ).toEqual(relative)
+    expect(await rpcError(acp.request("session/list", { cwd: "workspace" }))).toEqual(relative)
+    expect(await rpcError(acp.request("session/list", { cwd: "" }))).toMatchObject({
+      code: -32602,
+      data: { field: "cwd" },
+    })
     expect(new Set(acp.server.sessions.keys())).toEqual(existing)
     expect(acp.server.requests.filter((request) => request.path.includes("ses_saved"))).toEqual([])
     expect(acp.logs).toEqual([])

@@ -10,4 +10,6 @@ export default {
   "git.description": "Ushbu loyihadagi oʻzgarishlarni kuzating, koʻrib chiqing va bekor qiling",
   loadingChanges: "Oʻzgarishlar yuklanmoqda…",
   noChanges: "Oʻzgarishlar yoʻq",
+  "settings.wrapLines.title": "Qatorlarni o‘rash",
+  "settings.wrapLines.description": "Mobil diff-larda gorizontal aylantirish o‘rniga uzun qatorlarni o‘rash",
 }

@@ -82,6 +82,7 @@ describe("createSessionBackground", () => {
         status: () => "idle",
         shells: () => [],
       })
+
       expect(background.tasks()).toEqual([{ id: "child", type: "subagent", label: "child", agent: "explore" }])
       dispose()
     })
@@ -101,17 +102,21 @@ describe("createSessionBackground", () => {
         status: { root: "idle", child: "idle", "live-child": "idle" } as Record<string, "idle" | "running">,
         shells: [{ ...shell("shell", "command"), status: "exited" as ShellInfo["status"] }],
       })
+
       let scans = 0
+
       const background = createSessionBackground({
         sessionID: () => store.id,
         messages: (id) => {
           scans += 1
+
           return id === "root" ? store.messages : []
         },
         sessions: () => store.sessions,
         status: (id) => store.status[id],
         shells: () => store.shells,
       })
+
       const blocking = background.blocking()
       const initial = background.tasks()
       expect(initial.map((task) => task.id)).toEqual(["child", "shell"])
@@ -160,7 +165,9 @@ describe("createSessionBackground", () => {
         notification: notification("notice", { source: "subagent", childID: "other-child" }),
         status: { child: "running", "old-child": "running" } as Record<string, "idle" | "running">,
       })
+
       const messages = store.messages
+
       const background = createSessionBackground({
         sessionID: () => "root",
         messages: () => [...store.messages, store.notification],
@@ -168,6 +175,7 @@ describe("createSessionBackground", () => {
         status: (id) => store.status[id],
         shells: () => [shell("shell", "build")],
       })
+
       expect(background.blocking()).toEqual([
         { type: "subagent", partID: "child-part", id: "child", label: undefined },
         { type: "shell", partID: "shell-part", id: undefined, label: "build" },
