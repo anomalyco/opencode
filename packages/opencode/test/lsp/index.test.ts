@@ -205,6 +205,25 @@ describe("lsp.spawn", () => {
     { config: { lsp: true } },
   )
 
+  it.instance(
+    "spawns a builtin LSP for an extensionless file matched by its name",
+    () =>
+      LSP.Service.use((lsp) =>
+        Effect.gen(function* () {
+          const dir = (yield* TestInstance).directory
+          const dockerfile = spyOn(LSPServer.DockerfileLS, "spawn").mockResolvedValue(undefined)
+
+          try {
+            yield* lsp.touchFile(path.join(dir, "Dockerfile"), "document")
+            expect(dockerfile).toHaveBeenCalledTimes(1)
+          } finally {
+            dockerfile.mockRestore()
+          }
+        }),
+      ),
+    { config: { lsp: true } },
+  )
+
   disabledDownloadIt.instance(
     "passes disableLspDownload to builtin LSP spawn",
     () =>
