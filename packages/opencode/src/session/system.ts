@@ -54,6 +54,8 @@ export function provider(model: Provider.Model) {
 
 export interface Interface {
   readonly environment: (model: Provider.Model) => Effect.Effect<string[]>
+  readonly environmentStable: (model: Provider.Model) => Effect.Effect<string[]>
+  readonly environmentDynamic: () => Effect.Effect<string>
   readonly skills: (agent: Agent.Info) => Effect.Effect<string | undefined>
   readonly mcp: (agent: Agent.Info, permission?: PermissionV1.Ruleset) => Effect.Effect<string | undefined>
 }
@@ -68,7 +70,7 @@ const layer = Layer.effect(
     const locations = yield* LocationServiceMap.Service
 
     return Service.of({
-      environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
+      environmentStable: Effect.fn("SystemPrompt.environmentStable")(function* (model: Provider.Model) {
         const ctx = yield* InstanceState.context
         const references = yield* Effect.gen(function* () {
           return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
@@ -82,7 +84,6 @@ const layer = Layer.effect(
             `  Workspace root folder: ${ctx.worktree}`,
             `  Is directory a git repo: ${ctx.project.vcs === "git" ? "yes" : "no"}`,
             `  Platform: ${process.platform}`,
-            `  Today's date: ${new Date().toDateString()}`,
             `</env>`,
           ].join("\n"),
           references.length === 0
@@ -104,6 +105,49 @@ const layer = Layer.effect(
                 "</available_references>",
               ].join("\n"),
         ].filter((part): part is string => part !== undefined)
+      }),
+
+      environmentDynamic: Effect.fn("SystemPrompt.environmentDynamic")(function* () {
+        return `Today's date: ${new Date().toDateString()}`
+      }),
+
+      environment: Effect.fn("SystemPrompt.environment")(function* (model: Provider.Model) {
+        const ctx = yield* InstanceState.context
+        const references = yield* Effect.gen(function* () {
+          return (yield* (yield* Reference.Service).list()).filter((reference) => reference.description !== undefined)
+        }).pipe(Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(ctx.directory) }))))
+        const stableParts = [
+          [
+            `You are powered by the model named ${model.api.id}. The exact model ID is ${model.providerID}/${model.api.id}`,
+            `Here is some useful information about the environment you are running in:`,
+            `<env>`,
+            `  Working directory: ${ctx.directory}`,
+            `  Workspace root folder: ${ctx.worktree}`,
+            `  Is directory a git repo: ${ctx.project.vcs === "git" ? "yes" : "no"}`,
+            `  Platform: ${process.platform}`,
+            `</env>`,
+          ].join("\n"),
+          references.length === 0
+            ? undefined
+            : [
+                "Project references provide additional directories that can be accessed when relevant.",
+                "<available_references>",
+                ...references
+                  .toSorted((a, b) => a.name.localeCompare(b.name))
+                  .flatMap((reference) => [
+                    "  <reference>",
+                    `    <name>${reference.name}</name>`,
+                    `    <path>${reference.path}</path>`,
+                    ...(reference.description === undefined
+                      ? []
+                      : [`    <description>${reference.description}</description>`]),
+                    "  </reference>",
+                  ]),
+                "</available_references>",
+              ].join("\n"),
+        ].filter((part): part is string => part !== undefined)
+        const dynamicPart = `Today's date: ${new Date().toDateString()}`
+        return [...stableParts, dynamicPart]
       }),
 
       skills: Effect.fn("SystemPrompt.skills")(function* (agent: Agent.Info) {
