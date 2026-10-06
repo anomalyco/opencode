@@ -18,6 +18,7 @@ import * as ACPService from "@/acp/service"
 import * as ACPError from "@/acp/error"
 import { UsageService } from "@/acp/usage"
 import type { Provider } from "@/provider/provider"
+import type { Command } from "@/command"
 
 const providerID = ProviderV2.ID.make("test")
 const modelID = ModelV2.ID.make("test-model")
@@ -193,6 +194,7 @@ describe("ACP service sessions", () => {
   const makeService = (
     messages: readonly { info: unknown; parts: readonly unknown[] }[] = [],
     options?: {
+      commands?: Command.Info[]
       abort?: (input: { sessionID: string }) => Promise<{ data: boolean }>
       get?: () => Promise<{
         data: {
@@ -252,7 +254,9 @@ describe("ACP service sessions", () => {
       command: {
         list: () =>
           Promise.resolve({
-            data: [{ name: "init", description: "Initialize", source: "command", template: "init", hints: [] }],
+            data: options?.commands ?? [
+              { name: "init", description: "Initialize", source: "command", template: "init", hints: [] },
+            ],
           }),
       },
       session: {
@@ -373,6 +377,24 @@ describe("ACP service sessions", () => {
       availableCommands: expect.arrayContaining([{ name: "compact", description: "Compact the session" }]),
     })
     expect(mcpAdds).toEqual(["tools"])
+  })
+
+  it("preserves an existing compact command without advertising a duplicate", async () => {
+    const { service, updates } = makeService([], {
+      commands: [{ name: "compact", description: "Custom compact", source: "command", template: "custom", hints: [] }],
+    })
+    await Effect.runPromise(service.newSession({ cwd: "/workspace", mcpServers: [] }))
+
+    await new Promise((resolve) => setTimeout(resolve, 5))
+
+    expect(updates).toHaveLength(1)
+    expect(updates[0].update).toEqual({
+      sessionUpdate: "available_commands_update",
+      availableCommands: [
+        { name: "compact", description: "Custom compact" },
+        { name: "review-skill", description: "Review" },
+      ],
+    })
   })
 
   it("loads a session and restores model variant and mode from messages", async () => {
