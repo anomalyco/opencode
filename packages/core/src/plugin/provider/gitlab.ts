@@ -69,7 +69,7 @@ export const GitLabPlugin = define({
       const credential = stored
         ? yield* ctx.integration.connection.resolve(stored).pipe(Effect.orElseSucceed(() => undefined))
         : undefined
-      if (!stored || !credential) {
+      if (!stored || !credential || credential.type === "external") {
         loaded.models = undefined
         loaded.connection = undefined
         return

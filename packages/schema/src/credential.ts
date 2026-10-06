@@ -46,7 +46,15 @@ export const Key = Schema.Struct({
   configuration: optional(Form.Answer),
 }).annotate({ identifier: "Credential.Key" })
 
-export const Value = Schema.Union([OAuth, Key])
+/** References a credential source whose secrets and renewal are managed outside the credential store. */
+export interface External extends Schema.Schema.Type<typeof External> {}
+export const External = Schema.Struct({
+  type: Schema.Literal("external"),
+  methodID: IntegrationMethodID,
+  metadata: Schema.Record(Schema.String, Schema.Unknown),
+}).annotate({ identifier: "Credential.External" })
+
+export const Value = Schema.Union([OAuth, Key, External])
   .pipe(Schema.toTaggedUnion("type"))
   .annotate({ identifier: "Credential.Value" })
 export type Value = Schema.Schema.Type<typeof Value>
