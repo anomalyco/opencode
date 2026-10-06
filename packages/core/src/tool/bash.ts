@@ -78,6 +78,17 @@ const isTimeout = (error: AppProcess.AppProcessError) =>
 
 const shellTokens = (command: string) => command.match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) ?? []
 const unquote = (value: string) => value.replace(/^(['"])(.*)\1$/, "$2")
+
+/**
+ * Advisory-only canonicalization. `realPath` can fail for reasons other than a missing node —
+ * a live Unix-domain socket returns EOPNOTSUPP on some platforms — and a best-effort warning
+ * must never stop the command from running.
+ */
+const advisoryResolve = Effect.fn("BashTool.advisoryResolve")(function* (fs: FSUtil.Interface, target: string) {
+  const lexical = path.resolve(FSUtil.windowsPath(target))
+  return yield* fs.realPath(lexical).pipe(Effect.catch(() => Effect.succeed(lexical)))
+})
+
 const externalCommandDirectories = Effect.fn("BashTool.externalCommandDirectories")(function* (
   fs: FSUtil.Interface,
   command: string,
@@ -87,9 +98,9 @@ const externalCommandDirectories = Effect.fn("BashTool.externalCommandDirectorie
   for (const token of shellTokens(command)) {
     const value = unquote(token).replace(/[;,|&]+$/, "")
     if (!path.isAbsolute(value)) continue
-    const resolved = yield* fs.resolve(value)
+    const resolved = yield* advisoryResolve(fs, value)
     if (FSUtil.contains(cwd, resolved)) continue
-    directories.add(yield* fs.resolve(path.dirname(resolved)))
+    directories.add(yield* advisoryResolve(fs, path.dirname(resolved)))
   }
   return [...directories]
 })

@@ -2,10 +2,11 @@ import fs from "fs/promises"
 import { realpathSync } from "node:fs"
 import path from "path"
 import { describe, expect, test } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, FileSystem, Layer, PlatformError } from "effect"
 import { ChildProcess } from "effect/unstable/process"
 import { FSUtil } from "@opencode-ai/core/fs-util"
 import { Config } from "@opencode-ai/core/config"
+import { LayerNodePlatform } from "@opencode-ai/core/effect/app-node-platform"
 import { AppNodeBuilder } from "@opencode-ai/core/effect/app-node-builder"
 import { LayerNode } from "@opencode-ai/core/effect/layer-node"
 import { Location } from "@opencode-ai/core/location"
@@ -101,6 +102,7 @@ const withTool = <A, E, R>(
   directory: string,
   body: (registry: ToolRegistry.Interface) => Effect.Effect<A, E, R>,
   processLayer: Layer.Layer<AppProcess.Service> = appProcess,
+  filesystemLayer?: Layer.Layer<FileSystem.FileSystem>,
 ) => {
   const activeLocation = Layer.succeed(
     Location.Service,
@@ -118,6 +120,7 @@ const withTool = <A, E, R>(
           [AppProcess.node, processLayer],
           [Config.node, config],
           [ToolOutputStore.node, ToolOutputStore.nodeWithoutConfig],
+          ...(filesystemLayer ? [[LayerNodePlatform.filesystem, filesystemLayer] as const] : []),
         ],
       ),
     ),
@@ -328,6 +331,54 @@ describe("BashTool", () => {
                 truncated: false,
               })
               expect(settled.output?.structured).not.toHaveProperty("warnings")
+              expect(settled.output?.content[1]).toMatchObject({
+                type: "text",
+                text: expect.stringContaining("Warnings:"),
+              })
+            }),
+          ),
+        )
+      },
+      ([active, outside]) =>
+        Effect.promise(() =>
+          Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
+        ),
+    ),
+  )
+
+  it.live("executes the command when an advisory realPath lookup fails", () =>
+    Effect.acquireUseRelease(
+      Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
+      ([active, outside]) => {
+        reset()
+        const argument = path.join(outside.path, "realpath-blocked.sock")
+        // A live Unix-domain socket makes realPath fail with a non-NotFound error on some
+        // platforms, which must not stop the advisory scan from warning.
+        const failingFS = Layer.effect(
+          FileSystem.FileSystem,
+          FileSystem.FileSystem.pipe(
+            Effect.map((fs) =>
+              FileSystem.FileSystem.of({
+                ...fs,
+                realPath: (target) =>
+                  target.endsWith("realpath-blocked.sock")
+                    ? Effect.fail(PlatformError.badArgument({ module: "FileSystem", method: "realPath" }))
+                    : fs.realPath(target),
+              }),
+            ),
+          ),
+        ).pipe(Layer.provide(LayerNode.compile(LayerNodePlatform.filesystem)))
+        return withTool(
+          active.path,
+          (registry) => settleTool(registry, call({ command: `cat ${argument}` })),
+          appProcess,
+          failingFS,
+        ).pipe(
+          Effect.andThen((settled) =>
+            Effect.sync(() => {
+              expect(settled.result.type).toBe("content")
+              expect(runs).toHaveLength(1)
+              expect(assertions.map((item) => item.action)).toEqual(["bash"])
               expect(settled.output?.content[1]).toMatchObject({
                 type: "text",
                 text: expect.stringContaining("Warnings:"),
