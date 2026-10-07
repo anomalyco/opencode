@@ -14,7 +14,10 @@
   color: var(--v2-text-text-base);
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base); /* 14px */
-  line-height: 160%;
+  line-height: 22px;
+  font-kerning: normal;
+  font-variant-ligatures: common-ligatures contextual;
+  hanging-punctuation: first allow-end last;
 
   [data-markdown-word] {
     display: inline;
@@ -22,6 +25,31 @@
 
   :is([data-markdown-word], code)[data-markdown-enter] {
     animation: markdown-word-enter 180ms ease-out both;
+  }
+
+  /* Constrain prose to a comfortable foveal measure while code, tables, and diagrams bleed full width */
+  :is(h1, h2, h3, h4, h5, h6, p, ul, ol, blockquote) {
+    max-width: 72ch;
+  }
+
+  :is(p, li, blockquote) {
+    text-align: justify;
+    text-justify: inter-word;
+    text-wrap: pretty;
+    hyphens: auto;
+    hyphenate-limit-chars: 6 3 3;
+  }
+
+  :not(pre) > code,
+  a {
+    hyphens: none;
+  }
+
+  /* Keep streaming lines prefix-stable and flush-start so earlier lines never reflow or snap-stretch mid-stream */
+  :is(h1, h2, h3, h4, h5, h6, p, li, blockquote):has([data-markdown-word]) {
+    text-align: start;
+    text-wrap: stable;
+    hyphens: none;
   }
 
   /* Spacing for flow */
@@ -45,7 +73,9 @@
     font-weight: 600;
     margin-top: 28px;
     margin-bottom: 12px;
-    line-height: var(--line-height-large);
+    line-height: 26px;
+    letter-spacing: -0.015em;
+    text-wrap: balance;
   }
 
   h2 {
@@ -54,7 +84,9 @@
     font-weight: 600;
     margin-top: 24px;
     margin-bottom: 10px;
-    line-height: var(--line-height-large);
+    line-height: 24px;
+    letter-spacing: -0.01em;
+    text-wrap: balance;
   }
 
   h3 {
@@ -63,7 +95,8 @@
     font-weight: var(--font-weight-medium);
     margin-top: 20px;
     margin-bottom: 8px;
-    line-height: var(--line-height-large);
+    line-height: 20px;
+    text-wrap: balance;
   }
 
   h4,
@@ -74,7 +107,8 @@
     font-weight: var(--font-weight-medium);
     margin-top: 20px;
     margin-bottom: 8px;
-    line-height: var(--line-height-large);
+    line-height: 20px;
+    text-wrap: balance;
   }
 
   /* Emphasis & Strong: Neutral strong color */
@@ -190,7 +224,7 @@
     margin-top: 8px;
     margin-bottom: 12px;
     margin-inline-start: 0;
-    padding-inline-start: 32px;
+    padding-inline-start: 24px;
     list-style-position: outside;
   }
 
@@ -200,7 +234,8 @@
 
   ol {
     list-style-type: decimal;
-    padding-inline-start: 2.25rem;
+    padding-inline-start: 28px;
+    font-variant-numeric: tabular-nums;
   }
 
   li {
@@ -233,25 +268,26 @@
 
   li::marker {
     color: var(--v2-text-text-muted);
+    font-variant-numeric: tabular-nums;
   }
 
   /* Nested lists spacing */
   li > ul,
   li > ol {
-    margin-top: 0.25rem;
-    margin-bottom: 0.25rem;
-    padding-inline-start: 1rem; /* Minimal indent for nesting only */
+    margin-top: 4px;
+    margin-bottom: 4px;
+    padding-inline-start: 16px; /* Minimal indent for nesting only */
   }
 
   li > ol {
-    padding-inline-start: 1.75rem;
+    padding-inline-start: 24px;
   }
 
   /* Blockquotes */
   blockquote {
-    border-inline-start: 0.5px solid var(--v2-border-border-base);
-    margin: 1rem 0;
-    padding-inline-start: 0.5rem;
+    border-inline-start: 1.5px solid var(--v2-border-border-base);
+    margin: 16px 0;
+    padding-inline-start: 12px;
     color: var(--v2-text-text-muted);
     font-style: normal;
   }
@@ -391,6 +427,7 @@
     border-collapse: collapse;
     margin: 16px 0;
     font-size: var(--font-size-base);
+    font-variant-numeric: tabular-nums;
     display: block;
     overflow-x: auto;
   }

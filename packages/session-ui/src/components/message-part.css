@@ -139,6 +139,7 @@
     display: inline-block;
     white-space: pre-wrap;
     word-break: break-word;
+    text-wrap: pretty;
     overflow: hidden;
     unicode-bidi: plaintext;
     background: var(--v2-background-bg-layer-02);
@@ -307,6 +308,8 @@
     h6 {
       font-size: inherit;
       font-weight: inherit;
+      line-height: inherit;
+      letter-spacing: inherit;
       color: inherit;
     }
 
