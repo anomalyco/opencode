@@ -72,6 +72,7 @@ import {
 } from "@/pages/session/composer"
 import { createOpenReviewFile, createSessionTabs, createSizing, shouldShowFileTree } from "@/pages/session/helpers"
 import { MessageTimeline } from "@/pages/session/timeline/message-timeline"
+import { MessageNavRail } from "@/pages/session/timeline/message-nav-rail"
 import { createTimelineModel } from "@/pages/session/timeline/model"
 import { type DiffStyle, SessionReviewTab, type SessionReviewTabProps } from "@/pages/session/review-tab"
 import { useSessionLayout } from "@/pages/session/session-layout"
@@ -1684,6 +1685,10 @@ export default function Page() {
     return `[${language.t("common.attachment")}]`
   }
 
+  const navItems = createMemo(() =>
+    visibleUserMessages().map((message) => ({ id: message.id, text: line(message.id) })),
+  )
+
   const fail = (err: unknown) => {
     showToast({
       variant: "error",
@@ -1989,6 +1994,13 @@ export default function Page() {
     consumePendingMessage: layout.pendingMessage.consume,
   })
 
+  const jumpToMessage = (id: string) => {
+    const message = visibleUserMessages().find((item) => item.id === id)
+    if (!message) return
+    autoScroll.pause()
+    scrollToMessage(message, "auto")
+  }
+
   createEffect(
     on(
       () => params.id,
@@ -2064,7 +2076,7 @@ export default function Page() {
       <Show when={!isDesktop() && !!params.id && settings.general.newLayoutDesigns() && !mobileTabsBottom()}>
         {mobileTabs(true)}
       </Show>
-      <div class="flex-1 min-h-0 overflow-hidden">
+      <div class="relative flex-1 min-h-0 overflow-hidden">
         <Switch>
           <Match when={params.id && mobileChanges()}>
             <div class="relative h-full overflow-hidden">
@@ -2126,6 +2138,10 @@ export default function Page() {
             <NewSessionView worktree={newSessionWorktree()} />
           </Match>
         </Switch>
+
+        <Show when={params.id && messagesReady() && !mobileChanges()}>
+          <MessageNavRail items={navItems()} getScroller={() => scroller} onJump={jumpToMessage} />
+        </Show>
       </div>
 
       <Show when={(params.id || !newSessionDesign()) && !mobileChanges()}>

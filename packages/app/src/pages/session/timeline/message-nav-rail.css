@@ -1,0 +1,161 @@
+.oc-nav-rail {
+  position: absolute;
+  /* Clears the ScrollView thumb track, which is pinned to the edge. */
+  inset-block: 0;
+  inset-inline-end: 12px;
+  width: 26px;
+  z-index: 50;
+}
+
+/* Evenly spaced, vertically centred stack of marks. */
+.oc-nav-rail__track {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 7px;
+}
+
+.oc-nav-rail__mark {
+  position: relative;
+  display: block;
+  width: 22px;
+  height: 11px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.oc-nav-rail__mark::before {
+  content: "";
+  display: block;
+  width: 13px;
+  height: 3px;
+  margin-inline-start: auto;
+  border-radius: 2px;
+  background: var(--border-strong-base);
+  transition:
+    width 0.15s ease,
+    background 0.15s ease;
+}
+
+.oc-nav-rail__mark:hover::before,
+.oc-nav-rail__mark[data-hover]::before {
+  width: 18px;
+  background: var(--icon-base);
+}
+
+.oc-nav-rail__mark[data-active]::before {
+  width: 21px;
+  background: var(--icon-interactive-base);
+}
+
+/* Minimal touch handle, shown only in the mobile layout. */
+.oc-nav-rail__handle {
+  display: none;
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 0;
+  transform: translateY(-50%);
+  width: 30px;
+  height: 60px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.oc-nav-rail__handle::before {
+  content: "";
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: 4px;
+  transform: translateY(-50%);
+  width: 3px;
+  height: 34px;
+  border-radius: 3px;
+  background: var(--border-strong-base);
+  transition:
+    background 0.15s ease,
+    height 0.15s ease,
+    width 0.15s ease;
+}
+
+.oc-nav-rail[data-open] .oc-nav-rail__handle::before {
+  width: 4px;
+  height: 46px;
+  background: var(--icon-interactive-base);
+}
+
+/* Opaque menu panel; opens toward the content on the opposite side. */
+.oc-nav-rail__popover {
+  position: absolute;
+  inset-block-start: 50%;
+  inset-inline-end: calc(100% + 6px);
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 200px;
+  max-width: min(300px, 76vw);
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 6px;
+  background: var(--surface-raised-stronger-non-alpha);
+  border: 1px solid var(--border-weak-base);
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+  z-index: 51;
+}
+
+.oc-nav-rail__item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-weak);
+  font-size: 0.82rem;
+  line-height: 1.5;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease;
+}
+
+.oc-nav-rail__item:hover,
+.oc-nav-rail__item[data-active] {
+  background: var(--surface-interactive-weak);
+  color: var(--text-strong);
+}
+
+.oc-nav-rail__text {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 640px) {
+  .oc-nav-rail__track {
+    display: none;
+  }
+
+  .oc-nav-rail__handle {
+    display: block;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .oc-nav-rail__mark::before,
+  .oc-nav-rail__handle::before,
+  .oc-nav-rail__item {
+    transition: none;
+  }
+}
