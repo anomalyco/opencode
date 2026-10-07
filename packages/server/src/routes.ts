@@ -21,7 +21,6 @@ import { SessionTransfer } from "@opencode/core/session/transfer"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Job } from "@opencode/core/job"
 import { Mcp } from "@opencode/core/mcp/index"
-import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
@@ -33,9 +32,9 @@ import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
 import { Workspace } from "@opencode/core/workspace"
 import { Watcher } from "@opencode/core/filesystem/watcher"
-import { HttpPlatform, HttpRouter } from "effect/unstable/http"
+import { HttpRouter } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
-import { Context, Effect, FileSystem, Layer, Option } from "effect"
+import { Context, Effect, Layer, Option } from "effect"
 import { Api } from "./api"
 import { ServerAuth } from "./auth"
 import { CorsConfig } from "./cors"
@@ -52,7 +51,6 @@ import type { ServerOptions } from "./options"
 
 const applicationServiceNodes = [
   Global.node,
-  FSUtil.node,
   Database.node,
   Bus.node,
   EventLogger.node,
@@ -162,9 +160,6 @@ function makeRoutes<AuthError, AuthServices>(
   return serviceLayer.pipe(
     Layer.flatMap((context) => {
       const services = Layer.succeedContext(context)
-      const platform = Layer.fresh(HttpPlatform.layer).pipe(
-        Layer.provide(Layer.succeed(FileSystem.FileSystem, Context.get(context, FSUtil.Service))),
-      )
       const requestServices = Layer.merge(
         Layer.succeedContext(
           Context.pick(
@@ -179,13 +174,7 @@ function makeRoutes<AuthError, AuthServices>(
         ServerInfo.layer(serviceURLs, Context.get(context, Global.Service).tmp, options.app),
       )
       const api = HttpApiBuilder.layer(Api, { openapiPath: "/openapi.json" }).pipe(
-        Layer.provide(
-          handlers.pipe(
-            Layer.provide(platform),
-            Layer.provide(services),
-            Layer.provide(Layer.succeed(CorsConfig, options)),
-          ),
-        ),
+        Layer.provide(handlers.pipe(Layer.provide(services), Layer.provide(Layer.succeed(CorsConfig, options)))),
         Layer.provide(formLocationLayer),
         Layer.provide(sessionLocationLayer),
         Layer.provide(layer),

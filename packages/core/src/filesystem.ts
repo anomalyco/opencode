@@ -88,7 +88,6 @@ export class GrepInput extends Schema.Class<GrepInput>("FileSystem.GrepInput")({
 export const Event = FileSystem.Event
 
 export interface File {
-  readonly path: AbsolutePath
   readonly mime: string
   readonly size: number
   readonly mtime: Option.Option<Date>
@@ -167,7 +166,6 @@ const baseLayer = Layer.effect(
         )
         if (info.type !== "File") return yield* Effect.fail(new NotFoundError({ path: input.path }))
         return {
-          path: AbsolutePath.make(target.real),
           mime: FSUtil.mimeType(target.real),
           size: Number(info.size),
           mtime: info.mtime,

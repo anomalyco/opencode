@@ -85,10 +85,7 @@ it.live(
       const tmp = yield* tmpdirScoped()
       const current = path.join(tmp.path, "project")
       const outside = path.join(tmp.path, "outside")
-      const largeBytes = Uint8Array.from(
-        { length: 4 * 1024 * 1024 + 321 },
-        (_, i) => (i * 31 + (i >> 8)) & 0xff,
-      )
+      const largeBytes = Uint8Array.from({ length: 4 * 1024 * 1024 + 321 }, (_, i) => (i * 31 + (i >> 8)) & 0xff)
 
       yield* Effect.promise(async () => {
         await fs.mkdir(path.join(current, "nested"), { recursive: true })
@@ -96,6 +93,7 @@ it.live(
         await fs.writeFile(path.join(current, "clip.mp4"), "0123456789")
         await fs.writeFile(path.join(current, "empty.bin"), "")
         await fs.writeFile(path.join(current, "large.mp4"), largeBytes)
+        await fs.writeFile(path.join(current, "notes.txt"), "compressible ".repeat(1024))
         await fs.writeFile(path.join(outside, "secret.txt"), "secret")
         await fs.symlink(outside, path.join(current, "escape-link"), "junction")
       })
@@ -106,7 +104,7 @@ it.live(
         url.searchParams.set("location[directory]", current)
         return url
       }
-      const request = (relativePath: string, init?: RequestInit) =>
+      const request = (relativePath: string, init?: BunFetchRequestInit) =>
         Effect.promise(() =>
           fetch(readUrl(relativePath), {
             ...init,
@@ -265,7 +263,14 @@ it.live(
         }),
       )
 
-      // 9. Multi-megabyte file streams byte-for-byte on full read and range slice
+      // 9. Compressible files keep their exact Content-Length instead of being gzipped
+      const text = yield* request("notes.txt", { headers: { "Accept-Encoding": "gzip" }, decompress: false })
+      expect(text.status).toBe(200)
+      expect(text.headers.get("content-encoding")).toBeNull()
+      expect(text.headers.get("content-length")).toBe(String("compressible ".length * 1024))
+      expect(yield* Effect.promise(() => text.text())).toBe("compressible ".repeat(1024))
+
+      // 10. Multi-megabyte file streams byte-for-byte on full read and range slice
       const fullLarge = yield* request("large.mp4")
       expect(fullLarge.status).toBe(200)
       expect(fullLarge.headers.get("content-length")).toBe(String(largeBytes.length))
@@ -279,12 +284,51 @@ it.live(
         headers: { Range: `bytes=${sliceStart}-${sliceEnd}` },
       })
       expect(partialLarge.status).toBe(206)
-      expect(partialLarge.headers.get("content-range")).toBe(
-        `bytes ${sliceStart}-${sliceEnd}/${largeBytes.length}`,
-      )
+      expect(partialLarge.headers.get("content-range")).toBe(`bytes ${sliceStart}-${sliceEnd}/${largeBytes.length}`)
       expect(partialLarge.headers.get("content-length")).toBe(String(sliceEnd - sliceStart + 1))
       const partialLargeReceived = new Uint8Array(yield* Effect.promise(() => partialLarge.arrayBuffer()))
       expect(Buffer.compare(partialLargeReceived, largeBytes.subarray(sliceStart, sliceEnd + 1))).toBe(0)
     }),
   15_000,
+)
+
+it.live("opens no file for HEAD and closes it when a download is aborted", () =>
+  Effect.gen(function* () {
+    if (process.platform !== "linux" && process.platform !== "darwin") return
+    const tmp = yield* tmpdirScoped()
+    const file = path.join(tmp.path, "large.bin")
+    yield* Effect.promise(() => fs.writeFile(file, new Uint8Array(32 * 1024 * 1024)))
+    const real = yield* Effect.promise(() => fs.realpath(file))
+    const server = yield* startServer(path.join(tmp.path, "config"))
+    const url = new URL("/api/fs/read/large.bin", server.base)
+    url.searchParams.set("location[directory]", tmp.path)
+    const openHandles = Effect.promise(async () => {
+      if (process.platform === "darwin")
+        return Bun.spawnSync(["lsof", "-p", String(process.pid), "-Fn"])
+          .stdout.toString()
+          .split("\n")
+          .filter((line) => line === `n${real}`).length
+      const fds = await fs.readdir("/proc/self/fd")
+      const targets = await Promise.all(fds.map((fd) => fs.readlink(`/proc/self/fd/${fd}`).catch(() => "")))
+      return targets.filter((target) => target === real).length
+    })
+
+    const head = yield* Effect.promise(() => fetch(url, { method: "HEAD", headers: server.headers }))
+    expect(head.status).toBe(200)
+    expect(head.headers.get("content-length")).toBe(String(32 * 1024 * 1024))
+    expect(yield* openHandles).toBe(0)
+
+    const controller = new AbortController()
+    const download = yield* Effect.promise(() => fetch(url, { headers: server.headers, signal: controller.signal }))
+    const reader = download.body?.getReader()
+    yield* Effect.promise(async () => reader?.read())
+    expect(yield* openHandles).toBe(1)
+    controller.abort()
+    expect(
+      yield* openHandles.pipe(
+        Effect.repeat({ until: (count) => count === 0, schedule: Schedule.spaced("25 millis") }),
+        Effect.timeout("5 seconds"),
+      ),
+    ).toBe(0)
+  }),
 )

@@ -1,15 +1,14 @@
 import { FileSystem } from "@opencode/core/filesystem"
 import { RelativePath } from "@opencode/core/schema"
 import { FileNotFoundError } from "@opencode/protocol/errors"
-import { Effect } from "effect"
-import { HttpEffect, HttpPlatform, type HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
+import { Effect, Option, Stream } from "effect"
+import { type HttpServerRequest, HttpServerResponse } from "effect/unstable/http"
 import { HttpApiBuilder } from "effect/unstable/httpapi"
 import { Api } from "../api"
 import { response } from "../location"
 
 export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handlers) =>
   Effect.gen(function* () {
-    const platform = yield* HttpPlatform.HttpPlatform
     return handlers
       .handleRaw("fs.read", (ctx) =>
         Effect.gen(function* () {
@@ -22,9 +21,7 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
                 (error) => new FileNotFoundError({ path: error.path, message: `File not found: ${error.path}` }),
               ),
             )
-          return yield* serveFile(ctx.request, path, file).pipe(
-            Effect.provideService(HttpPlatform.HttpPlatform, platform),
-          )
+          return serveFile(ctx.request, file)
         }),
       )
       .handle("fs.list", (ctx) =>
@@ -62,189 +59,77 @@ function decodeRequestPath(url: string) {
   })
 }
 
-const serveFile = Effect.fnUntraced(function* (
-  request: HttpServerRequest.HttpServerRequest,
-  path: RelativePath,
-  file: FileSystem.File,
-) {
-  yield* HttpEffect.appendPreResponseHandler((_request, res) =>
-    Effect.succeed(HttpServerResponse.removeHeader(res, "content-encoding")),
-  )
-  const fileResponse = (options?: Parameters<typeof HttpServerResponse.file>[1]) =>
-    HttpServerResponse.file(file.path, {
-      ...options,
-      headers: {
-        "content-type": file.mime,
-        "accept-ranges": "bytes",
-        "content-encoding": "identity",
-        ...options?.headers,
-      },
-    }).pipe(
-      Effect.catchReason(
-        "PlatformError",
-        "NotFound",
-        () => Effect.fail(new FileNotFoundError({ path, message: `File not found: ${path}` })),
-        (_, error) => Effect.die(error),
-      ),
-    )
+function serveFile(request: HttpServerRequest.HttpServerRequest, file: FileSystem.File) {
+  const etag = `W/"${file.size.toString(16)}-${Option.match(file.mtime, {
+    onNone: () => "0",
+    onSome: (mtime) => mtime.getTime().toString(16),
+  })}"`
+  const lastModified = Option.getOrUndefined(Option.map(file.mtime, (mtime) => mtime.toUTCString()))
+  // no-transform keeps compression from changing Content-Length.
+  const validators = {
+    "cache-control": "no-transform",
+    etag,
+    ...(lastModified === undefined ? {} : { "last-modified": lastModified }),
+  }
+  if (isNotModified(request, etag, lastModified)) return HttpServerResponse.empty({ status: 304, headers: validators })
 
   const rangeHeader = request.method === "GET" ? request.headers["range"] : undefined
-  const ifRange = request.headers["if-range"]
-  const shouldEvaluateConditionals =
-    request.headers["if-none-match"] !== undefined || request.headers["if-modified-since"] !== undefined
-
-  const fullResponse =
-    shouldEvaluateConditionals || (rangeHeader !== undefined && ifRange !== undefined) || rangeHeader === undefined
-      ? yield* fileResponse()
+  const range =
+    rangeHeader !== undefined && matchesIfRange(request.headers["if-range"], etag, lastModified)
+      ? parseRange(rangeHeader, file.size)
       : undefined
-
-  if (shouldEvaluateConditionals && fullResponse !== undefined) {
-    const conditional = evaluateConditionalRequest(request, fullResponse)
-    if (conditional !== undefined) return conditional
-  }
-
-  if (rangeHeader === undefined) {
-    return fullResponse ?? (yield* fileResponse())
-  }
-
-  if (ifRange !== undefined && fullResponse !== undefined && !matchesIfRange(ifRange, fullResponse)) {
-    return fullResponse
-  }
-
-  const parsedRange = parseRange(rangeHeader, file.size)
-  if (parsedRange === undefined) {
-    return fullResponse ?? (yield* fileResponse())
-  }
-
-  if (parsedRange === "unsatisfiable") {
+  if (range === "unsatisfiable")
     return HttpServerResponse.empty({
       status: 416,
-      headers: {
-        "accept-ranges": "bytes",
-        "content-range": `bytes */${file.size}`,
-      },
+      headers: { "accept-ranges": "bytes", "content-range": `bytes */${file.size}` },
     })
-  }
 
-  return yield* fileResponse({
-    status: 206,
-    offset: parsedRange.start,
-    bytesToRead: parsedRange.end - parsedRange.start + 1,
+  const offset = range?.start ?? 0
+  const length = range === undefined ? file.size : range.end - range.start + 1
+  return HttpServerResponse.stream(length === 0 ? Stream.empty : file.stream({ offset, bytesToRead: length }), {
+    status: range === undefined ? 200 : 206,
+    contentLength: length,
     headers: {
-      "content-range": `bytes ${parsedRange.start}-${parsedRange.end}/${file.size}`,
-    },
-  })
-})
-
-function parseInteger(value: string) {
-  if (!/^\d+$/.test(value)) return undefined
-  const parsed = Number(value)
-  return Number.isSafeInteger(parsed) ? parsed : undefined
-}
-
-function parseRange(
-  header: string,
-  fileSize: number,
-): { readonly start: number; readonly end: number } | "unsatisfiable" | undefined {
-  const value = header.trim()
-  if (!value.toLowerCase().startsWith("bytes=")) return undefined
-  const rangeValue = value.slice(6).trim()
-  if (rangeValue.length === 0 || rangeValue.includes(",")) return undefined
-  const separatorIndex = rangeValue.indexOf("-")
-  if (separatorIndex === -1) return undefined
-  const startPart = rangeValue.slice(0, separatorIndex).trim()
-  const endPart = rangeValue.slice(separatorIndex + 1).trim()
-  if (startPart === "" && endPart === "") return undefined
-  if (startPart === "") {
-    const suffixLength = parseInteger(endPart)
-    if (suffixLength === undefined) return undefined
-    if (suffixLength === 0 || fileSize === 0) return "unsatisfiable"
-    return {
-      start: Math.max(fileSize - suffixLength, 0),
-      end: fileSize - 1,
-    }
-  }
-  const start = parseInteger(startPart)
-  if (start === undefined) return undefined
-  if (endPart === "") {
-    if (start >= fileSize) return "unsatisfiable"
-    return {
-      start,
-      end: fileSize - 1,
-    }
-  }
-  const end = parseInteger(endPart)
-  if (end === undefined) return undefined
-  if (start > end || start >= fileSize) return "unsatisfiable"
-  return {
-    start,
-    end: Math.min(end, fileSize - 1),
-  }
-}
-
-function stripWeakEtagPrefix(value: string) {
-  const trimmed = value.trim()
-  return /^w\//i.test(trimmed) ? trimmed.slice(2) : trimmed
-}
-
-function matchesIfNoneMatch(ifNoneMatch: string, etag: string | undefined) {
-  const normalizedEtag = etag === undefined ? undefined : stripWeakEtagPrefix(etag)
-  return ifNoneMatch.split(",").some((candidate) => {
-    const value = candidate.trim()
-    if (value === "") return false
-    if (value === "*") return true
-    return normalizedEtag !== undefined && stripWeakEtagPrefix(value) === normalizedEtag
-  })
-}
-
-function isNotModifiedSince(ifModifiedSince: string, lastModified: string | undefined) {
-  if (lastModified === undefined) return false
-  const ifModifiedSinceMs = Date.parse(ifModifiedSince)
-  if (Number.isNaN(ifModifiedSinceMs)) return false
-  const lastModifiedMs = Date.parse(lastModified)
-  if (Number.isNaN(lastModifiedMs)) return false
-  return lastModifiedMs <= ifModifiedSinceMs
-}
-
-function matchesIfRange(ifRange: string, response: HttpServerResponse.HttpServerResponse) {
-  const value = ifRange.trim()
-  if (value === "") return false
-  if (value.startsWith('"') || /^w\/"/i.test(value)) {
-    const etag = response.headers["etag"]
-    if (etag === undefined || !value.endsWith('"')) return false
-    return stripWeakEtagPrefix(value) === stripWeakEtagPrefix(etag)
-  }
-  const lastModified = response.headers["last-modified"]
-  if (lastModified === undefined) return false
-  const ifRangeMs = Date.parse(value)
-  if (Number.isNaN(ifRangeMs)) return false
-  const lastModifiedMs = Date.parse(lastModified)
-  if (Number.isNaN(lastModifiedMs)) return false
-  return lastModifiedMs === ifRangeMs
-}
-
-function notModifiedResponse(response: HttpServerResponse.HttpServerResponse) {
-  return HttpServerResponse.empty({
-    status: 304,
-    headers: {
-      ...(response.headers["etag"] !== undefined ? { etag: response.headers["etag"] } : {}),
-      ...(response.headers["cache-control"] !== undefined ? { "cache-control": response.headers["cache-control"] } : {}),
-      ...(response.headers["last-modified"] !== undefined ? { "last-modified": response.headers["last-modified"] } : {}),
+      ...validators,
+      "accept-ranges": "bytes",
+      "content-type": file.mime,
+      ...(range === undefined ? {} : { "content-range": `bytes ${range.start}-${range.end}/${file.size}` }),
     },
   })
 }
 
-function evaluateConditionalRequest(
-  request: HttpServerRequest.HttpServerRequest,
-  response: HttpServerResponse.HttpServerResponse,
-) {
+function isNotModified(request: HttpServerRequest.HttpServerRequest, etag: string, lastModified: string | undefined) {
   const ifNoneMatch = request.headers["if-none-match"]
-  if (ifNoneMatch !== undefined) {
-    return matchesIfNoneMatch(ifNoneMatch, response.headers["etag"]) ? notModifiedResponse(response) : undefined
-  }
+  if (ifNoneMatch !== undefined)
+    return ifNoneMatch.split(",").some((tag) => tag.trim() === "*" || stripWeak(tag) === stripWeak(etag))
   const ifModifiedSince = request.headers["if-modified-since"]
-  if (ifModifiedSince !== undefined && isNotModifiedSince(ifModifiedSince, response.headers["last-modified"])) {
-    return notModifiedResponse(response)
+  return (
+    ifModifiedSince !== undefined &&
+    lastModified !== undefined &&
+    Date.parse(lastModified) <= Date.parse(ifModifiedSince)
+  )
+}
+
+function matchesIfRange(ifRange: string | undefined, etag: string, lastModified: string | undefined) {
+  if (ifRange === undefined) return true
+  if (/^\s*(w\/)?"/i.test(ifRange)) return stripWeak(ifRange) === stripWeak(etag)
+  return lastModified !== undefined && Date.parse(ifRange) === Date.parse(lastModified)
+}
+
+function stripWeak(etag: string) {
+  return etag.trim().replace(/^w\//i, "")
+}
+
+function parseRange(header: string, size: number) {
+  const match = /^bytes=\s*(\d*)\s*-\s*(\d*)\s*$/i.exec(header.trim())
+  if (match === null || (match[1] === "" && match[2] === "")) return undefined
+  if (match[1] === "") {
+    const suffix = Number(match[2])
+    if (suffix === 0 || size === 0) return "unsatisfiable"
+    return { start: Math.max(size - suffix, 0), end: size - 1 }
   }
-  return undefined
+  const start = Number(match[1])
+  const end = match[2] === "" ? size - 1 : Number(match[2])
+  if (start > end || start >= size) return "unsatisfiable"
+  return { start, end: Math.min(end, size - 1) }
 }
