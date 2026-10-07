@@ -296,9 +296,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "စကားဝှက်",
   "dialog.server.edit.title": "ဆာဗာကို တည်းဖြတ်ပါ။",
   "dialog.server.menu.edit": "တည်းဖြတ်ရန်",
-  "dialog.server.menu.default": "မူရင်းအဖြစ် သတ်မှတ်ပါ။",
-  "dialog.server.menu.defaultRemove": "မူရင်းကို ဖယ်ရှားပါ။",
-  "dialog.server.status.default": "မူရင်း",
   "dialog.project.edit.title": "ပရောဂျက်ကို တည်းဖြတ်ပါ။",
   "dialog.project.edit.icon": "သင်္ကေတ",
   "dialog.project.edit.icon.alt": "ပရောဂျက် သင်္ကေတ",
@@ -808,7 +805,6 @@ export const dict = {
   "server.connect.button": "ချိတ်ဆက်မည်",
   "server.connect.address.invalid": "မှန်ကန်သော HTTP သို့မဟုတ် HTTPS server လိပ်စာကို ထည့်ပါ။",
   "server.connect.failed": "ချိတ်ဆက်၍ မရပါ။ Server လိပ်စာနှင့် စကားဝှက်ကို စစ်ဆေးပြီး ပြန်ကြိုးစားပါ။",
-  "server.connect.pair.description": "ချိတ်ဆက်ရန်အသေးစိတ်ကို ရယူရန် သင့်ကွန်ပျူတာတွင် ဤ command ကို chạy ဆောင်ရန်။",
   "server.connect.scan": "QR ကုဒ် စကင်",
   "server.connect.scan.description": "opencode pair မှ ပြသထားသော QR ကုဒ်ကို သင်၏ ကင်မရာဖြင့် ညွှန်ပါ။",
   "server.connect.scan.invalid":
@@ -816,8 +812,6 @@ export const dict = {
   "server.connect.camera": "ကင်မရာကို အစုံပေါင်းခြင်း",
   "server.connect.camera.starting": "ကင်မရာဖွင့်နေသည်…",
   "server.connect.mixedContent": "HTTPS စာမျက်နှာမှ ဤ HTTP ဆာဗာထံ ချိတ်ဆက်၍ မရနိုင်ပါ။ HTTPS ဆာဗာလိပ်စာကို အသုံးပြုပါ။",
-  "server.connect.camera.insecure":
-    "QR စကင်လုပ်ရန် HTTPS ဖြင့် သို့မဟုတ် localhost တွင် ဤစာမျက်နှာကို ဖွင့်ရန် လိုအပ်သည်။",
   "server.connect.camera.unavailable": "ဤဘရောက်ဇာတွင် ကင်မရာမရှိပါ။ ချိတ်ဆက်မှုအချက်အလက်များကို လက်ဖြင့်ထည့်ပါ။",
   "server.connect.camera.error":
     "ကင်မရာဖွင့်၍ မရနိုင်ပါ။ ကင်မရာခွင့်ပြုချက်ပေးပါ သို့မဟုတ် ချိတ်ဆက်မှုအချက်အလက်များကို လက်ဖြင့်ထည့်ပါ။",

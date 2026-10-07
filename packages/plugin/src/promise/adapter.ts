@@ -356,6 +356,10 @@ export function fromPromise(plugin: Plugin) {
             get: adaptApiMethod(IntegrationEndpoints["integration.get"], host.integration.get),
             connect: {
               key: adaptApiMethod(IntegrationEndpoints["integration.connect.key"], host.integration.connect.key),
+              external: adaptApiMethod(
+                IntegrationEndpoints["integration.connect.external"],
+                host.integration.connect.external,
+              ),
             },
             oauth: {
               connect: adaptApiMethod(

@@ -31,8 +31,5 @@ export default {
   "form.name": "伺服器名稱（選填）",
   "form.namePlaceholder": "Localhost",
   "form.add": "新增伺服器",
-  "server.default": "預設",
-  "menu.default": "設為預設",
-  "menu.defaultRemove": "取消預設",
   "menu.delete": "刪除",
 }

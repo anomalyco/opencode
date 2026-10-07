@@ -41,9 +41,10 @@ export function createConnection(input: {
   target: () => { server: string; session: string }
   /**
    * `mirror` applies the current tabs to the strip; call it right after storing the state, in the same batch, or
-   * later once the strip can be written. A mirror that never runs leaves the strip's tabs as they are.
+   * later once the strip can be written. A mirror that never runs leaves the strip's tabs as they are. `native` is true
+   * for an inventory the desktop reported, false for a change made here, such as a new embed or a suspension.
    */
-  change: (state: ConnectionState, mirror: () => void) => void
+  change: (state: ConnectionState, mirror: () => void, native: boolean) => void
   /** The session's strip: the browser tab IDs it stores, and quietly adding or removing one. */
   strip: {
     stored: () => readonly string[]
@@ -98,7 +99,7 @@ export function createConnection(input: {
 
   const publish = (native = false) => {
     pruning ||= native
-    input.change({ ...state }, mirror)
+    input.change({ ...state }, mirror, native)
   }
 
   // The pane itself is unreachable while its main extension restarts or is disabled, and main drops every

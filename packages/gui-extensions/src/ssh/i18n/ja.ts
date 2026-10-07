@@ -38,8 +38,5 @@ export default {
   "form.name": "サーバー名 (オプション)",
   "form.namePlaceholder": "Localhost",
   "form.add": "サーバーを追加",
-  "server.default": "デフォルト",
-  "menu.default": "デフォルトに設定",
-  "menu.defaultRemove": "デフォルト設定を解除",
   "menu.delete": "削除",
 }

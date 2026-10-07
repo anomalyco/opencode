@@ -36,6 +36,17 @@ story("renders small completed Markdown immediately without skipping sanitizatio
   await expect(harness.locator("pre.shiki")).toBeVisible()
 })
 
+story("keeps Markdown text selectable inside a container that disables selection", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    document.body.style.userSelect = "none"
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({ text: "Selectable answer text" })
+  }, fixture)
+
+  await page.getByTestId("markdown-fixture").getByText("Selectable answer text").click({ clickCount: 3 })
+  expect(await page.evaluate(() => getSelection()?.toString().trim())).toBe("Selectable answer text")
+})
+
 story("sanitizes raw HTML while preserving supported Markdown markup", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)

@@ -287,9 +287,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "нууц үг",
   "dialog.server.edit.title": "Сервер засах",
   "dialog.server.menu.edit": "Засварлах",
-  "dialog.server.menu.default": "Өгөгдмөл болгож тохируулах",
-  "dialog.server.menu.defaultRemove": "Өгөгдмөлийг арилгах",
-  "dialog.server.status.default": "Өгөгдмөл",
   "dialog.project.edit.title": "Төслийг засварлах",
   "dialog.project.edit.icon": "Дүрс",
   "dialog.project.edit.icon.alt": "Төслийн дүрс тэмдэг",
@@ -797,8 +794,6 @@ export const dict = {
   "server.connect.button": "Холбох",
   "server.connect.address.invalid": "Хүчинтэй HTTP эсвэл HTTPS серверийн хаягийг оруулна уу.",
   "server.connect.failed": "Холбогдож чадсангүй. Серверийн хаяг ба нууц үгийг шалгаад дахин оролдоно уу.",
-  "server.connect.pair.description":
-    "Энэ командыг өөрийн компьютер дээр ажиллуулж, холболтын дэлгэрэнгүй мэдээллийг аваарай.",
   "server.connect.scan": "QR кодыг сканнердах",
   "server.connect.scan.description": "Камераа opencode pair-ийн харуулсан QR код руу чиглүүлнэ үү.",
   "server.connect.scan.invalid": "Энэ OpenCode холболтын код биш. opencode pair-ийн харуулсан кодыг уншуулна уу.",
@@ -806,7 +801,6 @@ export const dict = {
   "server.connect.camera.starting": "Камер нээж байна…",
   "server.connect.mixedContent":
     "HTTPS хуудсаас энэ HTTP серверт холбогдож чадсангүй. Үүний оронд HTTPS серверийн хаягийг ашигла.",
-  "server.connect.camera.insecure": "QR сканнердах нь энэ хуудасыг HTTPS дээр эсвэл localhost дээр нээх шаардлагатай.",
   "server.connect.camera.unavailable": "Энэ хөтчид камер байхгүй байна. Холболтын мэдээллээ гар аргаар оруулна уу.",
   "server.connect.camera.error":
     "Камерыг нээж чадсангүй. Камер ашиглахыг зөвшөөрөх эсвэл холболтын дэлгэрэнгүй мэдээллээ гараар оруулна уу.",

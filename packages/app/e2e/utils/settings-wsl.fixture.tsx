@@ -241,11 +241,7 @@ export function mount(input: {
 
       return (
         <Show when={extensions.ready()}>
-          <AppInterface
-            servers={servers()}
-            defaultServer={ServerConnection.Key.make("sidecar")}
-            router={(props) => <MemoryRouter {...props} history={history} />}
-          />
+          <AppInterface servers={servers()} router={(props) => <MemoryRouter {...props} history={history} />} />
         </Show>
       )
     }

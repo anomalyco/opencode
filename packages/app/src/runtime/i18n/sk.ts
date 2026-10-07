@@ -311,9 +311,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "heslo",
   "dialog.server.edit.title": "Upraviť server",
   "dialog.server.menu.edit": "Upraviť",
-  "dialog.server.menu.default": "Nastaviť ako predvolený",
-  "dialog.server.menu.defaultRemove": "Odstrániť predvolený",
-  "dialog.server.status.default": "Predvolený",
   "dialog.project.edit.title": "Upraviť projekt",
   "dialog.project.edit.icon": "Ikona",
   "dialog.project.edit.icon.alt": "Ikona projektu",
@@ -815,7 +812,6 @@ export const dict = {
   "server.connect.button": "Pripojiť sa",
   "server.connect.address.invalid": "Zadajte platnú adresu servera s protokolom HTTP alebo HTTPS.",
   "server.connect.failed": "Nepodarilo sa pripojiť. Skontrolujte adresu servera a heslo a skúste znova.",
-  "server.connect.pair.description": "Spustite tento príkaz na svojom počítači, aby ste získali údaje na pripojenie.",
   "server.connect.scan": "Naskenujte QR kód",
   "server.connect.scan.description": "Namierte kameru na QR kód zobrazený pomocou opencode pair.",
   "server.connect.scan.invalid": "Toto nie je párovací kód OpenCode. Naskenujte kód zobrazený pomocou opencode pair.",
@@ -823,7 +819,6 @@ export const dict = {
   "server.connect.camera.starting": "Otvorenie kamery…",
   "server.connect.mixedContent":
     "Nie je možné pripojiť sa k tomuto HTTP serveru z HTTPS stránky. Namiesto toho použite adresu HTTPS.",
-  "server.connect.camera.insecure": "Na skenovanie QR je potrebné otvoriť túto stránku cez HTTPS alebo na localhoste.",
   "server.connect.camera.unavailable":
     "Tento prehliadač nemá k dispozícii žiadnu kameru. Zadajte údaje na pripojenie ručne.",
   "server.connect.camera.error":

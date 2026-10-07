@@ -85,7 +85,7 @@ const router: Router = { routing: () => false, path: () => "/" }
 
 const keybinds: Keybinds = { keybind: () => [], keys: (bind) => bind.split("+"), matches: () => false }
 
-const servers: Servers = { list: () => [] }
+const servers: Servers = { list: () => [], get: () => undefined }
 
 const workspaces: Workspaces = { on: () => () => undefined }
 
@@ -348,6 +348,7 @@ function standIn(overrides: Partial<Interface>): Interface {
     keybind: () => [],
     matches: () => false,
     servers: () => ["local"],
+    server: () => undefined,
     ...overrides,
   }
 }

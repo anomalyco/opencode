@@ -1,11 +1,11 @@
 ---
-title: "BYOK"
-description: "Call your own provider connections through the Console gateway with a Console key."
+title: "Providers API"
+description: "Call the providers connected to your workspace through the Console gateway with a Console key."
 ---
 
-Bring your own key (BYOK) connects a provider account you already pay for to your workspace. Console stores the
-provider credential and gives each connection one gateway URL. Members and integrations call that URL with a Console
-key and never handle the provider secret.
+Every [provider](/console/providers) connected to your workspace is served through the Console gateway at its own
+URL. OpenCode uses it automatically after `/connect`; call it directly to use the same providers from your own tools.
+Console adds the provider credential before forwarding, so the provider secret never leaves the workspace.
 
 ```bash
 curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
@@ -17,29 +17,18 @@ curl -X POST "https://opencode.ai/inference/custom/conn_.../chat/completions" \
   }'
 ```
 
-## Connect a provider
+## Provider URL
 
-1. In the [Console](https://opencode.ai/console), open **Providers** and click **Connect Provider**.
-2. Pick a provider from the catalog and paste its API key, or click **Add Custom Provider** for any other endpoint.
-3. Copy the **Console API URL** from the provider page.
+Copy the **Console API URL** from the provider's page under **Providers**.
 
 ```text
 https://opencode.ai/inference/custom/<connection_id>
 ```
 
-Catalog providers come with their models preconfigured. Custom providers need a few more fields:
-
-| Field      | Description                                                                       |
-| ---------- | --------------------------------------------------------------------------------- |
-| Base URL   | Where Console forwards requests, for example `https://api.deepseek.com/v1`.       |
-| API schema | Chat Completions, Responses API, Anthropic Compatible, or Google Generative AI.   |
-| Auth mode  | Bearer, API key header, or Custom header, plus the credential to send.            |
-| Models     | The model IDs members can request, with optional pricing used for usage tracking. |
-
 ## Authentication
 
-Replace `<token>` with a service account key created in Console. Console swaps it for the connection's credential
-before forwarding, so the provider secret stays in the workspace.
+Replace `<token>` with a [service account key](/console/api#service-accounts) created in Console. Console swaps it for
+the connection's credential before forwarding.
 
 ```text
 Authorization: Bearer <token>
@@ -53,7 +42,7 @@ Console API URL.
 Append the provider's API path to the Console API URL. Console forwards the request to the connection's base URL and
 returns the provider response unchanged.
 
-| API schema           | Path                              |
+| Format               | Path                              |
 | -------------------- | --------------------------------- |
 | Chat Completions     | `/chat/completions`               |
 | Responses API        | `/responses`                      |
@@ -116,16 +105,7 @@ curl -X POST "https://opencode.ai/inference/custom/conn_.../models/gemini-3.1-pr
   }'
 ```
 
-## Use in OpenCode
+## Usage
 
-Members do not need the gateway URL. Connections appear as providers in OpenCode for everyone who connects to the
-workspace with `/connect`, and `/models` lists their enabled models.
-
-```text
-/connect
-```
-
-## Usage and limits
-
-The provider bills you for the tokens. Console records every request and, using the pricing configured on the model,
-counts it toward workspace and member monthly limits.
+Requests count toward [budgets](/console/budgets) using the pricing set on each model. The provider
+bills you for the tokens.

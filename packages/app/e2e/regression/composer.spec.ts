@@ -213,7 +213,18 @@ test("keeps a narrow session composer contained when invoking a built-in", async
   await page.getByRole("menuitem", { name: "Commands" }).click()
   await page.locator('[data-suggestion-id="model.choose"]').click()
 
+  const dialog = page.getByRole("dialog", { name: "Select model", exact: true })
+  const search = dialog.getByRole("searchbox", { name: "Search models", exact: true })
+  await expect(search).toBeFocused()
   await expect(editor).toHaveText("keep me")
+  await page.keyboard.press("Escape")
+  await expect(dialog).toBeHidden()
+
+  await editor.fill("/model")
+  await expect(page.locator('[data-suggestion-id="model.choose"]')).toHaveAttribute("data-active", "")
+  await editor.press("Enter")
+  await expect(search).toBeFocused()
+  await expect(editor).toBeEmpty()
 })
 
 test("lists slash commands in their built-in order", async ({ page }) => {

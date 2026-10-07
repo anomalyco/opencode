@@ -1,5 +1,6 @@
 import { useCommand, type CommandOption } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { DialogSelectModel } from "@/providers/models/select-dialog"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { getCursorPosition, setCursorPosition } from "./editor/dom"
@@ -33,7 +34,7 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
     void dialog.show(() => <DialogConnectProvider directory={workspace().directory} />)
   }
 
-  const chooseModel = async () => {
+  const chooseModel = () => {
     const owner = sessionOwnership.capture()
     const editor = document.querySelector<HTMLElement>('[data-component="composer-editor"]')
     const selection = window.getSelection()
@@ -54,7 +55,6 @@ export const useComposerCommands = (input: { model?: ModelSelection } = {}) => {
       })
     }
 
-    const { DialogSelectModel } = await import("@/providers/models/select-dialog")
     owner.run(() => {
       void dialog.show(() => <DialogSelectModel model={model} />, restoreComposer)
     })

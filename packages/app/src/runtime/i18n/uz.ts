@@ -287,9 +287,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "parol",
   "dialog.server.edit.title": "Serverni tahrirlash",
   "dialog.server.menu.edit": "Tahrirlash",
-  "dialog.server.menu.default": "Standart sifatida o'rnating",
-  "dialog.server.menu.defaultRemove": "Standartni olib tashlang",
-  "dialog.server.status.default": "Standart",
   "dialog.project.edit.title": "Loyihani tahrirlash",
   "dialog.project.edit.icon": "Belgi",
   "dialog.project.edit.icon.alt": "Loyiha belgisi",
@@ -797,8 +794,6 @@ export const dict = {
   "server.connect.button": "Ulanish",
   "server.connect.address.invalid": "Yaroqli HTTP yoki HTTPS server manzilini kiriting.",
   "server.connect.failed": "Ulanib bo‘lmadi. Server manzili va parolni tekshiring, keyin qayta urinib ko'ring.",
-  "server.connect.pair.description":
-    "Ulanish ma'lumotlarini olish uchun ushbu buyruqni kompyuteringizda ishga tushiring.",
   "server.connect.scan": "QR kodini skanerlang",
   "server.connect.scan.description": "Kamerani opencode pair koʻrsatgan QR kodga qarating.",
   "server.connect.scan.invalid": "Bu OpenCode ulash kodi emas. opencode pair koʻrsatgan kodni skanerlang.",
@@ -806,7 +801,6 @@ export const dict = {
   "server.connect.camera.starting": "Kamera ochilmoqda…",
   "server.connect.mixedContent":
     "HTTPS sahifasidan ushbu HTTP serveriga ulanib boʻlmadi. Buning o'rniga HTTPS server manzilidan foydalaning.",
-  "server.connect.camera.insecure": "QR skanerlash uchun bu sahifani HTTPS yoki localhost orqali ochish kerak.",
   "server.connect.camera.unavailable":
     "Bu brauzerda hech qanday kamera mavjud emas. Ulanish ma'lumotlarini qo'lda kiriting.",
   "server.connect.camera.error":

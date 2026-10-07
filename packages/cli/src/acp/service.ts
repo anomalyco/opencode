@@ -109,6 +109,7 @@ export function make(input: {
         description: "Run `opencode auth login` in the terminal",
         name: "Login with opencode",
         id: AuthMethodID,
+        ...(params.clientCapabilities?.auth?.terminal ? { type: "terminal" as const, args: ["--login"] } : {}),
       }
       if (params.clientCapabilities?._meta?.["terminal-auth"] === true) {
         authMethod._meta = {
@@ -164,7 +165,9 @@ export function make(input: {
     listSessions: Effect.fnUntraced(function* (params) {
       const page = yield* input.client.session
         .list({
-          ...(params.cwd ? { directory: AbsolutePath.make(params.cwd) } : {}),
+          ...(params.cwd !== undefined && params.cwd !== null
+            ? { directory: yield* ACPDirectories.parseCwd(params.cwd) }
+            : {}),
           order: "desc",
           limit: 100,
           ...(params.cursor ? { cursor: Schema.decodeSync(SessionsCursor)(params.cursor) } : {}),
@@ -188,6 +191,7 @@ export function make(input: {
       }
     }),
     deleteSession: Effect.fnUntraced(function* (params) {
+      yield* input.turn.cancel({ sessionId: params.sessionId })
       yield* ACPClient.decodeSessionID(params.sessionId).pipe(
         Effect.flatMap((sessionID) => input.client.session.remove({ sessionID })),
         Effect.catchTag(["ACPInvalidRequestError", "SessionNotFoundError"], () => Effect.void),
@@ -212,8 +216,8 @@ export function make(input: {
     forkSession: Effect.fnUntraced(function* (params) {
       const directories = yield* ACPDirectories.parse(params.cwd, params.additionalDirectories)
       const mcpServers = yield* supportedMcpServers(params.mcpServers)
-      const sessionID = yield* ACPClient.decodeSessionID(params.sessionId)
-      const forked = yield* input.client.session.fork({ sessionID }).pipe(Effect.catch(ACPClient.classify))
+      const session = yield* getSession(params.sessionId, params.cwd)
+      const forked = yield* input.client.session.fork({ sessionID: session.id }).pipe(Effect.catch(ACPClient.classify))
       // Forks inherit the source's grants; replace them with this request's.
       yield* ACPDirectories.activate(input.client, forked, directories)
       const attachment = yield* input.sessions.attach(forked, forked.location.directory, mcpServers)

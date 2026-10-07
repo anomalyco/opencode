@@ -1,4 +1,4 @@
-import { Badge } from "@opencode/ui/badge"
+import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { createSignal, createMemo, Show, type Component } from "solid-js"
 import { TextInput } from "@opencode/ui/text-input"
@@ -31,6 +31,10 @@ export const SettingsServerGeneral: Component<{
   const edit = (server: ServerConnection.Http) =>
     void dialog.push(() => <DialogServer mode="edit" server={server} onSave={props.onServerChange} />)
 
+  // An HTTP server that rejects its saved credentials signs in again through the edit dialog.
+  const signedOut = (server: ServerConnection.Any) =>
+    server.type === "http" && health()?.unauthorized ? server : undefined
+
   return (
     <>
       <div class="settings-tab-header">
@@ -61,7 +65,7 @@ export const SettingsServerGeneral: Component<{
                   {(server) => (
                     <div class="settings-servers-row">
                       <div class="settings-servers-lead">
-                        <ServerHealthIndicator health={health()} />
+                        <ServerHealthIndicator health={health()} authenticationRequired={!!health()?.unauthorized} />
                         <div class="settings-servers-copy">
                           <bdi class="settings-servers-name" dir="auto">
                             {serverName(server()) || props.entry.key}
@@ -72,8 +76,12 @@ export const SettingsServerGeneral: Component<{
                         </div>
                       </div>
                       <div class="settings-servers-actions">
-                        <Show when={controller.defaults.available() && controller.defaults.key() === props.entry.key}>
-                          <Badge>{language.t("dialog.server.status.default")}</Badge>
+                        <Show when={signedOut(server())}>
+                          {(http) => (
+                            <Button size="small" variant="neutral" onClick={() => edit(http())}>
+                              {language.t("server.action.authenticate")}
+                            </Button>
+                          )}
                         </Show>
                         <ServerRowMenu server={server()} domain={controller} onEdit={edit} />
                       </div>

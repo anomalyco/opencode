@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "{{distro}} स्वास्थ्य जाँचको लागि साइडकार {{timeout}}ms पछि समय सकियो",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms पछि टाइमआउट भयो",
   "error.failedPort": "पोर्ट प्राप्त गर्न असफल भयो",
-  "server.default": "पूर्वनिर्धारित",
-  "menu.default": "पूर्वनिर्धारित रूपमा सेट गर्नुहोस्",
-  "menu.defaultRemove": "पूर्वनिर्धारित हटाउनुहोस्",
   "menu.remove": "हटाउनुहोस्",
 }

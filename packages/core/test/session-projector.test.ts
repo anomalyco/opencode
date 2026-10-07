@@ -1,5 +1,6 @@
 import { describe, expect } from "bun:test"
 import { DateTime, Effect, Fiber, Option, Schema, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { asc, eq, sql } from "drizzle-orm"
 import { Database } from "@opencode/core/database/database"
 import { Agent } from "@opencode/core/agent"
@@ -758,6 +759,53 @@ describe("SessionProjector", () => {
           time: { created },
         }),
       ])
+    }),
+  )
+
+  it.effect("bumps session time_updated on step lifecycle events", () =>
+    Effect.gen(function* () {
+      const db = yield* seedSession({ time_created: 0, time_updated: 0 })
+      const bus = yield* Bus.Service
+      const updated = () =>
+        db.select({ time_updated: SessionTable.time_updated }).from(SessionTable).get().pipe(Effect.orDie)
+      const first = SessionMessage.ID.make("msg_touch_first")
+      const second = SessionMessage.ID.make("msg_touch_second")
+
+      yield* TestClock.setTime(5)
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: first,
+        agent: build,
+        model,
+        started: 5,
+      })
+      expect(yield* updated()).toEqual({ time_updated: 5 })
+
+      yield* TestClock.setTime(9)
+      yield* bus.publish(SessionEvent.Step.Ended, {
+        sessionID,
+        assistantMessageID: first,
+        finish: "stop",
+        cost: Money.USD.make(0),
+        tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+      expect(yield* updated()).toEqual({ time_updated: 9 })
+
+      yield* TestClock.setTime(12)
+      yield* bus.publish(SessionEvent.Step.Started, {
+        sessionID,
+        assistantMessageID: second,
+        agent: build,
+        model,
+        started: 12,
+      })
+      yield* TestClock.setTime(15)
+      yield* bus.publish(SessionEvent.Step.Failed, {
+        sessionID,
+        assistantMessageID: second,
+        error: { type: "provider.invalid-request", message: "Failed" },
+      })
+      expect(yield* updated()).toEqual({ time_updated: 15 })
     }),
   )
 })

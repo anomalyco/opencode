@@ -127,6 +127,8 @@ import type {
   IntegrationWellknownAddOutput,
   IntegrationConnectKeyInput,
   IntegrationConnectKeyOutput,
+  IntegrationConnectExternalInput,
+  IntegrationConnectExternalOutput,
   IntegrationOauthConnectInput,
   IntegrationOauthConnectOutput,
   IntegrationOauthStatusInput,
@@ -901,6 +903,16 @@ const EndpointIntegrationConnectKey = (raw: RawClient["server.integration"]) => 
     }).pipe(Effect.mapError(mapClientError)),
   )
 
+const EndpointIntegrationConnectExternal =
+  (raw: RawClient["server.integration"]) => (input: IntegrationConnectExternalInput) =>
+    preserveEffect<IntegrationConnectExternalOutput>()(
+      raw["integration.connect.external"]({
+        params: { integrationID: input["integrationID"] },
+        query: { location: input["location"] },
+        payload: { methodID: input["methodID"], answer: input["answer"], label: input["label"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const EndpointIntegrationOauthConnect =
   (raw: RawClient["server.integration"]) => (input: IntegrationOauthConnectInput) =>
     preserveEffect<IntegrationOauthConnectOutput>()(
@@ -969,7 +981,7 @@ const adaptGroupIntegration = (raw: RawClient["server.integration"]) => ({
   list: EndpointIntegrationList(raw),
   get: EndpointIntegrationGet(raw),
   wellknown: { add: EndpointIntegrationWellknownAdd(raw) },
-  connect: { key: EndpointIntegrationConnectKey(raw) },
+  connect: { key: EndpointIntegrationConnectKey(raw), external: EndpointIntegrationConnectExternal(raw) },
   oauth: {
     connect: EndpointIntegrationOauthConnect(raw),
     status: EndpointIntegrationOauthStatus(raw),

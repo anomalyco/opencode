@@ -295,9 +295,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "kata laluan",
   "dialog.server.edit.title": "Edit pelayan",
   "dialog.server.menu.edit": "Sunting",
-  "dialog.server.menu.default": "Tetapkan sebagai lalai",
-  "dialog.server.menu.defaultRemove": "Buang lalai",
-  "dialog.server.status.default": "Lalai",
   "dialog.project.edit.title": "Edit projek",
   "dialog.project.edit.icon": "Ikon",
   "dialog.project.edit.icon.alt": "Ikon projek",
@@ -795,7 +792,6 @@ export const dict = {
   "server.connect.button": "Sambung",
   "server.connect.address.invalid": "Masukkan alamat pelayan HTTP atau HTTPS yang sah.",
   "server.connect.failed": "Tidak dapat menyambung. Semak alamat pelayan dan kata laluan, kemudian cuba lagi.",
-  "server.connect.pair.description": "Jalankan arahan ini pada komputer anda untuk mendapatkan butiran sambungan anda.",
   "server.connect.scan": "Imbas kod QR",
   "server.connect.scan.description": "Tujukan kamera anda ke kod QR yang dipaparkan oleh pasangan opencode.",
   "server.connect.scan.invalid": "Ini bukan kod pasangan OpenCode. Imbas kod yang ditunjukkan oleh pasangan opencode.",
@@ -803,7 +799,6 @@ export const dict = {
   "server.connect.camera.starting": "Membuka kamera…",
   "server.connect.mixedContent":
     "Tidak dapat sambung ke pelayan HTTP ini dari halaman HTTPS. Gunakan alamat pelayan HTTPS sebaliknya.",
-  "server.connect.camera.insecure": "Imbasan QR memerlukan pembukaan halaman ini melalui HTTPS atau di localhost.",
   "server.connect.camera.unavailable":
     "Tiada kamera tersedia untuk pelayar ini. Masukkan butiran sambungan anda secara manual.",
   "server.connect.camera.error":

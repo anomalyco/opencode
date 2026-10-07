@@ -298,9 +298,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "lykilorð",
   "dialog.server.edit.title": "Breyta miðlara",
   "dialog.server.menu.edit": "Breyta",
-  "dialog.server.menu.default": "Stillt sem sjálfgefið",
-  "dialog.server.menu.defaultRemove": "Fjarlægja sjálfgefið",
-  "dialog.server.status.default": "Sjálfgefið",
   "dialog.project.edit.title": "Breyta verkefni",
   "dialog.project.edit.icon": "Táknmynd",
   "dialog.project.edit.icon.alt": "Verkefnistákn",
@@ -782,7 +779,6 @@ export const dict = {
   "server.connect.button": "Tengdu",
   "server.connect.address.invalid": "Sláðu inn gilt HTTP eða HTTPS netfang netþjóns.",
   "server.connect.failed": "Ekki tókst að tengjast. Athugaðu netfang netþjóns og lykilorð, reyndu svo aftur.",
-  "server.connect.pair.description": "Keyrðu þessa skipun á tölvunni þinni til að fá upplýsingar um tenginguna þína.",
   "server.connect.scan": "Skanna QR kóða",
   "server.connect.scan.description": "Beindu myndavélinni þinni að QR kóðanum sem opencode pair sýnir.",
   "server.connect.scan.invalid": "Þetta er ekki OpenCode pörunarkóði. Skannaðu kóðann sem opencode pair sýnir.",
@@ -790,7 +786,6 @@ export const dict = {
   "server.connect.camera.starting": "Opnar myndavél...",
   "server.connect.mixedContent":
     "Gat ekki tengst þessum HTTP netþjóni frá HTTPS síðu. Notaðu HTTPS netþjónsfang í staðinn.",
-  "server.connect.camera.insecure": "QR skönnun krefst þess að opna þessa síðu yfir HTTPS eða á localhost.",
   "server.connect.camera.unavailable":
     "Engin myndavél er í boði fyrir þennan vafra. Sláðu inn tengiupplýsingar þínar handvirkt.",
   "server.connect.camera.error":

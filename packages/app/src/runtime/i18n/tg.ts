@@ -287,9 +287,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "парол",
   "dialog.server.edit.title": "Серверро таҳрир кунед",
   "dialog.server.menu.edit": "Таҳрир",
-  "dialog.server.menu.default": "Ҳамчун пешфарз таъин кунед",
-  "dialog.server.menu.defaultRemove": "Пешфарзро хориҷ кунед",
-  "dialog.server.status.default": "Пешфарз",
   "dialog.project.edit.title": "Таҳрири лоиҳа",
   "dialog.project.edit.icon": "Нишона",
   "dialog.project.edit.icon.alt": "Нишонаи лоиҳа",
@@ -796,7 +793,6 @@ export const dict = {
   "server.connect.button": "Пайваст кунед",
   "server.connect.address.invalid": "Суроғаи сервери дурусти HTTP ё HTTPS-ро ворид кунед.",
   "server.connect.failed": "Пайваст шуда натавонист. Суроғаи сервер ва паролро тафтиш кунед ва аз нав кӯшиш кунед.",
-  "server.connect.pair.description": "Барои гирифтани тафсилоти пайвасти худ ин фармонро дар компютери худ иҷро кунед.",
   "server.connect.scan": "Рамзи QR-ро скан кунед",
   "server.connect.scan.description": "Камераро ба рамзи QR, ки opencode pair нишон медиҳад, равона кунед.",
   "server.connect.scan.invalid":
@@ -805,8 +801,6 @@ export const dict = {
   "server.connect.camera.starting": "Кушодани камера…",
   "server.connect.mixedContent":
     "Аз саҳифаи HTTPS ба ин сервери HTTP пайваст шуда натавонист. Ба ҷои он суроғаи сервери HTTPS-ро истифода баред.",
-  "server.connect.camera.insecure":
-    "Сканкунии QR талаб мекунад, ки ин саҳифа тавассути HTTPS ё дар localhost кушода шавад.",
   "server.connect.camera.unavailable":
     "Барои ин браузер ягон камера дастрас нест. Тафсилоти пайвасти худро дастӣ ворид кунед.",
   "server.connect.camera.error":

@@ -9,7 +9,7 @@ import { build } from "vite"
 import { Script } from "@opencode/script"
 import pkg from "../package.json"
 import { collectNodeAssets, copyNodeAssets, hashNodeAssets, seaAssetMap } from "./node-assets"
-import { mainConfig } from "../vite.node.config"
+import { appArchiveAsset, mainConfig } from "../vite.node.config"
 import { nodeExecArgv, nodeTarget, type NodeTarget } from "../src/node/target"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact } from "./verify-artifact"
@@ -59,7 +59,7 @@ if (targets.length === 0) {
 if (!bundleOnly && targets.some((target) => target.platform === "darwin" && target.arch === "x64")) {
   throw new Error("Node 26.4 SEA does not support macOS x64")
 }
-const appArchive = archivePath ? (await Bun.file(archivePath).text()).trim() : await buildAppArchive(Script.channel)
+const appArchive = archivePath ? await Bun.file(archivePath).bytes() : await buildAppArchive(Script.channel)
 if (!bundleOnly) await rm(outdir, { recursive: true, force: true })
 const builder =
   !bundleOnly || targets.some((target) => target.platform === process.platform && target.arch === process.arch)
@@ -95,9 +95,9 @@ for (const target of targets) {
     channel: Script.channel,
     assetHash,
     target,
-    appArchive,
   }
   await copyNodeAssets(assets)
+  await writeFile(path.join("dist-node", "assets", appArchiveAsset), appArchive)
   await build(mainConfig(input))
   await assertTextImportsInlined("dist-node/opencode.mjs")
   if (bundleOnly) await verifyArtifact("dist-node/opencode.mjs")

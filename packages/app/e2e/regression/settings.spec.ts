@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test"
 import type { ConfigEntry, OpenCodeEvent, WorktreeDirectory } from "@opencode/client/promise"
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, session } from "../utils/app"
+import { mockOpenCodeServer } from "../utils/mock-server"
 import { mockRemoteServer, mockWorkspace, openSettings, type WorkspaceInput } from "../utils/workspace"
 
 const directory = "C:/Projects/settings-demo"
@@ -463,7 +464,7 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
     worktrees: () => inventory,
     onWorktreeRemove: (body) => {
       inventory.splice(
-        inventory.findIndex((item) => item.directory === (body as { directory: string }).directory),
+        inventory.findIndex((item) => item.directory === body.directory),
         1,
       )
     },
@@ -499,6 +500,7 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
   // Home never listed this session, so only the new worktree's directory read can show it.
   view.sessions.push(session({ id: "ses_discovered", directory: discovered, title: "Discovered session", projectID }))
   inventory.push({ directory: discovered, strategy: "git" })
+  // SAFETY: a worktree.updated event carries only the project ID, which is all the app reads from it.
   await view.push([
     { id: "evt_settings_worktree_updated", created: Date.now(), type: "worktree.updated", data: { projectID } },
   ] as OpenCodeEvent[])
@@ -582,7 +584,9 @@ test.describe("worktrees prefetch", () => {
 
   test("server Worktrees hover only prefetches metadata", async ({ page }) => {
     const { settings } = await open(page)
-    const calls = { projects: 0, worktrees: [] as string[], refreshes: [] as string[] }
+
+    const calls = { projects: 0, worktrees: new Array<string>(), refreshes: new Array<string>() }
+
     page.on("request", (request) => {
       if (new URL(request.url()).pathname === "/api/worktree/refresh")
         calls.refreshes.push(request.postDataJSON().projectID)
@@ -754,7 +758,9 @@ test("the add server dialog keeps focus above fullscreen settings", async ({ pag
   await settings.getByRole("button", { name: "Add server" }).click()
 
   const editor = page.getByRole("dialog", { name: "Add server" })
-  await expect(editor.getByPlaceholder("http://localhost:4096")).toBeFocused()
+  await expect(editor.getByLabel("Pairing link", { exact: true })).toBeFocused()
+  await expect(editor.getByPlaceholder("password")).toHaveCount(0)
+  await editor.getByRole("button", { name: "Use password", exact: true }).click()
   await expect(editor.getByPlaceholder("username")).toHaveCount(0)
   const name = editor.getByPlaceholder("Localhost", { exact: true })
   await name.click()
@@ -764,6 +770,80 @@ test("the add server dialog keeps focus above fullscreen settings", async ({ pag
   await page.keyboard.press("Escape")
   await expect(editor).toBeHidden()
   await expect(settings).toBeVisible()
+})
+
+test("the add server dialog pairs from a one-time link and explains a spent one", async ({ page }) => {
+  const paired = "http://127.0.0.1:4098"
+  await mockRemoteServer(page, { directory: "/remote/settings-demo" })
+  await mockOpenCodeServer(page, {
+    server: paired,
+    directory: "/remote/paired",
+    project: project({ id: "proj_paired", directory: "/remote/paired" }),
+    provider: NO_PROVIDER,
+    sessions: [],
+    pageMessages: () => ({ items: [] }),
+    password: "session-token",
+    pairing: { code: "one-time-code", token: "session-token" },
+  })
+  const { settings } = await open(page)
+  const link = `${paired}/auth/connect/one-time-code`
+
+  const addServer = async () => {
+    await settings.locator('[data-component="settings-nav-group-header"]').filter({ hasText: "Servers" }).hover()
+    await settings.getByRole("button", { name: "Add server" }).click()
+    const editor = page.getByRole("dialog", { name: "Add server" })
+    await editor.getByLabel("Pairing link", { exact: true }).fill(link)
+    await editor.getByRole("button", { name: "Add server", exact: true }).click()
+
+    return editor
+  }
+
+  const added = await addServer()
+  await expect(added).toBeHidden()
+  await expect(settings.getByText(paired, { exact: true })).toBeVisible()
+  await settings.getByRole("button", { name: "Back to settings" }).click()
+
+  const spent = await addServer()
+  await expect(spent.getByRole("alert")).toHaveText(
+    "This pairing link expired or was already used. Run opencode pair to get a new one.",
+  )
+})
+
+test("a pairing code with several addresses keeps the first one that works with its token", async ({ page }) => {
+  // Both addresses reach one server. The second spends the code first, so the first answers 401, and the token works on
+  // it as on every address of that server.
+  const first = "http://127.0.0.1:4098"
+  const second = "http://127.0.0.1:4099"
+  await mockRemoteServer(page, { directory: "/remote/settings-demo" })
+
+  for (const [server, pairing] of [
+    [first, { code: "spent-by-the-other-address", token: "session-token" }],
+    [second, { code: "one-time-code", token: "session-token" }],
+  ] as const) {
+    await mockOpenCodeServer(page, {
+      server,
+      directory: "/remote/paired",
+      project: project({ id: "proj_paired", directory: "/remote/paired" }),
+      provider: NO_PROVIDER,
+      sessions: [],
+      pageMessages: () => ({ items: [] }),
+      password: "session-token",
+      pairing,
+    })
+  }
+
+  const { settings } = await open(page)
+  await settings.locator('[data-component="settings-nav-group-header"]').filter({ hasText: "Servers" }).hover()
+  await settings.getByRole("button", { name: "Add server" }).click()
+  const editor = page.getByRole("dialog", { name: "Add server" })
+  await editor
+    .getByLabel("Pairing link", { exact: true })
+    .fill(JSON.stringify({ code: "one-time-code", urls: [first, second] }))
+  await editor.getByRole("button", { name: "Add server", exact: true }).click()
+
+  await expect(editor).toBeHidden()
+  await expect(settings.getByText(first, { exact: true })).toBeVisible()
+  await expect(settings.getByText(second, { exact: true })).toHaveCount(0)
 })
 
 test("the tab layout preference switches to vertical tabs and survives reload", async ({ page }) => {

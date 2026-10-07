@@ -288,9 +288,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "parol",
   "dialog.server.edit.title": "Serveri redaktə et",
   "dialog.server.menu.edit": "Redaktə et",
-  "dialog.server.menu.default": "Standart olaraq təyin et",
-  "dialog.server.menu.defaultRemove": "Standartı sil",
-  "dialog.server.status.default": "Standart",
   "dialog.project.edit.title": "Layihəni redaktə et",
   "dialog.project.edit.icon": "İkon",
   "dialog.project.edit.icon.alt": "Layihə ikonu",
@@ -799,7 +796,6 @@ export const dict = {
   "server.connect.button": "Qoşulun",
   "server.connect.address.invalid": "Etibarlı HTTP və ya HTTPS server ünvanını daxil edin.",
   "server.connect.failed": "Bağlana bilmədik. Server ünvanını və şifrəni yoxlayın, sonra yenidən cəhd edin.",
-  "server.connect.pair.description": "Bağlantı məlumatlarınızı almaq üçün bu əmri kompüterinizdə işlədin.",
   "server.connect.scan": "QR kodu skan edin",
   "server.connect.scan.description": "Kameranızı opencode pair tərəfindən göstərilən QR koda yönəldin.",
   "server.connect.scan.invalid": "Bu, OpenCode qoşulma kodu deyil. opencode pair tərəfindən göstərilən kodu skan edin.",
@@ -807,8 +803,6 @@ export const dict = {
   "server.connect.camera.starting": "Kamera açılır…",
   "server.connect.mixedContent":
     "Bu HTTPS səhifəsindən bu HTTP serverinə qoşulmaq mümkün olmadı. Bunun əvəzinə HTTPS server ünvanından istifadə edin.",
-  "server.connect.camera.insecure":
-    "QR skan edilməsi üçün bu səhifəni HTTPS üzərindən və ya localhost-da açmaq tələb olunur.",
   "server.connect.camera.unavailable":
     "Bu brauzer üçün heç bir kamera mövcud deyil. Bağlantı məlumatlarınızı əl ilə daxil edin.",
   "server.connect.camera.error":

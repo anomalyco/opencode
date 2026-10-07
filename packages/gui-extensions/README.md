@@ -186,14 +186,22 @@ const Page = lazy(() => import("./page"))
 onCleanup(onIdle(() => void Page.preload()))
 ```
 
-Pairing's shipping page uses a query, not `createLatest`. It passes the query's abort signal directly to the no-input Ipc method; options are the only argument:
+Pairing's shipping page uses a query, not `createLatest`. It passes the query's abort signal directly to the no-input Ipc method; options are the only argument. The generation in the key asks again when main comes back:
 
-<!-- source: src/pairing/page.tsx#local -->
+<!-- source: src/pairing/page.tsx#screenActive -->
 
 ```tsx
-const local = useQuery(() => ({
-  queryKey: [ctx.id, "local"],
-  queryFn: (input) => props.client.info({ signal: input.signal }),
+const screenActive = useQuery(() => ({
+  queryKey: [ctx.id, "screen-active", display()?.generation],
+  queryFn: (input) => {
+    const live = display()
+
+    if (!live) throw new Error("Pairing's main side is not active")
+
+    return live.value.screenActive({ signal: input.signal })
+  },
+  enabled: !!display(),
+  gcTime: 0,
 }))
 ```
 
@@ -236,7 +244,7 @@ SDK icon fields use `IconName` from `@opencode/ui/icons/catalog`, a dependency-f
 | `ctx.appearance`             | `Appearance`                                                   | The user's mono font                                              |
 | `ctx.router`                 | `Router`                                                       | The route path, and whether it is changing                        |
 | `ctx.keybinds`               | `Keybinds`                                                     | Display and matching of command keybinds                          |
-| `ctx.servers`                | `Servers`                                                      | Ids of the servers the app lists                                  |
+| `ctx.servers`                | `Servers`                                                      | The servers the app lists, and each one's live `ServerRef`        |
 | `ctx.workspaces`             | `Workspaces`                                                   | `on("remove", …)` when a workspace is removed                     |
 | `ctx.scope` (main)           | `Scope`                                                        | The instance's lifetime                                           |
 | `ctx.storage` (main)         | `Storage`                                                      | Synchronous storage, the same `Persisted` shape                   |
@@ -268,7 +276,7 @@ sequenceDiagram
   M-->>W: emit("check", null, window): the app menu asks this window to check
 ```
 
-- Define it in `contract.ts`. Its id is your extension id, or `<id>.<name>`. A method without an input schema takes only optional call options: `pairing.info({ signal })`, never an `undefined` placeholder.
+- Define it in `contract.ts`. Its id is your extension id, or `<id>.<name>`. A method without an input schema takes only optional call options: `pairing.screenActive({ signal })`, never an `undefined` placeholder.
 - Your own Ipc goes in `provides` only: the main entry provides it, and the window entry reads it as `ctx.uses.name`. Another extension's Ipc goes in `uses`.
 - On the web there is no main process: the Ipc is always `inactive`.
 - `IpcsProvided<typeof renderer, typeof main>` fails to compile when a window provides, uses or requires an Ipc that no main entry provides. [`src/builtins.typecheck.ts`](src/builtins.typecheck.ts) checks the built-ins.
@@ -320,20 +328,16 @@ const act = (name: "check" | "install") => {
 }
 ```
 
-The pairing settings page renders only while its main side is up, so it never offers a control that cannot answer:
+The pairing settings page waits for its main side only where it needs it. The link and QR code come from the local server's `ServerRef`, so they render without main; the display setting renders only while main is active, so it never offers a switch that cannot answer:
 
-<!-- source: src/pairing/page.tsx#PairingPage -->
+<!-- source: src/pairing/page.tsx#display -->
 
 ```tsx
-// The page shows nothing until the main side is up, and again while it is away.
-export default function PairingPage(props: { pairing: Accessor<Live<Client>> }) {
-  const client = () => {
-    const live = props.pairing()
+// Only the display setting needs pairing's main side; the link and QR code come from the server, so they never wait.
+const display = () => {
+  const live = props.pairing()
 
-    return live.status === "active" ? live.value : undefined
-  }
-
-  return <Show when={client()}>{(client) => <SettingsPairing client={client()} />}</Show>
+  return live.status === "active" ? live : undefined
 }
 ```
 
@@ -437,9 +441,9 @@ legacy: ["summary"],
 
 ## Build your first extension
 
-Pairing shows another device how to reach this machine's server, and keeps the display awake. It is small and uses both processes: a main entry that owns a power-save blocker and the server's credentials, and a window entry that adds a settings page and a command. Each block below is its shipping source.
+Pairing shows another device how to reach this machine's server, and keeps the display awake. It is small and uses both processes: a main entry that owns a power-save blocker, and a window entry that adds a settings page and a command. The window asks the local server for its addresses and pairing codes through `ctx.servers`: that server's `ServerRef` is already authenticated in the window, so its credentials never leave main. Each block below is its shipping source.
 
-1. **Define the contract.** `contract.ts` holds the tokens other code may import, here the Ipc between pairing's main and window entries. The schemas type both sides and encode every value.
+1. **Define the contract.** `contract.ts` holds the tokens other code may import, here the Ipc between pairing's main and window entries. It carries only what needs the main process, the display sleep blocker. The schemas type both sides and encode every value.
 
 <!-- source: src/pairing/contract.ts -->
 
@@ -447,23 +451,22 @@ Pairing shows another device how to reach this machine's server, and keeps the d
 import { Schema } from "effect"
 import { Ipc } from "../sdk"
 
-export const PairingInfo = Schema.Struct({ urls: Schema.Array(Schema.String) })
-
-/** Pairs other devices with this machine's local server and keeps its display awake. */
+/**
+ * Keeps this machine's display awake while another device uses it. The window asks the local server for addresses and
+ * pairing codes through its own `ServerRef`; only the display sleep blocker needs the main process.
+ */
 export const Pairing = Ipc.define({
   id: "pairing",
   methods: {
-    /** The local server's advertised URLs. */
-    info: { output: PairingInfo },
-    /** A single-use code for an `/auth/connect/:code` link. */
-    code: { output: Schema.String },
+    /** Whether main holds the display sleep blocker. */
     screenActive: { output: Schema.Boolean },
+    /** Holds or releases the display sleep blocker, and remembers the choice. */
     setScreenActive: { input: Schema.Boolean },
   },
 })
 ```
 
-2. **Write the definition.** Pairing provides its Ipc, so its window entry reads it as `ctx.uses.pairing` with no second declaration. Whether main keeps the display awake is a main store, imported once from the key the desktop kept it under before.
+2. **Write the definition.** Pairing provides its Ipc, so its window entry reads it as `ctx.uses.pairing` with no second declaration. Whether main keeps the display awake is a main store, imported once from the key the desktop kept it under before. The addresses pairing links use are a window store, which the settings page reads.
 
 <!-- source: src/pairing/index.ts -->
 
@@ -479,12 +482,14 @@ export default Extension.define({
   stores: {
     // Whether main keeps the display awake; stored before in the desktop's own settings namespace.
     keepScreenActive: Store.main(Schema.Boolean, false, { state: ["opencode.settings", "keepScreenActive"] }),
+    // An address of this computer the server cannot see (a VPN, tunnel or proxy), and the address links use.
+    links: Store.global(Schema.Struct({ custom: Schema.String, selected: Schema.String }), { custom: "", selected: "" }),
   },
   i18n: { en },
 })
 ```
 
-3. **Provide it from main.** `MainSetup<typeof definition>` types `ctx.stores`, which main reads synchronously. A finalizer releases the blocker when the instance goes away, and the sidecar's credentials never leave main.
+3. **Provide it from main.** `MainSetup<typeof definition>` types `ctx.stores`, which main reads synchronously. A finalizer releases the blocker when the instance goes away.
 
 <!-- source: src/pairing/main.ts -->
 
@@ -517,18 +522,7 @@ const setup: MainSetup<typeof definition> = (ctx) => {
   if (stored.value) keepScreenActive(true)
   ctx.scope.addFinalizer(release)
 
-  const client = async () => {
-    const server = ctx.serverEndpoints.get("sidecar")
-
-    if (!server) throw new Error("The local desktop server is not ready")
-    const { OpenCode } = await import("@opencode/client/promise")
-
-    return OpenCode.make({ baseUrl: server.url, headers: server.headers })
-  }
-
   ctx.provide(Pairing, {
-    info: async () => ({ urls: (await (await client()).server.info()).urls }),
-    code: async () => (await (await client()).server.pair()).code,
     screenActive: () => blocker.id !== undefined && powerSaveBlocker.isStarted(blocker.id),
     setScreenActive: (enabled) => keepScreenActive(enabled),
   })
@@ -537,7 +531,7 @@ const setup: MainSetup<typeof definition> = (ctx) => {
 export default setup
 ```
 
-4. **Write the window entry.** Pairing exists only on desktop, so setup returns at once on the web. The settings page is heavy, so it loads behind `lazy()` and compiles while the app idles; its search entries are indexed without mounting it. The page receives `ctx.uses.pairing` and renders nothing until main answers (see `PairingPage` under [Live and failure handling](#live-and-failure-handling)).
+4. **Write the window entry.** Pairing exists only on desktop, so setup returns at once on the web. The settings page is heavy, so it loads behind `lazy()` and compiles while the app idles; its search entries are indexed without mounting it. The page receives the desktop's own server, found through `ctx.servers` by `builtin`, and `ctx.uses.pairing`. The search entry for the display setting, like the setting itself, exists only while main answers (see `display` under [Live and failure handling](#live-and-failure-handling)).
 
 <!-- source: src/pairing/renderer.tsx -->
 
@@ -549,9 +543,18 @@ import type definition from "./index"
 const setup: Setup<typeof definition> = (ctx) => {
   if (!ctx.desktop) return
   const layout = ctx.layout
+  const servers = ctx.servers
+  const pairing = ctx.uses.pairing
   const Page = lazy(() => import("./page"))
   // Settings rows are small; load them while idle so settings opens without a blank row.
   onCleanup(onIdle(() => void Page.preload()))
+
+  // The desktop's own server. Its ref is already authenticated in this window, so codes need no main process.
+  const local = () =>
+    servers
+      .list()
+      .map((id) => servers.get(id))
+      .find((server) => server?.builtin)
 
   ctx.add(SettingsPage, {
     id: "pairing",
@@ -561,8 +564,13 @@ const setup: Setup<typeof definition> = (ctx) => {
       return ctx.t("title")
     },
     get entries() {
+      const pairingEntry = { id: "pairing", title: ctx.t("title"), keywords: "pair device qr local" }
+
+      // The display setting exists only while pairing's main side answers.
+      if (pairing().status !== "active") return [pairingEntry]
+
       return [
-        { id: "pairing", title: ctx.t("title"), keywords: "pair device qr local" },
+        pairingEntry,
         {
           id: "settings-keep-screen-active",
           title: ctx.t("screenActive.title"),
@@ -573,7 +581,7 @@ const setup: Setup<typeof definition> = (ctx) => {
     },
     render: () => (
       <Suspense>
-        <Page pairing={ctx.uses.pairing} />
+        <Page server={local} pairing={pairing} />
       </Suspense>
     ),
   })
@@ -615,6 +623,7 @@ export const builtins = Extension.compose(
   { ...updater, main: () => import("./updater/main") },
   { ...ssh, main: () => import("./ssh/main") },
   { ...wsl, main: () => import("./wsl/main") },
+  microsoftOffice,
 )
 ```
 
@@ -640,6 +649,7 @@ export const builtins = Extension.compose(
   { ...updater, renderer: eager(updaterRenderer) },
   { ...ssh, renderer: eager(sshRenderer) },
   { ...wsl, renderer: eager(wslRenderer) },
+  { ...microsoftOffice, renderer: eager(microsoftOfficeRenderer) },
 )
 ```
 

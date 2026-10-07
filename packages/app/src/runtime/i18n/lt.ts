@@ -299,9 +299,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "slaptažodis",
   "dialog.server.edit.title": "Redaguoti serverį",
   "dialog.server.menu.edit": "Redaguoti",
-  "dialog.server.menu.default": "Nustatyti kaip numatytąjį",
-  "dialog.server.menu.defaultRemove": "Pašalinti numatytąjį",
-  "dialog.server.status.default": "Numatytoji",
   "dialog.project.edit.title": "Redaguoti projektą",
   "dialog.project.edit.icon": "Piktograma",
   "dialog.project.edit.icon.alt": "Projekto piktograma",
@@ -805,8 +802,6 @@ export const dict = {
   "server.connect.address.invalid": "Įveskite galiojantį HTTP arba HTTPS serverio adresą.",
   "server.connect.failed":
     "Nepavyko prisijungti. Patikrinkite serverio adresą ir slaptažodį, tada bandykite dar kartą.",
-  "server.connect.pair.description":
-    "Paleiskite šią komandą savo kompiuteryje, kad gautumėte išsamią ryšio informaciją.",
   "server.connect.scan": "Nuskaitykite QR kodą",
   "server.connect.scan.description": "Nukreipkite fotoaparatą į QR kodą, rodomą opencode pair.",
   "server.connect.scan.invalid": "Tai nėra OpenCode susiejimo kodas. Nuskaitykite kodą, kurį rodo opencode pair.",
@@ -814,7 +809,6 @@ export const dict = {
   "server.connect.camera.starting": "Atidaroma kamera…",
   "server.connect.mixedContent":
     "Nepavyko prisijungti prie šio HTTP serverio iš HTTPS puslapio. Vietoj to naudokite HTTPS serverio adresą.",
-  "server.connect.camera.insecure": "Norint nuskaityti QR, reikia atidaryti šį puslapį per HTTPS arba localhost.",
   "server.connect.camera.unavailable": "Šioje naršyklėje nėra fotoaparato. Įveskite savo ryšio duomenis rankiniu būdu.",
   "server.connect.camera.error":
     "Nepavyko atidaryti fotoaparato. Suteikite prieigą prie fotoaparato arba įveskite savo ryšio duomenis rankiniu būdu.",

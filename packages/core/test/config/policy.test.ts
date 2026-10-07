@@ -25,8 +25,8 @@ const provider = (effect: ConfigPolicy.Effect, resource: string): ConfigPolicy.I
   resource,
   effect,
 })
-const permission = (effect: ConfigPolicy.Effect, resource: string): ConfigPolicy.Info => ({
-  action: "permission",
+const tool = (effect: ConfigPolicy.Effect, resource: string): ConfigPolicy.Info => ({
+  action: "tool.use",
   resource,
   effect,
 })
@@ -49,6 +49,29 @@ const evaluate = Effect.fn(function* (action: string, resources: string[], effec
 })
 
 describe("ConfigPolicyPlugin.Plugin", () => {
+  it.effect("preserves last-match precedence for tool.use without granting approvals", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([
+        document(tool("deny", "shell:*"), tool("allow", "shell:git *"), tool("deny", "shell:git push *")),
+      ])
+      expect((yield* evaluate("shell", ["git status"], "ask")).effect).toBe("ask")
+      expect((yield* evaluate("shell", ["git push origin main"])).effect).toBe("deny")
+      expect((yield* evaluate("shell", ["ls"])).effect).toBe("deny")
+      expect((yield* evaluate("edit", ["notes.md"])).effect).toBe("allow")
+    }),
+  )
+
+  it.effect("organization tool.use policy overrides authored policy", () =>
+    Effect.gen(function* () {
+      const managed = yield* ManagedPolicy.Service
+      yield* managed.set({ statements: [tool("deny", "shell:*")], organization: "Acme" })
+      yield* addPlugin([document(tool("allow", "shell:*"))])
+      expect(yield* evaluate("shell", ["ls"])).toEqual({ effect: "deny", message: "Blocked by Acme's policy" })
+      yield* managed.set({ statements: [tool("allow", "shell:*")] })
+      expect((yield* evaluate("shell", ["ls"], "ask")).effect).toBe("ask")
+    }),
+  )
+
   it.effect("filters plugin-provided providers with ordered wildcard policies", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
@@ -96,7 +119,7 @@ describe("ConfigPolicyPlugin.Plugin", () => {
 
   it.effect("denies permissions matched as action:resource", () =>
     Effect.gen(function* () {
-      yield* addPlugin([document(permission("deny", "shell:git push *"))])
+      yield* addPlugin([document(tool("deny", "shell:git push *"))])
 
       expect(yield* evaluate("shell", ["git push"])).toEqual({
         effect: "deny",
@@ -115,7 +138,7 @@ describe("ConfigPolicyPlugin.Plugin", () => {
 
   it.effect("turns an ask into a deny but never grants", () =>
     Effect.gen(function* () {
-      yield* addPlugin([document(permission("deny", "webfetch:*"), permission("allow", "shell:*"))])
+      yield* addPlugin([document(tool("deny", "webfetch:*"), tool("allow", "shell:*"))])
 
       expect((yield* evaluate("webfetch", ["https://example.com"], "ask")).effect).toBe("deny")
       expect((yield* evaluate("shell", ["ls"], "ask")).effect).toBe("ask")
@@ -124,7 +147,7 @@ describe("ConfigPolicyPlugin.Plugin", () => {
 
   it.effect("lets a later allow lift an earlier broad deny", () =>
     Effect.gen(function* () {
-      yield* addPlugin([document(permission("deny", "shell:*"), permission("allow", "shell:git status *"))])
+      yield* addPlugin([document(tool("deny", "shell:*"), tool("allow", "shell:git status *"))])
 
       expect((yield* evaluate("shell", ["git status --short"])).effect).toBe("allow")
       expect((yield* evaluate("shell", ["rm -rf /"])).effect).toBe("deny")
@@ -133,7 +156,7 @@ describe("ConfigPolicyPlugin.Plugin", () => {
 
   it.effect("denies every permission with a bare wildcard", () =>
     Effect.gen(function* () {
-      yield* addPlugin([document(permission("deny", "*"))])
+      yield* addPlugin([document(tool("deny", "*"))])
 
       expect((yield* evaluate("question", ["*"])).effect).toBe("deny")
       expect((yield* evaluate("read", ["/tmp/notes.txt"])).effect).toBe("deny")
@@ -174,13 +197,13 @@ describe("ConfigPolicyPlugin.Plugin", () => {
   it.effect("names the organization when its permission statement decides", () =>
     Effect.gen(function* () {
       const managed = yield* ManagedPolicy.Service
-      yield* managed.set({ statements: [permission("deny", "shell:sudo *")], organization: "Acme" })
-      yield* addPlugin([document(permission("allow", "shell:*"))])
+      yield* managed.set({ statements: [tool("deny", "shell:sudo *")], organization: "Acme" })
+      yield* addPlugin([document(tool("allow", "shell:*"))])
 
       expect(yield* evaluate("shell", ["sudo ls"])).toEqual({ effect: "deny", message: "Blocked by Acme's policy" })
       expect((yield* evaluate("shell", ["ls"])).effect).toBe("allow")
 
-      yield* managed.set({ statements: [permission("deny", "shell:sudo *")] })
+      yield* managed.set({ statements: [tool("deny", "shell:sudo *")] })
       expect(yield* evaluate("shell", ["sudo ls"])).toEqual({
         effect: "deny",
         message: "Blocked by your organization's policy",

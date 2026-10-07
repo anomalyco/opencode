@@ -1,5 +1,6 @@
-import { createMemo, createSignal, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js"
+import { createMemo, createSignal, ErrorBoundary, For, Match, onCleanup, Show, Switch, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
+import { Dynamic } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Button } from "@opencode/ui/button"
 import { FileIcon } from "@opencode/ui/file-icon"
@@ -10,16 +11,31 @@ import { MarkdownProvider, useMarkdown } from "@opencode/session-ui/context/mark
 import { artifactKind, type ArtifactKind } from "@opencode/util/artifact"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { createKeyed, useExtension, type FileContent, type MountedSession } from "../sdk"
-import { blobUrlFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
+import { blobUrlFromContent, bytesFromContent, contentBytes, parseDelimited, resolveArtifactPath } from "./artifact"
 import { current, useShared } from "./context"
+import { FileViewer } from "./contract"
 import { workspaceFileUrl } from "./path"
 
 type ArtifactMode = "preview" | "source"
 
 /** Facts a viewer learns from the decoded media, shown in the toolbar. */
-type ArtifactInfo = { width?: number; height?: number; duration?: number; rows?: number; columns?: number }
+type ArtifactInfo = {
+  width?: number
+  height?: number
+  duration?: number
+  rows?: number
+  columns?: number
+  /** Facts an extension's viewer reports, already localized. */
+  details?: readonly string[]
+}
 
-type ViewerState = { readonly mode: ArtifactMode; readonly info: ArtifactInfo; readonly undecodable: boolean }
+type ViewerState = {
+  readonly mode: ArtifactMode
+  readonly info: ArtifactInfo
+  readonly undecodable: boolean
+  /** Why the file shows as binary, when a viewer said. */
+  readonly reason?: string
+}
 
 type ImageZoom = { readonly url: string; readonly zoom: "fit" | "actual"; readonly overflow: boolean }
 
@@ -89,11 +105,24 @@ export default function ArtifactView(props: {
       info.duration ? formatDuration(info.duration) : undefined,
       info.rows !== undefined ? ctx.plural("view.table.rows", Math.max(0, info.rows - 1)) : undefined,
       info.columns !== undefined ? ctx.plural("view.table.columns", info.columns) : undefined,
+      ...(info.details ?? []),
       formatBytes(locale.locale(), contentBytes(props.content)),
     ].filter((item): item is string => !!item)
   })
 
-  const media = { onInfo: (info: ArtifactInfo) => change({ info }), onError: () => change({ undecodable: true }) }
+  // A file that fails also drops the facts its viewer reported, such as a page count.
+  const fail = (reason?: string) => change({ undecodable: true, info: {}, reason })
+
+  const media = { onInfo: (info: ArtifactInfo) => change({ info }), onError: () => fail() }
+
+  const size = () => formatBytes(locale.locale(), contentBytes(props.content))
+
+  // A kind the file view does not render itself goes to the first extension viewer that lists it.
+  const viewer = createMemo(() => {
+    const value = kind()
+
+    return value === "binary" ? undefined : ctx.list(FileViewer).find((item) => item.kinds.includes(value))
+  })
 
   const rendered = () => (
     <ScrollView class="min-h-0 flex-1">
@@ -124,7 +153,7 @@ export default function ArtifactView(props: {
         }
       />
       <Show when={!previewable() || state().mode === "preview"} fallback={props.source}>
-        <Switch>
+        <Switch fallback={<ArtifactBinary path={props.path} size={size()} reason={state().reason} />}>
           <Match when={kind() === "image" || kind() === "svg"}>
             <ArtifactImage path={props.path} content={props.content} {...media} />
           </Match>
@@ -142,8 +171,18 @@ export default function ArtifactView(props: {
           </Match>
           <Match when={table()}>{(parsed) => <ArtifactTable parsed={parsed()} />}</Match>
           <Match when={kind() === "markdown" || kind() === "mermaid"}>{rendered()}</Match>
-          <Match when={kind() === "binary"}>
-            <ArtifactBinary path={props.path} size={formatBytes(locale.locale(), contentBytes(props.content))} />
+          {/* Keyed, so another viewer for the file mounts with bytes of its own. */}
+          <Match when={viewer()} keyed>
+            {(viewer) => (
+              <ArtifactViewer
+                viewer={viewer}
+                path={props.path}
+                size={size()}
+                content={props.content}
+                onDetails={(details) => change({ info: { details } })}
+                onError={fail}
+              />
+            )}
           </Match>
         </Switch>
       </Show>
@@ -405,7 +444,7 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
       openLocalFile={(href) => void links.open({ href, base: dir(), session: props.session })}
     >
       <div class="mx-auto w-full max-w-3xl px-8 py-6">
-        <Markdown text={props.text} cacheKey={props.cacheKey} class="select-text" />
+        <Markdown text={props.text} cacheKey={props.cacheKey} />
       </div>
     </MarkdownProvider>
   )
@@ -415,7 +454,7 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
 function ArtifactMermaid(props: { text: string; cacheKey?: string }) {
   return (
     <div class="mx-auto w-full max-w-4xl px-8 py-6">
-      <Markdown text={`\`\`\`mermaid\n${props.text}\n\`\`\``} cacheKey={props.cacheKey} class="select-text" />
+      <Markdown text={`\`\`\`mermaid\n${props.text}\n\`\`\``} cacheKey={props.cacheKey} />
     </div>
   )
 }
@@ -507,7 +546,52 @@ function ArtifactFont(props: { path: string; content: FileContent }) {
   )
 }
 
-function ArtifactBinary(props: { path: string; size: string }) {
+/**
+ * Hands a file to an extension's viewer, decoding its bytes once per loaded content; the viewer owns them, and may move
+ * their buffer to a worker. Bytes the viewer rejects, and a viewer that throws, show the binary placeholder in this
+ * area alone rather than the whole file panel failing.
+ */
+function ArtifactViewer(props: {
+  viewer: FileViewer
+  path: string
+  size: string
+  content: FileContent
+  onDetails: (details: readonly string[]) => void
+  onError: (reason?: string) => void
+}) {
+  // Checked together, so the check only ever reads bytes freshly decoded, never ones the viewer has moved away.
+  const decoded = createMemo(() => {
+    const bytes = bytesFromContent(props.content)
+
+    return { bytes, problem: props.viewer.problem?.(bytes) }
+  })
+
+  return (
+    <Show
+      when={!decoded().problem}
+      fallback={<ArtifactBinary path={props.path} size={props.size} reason={decoded().problem} />}
+    >
+      <ErrorBoundary
+        // Taking the error makes Solid call this once per error, untracked, rather than render it as a reactive child.
+        fallback={(_) => {
+          // Fails the file as a rejection does: its details leave the toolbar, and a reloaded file mounts a new viewer.
+          props.onError()
+
+          return <ArtifactBinary path={props.path} size={props.size} />
+        }}
+      >
+        <Dynamic
+          component={props.viewer.View}
+          bytes={decoded().bytes}
+          onDetails={props.onDetails}
+          onError={props.onError}
+        />
+      </ErrorBoundary>
+    </Show>
+  )
+}
+
+function ArtifactBinary(props: { path: string; size: string; reason?: string }) {
   const ctx = useExtension()
 
   return (
@@ -516,6 +600,7 @@ function ArtifactBinary(props: { path: string; size: string }) {
         <FileIcon node={{ path: props.path, type: "file" }} class="size-8 text-text-weak" />
         <div class="text-14-medium text-text-strong">{getFilename(props.path)}</div>
         <div class="text-13-regular text-text-weak">{ctx.t("view.binary", { size: props.size })}</div>
+        <Show when={props.reason}>{(reason) => <div class="text-13-regular text-text-weak">{reason()}</div>}</Show>
       </div>
     </div>
   )

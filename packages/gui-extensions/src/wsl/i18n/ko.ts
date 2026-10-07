@@ -51,8 +51,5 @@ export default {
   "error.healthTimeout": "{{distro}} 사이드카의 상태 확인이 {{timeout}}ms 후 시간 초과되었습니다",
   "error.commandTimeout": "{{command}} {{args}} 명령이 {{timeout}}ms 후 시간 초과되었습니다",
   "error.failedPort": "포트를 가져오지 못했습니다",
-  "server.default": "기본값",
-  "menu.default": "기본값으로 설정",
-  "menu.defaultRemove": "기본값 제거",
   "menu.remove": "제거",
 }
