@@ -46,6 +46,7 @@ import { StickyAccordionHeader } from "@opencode-ai/ui/sticky-accordion-header"
 import { TextField } from "@opencode-ai/ui/text-field"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { createThinkingLabel } from "@opencode-ai/session-ui/thinking-label"
 import type {
   AssistantMessage,
   Message as MessageType,
@@ -130,12 +131,17 @@ const markBoundaryGesture = (input: {
   }
 }
 
-function TimelineThinkingRow(props: { reasoningHeading?: string; showReasoningSummaries: boolean }) {
-  const language = useLanguage()
+function TimelineThinkingRow(props: { start?: number; reasoningHeading?: string; showReasoningSummaries: boolean }) {
+  const label = createThinkingLabel({
+    active: true,
+    get start() {
+      return props.start
+    },
+  })
 
   return (
     <div data-slot="session-turn-thinking">
-      <TextShimmer text={language.t("ui.sessionTurn.status.thinking")} />
+      <TextShimmer text={label()} />
       <Show when={!props.showReasoningSummaries}>
         <TextReveal text={props.reasoningHeading} class="session-turn-thinking-heading" travel={25} duration={700} />
       </Show>
@@ -1166,12 +1172,16 @@ export function MessageTimeline(props: {
       }
       case "AssistantPart": {
         const assistantPartRow = row as Accessor<TimelineRowByTag<"AssistantPart">>
+        const reasoning = createMemo(() => {
+          const group = assistantPartRow().group
+          return group.type === "part" && getMsgPart(group.ref.messageID, group.ref.partID)?.type === "reasoning"
+        })
         return (
           <TimelineRowFrame row={assistantPartRow}>
             <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
               <div
                 data-slot="session-turn-assistant-content"
-                aria-hidden={workingTurn(assistantPartRow().userMessageID)}
+                aria-hidden={workingTurn(assistantPartRow().userMessageID) && !reasoning()}
               >
                 {renderAssistantPartGroup(assistantPartRow, onSizeChange)}
               </div>
@@ -1185,6 +1195,7 @@ export function MessageTimeline(props: {
           <TimelineRowFrame row={thinkingRow}>
             <div data-slot="session-turn-message-container" class="w-full px-4 md:px-5">
               <TimelineThinkingRow
+                start={messageByID().get(thinkingRow().userMessageID)?.time.created}
                 reasoningHeading={thinkingRow().reasoningHeading}
                 showReasoningSummaries={settings.general.showReasoningSummaries()}
               />

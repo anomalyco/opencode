@@ -88,7 +88,7 @@ export async function setupTimeline(
   page: Page,
   input: {
     messages?: TimelineMessage[]
-    settings?: Record<string, boolean>
+    settings?: Record<string, boolean> | null
     sessions?: Session[]
     cpuRate?: number
     viewport?: { width: number; height: number }
@@ -125,23 +125,27 @@ export async function setupTimeline(
       items: messages,
     }),
   })
-  await page.addInitScript((settings) => {
-    localStorage.setItem(
-      "settings.v3",
-      JSON.stringify({
-        general: {
-          editToolPartsExpanded: false,
-          shellToolPartsExpanded: false,
-          showReasoningSummaries: false,
-          showSessionProgressBar: true,
-          ...settings,
-        },
-      }),
-    )
-    if (settings.newLayoutDesigns === false) {
-      localStorage.setItem("app-version.v1", JSON.stringify({ version: "1.17.20" }))
-    }
-  }, input.settings ?? {})
+  await page.addInitScript(
+    (settings) => {
+      if (settings === null) return
+      localStorage.setItem(
+        "settings.v3",
+        JSON.stringify({
+          general: {
+            editToolPartsExpanded: false,
+            shellToolPartsExpanded: false,
+            showReasoningSummaries: false,
+            showSessionProgressBar: true,
+            ...settings,
+          },
+        }),
+      )
+      if (settings.newLayoutDesigns === false) {
+        localStorage.setItem("app-version.v1", JSON.stringify({ version: "1.17.20" }))
+      }
+    },
+    input.settings === undefined ? {} : input.settings,
+  )
   if (input.locale) {
     await page.addInitScript((locale) => {
       localStorage.setItem("opencode.global.dat:language", JSON.stringify({ locale }))

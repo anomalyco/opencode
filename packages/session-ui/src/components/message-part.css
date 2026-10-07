@@ -295,6 +295,15 @@
   color: var(--v2-text-text-muted);
   line-height: var(--line-height-normal);
 
+  [data-slot="collapsible-trigger"] {
+    width: fit-content;
+    color: inherit;
+
+    [data-slot="collapsible-arrow"] {
+      opacity: 1;
+    }
+  }
+
   [data-component="markdown"] {
     margin-top: 16px;
     font-style: normal;

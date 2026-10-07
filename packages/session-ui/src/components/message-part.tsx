@@ -58,6 +58,7 @@ import { ButtonV2 } from "@opencode-ai/ui/v2/button-v2"
 import { TooltipV2 } from "@opencode-ai/ui/v2/tooltip-v2"
 import { Spinner } from "@opencode-ai/ui/spinner"
 import { TextShimmer } from "@opencode-ai/ui/text-shimmer"
+import { createThinkingLabel } from "./thinking-label"
 import { AnimatedCountList } from "./tool-count-summary"
 import { ToolStatusTitle } from "./tool-status-title"
 import { patchFiles } from "./apply-patch-file"
@@ -1695,7 +1696,7 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
     const items = [
       agent ? agent[0]?.toUpperCase() + agent.slice(1) : "",
       model(),
-      duration(),
+      duration() ? i18n.t("ui.message.duration.total", { duration: duration() }) : "",
       interrupted() ? i18n.t("ui.message.interrupted") : "",
     ]
     return items.filter((x) => !!x).join(" \u00B7 ")
@@ -1758,16 +1759,65 @@ PART_MAPPING["text"] = function TextPartDisplay(props) {
 
 PART_MAPPING["reasoning"] = function ReasoningPartDisplay(props) {
   const data = useData()
+  const i18n = useI18n()
   const part = () => props.part as ReasoningPart
-  const streaming = createMemo(
-    () => props.message.role === "assistant" && typeof (props.message as AssistantMessage).time.completed !== "number",
-  )
+  const streaming = createMemo(() => {
+    if (part().time.end !== undefined) return false
+    if (props.message.role !== "assistant" || props.message.time.completed || props.message.error) return false
+    if (data.store.session_status[props.message.sessionID]?.type === "idle") return false
+    const parts = data.store.part[props.message.id] ?? []
+    const index = parts.findIndex((item) => item.id === part().id)
+    // A response can start before the assistant message is marked complete.
+    return !parts.slice(index + 1).some((item) => {
+      if (item.type === "tool") return true
+      return (
+        (item.type === "text" || item.type === "reasoning") && !!readPartText(data.store.part_text_accum_delta, item)
+      )
+    })
+  })
+  const [state, setState] = createStore({ open: undefined as boolean | undefined })
+  createEffect(() => {
+    streaming()
+    setState("open", undefined)
+  })
+  const open = () => state.open ?? streaming()
   const text = () => readPartText(data.store.part_text_accum_delta, part())
+  const label = createThinkingLabel({
+    get active() {
+      return streaming()
+    },
+    get start() {
+      return part().time.start
+    },
+    get end() {
+      return part().time.end
+    },
+    get fallbackEnd() {
+      return props.message.role === "assistant" ? props.message.time.completed : undefined
+    },
+  })
 
   return (
     <Show when={text()}>
       <div data-component="reasoning-part" data-timeline-part-id={part().id}>
-        <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+        <Collapsible variant="ghost" open={open()} onOpenChange={(value) => setState("open", value)}>
+          <Collapsible.Trigger aria-label={label()}>
+            <Dynamic
+              component={props.useV2Actions ? TooltipV2 : Tooltip}
+              value={i18n.t("ui.sessionTurn.reasoning.durationDescription")}
+              placement="top"
+              class="inline-flex"
+            >
+              <Show when={streaming()} fallback={<span>{label()}</span>}>
+                <TextShimmer text={label()} />
+              </Show>
+            </Dynamic>
+            <Collapsible.Arrow />
+          </Collapsible.Trigger>
+          <Collapsible.Content>
+            <PacedMarkdown text={text()} cacheKey={part().id} streaming={streaming()} />
+          </Collapsible.Content>
+        </Collapsible>
       </div>
     </Show>
   )

@@ -608,8 +608,8 @@ export const dict = {
   "settings.general.row.followup.description": "후속 프롬프트를 즉시 실행할지 대기열에 넣을지 선택하세요",
   "settings.general.row.followup.option.queue": "대기열",
   "settings.general.row.followup.option.steer": "즉시 반영",
-  "settings.general.row.reasoningSummaries.title": "추론 요약 표시",
-  "settings.general.row.reasoningSummaries.description": "타임라인에 모델 추론 요약 표시",
+  "settings.general.row.reasoningSummaries.title": "추론 표시",
+  "settings.general.row.reasoningSummaries.description": "타임라인에 모델 추론 표시",
   "settings.general.row.shellToolPartsExpanded.title": "shell 도구 항목 펼치기",
   "settings.general.row.shellToolPartsExpanded.description":
     "타임라인에서 기본적으로 shell 도구 항목을 펼친 상태로 표시합니다",

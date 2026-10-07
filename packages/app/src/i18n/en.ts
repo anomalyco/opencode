@@ -943,8 +943,8 @@ export const dict = {
   "settings.general.row.showCustomAgents.title": "Show agent",
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
-  "settings.general.row.reasoningSummaries.title": "Show reasoning summaries",
-  "settings.general.row.reasoningSummaries.description": "Display model reasoning summaries in the timeline",
+  "settings.general.row.reasoningSummaries.title": "Show reasoning",
+  "settings.general.row.reasoningSummaries.description": "Display model reasoning in the timeline",
   "settings.general.row.shellToolPartsExpanded.title": "Expand shell tool parts",
   "settings.general.row.shellToolPartsExpanded.description":
     "Show shell tool parts expanded by default in the timeline",

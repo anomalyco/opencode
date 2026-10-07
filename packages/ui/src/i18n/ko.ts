@@ -65,6 +65,7 @@ export const dict = {
   "ui.sessionTurn.status.makingEdits": "편집 수행 중",
   "ui.sessionTurn.status.runningCommands": "명령어 실행 중",
   "ui.sessionTurn.status.thinking": "생각 중",
+  "ui.sessionTurn.reasoning.durationDescription": "이 추론 내용을 생성하는 데 걸린 시간입니다.",
   "ui.sessionTurn.status.thinkingWithTopic": "생각 중 - {{topic}}",
   "ui.sessionTurn.status.gatheringThoughts": "생각 정리 중",
   "ui.sessionTurn.status.consideringNextSteps": "다음 단계 고려 중",
@@ -190,6 +191,7 @@ export const dict = {
   "ui.toolErrorCard.copyError": "오류 복사",
   "ui.message.duration.seconds": "{{count}}초",
   "ui.message.duration.minutesSeconds": "{{minutes}}분 {{seconds}}초",
+  "ui.message.duration.total": "총 {{duration}}",
 
   "ui.sessionReview.title.git": "Git 변경 사항",
   "ui.sessionReview.title.branch": "브랜치 변경 사항",

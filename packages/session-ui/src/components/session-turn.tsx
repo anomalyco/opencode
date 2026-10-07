@@ -25,6 +25,7 @@ import { SessionRetry } from "./session-retry"
 import { TextReveal } from "@opencode-ai/ui/text-reveal"
 import { createAutoScroll } from "@opencode-ai/ui/hooks"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
+import { createThinkingLabel } from "./thinking-label"
 import { normalize } from "./session-diff"
 
 function record(value: unknown): value is Record<string, unknown> {
@@ -382,6 +383,15 @@ export function SessionTurn(
     overflowAnchor: "dynamic",
   })
 
+  const thinkingLabel = createThinkingLabel({
+    get active() {
+      return showThinking()
+    },
+    get start() {
+      return message()?.time.created
+    },
+  })
+
   return (
     <div data-component="session-turn" class={props.classes?.root}>
       <div
@@ -421,7 +431,7 @@ export function SessionTurn(
               </Show>
               <Show when={showThinking()}>
                 <div data-slot="session-turn-thinking">
-                  <TextShimmer text={i18n.t("ui.sessionTurn.status.thinking")} />
+                  <TextShimmer text={thinkingLabel()} />
                   <Show when={!showReasoningSummaries()}>
                     <TextReveal
                       text={reasoningHeading()}
