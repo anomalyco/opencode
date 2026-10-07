@@ -48,6 +48,7 @@ import type definition from "./index"
 import { createModel } from "./model"
 import SessionBrowserPane from "./panel"
 import { BrowserPane, type PaneEvent } from "./ipc"
+import { refusal } from "./policy"
 
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
 type PaneHost = {
@@ -287,7 +288,10 @@ export function mountBrowserPane(input: PaneHost) {
       load: async () => undefined,
       command: async (value) => {
         const command = value.command
+        // Main refuses what it does not open before anything happens, naming why.
+        const reason = command.type === "navigate" ? refusal(command.url) : undefined
 
+        if (reason) throw new Error(reason)
         setStore("error", undefined)
 
         if (command.type === "navigate" || command.type === "reload") setStore("loadErrors", store.session, undefined)
@@ -440,7 +444,7 @@ export function mountBrowserPane(input: PaneHost) {
             <button onClick={() => setStore("delayNavigation", true)}>Delay navigation</button>
             <button
               onClick={() => {
-                setStore({ error: "ERR_BLOCKED_BY_CLIENT", pendingURL: undefined })
+                setStore({ error: "browser.address.web", pendingURL: undefined })
                 report()
               }}
             >

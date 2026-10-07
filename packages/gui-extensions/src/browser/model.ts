@@ -96,8 +96,22 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const recorded = new Map<string, string>()
   const key = (tabID: string) => `${ctx.id}:${tabID}`
 
+  // Main names why it moved control elsewhere or refused an address; any other failure is a failed request.
+  const describe = (error: string) => {
+    if (error === "browser.pane.replaced") return ctx.t("replaced")
+
+    if (error === "browser.address.credentials") return ctx.t("refused.credentials")
+
+    if (error === "browser.address.workspace") return ctx.t("refused.workspace")
+
+    if (error === "browser.address.web") return ctx.t("refused.web")
+
+    return ctx.t("common.requestFailed")
+  }
+
   // Pages the user or the agent opened, once loaded: only a tab whose page exists has a real URL and title, as a
-  // restored tab's saved URL carries no title until it loads again.
+  // restored tab's saved URL carries no title until it loads again. Only the desktop's own reports count: a restored
+  // tab's embed arrives before its page loads, with the saved URL as if it had.
   const record = (session: string, next: { browser: Browser.State | null; embeds: Readonly<Record<string, string>> }) =>
     next.browser?.tabs.forEach((tab) => {
       if (tab.loading || tab.loadError || !next.embeds[tab.id] || !recordable(tab.url)) return
@@ -194,7 +208,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           if (visits) history.set({ visits })
         },
         address: (tabID) => addressed.get(id)?.forEach((listener) => listener(tabID)),
-        change: (next, mirror) => {
+        change: (next, mirror, native) => {
           if (next.error === "browser.pane.unsupported") {
             setState("unsupported", ref.server.id, true)
 
@@ -216,15 +230,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
                 browser: next.browser,
                 embeds: next.embeds,
                 suspended: next.suspended,
-                error:
-                  next.error === "browser.pane.replaced"
-                    ? ctx.t("replaced")
-                    : next.error
-                      ? ctx.t("common.requestFailed")
-                      : undefined,
+                error: next.error ? describe(next.error) : undefined,
               }),
             )
-            record(id, next)
+
+            if (native) record(id, next)
 
             // After the store: closing a strip tab asks this model whether the desktop still has it.
             if (ref.location) return mirror()
@@ -361,9 +371,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (state.attachments[id]) setState("attachments", id, "error", undefined)
     })
 
-    // An unreachable pane is suspended, not a failed request.
+    // An unreachable pane is suspended, not a failed request. A tab that never opened has no address field to focus.
     const failed = (cause: unknown) => {
-      if (!unavailable(cause)) setState("errors", id, ctx.t("common.requestFailed"))
+      if (action.type === "tabs.open") opening.delete(id)
+
+      if (!unavailable(cause)) setState("errors", id, describe(cause instanceof Error ? cause.message : ""))
     }
 
     const connection = live.get(id)?.connection

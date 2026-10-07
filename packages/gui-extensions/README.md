@@ -615,6 +615,7 @@ export const builtins = Extension.compose(
   { ...updater, main: () => import("./updater/main") },
   { ...ssh, main: () => import("./ssh/main") },
   { ...wsl, main: () => import("./wsl/main") },
+  microsoftOffice,
 )
 ```
 
@@ -640,6 +641,7 @@ export const builtins = Extension.compose(
   { ...updater, renderer: eager(updaterRenderer) },
   { ...ssh, renderer: eager(sshRenderer) },
   { ...wsl, renderer: eager(wslRenderer) },
+  { ...microsoftOffice, renderer: eager(microsoftOfficeRenderer) },
 )
 ```
 
