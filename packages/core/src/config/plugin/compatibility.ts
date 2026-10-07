@@ -3,7 +3,7 @@ export * as ConfigCompatibilityPlugin from "./compatibility.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
-import { Effect, FiberMap, PubSub, Semaphore, Stream } from "effect"
+import { Effect, FiberMap, PubSub, Ref, Semaphore, Stream } from "effect"
 import { Config } from "../../config.js"
 import { Watcher } from "../../filesystem/watcher.js"
 import { Skill } from "../../skill.js"
@@ -33,40 +33,70 @@ export const Plugin = define({
       )
     })
 
+    // The plugin reacts only to the set of compatibility directories it can
+    // actually watch; resolve the candidates once so the initial scan and the
+    // config listener compare the same list.
+    const directories = Effect.fnUntraced(function* () {
+      const roots = config.compatibility ? yield* config.compatibility() : { claude: [], agents: [] }
+      const candidates = [...roots.claude, ...roots.agents].map((root) => path.join(root, "skills"))
+      const resolved = yield* Effect.forEach(candidates, (candidate) =>
+        fs.realPath(candidate).pipe(Effect.orElseSucceed(() => undefined)),
+      )
+      return resolved.filter((directory): directory is string => directory !== undefined)
+    })
+    const scanned = yield* Ref.make<readonly string[]>([])
+
     const refresh = Effect.fn("ConfigCompatibilityPlugin.refresh")(
       function* () {
         yield* FiberMap.clear(watches)
-        const roots = config.compatibility ? yield* config.compatibility() : { claude: [], agents: [] }
-        const directories = [...roots.claude, ...roots.agents].map((root) => path.join(root, "skills"))
+        const current = yield* directories()
         const loaded = new Map<Skill.ID, Skill.Info>()
-        for (const directory of directories) {
-          const resolved = yield* fs.realPath(directory).pipe(Effect.orElseSucceed(() => undefined))
-          if (!resolved) continue
-          yield* watch(resolved, "directory")
+        for (const directory of current) {
+          yield* watch(directory, "directory")
           const files = yield* fs
-            .scan("{*.md,**/SKILL.md}", { cwd: resolved, absolute: true, include: "file", symlink: true, dot: true })
+            .scan("{*.md,**/SKILL.md}", { cwd: directory, absolute: true, include: "file", symlink: true, dot: true })
             .pipe(Effect.orElseSucceed(() => [] as string[]))
           for (const filepath of files.toSorted()) {
             const content = yield* fs.readFileStringSafe(filepath).pipe(Effect.orElseSucceed(() => undefined))
             if (!content) continue
-            const parsed = SkillFile.parse(resolved, filepath, content)
+            const parsed = SkillFile.parse(directory, filepath, content)
             if (parsed._tag === "Parsed") loaded.set(parsed.skill.id, parsed.skill)
           }
         }
         skills.splice(0, skills.length, ...loaded.values())
+        yield* Ref.set(scanned, current)
       },
       (effect) => lock.withPermit(effect),
     )
 
     const reload = refresh().pipe(Effect.andThen(ctx.skill.reload()))
+    // Config roots observe every write under them, including plugin state and
+    // logs. Only a change to the watched compatibility directories can affect
+    // this plugin, so compare before reloading; otherwise unrelated writes
+    // tear down and re-register every skill watch.
+    const reloadIfChanged = Effect.gen(function* () {
+      const current = yield* directories()
+      const previous = yield* Ref.get(scanned)
+      if (previous.length === current.length && previous.every((directory, index) => directory === current[index]))
+        return
+      yield* reload
+    })
+
     const updates = yield* PubSub.subscribe(changes)
     yield* Stream.fromSubscription(updates).pipe(
       Stream.debounce("100 millis"),
       Stream.runForEach(() => reload),
       Effect.forkScoped({ startImmediately: true }),
     )
+    const configReloads = yield* PubSub.sliding<void>(1)
     yield* config.changes().pipe(
-      Stream.runForEach(() => reload),
+      Stream.runForEach(() => PubSub.publish(configReloads, undefined).pipe(Effect.asVoid)),
+      Effect.forkScoped({ startImmediately: true }),
+    )
+    const configUpdates = yield* PubSub.subscribe(configReloads)
+    yield* Stream.fromSubscription(configUpdates).pipe(
+      Stream.debounce("100 millis"),
+      Stream.runForEach(() => reloadIfChanged),
       Effect.forkScoped({ startImmediately: true }),
     )
     yield* refresh()
