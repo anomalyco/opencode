@@ -289,6 +289,152 @@
   text-decoration: underline;
 }
 
+.settings-about-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.settings-about-link:hover,
+.settings-about-link:focus-visible {
+  color: var(--v2-text-text-base);
+  text-decoration: underline;
+}
+
+.settings-notices {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 0 20px 20px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.settings-notice {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.settings-notice p {
+  margin: 0;
+}
+
+.settings-notice-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--v2-text-text-base);
+  font-weight: 540;
+}
+
+.settings-notice-heading span {
+  color: var(--v2-text-text-faint);
+  font-weight: 440;
+}
+
+.settings-notice-heading a {
+  color: inherit;
+}
+
+.settings-notice summary {
+  cursor: pointer;
+  color: var(--v2-text-text-faint);
+}
+
+.settings-notice pre {
+  margin: 0;
+  font-family: var(--font-family-mono);
+  font-size: 11px;
+  line-height: var(--line-height-compact);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.settings-notice details pre {
+  margin-top: 8px;
+  padding: 12px;
+  border-radius: 8px;
+  background: var(--v2-background-bg-layer-02);
+}
+
+.settings-crates {
+  padding-top: 20px;
+  border-top: 0.5px solid var(--v2-border-border-base);
+}
+
+.settings-crates h3,
+.settings-crates h4 {
+  margin: 0;
+  font-size: 13px;
+  line-height: var(--line-height-base);
+}
+
+.settings-crates h4 {
+  margin-top: 8px;
+  color: var(--v2-text-text-base);
+  font-weight: 540;
+}
+
+.settings-crate-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.settings-crate {
+  line-height: var(--line-height-compact);
+}
+
+.settings-crate-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.settings-crate-heading > span:first-child {
+  color: var(--v2-text-text-faint);
+}
+
+.settings-crate-heading a {
+  color: var(--v2-text-text-base);
+}
+
+.settings-crate-heading > span:last-child {
+  flex-shrink: 0;
+  color: var(--v2-text-text-faint);
+}
+
+.settings-crate-heading strong {
+  color: var(--v2-text-text-base);
+  font-weight: 540;
+}
+
+.settings-crate p {
+  color: var(--v2-text-text-faint);
+  font-size: 12px;
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.settings-crates summary span {
+  margin-inline-start: 8px;
+}
+
+.settings-crates details > p {
+  margin-top: 8px;
+}
+
 .settings-back {
   display: flex;
   flex-shrink: 0;

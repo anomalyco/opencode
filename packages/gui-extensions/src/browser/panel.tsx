@@ -20,13 +20,16 @@ import { commentNote, pageNote } from "./comment"
 import { bare, completes, highlight, suggest, type Visit } from "./history"
 import type { Model } from "./model"
 import type { PaneElement } from "./ipc"
+import { PageIcon } from "./page-icon"
 
 type PaneState = {
   /** The address field's text while the user edits it, and the submitted address it keeps afterwards. */
   address: string
   editing: boolean
-  submitted: boolean
-  /** The report counts when a submitted address was kept; the next URL change or rejection shows the page's URL. */
+  /**
+   * The report counts when an address was submitted; the next URL change, finished load or rejection shows the
+   * page's URL.
+   */
   kept: { followed: number; rejected: number } | undefined
   /** The movement count at a submit; the next reported movement ends the submitted navigation. */
   navigating: number | undefined
@@ -89,7 +92,6 @@ export default function SessionBrowserPane(props: {
   const [store, setStore] = createStore<PaneState>({
     address: "",
     editing: false,
-    submitted: false,
     kept: undefined,
     navigating: undefined,
     typed: false,
@@ -102,8 +104,20 @@ export default function SessionBrowserPane(props: {
     editorHeight: 0,
   })
 
-  // Page reports, counted: a count moves on every report, even one that repeats a value. Tab switches and URL changes:
-  const followed = createMemo(on([() => state()?.id, address], (_input, _previous, count: number = 0) => count + 1))
+  // Finished loads, counted. A submitted address that lands on the URL the page already had (say "example.com" on
+  // https://example.com/) changes no URL, only this.
+  const settled = createMemo(
+    on(
+      () => !!state()?.loading,
+      (loading, previous, count: number = 0) => (previous && !loading ? count + 1 : count),
+    ),
+  )
+
+  // Page reports, counted: a count moves on every report, even one that repeats a value. Tab switches, URL changes and
+  // finished loads:
+  const followed = createMemo(
+    on([() => state()?.id, address, settled], (_input, _previous, count: number = 0) => count + 1),
+  )
 
   // Rejections: a blocked or rejected request leaves the page where it was.
   const rejected = createMemo(
@@ -113,10 +127,10 @@ export default function SessionBrowserPane(props: {
     ),
   )
 
-  // Any reported movement, including a rejected or blocked request.
+  // Any reported movement, including a rejected or blocked request. A command clearing the last error is not one.
   const moved = createMemo(
     on(
-      [() => state()?.id, () => state()?.generation, () => state()?.loading, () => props.model.error(props.session)],
+      [() => state()?.id, () => state()?.generation, () => state()?.loading, rejected],
       (_input, _previous, count: number = 0) => count + 1,
     ),
   )
@@ -221,12 +235,20 @@ export default function SessionBrowserPane(props: {
   }
 
   // Navigates the tab and keeps the submitted address in the field until the page reports where it went; a blank page
-  // keeps the field empty.
+  // keeps the field empty. Ends editing here rather than on blur: a click elsewhere, such as a recent page, may have
+  // blurred the field already.
   const go = (url: string) => {
     const tab = state()
 
     if (!tab) return
-    setStore({ submitted: true, address: url === "about:blank" ? "" : url, navigating: moved() })
+    setStore({
+      editing: false,
+      typed: false,
+      active: -1,
+      address: url === "about:blank" ? "" : url,
+      navigating: moved(),
+      kept: { followed: followed(), rejected: rejected() },
+    })
     command({ type: "navigate", tabID: tab.id, url })
     input?.blur()
   }
@@ -276,6 +298,9 @@ export default function SessionBrowserPane(props: {
 
     if (!tab || !address()) return
 
+    // The editor is already open: the button keeps what the user wrote.
+    if (noting()) return
+
     if (picking() && store.picking) setPicking(store.picking, false)
     closeComment()
     setStore("note", { sessionKey: props.session.key, tabID: tab.id, url: tab.url, title: tab.title, draft: "" })
@@ -296,6 +321,14 @@ export default function SessionBrowserPane(props: {
       }),
     )
     closeNote()
+  }
+
+  const zoomed = () => !!address() && (page()?.zoom ?? 1) !== 1
+
+  const zoomPage = (direction: "in" | "out" | "reset") => {
+    const tab = state()
+
+    if (tab) props.model.zoom(props.session, tab.id, direction)
   }
 
   const copyLink = () => {
@@ -359,30 +392,30 @@ export default function SessionBrowserPane(props: {
 
   // The pane stays mounted when another session is routed; it listens to the routed session's picker.
   createKeyed(
-    () => props.session,
-    (session) =>
+    () => props.session.key,
+    (sessionKey) =>
       onCleanup(
-        props.model.onInspect(session, (event) => {
+        props.model.onInspect({ key: sessionKey }, (event) => {
           if (event.active) {
-            setStore("picking", { sessionKey: session.key, tabID: event.tabID })
+            setStore("picking", { sessionKey, tabID: event.tabID })
 
             return
           }
 
-          if (store.picking?.sessionKey === session.key && store.picking.tabID === event.tabID)
+          if (store.picking?.sessionKey === sessionKey && store.picking.tabID === event.tabID)
             setStore("picking", undefined)
 
           if (!event.element) return
           const tab = state()
 
           if (tab?.id !== event.tabID || !visible()) {
-            props.model.highlight(session, event.tabID)
+            props.model.highlight({ key: sessionKey }, event.tabID)
 
             return
           }
 
           setStore("comment", {
-            sessionKey: session.key,
+            sessionKey,
             tabID: tab.id,
             url: tab.url,
             generation: tab.generation,
@@ -395,10 +428,10 @@ export default function SessionBrowserPane(props: {
 
   // The page's address shortcut moves focus to this field when the page is the one on screen.
   createKeyed(
-    () => props.session,
-    (session) =>
+    () => props.session.key,
+    (sessionKey) =>
       onCleanup(
-        props.model.onAddress(session, (tabID) => {
+        props.model.onAddress({ key: sessionKey }, (tabID) => {
           if (tabID === state()?.id && visible()) focusAddress()
         }),
       ),
@@ -574,23 +607,29 @@ export default function SessionBrowserPane(props: {
             <Show
               when={site()}
               fallback={
-                <PageIcon icon={store.editing && field() ? (store.typed ? chosen()?.icon : page()?.icon) : undefined} />
+                <PageIcon
+                  icon={store.editing && field() ? (store.typed ? chosen()?.icon : page()?.icon) : undefined}
+                  class="text-v2-icon-icon-muted"
+                />
               }
             >
-              <SiteInformation
-                url={address()}
-                server={props.session.server.local ? undefined : props.session.server.name}
-                site={() => {
-                  const tab = state()
+              {/* Site information describes one page: another tab or URL closes it, and opening it reads anew. */}
+              <Show when={`${props.session.key}\n${state()?.id}\n${address()}`} keyed>
+                <SiteInformation
+                  url={address()}
+                  server={props.session.server.local ? undefined : props.session.server.name}
+                  site={() => {
+                    const tab = state()
 
-                  return tab ? props.model.site(props.session, tab.id) : undefined
-                }}
-                clear={() => {
-                  const tab = state()
+                    return tab ? props.model.site(props.session, tab.id) : undefined
+                  }}
+                  clear={() => {
+                    const tab = state()
 
-                  return tab ? props.model.clearSite(props.session, tab.id) : undefined
-                }}
-              />
+                    return tab ? props.model.clearSite(props.session, tab.id) : undefined
+                  }}
+                />
+              </Show>
             </Show>
             <div data-slot="browser-address-text">
               <input
@@ -611,15 +650,10 @@ export default function SessionBrowserPane(props: {
                   setStore({ editing: true, address: field(), typed: false, active: -1, dismissed: false })
                   event.currentTarget.select()
                 }}
-                onBlur={() =>
-                  setStore({
-                    editing: false,
-                    submitted: false,
-                    typed: false,
-                    active: -1,
-                    kept: store.submitted ? { followed: followed(), rejected: rejected() } : undefined,
-                  })
-                }
+                // Leaving the field without submitting cancels the edit; a submit already ended it.
+                onBlur={() => {
+                  if (store.editing) setStore({ editing: false, typed: false, active: -1, kept: undefined })
+                }}
                 onInput={(event) => {
                   const value = event.currentTarget.value
                   const first = suggest(props.model.visits(), value, 1)[0]
@@ -631,6 +665,10 @@ export default function SessionBrowserPane(props: {
                   setStore({ address: value, typed: true, dismissed: false, active: complete ? 0 : -1 })
                 }}
                 onKeyDown={(event) => {
+                  // Keys during IME composition pick and cancel candidates, not suggestions. Safari can report the
+                  // composition-confirming keydown with isComposing false but keyCode 229.
+                  if (event.isComposing || event.keyCode === 229) return
+
                   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                     if (!suggestions().length) return
                     event.preventDefault()
@@ -662,12 +700,25 @@ export default function SessionBrowserPane(props: {
               <Show when={store.editing && store.address.length <= 48 && chosen()}>
                 {(visit) => (
                   <div aria-hidden="true" data-slot="browser-address-hint">
-                    <span class="invisible">{store.address}</span>
-                    <span class="ms-1.5">{`- ${bare(visit().url)}`}</span>
+                    <span class="invisible shrink-0">{store.address}</span>
+                    <span class="ms-1.5 min-w-0 truncate">{`- ${bare(visit().url)}`}</span>
                   </div>
                 )}
               </Show>
             </div>
+            {/* Any zoom but 100% stays in sight, as the system browser shows it; a click resets it. */}
+            <Show when={zoomed()}>
+              <Tooltip placement="top" value={extension.t("zoom.reset")}>
+                <button
+                  type="button"
+                  data-slot="browser-address-zoom"
+                  onPointerDown={(event) => event.preventDefault()}
+                  onClick={() => zoomPage("reset")}
+                >
+                  {extension.t("zoom.percent", { percent: Math.round((page()?.zoom ?? 1) * 100) })}
+                </button>
+              </Tooltip>
+            </Show>
             <Show when={address()}>
               <div data-slot="browser-address-actions">
                 <Tooltip placement="top" value={extension.t("page.add")}>
@@ -756,39 +807,26 @@ export default function SessionBrowserPane(props: {
             </Tooltip>
             <Menu.Portal>
               <Menu.Content class="min-w-56">
+                {/* Zooming closes the menu: the page stays a still while the menu covers it, so a zoom would show
+                    only once it closed. The address field shows any zoom but 100% afterwards. */}
                 <Menu.Group>
                   <Menu.Item
-                    closeOnSelect={false}
                     disabled={!address()}
-                    onSelect={() => {
-                      const tab = state()
-
-                      if (tab) props.model.zoom(props.session, tab.id, "in")
-                    }}
+                    onSelect={() => zoomPage("in")}
                     shortcut={<Keybind keys={[...keybinds.keys("mod+plus")]} variant="neutral" />}
                   >
                     {extension.t("zoom.in")}
                   </Menu.Item>
                   <Menu.Item
-                    closeOnSelect={false}
                     disabled={!address()}
-                    onSelect={() => {
-                      const tab = state()
-
-                      if (tab) props.model.zoom(props.session, tab.id, "out")
-                    }}
+                    onSelect={() => zoomPage("out")}
                     shortcut={<Keybind keys={[...keybinds.keys("mod+-")]} variant="neutral" />}
                   >
                     {extension.t("zoom.out")}
                   </Menu.Item>
                   <Menu.Item
-                    closeOnSelect={false}
-                    disabled={!address() || (page()?.zoom ?? 1) === 1}
-                    onSelect={() => {
-                      const tab = state()
-
-                      if (tab) props.model.zoom(props.session, tab.id, "reset")
-                    }}
+                    disabled={!zoomed()}
+                    onSelect={() => zoomPage("reset")}
                     badge={extension.t("zoom.percent", { percent: Math.round((page()?.zoom ?? 1) * 100) })}
                   >
                     {extension.t("zoom.reset")}
@@ -812,7 +850,7 @@ export default function SessionBrowserPane(props: {
       </div>
       <Show when={error() && !failed()}>
         <div
-          class="shrink-0 px-3 py-1.5 text-12-regular text-text-danger-base border-b border-v2-border-border-muted"
+          class="shrink-0 px-3 py-1.5 text-12-regular text-v2-state-fg-danger border-b border-v2-border-border-muted"
           role="alert"
           aria-live="assertive"
         >
@@ -987,15 +1025,6 @@ export default function SessionBrowserPane(props: {
   )
 }
 
-/** A page's icon, or the globe while it has none. */
-function PageIcon(props: { icon: string | undefined }) {
-  return (
-    <Show when={props.icon} fallback={<Icon name="outline-globe" class="size-4 shrink-0 text-v2-icon-icon-muted" />}>
-      {(icon) => <img src={icon()} alt="" class="size-4 shrink-0 object-contain" />}
-    </Show>
-  )
-}
-
 /** A page in the suggestions or the new tab page: its icon, title and address, with the query's matches drawn. */
 function PageRow(props: {
   visit: Visit
@@ -1006,7 +1035,7 @@ function PageRow(props: {
 }) {
   const body = () => (
     <>
-      <PageIcon icon={props.visit.icon} />
+      <PageIcon icon={props.visit.icon} class="text-v2-icon-icon-muted" />
       <span data-slot="browser-page-row-text">
         <Show when={props.visit.title}>
           <span data-slot="browser-page-row-title">

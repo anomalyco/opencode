@@ -108,6 +108,30 @@
     color: var(--v2-text-text-base);
   }
 
+  /* The page's zoom when it is not 100%, drawn like the zoom badge in the browser options. */
+  [data-slot="browser-address-zoom"] {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 4px;
+    border: 0.5px solid var(--v2-border-border-base);
+    border-radius: 2px;
+    background: var(--v2-background-bg-layer-02);
+    color: var(--v2-text-text-muted);
+    font-size: 11px;
+    font-weight: 530;
+    line-height: var(--line-height-tight);
+    letter-spacing: 0.05px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    cursor: default;
+
+    &:hover {
+      color: var(--v2-text-text-base);
+    }
+  }
+
   /* Page actions show on hover and while the field has focus. */
   [data-slot="browser-address-actions"] {
     display: none;

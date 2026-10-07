@@ -216,8 +216,8 @@ export function make(input: {
     forkSession: Effect.fnUntraced(function* (params) {
       const directories = yield* ACPDirectories.parse(params.cwd, params.additionalDirectories)
       const mcpServers = yield* supportedMcpServers(params.mcpServers)
-      const sessionID = yield* ACPClient.decodeSessionID(params.sessionId)
-      const forked = yield* input.client.session.fork({ sessionID }).pipe(Effect.catch(ACPClient.classify))
+      const session = yield* getSession(params.sessionId, params.cwd)
+      const forked = yield* input.client.session.fork({ sessionID: session.id }).pipe(Effect.catch(ACPClient.classify))
       // Forks inherit the source's grants; replace them with this request's.
       yield* ACPDirectories.activate(input.client, forked, directories)
       const attachment = yield* input.sessions.attach(forked, forked.location.directory, mcpServers)

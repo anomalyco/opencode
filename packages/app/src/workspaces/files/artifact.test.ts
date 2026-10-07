@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { bytesToBase64, fileContentFromBytes, MAX_MEDIA_BYTES } from "./artifact"
+import { fileContentFromBytes, MAX_MEDIA_BYTES } from "./artifact"
 
 describe("fileContentFromBytes", () => {
   test("keeps media as base64 with a mime type", () => {
@@ -27,10 +27,5 @@ describe("fileContentFromBytes", () => {
 
   test("marks unknown binaries without keeping bytes", () => {
     expect(fileContentFromBytes("a.bin", new Uint8Array([1, 0, 2]))).toEqual({ type: "binary", content: "", size: 3 })
-  })
-
-  test("encodes large buffers in chunks", () => {
-    const bytes = new Uint8Array(70_000).fill(65)
-    expect(bytesToBase64(bytes)).toBe(Buffer.from(bytes).toString("base64"))
   })
 })

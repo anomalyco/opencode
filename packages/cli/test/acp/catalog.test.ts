@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test"
 import { currentValue } from "./select-options"
-import { rpcError, secondModel, startSession, startWire } from "./wire-fixture"
+import { rpcError, secondModel, startWire } from "./wire-fixture"
 
 describe("acp catalog and config options over the wire", () => {
   test("switches model, effort, and mode against the warm catalog", async () => {
-    await using acp = await startSession()
-    const sessionId = acp.sessionId
+    await using acp = await startWire()
+    acp.server.catalog.models.push({ ...secondModel, providerID: "test/sub" })
+    await acp.initialize()
+    const sessionId = (await acp.newSession()).sessionId
     const set = (configId: string, value: string) =>
       acp.request("session/set_config_option", { sessionId, configId, value })
 
@@ -32,6 +34,9 @@ describe("acp catalog and config options over the wire", () => {
       code: -32602,
       data: { modelId: "test/missing-model" },
     })
+    const overlap = "test/sub/second-model"
+    expect(currentValue(await set("model", overlap), "model")).toBe(overlap)
+    expect(currentValue(await set("model", `${overlap}/low`), "effort")).toBe("low")
   })
 
   test("answers the first session after a cold location activates its plugins (#52729, #52472)", async () => {

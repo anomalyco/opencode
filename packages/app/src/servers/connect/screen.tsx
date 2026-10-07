@@ -44,7 +44,7 @@ export function ConnectServerScreen(props: { url?: string } = {}) {
         }
 
         // Keep the token in the form so a failed connection check can retry without the spent code.
-        setState({ url: link.url, password: redeemed.password })
+        setState({ url: redeemed.url, password: redeemed.password })
       }
 
       const url = serverAddress(state.url)
