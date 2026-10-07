@@ -3,7 +3,9 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Yeni anonim model Space Bunny Free sınırlı bir süre için kullanılabilir",
+  "go.referral.ended.label": "Uyarı",
+  "go.referral.ended":
+    "Tavsiye programı sona erdi. Tavsiye bağlantıları artık size veya bağlantıyı paylaşan kişiye kredi kazandırmıyor.",
   "go.graph.bonus": "{{count}}× kullanım",
   "nav.github": "GitHub",
   "nav.docs": "Dokümantasyon",
@@ -265,6 +267,7 @@ export const dict = {
   "go.meta.description":
     "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
+  "go.hero.tagline": "Herhangi bir ajanla kullanın. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
   "go.hero.body":
     "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
 
@@ -272,6 +275,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "Go'ya abone ol",
   "go.cta.price": "Ayda 10$",
+  "go.plans.month": "aylık",
+  "go.plans.plus.cta": "Go Plus'a abone ol",
+  "go.plans.plus.description": "Go Plus ayda 40$'dır ve daha yüksek limitler sunar.",
+  "go.plans.go.feature1": "Seçilmiş, uygun fiyatlı modeller",
+  "go.plans.go.feature2": "Ajan destekli kodlama için test edildi",
+  "go.plans.go.feature3": "Cömert limitler ve güvenilir erişim",
+  "go.plans.plus.feature1": "Go'daki her şey dahil",
+  "go.plans.plus.feature2": "Daha uzun, odaklı kodlama oturumları için daha yüksek limitler",
+  "go.plans.plus.feature3": "Daha büyük ve zorlu projeler için",
+  "go.plans.limits": "Limitler",
+  "go.plans.description": "Model başına 5 saatlik tahmini istek ve aylık kullanım limitleri",
+  "go.plans.legend": "Planlar",
   "go.pricing.body": "Herhangi bir ajanla kullanın. Ayda 10$. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
   "go.graph.free": "Ücretsiz",
   "go.graph.freePill": "Big Pickle ve ücretsiz modeller",
@@ -385,7 +400,7 @@ export const dict = {
 
   "go.faq.q9": "Ücretsiz modeller ve Go arasındaki fark nedir?",
   "go.faq.a9":
-    "Ücretsiz modeller, günlük 200 istek kotasıyla Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında (5 saatlik, haftalık ve aylık) uygulanan daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar. Bu kotalar kabaca her 5 saatte 12$, haftada 30$ ve ayda 60$ değerindeki temel kullanım haklarına eşdeğerdir; modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+    "Ücretsiz modeller, günlük 200 istek kotasıyla Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar: aylık kotanın %20'si her 5 saatte, %50'si haftada ve %100'ü ayda kullanılabilir. Modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
   "go.faq.q10": "Para iadesi alabilir miyim?",
   "go.faq.a10":
     "Ücret son 14 gün içinde tahsil edildiyse ve ilgili faturalandırma döneminde Go kullanım hakkınızı hiç kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
@@ -652,7 +667,6 @@ export const dict = {
   "workspace.payments.type.subscription": "abonelik",
   "workspace.payments.view": "Görüntüle",
 
-  "workspace.black.loading": "Yükleniyor...",
   "workspace.black.time.day": "gün",
   "workspace.black.time.days": "gün",
   "workspace.black.time.hour": "saat",
@@ -662,7 +676,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "birkaç saniye",
   "workspace.black.subscription.title": "Abonelik",
   "workspace.black.subscription.message": "Aylık ${{plan}} karşılığında OpenCode Black'e abonesiniz.",
-  "workspace.black.subscription.manage": "Aboneliği Yönet",
+  "workspace.black.subscription.ending":
+    "OpenCode Black mevcut fatura döneminizin sonunda sona erer ve yenilenmez. Sizi yeni konsola taşıyacağız.",
   "workspace.black.subscription.rollingUsage": "5 Saatlik Kullanım",
   "workspace.black.subscription.weeklyUsage": "Haftalık Kullanım",
   "workspace.black.subscription.resetsIn": "Sıfırlama süresi",

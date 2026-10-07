@@ -67,10 +67,10 @@ export function ComparisonCardsSection(props: {
         data-section={featured() ? "compare-home-related" : "model-panel"}
         data-variant={!featured() && props.compact ? "compact" : undefined}
       >
-        <p data-slot="section-title">
+        <h2 data-slot="section-title">
           <strong>{props.title ?? "Model Comparisons"}.</strong>{" "}
           <span>{props.description ?? "Compare usage, cost, limits, and features."}</span>
-        </p>
+        </h2>
         <div data-component={featured() ? "compare-home-card-grid" : "comparison-card-grid"}>
           <For each={pairs()}>
             {(pair) => (featured() ? <FeaturedComparisonCard pair={pair} /> : <ComparisonPanelCard pair={pair} />)}

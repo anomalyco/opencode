@@ -3,7 +3,9 @@ import { dict as en } from "./en"
 
 export const dict = {
   ...en,
-  "go.promo.spaceBunny": "Space Bunny Free, un nouveau modèle anonyme, est disponible pour une durée limitée",
+  "go.referral.ended.label": "Avertissement",
+  "go.referral.ended":
+    "Le programme de parrainage est terminé. Les liens de parrainage ne donnent plus de crédit, ni à vous ni à la personne qui les a partagés.",
   "go.graph.bonus": "{{count}}× d’utilisation",
   "app.meta.description": "OpenCode - L'agent de code open source.",
   "nav.github": "GitHub",
@@ -267,6 +269,7 @@ export const dict = {
   "go.meta.description":
     "Go coûte 10 $/mois, avec des limites d'utilisation généreuses et un accès fiable aux principaux modèles de codage.",
   "go.hero.title": "Modèles de code à faible coût pour tous",
+  "go.hero.tagline": "Utilisable avec n'importe quel agent. Rechargez du crédit si besoin. Résiliez à tout moment.",
   "go.hero.body":
     "Go apporte le codage agentique aux programmeurs du monde entier. Offrant des limites généreuses et un accès fiable aux modèles open source les plus capables, pour que vous puissiez construire avec des agents puissants sans vous soucier du coût ou de la disponibilité.",
 
@@ -274,6 +277,18 @@ export const dict = {
   "go.cta.template": "{{text}} {{price}}",
   "go.cta.text": "S'abonner à Go",
   "go.cta.price": "10 $/mois",
+  "go.plans.month": "par mois",
+  "go.plans.plus.cta": "S'abonner à Go Plus",
+  "go.plans.plus.description": "Go Plus coûte 40 $/mois et offre des limites plus élevées.",
+  "go.plans.go.feature1": "Modèles sélectionnés et abordables",
+  "go.plans.go.feature2": "Testés pour le codage agentique",
+  "go.plans.go.feature3": "Limites généreuses et accès fiable",
+  "go.plans.plus.feature1": "Tous les avantages de Go",
+  "go.plans.plus.feature2": "Des limites plus élevées pour coder plus longtemps sans perdre le fil",
+  "go.plans.plus.feature3": "Pour les projets plus vastes et exigeants",
+  "go.plans.limits": "Limites",
+  "go.plans.description": "Requêtes estimées par 5 heures et limites mensuelles par modèle",
+  "go.plans.legend": "Offres",
   "go.pricing.body":
     "Utilisez-le avec n'importe quel agent. 10 $/mois. Rechargez du crédit si nécessaire. Annulez à tout moment.",
   "go.graph.free": "Gratuit",
@@ -386,7 +401,7 @@ export const dict = {
     "Oui, vous pouvez utiliser Go avec n'importe quel agent. Suivez les instructions de configuration dans votre agent de code préféré.",
   "go.faq.q9": "Quelle est la différence entre les modèles gratuits et Go ?",
   "go.faq.a9":
-    "Les modèles gratuits incluent Big Pickle ainsi que les modèles promotionnels disponibles à ce moment-là, avec un quota de 200 requêtes/jour. Go propose une sélection de modèles avec des quotas de requêtes plus élevés appliqués sur des fenêtres glissantes (5 heures, hebdomadaire et mensuelle), à peu près équivalents à des quotas de base de 12 $ par 5 heures, 30 $ par semaine et 60 $ par mois ; les quotas propres à chaque modèle peuvent varier (le nombre réel de requêtes varie selon le modèle et l'utilisation).",
+    "Les modèles gratuits incluent Big Pickle ainsi que les modèles promotionnels disponibles à ce moment-là, avec un quota de 200 requêtes/jour. Go propose une sélection de modèles avec des quotas de requêtes plus élevés sur des fenêtres glissantes : 20 % du quota mensuel par 5 heures, 50 % par semaine et 100 % par mois. Les quotas propres à chaque modèle peuvent varier (le nombre réel de requêtes varie selon le modèle et l'utilisation).",
   "go.faq.q10": "Puis-je obtenir un remboursement ?",
   "go.faq.a10":
     "Vous pourriez avoir droit à un remboursement si le paiement a été effectué au cours des 14 derniers jours et que vous n’avez pas utilisé votre quota Go pendant cette période de facturation. {{contact}} pour demander un remboursement.",
@@ -655,7 +670,6 @@ export const dict = {
   "workspace.payments.type.subscription": "abonnement",
   "workspace.payments.view": "Voir",
 
-  "workspace.black.loading": "Chargement...",
   "workspace.black.time.day": "jour",
   "workspace.black.time.days": "jours",
   "workspace.black.time.hour": "heure",
@@ -665,7 +679,8 @@ export const dict = {
   "workspace.black.time.fewSeconds": "quelques secondes",
   "workspace.black.subscription.title": "Abonnement",
   "workspace.black.subscription.message": "Vous êtes abonné à OpenCode Black pour {{plan}} $ par mois.",
-  "workspace.black.subscription.manage": "Gérer l'abonnement",
+  "workspace.black.subscription.ending":
+    "OpenCode Black prend fin avec votre période de facturation actuelle et ne sera pas renouvelé. Nous vous migrerons vers la nouvelle console.",
   "workspace.black.subscription.rollingUsage": "Utilisation 5 heures",
   "workspace.black.subscription.weeklyUsage": "Utilisation hebdomadaire",
   "workspace.black.subscription.resetsIn": "Réinitialisation dans",

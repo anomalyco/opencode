@@ -63,6 +63,7 @@ export const dict = {
   "range.2W": "2 สัปดาห์",
   "range.1M": "1 เดือน",
   "range.2M": "2 เดือน",
+  "chart.weekly": "รายสัปดาห์",
   "chart.daily": "รายวัน",
   "chart.input": "อินพุต",
   "chart.output": "เอาต์พุต",
@@ -80,10 +81,14 @@ export const dict = {
   "chart.leaderboardAria": "ลีดเดอร์บอร์ด token ของโมเดล",
   "chart.scrollableLeaderboardAria": "ลีดเดอร์บอร์ด token ของโมเดลแบบเลื่อนได้",
   "chart.byAuthor": "โดย {{author}}",
+  "chart.vsPreviousWeek": "เทียบกับสัปดาห์ก่อน",
+  "chart.date": "วันที่",
   "home.updated": "อัปเดตแล้ว",
   "home.noRows": "ยังไม่มีแถวข้อมูล",
   "home.justNow": "เมื่อสักครู่",
   "home.heroCopy": "ดูว่าโมเดลใดชนะในการใช้งานจริง ส่วนผสมการใช้งานเปลี่ยนไปอย่างไร และสิ่งนั้นหมายถึงต้นทุนอย่างไร",
+  "home.summary":
+    "ณ วันที่ {{date}} ในช่วง 7 วันที่ผ่านมา {{first}} มีการใช้งานสูงสุดใน OpenCode ด้วย {{firstTokens}} token ตามมาด้วย {{second}} ({{secondTokens}}) และ {{third}} ({{thirdTokens}})",
   "home.loadingTitle": "กำลังโหลดข้อมูล",
   "home.loadingDescription": "กำลังอ่านข้อมูลสรุปของโมเดล",
   "home.usageTitle": "การใช้งาน",
@@ -129,6 +134,8 @@ export const dict = {
   "lab.title": "การใช้งานและอันดับโมเดล AI ของ {{lab}} | ข้อมูล OpenCode",
   "lab.description":
     "เปรียบเทียบโมเดล {{lab}} ที่ใช้ใน OpenCode รวมถึงการใช้ token อันดับโมเดล หน้าต่างบริบท วันที่ปล่อย ต้นทุน และข้อมูลเฉพาะโมเดล",
+  "lab.summary":
+    "โมเดล {{lab}} ประมวลผล {{tokens}} token ใน OpenCode ในช่วงสองเดือนล่าสุด คิดเป็น {{share}} ของการใช้งานทั้งหมด โดย {{model}} เป็นโมเดล {{lab}} ที่มีการใช้งานมากที่สุด",
   "lab.loadingTitle": "แล็บโมเดล",
   "lab.loadingDescription": "กำลังอ่านความพร้อมของโมเดลและการใช้งาน OpenCode ล่าสุด",
   "lab.notFound": "ไม่มีโมเดลที่ตรงกับแล็บนี้",
@@ -155,6 +162,10 @@ export const dict = {
   "model.title": "การใช้งาน ต้นทุน และอันดับของ {{model}} | ข้อมูล OpenCode",
   "model.description":
     "ดูข้อมูลการใช้งาน OpenCode ของ {{model}} รวมถึงปริมาณ token อันดับรายสัปดาห์ ส่วนผสม token ต้นทุน อัตราแคช เซสชัน ข้อมูลแยกตามภูมิศาสตร์ และโมเดลใกล้เคียง",
+  "model.summary":
+    "{{model}} อยู่อันดับ #{{rank}} ตามจำนวน token ใน OpenCode เมื่อสัปดาห์ที่แล้ว โดยมีส่วนแบ่ง token {{share}} ในช่วงสองเดือนล่าสุด",
+  "model.summaryUnranked": "{{model}} มีส่วนแบ่ง token {{share}} ใน OpenCode ในช่วงสองเดือนล่าสุด",
+  "model.summaryPrice": "{{model}} มีราคา {{input}} ต่อ 1M input token และ {{output}} ต่อ 1M output token",
   "model.loadingTitle": "ข้อมูลโมเดล",
   "model.loadingDescription": "กำลังอ่านข้อมูลสรุปของโมเดล",
   "model.loadingProfile": "กำลังอ่านโปรไฟล์โมเดล",
@@ -228,4 +239,19 @@ export const dict = {
   "model.pdf": "PDF",
   "format.users": "ผู้ใช้",
   "format.tokens": "token",
+  "methodology.title": "ระเบียบวิธี",
+  "methodology.description": "วิธีเก็บรวบรวมข้อมูลนี้",
+  "methodology.updatesLabel": "การอัปเดต",
+  "methodology.updates": "รวบรวมข้อมูลทุกชั่วโมง วันและสัปดาห์อิงตามเวลา UTC",
+  "methodology.tokensLabel": "Token",
+  "methodology.tokens": "token อินพุต เอาต์พุต การให้เหตุผล และ token ที่แคชแล้วของแต่ละคำขอ",
+  "methodology.usersLabel": "ผู้ใช้และเซสชัน",
+  "methodology.users": "จำนวนผู้ใช้ไม่ซ้ำและเซสชัน OpenCode โดยประมาณ",
+  "methodology.costLabel": "ต้นทุน",
+  "methodology.cost":
+    "ต้นทุนเซสชันคือต้นทุนเฉลี่ยต่อเซสชัน OpenCode ราคา token คือราคาตั้งจากแค็ตตาล็อกโมเดลของ OpenCode",
+  "methodology.retentionLabel": "การรักษาผู้ใช้",
+  "methodology.retention": "สัดส่วนผู้ใช้ของโมเดลในสัปดาห์หนึ่งที่กลับมาใช้โมเดลนั้นอีกครั้งในสัปดาห์ถัดไป",
+  "methodology.citeLabel": "การอ้างอิง",
+  "methodology.cite": "อ้างอิง OpenCode Data (opencode.ai/data) พร้อมระบุเวลาอัปเดตที่แสดงอยู่ด้านบนของหน้า",
 } satisfies Record<Key, string>

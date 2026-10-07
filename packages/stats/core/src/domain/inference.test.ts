@@ -14,6 +14,7 @@ import {
   statModel,
   statProvider,
 } from "./model-normalization"
+import { catalogIdentity } from "./catalog-identity"
 
 describe("inference stat normalization", () => {
   test("normalizes model suffixes used by router/provider variants", () => {
@@ -36,6 +37,7 @@ describe("inference stat normalization", () => {
     expect(modelAuthor("grok-build-0.1")).toBe("xai")
     expect(modelAuthor("hy3-preview")).toBe("tencent")
     expect(modelAuthor("kimi-k2.6")).toBe("moonshot")
+    expect(modelAuthor("longcat-2.5-preview")).toBe("meituan")
     expect(modelAuthor("mimo-v2-omni")).toBe("xiaomi")
     expect(modelAuthor("minimax-m2.7")).toBe("minimax")
     expect(modelAuthor("muse-spark-1.2-contributor")).toBe("meta")
@@ -87,6 +89,7 @@ describe("inference stat normalization", () => {
     expect(statProvider("OMEN-ALPHA-free:global", "gpt-test-model", "test-provider")).toBe("unknown")
     expect(statProvider("omen-alpha", "", "test-provider")).toBe("unknown")
     expect(statProvider("space-bunny-free", "hidden-route-model", "hidden-provider")).toBe("unknown")
+    expect(statProvider("exo-free", "gpt-test-model", "hidden-provider")).toBe("unknown")
 
     const spaceBunny = { ...aggregate("space-bunny-free", "hidden-provider"), provider_model: "hidden-route-model" }
     expect(toModelAggregate(spaceBunny)).toMatchObject([{ model: "space-bunny", provider: "unknown", requests: 1 }])
@@ -178,6 +181,45 @@ describe("inference stat normalization", () => {
     ])
   })
 
+  test("uses catalog labs in SQL and retains them in aggregate conversion", () => {
+    const catalog = catalogIdentity({
+      models: { "meituan/longcat-2.5-preview": {}, "cohere/north-mini-code": {}, "zhipuai/glm-5.3": {} },
+      providers: {
+        opencode: {
+          models: {
+            "longcat-2.5-preview-free": { canonical_model_id: "meituan/longcat-2.5-preview" },
+            "north-mini-code": { canonical_model_id: "cohere/north-mini-code" },
+            "glm-5.3": { canonical_model_id: "zhipuai/glm-5.3" },
+          },
+        },
+      },
+    })
+    const [query] = buildStatsQueries(
+      new Date("2026-09-27"),
+      new Date("2026-09-28"),
+      {
+        namespace: "inference",
+        table: "generation",
+        dataset: "zen",
+      },
+      catalog,
+    )
+
+    expect(query).toContain(
+      "WHEN lower(raw_provider) = 'opencode' AND lower(raw_model) = 'longcat-2.5-preview-free' THEN 'meituan'",
+    )
+    expect(query).toContain("WHEN lower(model) = 'longcat-2.5-preview' THEN 'meituan'")
+    expect(query).toContain("WHEN lower(model) = 'north-mini-code' THEN 'cohere'")
+    expect(query).toContain("WHEN strpos(lower(model), 'glm') > 0 THEN 'zhipu'")
+    expect(query).not.toContain("WHEN lower(model) = 'glm-5.3' THEN 'zhipuai'")
+    expect(toModelAggregate(aggregate("longcat-2.5-preview", "meituan"), catalog)).toMatchObject([
+      { model: "longcat-2.5-preview", provider: "meituan" },
+    ])
+    expect(toGeoAggregate({ ...aggregate("longcat-2.5-preview", "meituan"), country: "US" }, catalog)).toMatchObject([
+      { model: "longcat-2.5-preview", provider: "meituan", country: "US" },
+    ])
+  })
+
   test("provider aggregates never keep opencode as the provider", () => {
     expect(toProviderAggregate({ ...aggregate("big-pickle", "opencode"), provider_model: "gpt-5" })).toMatchObject([
       { provider: "openai" },
@@ -204,6 +246,19 @@ describe("inference stat normalization", () => {
     ).toMatchObject([{ period_key: "2026-W20" }])
   })
 
+  test("excludes hidden models from stats and retention queries", () => {
+    const source = { namespace: "inference", table: "generation", dataset: "zen", hiddenModels: ["hidden-model"] }
+    const queries = [
+      ...buildStatsQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-11T00:00:00.000Z"), source),
+      ...buildRetentionQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-24T00:00:00.000Z"), source).map(
+        (item) => item.query,
+      ),
+    ]
+
+    expect(queries.length).toBeGreaterThan(0)
+    queries.forEach((query) => expect(query).toContain("lower(model) NOT IN ('alpha-gpt-next', 'hidden-model')"))
+  })
+
   test("builds bounded R2 SQL queries for each day and week", () => {
     const queries = buildStatsQueries(new Date("2026-08-10T00:00:00.000Z"), new Date("2026-08-12T12:00:00.000Z"), {
       namespace: "inference",
@@ -215,7 +270,7 @@ describe("inference stat normalization", () => {
     queries.forEach((query) => {
       expect(query).toContain("WHERE lower(model) NOT IN ('alpha-gpt-next')")
       expect(query).toContain(
-        "CASE\n      WHEN lower(model) IN ('omen-alpha', 'space-bunny', 'union-alpha') THEN 'unknown'\n",
+        "CASE\n      WHEN lower(model) IN ('exo', 'omen-alpha', 'space-bunny', 'union-alpha') THEN 'unknown'\n",
       )
       expect(query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
       expect(query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")
@@ -288,7 +343,7 @@ describe("inference stat normalization", () => {
     expect(queries[0]?.query).toContain("AND product = 'go'")
     expect(queries[0]?.query).toContain("AND lower(model) NOT IN ('alpha-gpt-next')")
     expect(queries[0]?.query).toContain(
-      "CASE\n      WHEN lower(model) IN ('omen-alpha', 'space-bunny', 'union-alpha') THEN 'unknown'\n",
+      "CASE\n      WHEN lower(model) IN ('exo', 'omen-alpha', 'space-bunny', 'union-alpha') THEN 'unknown'\n",
     )
     expect(queries[0]?.query).toContain("= 'opencode-go/union-alpha' THEN 'union-alpha'")
     expect(queries[0]?.query).toContain("= 'opencode/union-alpha' THEN 'union-alpha'")

@@ -1,4 +1,3 @@
-export * as Athena from "./athena"
 export * as AppConfig from "./config"
 export * as Database from "./database"
 export * as GeoStat from "./domain/geo"

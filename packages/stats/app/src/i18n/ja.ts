@@ -63,6 +63,7 @@ export const dict = {
   "range.2W": "2週間",
   "range.1M": "1か月",
   "range.2M": "2か月",
+  "chart.weekly": "週次",
   "chart.daily": "日次",
   "chart.input": "入力",
   "chart.output": "出力",
@@ -80,11 +81,15 @@ export const dict = {
   "chart.leaderboardAria": "モデルのトークンランキング",
   "chart.scrollableLeaderboardAria": "スクロール可能なモデルのトークンランキング",
   "chart.byAuthor": "提供元: {{author}}",
+  "chart.vsPreviousWeek": "前週比",
+  "chart.date": "日付",
   "home.updated": "更新済み",
   "home.noRows": "まだ行がありません",
   "home.justNow": "たった今",
   "home.heroCopy":
     "実際の利用でどのモデルが伸びているか、利用構成がどう変化しているか、それがコストに何を意味するかを確認できます。",
+  "home.summary":
+    "{{date}}時点で、過去7日間のOpenCode使用量では{{first}}が{{firstTokens}}トークンで首位となり、{{second}}（{{secondTokens}}）、{{third}}（{{thirdTokens}}）が続きました。",
   "home.loadingTitle": "データを読み込み中",
   "home.loadingDescription": "モデル集計を読み込んでいます。",
   "home.usageTitle": "使用量",
@@ -130,6 +135,8 @@ export const dict = {
   "lab.title": "{{lab}} AIモデル使用量とランキング | OpenCodeデータ",
   "lab.description":
     "OpenCodeで使用されている{{lab}}モデルを、トークン使用量、モデルランキング、コンテキストウィンドウ、リリース日、コスト、モデル別データで比較できます。",
+  "lab.summary":
+    "過去2か月間に、{{lab}}モデルはOpenCode全体で{{tokens}}トークンを処理し、全使用量の{{share}}を占めました。最も使用された{{lab}}モデルは{{model}}でした。",
   "lab.loadingTitle": "モデルラボ",
   "lab.loadingDescription": "モデルの利用可否と最近のOpenCode使用状況を読み込んでいます。",
   "lab.notFound": "このラボに一致するモデルはありません。",
@@ -156,6 +163,10 @@ export const dict = {
   "model.title": "{{model}}の使用量、コスト、ランク | OpenCodeデータ",
   "model.description":
     "{{model}}のOpenCode使用データを、トークン量、週間ランク、トークン構成、コスト、キャッシュ比率、セッション、地域別内訳、類似モデルまで確認できます。",
+  "model.summary":
+    "{{model}}は先週、OpenCode全体のトークン数で#{{rank}}位となり、過去2か月間のトークンの{{share}}を占めました。",
+  "model.summaryUnranked": "{{model}}は過去2か月間、OpenCode全体のトークンの{{share}}を占めました。",
+  "model.summaryPrice": "{{model}}の価格は、入力トークン1Mあたり{{input}}、出力トークン1Mあたり{{output}}です。",
   "model.loadingTitle": "モデルデータ",
   "model.loadingDescription": "モデル集計を読み込んでいます。",
   "model.loadingProfile": "モデルプロフィールを読み込んでいます。",
@@ -229,4 +240,20 @@ export const dict = {
   "model.pdf": "PDF",
   "format.users": "ユーザー",
   "format.tokens": "トークン",
+  "methodology.title": "集計方法",
+  "methodology.description": "このデータの収集方法。",
+  "methodology.updatesLabel": "更新",
+  "methodology.updates": "1時間ごとに集計されます。日・週の区切りはUTC基準です。",
+  "methodology.tokensLabel": "トークン",
+  "methodology.tokens": "各リクエストの入力、出力、推論、キャッシュ済みトークン。",
+  "methodology.usersLabel": "ユーザーとセッション",
+  "methodology.users": "ユニークユーザー数とOpenCodeセッション数の概算値。",
+  "methodology.costLabel": "コスト",
+  "methodology.cost":
+    "セッションコストは、OpenCodeセッションあたりの平均コストです。トークン価格は、OpenCodeモデルカタログに掲載されている定価です。",
+  "methodology.retentionLabel": "継続率",
+  "methodology.retention": "ある週にモデルを使用したユーザーのうち、翌週も使用したユーザーの割合。",
+  "methodology.citeLabel": "引用",
+  "methodology.cite":
+    "引用する際は、OpenCode Data（opencode.ai/data）とページ上部に表示されている更新日時を記載してください。",
 } satisfies Record<Key, string>
