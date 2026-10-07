@@ -268,7 +268,7 @@ describe("Anthropic Messages effort updates", () => {
     }),
   )
 
-  it.effect("strips markers when thinking is disabled, between_tools, or switches from none", () =>
+  it.effect("strips markers when thinking is disabled or between_tools", () =>
     Effect.gen(function* () {
       const sonnet = anthropic("claude-sonnet-5-5")
       const betweenTools = yield* compileRequest(
@@ -278,22 +278,9 @@ describe("Anthropic Messages effort updates", () => {
           providerOptions: { thinking: { type: "between_tools" }, effort: "low" },
         }),
       )
-      const fromNone = yield* compileRequest(
-        LLM.request({
-          model: sonnet,
-          messages: [
-            Message.user("Before."),
-            Message.effort({ effort: "low", previous: "none" }),
-            Message.user("After."),
-          ],
-          providerOptions: { thinking: { type: "adaptive" }, effort: "low" },
-        }),
-      )
 
       expect(systemMessages(betweenTools.body)).toHaveLength(0)
       expect(betweenTools.body.output_config).toEqual({ effort: "low" })
-      expect(systemMessages(fromNone.body)).toHaveLength(0)
-      expect(fromNone.body.output_config).toEqual({ effort: "low" })
     }),
   )
 

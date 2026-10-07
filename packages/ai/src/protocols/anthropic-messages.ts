@@ -285,14 +285,8 @@ const AnthropicThinkingEnabled = Schema.Struct({
   ...AnthropicThinkingFields,
 })
 const AnthropicThinkingAdaptive = Schema.Struct({ type: Schema.tag("adaptive"), ...AnthropicThinkingFields })
-const AnthropicThinkingBetweenTools = Schema.Struct({ type: Schema.tag("between_tools") })
-const AnthropicThinkingDisabled = Schema.Struct({ type: Schema.tag("disabled") })
-const AnthropicThinking = Schema.Union([
-  AnthropicThinkingEnabled,
-  AnthropicThinkingAdaptive,
-  AnthropicThinkingBetweenTools,
-  AnthropicThinkingDisabled,
-])
+const AnthropicThinkingDisabled = Schema.Struct({ type: Schema.Literals(["disabled", "between_tools"]) })
+const AnthropicThinking = Schema.Union([AnthropicThinkingEnabled, AnthropicThinkingAdaptive, AnthropicThinkingDisabled])
 type AnthropicThinking = typeof AnthropicThinking.Type
 
 // SDK OutputConfig:2684 {effort?: "low"|"medium"|"high"|"xhigh"|"max"|null, format?: JSONOutputFormat:2399}
@@ -338,12 +332,7 @@ const ThinkingEnabledInput = Schema.Union([
     encode: SchemaGetter.passthrough({ strict: false }),
   }),
 )
-const Thinking = Schema.Union([
-  ThinkingEnabledInput,
-  AnthropicThinkingAdaptive,
-  AnthropicThinkingBetweenTools,
-  AnthropicThinkingDisabled,
-])
+const Thinking = Schema.Union([ThinkingEnabledInput, AnthropicThinkingAdaptive, AnthropicThinkingDisabled])
 
 const OutputConfigInput = Schema.Struct({
   effort: optionalNull(Schema.String),
@@ -1012,18 +1001,11 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
 // TODO: Move per-model capability heuristics (`supportsEffortUpdates`, `supportsNativeSystemUpdates`,
 // `supportsThinkingBlockBinding`) into explicit model/provider `compatibility` metadata so the protocol
 // only reads `request.model.compatibility`.
-const isThinkingOff = Schema.is(Schema.Struct({ type: Schema.Literals(["disabled", "between_tools"]) }))
+const isThinkingOff = Schema.is(AnthropicThinkingDisabled)
 
 // Per-turn effort started with Claude Opus 5 and every Claude 5.1 model; later versions of any family inherit it.
 const supportsEffortUpdates = (request: LLMRequest) => {
   if (isThinkingOff(request.providerOptions?.thinking)) return false
-  if (
-    request.messages.some((message) => {
-      const update = effortUpdate(message)
-      return update?.effort === "none" || update?.previous === "none"
-    })
-  )
-    return false
   const override = request.model.compatibility?.supportsEffortUpdates
   if (override !== undefined) return override
   const version = claudeVersion(request.model.id)
@@ -1033,7 +1015,7 @@ const supportsEffortUpdates = (request: LLMRequest) => {
 }
 
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
-  if (thinking?.type === "disabled" || thinking?.type === "between_tools") return thinking
+  if (isThinkingOff(thinking)) return thinking
   if (!supportsThinkingBlockBinding(model)) return thinking
   return {
     ...(thinking ?? { type: "adaptive" as const }),
@@ -1674,7 +1656,7 @@ function requiredBetaHeaders(body: Pick<AnthropicMessagesBody, "messages" | "con
     betas.push("mid-conversation-output-config-2026-07-01")
 
   const thinking = body.thinking
-  if (thinking && "block_binding" in thinking && thinking.block_binding) betas.push(THINKING_BINDING_BETA)
+  if (thinking && !isThinkingOff(thinking) && thinking.block_binding) betas.push(THINKING_BINDING_BETA)
   return betas
 }
 
