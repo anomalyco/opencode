@@ -1,7 +1,7 @@
 import { $ } from "bun"
 import { downloadCliToResources } from "./utils"
 
-await $`bun run install-electron`
+await $`node ./node_modules/electron/install.js`
 
 await $`bun ./scripts/copy-icons.ts ${process.env.OPENCODE_CHANNEL ?? "dev"}`
 
