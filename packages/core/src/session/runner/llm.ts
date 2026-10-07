@@ -34,6 +34,7 @@ import { SessionSchema } from "../schema"
 import { SessionStore } from "../store"
 import { type RunError, Service } from "./index"
 import { SessionRunnerModel } from "./model"
+import { ModelFallback } from "./model-fallback"
 import { createLLMEventPublisher } from "./publish-llm-event"
 import { toLLMMessages } from "./to-llm-message"
 import { MAX_STEPS_PROMPT } from "./max-steps"
@@ -177,6 +178,7 @@ const layer = Layer.effect(
       promotion: SessionInput.Delivery | undefined,
       step: number,
       recoverOverflow?: typeof compaction.compactAfterOverflow,
+      preferred?: ModelV2.Info,
     ) {
       const session = yield* getSession(sessionID)
       if (session.location.directory !== location.directory || session.location.workspaceID !== location.workspaceID)
@@ -198,7 +200,7 @@ const layer = Layer.effect(
       }
       const system =
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
-      const model = yield* models.resolve(session)
+      const model = yield* models.resolve(session, preferred)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
@@ -378,27 +380,35 @@ const layer = Layer.effect(
     })
 
     const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step) {
-      return yield* runTurnAttempt(sessionID, promotion, step, compaction.compactAfterOverflow).pipe(
-        // Phase 11 — Self-Healing: retry transient provider-turn failures (rate
-        // limits, 5xx, transport). Overflow and interrupt paths reach the runner
-        // as defects, so Effect.retry leaves them for catchDefect / compaction.
-        Effect.retry(
-          ProviderRetry.policy({
-            parse: (error) =>
-              error instanceof LLMError
-                ? { llmError: error, retryAfterMs: error.retryAfterMs }
-                : undefined,
-            set: (ctx) =>
-              Effect.gen(function* () {
-                yield* events.publish(SessionEvent.Retried, {
-                  sessionID,
-                  timestamp: yield* DateTime.now,
-                  attempt: ctx.attempt,
-                  error: ProviderRetry.toRetryError(ctx.retryInfo.llmError),
-                })
+      const session = yield* getSession(sessionID)
+      const chain = yield* ModelFallback.chainFor(session)
+      return yield* ModelFallback.withFallback(
+        chain,
+        (preferred) =>
+          runTurnAttempt(sessionID, promotion, step, compaction.compactAfterOverflow, preferred).pipe(
+            // Phase 11 — Self-Healing: retry transient provider-turn failures (rate
+            // limits, 5xx, transport). Overflow and interrupt paths reach the runner
+            // as defects, so Effect.retry leaves them for catchDefect / compaction.
+            Effect.retry(
+              ProviderRetry.policy({
+                parse: (error) =>
+                  error instanceof LLMError
+                    ? { llmError: error, retryAfterMs: error.retryAfterMs }
+                    : undefined,
+                set: (ctx) =>
+                  Effect.gen(function* () {
+                    yield* events.publish(SessionEvent.Retried, {
+                      sessionID,
+                      timestamp: yield* DateTime.now,
+                      attempt: ctx.attempt,
+                      error: ProviderRetry.toRetryError(ctx.retryInfo.llmError),
+                    })
+                  }),
               }),
-          }),
-        ),
+            ),
+          ),
+        (error) => error instanceof LLMError && ProviderRetry.retryable(error),
+      ).pipe(
         Effect.catchDefect(
           Effect.fnUntraced(function* (defect) {
             if (!(defect instanceof TurnTransitionError)) return yield* Effect.die(defect)

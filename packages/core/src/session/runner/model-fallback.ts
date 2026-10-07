@@ -1,4 +1,4 @@
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { Catalog } from "../../catalog"
 import { ModelV2 } from "../../model"
 import { SessionSchema } from "../schema"
@@ -14,10 +14,9 @@ import { SessionRunnerModel } from "./model"
  * exposes, in a stable release-descending order, so the runner can step down to a
  * different provider/model when a turn fails with a retryable provider error
  * (429 / QuotaExceeded / persistent 5xx) after {@link ProviderRetry.policy} is
- * exhausted — instead of surfacing a `RunError` to the session.
- *
- * This is the catalog side only; wiring the runner to cycle through it on retry
- * exhaustion is a follow-up reviewed under the interrupt-finality invariant.
+ * exhausted — instead of surfacing a `RunError` to the session. The runner
+ * cycles through this chain via {@link withFallback}; each model keeps its own
+ * full retry budget.
  */
 export interface FallbackChain {
   readonly primary: ModelV2.Info | undefined
@@ -55,13 +54,40 @@ export const nextAlternative = (
   return index >= 0 ? ordered[index + 1] : undefined
 }
 
-/** `chainFrom` against the live Location catalog. */
+/** `chainFrom` against the live Location catalog. Degrades to an empty chain when
+ * no Catalog is in context (single-model behavior is then preserved exactly). */
 export const chainFor = Effect.fn("ModelFallback.chainFor")(function* (
   session: SessionSchema.Info,
 ) {
-  const catalog = yield* Catalog.Service
-  const available = yield* catalog.model.available()
+  const catalog = yield* Effect.serviceOption(Catalog.Service)
+  if (Option.isNone(catalog)) return { primary: undefined, alternatives: [] } satisfies FallbackChain
+  const available = yield* catalog.value.model.available()
   return chainFrom(session, available)
 })
+
+/**
+ * Runs `attempt` against the fallback chain, stepping to the next alternative
+ * only when the attempt fails with an error accepted by `shouldFallback`.
+ * Each model is attempted at most once; when the chain is exhausted the last
+ * error surfaces. Typed failures alone are inspected — defects (interrupts,
+ * compaction transitions) propagate untouched.
+ */
+export const withFallback = <A, E>(
+  chain: FallbackChain,
+  attempt: (preferred: ModelV2.Info | undefined) => Effect.Effect<A, E>,
+  shouldFallback: (error: E) => boolean,
+): Effect.Effect<A, E> => {
+  const next = (preferred: ModelV2.Info | undefined): Effect.Effect<A, E> =>
+    attempt(preferred).pipe(
+      Effect.catchIf(shouldFallback, (error) =>
+        Effect.gen(function* () {
+          const alternative = nextAlternative(chain, preferred ?? chain.primary)
+          if (alternative === undefined) return yield* Effect.fail(error)
+          return yield* next(alternative)
+        }),
+      ),
+    )
+  return next(chain.primary)
+}
 
 export * as ModelFallback from "./model-fallback"

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { DateTime } from "effect"
+import { DateTime, Effect, Exit } from "effect"
 import { AbsolutePath } from "@opencode-ai/core/schema"
 import { ModelV2 } from "@opencode-ai/core/model"
 import { ProviderV2 } from "@opencode-ai/core/provider"
@@ -101,5 +101,103 @@ describe("ModelFallback", () => {
       expect(second?.name).toBe("claude-opus")
       expect(ModelFallback.nextAlternative(chain, second)).toBeUndefined()
     })
+  })
+
+  describe("withFallback", () => {
+    const available = [openai("gpt-4o", 100), anthropic("claude-opus", 90), openai("gpt-4o-mini", 50)]
+    const chain = ModelFallback.chainFrom(makeSession({ providerID: "alpha", id: "gpt-4o-mini" }), available)
+    const fallbackable = (error: string) => error.startsWith("retryable")
+
+    test("attempts each model once in chain order until one succeeds", () =>
+      Effect.gen(function* () {
+        const tried: Array<ModelV2.Info | undefined> = []
+        const result = yield* ModelFallback.withFallback(
+          chain,
+          (preferred) =>
+            Effect.gen(function* () {
+              tried.push(preferred)
+              if (tried.length < 3) return yield* Effect.fail(`retryable-${tried.length}`)
+              return "recovered"
+            }),
+          fallbackable,
+        )
+        expect(result).toBe("recovered")
+        expect(tried.map((model) => model?.name)).toEqual(["gpt-4o-mini", "gpt-4o", "claude-opus"])
+      }).pipe(Effect.runPromise),
+    )
+
+    test("surfaces the last error when the chain is exhausted", () =>
+      Effect.gen(function* () {
+        const tried: Array<ModelV2.Info | undefined> = []
+        const error = yield* ModelFallback.withFallback(
+          chain,
+          (preferred) =>
+            Effect.gen(function* () {
+              tried.push(preferred)
+              return yield* Effect.fail(`retryable-${tried.length}`)
+            }),
+          fallbackable,
+        ).pipe(Effect.flip)
+        expect(error).toBe("retryable-3")
+        expect(tried.map((model) => model?.name)).toEqual(["gpt-4o-mini", "gpt-4o", "claude-opus"])
+      }).pipe(Effect.runPromise),
+    )
+
+    test("does not advance on a non-fallbackable failure", () =>
+      Effect.gen(function* () {
+        const tried: Array<ModelV2.Info | undefined> = []
+        const error = yield* ModelFallback.withFallback(
+          chain,
+          (preferred) =>
+            Effect.gen(function* () {
+              tried.push(preferred)
+              return yield* Effect.fail("fatal")
+            }),
+          fallbackable,
+        ).pipe(Effect.flip)
+        expect(error).toBe("fatal")
+        expect(tried).toHaveLength(1)
+      }).pipe(Effect.runPromise),
+    )
+
+    test("leaves defects untouched without advancing", () =>
+      Effect.gen(function* () {
+        let attempts = 0
+        const exit = yield* ModelFallback.withFallback(
+          chain,
+          () =>
+            Effect.gen(function* () {
+              attempts += 1
+              return yield* Effect.die("boom")
+            }),
+          fallbackable,
+        ).pipe(Effect.exit)
+        expect(Exit.isFailure(exit)).toBe(true)
+        expect(attempts).toBe(1)
+      }).pipe(Effect.runPromise),
+    )
+
+    test("attempts once with undefined preferred when the chain is empty", () =>
+      Effect.gen(function* () {
+        const empty = ModelFallback.chainFrom(makeSession({ providerID: "missing", id: "nope" }), [])
+        expect(empty.primary).toBeUndefined()
+        const result = yield* ModelFallback.withFallback(
+          empty,
+          (preferred) => Effect.succeed(preferred?.name ?? "none"),
+          fallbackable,
+        )
+        expect(result).toBe("none")
+      }).pipe(Effect.runPromise),
+    )
+  })
+
+  describe("chainFor", () => {
+    test("degrades to an empty chain without a Catalog in context", () =>
+      Effect.gen(function* () {
+        const chain = yield* ModelFallback.chainFor(makeSession({ providerID: "alpha", id: "gpt-4o-mini" }))
+        expect(chain.primary).toBeUndefined()
+        expect(chain.alternatives).toEqual([])
+      }).pipe(Effect.runPromise),
+    )
   })
 })
