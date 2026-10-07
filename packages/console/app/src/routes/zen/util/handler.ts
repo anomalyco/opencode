@@ -115,6 +115,7 @@ export async function handler(
           opts.modelList === "full"
             ? entry?.providers.find((provider) => provider.id === entry.byokProvider)?.model
             : undefined,
+        anonymous: opts.modelList === "full" && entry?.proxyAnonymous === true,
         body: (providerModel) => requestBody?.stream(providerModel ?? model, false) ?? body,
       }).catch(() => {
         void (requestBody ? requestBody.cancel() : body.cancel()).catch(() => {})
