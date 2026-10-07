@@ -115,6 +115,67 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("migrates v1 model reasoning flag into capabilities", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        provider: {
+          local: {
+            models: {
+              "glm-flash": {
+                reasoning: true,
+                tool_call: true,
+                modalities: { input: ["text", "image"], output: ["text"] },
+              },
+            },
+          },
+        },
+      })
+
+      expect(migrated.providers?.local?.models?.["glm-flash"]?.capabilities).toEqual({
+        tools: true,
+        reasoning: true,
+        input: ["text", "image"],
+        output: ["text"],
+      })
+    }),
+  )
+
+  it.effect("migrates a v1 reasoning-only model into capabilities", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        provider: {
+          local: {
+            models: { "glm-flash": { reasoning: true } },
+          },
+        },
+      })
+
+      const capabilities = migrated.providers?.local?.models?.["glm-flash"]?.capabilities
+      expect(capabilities).toBeDefined()
+      expect(capabilities?.reasoning).toBe(true)
+      expect(capabilities?.tools).toBe(false)
+
+      // The migrated result must remain valid v2 configuration.
+      Schema.decodeUnknownSync(Config.Info)(migrated, { errors: "all" })
+    }),
+  )
+
+  it.effect("omits reasoning from capabilities when the v1 model does not declare it", () =>
+    Effect.sync(() => {
+      const migrated = ConfigMigrateV1.migrate({
+        provider: {
+          local: {
+            models: { "glm-flash": { tool_call: true } },
+          },
+        },
+      })
+
+      const capabilities = migrated.providers?.local?.models?.["glm-flash"]?.capabilities
+      expect(capabilities?.tools).toBe(true)
+      expect(capabilities && "reasoning" in capabilities).toBe(false)
+    }),
+  )
+
   it.effect("migrates v1 command configuration", () =>
     Effect.sync(() => {
       expect(
