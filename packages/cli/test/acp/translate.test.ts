@@ -225,7 +225,7 @@ const rows: Row[] = [
     ),
     expected: {
       updates: [
-        { sessionUpdate: "tool_call", toolCallId: "call_ok", status: "pending", kind: "execute" },
+        { sessionUpdate: "tool_call", toolCallId: "call_ok", name: "shell", status: "pending", kind: "execute" },
         {
           sessionUpdate: "tool_call_update",
           status: "in_progress",

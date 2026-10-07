@@ -30,13 +30,7 @@ function migrateV1(input: unknown) {
   if (result.type !== "normalized") throw new Error("expected normalized config")
   return result.encoded
 }
-const defaultPermissions = (global: Global.Interface): Permission.Ruleset => [
-  ...Agent.Info.default(Agent.ID.make("test")).permissions,
-  { action: "external_directory", resource: path.join(global.data, "shell", "*", "*"), effect: "allow" },
-  { action: "external_directory", resource: path.join(global.data, "tool-output", "*"), effect: "allow" },
-  { action: "external_directory", resource: path.join(global.tmp, "*"), effect: "allow" },
-  { action: "external_directory", resource: path.join(global.config, "*"), effect: "allow" },
-]
+const defaultPermissions = Agent.Info.default(Agent.ID.make("test")).permissions
 
 test("rejects named agent color tokens", () => {
   expect(() => decode({ agents: { reviewer: { color: "warning" } } })).toThrow()
@@ -229,7 +223,7 @@ permissions:
       const opencodeData = path.join(global.home, ".local", "share", "opencode", "*")
       const mcpAuth = path.join(global.home, ".local", "share", "opencode", "mcp-auth.json")
       expect(build.permissions).toEqual([
-        ...defaultPermissions(global),
+        ...defaultPermissions,
         { action: "question", resource: "*", effect: "allow" },
         { action: "shell", resource: "*", effect: "ask" },
         { action: "edit", resource: "*", effect: "ask" },
@@ -260,7 +254,6 @@ permissions:
   it.effect("applies all global permissions before agent-specific permissions", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
-      const global = yield* Global.Service
       const build = Agent.ID.make("build")
       yield* agents.transform((editor) =>
         editor.update(build, (agent) => {
@@ -313,7 +306,7 @@ permissions:
       const buildAgent = yield* agents.get(build)
       if (!buildAgent) throw new Error("expected configured build agent")
       expect(buildAgent.permissions).toEqual([
-        ...defaultPermissions(global),
+        ...defaultPermissions,
         { action: "bash", resource: "*", effect: "allow" },
         { action: "bash", resource: "*", effect: "ask" },
         { action: "read", resource: "*", effect: "allow" },
@@ -331,7 +324,7 @@ permissions:
         model: { providerID: "openrouter", id: "openai/gpt-5", variant: "high" },
       })
       expect(reviewer.permissions).toEqual([
-        ...defaultPermissions(global),
+        ...defaultPermissions,
         { action: "bash", resource: "*", effect: "ask" },
         { action: "read", resource: "*", effect: "allow" },
         { action: "edit", resource: "*", effect: "deny" },
@@ -339,7 +332,7 @@ permissions:
       ])
       expect(Permission.evaluate("read", "README.md", reviewer.permissions).effect).toBe("deny")
       expect((yield* agents.get(Agent.ID.make("late")))?.permissions).toEqual([
-        ...defaultPermissions(global),
+        ...defaultPermissions,
         { action: "bash", resource: "*", effect: "ask" },
         { action: "read", resource: "*", effect: "allow" },
         { action: "edit", resource: "*", effect: "allow" },
@@ -471,7 +464,6 @@ Use native v2 fields.`,
             await fs.writeFile(path.join(tmp.path, "modes", "plan.md"), "Make a plan.")
           })
           const agents = yield* Agent.Service
-          const global = yield* Global.Service
           const entries = [
             new Document({
               type: "document",
@@ -489,13 +481,13 @@ Use native v2 fields.`,
             system: "Review carefully.",
             description: "Markdown description",
             request: { body: { temperature: 0.5 } },
-            permissions: [...defaultPermissions(global), { action: "edit", resource: "*", effect: "deny" }],
+            permissions: [...defaultPermissions, { action: "edit", resource: "*", effect: "deny" }],
           })
           expect(yield* agents.get(Agent.ID.make("team/helper"))).toMatchObject({ system: "Help the team." })
           expect(yield* agents.get(Agent.ID.make("native"))).toMatchObject({
             system: "Use native v2 fields.",
             request: { headers: { "x-agent": "native" }, body: { effort: "high" } },
-            permissions: [...defaultPermissions(global), { action: "edit", resource: "*", effect: "deny" }],
+            permissions: [...defaultPermissions, { action: "edit", resource: "*", effect: "deny" }],
           })
           expect(yield* agents.get(Agent.ID.make("disabled"))).toBeUndefined()
           expect(yield* agents.get(Agent.ID.make("empty"))).toBeUndefined()

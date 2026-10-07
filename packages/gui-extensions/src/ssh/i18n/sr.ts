@@ -36,8 +36,5 @@ export default {
   "form.name": "Име сервера (опционо)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Додај сервер",
-  "server.default": "подразумевано",
-  "menu.default": "Подесите као подразумевано",
-  "menu.defaultRemove": "Уклони подразумевано",
   "menu.delete": "Избриши",
 }

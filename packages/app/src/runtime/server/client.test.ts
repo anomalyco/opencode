@@ -45,6 +45,7 @@ describe("server event stream", () => {
     const other: OpenCodeEvent[] = []
     const all: OpenCodeEvent[] = []
     let workspaceID: string | undefined
+
     const global = {
       id: "evt_connected",
       type: "server.connected",
@@ -87,9 +88,11 @@ describe("server event stream", () => {
 
 test("rotates HTTP and PTY clients together", async () => {
   const requests: Array<{ url: string; authorization: string | null }> = []
+
   const fetch = (async (input: string | URL | Request, init?: RequestInit) => {
     const request = input instanceof Request ? input : new Request(input, init)
     requests.push({ url: request.url, authorization: request.headers.get("authorization") })
+
     return Response.json({
       version: "2.0.0-test",
       pid: 1,
@@ -97,17 +100,21 @@ test("rotates HTTP and PTY clients together", async () => {
       paths: { tmp: "/tmp/opencode" },
     })
   }) as typeof globalThis.fetch
+
   const transport = createServerTransport({
     http: { url: "http://127.0.0.1:4100", password: "first" },
     fetch,
   })
+
   const initialPty = transport.pty
 
   await transport.api.server.info()
+
   const replacement = transport.update({
     url: "http://127.0.0.1:4200",
     password: "second",
   })
+
   await transport.api.server.info()
 
   expect(replacement).toBe(transport.api)

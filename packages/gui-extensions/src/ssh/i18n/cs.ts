@@ -38,8 +38,5 @@ export default {
   "form.name": "Název serveru (volitelné)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Přidat server",
-  "server.default": "Výchozí",
-  "menu.default": "Nastavit jako výchozí",
-  "menu.defaultRemove": "Odebrat výchozí",
   "menu.delete": "Odstranit",
 }

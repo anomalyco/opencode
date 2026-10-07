@@ -11,6 +11,7 @@ for (const size of ["typical", "large"]) {
     const answer = completedAnswer(size === "typical" ? 2 : 36)
     const errors: string[] = []
     page.on("pageerror", (error) => errors.push(error.message))
+
     const messages: Record<string, SessionMessageInfo[]> = Object.fromEntries(
       [fixture.sourceID, fixture.targetID].map((id) => [
         id,
@@ -43,6 +44,7 @@ for (const size of ["typical", "large"]) {
         ] satisfies SessionMessageInfo[],
       ]),
     )
+
     await mockOpenCodeServer(page, {
       sessions: fixture.sessions.filter((session) => session.id !== fixture.childID),
       provider: fixture.provider,
@@ -55,9 +57,11 @@ for (const size of ["typical", "large"]) {
     const targetPart = `msg_2_${fixture.targetID}_assistant:text:0`
     const sourcePart = `msg_2_${fixture.sourceID}_assistant:text:0`
     await installMarkdownGate(page, { answer, targetPart, sourcePart, href: sessionHref(fixture.sourceID) })
+
     const prefetched = page.waitForResponse((response) =>
       new URL(response.url()).pathname.endsWith(`/session/${fixture.targetID}/message`),
     )
+
     await page.goto(sessionHref(fixture.sourceID))
     await prefetched
     const source = page.locator(`[data-timeline-part-id="${sourcePart}"] [data-component="markdown"]`)
@@ -75,8 +79,10 @@ for (const size of ["typical", "large"]) {
     await expect(page.locator(`[data-timeline-part-id="${targetPart}"]`)).toHaveCount(0)
     await page.waitForFunction(() => window.markdownGate.settled > 0)
     const after = await cdp.send("Performance.getMetrics")
+
     const stats = await page.evaluate(() => {
       const value = window.markdownGate
+
       return {
         admitted: value.admitted,
         responses: value.responses,
@@ -88,14 +94,17 @@ for (const size of ["typical", "large"]) {
         sanitizeChars: value.sanitizeChars,
       }
     })
+
     expect(stats.admitted).toBe(1)
     expect(stats.responses).toBe(1)
     expect(stats.ready).toBeGreaterThan(stats.started)
     expect(stats.settled).toBeGreaterThan(stats.released)
     expect(errors).toEqual([])
+
     if (process.env.MARKDOWN_ASSERT_DISPOSAL === "1") expect(stats.sanitizeCalls).toBe(0)
     const value = (data: typeof after, name: string) => data.metrics.find((item) => item.name === name)!.value
     const retained = process.env.MARKDOWN_RETAINED === "1"
+
     if (retained) await cdp.send("HeapProfiler.collectGarbage")
     report(
       {
@@ -118,6 +127,7 @@ for (const size of ["typical", "large"]) {
         build: process.env.MARKDOWN_APP_BUILD_DIR,
       },
     )
+
     if (process.env.MARKDOWN_SCREENSHOT)
       await page.screenshot({ path: `${process.env.MARKDOWN_SCREENSHOT}/timeline-${size}.png` })
     await cdp.detach()

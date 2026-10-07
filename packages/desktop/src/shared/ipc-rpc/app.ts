@@ -13,14 +13,6 @@ export const AppConsumeInitialDeepLinks = Rpc.make("AppConsumeInitialDeepLinks",
   success: Schema.Array(Schema.String),
 })
 
-export const AppGetDefaultServerUrl = Rpc.make("AppGetDefaultServerUrl", {
-  success: Schema.NullOr(Schema.String),
-})
-
-export const AppSetDefaultServerUrl = Rpc.make("AppSetDefaultServerUrl", {
-  payload: { url: Schema.NullOr(Schema.String) },
-})
-
 export const AppIsFirstLaunchOnboardingPending = Rpc.make("AppIsFirstLaunchOnboardingPending", {
   success: Schema.Boolean,
 })
@@ -72,8 +64,6 @@ export const AppRpcs = RpcGroup.make(
   AppAwaitInitialization,
   AppReconnectService,
   AppConsumeInitialDeepLinks,
-  AppGetDefaultServerUrl,
-  AppSetDefaultServerUrl,
   AppIsFirstLaunchOnboardingPending,
   AppFinishFirstLaunchOnboarding,
   AppCheckAppExists,

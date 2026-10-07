@@ -40,6 +40,30 @@ export function commentNote(input: ElementComment): ComposerNote {
   return ref ? { ...note, live: { subject: subject(input, ref), href: `${input.tabID}#${ref}` } } : note
 }
 
+/** The composer note for a comment on a whole page; its chip shows the page's tab again. */
+export function pageNote(input: {
+  origin: string
+  tabID: Browser.TabID
+  url: string
+  title: string
+  label: string
+  comment: string
+}): ComposerNote {
+  // Page-provided strings are quoted so they read as data, not as part of the user's request.
+  const title = input.title ? ` titled ${JSON.stringify(input.title)}` : ""
+
+  return {
+    type: "note",
+    origin: input.origin,
+    commentID: crypto.randomUUID(),
+    label: input.label,
+    icon: "outline-globe",
+    subject: `the page in browser tab ${input.tabID} at ${input.url}${title}`,
+    comment: input.comment,
+    href: input.tabID,
+  }
+}
+
 /** The tab a note's href names, and its element ref while the note is live. */
 export function readHref(href: string): NoteHref | undefined {
   const [tabID, ref] = href.split("#")

@@ -8,10 +8,12 @@ import {
   onMount,
   Show,
   Suspense,
+  lazy,
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
+import { createMediaQuery } from "@solid-primitives/media"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -45,6 +47,12 @@ import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
 import { isAttachment } from "../prompt-parts"
 import "../attachments/attachments.css"
 import "./editor.css"
+
+const MobilePanelDrawer = lazy(async () => {
+  const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
+
+  return { default: MobilePanelDrawer }
+})
 
 export type {
   ComposerAttachment,
@@ -350,6 +358,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   {(control) => (
                     <Show when={control.options().length > 1}>
                       <ComposerEditorConfiguredSelect
+                        mobileDrawer
                         title={i18n.t("ui.promptInput.chooseVariant")}
                         keybind={["Shift", "Mod", "D"]}
                         control={control}
@@ -804,6 +813,7 @@ export function ComposerEditorAddMenu(props: {
 }
 
 function ComposerEditorConfiguredSelect(props: {
+  mobileDrawer?: boolean
   title: string
   keybind?: string[]
   control: ComposerSelectControl
@@ -815,6 +825,7 @@ function ComposerEditorConfiguredSelect(props: {
 
   return (
     <ComposerEditorSelect
+      mobileDrawer={props.mobileDrawer}
       title={props.title}
       class={props.class}
       keybind={props.control.keybind?.() ?? props.keybind}
@@ -831,6 +842,7 @@ function ComposerEditorConfiguredSelect(props: {
 }
 
 export function ComposerEditorSelect(props: {
+  mobileDrawer?: boolean
   title: string
   keybind?: string[]
   options: ComposerOption[]
@@ -840,8 +852,36 @@ export function ComposerEditorSelect(props: {
   onOpenChange?: (open: boolean) => void
   onSelect: (id: string) => void
 }) {
+  const mobile = createMediaQuery("(max-width: 767px)")
+  const [store, setStore] = createStore({ open: false, loaded: false })
+  let trigger: HTMLButtonElement | undefined
+
+  const setOpen = (open: boolean) => {
+    setStore("open", open)
+
+    if (open) setStore("loaded", true)
+    props.onOpenChange?.(open)
+  }
+
+  createEffect(() => {
+    if (!mobile() && store.open) setOpen(false)
+  })
+
+  const content = () => (
+    <>
+      {props.currentIcon}
+      <span class="truncate capitalize leading-5">
+        {props.options.find((option) => option.id === props.current)?.label ?? props.current}
+      </span>
+      <span class="-ms-0.5 -me-1 flex shrink-0">
+        <Icon name="chevron-down" />
+      </span>
+    </>
+  )
+
   return (
     <Tooltip
+      inactive={props.mobileDrawer && mobile()}
       placement="top"
       value={
         <>
@@ -850,36 +890,83 @@ export function ComposerEditorSelect(props: {
         </>
       }
     >
-      <Menu gutter={6} modal={false} placement="top-start" onOpenChange={props.onOpenChange}>
-        <Menu.Trigger
-          as={Button}
+      <Show
+        when={props.mobileDrawer && mobile()}
+        fallback={
+          <Menu gutter={6} modal={false} placement="top-start" onOpenChange={props.onOpenChange}>
+            <Menu.Trigger
+              as={Button}
+              variant="ghost-muted"
+              size="normal"
+              class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
+              aria-label={props.title}
+            >
+              {content()}
+            </Menu.Trigger>
+            <Menu.Portal>
+              <Menu.Content>
+                <Menu.RadioGroup value={props.current} onChange={props.onSelect}>
+                  <For each={props.options}>
+                    {(option) => (
+                      <Menu.RadioItem value={option.id} class="capitalize" closeOnSelect>
+                        {option.label}
+                      </Menu.RadioItem>
+                    )}
+                  </For>
+                </Menu.RadioGroup>
+              </Menu.Content>
+            </Menu.Portal>
+          </Menu>
+        }
+      >
+        <Button
+          ref={(element: HTMLButtonElement) => {
+            trigger = element
+          }}
           variant="ghost-muted"
           size="normal"
           class={`max-w-[220px] justify-start ![font-weight:440] ${props.class ?? ""}`}
           aria-label={props.title}
+          aria-haspopup="dialog"
+          aria-expanded={store.open}
+          onClick={() => setOpen(true)}
         >
-          {props.currentIcon}
-          <span class="truncate capitalize leading-5">
-            {props.options.find((option) => option.id === props.current)?.label ?? props.current}
-          </span>
-          <span class="-ms-0.5 -me-1 flex shrink-0">
-            <Icon name="chevron-down" />
-          </span>
-        </Menu.Trigger>
-        <Menu.Portal>
-          <Menu.Content>
-            <Menu.RadioGroup value={props.current} onChange={props.onSelect}>
-              <For each={props.options}>
-                {(option) => (
-                  <Menu.RadioItem value={option.id} class="capitalize" closeOnSelect>
-                    {option.label}
-                  </Menu.RadioItem>
-                )}
-              </For>
-            </Menu.RadioGroup>
-          </Menu.Content>
-        </Menu.Portal>
-      </Menu>
+          {content()}
+        </Button>
+        <Show when={store.loaded}>
+          <Suspense>
+            <MobilePanelDrawer
+              hideHeader
+              title={props.title}
+              open={store.open}
+              onOpenChange={setOpen}
+              returnFocus={() => trigger}
+            >
+              <div class="flex flex-col overflow-hidden rounded-lg border border-v2-border-border-base bg-v2-background-bg-layer-02 divide-y divide-v2-border-border-base">
+                <For each={props.options}>
+                  {(option) => (
+                    <Button
+                      variant="ghost"
+                      class="w-full !h-10 !justify-start !rounded-none !px-3 !font-[440] capitalize focus-visible:!outline-offset-[-2px]"
+                      aria-pressed={props.current === option.id}
+                      data-state={props.current === option.id ? "pressed" : undefined}
+                      onClick={() => {
+                        props.onSelect(option.id)
+                        setOpen(false)
+                      }}
+                    >
+                      {option.label}
+                      <Show when={props.current === option.id}>
+                        <Icon name="check" class="ms-auto" />
+                      </Show>
+                    </Button>
+                  )}
+                </For>
+              </div>
+            </MobilePanelDrawer>
+          </Suspense>
+        </Show>
+      </Show>
     </Tooltip>
   )
 }

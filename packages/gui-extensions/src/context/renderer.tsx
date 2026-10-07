@@ -40,7 +40,7 @@ const setup: Setup<typeof definition> = (ctx) => {
       region: "side",
       // Stored before extensions as "context", then under the extension's earlier id `usage`.
       legacy: { context: "main", "usage:context": "main" },
-      mobile: { title: ctx.t("mobile.title"), order: 10, kind: "menu" },
+      mobile: { title: ctx.t("mobile.title"), order: 40, kind: "menu", icon: "status" },
       list: (input) => (input.open.includes("main") ? [tab] : []),
       render: (props) => {
         const panel = usePanel()

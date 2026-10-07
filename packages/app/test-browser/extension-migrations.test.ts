@@ -149,8 +149,8 @@ function contextPanels() {
 
   const fake = {
     t: (key: string) => key,
-    add: (point: { readonly id: string }, item: () => Panel) => {
-      if (point.id === Panel.id) panels.push({ extension: context.id, value: item() })
+    add: (registry: { readonly id: string }, item: () => Panel) => {
+      if (registry.id === Panel.id) panels.push({ extension: context.id, value: item() })
 
       return () => undefined
     },
@@ -158,7 +158,7 @@ function contextPanels() {
 
   createRoot((dispose) => {
     // SAFETY: this setup reads only `t` and `add`, and contributes its Panel in the reactive form, a function returning
-    // it, which `add` calls for the Panel point only.
+    // it, which `add` calls for the Panel registry only.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     contextSetup(fake as unknown as Parameters<typeof contextSetup>[0])
     dispose()

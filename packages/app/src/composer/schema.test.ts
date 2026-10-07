@@ -14,13 +14,16 @@ import {
 } from "./schema"
 
 const text: TextPart = { type: "text", content: "hello", start: 0, end: 5 }
+
 const image: Omit<ImageAttachmentPart, "blob"> = {
   type: "image",
   id: "image",
   filename: "image.png",
   mime: "image/png",
 }
+
 const comment = { id: "comment", path: "src/app.ts", selection: { start: 1, end: 2 }, comment: "note", time: 1 }
+
 const decode = Schema.decodeUnknownSync(
   Persistence.withInitial(ComposerStore, { prompt: DEFAULT_PROMPT, context: { items: [] } }),
 )
@@ -29,6 +32,7 @@ describe("composer persistence schemas", () => {
   test("defaults missing or invalid fields independently and normalizes the cursor", () => {
     expect(decode({})).toEqual({ prompt: DEFAULT_PROMPT, context: { items: [] } })
     const selection = { startLine: 1, startChar: 0, endLine: 2, endChar: 3 }
+
     const value = decode({
       prompt: [null, { type: "unknown" }],
       cursor: -1,
@@ -44,6 +48,7 @@ describe("composer persistence schemas", () => {
         ],
       },
     })
+
     expect(value.prompt).toEqual(DEFAULT_PROMPT)
     expect(value.cursor).toBe(0)
     expect(value.mode).toBeUndefined()
@@ -80,10 +85,12 @@ describe("composer persistence schemas", () => {
       comment: "Rename this",
       commentID: "note",
     }
+
     const note = {
       ...durable,
       live: { subject: 'the "button#save" element (browser ref @e42)', href: `${durable.href}#e42` },
     }
+
     // A draft stored by a build before extension notes, as its composer schema encoded it.
     const browser = {
       type: "browser" as const,
@@ -94,6 +101,7 @@ describe("composer persistence schemas", () => {
       commentID: "picked",
       key: "browser:tab_00000000-0000-4000-8000-000000000000:c=picked",
     }
+
     const value = decode({ context: { items: [note, { ...note, subject: null }, browser, { ...browser, url: null }] } })
     expect(value.context.items).toEqual([
       { ...durable, key: "note:example:c=note" },
@@ -134,6 +142,7 @@ describe("composer persistence schemas", () => {
       model: { providerID: "provider", modelID: "model", variant: null },
       retry: { id: "msg_retry", agent: "build", providerID: "provider", modelID: "model", variant: false },
     })
+
     expect(value.prompt.map((part) => part.type)).toEqual(["text", "agent", "skill", "file"])
     expect(value.prompt[3]).toEqual({
       type: "file",
@@ -155,6 +164,7 @@ describe("composer persistence schemas", () => {
 
   test("preserves file source variants through canonical round trips", () => {
     const sourceText = { value: "@source", start: 0, end: 7 }
+
     const sources: NonNullable<FileAttachmentPart["source"]>[] = [
       { type: "file", path: "src/app.ts", text: sourceText },
       { type: "resource", clientName: "docs", uri: "docs://example", text: sourceText },
@@ -167,6 +177,7 @@ describe("composer persistence schemas", () => {
         text: sourceText,
       },
     ]
+
     const value = decode({
       prompt: sources.map((source) => ({
         type: "file",
@@ -178,6 +189,7 @@ describe("composer persistence schemas", () => {
         selection: { startLine: 1, startChar: 0, endLine: 2, endChar: 1 },
       })),
     })
+
     expect(value.prompt).toHaveLength(3)
     expect(value.prompt.map((part) => part.type === "file" && part.source)).toEqual(sources)
     expect(decode(Schema.encodeSync(ComposerStore)(value))).toEqual(value)
@@ -195,6 +207,7 @@ describe("composer persistence schemas", () => {
         { ...image, blob: { id: 42 } },
       ],
     })
+
     expect(value.prompt).toHaveLength(6)
     expect(value.prompt[0]).toEqual({
       ...image,
@@ -221,6 +234,7 @@ describe("composer persistence schemas", () => {
         { prompt: [text], comments: false },
       ],
     })
+
     expect(value.entries).toHaveLength(3)
     expect(value.entries[0].prompt).toHaveLength(2)
     expect(value.entries[0].comments).toEqual([])
@@ -245,6 +259,7 @@ describe("composer persistence schemas", () => {
       comment: "note",
       time: 1,
     }
+
     const value = Schema.decodeUnknownSync(Persistence.withInitial(CommentStore, { comments: {} }))({
       comments: {
         "src/app.ts": [line, null, { ...line, time: "bad" }, { ...line, selection: { start: 2, end: 4, side: "bad" } }],
@@ -252,6 +267,7 @@ describe("composer persistence schemas", () => {
         "healthy.ts": [{ ...line, file: "healthy.ts" }],
       },
     })
+
     expect(value.comments["src/app.ts"]).toEqual([line, { ...line, selection: { start: 2, end: 4 } }])
     expect(value.comments["broken.ts"]).toEqual([])
     expect(value.comments["healthy.ts"]).toEqual([{ ...line, file: "healthy.ts" }])

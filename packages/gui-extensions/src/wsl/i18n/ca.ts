@@ -53,8 +53,5 @@ export default {
     "S'ha esgotat el temps d'espera del sidecar per a {{distro}} comprovació de salut després de {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} s'ha esgotat després de {{timeout}}ms",
   "error.failedPort": "No s'ha pogut obtenir el port",
-  "server.default": "Per defecte",
-  "menu.default": "Estableix com a predeterminat",
-  "menu.defaultRemove": "Elimina el valor predeterminat",
   "menu.remove": "Elimina",
 }

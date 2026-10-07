@@ -10,7 +10,9 @@ export interface TabsProps extends ComponentProps<typeof Root> {
   variant?: TabsVariant
   orientation?: "horizontal" | "vertical"
 }
+
 export interface TabsListProps extends ComponentProps<typeof List> {}
+
 export interface TabsTriggerProps extends ComponentProps<typeof Trigger> {
   classes?: { button?: string }
   closeButton?: JSX.Element
@@ -18,7 +20,9 @@ export interface TabsTriggerProps extends ComponentProps<typeof Trigger> {
   onMiddleClick?: () => void
   subtext?: JSX.Element | string
 }
+
 export interface TabsCloseButtonProps extends ComponentProps<"button"> {}
+
 export interface TabsContentProps extends ComponentProps<typeof Content> {}
 
 const TabsContext = createContext<{ current: () => boolean }>({ current: () => false })
@@ -27,12 +31,17 @@ function TabsRoot(props: TabsProps) {
   const [local, rest] = splitProps(props, ["class", "classList", "variant", "orientation", "children"])
   const variant = () => local.variant ?? "panel"
   const current = () => variant() === "line" || variant() === "pill" || variant() === "settings"
+
   const dataVariant = () => {
     if (variant() === "panel" || variant() === "line") return "normal"
+
     if (variant() === "underline") return "alt"
+
     if (variant() === "surface") return "pill"
+
     return variant()
   }
+
   return (
     <TabsContext.Provider value={{ current }}>
       <Root
@@ -55,6 +64,7 @@ function TabsRoot(props: TabsProps) {
 function TabsList(props: TabsListProps) {
   const ctx = useContext(TabsContext)
   const [local, rest] = splitProps(props, ["class", "classList"])
+
   return (
     <List
       {...rest}
@@ -69,6 +79,7 @@ function TabsList(props: TabsListProps) {
 
 function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
   const ctx = useContext(TabsContext)
+
   const [local, rest] = splitProps(props, [
     "class",
     "classList",
@@ -80,9 +91,11 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
     "subtext",
     "dir",
   ])
+
   const wrapperSlot = () => (ctx.current() ? "tabs-v2-trigger-wrapper" : "tabs-trigger-wrapper")
   const triggerSlot = () => (ctx.current() ? "tabs-v2-trigger" : "tabs-trigger")
   const closeSlot = () => (ctx.current() ? "tabs-v2-trigger-close-button" : "tabs-trigger-close-button")
+
   return (
     <div
       data-slot={wrapperSlot()}
@@ -135,6 +148,7 @@ function TabsTrigger(props: ParentProps<TabsTriggerProps>) {
 function TabsCloseButton(props: TabsCloseButtonProps) {
   const i18n = useI18n()
   const [local, rest] = splitProps(props, ["class", "classList", "onClick", "onPointerDown", "aria-label"])
+
   return (
     <button
       type="button"
@@ -147,11 +161,13 @@ function TabsCloseButton(props: TabsCloseButtonProps) {
       }}
       onPointerDown={(event) => {
         event.stopPropagation()
+
         if (typeof local.onPointerDown === "function") local.onPointerDown(event)
       }}
       onClick={(event) => {
         event.preventDefault()
         event.stopPropagation()
+
         if (typeof local.onClick === "function") local.onClick(event)
       }}
     >
@@ -166,6 +182,7 @@ function TabsCloseButton(props: TabsCloseButtonProps) {
 function TabsContent(props: ParentProps<TabsContentProps>) {
   const ctx = useContext(TabsContext)
   const [local, rest] = splitProps(props, ["class", "classList", "children"])
+
   return (
     <Content
       {...rest}
@@ -182,6 +199,7 @@ function TabsContent(props: ParentProps<TabsContentProps>) {
 
 const TabsSectionTitle: Component<ParentProps> = (props) => {
   const ctx = useContext(TabsContext)
+
   return <div data-slot={ctx.current() ? "tabs-v2-section-title" : "tabs-section-title"}>{props.children}</div>
 }
 

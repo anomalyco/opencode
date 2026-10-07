@@ -6,6 +6,10 @@ type Client = IpcClient<(typeof BrowserPane)["spec"]>
 
 export type InspectEvent = Extract<PaneEvent, { type: "inspect" }>
 
+export type PageEvent = Extract<PaneEvent, { type: "page" }>
+
+export type Zoom = "in" | "out" | "reset"
+
 export type Connection = ReturnType<typeof createConnection>
 
 export type Registration = {
@@ -14,6 +18,9 @@ export type Registration = {
   command(command: Browser.Action): Promise<void>
   inspect(tabID: Browser.TabID, enabled: boolean): void
   highlight(tabID: Browser.TabID, ref?: Browser.Ref): void
+  zoom(tabID: Browser.TabID, zoom: Zoom): void
+  site(tabID: Browser.TabID): Promise<{ cookies: number }>
+  clearSite(tabID: Browser.TabID): Promise<void>
   close(): void
 }
 
@@ -34,9 +41,10 @@ export function createConnection(input: {
   target: () => { server: string; session: string }
   /**
    * `mirror` applies the current tabs to the strip; call it right after storing the state, in the same batch, or
-   * later once the strip can be written. A mirror that never runs leaves the strip's tabs as they are.
+   * later once the strip can be written. A mirror that never runs leaves the strip's tabs as they are. `native` is true
+   * for an inventory the desktop reported, false for a change made here, such as a new embed or a suspension.
    */
-  change: (state: ConnectionState, mirror: () => void) => void
+  change: (state: ConnectionState, mirror: () => void, native: boolean) => void
   /** The session's strip: the browser tab IDs it stores, and quietly adding or removing one. */
   strip: {
     stored: () => readonly string[]
@@ -46,6 +54,10 @@ export function createConnection(input: {
   focus: (tabID: Browser.TabID) => void
   preview: (path: string) => void
   inspect: (event: InspectEvent) => void
+  /** A page's icon or zoom changed. */
+  page: (event: PageEvent) => void
+  /** The user pressed the address shortcut while the page had focus. */
+  address: (tabID: Browser.TabID) => void
 }) {
   const state: ConnectionState = { browser: null, embeds: {}, suspended: false }
   let disposed = false
@@ -87,7 +99,7 @@ export function createConnection(input: {
 
   const publish = (native = false) => {
     pruning ||= native
-    input.change({ ...state }, mirror)
+    input.change({ ...state }, mirror, native)
   }
 
   // The pane itself is unreachable while its main extension restarts or is disabled, and main drops every
@@ -141,6 +153,10 @@ export function createConnection(input: {
         if (event.type === "preview") return input.preview(event.path)
 
         if (event.type === "inspect") return input.inspect(event)
+
+        if (event.type === "page") return input.page(event)
+
+        if (event.type === "address") return input.address(event.tabID)
 
         if (event.type === "embed") {
           state.embeds = { ...state.embeds, [event.tabID]: event.embed }
@@ -230,6 +246,12 @@ export function createConnection(input: {
     highlight(tabID: Browser.TabID, ref?: Browser.Ref) {
       state.registration?.highlight(tabID, ref)
     },
+    zoom(tabID: Browser.TabID, zoom: Zoom) {
+      state.registration?.zoom(tabID, zoom)
+    },
+    /** The page's site data; undefined while no registration can answer. */
+    site: (tabID: Browser.TabID) => state.registration?.site(tabID),
+    clearSite: (tabID: Browser.TabID) => state.registration?.clearSite(tabID),
     dispose() {
       disposed = true
       clearTimeout(retry)
@@ -273,6 +295,12 @@ function open(
         .then(() => client.highlight(ref === undefined ? { binding, tabID } : { binding, tabID, ref }))
         .catch(() => undefined)
     },
+    zoom(tabID, zoom) {
+      if (status.closed) return
+      void ready.then(() => client.zoom({ binding, tabID, zoom })).catch(() => undefined)
+    },
+    site: (tabID) => ready.then(() => client.site({ binding, tabID })),
+    clearSite: (tabID) => ready.then(() => client.clearSite({ binding, tabID })),
     close() {
       if (status.closed) return
       status.closed = true

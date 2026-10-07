@@ -3,18 +3,22 @@ import { createWindowRegistry } from "./registry"
 
 function setup(initial: unknown = []) {
   const state = { stored: initial }
+
   const registry = createWindowRegistry<{ name: string }>({
     read: () => state.stored,
     write: (ids) => {
       state.stored = ids
     },
   })
+
   return { registry, state }
 }
 
 function opened(...ids: string[]) {
   const app = setup()
+
   for (const id of ids) app.registry.register(id, { name: id })
+
   return app
 }
 

@@ -30,13 +30,16 @@ describe("worktree creation", () => {
   )("uses the server destination and clone-local main for $name (cached: $cached)", async (input) => {
     const project = { id: "proj_clone", directory: input.root, canonical: input.canonical }
     const requests: Request[] = []
+
     const api = OpenCode.make({
       baseUrl: "http://localhost:3000",
       fetch: Object.assign(
         async (input: RequestInfo | URL, init?: RequestInit) => {
           const request = new Request(input, init)
           requests.push(request)
+
           if (request.method === "POST") return Response.json({ directory: "/created" })
+
           return Response.json({ directory: new URL(request.url).searchParams.get("location[directory]"), project })
         },
         { preconnect() {} },
@@ -49,6 +52,7 @@ describe("worktree creation", () => {
         directory: input.directory,
         event: { on: () => () => {}, listen: () => () => {} },
       })
+
       try {
         expect(
           await createWorktree({
@@ -82,11 +86,13 @@ describe("worktree creation", () => {
 
   test("does not fall back to a shared project when location lookup fails", async () => {
     const requests: Request[] = []
+
     const api = OpenCode.make({
       baseUrl: "http://localhost:3000",
       fetch: Object.assign(
         async (input: RequestInfo | URL, init?: RequestInit) => {
           requests.push(new Request(input, init))
+
           return Response.json({ message: "unavailable" }, { status: 503 })
         },
         { preconnect() {} },
@@ -99,6 +105,7 @@ describe("worktree creation", () => {
         directory: "/copies/repo",
         event: { on: () => () => {}, listen: () => () => {} },
       })
+
       try {
         await expect(createWorktree({ api, data, directory: "/copies/repo" })).rejects.toMatchObject({
           reason: "UnexpectedStatus",

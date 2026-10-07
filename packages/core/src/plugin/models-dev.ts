@@ -3,6 +3,7 @@ import { Integration } from "@opencode/schema/integration"
 import { Provider } from "@opencode/schema/provider"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
+import { Model } from "../model.js"
 import { ModelsDev } from "../models-dev.js"
 
 // These catalog entries require inference profiles on Bedrock Runtime.
@@ -100,6 +101,7 @@ function snapshots(data: readonly ModelsDev.Snapshot[]) {
       models: provider.models.filter(
         (model) =>
           model.status !== "deprecated" &&
+          Model.supportsText(model) &&
           !(
             provider.info.id === Provider.ID.amazonBedrock &&
             BEDROCK_PROFILE_ONLY_IDS.includes(model.modelID ?? model.id)

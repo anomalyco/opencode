@@ -11,6 +11,7 @@ function setup(input?: {
   const pending: Array<{ url: string; signal: AbortSignal; resolve: () => void }> = []
   const logs: Array<{ message: string; data: Record<string, unknown> }> = []
   let clock = 0
+
   const queue = createRequestQueue({
     limit: input?.limit ?? 2,
     slowLimit: input?.slowLimit,
@@ -29,7 +30,9 @@ function setup(input?: {
       { preconnect() {} },
     ),
   })
+
   const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
+
   return { queue, pending, logs, settle, tick: (ms: number) => (clock += ms) }
 }
 
@@ -71,6 +74,7 @@ describe("createRequestQueue", () => {
 
   test("slow endpoints hold at most their share of slots so small reads go first", async () => {
     const input = setup({ limit: 4, slowLimit: 2 })
+
     const paths = [
       "/api/vcs?location[directory]=%2Fa",
       "/api/vcs/diff?location[directory]=%2Fa",
@@ -78,6 +82,7 @@ describe("createRequestQueue", () => {
       "/api/session/ses_1",
       "/api/vcsx",
     ]
+
     const responses = paths.map((path) => input.queue.fetch(`http://server${path}`))
     await input.settle()
     const started = () => input.pending.map((item) => new URL(item.url).pathname)
@@ -136,11 +141,13 @@ describe("createRequestQueue", () => {
   test("worktree creation gets the setup deadline while other worktree requests keep the normal one", async () => {
     const input = setup({ limit: 4, slowLimit: 4, headersTimeoutMs: 10, setupHeadersTimeoutMs: 200 })
     const create = input.queue.fetch("http://server/api/worktree?location[directory]=%2Fa", { method: "POST" })
+
     const others = [
       input.queue.fetch("http://server/api/worktree?location[directory]=%2Fa"),
       input.queue.fetch("http://server/api/worktree/refresh?location[directory]=%2Fa", { method: "POST" }),
       input.queue.fetch("http://server/api/worktree?location[directory]=%2Fa", { method: "DELETE" }),
     ]
+
     const errors = await Promise.all(others.map((request) => request.catch((cause: unknown) => cause)))
     expect(errors.map((error) => (error as DOMException).name)).toEqual([
       "TimeoutError",
@@ -171,11 +178,13 @@ describe("createRequestQueue", () => {
     const responses = Array.from({ length: 12 }, (_, index) => input.queue.fetch(`http://server/api/${index}`))
     await input.settle()
     expect(input.queue.queued()).toBe(10)
+
     // Drain two at a time before the stall threshold elapses.
     for (let round = 0; round < 6; round++) {
       input.pending.splice(0).forEach((item) => item.resolve())
       await input.settle()
     }
+
     await Promise.all(responses)
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(input.logs).toEqual([])

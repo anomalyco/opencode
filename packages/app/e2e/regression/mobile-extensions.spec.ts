@@ -1,9 +1,20 @@
-import { expect, test, type Request } from "@playwright/test"
+import { expect, test, type Page, type Request } from "@playwright/test"
 import { sessionHref } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { fileNode } from "../utils/workspace"
 
 test.use({ viewport: { width: 390, height: 844 } })
+
+async function openFiles(page: Page) {
+  await page
+    .getByRole("tablist", { name: "Session view", exact: true })
+    .getByRole("tab", { name: "More...", exact: true })
+    .click()
+  await page
+    .getByRole("dialog", { name: "More options", exact: true })
+    .getByRole("button", { name: "Files", exact: true })
+    .click()
+}
 
 test("mobile files browse, comment, search, and close tabs", async ({ page }) => {
   await mockStressTimeline(page, {
@@ -14,7 +25,7 @@ test("mobile files browse, comment, search, and close tabs", async ({ page }) =>
   })
   await page.goto(sessionHref(fixture.targetID))
   const navigation = page.getByRole("tablist", { name: "Session view", exact: true })
-  await navigation.getByRole("tab", { name: "Files", exact: true }).click()
+  await openFiles(page)
   const files = page.locator('[data-slot="session-mobile-files"]')
   await files.getByRole("button", { name: "first.ts", exact: true }).click()
   await expect(files.getByText("contents:first.ts", { exact: true })).toBeVisible()
@@ -50,7 +61,7 @@ test("mobile files browse, comment, search, and close tabs", async ({ page }) =>
     .click()
   await expect(session).toHaveAttribute("aria-selected", "true")
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeVisible()
-  await navigation.getByRole("tab", { name: "Files", exact: true }).click()
+  await openFiles(page)
   await expect(files.getByText("contents:first.ts", { exact: true })).toBeVisible()
   const filter = files.getByRole("combobox", { name: "Filter files", exact: true })
   await expect(filter).toBeHidden()
@@ -63,7 +74,7 @@ test("mobile files browse, comment, search, and close tabs", async ({ page }) =>
   await openTabs.getByRole("tab", { name: "first.ts", exact: true }).click()
   await expect(files.getByText("contents:first.ts", { exact: true })).toBeVisible()
   await navigation.getByRole("tab", { name: "Session", exact: true }).click()
-  await navigation.getByRole("tab", { name: "Files", exact: true }).click()
+  await openFiles(page)
   await expect(files.getByText("contents:first.ts", { exact: true })).toBeVisible()
   await files
     .locator('[data-slot="tabs-v2-trigger-wrapper"]')
@@ -239,7 +250,7 @@ test("mobile changes summarize expanded diffs, stage comments, wrap by setting, 
   for (const file of ["added.ts", "modified.ts", "added.ts", "modified.ts"]) {
     await navigation.getByRole("tab", { name: "Changes", exact: true }).click()
     await review.locator(`[data-file="${file}"]`).getByRole("button", { name: "Open file", exact: true }).click()
-    await expect(navigation.getByRole("tab", { name: "Files", exact: true })).toHaveAttribute("aria-selected", "true")
+    await expect(navigation.getByRole("tab", { name: "More...", exact: true })).toHaveAttribute("aria-selected", "true")
     await expect(selected).toHaveText([file])
     await expect(files).toHaveAttribute("data-browsing", "false")
 
@@ -248,20 +259,23 @@ test("mobile changes summarize expanded diffs, stage comments, wrap by setting, 
   }
 })
 
-test("summary drawer dismisses by button, backdrop, Escape, and drag", async ({ page }) => {
+test("summary drawer dismisses by backdrop, Escape, and drag", async ({ page }) => {
   await mockStressTimeline(page)
   await page.goto(sessionHref(fixture.targetID))
 
   const more = page
-    .locator('[data-slot="session-mobile-view-navigation"]')
-    .getByRole("button", { name: "More options", exact: true })
+    .getByRole("tablist", { name: "Session view", exact: true })
+    .getByRole("tab", { name: "More...", exact: true })
 
   const drawer = page.getByRole("dialog", { name: "Session details", exact: true })
   const overlay = page.locator('[data-slot="mobile-drawer-overlay"]')
 
-  for (const dismissal of ["button", "backdrop", "escape", "drag"] as const) {
+  for (const dismissal of ["backdrop", "escape", "drag"] as const) {
     await more.click()
-    await page.getByRole("menuitem", { name: "Session details", exact: true }).click()
+    await page
+      .getByRole("dialog", { name: "More options", exact: true })
+      .getByRole("button", { name: "Session details", exact: true })
+      .click()
     await expect(drawer.getByRole("button", { name: "MCP", exact: true })).toBeVisible()
     // Corvu starts opening after paint; the transition flag is also absent
     // before that callback. Wait for the open position before dismissing.
@@ -269,8 +283,6 @@ test("summary drawer dismisses by button, backdrop, Escape, and drag", async ({ 
       .poll(() => drawer.evaluate((element) => new DOMMatrixReadOnly(getComputedStyle(element).transform).m42))
       .toBe(0)
     await expect(drawer).not.toHaveAttribute("data-transitioning")
-
-    if (dismissal === "button") await drawer.getByRole("button", { name: "Close", exact: true }).click()
 
     if (dismissal === "backdrop") await overlay.click({ position: { x: 10, y: 10 } })
 

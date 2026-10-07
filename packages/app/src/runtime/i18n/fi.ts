@@ -23,7 +23,6 @@ export const dict = {
   "server.connect.address.invalid": "Anna kelvollinen HTTP- tai HTTPS-palvelinosoite.",
   "server.connect.failed":
     "Yhteyttä ei voitu muodostaa. Tarkista palvelimen osoite ja salasana ja yritä sitten uudelleen.",
-  "server.connect.pair.description": "Suorita tämä komento tietokoneellasi saadaksesi yhteystiedot.",
   "server.connect.scan": "Skannaa QR-koodi",
   "server.connect.scan.description": "Suuntaa kamerasi QR-koodiin, joka näkyy opencode pair:ssä.",
   "server.connect.scan.invalid": "Tämä ei ole OpenCode-pariliitoskoodi. Skannaa opencode pair:n näyttämä koodi.",
@@ -31,7 +30,6 @@ export const dict = {
   "server.connect.camera.starting": "Avataan kameraa…",
   "server.connect.mixedContent":
     "Yhteyttä tähän HTTP-palvelimeen ei voitu muodostaa HTTPS-sivulta. Käytä sen sijaan HTTPS-palvelinosoitetta.",
-  "server.connect.camera.insecure": "QR-skannaus vaatii tämän sivun avaamisen HTTPS:n kautta tai localhostissa.",
   "server.connect.camera.unavailable": "Kamera ei ole saatavilla tälle selaimelle. Syötä yhteystietosi manuaalisesti.",
   "server.connect.camera.error": "Kameraa ei voitu avata. Salli kameran käyttö tai anna yhteystietosi manuaalisesti.",
   "dialog.server.menu.remove": "Poista",
@@ -426,9 +424,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "salasana",
   "dialog.server.edit.title": "Muokkaa palvelinta",
   "dialog.server.menu.edit": "Muokkaa",
-  "dialog.server.menu.default": "Aseta oletukseksi",
-  "dialog.server.menu.defaultRemove": "Poista oletuspalvelin",
-  "dialog.server.status.default": "Oletus",
   "dialog.project.edit.title": "Muokkaa projektia",
   "dialog.project.edit.icon": "Kuvake",
   "dialog.project.edit.icon.alt": "Projektikuvake",

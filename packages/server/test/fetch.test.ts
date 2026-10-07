@@ -267,6 +267,7 @@ it.live("returns 404 when a previously readable file is deleted", () =>
 
         const readable = yield* Effect.promise(() => handler(new Request(url)))
         expect(readable.status).toBe(200)
+        expect(yield* Effect.promise(() => readable.text())).toBe("content")
 
         yield* Effect.promise(() => fs.unlink(file))
         const missing = yield* Effect.promise(() => handler(new Request(url)))
@@ -320,7 +321,7 @@ it.live(
       expect(yield* Effect.promise(() => response.json())).toEqual({
         _tag: "InvalidRequestError",
         message:
-          "OpenAI browser login needs local port 1455 or 1457, but both are already in use. Stop the processes using those ports or choose ChatGPT Pro/Plus (headless), then try again.",
+          "OpenAI browser login needs local port 1455 or 1457, but both are already in use. Stop the processes using those ports or choose Codex device code (legacy), then try again.",
         kind: "integration_authorization",
       })
     }),

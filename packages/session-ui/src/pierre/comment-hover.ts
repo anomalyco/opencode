@@ -35,6 +35,7 @@ export function createHoverCommentUtility(props: {
 
   const sync = () => {
     const next = props.getHoveredLine()
+
     if (!next) return
     line = next
   }
@@ -48,13 +49,16 @@ export function createHoverCommentUtility(props: {
     if (!button.isConnected) {
       document.removeEventListener("pointermove", onHoverInvalidated)
       document.removeEventListener("scroll", onHoverInvalidated, true)
+
       return
     }
+
     sync()
   }
 
   const open = () => {
     const next = props.getHoveredLine() ?? line
+
     if (!next) return
     props.onSelect(next)
   }

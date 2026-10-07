@@ -2161,7 +2161,7 @@ test("serializes concurrent MCP lifecycle operations", async () => {
   )
 })
 
-testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin transforms through catalog updates", () =>
+testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog updates", () =>
   Effect.gen(function* () {
     const tool = (server: string, name: string, description = name) =>
       ({
@@ -2172,8 +2172,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
         inputSchema: { type: "object", properties: {} },
       }) satisfies Mcp.Tool
     const healthy = [tool("demo", "search"), tool("other", "lookup")]
-    const namespace = tool("x".repeat(65), "lookup")
-    const catalog = yield* Ref.make([tool("demo", "x".repeat(129)), ...healthy, namespace])
+    const catalog = yield* Ref.make(healthy)
 
     yield* Effect.gen(function* () {
       const registry = yield* Tool.Service
@@ -2202,7 +2201,7 @@ testEffect(Layer.empty).live("isolates invalid MCP tools and preserves plugin tr
         editor.remove("repaired_lookup")
       })
 
-      yield* Ref.set(catalog, [tool("demo", "y".repeat(129)), ...healthy, tool("demo", "added"), namespace])
+      yield* Ref.set(catalog, [...healthy, tool("demo", "added")])
       yield* bus.publish(McpEvent.ToolsChanged, { server: "demo" })
       yield* waitForTool(registry, "demo_added")
       expect((yield* toolDefinitions(registry)).map((tool) => tool.name)).toEqual([

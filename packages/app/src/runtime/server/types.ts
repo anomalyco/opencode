@@ -46,6 +46,7 @@ export type Path = {
 }
 
 export type VcsInfo = { branch?: string; default_branch?: string }
+
 export type LspStatus = { id: string; name: string; root: string; status: "connected" | "error" }
 
 export type Agent = {

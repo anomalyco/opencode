@@ -6,13 +6,16 @@ function setup(
   respond: (init?: RequestInit) => Response | Promise<Response> = () => new Response(new Uint8Array([0, 127, 255])),
 ) {
   const requests: Array<{ url: URL; init?: RequestInit }> = []
+
   const api = createApiForServer({
     server: { url: "https://server.example:4096", password: "secret" },
     fetch: (async (input: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: new URL(input instanceof Request ? input.url : input), init })
+
       return respond(init)
     }) as typeof fetch,
   })
+
   return { api, requests }
 }
 
@@ -65,6 +68,7 @@ describe("readLocalImage", () => {
     const { api } = setup(
       () => new Response("image bytes", { headers: { "content-type": "application/octet-stream" } }),
     )
+
     const blob = await readLocalImage(api, "/repo", `image.${extension}`, new AbortController().signal)
     expect(blob?.type).toBe(type)
     expect(await blob?.text()).toBe("image bytes")
@@ -121,12 +125,14 @@ describe("readLocalImage", () => {
 
   test("forwards cancellation to an in-flight fetch", async () => {
     const controller = new AbortController()
+
     const { api, requests } = setup(
       (init) =>
         new Promise((_resolve, reject) => {
           init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), { once: true })
         }),
     )
+
     const result = readLocalImage(api, "/repo", "image.png", controller.signal)
     expect(requests[0].init?.signal).toBe(controller.signal)
     controller.abort()

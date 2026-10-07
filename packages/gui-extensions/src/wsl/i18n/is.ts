@@ -50,8 +50,5 @@ export default {
   "error.healthTimeout": "Tímamörk heilsuprófunar hliðarferlis fyrir {{distro}} runnu út eftir {{timeout}} ms",
   "error.commandTimeout": "Tímamörk {{command}} {{args}} runnu út eftir {{timeout}} ms",
   "error.failedPort": "Ekki tókst að sækja gátt",
-  "server.default": "Sjálfgefið",
-  "menu.default": "Stillt sem sjálfgefið",
-  "menu.defaultRemove": "Fjarlægja sjálfgefið",
   "menu.remove": "Fjarlægja",
 }

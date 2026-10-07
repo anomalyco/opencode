@@ -40,8 +40,5 @@ export default {
   "form.name": "Όνομα διακομιστή (προαιρετικό)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Προσθήκη διακομιστή",
-  "server.default": "Προεπιλογή",
-  "menu.default": "Ορισμός ως προεπιλογή",
-  "menu.defaultRemove": "Κατάργηση προεπιλογής",
   "menu.delete": "Διαγραφή",
 }

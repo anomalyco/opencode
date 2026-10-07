@@ -7,7 +7,14 @@ import { TokenUsage } from "@opencode/schema/token-usage"
 import { ACPChild } from "./child"
 import { ACPCompaction } from "./compaction"
 import { ACPError } from "./error"
-import { completedToolUpdate, errorToolUpdate, pendingToolCall, runningToolUpdate, type ToolInput } from "./tool"
+import {
+  completedToolUpdate,
+  errorToolUpdate,
+  pendingToolCall,
+  runningToolUpdate,
+  type DiffSource,
+  type ToolInput,
+} from "./tool"
 
 const RetryMeta = "opencode/retry"
 
@@ -56,8 +63,8 @@ type FormEvent = Extract<OpenCodeEvent, { type: "form.created" }>
 type CreatedEvent = Extract<OpenCodeEvent, { type: "session.created" }>
 
 export type Output =
-  | { readonly _tag: "SessionUpdate"; readonly update: SessionUpdate }
-  | { readonly _tag: "ChildUpdate"; readonly update: ACPChild.Update }
+  | { readonly _tag: "SessionUpdate"; readonly update: SessionUpdate; readonly diff?: DiffSource }
+  | { readonly _tag: "ChildUpdate"; readonly update: ACPChild.Update; readonly diff?: DiffSource }
   | {
       readonly _tag: "PermissionAsk"
       readonly event: PermissionEvent
@@ -374,7 +381,10 @@ function sessionEvent(
             content: event.data.content,
             cwd: ctx.cwd,
           }),
-        }),
+        }).map((output) => ({
+          ...output,
+          diff: { toolName: tool.name, input: tool.input, metadata: event.data.metadata },
+        })),
       }
     }
     case "session.tool.failed": {

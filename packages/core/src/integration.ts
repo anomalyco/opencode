@@ -165,7 +165,7 @@ export interface Interface extends State.Transformable<Editor> {
   readonly connection: {
     /** Returns the active connection for one integration. */
     readonly active: (id: ID) => Effect.Effect<IntegrationConnection.Info | undefined>
-    /** Resolves a connection into usable credential material. */
+    /** Resolves a connection into credential material or an external credential-source reference. */
     readonly resolve: (
       connection: IntegrationConnection.Info,
     ) => Effect.Effect<Credential.Value | undefined, AuthorizationError>
@@ -700,7 +700,7 @@ const layer = Layer.effect(
           }
           const credential = yield* credentials.get(connection.id)
           if (!credential) return undefined
-          if (credential.value.type === "key") return credential.value
+          if (credential.value.type !== "oauth") return credential.value
           const implementation = state
             .get()
             .integrations.get(credential.integrationID)

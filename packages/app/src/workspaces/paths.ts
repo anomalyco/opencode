@@ -30,6 +30,7 @@ export function filterWorkspaceInventory<T extends { project: { id: string } }>(
   project: string,
 ) {
   if (project === "all") return [...workspaces]
+
   return workspaces.filter((workspace) => workspace.project.id === project)
 }
 
@@ -44,8 +45,10 @@ export function mergeWorkspaceSessionInventory(server: readonly SessionInfo[], c
   const sessions = new Map(server.map((session) => [session.id, session]))
   cached.forEach((session) => {
     const current = sessions.get(session.id)
+
     if (!current || session.time.updated > current.time.updated) sessions.set(session.id, session)
   })
+
   return [...sessions.values()]
 }
 
@@ -77,18 +80,23 @@ export function inspectWorkspaceDeletion(input: {
 
 export function isWorkspaceDirectory(project: WorkspaceProject | undefined, directory: string) {
   if (!project || sameDirectory(project.worktree, directory)) return false
+
   return workspaceDirectories(project).some((workspace) => containsDirectory(workspace, directory))
 }
 
 export function isProjectDirectory(project: WorkspaceProject | undefined, directory: string) {
   if (!project) return false
+
   return [project.worktree, ...(project.sandboxes ?? [])].some((root) => containsDirectory(root, directory))
 }
 
 export function isWorkspaceSelection(project: WorkspaceProject | undefined, selection: string) {
   if (selection === "main" || selection === "create") return true
+
   if (!project) return false
+
   if (sameDirectory(project.worktree, selection)) return true
+
   return isWorkspaceDirectory(project, selection)
 }
 
@@ -101,6 +109,8 @@ export function workspaceDefaultSelection(
   lastUsed: WorkspaceLastUsed | undefined,
 ) {
   if (setting === "local") return "main"
+
   if (setting === "new") return "create"
+
   return lastUsed === "workspace" ? "create" : "main"
 }

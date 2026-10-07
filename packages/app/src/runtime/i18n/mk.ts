@@ -287,9 +287,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "лозинка",
   "dialog.server.edit.title": "Уреди сервер",
   "dialog.server.menu.edit": "Уреди",
-  "dialog.server.menu.default": "Поставете како стандардно",
-  "dialog.server.menu.defaultRemove": "Отстрани стандардно",
-  "dialog.server.status.default": "Стандардно",
   "dialog.project.edit.title": "Уреди проект",
   "dialog.project.edit.icon": "Икона",
   "dialog.project.edit.icon.alt": "Икона на проектот",
@@ -795,8 +792,6 @@ export const dict = {
   "server.connect.address.invalid": "Внесете валидна HTTP или HTTPS адреса на серверот.",
   "server.connect.failed":
     "Не можеше да се поврзе. Проверете ја адресата на серверот и лозинката, потоа обидете се повторно.",
-  "server.connect.pair.description":
-    "Извршете ја оваа команда на вашиот компјутер за да ги добиете деталите за вашата конекција.",
   "server.connect.scan": "Скенирај QR код",
   "server.connect.scan.description": "Насочете ја вашата камера кон QR кодот прикажан од opencode pair.",
   "server.connect.scan.invalid": "Ова не е OpenCode паринг код. Скенирајте го кодот прикажан од opencode pair.",
@@ -804,7 +799,6 @@ export const dict = {
   "server.connect.camera.starting": "Отворање на камерата…",
   "server.connect.mixedContent":
     "Не можевте да се поврзете на овој HTTP сервер од HTTPS страница. Користете HTTPS сервер адреса наместо тоа.",
-  "server.connect.camera.insecure": "Скенирањето на QR бара отворање на оваа страница преку HTTPS или на localhost.",
   "server.connect.camera.unavailable":
     "Нема камера достапна за овој прелистувач. Внесете ги деталите за вашата конекција рачно.",
   "server.connect.camera.error":

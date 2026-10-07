@@ -74,7 +74,7 @@ function modelLabel(
 
 function MessageActionButton(
   props: Pick<ComponentProps<"button">, "disabled" | "onMouseDown" | "onClick" | "aria-label"> & {
-    icon: "check" | "copy" | "reset" | "bullet-list" | "outline-trash"
+    icon: "check" | "copy" | "reset" | "arrow-down-to-line" | "outline-trash"
     label: JSX.Element
   },
 ) {
@@ -271,7 +271,9 @@ export function CurrentUserMessageDisplay(props: {
   const metaHead = createMemo(() => {
     const agent = props.agent
 
-    return [agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()].filter(Boolean).join("\u00A0\u00B7\u00A0")
+    return [pending() ? i18n.t("ui.message.pending") : "", agent ? agent[0]?.toUpperCase() + agent.slice(1) : "", model()]
+      .filter(Boolean)
+      .join("\u00A0\u00B7\u00A0")
   })
 
   const stamp = createMemo(() => timefmt().format(props.message.time.created))
@@ -349,7 +351,11 @@ export function CurrentUserMessageDisplay(props: {
   )
 
   return (
-    <div data-component="user-message" data-timeline-part-id={props.text ? `${props.message.id}:text:0` : undefined}>
+    <div
+      data-component="user-message"
+      data-pending={pending() ? "true" : undefined}
+      data-timeline-part-id={props.text ? `${props.message.id}:text:0` : undefined}
+    >
       <Show
         when={props.text}
         fallback={
@@ -388,7 +394,7 @@ export function CurrentUserMessageDisplay(props: {
           </span>
           <Show when={pending()}>
             <MessageActionButton
-              icon="bullet-list"
+              icon="arrow-down-to-line"
               label={i18n.t("ui.message.moveToQueue")}
               disabled={state.updating}
               onMouseDown={(event) => event.preventDefault()}

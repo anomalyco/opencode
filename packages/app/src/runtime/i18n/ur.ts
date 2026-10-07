@@ -295,9 +295,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "پاس ورڈ",
   "dialog.server.edit.title": "سرور میں ترمیم کریں۔",
   "dialog.server.menu.edit": "ترمیم کریں۔",
-  "dialog.server.menu.default": "بطور ڈیفالٹ سیٹ کریں۔",
-  "dialog.server.menu.defaultRemove": "ڈیفالٹ کو ہٹا دیں۔",
-  "dialog.server.status.default": "طے شدہ",
   "dialog.project.edit.title": "پروجیکٹ میں ترمیم کریں۔",
   "dialog.project.edit.icon": "آئیکن",
   "dialog.project.edit.icon.alt": "پروجیکٹ کا آئیکن",
@@ -804,7 +801,6 @@ export const dict = {
   "server.connect.button": "جڑیں۔",
   "server.connect.address.invalid": "ایک درست HTTP یا HTTPS سرور کا پتہ درج کریں۔",
   "server.connect.failed": "رابطہ نہیں ہو سکا۔ سرور کا پتہ اور پاس ورڈ چیک کریں، پھر دوبارہ کوشش کریں۔",
-  "server.connect.pair.description": "اپنے کنکشن کی تفصیلات حاصل کرنے کے لیے اس کمانڈ کو اپنے کمپیوٹر پر چلائیں۔",
   "server.connect.scan": "QR کوڈ اسکین کریں۔",
   "server.connect.scan.description": "اپنے کیمرے کو اوپن کوڈ پیئر کے ذریعے دکھائے گئے QR کوڈ کی طرف پوائنٹ کریں۔",
   "server.connect.scan.invalid":
@@ -813,7 +809,6 @@ export const dict = {
   "server.connect.camera.starting": "کیمرہ کھل رہا ہے…",
   "server.connect.mixedContent":
     "ایک HTTPS صفحہ سے اس HTTP سرور سے مربوط نہیں ہو سکا۔ اس کے بجائے ایک HTTPS سرور کا پتہ استعمال کریں۔",
-  "server.connect.camera.insecure": "QR اسکیننگ کے لیے اس صفحہ کو HTTPS پر یا لوکل ہوسٹ پر کھولنے کی ضرورت ہے۔",
   "server.connect.camera.unavailable":
     "اس براؤزر پر کوئی کیمرہ دستیاب نہیں ہے۔ اپنے کنکشن کی تفصیلات دستی طور پر درج کریں۔",
   "server.connect.camera.error":

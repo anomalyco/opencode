@@ -5,7 +5,9 @@ import path from "node:path"
 import { readWindowState, resolveWindowState } from "./window-state"
 
 const defaults = { width: 1280, height: 800 }
+
 const primary = { x: 0, y: 0, width: 1920, height: 1080 }
+
 const displays = {
   all: () => [primary, { x: 1920, y: 0, width: 2560, height: 1440 }],
   primary: () => primary,

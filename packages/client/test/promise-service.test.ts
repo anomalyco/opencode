@@ -218,6 +218,47 @@ test("evicts an unresponsive registered service before starting its replacement"
   expect(endpoint.url).toBe(replacement.url)
 })
 
+test("recovers when the starting service it waits for is stopped", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const starting = fixture.spawn("starting")
+  await fixture.waitForFile()
+  const result = ensure({ file: registration, version: "test", command: fixture.command("delayed", "10") })
+
+  await fixture.waitForFile(registration + ".status-request")
+  await stop({ file: registration })
+  const endpoint = await result
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+
+  expect(await starting.exited).toBe(0)
+  expect(replacement.pid).not.toBe(starting.pid)
+  expect(endpoint.url).toBe(replacement.url)
+})
+
+test("replaces a crashed service whose registration names a dead process", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const crashed = fixture.spawn("graceful")
+  await fixture.waitForFile()
+  crashed.kill("SIGKILL")
+  await crashed.exited
+
+  const starts: EnsureReason[] = []
+  const endpoint = await ensure({
+    file: registration,
+    version: "test",
+    command: fixture.command("delayed", "10"),
+    onStart: (reason) => starts.push(reason),
+  })
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+
+  expect(replacement.pid).not.toBe(crashed.pid)
+  expect(endpoint.url).toBe(replacement.url)
+  expect(starts).toEqual(["missing"])
+})
+
 test("stops the registered service even when terminal handoff fails", async () => {
   await using fixture = await serviceFixture()
   const registration = fixture.registration

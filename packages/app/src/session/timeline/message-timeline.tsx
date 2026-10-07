@@ -391,6 +391,17 @@ function MessageTimelineView(
     })
   })
 
+  const runningMenu = (title?: string) => (
+    <SessionRunningMenu
+      sessionID={sessionID()}
+      owner={props.background.running.sessionID()}
+      blocking={props.background.running.blocking()}
+      tasks={props.background.running.tasks()}
+      onReveal={virtualized.revealPart}
+      title={title}
+    />
+  )
+
   return (
     <VirtualizedTimeline
       workspaceSession={workspaceSession}
@@ -456,7 +467,8 @@ function MessageTimelineView(
                       />
                     )}
                   </Show>
-                  <Show when={childTitle() || title.editing}>
+                  <Show when={parentID()}>{runningMenu(childTitle())}</Show>
+                  <Show when={!parentID() && (childTitle() || title.editing)}>
                     <Show
                       when={title.editing}
                       fallback={
@@ -506,6 +518,7 @@ function MessageTimelineView(
                       />
                     </Show>
                   </Show>
+                  <Show when={!parentID()}>{runningMenu()}</Show>
                   <Show when={!parentID() && sessionID()} keyed>
                     {(id) => (
                       <Menu
@@ -559,13 +572,6 @@ function MessageTimelineView(
                       </Menu>
                     )}
                   </Show>
-                  <SessionRunningMenu
-                    sessionID={sessionID()}
-                    owner={props.background.running.sessionID()}
-                    blocking={props.background.running.blocking()}
-                    tasks={props.background.running.tasks()}
-                    onReveal={virtualized.revealPart}
-                  />
                 </div>
               </div>
               <Show when={sessionID()} keyed>

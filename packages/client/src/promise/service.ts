@@ -1,15 +1,10 @@
 import { readFile, rm } from "node:fs/promises"
 import type { DiscoverOptions, Endpoint, Info, EnsureOptions, StopOptions } from "../service.js"
-import {
-  contenderFailure,
-  contenderFinished,
-  type ServiceContender,
-  spawnServiceContender,
-} from "../service-contender.js"
+import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
-import { fallback, headers, probeResult, same } from "../service-probe.js"
+import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
 export { headers }
@@ -33,12 +28,9 @@ export async function discover(options: DiscoverOptions = {}) {
 export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
-  const contenders = new Set<ServiceContender>()
+  const pool = contenderPool(timing)
   let timeouts: { readonly info: Info; readonly count: number } | undefined
   let announced = false
-  let lastSpawn = 0
-  let spawnDelay = timing.spawnDelay
-  let failure: Error | undefined
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
     if (announced) return
@@ -57,7 +49,8 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
 
   try {
     while (true) {
-      if (Date.now() >= deadline) throw failure ?? new Error("Timed out waiting for the background service to start")
+      if (Date.now() >= deadline)
+        throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
       const registration = await registered(options.file, timing.requestTimeout)
       if (registration.timedOut && registration.info !== undefined) {
         timeouts = {
@@ -69,70 +62,40 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
           await PtyHandoff.clear(options.file ?? fallback())
           await terminate(registration.info, options, timing)
-          for (const item of contenders) {
-            if (item.child.pid === registration.info.pid || contenderFinished(item)) {
-              item.release()
-              contenders.delete(item)
-            }
-          }
-          failure = undefined
+          pool.evict(registration.info.pid)
+          pool.recruitNow()
           timeouts = undefined
-          lastSpawn = Date.now() - spawnDelay
         }
       } else timeouts = undefined
 
       if (registration.service !== undefined) {
-        spawnDelay = timing.spawnDelay
+        pool.serviceAnswered()
         const service = registration.service
-        const versionMatches = matchesVersion(service.version, options)
-        const compatible = service.compatible && versionMatches
-        if (!service.compatible && versionMatches)
-          throw new Error(
-            "Background service uses an incompatible health protocol. Update this client or explicitly restart the service.",
-          )
-        if (compatible && service.state === "ready") {
+        const decision = decide(service, options)
+        if (decision._tag === "fail") throw decision.error
+        if (decision._tag === "reuse") {
           await PtyHandoff.complete(options.file ?? fallback(), service.info)
           return service.endpoint
         }
-        if (compatible && service.state === "failed") throw new Error("Background service failed to start")
-        if (!compatible) {
+        if (decision._tag === "replace") {
           announce("version-mismatch", service.version)
           if (service.state !== "ready")
             console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
-          await stop({
-            file: options.file,
-            pty: service.state === "ready" ? "handoff" : "clear",
-          }).catch(() => undefined)
-          for (const item of contenders) {
-            if (item.child.pid === service.info.pid || contenderFinished(item)) {
-              item.release()
-              contenders.delete(item)
-            }
-          }
-          failure = undefined
-          lastSpawn = 0
+          await stop({ file: options.file, pty: decision.pty }).catch(() => undefined)
+          pool.evict(service.info.pid)
         }
       } else {
-        if (lastSpawn === 0 && registration.info !== undefined) lastSpawn = Date.now()
-        const finished = [...contenders].filter(contenderFinished)
-        failure ??= finished.map(contenderFailure).find((error) => error !== undefined)
-        if (finished.some((item) => item.child.exitCode === 0)) {
-          spawnDelay = Math.min(spawnDelay * 2, timing.maxSpawnDelay)
-        }
-        finished.forEach((item) => contenders.delete(item))
-        if (failure !== undefined && contenders.size === 0) throw failure
-        // Keep one candidate plus one lock probe for pre-lock stalls. After a failure, let the
-        // survivors finish without recruiting replacements that could hide the error indefinitely.
-        if (failure === undefined && contenders.size < 2 && Date.now() - lastSpawn >= spawnDelay) {
+        const failed = pool.reap()
+        if (failed !== undefined) throw failed
+        if (pool.shouldRecruit(registration.info !== undefined)) {
           announce("missing")
-          contenders.add(await spawnContender())
-          lastSpawn = Date.now()
+          pool.add(await spawnContender())
         }
       }
       await delay(timing.pollInterval)
     }
   } finally {
-    contenders.forEach((contender) => contender.release())
+    pool.releaseAll()
   }
 }
 

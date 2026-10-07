@@ -31,9 +31,11 @@ const FieldContext = createContext<FieldContextValue>()
 
 function useField() {
   const ctx = useContext(FieldContext)
+
   if (!ctx) {
     throw new Error("Field subcomponents must be used within <Field>")
   }
+
   return ctx
 }
 
@@ -72,17 +74,22 @@ function FieldRoot(props: ParentProps<FieldProps>) {
     unregisterSuffix: () => setSuffixCount((n) => Math.max(0, n - 1)),
     getDescribedBy: () => {
       const ids: string[] = []
+
       if (prefixCount() > 0) ids.push(prefixId)
+
       if (suffixCount() > 0) ids.push(suffixId)
+
       return ids.length > 0 ? ids.join(" ") : undefined
     },
   }
 
   const syncControlA11y = () => {
     const root = rootRef
+
     if (!root) return
 
     const control = root.querySelector(CONTROL_SELECTOR) as HTMLInputElement | HTMLTextAreaElement | null
+
     if (!control) return
 
     const shell = control.closest(
@@ -93,6 +100,7 @@ function FieldRoot(props: ParentProps<FieldProps>) {
     control.setAttribute("aria-labelledby", labelId)
 
     const describedBy = ctx.getDescribedBy()
+
     if (describedBy) {
       control.setAttribute("aria-describedby", describedBy)
     } else {

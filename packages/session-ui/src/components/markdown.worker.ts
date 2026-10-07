@@ -22,23 +22,30 @@ type Stream = {
 }
 
 const streams = new Map<string, Stream>()
+
 const projections = new Map<string, Projection>()
+
 let highlighter: ReturnType<typeof createHighlighter> | undefined
+
 const highlightQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "highlight" }>>({
   run: highlight,
   supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
   dispose: (key) => void streams.delete(key),
 })
+
 const projectQueue = createLatestWorkerQueue<Extract<MarkdownWorkerRequest, { type: "project" }>>({
   run: runProject,
   supersede: (request) => post({ type: "superseded", id: request.id, key: request.key }),
   dispose: (key) => void projections.delete(key),
 })
+
 const parser = createMarkdownParser(async (code, language) => {
   const instance = await getHighlighter()
   const name = language in bundledLanguages ? language : "text"
+
   if (!instance.getLoadedLanguages().includes(name))
     await instance.loadLanguage(bundledLanguages[name as BundledLanguage])
+
   return instance
     .codeToHtml(code, { lang: name as BundledLanguage, theme: "OpenCode", tabindex: false })
     .replace("<code>", `<code class="language-${name}">`)
@@ -48,14 +55,19 @@ self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
   if (event.data.type === "dispose") {
     highlightQueue.dispose(event.data.key)
     projectQueue.dispose(event.data.key)
+
     return
   }
+
   if (event.data.type === "parse") {
     void parse(event.data)
+
     return
   }
+
   if (event.data.type === "project") {
     projectQueue.highlight(event.data)
+
     return
   }
 
@@ -89,6 +101,7 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
   try {
     const instance = await getHighlighter()
     const language = request.language in bundledLanguages ? request.language : "text"
+
     if (!instance.getLoadedLanguages().includes(language))
       await instance.loadLanguage(bundledLanguages[language as BundledLanguage])
 
@@ -108,11 +121,13 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
           .map(token),
         unstable: [],
       })
+
       return
     }
 
     const previous = streams.get(request.key)
     const reset = !previous || previous.language !== language || !request.text.startsWith(previous.source)
+
     const stream = reset
       ? {
           language,
@@ -120,6 +135,7 @@ async function highlight(request: Extract<MarkdownWorkerRequest, { type: "highli
           tokenizer: new ShikiStreamTokenizer({ highlighter: instance, lang: language, theme: "OpenCode" }),
         }
       : previous
+
     const result = await stream.tokenizer.enqueue(request.text.slice(stream.source.length))
     stream.source = request.text
     streams.set(request.key, stream)

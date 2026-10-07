@@ -290,9 +290,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "পাসওয়ার্ড",
   "dialog.server.edit.title": "সার্ভার সম্পাদনা করুন",
   "dialog.server.menu.edit": "সম্পাদনা করুন",
-  "dialog.server.menu.default": "ডিফল্ট হিসেবে সেট করুন",
-  "dialog.server.menu.defaultRemove": "ডিফল্ট সরান",
-  "dialog.server.status.default": "ডিফল্ট",
   "dialog.project.edit.title": "প্রকল্প সম্পাদনা করুন",
   "dialog.project.edit.icon": "আইকন",
   "dialog.project.edit.icon.alt": "প্রকল্প আইকন",
@@ -797,7 +794,6 @@ export const dict = {
   "server.connect.button": "সংযোগ করুন",
   "server.connect.address.invalid": "একটি বৈধ HTTP বা HTTPS সার্ভার ঠিকানা লিখুন৷",
   "server.connect.failed": "সংযোগ করা যায়নি। সার্ভার ঠিকানা এবং পাসওয়ার্ড পরীক্ষা করুন, তারপর আবার চেষ্টা করুন.",
-  "server.connect.pair.description": "আপনার সংযোগের বিবরণ পেতে আপনার কম্পিউটারে এই কমান্ডটি চালান।",
   "server.connect.scan": "QR কোড স্ক্যান করুন",
   "server.connect.scan.description": "আপনার ক্যামেরাকে ওপেনকোড পেয়ার দ্বারা দেখানো QR কোডে নির্দেশ করুন৷",
   "server.connect.scan.invalid": "এটি একটি OpenCode পেয়ারিং কোড নয়৷ ওপেনকোড পেয়ার দ্বারা দেখানো কোডটি স্ক্যান করুন।",
@@ -805,7 +801,6 @@ export const dict = {
   "server.connect.camera.starting": "ক্যামেরা খোলা হচ্ছে...",
   "server.connect.mixedContent":
     "একটি HTTPS পৃষ্ঠা থেকে এই HTTP সার্ভারের সাথে সংযোগ করা যায়নি৷ পরিবর্তে একটি HTTPS সার্ভার ঠিকানা ব্যবহার করুন৷",
-  "server.connect.camera.insecure": "QR স্ক্যান করার জন্য এই পৃষ্ঠাটি HTTPS বা লোকালহোস্টে খুলতে হবে।",
   "server.connect.camera.unavailable": "এই ব্রাউজারে কোন ক্যামেরা উপলব্ধ নেই৷ ম্যানুয়ালি আপনার সংযোগ বিশদ লিখুন.",
   "server.connect.camera.error":
     "ক্যামেরা খুলতে পারিনি। ক্যামেরা অ্যাক্সেসের অনুমতি দিন বা ম্যানুয়ালি আপনার সংযোগের বিবরণ লিখুন।",

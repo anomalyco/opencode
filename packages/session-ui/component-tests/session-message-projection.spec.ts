@@ -25,9 +25,11 @@ story("renders interruption independently when the turn is not compacted", async
   await expect(timeline.getByText("Interrupted", { exact: true })).toBeVisible()
   await expect(timeline.getByText("Before", { exact: true })).toBeVisible()
   await expect(timeline.getByText("After", { exact: true })).toBeVisible()
+
   const rows = await timeline
     .locator('[data-timeline-row="AssistantPart"], [data-timeline-row="TurnDivider"]')
     .evaluateAll((elements) => elements.map((element) => element.getAttribute("data-timeline-row")))
+
   expect(rows).toEqual(["AssistantPart", "TurnDivider", "AssistantPart"])
 })
 

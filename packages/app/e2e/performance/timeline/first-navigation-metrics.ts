@@ -9,17 +9,22 @@ export type FirstNavigationSample = {
 
 function category(sample: FirstNavigationSample) {
   if (sample.destination && !sample.source) return "destination"
+
   if (sample.source && !sample.destination) return "source"
+
   if (!sample.content) return "blank"
+
   return "unknown"
 }
 
 export function summarizeFirstNavigation(samples: FirstNavigationSample[]) {
   const categories = samples.map(category)
+
   const stable = categories.findIndex(
     (value, index) =>
       value === "destination" && categories[index + 1] === "destination" && categories[index + 2] === "destination",
   )
+
   return {
     samples: samples.length,
     firstDestinationObservedMs: samples[categories.indexOf("destination")]?.observedAtMs ?? null,

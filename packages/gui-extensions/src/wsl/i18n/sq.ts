@@ -51,8 +51,5 @@ export default {
   "error.healthTimeout": "Makina anësore për kontrollin shëndetësor të {{distro}} mbaroi pas {{timeout}}ms",
   "error.commandTimeout": "{{command}} {{args}} skadoi pas {{timeout}}ms",
   "error.failedPort": "Dështoi në marrjen e portit",
-  "server.default": "E paracaktuar",
-  "menu.default": "Cakto si parazgjedhje",
-  "menu.defaultRemove": "Hiq parazgjedhjen",
   "menu.remove": "Hiq",
 }

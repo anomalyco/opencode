@@ -1,6 +1,7 @@
 import { Popover } from "@kobalte/core/popover"
-import { Component, ComponentProps, createEffect, createMemo, For, JSX, Show } from "solid-js"
+import { Component, ComponentProps, createEffect, createMemo, For, JSX, Show, Suspense, lazy, on } from "solid-js"
 import { createStore } from "solid-js/store"
+import { createMediaQuery } from "@solid-primitives/media"
 import { useLocal, type ModelSelection } from "@/providers/models/selection"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { popularProviders } from "@/providers/catalog/providers"
@@ -8,7 +9,6 @@ import { Button } from "@opencode/ui/button"
 import { Badge } from "@opencode/ui/badge"
 import { Dialog, DialogBody, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
 import { ScrollView } from "@opencode/ui/scroll-view"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Menu } from "@opencode/ui/menu"
@@ -24,16 +24,30 @@ import { createMenuDismissController } from "@/shell/commands/menu-dismiss"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { matchesModelSearch } from "./search"
 import { SettingsList } from "@/settings/list"
-import { CONSOLE_GROUP_KEY, consoleModelGroup, ProviderModelIcon, ProviderModelSections } from "@/providers/models/provider-group"
+import {
+  CONSOLE_GROUP_KEY,
+  consoleModelGroup,
+  ProviderModelIcon,
+  ProviderModelSections,
+} from "@/providers/models/provider-group"
 import "@/settings/settings.css"
+import "./select-dialog.css"
+
+const MobilePanelDrawer = lazy(async () => {
+  const { MobilePanelDrawer } = await import("@/shell/mobile-panel-drawer")
+
+  return { default: MobilePanelDrawer }
+})
 
 const isFree = (provider: string, cost: { input: number } | undefined) =>
   provider === "opencode" && (!cost || cost.input === 0)
 
 type ModelState = ModelSelection
+
 type ModelItem = ReturnType<ModelState["list"]>[number]
 
 const modelKey = (model: ModelItem) => `${model.provider.id}:${model.id}`
+
 const manageKey = "action:manage"
 
 const sortModelGroups = (a: { category: string; items: ModelItem[] }, b: { category: string; items: ModelItem[] }) => {
@@ -43,44 +57,65 @@ const sortModelGroups = (a: { category: string; items: ModelItem[] }, b: { categ
   const bPopular = bIndex >= 0
 
   if (aPopular && !bPopular) return -1
+
   if (!aPopular && bPopular) return 1
+
   if (aPopular && bPopular) return aIndex - bIndex
+
   return a.items[0].provider.name.localeCompare(b.items[0].provider.name)
 }
 
 const ModelList: Component<{
+  mobile?: boolean
+  open?: boolean
   provider?: string
   onSelect: () => void
   model?: ModelState
 }> = (props) => {
   const language = useLanguage()
+
   const controller = createModelSelectorController({
     model: props.model,
     provider: () => props.provider,
     onSelect: props.onSelect,
   })
-  const [store, setStore] = createStore({
+
+  const [store, setStore] = createStore<{ search: string; active: string; collapsed: Record<string, boolean> }>({
     search: "",
-    active: "",
-    collapsed: {} as Record<string, boolean>,
+    active: props.mobile ? (controller.current() ?? "") : "",
+    collapsed: {},
   })
+
+  createEffect(
+    on(
+      () => props.open,
+      (open) => {
+        if (!props.mobile || !open) return
+        setStore({ search: "", active: controller.current() ?? "" })
+      },
+    ),
+  )
   const models = createMemo(() => controller.models(store.search))
   const modelGroups = createMemo(() => controller.groups(models()))
   const managed = createMemo(() => consoleModelGroup(controller.all()))
   const expanded = (provider: string) => store.search.length > 0 || !store.collapsed[provider]
   const managedIDs = createMemo(() => new Set(managed()?.providers.map((provider) => provider.id) ?? []))
+
   const visibleModels = () =>
     models().filter(
       (item) => expanded(item.provider.id) && (!managedIDs().has(item.provider.id) || expanded(CONSOLE_GROUP_KEY)),
     )
+
   let scrollRef: HTMLDivElement | undefined
 
   const setSearch = (value: string) => {
     const first = controller.models(value).find((item) => value.length > 0 || !store.collapsed[item.provider.id])
     setStore({ search: value, active: first ? modelKey(first) : "" })
   }
+
   const moveActive = (delta: number) => {
     const keys = visibleModels().map(modelKey)
+
     if (keys.length === 0) return
     const index = keys.indexOf(store.active)
     const start = index === -1 ? (delta > 0 ? -1 : 0) : index
@@ -91,12 +126,14 @@ const ModelList: Component<{
         ?.scrollIntoView({ block: "nearest" })
     })
   }
+
   const selectActive = () => {
     const item = visibleModels().find((item) => modelKey(item) === store.active)
+
     if (item) controller.select(item)
   }
 
-  function ModelRows(props: { items: ModelItem[] }) {
+  function ModelRows(props: { items: ModelItem[]; mobile?: boolean }) {
     return (
       <SettingsList variant="catalog">
         <For each={props.items}>
@@ -105,6 +142,7 @@ const ModelList: Component<{
               type="button"
               data-component="settings-row"
               data-option-key={modelKey(item)}
+              aria-pressed={controller.current() === modelKey(item)}
               class="-mx-4 w-[calc(100%+32px)] px-4 text-start first:rounded-t-lg last:rounded-b-lg hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
               classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === modelKey(item) }}
               onMouseEnter={() => setStore("active", modelKey(item))}
@@ -114,6 +152,7 @@ const ModelList: Component<{
               <div data-slot="settings-row-copy">
                 <div data-slot="settings-row-title" class="flex items-center gap-2">
                   <Tooltip
+                    inactive={props.mobile}
                     placement="right-start"
                     gutter={12}
                     openDelay={0}
@@ -145,54 +184,54 @@ const ModelList: Component<{
 
   return (
     <div class="flex min-h-0 flex-1 flex-col">
-      <div class="shrink-0 px-4 pt-px pb-3">
-        <div class="relative">
-          <TextInput
-            type="search"
-            appearance="base"
-            class="!w-full self-stretch"
-            placeholder={language.t("dialog.model.search.placeholder")}
-            value={store.search}
-            autofocus
-            spellcheck={false}
-            autocorrect="off"
-            autocomplete="off"
-            autocapitalize="off"
-            onInput={(event) => setSearch(event.currentTarget.value)}
-            onKeyDown={(event) => {
-              if (event.altKey || event.metaKey) return
-              if (event.key === "ArrowDown") {
-                event.preventDefault()
-                moveActive(1)
-                return
-              }
-              if (event.key === "ArrowUp") {
-                event.preventDefault()
-                moveActive(-1)
-                return
-              }
-              if (event.key === "Enter" && !event.isComposing) {
-                event.preventDefault()
-                selectActive()
-              }
-            }}
-            aria-label={language.t("dialog.model.search.placeholder")}
-          />
-          <Show when={store.search}>
-            <IconButton
-              type="button"
-              variant="ghost-muted"
-              size="small"
-              class="settings-tab-search-clear"
-              icon={<Icon name="close" size="large" class="text-v2-icon-icon-muted" />}
-              onClick={() => setSearch("")}
-              aria-label={language.t("common.clear")}
-            />
-          </Show>
-        </div>
+      <div data-slot="model-selector-search" class="shrink-0 pt-px pb-3" classList={{ "px-4": !props.mobile }}>
+        <TextInput
+          type="search"
+          appearance="base"
+          class="!w-full self-stretch"
+          placeholder={language.t("dialog.model.search.placeholder")}
+          value={store.search}
+          autofocus={!props.mobile}
+          spellcheck={false}
+          autocorrect="off"
+          autocomplete="off"
+          autocapitalize="off"
+          onInput={(event) => setSearch(event.currentTarget.value)}
+          onKeyDown={(event) => {
+            if (event.altKey || event.metaKey) return
+
+            if (event.key === "ArrowDown") {
+              event.preventDefault()
+              moveActive(1)
+
+              return
+            }
+
+            if (event.key === "ArrowUp") {
+              event.preventDefault()
+              moveActive(-1)
+
+              return
+            }
+
+            if (event.key === "Enter" && !event.isComposing) {
+              event.preventDefault()
+              selectActive()
+            }
+          }}
+          aria-label={language.t("dialog.model.search.placeholder")}
+          showClearButton={!!store.search}
+          clearIcon="circle-xmark"
+          clearLabel={language.t("common.clear")}
+          onClearClick={() => setSearch("")}
+        />
       </div>
-      <div class="relative min-h-0 flex-1">
-        <div ref={(element) => (scrollRef = element)} class="settings-panel settings-models h-full px-4 pt-1 pb-4">
+      <div class="relative min-h-0" classList={{ "flex-1": !props.mobile }}>
+        <div
+          ref={(element) => (scrollRef = element)}
+          class="settings-panel settings-models pt-1 pb-4"
+          classList={{ "h-full px-4": !props.mobile, "max-h-[min(360px,40dvh)]": props.mobile }}
+        >
           <Show
             when={models().length > 0}
             fallback={<div class="settings-models-status">{language.t("dialog.model.empty")}</div>}
@@ -203,7 +242,7 @@ const ModelList: Component<{
               expanded={expanded}
               disabled={store.search.length > 0}
               onExpandedChange={(key, value) => setStore("collapsed", key, !value)}
-              rows={(items) => <ModelRows items={items} />}
+              rows={(items) => <ModelRows items={items} mobile={props.mobile} />}
             />
           </Show>
         </div>
@@ -213,45 +252,197 @@ const ModelList: Component<{
 }
 
 type ModelSelectorTriggerProps = Omit<ComponentProps<typeof Popover.Trigger>, "as" | "ref">
+
 type ModelSelectorTrigger = (props: ModelSelectorTriggerProps) => JSX.Element
+
 export function ModelSelectorPopover(props: {
   provider?: string
   model?: ModelState
+  unpaid?: boolean
   trigger: ModelSelectorTrigger
   onClose?: () => void
 }) {
   const dialog = useDialog()
+  const mobile = createMediaQuery("(max-width: 767px)")
   const data = useData()
   const location = useWorkspaceLocation()
+
   const controller = createModelSelectorController({
     model: props.model,
     provider: () => props.provider,
     onSelect: () => props.onClose?.(),
   })
+
   const chatgptPlan = () => {
     if (!controller.current()?.startsWith("openai:")) return false
+
     const connection = data.location.integration
       .list(location().ref)
-      ?.find((integration) => integration.id === "openai")
-      ?.connections[0]
+      ?.find((integration) => integration.id === "openai")?.connections[0]
+
     return connection?.type === "credential" && connection.method === "oauth"
   }
 
+  const manage = async () => {
+    const { DialogManageModels } = await import("./manage")
+    void dialog.show(() => <DialogManageModels />)
+  }
+
+  const connect = async () => {
+    const { DialogConnectProvider } = await import("@/providers/connect/dialog")
+    void dialog.show(() => <DialogConnectProvider directory={location().directory} />)
+  }
+
   return (
-    <ModelSelectorPopoverView
-      trigger={props.trigger}
-      models={controller.models}
-      groups={controller.groups}
-      current={controller.current()}
-      chatgptPlan={chatgptPlan()}
-      select={controller.select}
-      onManage={() => {
-        void import("./manage").then((module) => {
-          void dialog.show(() => <module.DialogManageModels />)
-        })
-      }}
-      onClose={() => props.onClose?.()}
-    />
+    <Show
+      when={mobile()}
+      fallback={
+        <ModelSelectorPopoverView
+          trigger={props.trigger}
+          models={controller.models}
+          groups={controller.groups}
+          current={controller.current()}
+          chatgptPlan={chatgptPlan()}
+          select={controller.select}
+          onManage={manage}
+          onClose={() => props.onClose?.()}
+        />
+      }
+    >
+      <ModelSelectorDrawer
+        trigger={props.trigger}
+        model={props.model}
+        provider={props.provider}
+        onConnect={props.unpaid ? connect : undefined}
+        chatgptPlan={chatgptPlan()}
+        onClose={() => props.onClose?.()}
+        onManage={manage}
+      />
+    </Show>
+  )
+}
+
+function ModelSelectorDrawer(props: {
+  trigger: ModelSelectorTrigger
+  model?: ModelState
+  provider?: string
+  chatgptPlan?: boolean
+  onClose: () => void
+  onManage: () => void
+  onConnect?: () => void
+}) {
+  const language = useLanguage()
+
+  const [store, setStore] = createStore<{
+    open: boolean
+    loaded: boolean
+    restoreTrigger: boolean
+    action?: "select" | "manage" | "connect"
+  }>({
+    open: false,
+    loaded: false,
+    restoreTrigger: true,
+  })
+
+  let trigger: HTMLDivElement | undefined
+  let content: HTMLDivElement | undefined
+
+  return (
+    <>
+      <div ref={trigger} class="min-w-0">
+        {props.trigger({
+          "aria-haspopup": "dialog",
+          get "aria-expanded"() {
+            return store.open
+          },
+          onClick: () => setStore({ open: true, loaded: true, restoreTrigger: true }),
+        })}
+      </div>
+      <Show when={store.loaded}>
+        <Suspense>
+          <MobilePanelDrawer
+            hideHeader
+            title={language.t("dialog.model.select.title")}
+            open={store.open}
+            onOpenChange={(open) => setStore("open", open)}
+            initialFocus={() => content}
+            returnFocus={() => trigger?.querySelector("button") ?? undefined}
+            onFinalFocus={(event) => {
+              if (!store.restoreTrigger) event.preventDefault()
+            }}
+            onContentPresentChange={(present) => {
+              if (present) return
+              const action = store.action
+              setStore("action", undefined)
+
+              if (action === "manage") {
+                props.onManage()
+
+                return
+              }
+
+              if (action === "connect") {
+                props.onConnect?.()
+
+                return
+              }
+
+              if (action === "select") queueMicrotask(props.onClose)
+            }}
+          >
+            <div
+              ref={content}
+              tabIndex={-1}
+              data-slot="model-selector-drawer"
+              class="flex min-h-0 flex-col gap-2 outline-none"
+            >
+              <div class="flex min-h-0 flex-col">
+                <ModelList
+                  mobile
+                  open={store.open}
+                  model={props.model}
+                  provider={props.provider}
+                  onSelect={() => setStore({ open: false, action: "select", restoreTrigger: false })}
+                />
+              </div>
+              <div data-slot="model-selector-actions" class="flex flex-col gap-2">
+                <Button
+                  variant="ghost"
+                  class="w-full !h-10 !justify-start"
+                  icon="outline-sliders"
+                  onClick={() => setStore({ open: false, action: "manage", restoreTrigger: false })}
+                >
+                  {language.t("dialog.model.manage")}
+                </Button>
+                <Show when={props.onConnect}>
+                  <Button
+                    variant="ghost"
+                    class="w-full !h-10 !justify-start"
+                    icon="plus"
+                    onClick={() => setStore({ open: false, action: "connect", restoreTrigger: false })}
+                  >
+                    {language.t("command.provider.connect")}
+                  </Button>
+                </Show>
+                <Show when={props.chatgptPlan}>
+                  <div class="flex min-h-10 items-center gap-2 border-t border-v2-border-border-muted px-3 py-2 text-[13px] leading-5 text-v2-text-text-base">
+                    <ProviderModelIcon provider={{ id: "openai", name: "OpenAI" }} class="shrink-0" />
+                    <span class="min-w-0 flex-1 truncate">{language.t("dialog.model.chatgptPlan")}</span>
+                    <ExternalLink
+                      href="https://chatgpt.com/settings/usage"
+                      class="flex shrink-0 items-center gap-1 rounded-sm text-v2-text-text-muted no-underline hover:text-v2-text-text-base focus-visible:outline focus-visible:outline-2"
+                    >
+                      {language.t("dialog.model.chatgptManageUsage")}
+                      <Icon name="arrow-up-right" size="small" />
+                    </ExternalLink>
+                  </div>
+                </Show>
+              </div>
+            </div>
+          </MobilePanelDrawer>
+        </Suspense>
+      </Show>
+    </>
   )
 }
 
@@ -261,6 +452,7 @@ function createModelSelectorController(input: {
   onSelect: () => void
 }) {
   const model = input.model ?? useLocal().model
+
   const allModels = createMemo(() =>
     model
       .list()
@@ -272,20 +464,25 @@ function createModelSelectorController(input: {
     all: () => model.list().filter((item) => (input.provider() ? item.provider.id === input.provider() : true)),
     models: (search: string) => {
       const query = search.trim()
+
       const filtered = query
         ? allModels().filter((item) => matchesModelSearch(query, [item.name, item.id, item.provider.name]))
         : allModels()
+
       return [...filtered].sort((a, b) => a.name.localeCompare(b.name))
     },
     groups: (models: ModelItem[]) => {
       const byProvider = new Map<string, ModelItem[]>()
+
       for (const item of models) {
         byProvider.set(item.provider.id, [...(byProvider.get(item.provider.id) ?? []), item])
       }
+
       return Array.from(byProvider, ([category, items]) => ({ category, items })).sort(sortModelGroups)
     },
     current: () => {
       const value = model.current()
+
       return value ? modelKey(value) : undefined
     },
     select: (item: ModelItem) => {
@@ -314,14 +511,19 @@ export function ModelSelectorPopoverView(props: {
   const models = createMemo(() => props.models(store.search))
   const groups = createMemo(() => props.groups(models()))
   const keys = () => [...groups().flatMap((group) => group.items.map(modelKey)), manageKey]
+
   const initialActive = () => {
     const selected = props.current
     const options = keys()
+
     if (selected && options.includes(selected)) return selected
+
     return options[0] ?? ""
   }
+
   const activeItem = () =>
     store.active ? contentRef?.querySelector<HTMLElement>(`[data-option-key="${CSS.escape(store.active)}"]`) : undefined
+
   const setOpen = (open: boolean) => {
     if (open) {
       dismiss.allowTriggerRestore()
@@ -332,36 +534,47 @@ export function ModelSelectorPopoverView(props: {
           activeItem()?.scrollIntoView({ block: "nearest" })
         }),
       )
+
       return
     }
+
     setStore({ open: false, search: "", active: "" })
   }
+
   const selectModel = (item: ModelItem) => {
     dismiss.preventTriggerRestore()
     setOpen(false)
     dismiss.afterClose(() => props.select(item))
   }
+
   const manage = () => {
     dismiss.preventTriggerRestore()
     setOpen(false)
     dismiss.afterClose(props.onManage)
   }
+
   const selectActive = () => {
     const item = models().find((item) => modelKey(item) === store.active)
+
     if (item) {
       selectModel(item)
+
       return
     }
+
     if (store.active === manageKey) manage()
   }
+
   const moveActive = (delta: number) => {
     const options = keys()
+
     if (options.length === 0) return
     const index = options.indexOf(store.active)
     const start = index === -1 ? 0 : index
     setStore("active", options[(start + delta + options.length) % options.length])
     queueMicrotask(() => activeItem()?.scrollIntoView({ block: "nearest" }))
   }
+
   const setSearch = (value: string) => {
     const first = props.models(value)[0]
     setStore({ search: value, active: first ? modelKey(first) : manageKey })
@@ -390,7 +603,7 @@ export function ModelSelectorPopoverView(props: {
           onCloseAutoFocus={dismiss.onCloseAutoFocus}
         >
           <div class="flex flex-col p-0.5">
-            <div class="flex h-7 items-center gap-2 rounded-sm pl-3 pr-2.5 text-v2-icon-icon-muted">
+            <div class="flex h-7 items-center gap-2 rounded-sm pl-3 pr-1 text-v2-icon-icon-muted">
               <Icon name="magnifying-glass" size="small" class="shrink-0" />
               <input
                 ref={(el) => (searchRef = el)}
@@ -405,24 +618,32 @@ export function ModelSelectorPopoverView(props: {
                 onKeyDown={(event) => {
                   if (event.key === "Tab") return
                   event.stopPropagation()
+
                   if (event.key === "Escape") {
                     event.preventDefault()
                     dismiss.preventTriggerRestore()
                     setOpen(false)
                     dismiss.afterClose(props.onClose)
+
                     return
                   }
+
                   if (event.altKey || event.metaKey) return
+
                   if (event.key === "ArrowDown") {
                     event.preventDefault()
                     moveActive(1)
+
                     return
                   }
+
                   if (event.key === "ArrowUp") {
                     event.preventDefault()
                     moveActive(-1)
+
                     return
                   }
+
                   if (event.key === "Enter" && !event.isComposing) {
                     event.preventDefault()
                     selectActive()
@@ -432,12 +653,12 @@ export function ModelSelectorPopoverView(props: {
               <Show when={store.search.trim()}>
                 <button
                   type="button"
-                  class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+                  class="flex size-5 items-center justify-center rounded-sm bg-transparent text-v2-icon-icon-faint transition-colors hover:text-v2-icon-icon-base focus-visible:text-v2-icon-icon-base active:text-v2-icon-icon-base"
                   onPointerDown={(event) => event.preventDefault()}
                   onClick={() => setSearch("")}
                   aria-label={language.t("common.clear")}
                 >
-                  <Icon name="close" size="small" />
+                  <Icon name="circle-xmark" />
                 </button>
               </Show>
             </div>
