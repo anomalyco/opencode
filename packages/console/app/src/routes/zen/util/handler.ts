@@ -58,7 +58,17 @@ type PreparedBody = Awaited<ReturnType<typeof prepareRequestBody>>
 type BillingSource = "anonymous" | "free" | "byok" | "subscription" | "lite" | "balance"
 
 // Free models whose keyless requests skip legacy checks and go straight to new inference.
-const ANONYMOUS_PROXY_MODELS = new Set(["ling-3.1-flash-free", "nemotron-3.5-lightning-free"])
+const ANONYMOUS_PROXY_MODELS = new Set([
+  "fledge-alpha-free",
+  "jev-1.13-free",
+  "ling-3.0-flash-fin-free",
+  "ling-3.1-flash-free",
+  "longcat-2.5-preview-free",
+  "mimo-v2.6-flash-free",
+  "muse-spark-1.2-contributor-free",
+  "nemotron-3-ultra-free",
+  "nemotron-3.5-lightning-free",
+])
 
 function resolve(text: string, params?: Record<string, string | number>) {
   if (!params) return text
