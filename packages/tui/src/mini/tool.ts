@@ -15,6 +15,7 @@ import os from "os"
 import path from "path"
 import stripAnsi from "strip-ansi"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
+import { formatShellCommand } from "../util/format-command"
 import { LANGUAGE_EXTENSIONS } from "../util/filetype"
 import { Locale } from "../util/locale"
 import {
@@ -653,15 +654,16 @@ function scrollBashStart(p: ToolProps): string {
   const wd = p.input.workdir ?? ""
   const formatted = wd && wd !== "." ? displayPath(p, wd, { home: true }) : ""
   const dir = formatted === "." ? "" : formatted
+  const formattedCmd = formatShellCommand(cmd)
   if (cmd && !dir) {
-    return `$ ${cmd}`
+    return `$ ${formattedCmd}`
   }
 
   if (!cmd) {
     return dir ? `${dir}$` : ""
   }
 
-  return `${dir}$ ${cmd}`
+  return `${dir}$ ${formattedCmd}`
 }
 
 function scrollBashProgress(p: ToolProps): string {
@@ -1317,7 +1319,7 @@ export function toolEntryBody(
 ): RunEntryBody | undefined {
   if (commit.shell) {
     if (commit.phase === "start") {
-      return textBody(`$ ${commit.shell.command}`)
+      return textBody(`$ ${formatShellCommand(commit.shell.command)}`)
     }
 
     if (commit.phase === "progress") {

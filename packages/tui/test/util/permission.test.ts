@@ -21,3 +21,16 @@ test("preserves permission roots and self-contained metadata", () => {
     },
   )
 })
+
+test("formats long shell commands in the shell permission card", () => {
+  expect(
+    permissionPresentation({
+      action: "shell",
+      resources: [],
+      input: { command: "npm run build -- --production --verbose && npm test -- --coverage --ci" },
+    }),
+  ).toMatchObject({
+    title: "Shell command",
+    lines: ["$ npm run build -- --production --verbose &&\n  npm test -- --coverage --ci"],
+  })
+})

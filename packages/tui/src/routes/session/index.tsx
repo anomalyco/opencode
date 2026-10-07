@@ -97,6 +97,7 @@ import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
 import { collapseShellOutput, collapseToolOutput } from "../../util/collapse-tool-output"
+import { formatShellCommand } from "../../util/format-command"
 import { Keymap, type KeymapCommand } from "../../context/keymap"
 import { usePathFormatter } from "../../context/path-format"
 import { useLocation } from "../../context/location"
@@ -3095,7 +3096,9 @@ function ShellDisplay(props: {
   const maxLines = 10
   const maxChars = createMemo(() => maxLines * Math.max(20, ctx.width - 8 - (isRunning() ? 2 : 0)))
   const prefix = createMemo(() => (workdir() && workdir() !== "." ? `cd ${workdir()} && ` : ""))
-  const input = createMemo(() => (props.command ? `${isRunning() ? "" : "$ "}${prefix()}${props.command}` : ""))
+  const input = createMemo(() =>
+    props.command ? `${isRunning() ? "" : "$ "}${prefix()}${formatShellCommand(props.command)}` : "",
+  )
   const collapsed = createMemo(() => collapseShellOutput(input(), output(), maxLines, maxChars()))
   const limitedInput = createMemo(() => (expanded() ? input() : collapsed().input))
   const limitedOutput = createMemo(() => (expanded() ? output() : collapsed().output))
