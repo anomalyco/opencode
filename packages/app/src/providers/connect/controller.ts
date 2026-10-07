@@ -285,7 +285,9 @@ export function createProviderConnectionController(options: {
       setStore("statusFailed", true)
       dispatch({
         type: "auth.error",
-        error: isConsole() ? language.t("provider.connect.console.statusFailed") : formatServerError(result.error, language.t),
+        error: isConsole()
+          ? language.t("provider.connect.console.statusFailed")
+          : formatServerError(result.error, language.t),
       })
 
       return
@@ -435,7 +437,9 @@ export function createProviderConnectionController(options: {
     if (!result.ok) {
       dispatch({
         type: "auth.error",
-        error: isConsole() ? language.t("provider.connect.console.startFailed") : formatServerError(result.error, language.t),
+        error: isConsole()
+          ? language.t("provider.connect.console.startFailed")
+          : formatServerError(result.error, language.t),
       })
 
       return
