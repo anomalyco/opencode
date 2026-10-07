@@ -325,11 +325,13 @@ describe("OpenAI Responses route", () => {
     }),
   )
 
-  it.effect("passes through provider-defined service tiers", () =>
+  it.effect("passes through provider-defined and future service tiers", () =>
     Effect.gen(function* () {
-      const prepared = yield* compileRequest(LLMRequest.update(request, { providerOptions: { serviceTier: "scale" } }))
+      for (const serviceTier of ["scale", "ultrafast", "future-tier"]) {
+        const prepared = yield* compileRequest(LLMRequest.update(request, { providerOptions: { serviceTier } }))
 
-      expect(prepared.body.service_tier).toBe("scale")
+        expect(prepared.body.service_tier).toBe(serviceTier)
+      }
     }),
   )
 
