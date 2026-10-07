@@ -1,4 +1,4 @@
-import { animate, motion, useMotionValue, useReducedMotion, type Transition } from "@kitlangton/solid-motion"
+import { animate, motion, useMotionValue, type Transition } from "@kitlangton/solid-motion"
 import {
   createContext,
   createEffect,
@@ -107,7 +107,10 @@ export function SegmentedControl(props: SegmentedControlProps) {
   const [ready, setReady] = createSignal(false)
 
   const selected = createMemo(() => (isControlled() ? (local.value ?? null) : internal()))
-  const reducedMotion = useReducedMotion()
+  const reducedMotion = () =>
+    typeof window !== "undefined" &&
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)")?.matches === true
 
   const x = useMotionValue(0)
   const width = useMotionValue(0)
