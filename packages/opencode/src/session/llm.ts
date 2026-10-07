@@ -6,7 +6,8 @@ import { SessionV1 } from "@opencode-ai/core/v1/session"
 import { serviceUse } from "@opencode-ai/core/effect/service-use"
 import { Context, Effect, Layer } from "effect"
 import * as Stream from "effect/Stream"
-import { streamText, wrapLanguageModel, type ModelMessage, type Tool } from "ai"
+import { streamText, wrapLanguageModel, type ModelMessage, type Tool, type ToolCallRepairFunction, type ToolSet } from "ai"
+import { ulid } from "ulid"
 import type { LLMEvent } from "@opencode-ai/llm"
 import { LLMClient } from "@opencode-ai/llm/route"
 import type { LLMClientService } from "@opencode-ai/llm/route"
@@ -31,6 +32,31 @@ import { LLMNativeRuntime } from "./llm/native-runtime"
 import { LLMRequestPrep } from "./llm/request"
 
 export const OUTPUT_TOKEN_MAX = ProviderTransform.OUTPUT_TOKEN_MAX
+
+export function makeToolCallRepair<TOOLS extends ToolSet>(tools: TOOLS): ToolCallRepairFunction<TOOLS> {
+  return async (failed) => {
+    const lower = failed.toolCall.toolName.toLowerCase()
+    // a provider that streams tool calls without an id would otherwise persist
+    // callID: "" and every later request replays it, which providers reject
+    const toolCallId = failed.toolCall.toolCallId || `call_${ulid()}`
+    if (lower !== failed.toolCall.toolName && tools[lower]) {
+      return {
+        ...failed.toolCall,
+        toolCallId,
+        toolName: lower,
+      }
+    }
+    return {
+      ...failed.toolCall,
+      toolCallId,
+      input: JSON.stringify({
+        tool: failed.toolCall.toolName,
+        error: failed.error.message,
+      }),
+      toolName: "invalid",
+    }
+  }
+}
 
 export type StreamInput = {
   user: SessionV1.User
@@ -293,23 +319,7 @@ const live: Layer.Layer<
           },
           // Copilot returns the authoritative billed amount only in provider-specific response fields.
           includeRawChunks: input.model.providerID.includes("github-copilot"),
-          async experimental_repairToolCall(failed) {
-            const lower = failed.toolCall.toolName.toLowerCase()
-            if (lower !== failed.toolCall.toolName && prepared.tools[lower]) {
-              return {
-                ...failed.toolCall,
-                toolName: lower,
-              }
-            }
-            return {
-              ...failed.toolCall,
-              input: JSON.stringify({
-                tool: failed.toolCall.toolName,
-                error: failed.error.message,
-              }),
-              toolName: "invalid",
-            }
-          },
+          experimental_repairToolCall: makeToolCallRepair(prepared.tools),
           temperature: prepared.params.temperature,
           topP: prepared.params.topP,
           topK: prepared.params.topK,
