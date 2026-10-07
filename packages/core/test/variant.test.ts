@@ -261,6 +261,40 @@ test("spells Chat Completions variants for direct providers", () => {
   ])
 })
 
+test("recognizes Claude family metadata for Bedrock inference profile ARNs", () => {
+  const input = model("@opencode/ai/providers/amazon-bedrock", "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opaque") as Model.MutableInfo
+  input.family = Model.Family.make("claude-sonnet")
+
+  expect(resolve(Model.Info.make(input), [{ type: "effort", values: ["high"] }])).toEqual([
+    {
+      id: "high",
+      body: {
+        additionalModelRequestFields: {
+          thinking: { type: "adaptive", display: "summarized" },
+          output_config: { effort: "high" },
+        },
+      },
+    },
+  ])
+})
+
+test("recognizes the bare Claude family for Bedrock inference profile ARNs", () => {
+  const input = model("@opencode/ai/providers/amazon-bedrock", "arn:aws:bedrock:us-east-1:123456789012:application-inference-profile/opaque") as Model.MutableInfo
+  input.family = Model.Family.make("claude")
+
+  expect(resolve(Model.Info.make(input), [{ type: "effort", values: ["high"] }])).toEqual([
+    {
+      id: "high",
+      body: {
+        additionalModelRequestFields: {
+          thinking: { type: "adaptive", display: "summarized" },
+          output_config: { effort: "high" },
+        },
+      },
+    },
+  ])
+})
+
 test("spells Bedrock Converse Claude budgets as a thinking setting", () => {
   expect(
     resolve(model("@opencode/ai/providers/amazon-bedrock", "us.anthropic.claude-haiku-4-5-20251001-v1:0", 64_000), [
