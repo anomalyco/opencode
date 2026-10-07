@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1140" viewBox="0 0 1200 1140" role="img" aria-labelledby="title desc">
+<title id="title">PUSI architecture</title><desc id="desc">Workspace, session execution, and voice transcription paths, with model adapters, tools, and SQLite persistence.</desc>
+<defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#25232b"/></marker></defs>
+<style>text{font-family:Arial,Helvetica,sans-serif;fill:#25232b} .label{font-size:21px;font-weight:600} .small{font-size:16px;fill:#57535f} .group{fill:#f2f1f4;stroke:#25232b;stroke-width:2.5} .box{stroke:#25232b;stroke-width:2.5} .flow{fill:none;stroke:#25232b;stroke-width:2.5;stroke-linejoin:round;marker-end:url(#arrow)}</style>
+<rect width="1200" height="1140" rx="20" fill="#fff"/>
+
+<text x="600" y="48" class="label" text-anchor="middle">PUSI</text>
+<text x="600" y="78" class="small" text-anchor="middle">Private Unified Super Intelligence</text>
+<rect class="group" x="55" y="110" width="1090" height="185" rx="18"/>
+<text x="80" y="147" class="label" text-anchor="start">Workspace</text>
+<rect class="box" x="85" y="178" width="265" height="80" rx="12" fill="#c6dbfb"/>
+<text x="217.5" y="215.0" class="label" text-anchor="middle">Desktop / Web</text>
+<text x="217.5" y="241.0" class="small" text-anchor="middle">Electron shell · browser</text>
+<rect class="box" x="415" y="178" width="340" height="80" rx="12" fill="#c6dbfb"/>
+<text x="585.0" y="215.0" class="label" text-anchor="middle">SolidJS interface</text>
+<text x="585.0" y="241.0" class="small" text-anchor="middle">Composer · projects · timeline</text>
+<rect class="box" x="825" y="178" width="285" height="80" rx="12" fill="#c6dbfb"/>
+<text x="967.5" y="215.0" class="label" text-anchor="middle">Typed client</text>
+<text x="967.5" y="241.0" class="small" text-anchor="middle">Shared schema + protocol</text>
+<path class="flow" d="M350 218 H415"/>
+<path class="flow" d="M755 218 H825"/>
+<rect class="group" x="55" y="350" width="1090" height="450" rx="18"/>
+<text x="80" y="387" class="label" text-anchor="start">Session runtime</text>
+<rect class="box" x="85" y="420" width="225" height="80" rx="12" fill="#c6dbfb"/>
+<text x="197.5" y="457.0" class="label" text-anchor="middle">HTTP API</text>
+<text x="197.5" y="483.0" class="small" text-anchor="middle">Server routes</text>
+<rect class="box" x="355" y="420" width="235" height="80" rx="12" fill="#c6dbfb"/>
+<text x="472.5" y="457.0" class="label" text-anchor="middle">Durable input</text>
+<text x="472.5" y="483.0" class="small" text-anchor="middle">Prompt admission</text>
+<rect class="box" x="635" y="420" width="235" height="80" rx="12" fill="#c6dbfb"/>
+<text x="752.5" y="457.0" class="label" text-anchor="middle">Session runner</text>
+<text x="752.5" y="483.0" class="small" text-anchor="middle">Provider turns</text>
+<rect class="box" x="925" y="420" width="185" height="80" rx="12" fill="#c6dbfb"/>
+<text x="1017.5" y="457.0" class="label" text-anchor="middle">LLM adapters</text>
+<text x="1017.5" y="483.0" class="small" text-anchor="middle">Typed streaming</text>
+<path class="flow" d="M968 258 V397 H198 V420"/>
+<text x="565" y="313" class="small" text-anchor="middle">Prompts and session commands</text>
+<path class="flow" d="M310 460 H355"/>
+<path class="flow" d="M590 460 H635"/>
+<path class="flow" d="M870 460 H925"/>
+<rect class="box" x="620" y="557" width="265" height="75" rx="12" fill="#ffe7a7"/>
+<text x="752.5" y="591.5" class="label" text-anchor="middle">Tools + permissions</text>
+<text x="752.5" y="617.5" class="small" text-anchor="middle">Workspace-scoped execution</text>
+<path class="flow" d="M752 500 V557"/>
+<rect class="box" x="925" y="557" width="185" height="105" rx="12" fill="#ffe7a7"/>
+<text x="1017.5" y="606.5" class="label" text-anchor="middle">Model endpoints</text>
+<text x="1017.5" y="632.5" class="small" text-anchor="middle">Cloud / local</text>
+<path class="flow" d="M1018 500 V557"/>
+<rect class="box" x="85" y="557" width="505" height="75" rx="12" fill="#ded1ee"/>
+<text x="337.5" y="591.5" class="label" text-anchor="middle">SQLite persistence</text>
+<text x="337.5" y="617.5" class="small" text-anchor="middle">Session history · durable inputs · events</text>
+<path class="flow" d="M472 500 V557"/>
+<path class="flow" d="M635 483 H610 V595 H590"/>
+<rect class="box" x="85" y="694" width="800" height="68" rx="12" fill="#c7e3bf"/>
+<text x="485.0" y="725.0" class="label" text-anchor="middle">Session events → timeline</text>
+<text x="485.0" y="751.0" class="small" text-anchor="middle">Answers · tool activity · reasoning disclosures</text>
+<path class="flow" d="M870 483 H902 V728 H885"/>
+<path class="flow" d="M85 728 H28 V278 H585 V258"/>
+<text x="990" y="746" class="small" text-anchor="middle">Streamed updates</text>
+<rect class="group" x="55" y="850" width="1090" height="205" rx="18"/>
+<text x="80" y="887" class="label" text-anchor="start">Voice input</text>
+<rect class="box" x="85" y="924" width="225" height="85" rx="12" fill="#ded1ee"/>
+<text x="197.5" y="963.5" class="label" text-anchor="middle">Microphone</text>
+<text x="197.5" y="989.5" class="small" text-anchor="middle">Capture → mono WAV</text>
+<rect class="box" x="365" y="912" width="415" height="110" rx="12" fill="#ffe7a7"/>
+<text x="572.5" y="964.0" class="label" text-anchor="middle">Transcription adapters</text>
+<text x="572.5" y="990.0" class="small" text-anchor="middle">MLX · Ollama · audio API</text>
+<rect class="box" x="835" y="924" width="275" height="85" rx="12" fill="#c7e3bf"/>
+<text x="972.5" y="963.5" class="label" text-anchor="middle">Transcript</text>
+<text x="972.5" y="989.5" class="small" text-anchor="middle">Text → composer</text>
+<path class="flow" d="M310 966 H365"/>
+<path class="flow" d="M780 966 H835"/>
+<text x="600" y="1095" class="small" text-anchor="middle">Voice supplies text to the same composer; model execution remains in the session runtime.</text>
+</svg>
