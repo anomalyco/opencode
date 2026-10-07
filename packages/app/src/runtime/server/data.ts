@@ -6,15 +6,20 @@ import { uuid } from "@/runtime/persistence/uuid"
 
 type SessionMutation = { readonly id: string; readonly type: "remove"; readonly sessionID: string }
 
-export function createDesktopData(input: { data: Data; remove: (sessionID: string) => Promise<void> }) {
+export function createDesktopData(input: {
+  createData: (session: { removing: (sessionID: string) => boolean }) => Data
+  remove: (sessionID: string) => Promise<void>
+}) {
   const mutation = createSessionMutations(input.remove)
-  onCleanup(input.data.on("session.deleted", (event) => mutation.deleted(event.data.sessionID)))
+  // Registered after the factory's listeners, so they observe a local removal before its deletion event settles it.
+  const data = input.createData({ removing: mutation.removing })
+  onCleanup(data.on("session.deleted", (event) => mutation.deleted(event.data.sessionID)))
 
   return {
-    ...input.data,
+    ...data,
     session: {
-      ...input.data.session,
-      list: () => mutation.apply(input.data.session.list()),
+      ...data.session,
+      list: () => mutation.apply(data.session.list()),
       apply: mutation.apply,
       remove: mutation.remove,
     },
@@ -46,6 +51,9 @@ export function createSessionMutations(remove: (sessionID: string) => Promise<vo
           clear(mutation.id)
           throw error
         })
+    },
+    removing(sessionID: string) {
+      return store.session.some((mutation) => mutation.sessionID === sessionID)
     },
     deleted(sessionID: string) {
       setStore("session", (current) => current.filter((mutation) => mutation.sessionID !== sessionID))

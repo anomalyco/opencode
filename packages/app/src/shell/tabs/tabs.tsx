@@ -492,7 +492,7 @@ export const { use: useTabs, provider: TabsProvider } = createSimpleContext({
                     (tab) =>
                       tab.type === "session" &&
                       tab.server === sessionRoute.server &&
-                      tab.sessionId === sessionRoute.sessionId,
+                      (tab.sessionId === sessionRoute.sessionId || tab.routeSessionId === sessionRoute.sessionId),
                   )
                 : -1
 

@@ -391,6 +391,8 @@ export const dict = {
   "toast.context.noLineSelection.title": "No line selection",
   "toast.context.noLineSelection.description": "Select a line range in a file tab first.",
 
+  "toast.session.deleted.named": 'Session "{{title}}" was deleted',
+  "toast.session.deleted.current": "The current session was deleted",
   "toast.session.export.success.title": "Session exported",
   "toast.session.export.success.description": "Saved session to {{filename}}",
   "toast.session.export.failed.title": "Failed to export session",
