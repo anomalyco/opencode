@@ -153,6 +153,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
 
       const repository = createModelPreferenceRepository(path.join(paths.state, "model.json"))
       const pendingSelectionCommits = new Map<string, { agentID: string; selection: string }>()
+      // Recents are shared, but an open session's fallback is local until a durable selection replaces it.
+      const fallbackBySessionAgent = new Map<string, Map<string, ModelSelection>>()
       const selectionKey = (value: ModelSelection) =>
         `${modelPreferenceKey(value)}:${normalizeModelVariant(value.variant) ?? "default"}`
 
@@ -267,6 +269,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const selected = [
           selectionState.selectionBySessionAgent[sessionID]?.[current.id],
           !session?.agent || session.agent === current.id ? durableSelection(sessionID) : undefined,
+          fallbackBySessionAgent.get(sessionID)?.get(current.id),
         ].find((selection) => selection && isModelValid(selection))
         if (selected) {
           const info = models()?.find((item) => item.providerID === selected.providerID && item.id === selected.modelID)
@@ -276,7 +279,12 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           }
         }
         const model = newSessionModel()
-        return model && preferredSelection(model)
+        if (!model) return
+        const fallback = preferredSelection(model)
+        const byAgent = fallbackBySessionAgent.get(sessionID) ?? new Map<string, ModelSelection>()
+        byAgent.set(current.id, fallback)
+        fallbackBySessionAgent.set(sessionID, byAgent)
+        return fallback
       }
 
       function setSessionSelection(sessionID: string, agentID: string, selection: ModelSelection | undefined) {
@@ -344,6 +352,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       onCleanup(
         event.on("session.deleted", (evt) => {
           pendingSelectionCommits.delete(evt.data.sessionID)
+          fallbackBySessionAgent.delete(evt.data.sessionID)
           setSelectionState("selectionBySessionAgent", evt.data.sessionID, undefined)
         }),
       )
