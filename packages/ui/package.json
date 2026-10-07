@@ -109,6 +109,7 @@
     "vite-plugin-solid": "catalog:"
   },
   "dependencies": {
+    "@kitlangton/solid-motion": "0.2.2",
     "@kobalte/core": "catalog:",
     "@pierre/diffs": "catalog:",
     "@solid-primitives/event-listener": "catalog:",
