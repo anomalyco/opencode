@@ -58,24 +58,50 @@ export function duration(input: number) {
   return `${days}d ${hours}h`
 }
 
+const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+
+function graphemeParts(str: string) {
+  return Array.from(graphemes.segment(str), (part) => part.segment)
+}
+
+function graphemeWidth(parts: string[]) {
+  return parts.reduce((sum, part) => sum + Bun.stringWidth(part), 0)
+}
+
+function takeWidth(parts: string[], budget: number) {
+  const kept: string[] = []
+  let width = 0
+  for (const part of parts) {
+    const next = width + Bun.stringWidth(part)
+    if (next > budget) break
+    kept.push(part)
+    width = next
+  }
+  return kept
+}
+
 export function truncate(str: string, len: number): string {
-  if (str.length <= len) return str
-  return str.slice(0, len - 1) + "…"
+  const parts = graphemeParts(str)
+  if (graphemeWidth(parts) <= len) return str
+  return takeWidth(parts, Math.max(0, len - 1)).join("") + "…"
 }
 
 export function truncateLeft(str: string, len: number): string {
-  if (str.length <= len) return str
-  return "…" + str.slice(-(len - 1))
+  const parts = graphemeParts(str)
+  if (graphemeWidth(parts) <= len) return str
+  return "…" + takeWidth(parts.reverse(), Math.max(0, len - 1)).reverse().join("")
 }
 
 export function truncateMiddle(str: string, maxLength: number = 35): string {
-  if (str.length <= maxLength) return str
+  const parts = graphemeParts(str)
+  if (graphemeWidth(parts) <= maxLength) return str
 
-  const ellipsis = "…"
-  const keepStart = Math.ceil((maxLength - ellipsis.length) / 2)
-  const keepEnd = Math.floor((maxLength - ellipsis.length) / 2)
-
-  return str.slice(0, keepStart) + ellipsis + str.slice(-keepEnd)
+  const keep = Math.max(0, maxLength - 1)
+  const start = takeWidth(parts, Math.ceil(keep / 2)).join("")
+  const end = takeWidth([...parts].reverse(), Math.floor(keep / 2))
+    .reverse()
+    .join("")
+  return start + "…" + end
 }
 
 export function pluralize(count: number, singular: string, plural: string): string {
