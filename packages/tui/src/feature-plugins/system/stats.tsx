@@ -175,6 +175,11 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
           </Show>
         </Show>
       </scrollbox>
+      <box flexDirection="row" justifyContent="flex-end" paddingRight={2} flexShrink={0}>
+        <text fg={theme.text.action.secondary.base} selectable={false} onMouseUp={props.onClose}>
+          esc back
+        </text>
+      </box>
     </box>
   )
 }
