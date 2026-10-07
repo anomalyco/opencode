@@ -38,8 +38,5 @@ export default {
   "form.name": "Server nomi (ixtiyoriy)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Server qo'shish",
-  "server.default": "Standart",
-  "menu.default": "Standart sifatida o'rnating",
-  "menu.defaultRemove": "Standartni olib tashlang",
   "menu.delete": "Oʻchirish",
 }

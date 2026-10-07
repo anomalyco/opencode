@@ -39,7 +39,7 @@ import {
   type Links,
   type Messages,
   type Persisted,
-  type Point,
+  type Registry,
   type Ipc,
   type IpcClient,
   type IpcRef,
@@ -51,7 +51,7 @@ import {
 import { useLanguage } from "@/runtime/i18n/language"
 import { createSessionStore, whenLoaded } from "./stores"
 
-type Entry = { key: string; point: string; extension: string; value: Accessor<unknown> }
+type Entry = { key: string; registry: string; extension: string; value: Accessor<unknown> }
 
 export type Item<T> = { readonly key: string; readonly extension: string; readonly value: T }
 
@@ -154,7 +154,7 @@ function createHost(input: HostInput) {
   const provided = new Map<string, { live: Live<unknown> & { readonly status: "active" } }>()
   const generations = new Map<string, number>()
 
-  // Entries are indexed by point and contracts versioned by token, so a change wakes only its own readers.
+  // Entries are indexed by registry and contracts versioned by token, so a change wakes only its own readers.
   const [state, setState] = createStore<HostState>({ entries: {}, contracts: {}, status: {}, failures: {} })
 
   const instances = new Map<string, Instance>()
@@ -287,14 +287,15 @@ function createHost(input: HostInput) {
     return memo
   }
 
-  const items = <T,>(point: Point<T>) => {
-    const memo = memos.get(point.id) ?? createItems(point.id)
+  const items = <T,>(registry: Registry<T>) => {
+    const memo = memos.get(registry.id) ?? createItems(registry.id)
 
-    // SAFETY: only `add` stores entries, under the id of the typed point it was given, so this point's items are T.
+    // SAFETY: only `add` stores entries, under the id of the typed registry it was given, so this registry's items
+    // are T.
     return memo() as readonly Item<T>[]
   }
 
-  const list = <T,>(point: Point<T>) => items(point).map((item) => item.value)
+  const list = <T,>(registry: Registry<T>) => items(registry).map((item) => item.value)
 
   const links: Links = {
     open(link) {
@@ -614,12 +615,12 @@ function createHost(input: HostInput) {
     const context = {
       id: extension,
       signal: controller.signal,
-      add<T>(point: Point<T>, item: T | (() => T | undefined)) {
+      add<T>(registry: Registry<T>, item: T | (() => T | undefined)) {
         if (late()) return () => {}
 
         // Promise callbacks may have no owner; fall back to the extension root.
         const read =
-          // SAFETY: a function item is the SDK's reactive form; points take no function values.
+          // SAFETY: a function item is the SDK's reactive form; registries take no function values.
           // oxlint-disable-next-line anti-slop/no-runtime-typeof -- see SAFETY above
           typeof item === "function"
             ? runWithOwner(getOwner() ?? root, () => createMemo(item as () => T | undefined))
@@ -627,13 +628,13 @@ function createHost(input: HostInput) {
 
         const key = `${extension}/${++sequence.value}`
 
-        setState("entries", point.id, (entries = []) => [
+        setState("entries", registry.id, (entries = []) => [
           ...entries,
-          { key, point: point.id, extension, value: read ?? (() => undefined) },
+          { key, registry: registry.id, extension, value: read ?? (() => undefined) },
         ])
 
         return register(() =>
-          setState("entries", point.id, (entries = []) => entries.filter((entry) => entry.key !== key)),
+          setState("entries", registry.id, (entries = []) => entries.filter((entry) => entry.key !== key)),
         )
       },
       list,
@@ -748,10 +749,10 @@ function createHost(input: HostInput) {
         batch(() => {
           Array.from(cleanups).reverse().forEach(release)
           cleanups.clear()
-          Object.entries(state.entries).forEach(([point, entries]) => {
+          Object.entries(state.entries).forEach(([registry, entries]) => {
             if (!entries?.some((entry) => entry.extension === extension)) return
 
-            setState("entries", point, (list = []) => list.filter((entry) => entry.extension !== extension))
+            setState("entries", registry, (list = []) => list.filter((entry) => entry.extension !== extension))
           })
         })
         // A throwing onCleanup in the extension's root must not stop the host disposing the rest.

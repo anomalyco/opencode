@@ -1,7 +1,8 @@
 import { app } from "electron"
 import { Context, Effect, FileSystem, Layer, Path } from "effect"
 import { BackgroundServiceState } from "./background-service-state"
-import { cleanStages, DesktopCli } from "./desktop-cli"
+import { cleanStages } from "./cli-stages"
+import { DesktopCli } from "./desktop-cli"
 import { SidecarCredentials } from "./sidecar-credentials"
 import { sidecarProbe } from "./sidecar-probe"
 
@@ -18,6 +19,7 @@ export const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const context = yield* Effect.context<FileSystem.FileSystem | Path.Path | DesktopCli.Service>()
+
     return Service.of(
       yield* BackgroundServiceState.make({
         initial: connect("initial").pipe(Effect.provide(context)),
@@ -31,12 +33,14 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
   yield* Effect.logInfo("starting v2 background service")
   const path = yield* Path.Path
   const desktopCli = yield* DesktopCli.Service
-  const runFork = Effect.runForkWith(yield* Effect.context())
+  const runFork = Effect.runForkWith(yield* Effect.context<FileSystem.FileSystem | Path.Path>())
   const isolated = !app.isPackaged && process.env.OPENCODE_DESKTOP_ISOLATED_SERVER === "1"
   const cli = yield* desktopCli.resolve
   const version = mode === "initial" ? cli.version : undefined
+
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
+
   const ensure = () =>
     client.Service.ensure({
       file:
@@ -55,27 +59,41 @@ const connect = Effect.fn("BackgroundService.connect")(function* (mode: "initial
       onStart: (reason, previousVersion) =>
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
     })
+
   // A compatible service the entry module already found is adopted at once; ensure() still runs
   // afterwards for its side effects (terminal handoff completion), off the renderer's path.
   const early = mode === "initial" && !isolated ? yield* Effect.promise(sidecarProbe) : undefined
+
   if (early) yield* Effect.sync(() => void ensure().catch(() => undefined))
   const service = early ?? (yield* Effect.tryPromise(ensure))
+
   if (service.auth?.type !== "basic") throw new Error("V2 CLI background service did not provide authentication")
   const url = new URL(service.url)
+
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
   yield* Effect.logInfo("v2 CLI background service ready", {
     version,
     probed: !!early,
     ...endpoint(url.origin),
   })
-  if (mode === "initial" && isolated && cli.binary) yield* cleanStages(cli.binary).pipe(Effect.orDie)
+
+  // Only packaged and isolated builds run a staged copy; any other binary sits in the source tree.
+  // The service now runs the current version, so an older copy at most belongs to a process still exiting.
+  if (mode === "initial" && (app.isPackaged || isolated) && cli.binary)
+    runFork(
+      cleanStages(cli.binary).pipe(
+        Effect.catch((error) => Effect.logError("failed to clean staged v2 CLIs", { error })),
+      ),
+    )
   const ready = { url: url.origin, password: service.auth.password } satisfies SidecarCredentials.Data
   SidecarCredentials.set(ready)
+
   return ready
 })
 
 function endpoint(url: string | undefined) {
   if (!url || !URL.canParse(url)) return {}
   const parsed = new URL(url)
+
   return { url, hostname: parsed.hostname, port: parsed.port }
 }

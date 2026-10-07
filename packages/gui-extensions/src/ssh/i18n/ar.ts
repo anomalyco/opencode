@@ -33,8 +33,5 @@ export default {
   "form.name": "اسم الخادم (اختياري)",
   "form.namePlaceholder": "Localhost",
   "form.add": "إضافة خادم",
-  "server.default": "افتراضي",
-  "menu.default": "تعيين كافتراضي",
-  "menu.defaultRemove": "إزالة الافتراضي",
   "menu.delete": "حذف",
 }

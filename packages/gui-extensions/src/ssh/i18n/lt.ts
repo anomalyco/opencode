@@ -36,8 +36,5 @@ export default {
   "form.name": "Serverio pavadinimas (neprivaloma)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Pridėti serverį",
-  "server.default": "Numatytoji",
-  "menu.default": "Nustatyti kaip numatytąjį",
-  "menu.defaultRemove": "Pašalinti numatytąjį",
   "menu.delete": "Ištrinti",
 }

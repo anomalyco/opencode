@@ -1,7 +1,7 @@
 import type { BrowserWindow, NativeImage, WebContentsView } from "electron"
 import type { Schema } from "effect"
 import {
-  Point,
+  Registry,
   type BaseContext,
   type Build,
   type Cleanup,
@@ -393,8 +393,8 @@ export interface MenubarItem {
 }
 
 /**
- * A point: an item of the native app menu, contributed from a main entry. Windows without a native menubar show it in
- * the in-app menu.
+ * The registry of native app menu items, contributed from main entries. Windows without a native menubar show them
+ * in the in-app menu.
  *
  * @example
  * ```ts
@@ -408,4 +408,4 @@ export interface MenubarItem {
  * })
  * ```
  */
-export const MenubarItem = Point.define<MenubarItem>("menubar-item")
+export const MenubarItem = Registry.define<MenubarItem>("menubar-item")

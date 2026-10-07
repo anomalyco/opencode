@@ -63,6 +63,8 @@ export function Icon(props: IconProps) {
       data-directional={
         iconName() === "arrow-left" ||
         iconName() === "arrow-right" ||
+        iconName() === "outline-arrow-left" ||
+        iconName() === "outline-arrow-right" ||
         iconName() === "chevron-left" ||
         iconName() === "chevron-right"
           ? ""

@@ -19,15 +19,18 @@ export function createTimelineCache(
 ) {
   const owner = getOwner()
   let workspace = untrack(session.identity.workspaceKey)
+
   const cache = createScopedCache(
     (key) =>
       createRoot((dispose) => {
         const id = untrack(session.identity.sessionID)
         const sessionKey = untrack(session.identity.sessionKey)
         const active = createMemo(() => visible() && session.identity.sessionKey() === key)
+
         // A detached view retains its own inputs until it is selected again.
         const select = <T>(read: Accessor<T>) =>
           createMemo<T>((previous) => (active() ? read() : previous), untrack(read))
+
         return {
           value: render(
             {
@@ -51,19 +54,24 @@ export function createTimelineCache(
       }, owner),
     { maxEntries: 16, dispose: (entry) => entry.dispose() },
   )
+
   onCleanup(cache.clear)
+
   const syncWorkspace = (key: string) => {
     if (workspace === key) return
     workspace = key
     cache.clear()
   }
+
   // Providers follow the selected Location even while its history is loading.
   // Dispose detached views before their effects can read the new Location.
   createComputed(on(session.identity.workspaceKey, syncWorkspace, { defer: true }))
+
   return () => {
     // A tab's render can run before the workspace watcher in the same batch.
     // Clear the old workspace here, and let that later watcher keep this view.
     syncWorkspace(session.identity.workspaceKey())
+
     return cache.get(session.identity.sessionKey()).value
   }
 }

@@ -11,6 +11,7 @@ const sessions = Array.from({ length: 8 }, (_, index) => ({
   id: `ses_prefetch_${index}`,
   title: `Renderer review ${index}`,
 }))
+
 // A normal first page, not the full-history response used by the tab-switch benchmark.
 const pages = Object.fromEntries(
   sessions.map((session) => [
@@ -18,6 +19,7 @@ const pages = Object.fromEntries(
     messages[fixture.targetID].slice(-20).map((message) => ({ ...message, id: `${message.id}_${session.id}` })),
   ]),
 )
+
 const workload = {
   sessions: sessions.length,
   messagesPerPage: 20,
@@ -33,6 +35,7 @@ const workload = {
   ),
   events: 0,
 }
+
 type ProbeWindow = Window & { __prefetchBodies?: Record<string, number> }
 
 benchmark.use({ viewport: { width: 1440, height: 900 }, video: "off", trace: "off", serviceWorkers: "block" })
@@ -55,8 +58,10 @@ for (const close of [false, true]) {
       })
       page.on("request", (request) => {
         const path = new URL(request.url()).pathname
+
         if (request.method() === "DELETE" || /\/(interrupt|prompt)$/.test(path)) mutations.push(request.url())
         const inbox = path.match(/^\/api\/session\/([^/]+)\/inbox$/)
+
         if (request.method() === "GET" && inbox) inboxReads.push(inbox[1])
       })
       await page.addInitScript(() => {
@@ -65,10 +70,12 @@ for (const close of [false, true]) {
         const text = Response.prototype.text
         Response.prototype.text = async function () {
           const body = await text.call(this)
+
           if (this.url) {
             const path = new URL(this.url).pathname
             host.__prefetchBodies![path] = (host.__prefetchBodies![path] ?? 0) + 1
           }
+
           return body
         }
       })
@@ -99,28 +106,35 @@ for (const close of [false, true]) {
       const speculativeReads = reads.filter((id) => id !== sessions[0].id)
       const speculativeInboxReads = inboxReads.filter((id) => id !== sessions[0].id).length
       const closed = sessions.at(-1)!
+
       if (close) {
         const tab = page
           .locator("[data-titlebar-tab-slot]")
           .filter({ has: page.locator(`a[href="${sessionHref(closed.id)}"]`) })
+
         await tab.getByRole("button", { name: "Close tab", exact: true }).click()
         await expect(tab).toHaveCount(0)
       }
+
       gate.resolve()
       await page.waitForFunction(
         (ids) => ids.every((id) => (window as ProbeWindow).__prefetchBodies![`/api/session/${id}/message`] > 0),
         reads,
       )
       await expectSessionTitle(page, sessions[0].title)
+
       const heap =
         process.env.OPENCODE_PERFORMANCE_MEMORY === "1"
           ? await cdp.send("HeapProfiler.collectGarbage").then(() => cdp.send("Runtime.getHeapUsage"))
           : undefined
+
       const task =
         (await cdp.send("Performance.getMetrics")).metrics.find((metric) => metric.name === "TaskDuration")!.value *
         1000
+
       const before = reads.length
       const target = sessions[1]
+
       const result = await measureSessionSwitch(page, {
         destinationIDs: pages[target.id].map((message) => message.id),
         sourceIDs: pages[sessions[0].id].map((message) => message.id),
@@ -132,6 +146,7 @@ for (const close of [false, true]) {
           await expectSessionTitle(page, target.title)
         },
       })
+
       await expect(
         page.locator(`[data-timeline-part-id="${pages[target.id].at(-1)!.id}:text:0"] [data-component="markdown"]`),
       ).toHaveAttribute("data-markdown-ready", "")
@@ -159,6 +174,7 @@ for (const close of [false, true]) {
           scope: "production app renderer; not total desktop RAM",
         },
       )
+
       if (testInfo.repeatEachIndex === 0) await page.screenshot({ path: testInfo.outputPath("destination.png") })
       await cdp.detach()
     },

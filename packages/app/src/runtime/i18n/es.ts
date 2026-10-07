@@ -23,7 +23,6 @@ export const dict = {
   "server.connect.address.invalid": "Ingrese una dirección de servidor HTTP o HTTPS válida.",
   "server.connect.failed":
     "No se pudo conectar. Verifique la dirección y la contraseña del servidor y vuelva a intentarlo.",
-  "server.connect.pair.description": "Ejecute este comando en su computadora para obtener los detalles de su conexión.",
   "server.connect.scan": "Escanea el código QR",
   "server.connect.scan.description": "Apunte su cámara al código QR mostrado por opencode pair.",
   "server.connect.scan.invalid":
@@ -32,7 +31,6 @@ export const dict = {
   "server.connect.camera.starting": "Abriendo cámara...",
   "server.connect.mixedContent":
     "No se pudo conectar a este servidor HTTP desde una página HTTPS. Utilice una dirección de servidor HTTPS en su lugar.",
-  "server.connect.camera.insecure": "El escaneo de QR requiere abrir esta página en HTTPS o en localhost.",
   "server.connect.camera.unavailable":
     "No hay ninguna cámara disponible para este navegador. Ingrese los detalles de su conexión manualmente.",
   "server.connect.camera.error":
@@ -537,9 +535,6 @@ export const dict = {
   "dialog.server.edit.title": "Editar servidor",
 
   "dialog.server.menu.edit": "Editar",
-  "dialog.server.menu.default": "Establecer como predeterminado",
-  "dialog.server.menu.defaultRemove": "Quitar como predeterminado",
-  "dialog.server.status.default": "Predeterminado",
 
   "dialog.project.edit.title": "Editar proyecto",
   "dialog.project.edit.icon": "Icono",

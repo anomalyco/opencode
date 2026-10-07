@@ -49,6 +49,35 @@ function withoutEmptyCompatibilityContainers(input: Record<string, unknown>) {
 }
 
 describe("ConfigNormalize", () => {
+  test("accepts tool.use without losing statement order", () => {
+    const policies = [
+      { action: "tool.use", effect: "deny", resource: "shell:*" },
+      { action: "tool.use", effect: "allow", resource: "shell:git *" },
+      { action: "tool.use", effect: "deny", resource: "shell:git push *" },
+    ] as const
+    const result = normalized({ experimental: { policies } })
+    expect(result.diagnostics).toEqual([])
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).experimental?.policies).toEqual(policies)
+  })
+
+  test("drops unsupported policy actions without losing supported policies", () => {
+    const supported = { action: "tool.use", effect: "deny", resource: "shell:*" } as const
+    const result = normalized({
+      experimental: {
+        policies: [
+          { action: "permission", effect: "allow", resource: "*" },
+          supported,
+          { action: "future.use", effect: "deny", resource: "*" },
+        ],
+      },
+    })
+    expect(Schema.decodeUnknownSync(Info)(result.encoded).experimental?.policies).toEqual([supported])
+    expect(result.diagnostics.map((diagnostic) => diagnostic.path)).toEqual([
+      ["experimental", "policies", "0"],
+      ["experimental", "policies", "2"],
+    ])
+  })
+
   test("rejects every non-object root with one root diagnostic", () => {
     for (const input of [null, [], "config", true, 1]) {
       expect(ConfigNormalize.normalize(input)).toEqual({
@@ -506,6 +535,60 @@ describe("ConfigNormalize", () => {
       ["agent", "invalid", "model"],
       ["agent", "invalid", "variant"],
     ])
+  })
+
+  test("migrates the legacy thinking block-binding opt-out into model compatibility", () => {
+    const result = normalized({
+      provider: {
+        gateway: {
+          models: {
+            anthropic: { options: { thinking: { type: "adaptive", blockBinding: false }, effort: "high" } },
+            bedrock: { options: { reasoningConfig: { blockBinding: false } } },
+            both: {
+              options: {
+                thinking: { type: "adaptive", blockBinding: false },
+                reasoningConfig: { type: "adaptive", blockBinding: false },
+              },
+            },
+            untouched: { options: { thinking: { type: "adaptive" } } },
+          },
+        },
+      },
+    })
+    expect(result.encoded.providers).toMatchObject({
+      gateway: {
+        models: {
+          anthropic: {
+            compatibility: { supportsThinkingBlockBinding: false },
+            settings: { thinking: { type: "adaptive" }, effort: "high" },
+          },
+          bedrock: { compatibility: { supportsThinkingBlockBinding: false }, settings: {} },
+          both: {
+            compatibility: { supportsThinkingBlockBinding: false },
+            settings: { thinking: { type: "adaptive" }, reasoningConfig: { type: "adaptive" } },
+          },
+          untouched: { settings: { thinking: { type: "adaptive" } } },
+        },
+      },
+    })
+    expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "bedrock", "settings", "reasoningConfig"])
+    expect(result.encoded.providers).not.toHaveProperty([
+      "gateway",
+      "models",
+      "both",
+      "settings",
+      "thinking",
+      "blockBinding",
+    ])
+    expect(result.encoded.providers).not.toHaveProperty([
+      "gateway",
+      "models",
+      "both",
+      "settings",
+      "reasoningConfig",
+      "blockBinding",
+    ])
+    expect(result.encoded.providers).not.toHaveProperty(["gateway", "models", "untouched", "compatibility"])
   })
 
   test("invalid legacy provider overlays skip only that provider", () => {

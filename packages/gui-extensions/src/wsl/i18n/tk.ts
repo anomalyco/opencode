@@ -51,8 +51,5 @@ export default {
   "error.healthTimeout": "{{distro}} saglyk barlagy üçin Sidecar, {{timeout}}ms-den soň gutardy",
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms-den soň gutardy",
   "error.failedPort": "Port alyp bilmedi",
-  "server.default": "Bellenen",
-  "menu.default": "Dymmaklyk hökmünde düzüň",
-  "menu.defaultRemove": "Dymmaklygy aýyryň",
   "menu.remove": "Aýyr",
 }

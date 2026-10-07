@@ -2,9 +2,13 @@ import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/clie
 import { shellResultFailed } from "../message/current-tool-state"
 
 export const timelineCategories = ["shell", "edit", "thinking", "subagents", "notices", "tools"] as const
+
 export type TimelineCategory = (typeof timelineCategories)[number]
+
 export type TimelinePlacement = "separate" | "grouped" | "hidden"
+
 export type TimelineExpansion = "collapsed" | "expanded"
+
 export type TimelineDetail = {
   shell: { placement: TimelinePlacement; details: TimelineExpansion }
   edit: { placement: TimelinePlacement; details: TimelineExpansion }
@@ -77,6 +81,7 @@ export function timelinePreset(value: TimelineDetail) {
     timelineCategories.every((category) => {
       const current = value[category]
       const expected = preset.value[category]
+
       return (
         current.placement === expected.placement &&
         (current.placement === "hidden" ||
@@ -91,17 +96,24 @@ export function timelineCategory(
   content: SessionMessageAssistant["content"][number],
 ): keyof TimelineDetail | undefined {
   if (content.type === "text") return
+
   if (content.type === "reasoning") return "thinking"
+
   if (["shell", "execute", "bash"].includes(content.name)) return "shell"
+
   if (["edit", "write", "patch", "apply_patch"].includes(content.name)) return "edit"
+
   if (["subagent", "task"].includes(content.name)) return "subagents"
+
   return "tools"
 }
 
 export function timelineNoticeRequired(message: SessionMessageInfo) {
   if (message.type === "compaction") return message.status !== "completed"
+
   if (message.type !== "synthetic") return false
   const metadata = message.metadata
+
   return (
     metadata?.state === "error" ||
     (metadata?.source === "shell" && metadata.state === "completed" && shellResultFailed(metadata))

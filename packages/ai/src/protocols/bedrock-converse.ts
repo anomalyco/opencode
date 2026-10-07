@@ -476,7 +476,9 @@ const MIN_THINKING_BUDGET = 1_024
 
 const isThinkingDisabled = Schema.is(
   Schema.Struct({
-    additionalModelRequestFields: Schema.Struct({ thinking: Schema.Struct({ type: Schema.Literal("disabled") }) }),
+    additionalModelRequestFields: Schema.Struct({
+      thinking: Schema.Struct({ type: Schema.Literals(["disabled", "between_tools"]) }),
+    }),
   }),
 )
 

@@ -52,8 +52,5 @@ export default {
   "error.healthTimeout": "Baigėsi {{distro}} pagalbinio proceso būklės patikros {{timeout}} ms skirtasis laikas",
   "error.commandTimeout": "Baigėsi komandai {{command}} {{args}} skirtas {{timeout}} ms laikas",
   "error.failedPort": "Nepavyko gauti prievado",
-  "server.default": "Numatytoji",
-  "menu.default": "Nustatyti kaip numatytąjį",
-  "menu.defaultRemove": "Pašalinti numatytąjį",
   "menu.remove": "Pašalinti",
 }

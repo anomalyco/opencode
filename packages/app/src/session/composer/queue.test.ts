@@ -20,7 +20,9 @@ const queued = [
     payload: { text: "edited" },
   },
 ] satisfies SessionInboxInfo[]
+
 const other = { ...queued[0], id: "msg_other", payload: { text: "other" } }
+
 const edit = { original: "msg_original", replacement: "msg_replacement" }
 
 describe("queuedPromptRows", () => {

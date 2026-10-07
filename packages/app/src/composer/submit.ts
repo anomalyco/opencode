@@ -332,6 +332,8 @@ function clearSubmission(input: ComposerSubmitInput, submission: ReturnType<type
   submission.target().mode.set("normal")
   input.setMode("normal")
   input.closePopover()
+
+  if (window.matchMedia("(max-width: 767px)").matches) input.editor()?.blur()
 }
 
 function restoreSubmission(
@@ -455,6 +457,7 @@ async function applySelection(
   session: ComposerSession,
   selection: ComposerSelection,
   track?: ModelSelection["trackSessionCommit"],
+  beforeModel?: () => Promise<void>,
 ) {
   const cancel = track?.(session.id, selection)
 
@@ -464,6 +467,8 @@ async function applySelection(
     if (current?.agent !== selection.agent) {
       await session.api.switchAgent({ sessionID: session.id, agent: selection.agent })
     }
+
+    await beforeModel?.()
 
     // The server deduplicates unchanged selections; cached SSE state may still be behind an earlier switch.
     await session.api.switchModel({
@@ -489,9 +494,14 @@ async function sendPrompt(
   // selection applies now; a queued follow-up must not reconfigure the turn it
   // waits behind, so it runs with the session selection at delivery time (the
   // intended selection stays recorded in its metadata).
-  if (value.delivery === "steer") {
-    await applySelection(session, value.selection, track)
+  // Like the TUI, a staged revert settles after the agent switch and before the model switch and admission. The
+  // server would otherwise commit it on admission and delete every row from its boundary on, the model switch too.
+  const settle = async () => {
+    if (session.current()?.revert) await session.api.revert.commit({ sessionID: session.id })
   }
+
+  if (value.delivery === "steer") await applySelection(session, value.selection, track, settle)
+  else await settle()
 
   const admission = {
     id: value.id,

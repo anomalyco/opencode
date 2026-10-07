@@ -1,7 +1,14 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot, getOwner, onCleanup } from "solid-js"
 import { createTabMemory } from "./memory"
-import { nextTabAfterClose, pushClosedTab, removeClosedTabs, takeClosedTab, type ClosedTab } from "./closed"
+import {
+  listClosedTabs,
+  nextTabAfterClose,
+  pushClosedTab,
+  removeClosedTabs,
+  takeClosedTab,
+  type ClosedTab,
+} from "./closed"
 import { findSessionTab, sessionIDHasOpenTab, tabHref, tabKey, type SessionTab, type Tab } from "./tabs"
 import { Schema } from "effect"
 import { TabStorage } from "./schema"
@@ -144,10 +151,21 @@ describe("tab memory", () => {
 })
 
 describe("closed tab stack", () => {
-  test("records session tabs with their index and ignores draft tabs", () => {
+  test("records session tabs with their index", () => {
+    const stack = pushClosedTab([], sessionTab("a"), 2, {
+      title: "Alpha",
+      directory: "/project",
+      prompted: true,
+    })
+
+    expect(stack).toEqual([
+      { tab: sessionTab("a"), index: 2, info: { title: "Alpha", directory: "/project", prompted: true } },
+    ])
+  })
+
+  test("ignores draft tabs", () => {
     const draft: Tab = { type: "draft", draftID: "d1", server, directory: "/tmp" }
 
-    expect(pushClosedTab([], sessionTab("a"), 2)).toEqual([{ tab: sessionTab("a"), index: 2 }])
     expect(pushClosedTab([], draft, 0)).toEqual([])
   })
 
@@ -162,16 +180,85 @@ describe("closed tab stack", () => {
     expect(stack.at(-1)?.tab.sessionId).toBe("s29")
   })
 
-  test("pops the most recently closed tab that is not already open", () => {
+  test("keeps only the newest close record for a session", () => {
+    const stack = pushClosedTab(
+      pushClosedTab([], sessionTab("a"), 1, { title: "Old", directory: "/old", prompted: true }),
+      sessionTab("a"),
+      3,
+      { title: "New", directory: "/new", prompted: true },
+    )
+
+    expect(stack).toEqual([
+      { tab: sessionTab("a"), index: 3, info: { title: "New", directory: "/new", prompted: true } },
+    ])
+  })
+
+  test("pops the most recently closed tab", () => {
     const stack = [
       { tab: sessionTab("a"), index: 0 },
       { tab: sessionTab("b"), index: 1 },
     ]
 
-    expect(takeClosedTab(stack, [])).toEqual({ entry: stack[1], stack: [stack[0]] })
-    expect(takeClosedTab(stack, [sessionTab("b")])).toEqual({ entry: stack[0], stack: [] })
-    expect(takeClosedTab(stack, [sessionTab("a"), sessionTab("b")])).toEqual({ entry: undefined, stack: [] })
+    const result = takeClosedTab(stack, [])
+
+    expect(result.entry?.tab.sessionId).toBe("b")
+    expect(result.stack).toEqual([{ tab: sessionTab("a"), index: 0 }])
+  })
+
+  test("skips entries whose tab is already open", () => {
+    const stack = [
+      { tab: sessionTab("a"), index: 0 },
+      { tab: sessionTab("b"), index: 1 },
+    ]
+
+    const result = takeClosedTab(stack, [sessionTab("b")])
+
+    expect(result.entry?.tab.sessionId).toBe("a")
+    expect(result.stack).toEqual([])
+  })
+
+  test("lists closed tabs from newest to oldest and excludes open tabs", () => {
+    const stack = [
+      { tab: sessionTab("a"), index: 0 },
+      { tab: sessionTab("b"), index: 1 },
+      { tab: sessionTab("c"), index: 2 },
+    ]
+
+    expect(listClosedTabs(stack, [sessionTab("b")]).map((entry) => entry.tab.sessionId)).toEqual(["c", "a"])
+  })
+
+  test("deduplicates previously stored close records", () => {
+    const stack = [
+      { tab: sessionTab("a"), index: 0 },
+      { tab: sessionTab("b"), index: 1 },
+      { tab: sessionTab("a"), index: 2 },
+    ]
+
+    expect(listClosedTabs(stack, []).map((entry) => [entry.tab.sessionId, entry.index])).toEqual([
+      ["a", 2],
+      ["b", 1],
+    ])
+  })
+
+  test("takes a selected closed tab without removing newer entries", () => {
+    const stack = [
+      { tab: sessionTab("a"), index: 0 },
+      { tab: sessionTab("b"), index: 1 },
+      { tab: sessionTab("c"), index: 2 },
+    ]
+
+    const result = takeClosedTab(stack, [], sessionTab("a"))
+
+    expect(result.entry?.tab.sessionId).toBe("a")
+    expect(result.stack.map((entry) => entry.tab.sessionId)).toEqual(["b", "c"])
+  })
+
+  test("returns no entry when everything is open or empty", () => {
     expect(takeClosedTab([], []).entry).toBeUndefined()
+
+    const result = takeClosedTab([{ tab: sessionTab("a"), index: 0 }], [sessionTab("a")])
+    expect(result.entry).toBeUndefined()
+    expect(result.stack).toEqual([])
   })
 
   test("purges removed sessions", () => {

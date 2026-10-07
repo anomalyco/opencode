@@ -22,7 +22,6 @@ export const dict = {
   "server.connect.button": "Anslut",
   "server.connect.address.invalid": "Ange en giltig HTTP- eller HTTPS-serveradress.",
   "server.connect.failed": "Kunde inte ansluta. Kontrollera serveradressen och lösenordet och försök sedan igen.",
-  "server.connect.pair.description": "Kör det här kommandot på din dator för att få din anslutningsinformation.",
   "server.connect.scan": "Skanna QR-koden",
   "server.connect.scan.description": "Rikta kameran mot QR-koden som visas av opencode pair.",
   "server.connect.scan.invalid": "Detta är inte en OpenCode parningskod. Skanna koden som visas av opencode pair.",
@@ -30,7 +29,6 @@ export const dict = {
   "server.connect.camera.starting": "Öppnar kameran...",
   "server.connect.mixedContent":
     "Det gick inte att ansluta till denna HTTP-server från en HTTPS-sida. Använd en HTTPS-serveradress istället.",
-  "server.connect.camera.insecure": "QR-skanning kräver att den här sidan öppnas över HTTPS eller på localhost.",
   "server.connect.camera.unavailable":
     "Ingen kamera är tillgänglig för den här webbläsaren. Ange dina anslutningsuppgifter manuellt.",
   "server.connect.camera.error":
@@ -493,9 +491,6 @@ export const dict = {
   "dialog.server.add.passwordPlaceholder": "lösenord",
   "dialog.server.edit.title": "Redigera server",
   "dialog.server.menu.edit": "Redigera",
-  "dialog.server.menu.default": "Ställ in som standard",
-  "dialog.server.menu.defaultRemove": "Ta bort standard",
-  "dialog.server.status.default": "Standard",
   "dialog.project.edit.title": "Redigera projekt",
   "dialog.project.edit.icon": "Ikon",
   "dialog.project.edit.icon.alt": "Projektikonen",

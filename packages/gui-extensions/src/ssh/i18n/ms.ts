@@ -35,8 +35,5 @@ export default {
   "form.name": "Nama pelayan (pilihan)",
   "form.namePlaceholder": "Localhost",
   "form.add": "Tambah pelayan",
-  "server.default": "Lalai",
-  "menu.default": "Tetapkan sebagai lalai",
-  "menu.defaultRemove": "Buang lalai",
   "menu.delete": "Padam",
 }
