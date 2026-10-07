@@ -63,8 +63,7 @@ export function importLegacyCredentials(tx: Parameters<DatabaseMigration.Migrati
 
       const credential =
         value.type === "api"
-          ? // V1 stored connect-form answers, such as an Azure resource name, as API key metadata.
-            Credential.Key.make({ type: "key", key: value.key, configuration: value.metadata })
+          ? Credential.Key.make({ type: "key", key: value.key, metadata: value.metadata })
           : value.type === "wellknown"
             ? Credential.Key.make({ type: "key", key: value.token })
             : Credential.OAuth.make({

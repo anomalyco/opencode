@@ -14,7 +14,6 @@ import workspaceNameMigration from "@opencode/core/database/migration/2026041017
 import { Database } from "@opencode/core/database/database"
 import { tmpdir } from "./fixture/tmpdir"
 import legacyCredentialsMigration from "@opencode/core/database/migration/20260805200742_import_legacy_credentials"
-import legacyKeyConfigurationMigration from "@opencode/core/database/migration/20261006143000_legacy_key_configuration"
 import worktreeMigration from "@opencode/core/database/migration/20260812213948_worktree"
 import previousV2Migration from "@opencode/core/database/migration/20260804233008_loose_psylocke"
 import workspaceMigration from "@opencode/core/database/migration/20260808023530_workspace_domain"
@@ -485,7 +484,7 @@ describe("DatabaseMigration", () => {
             {
               integration_id: "google",
               label: "API key",
-              value: JSON.stringify({ type: "key", key: "google-key", configuration: { region: "us" } }),
+              value: JSON.stringify({ type: "key", key: "google-key", metadata: { region: "us" } }),
             },
             {
               integration_id: "https://example.com",
@@ -514,68 +513,6 @@ describe("DatabaseMigration", () => {
     )
 
     expect(await Bun.file(source).text()).toBe(content)
-  })
-
-  test("moves imported legacy API key metadata into configuration", async () => {
-    await run(
-      Effect.gen(function* () {
-        const db = yield* makeDb
-        yield* DatabaseMigration.apply(db)
-        const now = Date.now()
-        const rows = [
-          ["azure", { type: "key", key: "azure-key", metadata: { resourceName: "my-models" } }],
-          [
-            "cloudflare-ai-gateway",
-            {
-              type: "key",
-              key: "gateway-key",
-              metadata: { accountId: "legacy-account", gatewayId: "gateway" },
-              configuration: { accountId: "current-account" },
-            },
-          ],
-          ["custom", { type: "key", key: "custom-key", metadata: { nested: { value: 1 } } }],
-          ["plain", { type: "key", key: "plain-key" }],
-          [
-            "openai",
-            {
-              type: "oauth",
-              methodID: "chatgpt-browser",
-              refresh: "refresh",
-              access: "access",
-              expires: 123,
-              metadata: { accountID: "account" },
-            },
-          ],
-        ] as const
-        yield* Effect.forEach(rows, ([id, value]) =>
-          db.run(sql`
-            INSERT INTO credential (id, integration_id, label, value, time_created, time_updated)
-            VALUES (${id}, ${id}, 'Label', ${JSON.stringify(value)}, ${now}, ${now})
-          `),
-        )
-
-        yield* db.run(sql`DELETE FROM migration WHERE id = ${legacyKeyConfigurationMigration.id}`)
-        yield* DatabaseMigration.applyOnly(db, [legacyKeyConfigurationMigration])
-
-        const values = Object.fromEntries(
-          (yield* db.all<{ id: string; value: string }>(sql`SELECT id, value FROM credential`)).map((row) => [
-            row.id,
-            JSON.parse(row.value),
-          ]),
-        )
-        expect(values).toEqual({
-          azure: { type: "key", key: "azure-key", configuration: { resourceName: "my-models" } },
-          "cloudflare-ai-gateway": {
-            type: "key",
-            key: "gateway-key",
-            configuration: { accountId: "current-account", gatewayId: "gateway" },
-          },
-          custom: rows[2][1],
-          plain: rows[3][1],
-          openai: rows[4][1],
-        })
-      }),
-    )
   })
 
   test("skips legacy credential import when the source file is absent", async () => {
