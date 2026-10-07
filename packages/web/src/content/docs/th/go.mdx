@@ -95,7 +95,7 @@ OpenCode Go ทำงานเหมือนผู้ให้บริกา�
 - **DeepSeek V4 Flash Vision Exp**
 - **Hy4 preview**
 - **Hy3**
-- **Space Bunny Free** (ในช่วงเวลาจำกัด)
+- **Space Bunny**
 
 รายการโมเดลอาจเปลี่ยนแปลงเมื่อเราทดสอบและเพิ่มโมเดลใหม่
 
@@ -190,7 +190,7 @@ OpenCode Go ออกแบบมาสำหรับ [OpenCode](https://openco
     | DeepSeek V4 Flash Vision Exp (Peak)     | $0.30  | $1.20  | $0.006      | -            | **$15**                                        |
     | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | **$30**                                        |
     | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | **$60**                                        |
-    | Space Bunny Free                        | ฟรี    | ฟรี    | ฟรี        | -            | **ไม่จำกัด**<br /><small>ในช่วงเวลาจำกัด</small> |
+    | Space Bunny                             | $0.15  | $0.60  | $0.03      | -            | **$30**                                          |
     | Grok 4.7 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                        |
     | Grok 4.7 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | **$15**                                        |
     | Grok 4.6 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$15**                                        |
@@ -235,7 +235,7 @@ OpenCode Go ออกแบบมาสำหรับ [OpenCode](https://openco
     | DeepSeek V4 Flash Vision Exp (Peak)     | $0.30  | $1.20  | $0.006      | -            | **$60**                                        |
     | Hy4 preview                             | $0.834 | $2.501 | $0.042      | -            | **$120**                                       |
     | Hy3                                     | $0.14  | $0.58  | $0.035      | -            | **$240**                                       |
-    | Space Bunny Free                        | ฟรี    | ฟรี    | ฟรี        | -            | **ไม่จำกัด**<br /><small>ในช่วงเวลาจำกัด</small> |
+    | Space Bunny                             | $0.15  | $0.60  | $0.03      | -            | **$120**                                         |
     | Grok 4.7 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$60**                                        |
     | Grok 4.7 (> 200K tokens)                | $4.00  | $12.00 | $1.00       | -            | **$60**                                        |
     | Grok 4.6 (≤ 200K tokens)                | $2.00  | $6.00  | $0.50       | -            | **$60**                                        |
@@ -247,8 +247,6 @@ OpenCode Go ออกแบบมาสำหรับ [OpenCode](https://openco
 
   </TabItem>
 </Tabs>
-
-**Space Bunny Free:** ใช้งานฟรีในช่วงเวลาจำกัด
 
 **LongCat 2.5 Preview Free:** ใช้งานฟรีในช่วงเวลาจำกัด
 
@@ -291,7 +289,7 @@ Plus จะเพิ่มตามขีดจำกัดการใช้ง
     | DeepSeek V4 Flash Vision Exp | 6,500                | 16,250            | 32,500             |
     | Hy4 preview                  | 1,350                | 3,380             | 6,770              |
     | Hy3                          | 4,300                | 10,750            | 21,500             |
-    | Space Bunny Free             | ไม่จำกัด              | ไม่จำกัด          | ไม่จำกัด                  |
+    | Space Bunny                  | 3,130                 | 7,810             | 15,630                    |
     | Grok 4.7                     | 169                  | 423               | 845                |
     | Grok 4.6                     | 169                  | 423               | 845                |
     | GPT 6 Luna                   | 4,230                | 10,560            | 21,130             |
@@ -327,7 +325,7 @@ Plus จะเพิ่มตามขีดจำกัดการใช้ง
     | DeepSeek V4 Flash Vision Exp | 26,000               | 65,000            | 130,000            |
     | Hy4 preview                  | 5,400                | 13,520            | 27,080             |
     | Hy3                          | 17,200               | 43,000            | 86,000             |
-    | Space Bunny Free             | ไม่จำกัด              | ไม่จำกัด          | ไม่จำกัด                  |
+    | Space Bunny                  | 12,500                | 31,250            | 62,500                    |
     | Grok 4.7                     | 676                  | 1,692             | 3,380              |
     | Grok 4.6                     | 676                  | 1,692             | 3,380              |
     | GPT 6 Luna                   | 16,920               | 42,240            | 84,520             |
@@ -363,6 +361,7 @@ Plus จะเพิ่มตามขีดจำกัดการใช้ง
 - Qwen3.7 Plus — 500 input, 57,000 cached, 190 output tokens ต่อคำขอ
 - Hy4 preview — 830 input, 71,500 cached, 295 output tokens ต่อคำขอ
 - Hy3 — 830 input, 71,500 cached, 295 output tokens ต่อคำขอ
+- Space Bunny — 1,000 input, 55,000 cached, 200 output tokens ต่อคำขอ
 
 คุณสามารถติดตามการใช้งานปัจจุบันได้ใน **<a href={console}>console</a>**
 
@@ -429,7 +428,7 @@ Plus จะเพิ่มตามขีดจำกัดการใช้ง
 | Qwen3.7 Plus                 | qwen3.7-plus                 | `https://opencode.ai/zen/go/v1/messages`         | `@ai-sdk/anthropic`         |
 | Hy4 preview                  | hy4-preview                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 | Hy3                          | hy3                          | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
-| Space Bunny Free             | space-bunny-free             | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
+| Space Bunny                  | space-bunny                  | `https://opencode.ai/zen/go/v1/chat/completions` | `@ai-sdk/openai-compatible` |
 
 [model id](/docs/config/#models) ใน OpenCode config
 ใช้รูปแบบ `opencode-go/<model-id>` ตัวอย่างเช่น สำหรับ Kimi K3 ให้
@@ -479,7 +478,7 @@ https://opencode.ai/zen/go/v1/models
 | DeepSeek V4 Flash Vision Exp | ไม่นำไปใช้  | 0 วัน\*            |
 | Hy4 preview                  | ไม่นำไปใช้  | 0 วัน              |
 | Hy3                          | ไม่นำไปใช้  | 0 วัน              |
-| Space Bunny Free             | ไม่นำไปใช้  | 0 วัน              |
+| Space Bunny                  | ไม่นำไปใช้  | 0 วัน              |
 | LongCat 2.5 Preview Free     | ไม่นำไปใช้  | 0 วัน              |
 
 - **Grok 4.7/4.6:** ZDR ปิดใช้ฟีเจอร์ API สำคัญที่ต้องอาศัยข้อมูลที่จัดเก็บไว้ รวมถึง Responses API แบบมีสถานะ, Files and Collections และ Batch API [ดูข้อมูลเพิ่มเติม](https://docs.x.ai/developers/faq/security#what-is-zero-data-retention-zdr)

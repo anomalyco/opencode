@@ -6,6 +6,7 @@ import {
   type MarketDay,
   type TokenCostEntry,
 } from "@opencode-ai/stats-core/domain/home"
+import { statModel } from "@opencode-ai/stats-core/domain/model-normalization"
 import { runStatsEffect } from "../stats-runtime"
 import {
   catalogSlug,
@@ -73,6 +74,7 @@ export async function loadModelPage(labParam: string, modelParam: string) {
   return {
     catalog: {
       entry,
+      stealthSpecs: entry ? null : (catalog.stealthSpecs[statModel(stats?.model ?? modelParam, undefined)] ?? null),
       labs: catalog.labs.map((item) => ({ id: item.id, name: item.name })),
       labModels:
         catalog.labs
