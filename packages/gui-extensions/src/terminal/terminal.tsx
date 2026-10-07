@@ -648,7 +648,8 @@ export const Terminal = (props: TerminalProps) => {
             cursor: seek,
           })
           .catch((err) => {
-            fail(err)
+            // A failed connection does not mean the PTY exited; retry checks its status first.
+            retry(err)
 
             return undefined
           })

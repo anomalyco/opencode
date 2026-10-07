@@ -240,7 +240,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   credential?: Credential.Value,
   dependencies?: Dependencies,
 ) {
-  const resolved = prepareRuntimeModel(model, credential)
+  const resolved = prepareRuntimeModel(model)
   const configuration = credential?.type === "key" ? credential.configuration : undefined
   const configured = { ...resolved.settings, ...credential?.metadata, ...configuration }
   if (Provider.isAISDK(resolved.package)) {
@@ -298,15 +298,9 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
   })
 })
 
-function prepareRuntimeModel(model: RuntimeInfo, credential: Credential.Value | undefined) {
-  if (model.settings?.apiKey !== "" && (credential?.type !== "key" || credential.metadata === undefined)) return model
-  return {
-    ...model,
-    ...(model.settings?.apiKey === "" ? { settings: Struct.omit(model.settings, ["apiKey"]) } : {}),
-    ...(credential?.type === "key" && credential.metadata !== undefined
-      ? { body: Provider.mergeOverlay(model.body, credential.metadata) }
-      : {}),
-  }
+function prepareRuntimeModel(model: RuntimeInfo) {
+  if (model.settings?.apiKey !== "") return model
+  return { ...model, settings: Struct.omit(model.settings, ["apiKey"]) }
 }
 
 function validateProviderVariables(

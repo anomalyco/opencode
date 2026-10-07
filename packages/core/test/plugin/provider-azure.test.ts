@@ -574,8 +574,14 @@ describe("AzurePlugin resource name", () => {
       name: "prefers the connection's resource over configuration, as requests do",
       env: { AZURE_RESOURCE_NAME: "from-env" },
       settings: { resourceName: "from-config" },
-      connection: true,
+      credential: keyCredential(),
       expected: "test-resource",
+    },
+    {
+      name: "reads the resource of an API key imported from V1",
+      env: { AZURE_RESOURCE_NAME: "from-env" },
+      credential: Credential.Key.make({ type: "key", key: "secret", metadata: { resourceName: "imported-resource" } }),
+      expected: "imported-resource",
     },
   ]
 
@@ -586,7 +592,7 @@ describe("AzurePlugin resource name", () => {
         yield* seedProvider(item.settings)
         const providers = yield* Provider.Service
         yield* providers.transform((editor) => editor.update(Provider.ID.openai, () => {}))
-        if (item.connection) yield* connect(keyCredential())
+        if (item.credential) yield* connect(item.credential)
         yield* addPlugin()
 
         expect(required(yield* providers.get(Provider.ID.azure)).settings?.resourceName).toBe(item.expected)

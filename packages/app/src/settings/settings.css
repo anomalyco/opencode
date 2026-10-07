@@ -1217,14 +1217,6 @@
 .settings-project-card[data-menu="true"] {
   background: var(--v2-background-bg-layer-02);
 }
-.settings-tab-search-clear {
-  position: absolute;
-  top: 50%;
-  inset-inline-end: 6px;
-  z-index: 1;
-  transform: translateY(-50%);
-}
-
 .settings-models {
   gap: 12px;
 }

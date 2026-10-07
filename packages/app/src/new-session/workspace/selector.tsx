@@ -327,7 +327,7 @@ export function PromptWorkspaceSelector(props: {
                   setTimeout(() => requestAnimationFrame(() => branchSearchInput?.focus({ preventScroll: true })))
                 }}
               >
-                <div class="flex h-7 shrink-0 items-center gap-2 rounded-sm pl-3 pr-2.5 text-v2-icon-icon-muted">
+                <div class="flex h-7 shrink-0 items-center gap-2 rounded-sm pl-3 pr-1 text-v2-icon-icon-muted">
                   <Icon name="magnifying-glass" size="small" class="shrink-0" />
                   <input
                     ref={(element) => {
@@ -355,7 +355,7 @@ export function PromptWorkspaceSelector(props: {
                   <Show when={search.branches.trim()}>
                     <button
                       type="button"
-                      class="flex size-5 items-center justify-center rounded-sm text-v2-icon-icon-muted hover:bg-v2-overlay-simple-overlay-hover"
+                      class="flex size-5 items-center justify-center rounded-sm bg-transparent text-v2-icon-icon-faint transition-colors hover:text-v2-icon-icon-base focus-visible:text-v2-icon-icon-base active:text-v2-icon-icon-base"
                       onPointerDown={(event) => event.preventDefault()}
                       onClick={() => {
                         setSearch("branches", "")
@@ -363,7 +363,7 @@ export function PromptWorkspaceSelector(props: {
                       }}
                       aria-label={language.t("common.clear")}
                     >
-                      <Icon name="close-small" size="small" />
+                      <Icon name="circle-xmark" />
                     </button>
                   </Show>
                 </div>
