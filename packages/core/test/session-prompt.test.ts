@@ -1,5 +1,4 @@
 import { describe, expect } from "bun:test"
-import { Config } from "@opencode/core/config"
 import type { FileSystem } from "@opencode/core/filesystem"
 import { DateTime, Effect, Fiber, Layer, LayerMap, Schema, Stream } from "effect"
 import path from "path"
@@ -74,10 +73,7 @@ const locations = makeGlobalNode({
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           Layer.mergeAll(
             LayerNode.compile(LayerNode.group([PluginHooks.node, Skill.node]), {
-              replacements: [
-                Bus.node.replace(Layer.succeed(Bus.Service, bus)),
-                Config.node.replace(Config.testLayer()),
-              ],
+              replacements: [Bus.node.replace(Layer.succeed(Bus.Service, bus))],
             }),
             Layer.mock(Image.Service, {
               normalize: (_resource, content) =>

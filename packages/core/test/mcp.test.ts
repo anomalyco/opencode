@@ -289,7 +289,7 @@ function resourceMcpLayer(
       yield* State.batch(
         Effect.gen(function* () {
           yield* ConfigMcpPlugin.register(bus.subscribe())
-          yield* registerIntegrationPolicy(mcp, bus.subscribe())
+          yield* registerIntegrationPolicy({ mcp, events: bus.subscribe() })
         }),
       )
     }),

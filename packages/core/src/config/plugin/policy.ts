@@ -13,7 +13,9 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const config = yield* Config.Service
     const managed = yield* ManagedPolicy.Service
-    const reload = State.batch(Effect.all([ctx.provider.reload(), ctx.mcp.reload()], { discard: true }))
+    const reload = State.batch(
+      Effect.all([ctx.provider.reload(), ctx.mcp.reload(), ctx.skill.reload()], { discard: true }),
+    )
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, reload)
     yield* managed.changes().pipe(
       Stream.runForEach(() => reload),
@@ -35,6 +37,12 @@ export const Plugin = define({
       const current = policies()
       for (const [name] of servers.list()) {
         if (ManagedPolicy.decision(current, "integration.use", `mcp:${name}`) === "deny") servers.remove(name)
+      }
+    })
+    yield* ctx.skill.transform((skills) => {
+      const current = policies()
+      for (const skill of skills.list()) {
+        if (ManagedPolicy.decision(current, "integration.use", `skill:${skill.id}`) === "deny") skills.remove(skill.id)
       }
     })
     yield* ctx.permission.hook("evaluate", (event) =>

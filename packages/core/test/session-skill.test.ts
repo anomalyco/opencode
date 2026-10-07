@@ -28,6 +28,7 @@ import { Skill } from "@opencode/core/skill"
 import { Event } from "@opencode/schema/event"
 import { testEffect } from "./lib/effect"
 import { globalProjectNode } from "./lib/project"
+import { registerIntegrationPolicy } from "./fixture/policy"
 
 const location = Location.Ref.make({ directory: AbsolutePath.make("/project") })
 const info = Skill.Info.make({
@@ -48,14 +49,23 @@ const locations = makeGlobalNode({
           // These tests need skill activation and prompt preparation from the same location services.
           // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
           Layer.mergeAll(
-            Layer.effectDiscard(Skill.Service.use((skills) => skills.transform((editor) => editor.add(info)))).pipe(
+            Layer.effectDiscard(
+              Effect.gen(function* () {
+                const skills = yield* Skill.Service
+                yield* skills.transform((editor) => editor.add(info))
+                yield* registerIntegrationPolicy({ skill: skills })
+              }),
+            ).pipe(
               Layer.provideMerge(
-                LayerNode.compile(LayerNode.group([PluginHooks.node, Image.node, Skill.node]), {
-                  replacements: [
-                    Config.node.replace(Config.testLayer()),
-                    ManagedPolicy.node.replace(Layer.succeed(ManagedPolicy.Service, managed)),
-                  ],
-                }),
+                LayerNode.compile(
+                  LayerNode.group([PluginHooks.node, Image.node, Skill.node, Config.node, ManagedPolicy.node]),
+                  {
+                    replacements: [
+                      Config.node.replace(Config.testLayer()),
+                      ManagedPolicy.node.replace(Layer.succeed(ManagedPolicy.Service, managed)),
+                    ],
+                  },
+                ),
               ),
             ),
             Layer.mock(Plugin.Service, { awaitActivation: Effect.void }),

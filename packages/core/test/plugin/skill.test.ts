@@ -8,7 +8,7 @@ import { Skill } from "@opencode/core/skill"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
 
-const it = testEffect(AppNodeBuilder.build(Skill.node, [Config.node.replace(Config.testLayer())]))
+const it = testEffect(AppNodeBuilder.build(Skill.node))
 const config = (plugins: Info["plugins"] = []) =>
   Layer.succeed(
     Config.Service,
@@ -70,7 +70,12 @@ describe("SkillPlugin.Plugin", () => {
       expect(report?.content).toContain("- Active plugins: -disabled, local.ts, package-plugin, package-plugin")
     }).pipe(
       Effect.provide(
-        config(["package-plugin", "-disabled", "local.ts", { package: "package-plugin", options: { enabled: true } }]),
+        config([
+          "package-plugin",
+          "-disabled",
+          "local.ts",
+          { package: "package-plugin", options: { enabled: true } },
+        ]),
       ),
     ),
   )

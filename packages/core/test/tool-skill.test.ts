@@ -20,6 +20,7 @@ import { permissionLayer } from "./lib/permission"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { toolIdentity, executeTool, registerToolPlugin, toolDefinitions } from "./lib/tool"
+import { registerIntegrationPolicy } from "./fixture/policy"
 
 const skillToolNode = makeLocationNode({
   name: "test/skill-tool-plugin",
@@ -47,6 +48,7 @@ describe("SkillTool", () => {
         ),
       )
       yield* managed.set({ statements: [{ action: "integration.use", resource: "skill:private", effect: "deny" }] })
+      yield* registerIntegrationPolicy({ skill: skills })
       expect(
         yield* executeTool(tools, {
           sessionID,
@@ -56,7 +58,7 @@ describe("SkillTool", () => {
       ).toEqual({ status: "error", error: { type: "tool.execution", message: "Unable to load skill private" } })
     }).pipe(
       Effect.provide(
-        AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode, Skill.node, ManagedPolicy.node]), [
+        AppNodeBuilder.build(LayerNode.group([Tool.node, skillToolNode, Skill.node, Config.node, ManagedPolicy.node]), [
           Config.node.replace(Config.testLayer()),
           Permission.node.replace(permissionLayer({ assert: () => Effect.die("Blocked skill reached authorization") })),
           Image.node.replace(imagePassthrough),

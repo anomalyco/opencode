@@ -279,7 +279,7 @@ Skills use their OpenCode IDs, including a namespace when present. Denied skills
 }
 ```
 
-Reads evaluate the current authored and organization statements, and policy changes publish a skill-catalog update. Removing a restriction restores the registered skill without reinstallation. A global integrations allow list also excludes skills unless it explicitly allows their IDs. Skill policy does not remove content already stored in session history or sandbox plugin filesystem access.
+The protected terminal config policy plugin filters `skill:<id>` through `ctx.skill.transform`, following the provider and MCP catalog pattern. The skill domain does not interpret policy statements. Config and managed policy changes reload the catalog and publish an update after the transformed values are visible. Removing a restriction restores the registered skill without reinstallation. A global integrations allow list also excludes skills unless it explicitly allows their IDs. Skill policy does not remove content already stored in session history or sandbox plugin filesystem access.
 
 Plugin hooks are governed by the existing plugin integration resource: blocking an external plugin prevents its import or unloads its active generation, including its hooks. There is no separate hook resource; required built-in policy and Console authentication plugins remain protected.
 

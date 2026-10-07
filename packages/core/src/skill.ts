@@ -3,12 +3,9 @@ export * as Skill from "./skill.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
-import { Context, Effect, Layer, Stream, Types } from "effect"
+import { Context, Effect, Layer, Types } from "effect"
 import { Skill } from "@opencode/schema/skill"
-import { Event } from "@opencode/schema/config"
 import { Bus } from "./bus.js"
-import { Config } from "./config.js"
-import { ManagedPolicy } from "./managed-policy.js"
 import { Permission } from "./permission.js"
 import { State } from "./state.js"
 
@@ -93,8 +90,6 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
-    const config = yield* Config.Service
-    const managed = yield* ManagedPolicy.Service
 
     const state = State.create<Data, Editor>({
       name: "skill",
@@ -118,28 +113,14 @@ const layer = Layer.effect(
       notify: () => bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
     })
 
-    yield* Effect.forEach(
-      [bus.subscribe(Event.Updated).pipe(Stream.map(() => undefined)), managed.changes()],
-      (changes) =>
-        changes.pipe(
-          Stream.runForEach(() => bus.publish(Skill.Event.Updated, {})),
-          Effect.forkScoped({ startImmediately: true }),
-        ),
-    )
-
     return Service.of({
       transform: state.transform,
       reload: state.reload,
       get: Effect.fn("Skill.get")(function* (id) {
-        const policies = ManagedPolicy.statements(yield* config.entries(), managed.current())
-        if (ManagedPolicy.decision(policies, "integration.use", `skill:${id}`) === "deny") return
         return state.get().skills.get(id)
       }),
       list: Effect.fn("Skill.list")(function* () {
-        const policies = ManagedPolicy.statements(yield* config.entries(), managed.current())
-        return Array.from(state.get().skills.values()).filter(
-          (skill) => ManagedPolicy.decision(policies, "integration.use", `skill:${skill.id}`) !== "deny",
-        )
+        return Array.from(state.get().skills.values())
       }),
     })
   }),
@@ -148,5 +129,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, Config.node, ManagedPolicy.node],
+  deps: [Bus.node],
 })
