@@ -13,6 +13,7 @@ export const LANGUAGE_EXTENSIONS: Record<string, string> = {
   ".cxx": "cpp",
   ".cc": "cpp",
   ".c++": "cpp",
+  ".cppm": "cpp",
   ".cs": "csharp",
   ".csx": "csharp",
   ".css": "css",
