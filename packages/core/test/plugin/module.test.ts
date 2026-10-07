@@ -14,13 +14,8 @@ import { Tool } from "@opencode/core/tool"
 import { execute } from "@opencode/core/tool/runtime"
 import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
-import {
-  createForeignPackageFilter,
-  createLoader,
-  discoverPluginRuntimeSpecifiers,
-  ensurePluginRuntime,
-  pluginRuntimeLoaderCode,
-} from "../../../cli/src/plugin-runtime"
+import { createForeignPackageFilter, ensurePluginRuntime } from "@opencode/plugin/runtime"
+import { createLoader, discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@opencode/plugin/runtime-modules"
 import { tempGlobalLayer } from "../fixture/global"
 import { tmpdirScoped } from "../fixture/tmpdir"
 import { testEffect } from "../lib/effect"

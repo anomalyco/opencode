@@ -13,6 +13,7 @@
     ".": "./src/promise/index.ts",
     "./effect": "./src/effect/index.ts",
     "./host": "./src/host.ts",
+    "./runtime": "./src/runtime.ts",
     "./tui": "./src/tui/index.ts",
     "./*": "./src/*.ts"
   },

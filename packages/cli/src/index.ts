@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { ensurePluginRuntime } from "./plugin-runtime"
+import { ensurePluginRuntime } from "@opencode/plugin/runtime"
 import { NodeRuntime, NodeServices } from "@effect/platform-node"
 import { Cause, Effect } from "effect"
 import { getErrorReported } from "effect/Runtime"

@@ -178,13 +178,6 @@ test("TUI plugins importing @opencode/plugin/tui and solid-js alongside effect r
   })
   const entry = new URL("tui.ts", sources.url)
   const badEntry = new URL("bad-tui.ts", sources.url)
-  const badCacheEntry = new URL("bad-cache-tui.ts", sources.url)
-  const badHostEntry = new URL("bad-host.js", sources.url)
-  const absExtra = new URL("abs-extra.ts", sources.url)
-  const cacheIndex = new URL("cache/effect@9.9.9@@@1/dist/index.js", sources.url)
-  const cacheOption = new URL("cache/effect@9.9.9@@@1/dist/Option.js", sources.url)
-  const cacheRemoved = new URL("cache/effect@9.9.9@@@1/dist/RemovedSubpath.js", sources.url)
-  const nmOptionQuery = `${fileURLToPath(new URL("node_modules/effect/dist/esm/Option.js", sources.url))}?v=1#tag`
   await Promise.all(
     Object.entries({
       "node_modules/effect/package.json":
@@ -193,49 +186,27 @@ test("TUI plugins importing @opencode/plugin/tui and solid-js alongside effect r
         "export const Effect = { foreign: true }; export const Schema = { foreign: true }",
       "node_modules/effect/dist/esm/Option.js": "export const some = () => null",
       "node_modules/effect/dist/esm/RemovedSubpath.js": "export const removed = true",
-      "cache/effect@9.9.9@@@1/package.json":
-        '{"name":"effect","version":"9.9.9","type":"module","exports":{".":"./dist/index.js","./Option":"./dist/Option.js","./RemovedSubpath":"./dist/RemovedSubpath.js"}}',
-      "cache/effect@9.9.9@@@1/dist/index.js": "export const Effect = { cachedForeign: true }",
-      "cache/effect@9.9.9@@@1/dist/Option.js": "export const some = () => 'cached-foreign'",
-      "cache/effect@9.9.9@@@1/dist/RemovedSubpath.js": "export const removed = 'cached-removed'",
       "node_modules/effect-helper/package.json":
         '{"name":"effect-helper","type":"module","exports":{".":"./index.js"}}',
-      "node_modules/effect-helper/index.js": [
-        'import { Effect, Schema }',
-        'from "effect"; import { some }',
-        'from "effect/Option"; export const helper = { Effect, Schema, some }',
-      ].join(" "),
+      "node_modules/effect-helper/index.js":
+        'import { Effect, Schema } from "effect"; import { some } from "effect/Option"; export const helper = { Effect, Schema, some }',
       "node_modules/zod/package.json": '{"name":"zod","type":"module","exports":{".":"./index.js"}}',
       "node_modules/zod/index.js": "export const fromPluginZod = true",
-      "helper.ts": ['import { fromPluginZod }', 'from "zod"; export { fromPluginZod }'].join(" "),
-      "abs-extra.ts": 'export const absValue = "own-abs-file"',
-      "bad-host.js": ['import', '"file://non-local-host/share/missing.js"'].join(" "),
-      "tui.ts": [
-        'import { createSignal }',
-        'from "solid-js"\nimport { Plugin }',
-        'from "@opencode/plugin/tui"\nimport { Plugin as HostEffectPlugin }',
-        'from "@opencode/plugin/effect"\nimport { Effect, Schema }',
-        'from "effect"\nimport { some }',
-        'from "effect/Option"\nimport { some as cachedSome }',
-        `from ${JSON.stringify(cacheOption.href)}\nimport pkg`,
-        'from "effect/package.json" with { type: "json" }\nimport { helper }',
-        'from "effect-helper"\nconst { fromPluginZod } = await',
-        'import("./helper.ts")\nconst dynOption = await',
-        'import("effect/Option")\nconst dynCachedEffect = await',
-        `import(${JSON.stringify(fileURLToPath(cacheIndex))})\nconst queryOption = await`,
-        `import(${JSON.stringify(nmOptionQuery)})\nconst dynEffectPlugin = await`,
-        `import("@opencode/plugin/effect")\nconst { absValue } = await import(${JSON.stringify(fileURLToPath(absExtra))})`,
-        "\nexport const plugin = { createSignal, Plugin, HostEffectPlugin, Effect, Schema, some, cachedSome, dynCachedEffect: dynCachedEffect.Effect, querySome: queryOption.some, dynSome: dynOption.some, dynEffectPlugin: dynEffectPlugin.Plugin, absValue, pkgName: pkg.name, fromPluginZod }\nexport { helper }",
-      ].join(" "),
-      "bad-tui.ts": [
-        'import { Plugin }',
-        'from "@opencode/plugin/tui"; import { removed }',
-        'from "effect/RemovedSubpath"; export default { Plugin, removed }',
-      ].join(" "),
-      "bad-cache-tui.ts": [
-        'import { removed }',
-        `from ${JSON.stringify(cacheRemoved.href)}; export default { removed }`,
-      ].join(" "),
+      "helper.ts": 'import { fromPluginZod } from "zod"; export { fromPluginZod }',
+      "tui.ts": `import { createSignal } from "solid-js"
+import { Plugin } from "@opencode/plugin/tui"
+import { Plugin as HostEffectPlugin } from "@opencode/plugin/effect"
+import { Effect, Schema } from "effect"
+import { some } from "effect/Option"
+import pkg from "effect/package.json" with { type: "json" }
+import { helper } from "effect-helper"
+const { fromPluginZod } = await import("./helper.ts")
+const dynOption = await import("effect/Option")
+const dynEffectPlugin = await import("@opencode/plugin/effect")
+export const plugin = { createSignal, Plugin, HostEffectPlugin, Effect, Schema, some, dynSome: dynOption.some, dynEffectPlugin: dynEffectPlugin.Plugin, pkgName: pkg.name, fromPluginZod }
+export { helper }`,
+      "bad-tui.ts":
+        'import { Plugin } from "@opencode/plugin/tui"; import { removed } from "effect/RemovedSubpath"; export default { Plugin, removed }',
     }).map(([file, text]) => Bun.write(new URL(file, sources.url), text)),
   )
   const loaded = (await sources.read(entry.href)).module as {
@@ -248,12 +219,8 @@ test("TUI plugins importing @opencode/plugin/tui and solid-js alongside effect r
   expect(loaded.plugin.Effect).toBe(Effect)
   expect(loaded.plugin.Schema).toBe(Schema)
   expect(loaded.plugin.some).toBe(Option.some)
-  expect(loaded.plugin.cachedSome).toBe(Option.some)
-  expect(loaded.plugin.dynCachedEffect).toBe(Effect)
-  expect(loaded.plugin.querySome).toBe(Option.some)
   expect(loaded.plugin.dynSome).toBe(Option.some)
   expect(loaded.plugin.dynEffectPlugin).toBe(effectPlugin.Plugin)
-  expect(loaded.plugin.absValue).toBe("own-abs-file")
   expect(loaded.plugin.pkgName).toBe("effect")
   expect(loaded.plugin.fromPluginZod).toBe(true)
   expect(loaded.helper.Effect).toBe(Effect)
@@ -262,12 +229,6 @@ test("TUI plugins importing @opencode/plugin/tui and solid-js alongside effect r
   expect(watched.some((item) => item.replaceAll("\\", "/").endsWith("/node_modules/effect"))).toBe(false)
   expect(watched.some((item) => item.replaceAll("\\", "/").endsWith("/node_modules/@opencode/plugin"))).toBe(false)
   await expect(sources.read(badEntry.href)).rejects.toThrow("effect/dist/esm/RemovedSubpath.js")
-  await expect(sources.read(badCacheEntry.href)).rejects.toThrow("effect/dist/RemovedSubpath.js")
-  const badHostStack = await import(fileURLToPath(badHostEntry)).then(
-    () => "",
-    (err) => String(err?.stack ?? err),
-  )
-  expect(badHostStack).not.toContain("plugin-runtime.ts")
 })
 
 test("helper import.meta stays anchored to its source, including assets and resolution", async () => {

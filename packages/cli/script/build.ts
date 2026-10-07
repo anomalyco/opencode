@@ -7,7 +7,7 @@ import { Script } from "@opencode/script"
 import { createSolidTransformPlugin } from "@opentui/solid/bun-plugin"
 import type { BunPlugin } from "bun"
 import pkg from "../package.json"
-import { discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "../src/plugin-runtime"
+import { discoverPluginRuntimeSpecifiers, pluginRuntimeLoaderCode } from "@opencode/plugin/runtime-modules"
 import { buildAppArchive } from "./app-assets"
 import { verifyArtifact, verifySimulationGraph } from "./verify-artifact"
 import { resolveOpencodePty } from "./opencode-pty"
@@ -84,21 +84,20 @@ export default () => readFileSync(archive)`,
   },
 }
 const pluginRuntimeEntries = discoverPluginRuntimeSpecifiers()
-const pluginRuntimeTemplate = await Bun.file("./src/plugin-runtime.ts").text()
-const pluginRuntimeMarker =
-  "const prebundledModules: Readonly<Record<string, RuntimeModuleLoader>> | undefined = undefined"
-if (!pluginRuntimeTemplate.includes(pluginRuntimeMarker)) {
-  throw new Error("Missing prebundledModules marker in packages/cli/src/plugin-runtime.ts")
-}
-const pluginRuntimeSource = pluginRuntimeTemplate.replace(
-  pluginRuntimeMarker,
-  `const prebundledModules: Readonly<Record<string, RuntimeModuleLoader>> | undefined = {\n${[...pluginRuntimeEntries.keys()].map((specifier) => `  ${JSON.stringify(specifier)}: ${pluginRuntimeLoaderCode(specifier, pluginRuntimeEntries)},`).join("\n")}\n}`,
-)
+const pluginRuntimeModulesSource = [
+  "export const resolveHostPackageRoots = () => []",
+  "const modules = {",
+  ...[...pluginRuntimeEntries.keys()].map(
+    (specifier) => `  ${JSON.stringify(specifier)}: ${pluginRuntimeLoaderCode(specifier, pluginRuntimeEntries)},`,
+  ),
+  "}",
+  "export const loadRuntimeModules = () => modules",
+].join("\n")
 const pluginRuntimePlugin: BunPlugin = {
   name: "opencode-plugin-runtime",
   setup(build) {
-    build.onLoad({ filter: /cli[/\\]src[/\\]plugin-runtime\.ts$/ }, () => ({
-      contents: pluginRuntimeSource,
+    build.onLoad({ filter: /plugin[/\\]src[/\\]runtime-modules\.ts$/ }, () => ({
+      contents: pluginRuntimeModulesSource,
       loader: "ts",
     }))
     build.onLoad({ filter: /[/\\]internal[/\\]httpApi(?:Scalar|Swagger)\.js$/ }, () => ({
