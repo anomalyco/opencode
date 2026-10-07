@@ -213,6 +213,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     const [ephemeral, setEphemeral] = createStore<{ sessionTabPreview: Record<string, string | undefined> }>({
       sessionTabPreview: {},
     })
+
     // Opening Home with its shortcut focuses session search, so typing filters immediately.
     let homeSearchFocus = false
 
