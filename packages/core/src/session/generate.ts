@@ -103,7 +103,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       : prepared.request
     const response = yield* llm.generate(request, prepared.options)
     yield* Effect.logInfo("session generation usage diagnostic", { usage: response.usage })
-    if (!input.schema) return { text: response.text } satisfies Result
+    if (!input.schema) return { text: response.text }
     const call = response.toolCalls.find((event) => event.name === STRUCTURED_OUTPUT_TOOL)
     if (!call)
       return yield* new AIError({
@@ -111,17 +111,7 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
           message: `Model did not call the forced \`${STRUCTURED_OUTPUT_TOOL}\` tool`,
         }),
       })
-    const object = yield* Schema.decodeUnknownEffect(Schema.Json)(call.input).pipe(
-      Effect.mapError(
-        (error) =>
-          new AIError({
-            reason: new InvalidProviderOutputError({
-              message: `\`${STRUCTURED_OUTPUT_TOOL}\` input is not JSON: ${error.message}`,
-              cause: error,
-            }),
-          }),
-      ),
-    )
-    return { text: response.text, object } satisfies Result
+    // Protocols parse tool call arguments with JSON.parse, so the input is already JSON.
+    return { text: response.text, object: call.input as Schema.Json }
   }).pipe(instances.provide(input.session))
 })
