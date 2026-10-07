@@ -72,7 +72,11 @@ export type Error =
   | Integration.AuthorizationError
 
 export interface Interface {
-  readonly resolve: (session: SessionSchema.Info, preferred?: ModelV2.Info) => Effect.Effect<Model, Error>
+  readonly resolve: (
+    session: SessionSchema.Info,
+    preferred?: ModelV2.Info,
+    freeFirst?: boolean,
+  ) => Effect.Effect<Model, Error>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/v2/SessionRunnerModel") {}
@@ -185,9 +189,9 @@ export const locationLayer = Layer.effect(
     const catalog = yield* Catalog.Service
     const integrations = yield* Integration.Service
     return Service.of({
-      resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, preferred) {
+      resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, preferred, freeFirst) {
         // Location plugins populate and filter the catalog asynchronously during layer startup.
-        const defaultModel = session.model ? undefined : yield* catalog.model.default()
+        const defaultModel = session.model ? undefined : yield* catalog.model.default({ freeFirst })
         const available = yield* catalog.model.available()
         const selected = preferred
           ? available.find(

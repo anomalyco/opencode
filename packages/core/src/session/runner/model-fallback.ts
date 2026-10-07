@@ -12,8 +12,9 @@ import { SessionRunnerModel } from "./model"
  * `primary` mirrors the model {@link SessionRunnerModel.resolve} selects (the
  * Session choice, or the catalog default / first supported model when none is
  * chosen). `alternatives` lists every *other* supported model the Location
- * exposes, in a stable free-first then release-descending order (FREE-FIRST:
- * recovery lands on zero-cost models before priced ones), so the runner can
+ * exposes, in a stable free-first then release-descending order (FREE-FIRST,
+ * gated by the `free_first` config toggle: recovery lands on zero-cost models
+ * before priced ones), so the runner can
  * step down to a different provider/model when a turn fails with a retryable
  * provider error (429 / QuotaExceeded / persistent 5xx) after
  * {@link ProviderRetry.policy} is exhausted — instead of surfacing a `RunError`
@@ -25,21 +26,23 @@ export interface FallbackChain {
   readonly alternatives: ReadonlyArray<ModelV2.Info>
 }
 
-/** Supported models free-first, then release-descending within each cost group (stable, immutable). */
-export const order = (available: ReadonlyArray<ModelV2.Info>): ModelV2.Info[] =>
+/** Supported models free-first (unless disabled), then release-descending within each cost group (stable, immutable). */
+export const order = (available: ReadonlyArray<ModelV2.Info>, freeFirst = true): ModelV2.Info[] =>
   [...available]
     .filter(SessionRunnerModel.supported)
     .sort(
       (a, b) =>
-        Number(ModelCost.isFree(b)) - Number(ModelCost.isFree(a)) || b.time.released - a.time.released,
+        (freeFirst ? Number(ModelCost.isFree(b)) - Number(ModelCost.isFree(a)) : 0) ||
+        b.time.released - a.time.released,
     )
 
 /** Builds the fallback chain from a Session's catalog snapshot. */
 export const chainFrom = (
   session: SessionSchema.Info,
   available: ReadonlyArray<ModelV2.Info>,
+  freeFirst = true,
 ): FallbackChain => {
-  const ordered = order(available)
+  const ordered = order(available, freeFirst)
   const selected = session.model
   const primary = selected
     ? ordered.find((m) => m.providerID === selected.providerID && m.id === selected.id)
@@ -65,11 +68,12 @@ export const nextAlternative = (
  * no Catalog is in context (single-model behavior is then preserved exactly). */
 export const chainFor = Effect.fn("ModelFallback.chainFor")(function* (
   session: SessionSchema.Info,
+  freeFirst = true,
 ) {
   const catalog = yield* Effect.serviceOption(Catalog.Service)
   if (Option.isNone(catalog)) return { primary: undefined, alternatives: [] } satisfies FallbackChain
   const available = yield* catalog.value.model.available()
-  return chainFrom(session, available)
+  return chainFrom(session, available, freeFirst)
 })
 
 /**

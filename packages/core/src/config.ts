@@ -36,6 +36,9 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   model: Schema.String.pipe(Schema.optional).annotate({
     description: "Default model to use when no session or agent model is selected",
   }),
+  free_first: Schema.Boolean.pipe(Schema.optional).annotate({
+    description: "Prefer free models for default selection and fallback ordering",
+  }),
   default_agent: Schema.String.pipe(Schema.optional).annotate({
     description: "Default primary agent to use when no session agent is selected",
   }),

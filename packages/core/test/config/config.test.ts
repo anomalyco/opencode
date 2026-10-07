@@ -66,6 +66,20 @@ describe("Config", () => {
     }),
   )
 
+  it.effect("decodes the free_first toggle and reads the latest defined value", () =>
+    Effect.sync(() => {
+      const info = Schema.decodeUnknownSync(Config.Info)({ free_first: false }, { errors: "all" })
+      expect(info.free_first).toBe(false)
+
+      const entries = [
+        new Config.Document({ type: "document", info: new Config.Info({ free_first: false }) }),
+        new Config.Document({ type: "document", info: new Config.Info({}) }),
+      ]
+      expect(Config.latest(entries, "free_first")).toBe(false)
+      expect(Config.latest([entries[1]], "free_first")).toBeUndefined()
+    }),
+  )
+
   it.effect("detects v1 configuration from any v1-only top-level key", () =>
     Effect.sync(() => {
       expect(ConfigMigrateV1.isV1({ snapshot: false })).toBe(true)

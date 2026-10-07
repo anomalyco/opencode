@@ -110,7 +110,11 @@ const layer = Layer.effect(
     const config = yield* Config.Service
     const snapshots = yield* Snapshot.Service
     const db = (yield* Database.Service).db
-    const compaction = SessionCompaction.make({ events, llm, config: yield* config.entries() })
+    const configEntries = yield* config.entries()
+    const compaction = SessionCompaction.make({ events, llm, config: configEntries })
+    // FREE-FIRST toggle: read once per Location (config entries are frozen at
+    // open) and threaded into every model-selection decision below.
+    const freeFirst = Config.latest(configEntries, "free_first") ?? true
     const getSession = Effect.fn("SessionRunner.getSession")(function* (sessionID: SessionSchema.ID) {
       const session = yield* store.get(sessionID)
       if (!session) return yield* Effect.die(`Session not found: ${sessionID}`)
@@ -202,7 +206,7 @@ const layer = Layer.effect(
       }
       const system =
         initialized ?? (yield* SessionContextEpoch.prepare(db, events, loadSystemContext(agent), session.id))
-      const model = yield* models.resolve(session, preferred)
+      const model = yield* models.resolve(session, preferred, freeFirst)
       const entries = yield* SessionHistory.entriesForRunner(db, session.id, system.baselineSeq)
       const context = entries.map((entry) => entry.message)
       const isLastStep = agent.info?.steps !== undefined && currentStep >= agent.info.steps
@@ -409,7 +413,7 @@ const layer = Layer.effect(
 
     const runTurn: RunTurn = Effect.fnUntraced(function* (sessionID, promotion, step, outputTokens) {
       const session = yield* getSession(sessionID)
-      const chain = yield* ModelFallback.chainFor(session)
+      const chain = yield* ModelFallback.chainFor(session, freeFirst)
       return yield* ModelFallback.withFallback(
         chain,
         (preferred) =>

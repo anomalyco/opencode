@@ -55,7 +55,7 @@ export interface Interface extends State.Transformable<Draft> {
     readonly get: (providerID: ProviderV2.ID, modelID: ModelV2.ID) => Effect.Effect<ModelV2.Info | undefined>
     readonly all: () => Effect.Effect<ModelV2.Info[]>
     readonly available: () => Effect.Effect<ModelV2.Info[]>
-    readonly default: () => Effect.Effect<ModelV2.Info | undefined>
+    readonly default: (options?: { readonly freeFirst?: boolean }) => Effect.Effect<ModelV2.Info | undefined>
     readonly small: (providerID: ProviderV2.ID) => Effect.Effect<ModelV2.Info | undefined>
   }
 }
@@ -213,7 +213,9 @@ const layer = Layer.effect(
           return (yield* result.model.all()).filter((model) => providers.has(model.providerID) && model.enabled)
         }),
 
-        default: Effect.fn("CatalogV2.model.default")(function* () {
+        default: Effect.fn("CatalogV2.model.default")(function* (options?: {
+          readonly freeFirst?: boolean
+        }) {
           const defaultModel = state.get().defaultModel
           if (defaultModel) {
             const provider = yield* result.provider.get(defaultModel.providerID)
@@ -225,19 +227,23 @@ const layer = Layer.effect(
 
           // FREE-FIRST: with no configured default, prefer the newest free
           // model that can still drive an agent session (tools + text
-          // input/output) over any priced one; unknown pricing counts as paid
-          // (ModelCost.isFree), so an unbilled model is never preferred here.
+          // input/output) over any priced one, unless the free_first toggle is
+          // disabled; unknown pricing counts as paid (ModelCost.isFree), so an
+          // unbilled model is never preferred here.
           const ordered = pipe(
             yield* result.model.available(),
             Array.sortWith((item) => item.time.released, Order.flip(Order.Number)),
           )
-          const free = ordered.find(
-            (model) =>
-              ModelCost.isFree(model) &&
-              model.capabilities.tools &&
-              model.capabilities.input.some((item) => item.startsWith("text")) &&
-              model.capabilities.output.some((item) => item.startsWith("text")),
-          )
+          const free =
+            options?.freeFirst === false
+              ? undefined
+              : ordered.find(
+                  (model) =>
+                    ModelCost.isFree(model) &&
+                    model.capabilities.tools &&
+                    model.capabilities.input.some((item) => item.startsWith("text")) &&
+                    model.capabilities.output.some((item) => item.startsWith("text")),
+                )
           return free ?? Option.getOrUndefined(Array.head(ordered))
         }),
 

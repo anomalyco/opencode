@@ -82,6 +82,14 @@ describe("ModelFallback", () => {
       ])
       expect(ordered.map((m) => m.name)).toEqual(["free-new", "free-old", "gpt-4o", "gpt-4o-mini"])
     })
+
+    test("ignores cost and orders release-descending when free-first is off", () => {
+      const ordered = ModelFallback.order(
+        [openai("gpt-4o", 100), free("free-new", 80), openai("gpt-4o-mini", 50), free("free-old", 60)],
+        false,
+      )
+      expect(ordered.map((m) => m.name)).toEqual(["gpt-4o", "free-new", "free-old", "gpt-4o-mini"])
+    })
   })
 
   describe("chainFrom", () => {
@@ -106,6 +114,16 @@ describe("ModelFallback", () => {
       )
       expect(chain.primary?.name).toBe("free-model")
       expect(chain.alternatives.map((m) => m.name)).toEqual(["gpt-4o", "claude-opus"])
+    })
+
+    test("keeps the newest paid model as primary when free-first is off", () => {
+      const chain = ModelFallback.chainFrom(
+        makeSession(),
+        [openai("gpt-4o", 100), free("free-model", 60), anthropic("claude-opus", 90)],
+        false,
+      )
+      expect(chain.primary?.name).toBe("gpt-4o")
+      expect(chain.alternatives.map((m) => m.name)).toEqual(["claude-opus", "free-model"])
     })
 
     test("returns undefined primary and all alternatives when the session model is unavailable", () => {
