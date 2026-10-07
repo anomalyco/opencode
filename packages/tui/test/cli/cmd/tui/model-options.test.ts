@@ -1,5 +1,20 @@
 import { describe, expect, test } from "bun:test"
-import { sortModelOptions } from "../../../../src/component/dialog-model"
+import { isFreeModel, sortModelOptions } from "../../../../src/component/model-options"
+
+describe("isFreeModel", () => {
+  test("requires every metered axis at zero", () => {
+    expect(isFreeModel({ input: 0, output: 0, cache: { read: 0, write: 0 } })).toBe(true)
+    expect(isFreeModel({ input: 0, output: 0 })).toBe(true)
+    expect(isFreeModel(undefined)).toBe(false)
+  })
+
+  test("any nonzero meter counts as priced", () => {
+    expect(isFreeModel({ input: 1, output: 0, cache: { read: 0, write: 0 } })).toBe(false)
+    expect(isFreeModel({ input: 0, output: 2, cache: { read: 0, write: 0 } })).toBe(false)
+    expect(isFreeModel({ input: 0, output: 0, cache: { read: 1, write: 0 } })).toBe(false)
+    expect(isFreeModel({ input: 0, output: 0, cache: { read: 0, write: 1 } })).toBe(false)
+  })
+})
 
 describe("sortModelOptions", () => {
   test("orders provider-scoped model choices by newest release first", () => {

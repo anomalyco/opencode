@@ -400,6 +400,33 @@ describe("CatalogV2", () => {
     }),
   )
 
+  it.effect("small model prefers a free candidate under free-first and honors the toggle", () =>
+    Effect.gen(function* () {
+      const catalog = yield* Catalog.Service
+      const providerID = ProviderV2.ID.make("test")
+      yield* catalog.transform((catalog) => {
+        catalog.provider.update(providerID, () => {})
+        catalog.model.update(providerID, ModelV2.ID.make("tiny-mini"), (model) => {
+          model.capabilities.input = ["text"]
+          model.capabilities.output = ["text"]
+          model.cost = [{ input: 1, output: 1, cache: { read: 0, write: 0 } }]
+          model.time.released = Date.now()
+        })
+        catalog.model.update(providerID, ModelV2.ID.make("free-general"), (model) => {
+          model.capabilities.input = ["text"]
+          model.capabilities.output = ["text"]
+          model.cost = [{ input: 0, output: 0, cache: { read: 0, write: 0 } }]
+          model.time.released = Date.now()
+        })
+      })
+
+      expect((yield* catalog.model.small(providerID))?.id).toBe(ModelV2.ID.make("free-general"))
+      expect((yield* catalog.model.small(providerID, { freeFirst: false }))?.id).toBe(
+        ModelV2.ID.make("tiny-mini"),
+      )
+    }),
+  )
+
   it.effect("removes providers denied by policy after loading", () =>
     Effect.gen(function* () {
       const catalog = yield* Catalog.Service

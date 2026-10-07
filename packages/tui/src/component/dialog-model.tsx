@@ -8,6 +8,7 @@ import { DialogVariant } from "./dialog-variant"
 import * as fuzzysort from "fuzzysort"
 import { useConnected } from "./use-connected"
 import { useSync } from "../context/sync"
+import { isFreeModel, sortModelOptions } from "./model-options"
 
 export function DialogModel(props: { providerID?: string }) {
   const local = useLocal()
@@ -41,7 +42,7 @@ export function DialogModel(props: { providerID?: string }) {
             description: provider.name,
             category,
             disabled: provider.id === "opencode" && model.id.includes("-nano"),
-            footer: model.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: isFreeModel(model.cost) ? "Free" : undefined,
             onSelect: () => {
               onSelect(provider.id, model.id)
             },
@@ -79,7 +80,7 @@ export function DialogModel(props: { providerID?: string }) {
               : undefined,
             category: connected() ? provider.name : undefined,
             disabled: provider.id === "opencode" && model.includes("-nano"),
-            footer: info.cost?.input === 0 && provider.id === "opencode" ? "Free" : undefined,
+            footer: isFreeModel(info.cost) ? "Free" : undefined,
             onSelect() {
               onSelect(provider.id, model)
             },
@@ -180,18 +181,5 @@ export function DialogModel(props: { providerID?: string }) {
       title={title()}
       current={local.model.current()}
     />
-  )
-}
-
-export function sortModelOptions<T extends { footer?: string; releaseDate: string | number; title: string }>(
-  options: T[],
-  newestFirst: boolean,
-) {
-  if (newestFirst) return sortBy(options, [(option) => option.releaseDate, "desc"], (option) => option.title)
-  return sortBy(
-    options,
-    (option) => option.footer !== "Free",
-    [(option) => option.releaseDate, "desc"],
-    (option) => option.title,
   )
 }

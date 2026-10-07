@@ -56,7 +56,10 @@ export interface Interface extends State.Transformable<Draft> {
     readonly all: () => Effect.Effect<ModelV2.Info[]>
     readonly available: () => Effect.Effect<ModelV2.Info[]>
     readonly default: (options?: { readonly freeFirst?: boolean }) => Effect.Effect<ModelV2.Info | undefined>
-    readonly small: (providerID: ProviderV2.ID) => Effect.Effect<ModelV2.Info | undefined>
+    readonly small: (
+      providerID: ProviderV2.ID,
+      options?: { readonly freeFirst?: boolean },
+    ) => Effect.Effect<ModelV2.Info | undefined>
   }
 }
 
@@ -247,10 +250,13 @@ const layer = Layer.effect(
           return free ?? Option.getOrUndefined(Array.head(ordered))
         }),
 
-        small: Effect.fn("CatalogV2.model.small")(function* (providerID) {
+        small: Effect.fn("CatalogV2.model.small")(function* (providerID, options?: {
+          readonly freeFirst?: boolean
+        }) {
           const record = state.get().providers.get(providerID)
           if (!record) return
           const provider = record.provider
+          const freeFirst = options?.freeFirst !== false
 
           // TODO: Remove these provider-specific assumptions once model syncing reliably reports available deployments.
           if (providerID === ProviderV2.ID.azure || providerID === ProviderV2.ID.make("azure-cognitive-services")) {
@@ -278,7 +284,9 @@ const layer = Layer.effect(
               age: (Date.now() - model.time.released) / (1000 * 60 * 60 * 24 * 30),
               small: SMALL_MODEL_RE.test(`${model.id} ${model.family ?? ""} ${model.name}`.toLowerCase()),
             })),
-            Array.filter((item) => item.cost > 0 && item.age <= 18),
+            // FREE-FIRST keeps zero-cost models eligible (the legacy gate
+            // excluded them); disabled restores the priced-only candidate set.
+            Array.filter((item) => (freeFirst || item.cost > 0) && item.age <= 18),
           )
 
           const pick = (items: typeof candidates) => {
@@ -292,13 +300,13 @@ const layer = Layer.effect(
             )
           }
 
-          return Option.getOrUndefined(
-            pipe(
-              candidates,
-              Array.filter((item) => item.small),
-              (items) => (items.length > 0 ? pick(items) : pick(candidates)),
-            ),
-          )
+          const smallItems = pipe(candidates, Array.filter((item) => item.small))
+          // FREE-FIRST: a free candidate outranks the small-keyword preference,
+          // then the cost/age score picks the newest free one; disabled
+          // restores the legacy small-keyword-then-score ladder.
+          const free = freeFirst ? candidates.filter((item) => ModelCost.isFree(item.model)) : []
+          const pool = free.length > 0 ? free : smallItems.length > 0 ? smallItems : candidates
+          return Option.getOrUndefined(pick(pool))
         }),
       },
     }
