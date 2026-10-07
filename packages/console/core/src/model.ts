@@ -32,8 +32,6 @@ export namespace ZenData {
     cost200K: ModelCostTierSchema.optional(),
     costPeak: ModelCostSchema.optional(),
     allowAnonymous: z.boolean().optional(),
-    // Sends keyless requests straight to new inference, skipping legacy free-tier checks.
-    proxyAnonymous: z.boolean().optional(),
     byokProvider: z.enum(["openai", "anthropic", "google"]).optional(),
     stickyProvider: z.enum(["strict", "prefer"]).optional(),
     trialProvider: z.string().optional(),
