@@ -111,6 +111,10 @@ const allTargets: {
     arch: "x64",
     avx2: false,
   },
+  {
+    os: "freebsd",
+    arch: "x64",
+  },
 ]
 
 const targets = singleFlag
