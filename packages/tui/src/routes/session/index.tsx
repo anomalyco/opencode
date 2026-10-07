@@ -2316,6 +2316,7 @@ function QueuedPromptDock(props: { prompts: { id: string; text: string }[]; onOp
 
   return (
     <box
+      marginBottom={1}
       border={["left"]}
       borderColor={theme.border.base}
       customBorderChars={SplitBorder.customBorderChars}
