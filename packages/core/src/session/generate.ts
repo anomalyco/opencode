@@ -1,8 +1,17 @@
 export * as SessionGenerate from "./generate.js"
 
 import type { FileSystem } from "../filesystem.js"
-import { LLMClient, Message, type AIError } from "@opencode/ai"
-import { Effect } from "effect"
+import {
+  AIError,
+  InvalidProviderOutputError,
+  type JsonSchema,
+  LLMClient,
+  LLMRequest,
+  Message,
+  ToolChoice,
+  ToolDefinition,
+} from "@opencode/ai"
+import { Effect, Schema } from "effect"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
 import { Plugin } from "../plugin/service.js"
@@ -22,10 +31,22 @@ export type Error =
   | AIError
   | FileSystem.DirectoryNotFoundError
 
-/** Generates text from current Session context without mutating the Session. */
+const STRUCTURED_OUTPUT_TOOL = "structured_output"
+
+export interface Result {
+  readonly text: string
+  /** The forced tool call's input when a `schema` was requested. It is not validated against that schema. */
+  readonly object?: Schema.Json
+}
+
+/**
+ * Generates from current Session context without mutating the Session. With a `schema`, the model is forced to call a
+ * synthetic tool whose input is that JSON Schema, and the call's input is returned as `object`.
+ */
 export const generate = Effect.fn("SessionGenerate.generate")(function* (input: {
   session: SessionSchema.Info
   prompt: string
+  schema?: JsonSchema
 }) {
   const instances = yield* Instance.Service
   const database = yield* Database.Service
@@ -66,8 +87,41 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       providerID: model.ref.providerID,
       modelID: model.ref.id,
     })
-    const response = yield* llm.generate(prepared.request, prepared.options)
+    // Session tools stay advertised because some providers reject tool history without tool definitions.
+    const request = input.schema
+      ? LLMRequest.update(prepared.request, {
+          tools: [
+            ...prepared.request.tools,
+            ToolDefinition.make({
+              name: STRUCTURED_OUTPUT_TOOL,
+              description: "Return the structured result by calling this tool.",
+              inputSchema: input.schema,
+            }),
+          ],
+          toolChoice: ToolChoice.named(STRUCTURED_OUTPUT_TOOL),
+        })
+      : prepared.request
+    const response = yield* llm.generate(request, prepared.options)
     yield* Effect.logInfo("session generation usage diagnostic", { usage: response.usage })
-    return response.text
+    if (!input.schema) return { text: response.text } satisfies Result
+    const call = response.toolCalls.find((event) => event.name === STRUCTURED_OUTPUT_TOOL)
+    if (!call)
+      return yield* new AIError({
+        reason: new InvalidProviderOutputError({
+          message: `Model did not call the forced \`${STRUCTURED_OUTPUT_TOOL}\` tool`,
+        }),
+      })
+    const object = yield* Schema.decodeUnknownEffect(Schema.Json)(call.input).pipe(
+      Effect.mapError(
+        (error) =>
+          new AIError({
+            reason: new InvalidProviderOutputError({
+              message: `\`${STRUCTURED_OUTPUT_TOOL}\` input is not JSON: ${error.message}`,
+              cause: error,
+            }),
+          }),
+      ),
+    )
+    return { text: response.text, object } satisfies Result
   }).pipe(instances.provide(input.session))
 })

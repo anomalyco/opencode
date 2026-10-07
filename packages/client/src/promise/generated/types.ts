@@ -179,7 +179,7 @@ export type SessionInboxCompactionPayload = {}
 
 export type InstructionEntryKey = string
 
-export type SessionGenerateResponse = { data: { text: string } }
+export type SessionGenerateResponse = { data: { text: string; object?: JsonValue | undefined } }
 
 export type LocationRef = { directory: string; workspaceID?: string }
 
@@ -4610,7 +4610,14 @@ export type SessionInstructionsEntryRemoveOutput = void
 
 export type SessionGenerateInput = {
   readonly sessionID: { readonly sessionID: string }["sessionID"]
-  readonly prompt: { readonly prompt: string }["prompt"]
+  readonly prompt: {
+    readonly prompt: string
+    readonly schema?: { readonly [x: string]: JsonValue } | undefined
+  }["prompt"]
+  readonly schema?: {
+    readonly prompt: string
+    readonly schema?: { readonly [x: string]: JsonValue } | undefined
+  }["schema"]
 }
 
 export type SessionGenerateOutput = SessionGenerateResponse["data"]

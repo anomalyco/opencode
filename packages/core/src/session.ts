@@ -2,7 +2,7 @@ export * as Session from "./session.js"
 export * from "./session/schema.js"
 
 import { Effect, Layer, Schema, Context, Stream } from "effect"
-import { LLMClient } from "@opencode/ai"
+import { type JsonSchema, LLMClient } from "@opencode/ai"
 import { ListAnchor } from "@opencode/schema/session"
 import { and, desc, eq } from "drizzle-orm"
 import { Project } from "./project.js"
@@ -186,11 +186,12 @@ export interface Interface {
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
   ) => ReturnType<Session.Handle["prompt"]>
-  /** Generates text from current Session context without admitting input or mutating history. */
+  /** Generates from current Session context without admitting input or mutating history. */
   readonly generate: (input: {
     sessionID: SessionSchema.ID
     prompt: string
-  }) => Effect.Effect<string, NotFoundError | SessionGenerate.Error>
+    schema?: JsonSchema
+  }) => Effect.Effect<SessionGenerate.Result, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
     sessionID: SessionSchema.ID
     command: string
@@ -416,7 +417,7 @@ const layer = Layer.effect(
       prompt: (input) => sessions.forSession(input.sessionID).prompt(input),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(
+        return yield* SessionGenerate.generate({ session, prompt: input.prompt, schema: input.schema }).pipe(
           Effect.provideService(Instance.Service, instances),
           Effect.provideService(Database.Service, database),
           Effect.provideService(LLMClient.Service, llm),

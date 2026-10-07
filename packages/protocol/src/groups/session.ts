@@ -705,9 +705,17 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.post("session.generate", "/api/session/:sessionID/generate", {
         params: { sessionID: Session.ID },
-        payload: Schema.Struct({ prompt: Schema.String }),
+        payload: Schema.Struct({
+          prompt: Schema.String,
+          schema: Schema.optional(
+            Schema.Record(Schema.String, Schema.Json).annotate({
+              description:
+                "JSON Schema for a structured result. The model is forced to return it as `object`; it is not validated against the schema.",
+            }),
+          ),
+        }),
         success: Schema.Struct({
-          data: Schema.Struct({ text: Schema.String }),
+          data: Schema.Struct({ text: Schema.String, object: Schema.optional(Schema.Json) }),
         }).annotate({ identifier: "SessionGenerateResponse" }),
         error: [SessionNotFoundError, ServiceUnavailableError],
       })
@@ -715,8 +723,9 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
         .annotateMerge(
           OpenApi.annotations({
             identifier: "session.generate",
-            summary: "Generate text from session context",
-            description: "Generate transient text from the current session context without mutating session history.",
+            summary: "Generate from session context",
+            description:
+              "Generate transient text, or a structured result when `schema` is provided, from the current session context without mutating session history.",
           }),
         ),
     )

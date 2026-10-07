@@ -1,5 +1,6 @@
 import { expect } from "bun:test"
 import {
+  AIError,
   LLMClient,
   LLMEvent,
   LLMResponse,
@@ -57,6 +58,8 @@ import { testEffect } from "./lib/effect"
 const requests: LLMRequest[] = []
 const options: Array<StreamOptions | undefined> = []
 let instruction: string | Instructions.Unavailable = "Initial context"
+// Events the mock model returns after its step starts; defaults to a plain text answer.
+let reply: LLMEvent[] | undefined
 const sessionID = SessionSchema.ID.make("ses_generate_test")
 
 const model = LanguageModel.make({ id: "generate-model", provider: "test", route: OpenAIChat.route })
@@ -68,9 +71,11 @@ const client = Layer.mock(LLMClient.Service)({
       options.push(requestOptions)
       const response = LLMResponse.fromEvents([
         LLMEvent.stepStart({ index: 0 }),
-        LLMEvent.textStart({ id: "generate" }),
-        LLMEvent.textDelta({ id: "generate", text: "Transient answer" }),
-        LLMEvent.textEnd({ id: "generate" }),
+        ...(reply ?? [
+          LLMEvent.textStart({ id: "generate" }),
+          LLMEvent.textDelta({ id: "generate", text: "Transient answer" }),
+          LLMEvent.textEnd({ id: "generate" }),
+        ]),
         LLMEvent.stepFinish({
           index: 0,
           reason: { normalized: "stop" },
@@ -327,7 +332,7 @@ it.effect(
         Effect.provideService(Instance.Service, instances),
       )
 
-      expect(result).toBe("Transient answer")
+      expect(result).toEqual({ text: "Transient answer" })
       expect(requests).toHaveLength(1)
       expect(requests[0]?.model).toBe(model)
       expect(requests[0]?.system.map((part) => part.text)).toContain("Initial context")
@@ -411,6 +416,57 @@ it.effect(
       expect(error).toBeInstanceOf(Instructions.InitializationBlocked)
       expect(requests).toEqual([])
       expect(yield* durableState(db, sessionID)).toEqual(before)
+    }),
+  { timeout: 15_000 },
+)
+
+it.effect(
+  "forces a structured output tool when a schema is requested",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      instruction = "Initial context"
+      const schema = { type: "object", properties: { answer: { type: "string" } }, required: ["answer"] }
+      reply = [LLMEvent.toolCall({ id: "call_structured", name: "structured_output", input: { answer: "42" } })]
+      const { db, bus, instructions, session, instances } = yield* setup
+      yield* InstructionState.prepare(db, bus, instructions, sessionID)
+      const before = yield* durableState(db, sessionID)
+
+      const result = yield* SessionGenerate.generate({ session, prompt: "Answer as JSON", schema }).pipe(
+        Effect.provideService(Instance.Service, instances),
+        Effect.ensuring(Effect.sync(() => (reply = undefined))),
+      )
+
+      expect(result).toEqual({ text: "", object: { answer: "42" } })
+      expect(requests).toHaveLength(1)
+      expect(requests[0]?.tools).toMatchObject([
+        { name: "lookup" },
+        { name: "structured_output", inputSchema: schema },
+      ])
+      expect(requests[0]?.toolChoice).toMatchObject({ type: "tool", name: "structured_output" })
+      expect(userTexts(requests[0])).toEqual(["Answer as JSON"])
+      expect(yield* durableState(db, sessionID)).toEqual(before)
+    }),
+  { timeout: 15_000 },
+)
+
+it.effect(
+  "fails when the model does not call the structured output tool",
+  () =>
+    Effect.gen(function* () {
+      requests.length = 0
+      instruction = "Initial context"
+      const { db, bus, instructions, session, instances } = yield* setup
+      yield* InstructionState.prepare(db, bus, instructions, sessionID)
+
+      const error = yield* SessionGenerate.generate({ session, prompt: "Answer as JSON", schema: { type: "object" } }).pipe(
+        Effect.provideService(Instance.Service, instances),
+        Effect.flip,
+      )
+
+      expect(error).toBeInstanceOf(AIError)
+      expect(error).toMatchObject({ reason: { _tag: "InvalidProviderOutput" } })
+      expect(requests).toHaveLength(1)
     }),
   { timeout: 15_000 },
 )
