@@ -10,10 +10,11 @@ const CLOSED_TAB_LIMIT = 25
 export function pushClosedTab(stack: ClosedTab[], tab: Tab, index: number, info?: TabInfo): ClosedTab[] {
   if (tab.type !== "session") return stack
 
-  return [
-    ...stack.filter((entry) => !sameTab(entry.tab, tab)),
-    { tab: { ...tab }, index, ...(info ? { info: { ...info } } : {}) },
-  ].slice(-CLOSED_TAB_LIMIT)
+  const entry: ClosedTab = { tab: { ...tab }, index }
+
+  if (info) entry.info = { ...info }
+
+  return [...stack.filter((item) => !sameTab(item.tab, tab)), entry].slice(-CLOSED_TAB_LIMIT)
 }
 
 export function listClosedTabs(stack: ClosedTab[], tabs: Tab[]) {
@@ -29,13 +30,11 @@ export function listClosedTabs(stack: ClosedTab[], tabs: Tab[]) {
   })
 }
 
+export type TakenClosedTab = { entry?: ClosedTab; stack: ClosedTab[] }
+
 // Pops the most recently closed tab that is not open again,
 // discarding stale entries along the way.
-export function takeClosedTab(
-  stack: ClosedTab[],
-  tabs: Tab[],
-  target?: SessionTab,
-): { entry?: ClosedTab; stack: ClosedTab[] } {
+export function takeClosedTab(stack: ClosedTab[], tabs: Tab[], target?: SessionTab): TakenClosedTab {
   if (target) {
     const index = stack.findLastIndex((entry) => sameTab(entry.tab, target))
     const entry = stack[index]

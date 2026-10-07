@@ -21,6 +21,7 @@ export function RecentlyClosedTabsMenu(props: {
 }) {
   const language = useLanguage()
   const tabs = useTabs()
+
   const recent = createMemo(() =>
     listClosedTabs(tabs.closed, tabs.store).filter((entry) => entry.info?.prompted === true),
   )
