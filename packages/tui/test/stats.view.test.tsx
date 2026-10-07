@@ -92,7 +92,7 @@ test("stats shows only this year and returns after errors or success", async () 
       expect(rows[height - 2]?.trim()).toBe("esc back")
       expect(rows[height - 2]?.indexOf("esc back")).toBe(width - 10)
     }
-    await setup.mockMouse.click(111, 40)
+    setup.mockInput.pressKey("ESCAPE")
     await setup.waitForFrame((frame) => frame.includes("commands") && !frame.includes("opencode / stats"))
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()
