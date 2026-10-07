@@ -26,15 +26,20 @@ export type Displays = {
 // without bounds is kept so manage() can restore it.
 export function resolveWindowState(saved: unknown, defaults: { width: number; height: number }, displays: Displays) {
   const state = isState(saved) ? saved : undefined
+
   if (!state) return { width: defaults.width, height: defaults.height } satisfies WindowState
+
   if (!hasBounds(state)) {
     return state.isMaximized || state.isFullScreen
       ? ({ ...state, width: defaults.width, height: defaults.height } satisfies WindowState)
       : ({ width: defaults.width, height: defaults.height } satisfies WindowState)
   }
+
   if (!state.displayBounds) return state
   const visible = displays.all().some((bounds) => within(state, bounds))
+
   if (visible) return state
+
   return {
     width: defaults.width,
     height: defaults.height,
@@ -50,6 +55,7 @@ export function windowStateFile(id: string) {
 
 export function readWindowState(file: string): unknown {
   if (!existsSync(file)) return undefined
+
   try {
     return JSON.parse(readFileSync(file, "utf8"))
   } catch {
@@ -61,26 +67,33 @@ export function readWindowState(file: string): unknown {
 // the window is in its normal state so a maximized window restores to its previous size.
 export function manageWindowState(win: BrowserWindow, file: string, initial: WindowState, displays: Displays) {
   const state = { ...initial }
+
   if (state.isMaximized) win.maximize()
+
   if (state.isFullScreen) win.setFullScreen(true)
   let timer: ReturnType<typeof setTimeout> | undefined
+
   const update = () => {
     if (win.isDestroyed()) return
     const bounds = win.getBounds()
+
     if (!win.isMaximized() && !win.isMinimized() && !win.isFullScreen()) {
       state.x = bounds.x
       state.y = bounds.y
       state.width = bounds.width
       state.height = bounds.height
     }
+
     state.isMaximized = win.isMaximized()
     state.isFullScreen = win.isFullScreen()
     state.displayBounds = displays.matching(bounds)
   }
+
   const changed = () => {
     clearTimeout(timer)
     timer = setTimeout(update, 100)
   }
+
   const closed = () => {
     clearTimeout(timer)
     win.off("resize", changed)
@@ -91,6 +104,7 @@ export function manageWindowState(win: BrowserWindow, file: string, initial: Win
     writeFileSync(`${file}.tmp`, JSON.stringify(state))
     renameSync(`${file}.tmp`, file)
   }
+
   win.on("resize", changed)
   win.on("move", changed)
   win.on("close", update)

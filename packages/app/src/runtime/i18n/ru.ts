@@ -876,7 +876,6 @@ export const dict = {
   "server.connect.button": "Подключиться",
   "server.connect.address.invalid": "Введите действительный адрес сервера HTTP или HTTPS.",
   "server.connect.failed": "Не удалось подключиться. Проверьте адрес сервера и пароль, затем попробуйте снова.",
-  "server.connect.pair.description": "Выполните эту команду на вашем компьютере, чтобы получить данные подключения.",
   "server.connect.scan": "Сканировать QR-код",
   "server.connect.scan.description": "Наведите камеру на QR-код, показанный парой opencode.",
   "server.connect.scan.invalid": "Это не код пары OpenCode. Сканируйте код, показанный парой opencode.",
@@ -884,8 +883,6 @@ export const dict = {
   "server.connect.camera.starting": "Открытие камеры…",
   "server.connect.mixedContent":
     "Не удалось подключиться к этому HTTP-серверу с HTTPS-страницы. Используйте адрес HTTPS-сервера вместо этого.",
-  "server.connect.camera.insecure":
-    "Сканирование QR требует открытия этой страницы через HTTPS или на локальном хосте.",
   "server.connect.camera.unavailable": "Камера недоступна для этого браузера. Введите данные подключения вручную.",
   "server.connect.camera.error":
     "Не удалось открыть камеру. Разрешите доступ к камере или введите данные подключения вручную.",

@@ -862,7 +862,6 @@ export const dict = {
   "server.connect.button": "Poveži se",
   "server.connect.address.invalid": "Unesite ispravnu HTTP ili HTTPS adresu servera.",
   "server.connect.failed": "Povezivanje nije uspjelo. Provjerite adresu servera i lozinku, pa pokušajte ponovo.",
-  "server.connect.pair.description": "Pokrenite ovu naredbu na računaru da biste dobili podatke za povezivanje.",
   "server.connect.scan": "Skeniraj QR kod",
   "server.connect.scan.description": "Usmjerite kameru prema QR kodu koji prikazuje opencode pair.",
   "server.connect.scan.invalid": "Ovo nije OpenCode kod za uparivanje. Skenirajte kod koji prikazuje opencode pair.",
@@ -870,8 +869,6 @@ export const dict = {
   "server.connect.camera.starting": "Otvaranje kamere…",
   "server.connect.mixedContent":
     "Nije se moguće povezati s ovim HTTP serverom s HTTPS stranice. Umjesto toga koristite HTTPS adresu servera.",
-  "server.connect.camera.insecure":
-    "Za skeniranje QR koda ovu stranicu morate otvoriti putem HTTPS-a ili na localhostu.",
   "server.connect.camera.unavailable": "Ovom pregledniku nije dostupna kamera. Ručno unesite podatke za povezivanje.",
   "server.connect.camera.error":
     "Kameru nije bilo moguće otvoriti. Dozvolite pristup kameri ili ručno unesite podatke za povezivanje.",

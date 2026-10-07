@@ -295,7 +295,7 @@ const layer = Layer.effect(
         const value = yield* publicRead()
         const requested = value.data.defaultModel
         const model = requested && value.byProvider.get(requested.providerID)?.get(requested.modelID)
-        return model?.enabled ? model : value.available[0]
+        return model?.enabled ? model : value.available.find(supportsText)
       }),
       small: Effect.fn("Model.small")(function* (providerID) {
         const value = yield* publicRead()
@@ -315,6 +315,13 @@ const layer = Layer.effect(
 )
 
 export const node = makeLocationNode({ service: Service, layer, deps: [Provider.node, Bus.node, Location.node] })
+
+export function supportsText(model: Pick<Info, "capabilities">) {
+  return (
+    (model.capabilities.input.length === 0 || model.capabilities.input.some((item) => item.startsWith("text"))) &&
+    (model.capabilities.output.length === 0 || model.capabilities.output.some((item) => item.startsWith("text")))
+  )
+}
 
 export function compatibility(input: unknown): Compatibility | undefined {
   if (typeof input === "string") return { reasoningField: input }

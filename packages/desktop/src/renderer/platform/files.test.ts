@@ -13,6 +13,7 @@ function fileApi(events: string[]): Parameters<typeof createDesktopFiles>[0] {
     }),
     readPickedFile: async (_token: string, path: string) => {
       events.push(`read:${path}`)
+
       return new TextEncoder().encode(path).buffer
     },
     releasePickedFiles: async (token: string) => {

@@ -61,6 +61,7 @@ for (const separator of ["shell", "error", "reasoning"]) {
     const group = root.locator('[data-component="collapsed-tool-group"]')
     await expect(group.locator('[data-component="apply-patch-tool"]')).toHaveCount(2)
     await expect(group.locator('[data-slot="apply-patch-filename"]')).toHaveText(["a.ts", "b.ts", "a.ts", "c.ts"])
+
     if (separator === "error") await expect(group.locator('[data-kind="tool-error-card"]')).toBeVisible()
   })
 }

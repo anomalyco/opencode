@@ -2,11 +2,14 @@ import { expect, test } from "bun:test"
 import { getCursorPosition, getTextLength, setCursorPosition } from "./dom"
 
 const br = () => document.createElement("br")
+
 const text = (value: string) => document.createTextNode(value)
+
 const pill = () => {
   const element = document.createElement("span")
   element.dataset.mention = "file"
   element.textContent = "@file"
+
   return element
 }
 

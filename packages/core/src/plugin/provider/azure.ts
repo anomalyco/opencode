@@ -235,7 +235,7 @@ export function make(
 
       const resourceDeployments = Effect.fn("AzurePlugin.resourceDeployments")(function* (
         url: string,
-        credential: Credential.Value,
+        credential: Credential.Key | Credential.OAuth,
       ) {
         return yield* http
           .execute(
@@ -266,7 +266,7 @@ export function make(
       // data-plane version 2022-12-01 has it; later versions dropped `/deployments` and keep `/models`, which lists
       // models the resource can deploy rather than its deployments.
       // https://github.com/Azure/azure-rest-api-specs/blob/main/specification/cognitiveservices/data-plane/OpenAIAuthoring/stable/2022-12-01/azureopenai.json
-      const deployments = (url: string, resource: string, credential: Credential.Value) =>
+      const deployments = (url: string, resource: string, credential: Credential.Key | Credential.OAuth) =>
         credential.type === "oauth"
           ? managementDeployments(resource).pipe(Effect.catch(() => resourceDeployments(url, credential)))
           : resourceDeployments(url, credential)
@@ -308,7 +308,12 @@ export function make(
         const credential = yield* ctx.integration.connection
           .resolve(connection)
           .pipe(Effect.orElseSucceed(() => undefined))
-        if (!credential || (credential.type === "oauth" && credential.methodID !== methodID)) return
+        if (
+          !credential ||
+          credential.type === "external" ||
+          (credential.type === "oauth" && credential.methodID !== methodID)
+        )
+          return
         const found = yield* deployments(url, name, credential).pipe(
           // Azure promises no order; normalize it so a reordered response does not rebuild the model list.
           Effect.map((list) => list.toSorted((a, b) => a.name.localeCompare(b.name))),

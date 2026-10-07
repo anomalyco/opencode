@@ -23,8 +23,6 @@ export const dict = {
   "server.connect.address.invalid": "Entrez une adresse de serveur HTTP ou HTTPS valide.",
   "server.connect.failed":
     "Impossible de se connecter. Vérifiez l'adresse et le mot de passe du serveur, puis réessayez.",
-  "server.connect.pair.description":
-    "Exécutez cette commande sur votre ordinateur pour obtenir les détails de votre connexion.",
   "server.connect.scan": "Scanner le code QR",
   "server.connect.scan.description": "Pointez votre appareil photo vers le code QR affiché par opencode pair.",
   "server.connect.scan.invalid":
@@ -33,7 +31,6 @@ export const dict = {
   "server.connect.camera.starting": "Ouverture de la caméra…",
   "server.connect.mixedContent":
     "Impossible de se connecter à ce serveur HTTP à partir d'une page HTTPS. Utilisez plutôt une adresse de serveur HTTPS.",
-  "server.connect.camera.insecure": "L'analyse QR nécessite l'ouverture de cette page sur HTTPS ou sur localhost.",
   "server.connect.camera.unavailable":
     "Aucune caméra n'est disponible pour ce navigateur. Saisissez manuellement vos informations de connexion.",
   "server.connect.camera.error":

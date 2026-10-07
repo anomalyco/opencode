@@ -56,8 +56,9 @@ const setup: Setup<typeof Details> = (ctx) => {
       get title() {
         return ctx.t("title")
       },
-      order: 20,
+      order: 50,
       kind: "drawer",
+      icon: "info",
     },
     list: () => [],
     render: (props) => {

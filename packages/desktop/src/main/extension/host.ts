@@ -22,7 +22,7 @@ import {
   type Messages,
   type OS,
   type Params,
-  type Point,
+  type Registry,
   type ServerEndpoint,
   type ServerEndpoints,
   type Windows,
@@ -88,10 +88,10 @@ type HostApis = {
   -readonly [K in Exclude<keyof MainContext, keyof BaseContext | "scope" | "provide">]?: MainContext[K]
 }
 
-/** A contribution as `add` stores it, with its point's item type erased; `list` restores it. */
+/** A contribution as `add` stores it, with its registry's item type erased; `list` restores it. */
 type Item = Parameters<MainContext["add"]>[1]
 
-type Entry = { readonly point: string; readonly extension: string; readonly value: Item }
+type Entry = { readonly registry: string; readonly extension: string; readonly value: Item }
 
 type Translation = { readonly catalog?: Catalog; messages: Messages }
 
@@ -176,7 +176,7 @@ export function createHost(input: {
 
   const menubarItems = () => {
     const items = [...entries.values()].flatMap((entry) => {
-      if (entry.point !== MenubarItem.id) return []
+      if (entry.registry !== MenubarItem.id) return []
       const item = read(entry)
 
       return isMenubarItem(item) ? [{ id: `${entry.extension}.${item.id}`, extension: entry.extension, item }] : []
@@ -337,25 +337,26 @@ export function createHost(input: {
     // The instance's HostApis, each created on first read.
     const created: HostApis = {}
 
-    function add<T>(point: Point<T>, item: T | (() => T | undefined)): Cleanup {
+    function add<T>(registry: Registry<T>, item: T | (() => T | undefined)): Cleanup {
       if (signal.aborted) return () => {}
 
       const key = `${id}/${++status.sequence}`
-      entries.set(key, { point: point.id, extension: id, value: item })
+      entries.set(key, { registry: registry.id, extension: id, value: item })
 
-      if (point.id === MenubarItem.id) scheduleMenubar()
+      if (registry.id === MenubarItem.id) scheduleMenubar()
 
       return contribute(() => {
-        if (entries.delete(key) && point.id === MenubarItem.id) scheduleMenubar()
+        if (entries.delete(key) && registry.id === MenubarItem.id) scheduleMenubar()
       })
     }
 
-    function list<T>(point: Point<T>): readonly T[] {
+    function list<T>(registry: Registry<T>): readonly T[] {
       return [...entries.values()].flatMap((entry) => {
-        if (entry.point !== point.id) return []
+        if (entry.registry !== registry.id) return []
         const value = read(entry)
 
-        // SAFETY: only `add` stores entries, under the id of the typed point it was given, so this point's items are T.
+        // SAFETY: only `add` stores entries, under the id of the typed registry it was given, so this registry's items
+        // are T.
         return value === undefined ? [] : [value as T]
       })
     }

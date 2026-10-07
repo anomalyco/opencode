@@ -3,23 +3,16 @@ export * as AgentPlugin from "./agent.js"
 import { define } from "@opencode/plugin/effect/plugin"
 import { Effect } from "effect"
 import { Agent } from "../agent.js"
-import { Permission } from "../permission.js"
 
 const PROMPT_EXPLORE = `You are a file search specialist. You excel at thoroughly navigating and exploring codebases.
 
-Your strengths:
-- Rapidly finding files using glob patterns
-- Searching code and text with powerful regex patterns
-- Reading and analyzing file contents
-
 Guidelines:
-- Use Glob for broad file pattern matching
-- Use Grep for searching file contents with regex
-- Use Read when you know the specific file path you need to read
+- Your role is EXCLUSIVELY to search and analyze
+- Parallelize independent tool calls for searches and reads whenever possible
 - Adapt your search approach based on the thoroughness level specified by the caller
 - Return file paths as absolute paths in your final response
-- For clear communication, avoid using emojis
-- Do not create any files, or run bash commands that modify the user's system state in any way
+- You MUST NOT create, modify, delete, move, or copy files, including temporary files and reports
+- Shell commands MUST be read-only. NEVER run commands that write files or change system state
 
 Complete the user's search request efficiently and report your findings clearly.`
 
@@ -103,30 +96,24 @@ export const Plugin = define({
       })
 
       editor.update(Agent.ID.make("explore"), (item) => {
-        const externalDirectories = item.permissions.filter(
-          (rule) => rule.action === "external_directory" && rule.effect === "allow",
-        )
         item.name = Agent.Name.make("Explore")
         item.description =
           'Fast agent specialized for exploring codebases. Use this when you need to quickly find files by patterns (eg. "src/components/**/*.tsx"), search code for keywords (eg. "API endpoints"), or answer questions about the codebase (eg. "how do API endpoints work?"). When calling this agent, specify the desired thoroughness level: "quick" for basic searches, "medium" for moderate exploration, or "very thorough" for comprehensive analysis across multiple locations and naming conventions.'
         item.system = PROMPT_EXPLORE
         item.mode = "subagent"
         item.permissions.push(
-          ...Permission.merge(
-            [
-              { action: "*", resource: "*", effect: "deny" },
-              { action: "grep", resource: "*", effect: "allow" },
-              { action: "glob", resource: "*", effect: "allow" },
-              { action: "webfetch", resource: "*", effect: "allow" },
-              { action: "websearch", resource: "*", effect: "allow" },
-              { action: "read", resource: "*", effect: "allow" },
-              { action: "read", resource: "*.env", effect: "ask" },
-              { action: "read", resource: "*.env.*", effect: "ask" },
-              { action: "read", resource: "*.env.example", effect: "allow" },
-              { action: "subagent", resource: "*", effect: "deny" },
-            ],
-            [{ action: "external_directory", resource: "*", effect: "ask" }, ...externalDirectories],
-          ),
+          { action: "*", resource: "*", effect: "deny" },
+          { action: "shell", resource: "*", effect: "allow" },
+          { action: "grep", resource: "*", effect: "allow" },
+          { action: "glob", resource: "*", effect: "allow" },
+          { action: "webfetch", resource: "*", effect: "allow" },
+          { action: "websearch", resource: "*", effect: "allow" },
+          { action: "read", resource: "*", effect: "allow" },
+          { action: "read", resource: "*.env", effect: "ask" },
+          { action: "read", resource: "*.env.*", effect: "ask" },
+          { action: "read", resource: "*.env.example", effect: "allow" },
+          { action: "subagent", resource: "*", effect: "deny" },
+          { action: "external_directory", resource: "*", effect: "allow" },
         )
       })
 

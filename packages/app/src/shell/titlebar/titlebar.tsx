@@ -49,6 +49,10 @@ const macTrafficLightsBaseWidth = 68
 
 const macTrafficLightsTopClearance = 28
 
+// iOS blurs page content just below the status bar in Home Screen web apps, so with a top safe area the phone
+// titlebar row stays 16px clear of it, as ChatGPT's phone header does. Without one, 8px matches the content gap below.
+const mobileTopClearance = "max(8px, min(16px, env(safe-area-inset-top, 0px) * 1000))"
+
 export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
   const platform = usePlatform()
   const command = useCommand()
@@ -152,15 +156,13 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             ? bottom()
               ? "calc(28px + max(8px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))))"
               : mobileTop()
-                ? "calc(28px + 16px + env(safe-area-inset-top, 0px))"
+                ? `calc(28px + ${mobileTopClearance} + env(safe-area-inset-top, 0px))`
                 : "calc(28px + max(8px, env(safe-area-inset-top, 0px)))"
             : undefined,
-        // iOS blurs page content just below the status bar in Home Screen web apps, so keep the phone titlebar row
-        // 16px clear of the safe area, as ChatGPT's phone header does.
         "padding-top": bottom()
           ? "0px"
           : mobileTop()
-            ? "calc(16px + env(safe-area-inset-top, 0px))"
+            ? `calc(${mobileTopClearance} + env(safe-area-inset-top, 0px))`
             : "env(safe-area-inset-top, 0px)",
         "padding-bottom": bottom() ? "var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px))" : "0px",
         "min-height": minHeight(),

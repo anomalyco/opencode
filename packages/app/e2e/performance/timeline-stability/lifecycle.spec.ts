@@ -28,9 +28,11 @@ test.describe("timeline visual lifecycle stability", () => {
     const ids = ["prt_parallel_01_empty", "prt_parallel_02_short", "prt_parallel_03_long"] as const
     const initial = ids.map((id) => shell(id, "running"))
     const followingID = "prt_parallel_04_following"
+
     const assistant = assistantMessage([...initial, textPart(followingID, "Following all parallel shells.")], {
       completed: false,
     })
+
     const timeline = await setupTimeline(page, {
       messages: [userMessage(), assistant],
       settings: { shellToolPartsExpanded: true, showReasoningSummaries: true },
@@ -38,18 +40,24 @@ test.describe("timeline visual lifecycle stability", () => {
       eventRetry: 24,
       seedHistory: true,
     })
+
     await timeline.send(status("busy"), 150)
+
     for (const id of ids) await timeline.waitForPart(id)
+
     const scroller = page.locator(".scroll-view__viewport", {
       has: page.locator('[data-timeline-row="AssistantPart"]'),
     })
+
     await scroller.evaluate((element) => (element.scrollTop = element.scrollHeight))
+
     const regions = defineVisualRegions({
       prt_shell_empty: shellRegion(ids[0]),
       prt_shell_short: shellRegion(ids[1]),
       prt_shell_long: shellRegion(ids[2]),
       following: shellRegion(followingID),
     })
+
     await waitForVisualSettle(page, [`[data-timeline-part-id="${renderedPartID(followingID)}"]`])
     await startVisualProbe(page, regions)
     await timeline.sendAll([
@@ -101,11 +109,13 @@ test.describe("timeline visual lifecycle stability", () => {
     const reasoningID = "prt_reasoning_visible"
     const textID = "prt_streamed_text"
     const assistant = assistantMessage([], { completed: false })
+
     const timeline = await setupTimeline(page, {
       messages: [userMessage(), assistant],
       settings: { showReasoningSummaries: true },
       cpuRate: 4,
     })
+
     await timeline.send(status("busy"), 120)
     await expect(page.locator('[data-timeline-row="Thinking"]')).toBeVisible()
     const initialReasoning = reasoningPart(reasoningID, "")
@@ -122,6 +132,7 @@ test.describe("timeline visual lifecycle stability", () => {
         closest: '[data-timeline-row="AssistantPart"]',
       },
     })
+
     await startVisualProbe(page, regions)
     await timeline.send(partUpdated(initialReasoning), 100)
     await expect(page.locator(`[data-timeline-part-id="${renderedPartID(reasoningID)}"]`)).toHaveCount(0)

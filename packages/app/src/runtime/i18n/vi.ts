@@ -801,7 +801,6 @@ export const dict = {
   "server.connect.button": "Kết nối",
   "server.connect.address.invalid": "Nhập địa chỉ máy chủ HTTP hoặc HTTPS hợp lệ.",
   "server.connect.failed": "Không thể kết nối. Kiểm tra địa chỉ máy chủ và mật khẩu, sau đó thử lại.",
-  "server.connect.pair.description": "Chạy lệnh này trên máy tính của bạn để lấy thông tin kết nối.",
   "server.connect.scan": "Quét mã QR",
   "server.connect.scan.description": "Chĩa camera của bạn vào mã QR được hiển thị bởi cặp opencode.",
   "server.connect.scan.invalid": "Đây không phải mã ghép cặp OpenCode. Quét mã được hiển thị bởi ghép cặp opencode.",
@@ -809,7 +808,6 @@ export const dict = {
   "server.connect.camera.starting": "Đang mở camera…",
   "server.connect.mixedContent":
     "Không thể kết nối với máy chủ HTTP này từ trang HTTPS. Sử dụng địa chỉ máy chủ HTTPS thay vào đó.",
-  "server.connect.camera.insecure": "Quét QR yêu cầu mở trang này qua HTTPS hoặc trên localhost.",
   "server.connect.camera.unavailable": "Trình duyệt này không có camera. Nhập chi tiết kết nối của bạn thủ công.",
   "server.connect.camera.error":
     "Không thể mở camera. Cho phép truy cập camera hoặc nhập chi tiết kết nối của bạn thủ công.",

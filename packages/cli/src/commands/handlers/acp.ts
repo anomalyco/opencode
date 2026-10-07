@@ -2,7 +2,7 @@ import { MessageTooLargeError, ndJsonStream } from "@agentclientprotocol/sdk"
 import { OpenCode } from "@opencode/client/effect"
 import { Service } from "@opencode/client/effect/service"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/unstable/http"
 import { Writable } from "node:stream"
 import { ACP } from "../../acp/agent"
@@ -12,7 +12,17 @@ import { Standalone } from "../../services/standalone"
 
 export default Runtime.handler(
   Commands.commands.acp,
-  Effect.fn("cli.acp")(function* () {
+  Effect.fn("cli.acp")(function* (input) {
+    if (input.login) {
+      const login = yield* Effect.promise(() => import("./auth/login"))
+      return yield* login.default({
+        target: Option.none(),
+        method: Option.none(),
+        answer: [],
+        server: Option.none(),
+        standalone: false,
+      })
+    }
     process.env.OPENCODE_CLIENT = "acp"
     const endpoint = yield* Standalone.start()
     const client = yield* OpenCode.make({ baseUrl: endpoint.url }).pipe(

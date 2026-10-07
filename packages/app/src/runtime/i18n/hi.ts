@@ -797,7 +797,6 @@ export const dict = {
   "server.connect.button": "जोड़ना",
   "server.connect.address.invalid": "एक वैध HTTP या HTTPS सर्वर पता दर्ज करें।",
   "server.connect.failed": "कनेक्ट नहीं हो सका। सर्वर पता और पासवर्ड जांचें, फिर पुनः प्रयास करें।",
-  "server.connect.pair.description": "अपना कनेक्शन विवरण प्राप्त करने के लिए इस कमांड को अपने कंप्यूटर पर चलाएँ।",
   "server.connect.scan": "QR कोड स्कैन करें",
   "server.connect.scan.description": "अपने कैमरे को ओपनकोड जोड़ी द्वारा दिखाए गए QR कोड पर इंगित करें।",
   "server.connect.scan.invalid": "यह कोई OpenCode युग्मन कोड नहीं है. ओपनकोड जोड़ी द्वारा दिखाए गए कोड को स्कैन करें।",
@@ -805,7 +804,6 @@ export const dict = {
   "server.connect.camera.starting": "कैमरा खुल रहा है...",
   "server.connect.mixedContent":
     "किसी HTTPS पेज से इस HTTP सर्वर से कनेक्ट नहीं किया जा सका। इसके बजाय HTTPS सर्वर पते का उपयोग करें।",
-  "server.connect.camera.insecure": "QR स्कैनिंग के लिए इस पृष्ठ को HTTPS या लोकलहोस्ट पर खोलने की आवश्यकता है।",
   "server.connect.camera.unavailable":
     "इस ब्राउज़र पर कोई कैमरा उपलब्ध नहीं है. अपना कनेक्शन विवरण मैन्युअल रूप से दर्ज करें।",
   "server.connect.camera.error":

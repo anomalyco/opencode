@@ -34,6 +34,32 @@ describe("AISDKNative", () => {
     }
   })
 
+  test("maps Vercel AI Gateway packages to native routes", () => {
+    expect(
+      map(
+        "@ai-sdk/gateway",
+        {
+          apiKey: "secret",
+          headers: { "x-gateway": "test" },
+          extraBody: { custom: true },
+          gateway: { order: ["anthropic"] },
+          reasoningEffort: "high",
+        },
+        "anthropic/claude-sonnet-5.5",
+        "vercel",
+      ),
+    ).toEqual({
+      package: "@opencode/ai/providers/vercel-ai-gateway",
+      settings: {
+        apiKey: "secret",
+        gateway: { order: ["anthropic"] },
+        reasoningEffort: "high",
+      },
+      headers: { "x-gateway": "test" },
+      body: { custom: true },
+    })
+  })
+
   test("maps OpenAI-family packages and request options to native providers", () => {
     expect(
       map("@ai-sdk/openai", {
@@ -224,6 +250,9 @@ describe("AISDKNative", () => {
     const chat = map("@ai-sdk/azure", { ...settings, useCompletionUrls: true }, "custom-deployment")
     expect(chat?.package).toBe("@opencode/ai/providers/azure/chat")
     expect(chat?.settings).not.toHaveProperty("useCompletionUrls")
+    expect(AISDKNative.native("@ai-sdk/azure", { providerID: "azure", shape: "completions" })).toBe(
+      "@opencode/ai/providers/azure/chat",
+    )
   })
 
   test("maps Bedrock provider and request options", () => {

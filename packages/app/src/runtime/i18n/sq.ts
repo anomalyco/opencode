@@ -782,7 +782,6 @@ export const dict = {
   "server.connect.address.invalid": "Fut një adresë të vlefshme serveri HTTP ose HTTPS.",
   "server.connect.failed":
     "Nuk mund të lidhej. Kontrolloni adresën dhe fjalëkalimin e serverit, më pas provoni përsëri.",
-  "server.connect.pair.description": "Ekzekutoni këtë komandë në kompjuterin tuaj për të marrë detajet e lidhjes suaj.",
   "server.connect.scan": "Skanoni kodin QR",
   "server.connect.scan.description": "Drejtoje kamerën drejt kodit QR të treguar nga opencode pair.",
   "server.connect.scan.invalid": "Ky nuk është një kod çiftimi OpenCode. Skanoni kodin e treguar nga opencode pair.",
@@ -790,7 +789,6 @@ export const dict = {
   "server.connect.camera.starting": "Hapja e kamerës…",
   "server.connect.mixedContent":
     "Nuk mund të lidhej me këtë server HTTP nga një faqe HTTPS. Në vend të kësaj, përdorni një adresë serveri HTTPS.",
-  "server.connect.camera.insecure": "Skanimi QR kërkon hapjen e kësaj faqeje mbi HTTPS ose në localhost.",
   "server.connect.camera.unavailable":
     "Asnjë kamerë nuk disponohet për këtë shfletues. Futni manualisht detajet e lidhjes suaj.",
   "server.connect.camera.error":

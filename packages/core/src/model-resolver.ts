@@ -351,7 +351,7 @@ function unresolvedProviderVariables(model: RuntimeInfo, baseURL: string) {
 }
 
 const nativeCredentialSettings = (specifier: string, credential: Credential.Value | undefined) => {
-  if (!credential) return {}
+  if (!credential || credential.type === "external") return {}
   if (credential.type === "key") return { apiKey: credential.key }
   if (specifier === "@opencode/ai/providers/anthropic" || specifier === "@opencode/ai/providers/anthropic-compatible")
     return { authToken: credential.access }
@@ -453,7 +453,9 @@ export const layer = Layer.effect(
                 Effect.flatMap((model) =>
                   model && hasPackage(model)
                     ? Effect.succeed(model)
-                    : Effect.map(models.available(), (models) => models.find(hasPackage)),
+                    : Effect.map(models.available(), (models) =>
+                        models.find((model) => hasPackage(model) && Model.supportsText(model)),
+                      ),
                 ),
               )
         if (!selected) return undefined
@@ -502,6 +504,7 @@ function usesAPIKeyAuth(packageName: string | undefined) {
     name === "@opencode/ai/providers/groq" ||
     name === "@opencode/ai/providers/mistral" ||
     name === "@opencode/ai/providers/togetherai" ||
+    name === "@opencode/ai/providers/vercel-ai-gateway" ||
     name === "@opencode/ai/providers/xai" ||
     name === "@opencode/ai/providers/openrouter" ||
     name === "@opencode/ai/providers/azure" ||

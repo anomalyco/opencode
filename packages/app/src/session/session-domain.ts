@@ -6,5 +6,6 @@ export function selectSessionUserMessages(messages: SessionMessageInfo[]) {
 
 export function selectVisibleSessionUserMessages(messages: SessionMessageUser[], revertMessageID?: string) {
   if (!revertMessageID) return messages
+
   return messages.filter((message) => message.id < revertMessageID)
 }

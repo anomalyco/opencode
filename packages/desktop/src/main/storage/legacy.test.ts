@@ -9,18 +9,23 @@ import { openDatabase } from "./database"
 import { importLegacyStores } from "./legacy"
 
 const now = new Date("2026-07-01T00:00:00.000Z")
+
 const day = 24 * 60 * 60 * 1000
+
 const roots: string[] = []
 
 beforeEach(() => setSystemTime(now))
+
 afterEach(() => {
   setSystemTime()
+
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
 function tempRoot() {
   const root = mkdtempSync(path.join(tmpdir(), "opencode-legacy-store-"))
   roots.push(root)
+
   return root
 }
 
@@ -30,8 +35,10 @@ function writeStore(root: string, name: string, value: string, modified = now) {
 }
 
 const listing = (root: string) => readdirSync(root).sort()
+
 const rows = (db: ReturnType<typeof openDatabase>["db"]) =>
   db.all<{ name: string; key: string; value: string }>(sql`SELECT name, key, value FROM state ORDER BY name, key`)
+
 const run = (db: ReturnType<typeof openDatabase>["db"], root: string) =>
   Effect.runPromise(
     importLegacyStores(db, root).pipe(Effect.provide(Layer.merge(NodeFileSystem.layer, NodePath.layer))),

@@ -28,10 +28,10 @@ export function configOptions(catalog: Catalog, selection: Selection): SessionCo
       name: "Model",
       category: "model",
       type: "select",
-      currentValue: `${model.providerID}/${model.id}`,
+      currentValue: advertisedModel(model),
       options: catalog.models
         .toSorted((a, b) => Order.String(a.providerID, b.providerID) || a.name.localeCompare(b.name))
-        .map((item) => ({ value: `${item.providerID}/${item.id}`, name: `${item.providerID}/${item.name}` })),
+        .map((item) => ({ value: advertisedModel(item), name: `${item.providerID}/${item.name}` })),
     },
     ...(variants.length > 0
       ? [
@@ -101,24 +101,18 @@ export const resolveChange = Effect.fnUntraced(function* (
 })
 
 export function parseModelSelection(value: string, models: ReadonlyArray<Model.Info>): Model.Ref {
-  const providerID = models
-    .map((model) => model.providerID)
-    .toSorted()
-    .find((id) => value.startsWith(`${id}/`))
-  if (!providerID) {
-    const separator = value.indexOf("/")
-    if (separator === -1) return { providerID: Provider.ID.make(value), id: Model.ID.make("") }
-    return { providerID: Provider.ID.make(value.slice(0, separator)), id: Model.ID.make(value.slice(separator + 1)) }
-  }
-  const id = Model.ID.make(value.slice(providerID.length + 1))
-  if (findModel(models, { providerID, id })) return { providerID, id }
-  const separator = id.lastIndexOf("/")
-  const baseID = Model.ID.make(separator === -1 ? id : id.slice(0, separator))
-  const variant = separator === -1 ? undefined : id.slice(separator + 1)
-  const model = findModel(models, { providerID, id: baseID })
-  if (model && variant && model.variants.some((item) => item.id === variant))
-    return { providerID, id: baseID, variant: Model.VariantID.make(variant) }
-  return { providerID, id }
+  const exact = models.find((model) => advertisedModel(model) === value)
+  if (exact) return { providerID: exact.providerID, id: exact.id }
+  const separator = value.lastIndexOf("/")
+  const variant = Model.VariantID.make(value.slice(separator + 1))
+  const base = models.find(
+    (model) =>
+      advertisedModel(model) === value.slice(0, separator) && model.variants.some((item) => item.id === variant),
+  )
+  if (base) return { providerID: base.providerID, id: base.id, variant }
+  const providerEnd = value.indexOf("/")
+  if (providerEnd === -1) return { providerID: Provider.ID.make(value), id: Model.ID.make("") }
+  return { providerID: Provider.ID.make(value.slice(0, providerEnd)), id: Model.ID.make(value.slice(providerEnd + 1)) }
 }
 
 const requireModel = Effect.fnUntraced(function* (catalog: Catalog, value: string, current: Model.Ref) {
@@ -136,6 +130,10 @@ const requireModel = Effect.fnUntraced(function* (catalog: Catalog, value: strin
       : undefined)
   return { providerID: model.providerID, id: model.id, variant } satisfies Model.Ref
 })
+
+function advertisedModel(model: { readonly providerID: string; readonly id: string }) {
+  return `${model.providerID}/${model.id}`
+}
 
 function selectVariant(variant: string | undefined, variants: readonly string[]) {
   if (!variant || variant === DEFAULT_VARIANT_VALUE) return DEFAULT_VARIANT_VALUE

@@ -1,0 +1,91 @@
+---
+title: "SSO"
+description: "Sign in to an OpenCode Console workspace through your identity provider with OIDC or SAML."
+---
+
+Single sign-on (SSO) sends workspace members through your company's identity provider when they sign in. Owners and
+admins set it up in **Settings › Security**, and it's included with every workspace.
+
+| Protocol       | Providers                                                                              |
+| -------------- | -------------------------------------------------------------------------------------- |
+| OpenID Connect | Google Workspace, Microsoft Entra ID, Okta, Auth0, Ping Identity, or any OIDC provider |
+| SAML 2.0       | Google Workspace, Microsoft Entra ID, Okta, or any SAML provider                       |
+
+Each workspace has one SSO connection.
+
+## Set up OIDC
+
+1. Open **Settings › Security**, click **Configure SSO**, and choose **OpenID Connect** and your provider.
+2. Create an app in your provider by following the steps shown, with the `openid`, `email`, and `profile` scopes.
+3. Enter the **Issuer URL**, or your tenant or domain, plus the **Client ID**, **Client Secret**, and a
+   **Display Name**, then click **Save**.
+4. Copy the **Callback URL** from the connection into your provider's allowed redirect URIs.
+
+```text
+https://opencode.ai/console/auth/sso/ssoconn_.../callback
+```
+
+Console checks that the issuer is reachable when you save. SSO is active as soon as the connection is saved.
+
+## Set up SAML
+
+1. Open **Settings › Security**, click **Configure SSO**, and choose **SAML 2.0** and your provider.
+2. Copy the **ACS URL** and **SP Entity ID** into your provider. Custom providers can use the **SP Metadata URL** or
+   download the XML instead.
+3. Add your provider's metadata by URL, XML upload, or paste. You can also enter the **IdP Entity ID**, **IdP SSO
+   URL**, and **IdP Certificate** by hand.
+4. Review the details and click **Activate SSO**.
+
+```text
+ACS URL:       https://opencode.ai/console/auth/sso/ssoconn_.../callback
+SP Entity ID:  https://opencode.ai/console/auth/sso/ssoconn_.../metadata
+```
+
+Your provider must sign the response or the assertion, and send the user's email as an `email` attribute or as the
+NameID.
+
+## Verify email domains
+
+People who sign in to the [Console](https://opencode.ai/console) with an email on a verified domain are sent to your
+identity provider. Once SSO is active, click **Add domain** under **Email domains**, enter your domain, and publish
+the TXT record shown.
+
+```text
+Name:   _opencode-console-challenge.example.com
+Type:   TXT
+Value:  oc-verify=...
+```
+
+Click **Verify Domain** once the record is published. DNS changes can take a while to propagate. Each domain can
+belong to only one workspace.
+
+## SSO enforcement
+
+Once a workspace has SSO, admins and members must sign in through it to open the workspace, and Console redirects
+them automatically. Connecting OpenCode with `/connect` follows the same rule.
+
+Owners can also sign in without SSO, so a misconfigured provider cannot lock the workspace out of its settings.
+
+## Automatic membership
+
+People on a verified domain join the workspace as **Member** the first time they sign in through SSO. They are not
+added automatically when:
+
+- They have a pending invitation. The invitation is used instead.
+- The workspace uses [directory sync](/console/scim), which decides membership.
+- The workspace has a [Go](/console/go) subscription.
+
+Invitations to an SSO workspace send the invitee to your identity provider when they open the link.
+
+## Existing accounts
+
+If someone already has a Console account with the same email, Console asks them to sign in to it once to link SSO.
+Invited people and people added by directory sync are linked automatically.
+
+## Edit or delete
+
+Click **Edit** on the connection to change its details. Leave the secret or certificate blank to keep the current
+one. To switch between OIDC and SAML, delete the connection and create a new one.
+
+Delete the connection from **⋯ › Delete...**. Members go back to their other sign-in methods, and directory sync stops
+with its tokens revoked. Email domains are kept.

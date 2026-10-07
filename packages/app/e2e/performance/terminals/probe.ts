@@ -29,8 +29,11 @@ const probe: TerminalProbe = {
   hiddenDraws: 0,
   serialized: [],
 }
+
 window.terminalProbe = probe
+
 const open = Terminal.prototype.open
+
 Terminal.prototype.open = function (element) {
   probe.term = this
   open.call(this, element)
@@ -42,33 +45,43 @@ Terminal.prototype.open = function (element) {
   renderer.render = function (...args) {
     probe.renders++
     hidden = !element.checkVisibility()
+
     if (hidden) probe.hiddenRenders++
+
     return render.apply(this, args)
   }
+
   if (new URL(location.href).searchParams.has("terminalDrawProbe")) {
     const context = element.querySelector("canvas")!.getContext("2d")!
     const draw = context.drawImage
     context.drawImage = function (...args: unknown[]) {
       probe.draws++
+
       if (hidden) probe.hiddenDraws++
       draw.apply(this, args)
     }
   }
 }
+
 const write = Terminal.prototype.write
+
 Terminal.prototype.write = function (data, done) {
   probe.writes++
   probe.pending++
   probe.bytes += typeof data === "string" ? new TextEncoder().encode(data).byteLength : data.byteLength
+
   return write.call(this, data, () => {
     probe.pending--
     done?.()
   })
 }
+
 const serialize = SerializeAddon.prototype.serialize
+
 SerializeAddon.prototype.serialize = function (options) {
   const start = performance.now()
   const value = serialize.call(this, options)
   probe.serialized.push({ ms: performance.now() - start, bytes: new TextEncoder().encode(value).byteLength, value })
+
   return value
 }

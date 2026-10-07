@@ -808,7 +808,6 @@ export const dict = {
   "server.connect.button": "接続",
   "server.connect.address.invalid": "有効なHTTPまたはHTTPSサーバーアドレスを入力してください。",
   "server.connect.failed": "接続できませんでした。サーバーアドレスとパスワードを確認して、もう一度お試しください。",
-  "server.connect.pair.description": "このコマンドをコンピューターで実行して接続情報を取得してください。",
   "server.connect.scan": "QRコードをスキャン",
   "server.connect.scan.description": "opencode pair に表示されたQRコードにカメラを向けてください。",
   "server.connect.scan.invalid":
@@ -817,7 +816,6 @@ export const dict = {
   "server.connect.camera.starting": "カメラを開いています…",
   "server.connect.mixedContent":
     "HTTPSページからこのHTTPサーバーに接続できません。代わりにHTTPSサーバーのアドレスを使用してください。",
-  "server.connect.camera.insecure": "QRスキャンには、このページをHTTPSで開くか、ローカルホストで開く必要があります。",
   "server.connect.camera.unavailable": "このブラウザで使用可能なカメラがありません。接続情報を手動で入力してください。",
   "server.connect.camera.error":
     "カメラを開くことができません。カメラへのアクセスを許可するか、接続情報を手動で入力してください。",

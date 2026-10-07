@@ -8,6 +8,7 @@ export interface KeybindProps extends ComponentProps<"div"> {
 
 export function Keybind(props: KeybindProps) {
   const [local, rest] = splitProps(props, ["keys", "variant", "class", "classList"])
+
   return (
     <div
       {...rest}

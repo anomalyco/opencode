@@ -135,6 +135,8 @@ export interface MockServerConfig {
   strictDirectory?: boolean
   // Answers 401 UnauthorizedError unless a request carries this password; a function may change it mid-test.
   password?: Resolvable<string>
+  // Serves GET /auth/connect/:code: `code` redeems once for `token` (send it as the password); others answer 401.
+  pairing?: { code: string; token: string }
 }
 
 export type MockPtyInfo = {
@@ -400,6 +402,29 @@ export async function mockOpenCodeServer(page: Page, config: MockServerConfig) {
       body: payload,
     })
   })
+
+  if (config.pairing) {
+    const pairing = { ...config.pairing, redeemed: false }
+
+    await page.route(`${server}/auth/connect/*`, (route) => {
+      if (route.request().method() === "OPTIONS") return route.fulfill({ status: 204, headers: corsHeaders })
+      const code = decodeURIComponent(new URL(route.request().url()).pathname.split("/").at(-1) ?? "")
+
+      if (code !== pairing.code || pairing.redeemed) {
+        return route.fulfill({
+          status: 401,
+          headers: corsHeaders,
+          json: Schema.encodeSync(MockUnauthorized)(
+            new MockUnauthorized({ message: "Pairing link expired or already used" }),
+          ),
+        })
+      }
+
+      pairing.redeemed = true
+
+      return route.fulfill({ headers: corsHeaders, json: { token: pairing.token } })
+    })
+  }
 
   if (config.pty) {
     const host = new URL(server).host

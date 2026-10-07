@@ -795,7 +795,6 @@ export const dict = {
   "server.connect.button": "اتصال",
   "server.connect.address.invalid": "یک نشانی معتبر سرور HTTP یا HTTPS وارد کنید.",
   "server.connect.failed": "اتصال ممکن نشد. نشانی سرور و گذرواژه را بررسی کنید و دوباره تلاش کنید.",
-  "server.connect.pair.description": "برای دریافت جزئیات اتصال، این فرمان را روی رایانهٔ خود اجرا کنید.",
   "server.connect.scan": "پویش کد QR",
   "server.connect.scan.description": "دوربین را به‌سمت کد QR نمایش‌داده‌شده توسط opencode pair بگیرید.",
   "server.connect.scan.invalid": "این کد جفت‌سازی OpenCode نیست. کدی را پویش کنید که opencode pair نشان می‌دهد.",
@@ -803,7 +802,6 @@ export const dict = {
   "server.connect.camera.starting": "در حال باز کردن دوربین…",
   "server.connect.mixedContent":
     "اتصال به این سرور HTTP از صفحهٔ HTTPS ممکن نشد. به‌جای آن از نشانی سرور HTTPS استفاده کنید.",
-  "server.connect.camera.insecure": "پویش QR نیازمند باز کردن این صفحه از طریق HTTPS یا روی localhost است.",
   "server.connect.camera.unavailable": "هیچ دوربینی برای این مرورگر در دسترس نیست. جزئیات اتصال را دستی وارد کنید.",
   "server.connect.camera.error":
     "باز کردن دوربین ممکن نشد. دسترسی دوربین را مجاز کنید یا جزئیات اتصال را دستی وارد کنید.",

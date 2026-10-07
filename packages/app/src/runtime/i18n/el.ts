@@ -796,8 +796,6 @@ export const dict = {
   "server.connect.address.invalid": "Εισαγάγετε μια έγκυρη διεύθυνση διακομιστή HTTP ή HTTPS.",
   "server.connect.failed":
     "Δεν ήταν δυνατή η σύνδεση. Ελέγξτε τη διεύθυνση του διακομιστή και τον κωδικό πρόσβασης και, στη συνέχεια, δοκιμάστε ξανά.",
-  "server.connect.pair.description":
-    "Εκτελέστε αυτήν την εντολή στον υπολογιστή σας για να λάβετε τα στοιχεία της σύνδεσής σας.",
   "server.connect.scan": "Σάρωση κωδικού QR",
   "server.connect.scan.description": "Στρέψτε την κάμερά σας στον κωδικό QR που εμφανίζεται από το opencode pair.",
   "server.connect.scan.invalid":
@@ -806,7 +804,6 @@ export const dict = {
   "server.connect.camera.starting": "Άνοιγμα κάμερας…",
   "server.connect.mixedContent":
     "Δεν ήταν δυνατή η σύνδεση σε αυτόν τον διακομιστή HTTP από μια σελίδα HTTPS. Χρησιμοποιήστε μια διεύθυνση διακομιστή HTTPS.",
-  "server.connect.camera.insecure": "Η σάρωση QR απαιτεί άνοιγμα αυτής της σελίδας μέσω HTTPS ή localhost.",
   "server.connect.camera.unavailable":
     "Δεν υπάρχει κάμερα διαθέσιμη σε αυτό το πρόγραμμα περιήγησης. Εισαγάγετε τα στοιχεία της σύνδεσής σας με μη αυτόματο τρόπο.",
   "server.connect.camera.error":

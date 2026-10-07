@@ -7,7 +7,6 @@ import { CloudflareWorkersAIPlugin } from "./provider/cloudflare-workers-ai.js"
 import { CoherePlugin } from "./provider/cohere.js"
 import { DigitalOceanPlugin } from "./provider/digitalocean.js"
 import { DynamicProviderPlugin } from "./provider/dynamic.js"
-import { GatewayPlugin } from "./provider/gateway.js"
 import { GithubCopilotPlugin } from "./provider/github-copilot.js"
 import { GitLabPlugin } from "./provider/gitlab.js"
 import { GoogleVertexPlugin } from "./provider/google-vertex.js"
@@ -41,7 +40,6 @@ export const ProviderPlugins: PluginInternal.InternalPlugin[] = [
   CloudflareWorkersAIPlugin,
   CoherePlugin,
   DigitalOceanPlugin,
-  GatewayPlugin,
   GithubCopilotPlugin,
   GitLabPlugin,
   GoogleVertexPlugin,

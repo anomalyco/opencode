@@ -107,6 +107,7 @@ const RepeatedEdits = {
 
 function EditSiblingUpdateStory() {
   const [state, setState] = createStore({ sibling: false })
+
   const document = createMemo(() => ({
     ...editThenTestDocument,
     status: { type: "busy" as const },
@@ -114,6 +115,7 @@ function EditSiblingUpdateStory() {
       .filter((message) => message.id === "msg_user_edit" || message.id === "msg_assistant_edit")
       .map((message) => {
         if (message.type !== "assistant") return message
+
         return {
           ...message,
           time: { created: message.time.created },
@@ -124,6 +126,7 @@ function EditSiblingUpdateStory() {
         }
       }),
   }))
+
   return (
     <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">
       <button type="button" onClick={() => setState("sibling", true)}>
@@ -142,6 +145,7 @@ const ThreeFilePatch = {
   render: () => {
     const source = (changed: boolean) =>
       Array.from({ length: 12 }, (_, index) => `export const value${index} = ${changed ? index + 1 : index}\n`).join("")
+
     const files = [
       { file: "src/a.ts", status: "modified" },
       { file: "src/b.ts", status: "added" },
@@ -158,6 +162,7 @@ const ThreeFilePatch = {
       additions: status === "deleted" ? 0 : 4,
       deletions: status === "added" ? 0 : 3,
     }))
+
     return (
       <CurrentSessionTimelineStory
         title="Update, create, and remove files"
@@ -203,10 +208,12 @@ const fileScenarios = {
 export const AppendingToolCalls = {
   render: () => {
     const [state, setState] = createStore({ calls: 0 })
+
     const files = ["src/a.ts", "src/b.ts"].map((file) => ({
       ...storyPatchFile(file),
       patch: createTwoFilesPatch(file, file, "export const before = true\n", "export const after = true\n"),
     }))
+
     const document = createMemo(() =>
       storyDocument([
         storyTool("tool_shell_existing", "shell", "completed", { command: "printf checked" }, { output: "checked" }),
@@ -232,6 +239,7 @@ export const AppendingToolCalls = {
         ),
       ]),
     )
+
     return (
       <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">
         <button type="button" onClick={() => setState("calls", (count) => count + 1)}>
@@ -273,6 +281,7 @@ export const FileToolFallbacks = {
   },
   render: (args: { tool: string; empty: boolean; forceOpen: boolean; controlled: boolean }) => {
     const [state, setState] = createStore({ completed: false, open: false })
+
     return (
       <section class="mx-auto flex w-full max-w-[860px] flex-col gap-4 p-6">
         <button type="button" onClick={() => setState("completed", true)}>

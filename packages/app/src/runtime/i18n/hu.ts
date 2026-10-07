@@ -794,8 +794,6 @@ export const dict = {
   "server.connect.button": "Csatlakozás",
   "server.connect.address.invalid": "Adjon meg egy érvényes HTTP vagy HTTPS szervercímet.",
   "server.connect.failed": "Nem sikerült csatlakozni. Ellenőrizze a szerver címét és jelszavát, majd próbálja újra.",
-  "server.connect.pair.description":
-    "Futtassa ezt a parancsot a számítógépén a kapcsolat részleteinek megtekintéséhez.",
   "server.connect.scan": "QR-kód beolvasása",
   "server.connect.scan.description": "Irányítsa kameráját a opencode pair által mutatott QR kódra.",
   "server.connect.scan.invalid": "Ez nem egy OpenCode párosítási kód. Olvassa be a opencode pair által mutatott kódot.",
@@ -803,7 +801,6 @@ export const dict = {
   "server.connect.camera.starting": "Kamera nyitása…",
   "server.connect.mixedContent":
     "Nem sikerült csatlakozni ehhez a HTTP szerverhez egy HTTPS oldalról. Használjon helyette HTTPS szervercímet.",
-  "server.connect.camera.insecure": "A QR beolvasásához ezt az oldalt a HTTPS vagy a localhost oldalon kell megnyitni.",
   "server.connect.camera.unavailable":
     "Ehhez a böngészőhöz nem érhető el kamera. Adja meg manuálisan a kapcsolat adatait.",
   "server.connect.camera.error":

@@ -791,7 +791,6 @@ export const dict = {
   "server.connect.button": "დაკავშირება",
   "server.connect.address.invalid": "შეიყვანეთ ვალიდური HTTP ან HTTPS სერვერის მისამართი.",
   "server.connect.failed": "ვერ მოხერხდა დაკავშირება. შეამოწმეთ სერვერის მისამართი და პაროლი, შემდეგ კვლავ სცადეთ.",
-  "server.connect.pair.description": "ჩაატარეთ ეს ბრძანება თქვენს კომპიუტერზე, რათა მიიღოთ თქვენი კავშირის დეტალები.",
   "server.connect.scan": "სკანირება QR კოდით",
   "server.connect.scan.description": "მიმართეთ კამერა opencode pair-ის მიერ ნაჩვენებ QR კოდზე.",
   "server.connect.scan.invalid":
@@ -800,7 +799,6 @@ export const dict = {
   "server.connect.camera.starting": "კამერის გახსნა…",
   "server.connect.mixedContent":
     "ვერ მოხერხდა დაკავშირება ამ HTTP სერვერთან HTTPS გვერდიდან. გამოიყენეთ HTTPS სერვერის მისამართი.",
-  "server.connect.camera.insecure": "QR სკანირება საჭიროებს ამ გვერდის გახსნა HTTPS-ზე ან localhost-ზე.",
   "server.connect.camera.unavailable":
     "ამ ბრაუზერისთვის კამერა არ არის ხელმისაწვდომი. შეიყვანეთ თქვენი კავშირის დეტალები ხელით.",
   "server.connect.camera.error":

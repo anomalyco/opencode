@@ -73,6 +73,7 @@ export const LiveUserCommand = {
   argTypes: { outcome: { control: "select", options: ["exited", "nonzero", "timeout", "killed"] } },
   render: (args: { outcome: "exited" | "nonzero" | "timeout" | "killed"; output: boolean; expanded: boolean }) => {
     const [stats, setStats] = createStore({ reads: 0 })
+
     const [message, setMessage] = createSignal<SessionMessageShell>({
       id: "msg_shell_live",
       type: "shell",
@@ -81,7 +82,9 @@ export const LiveUserCommand = {
       status: "running",
       time: { created: 1 },
     })
+
     let output = args.output ? "ready\n" : ""
+
     return (
       <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
         <output aria-label="Output requests">{stats.reads}</output>
@@ -108,10 +111,13 @@ export const LiveUserCommand = {
           data={{ session: [], session_status: {}, session_diff: {} }}
           shellOutput={async (input) => {
             setStats("reads", (value) => value + 1)
+
             if (message().status !== "running") throw new Error("Shell output unavailable")
+
             if (input.id !== "shell_live" || input.location?.directory !== "/workspace") {
               throw new Error("Unexpected shell output request")
             }
+
             return {
               location: {
                 directory: "/workspace",
@@ -205,8 +211,10 @@ function InteractiveCommandStory(props: {
     sibling: false,
     busy: false,
   })
+
   const document = createMemo(() => {
     const phase = state.phase as "streaming" | "input" | "running" | "completed"
+
     const content: SessionMessageAssistant["content"] = [
       ...(props.existingGroup
         ? [storyTool("tool_context_lifecycle", "read", "completed", { filePath: "/workspace/README.md" })]
@@ -236,11 +244,13 @@ function InteractiveCommandStory(props: {
         : []),
       ...(state.sibling ? [{ type: "text" as const, text: "Sibling content" }] : []),
     ]
+
     return {
       ...storyDocument(content, state.started && phase !== "completed"),
       status: { type: (state.started && phase !== "completed") || state.busy ? ("busy" as const) : ("idle" as const) },
     }
   })
+
   return (
     <section class="mx-auto flex w-full max-w-[720px] flex-col gap-4 p-6">
       <div class="flex flex-wrap gap-3">

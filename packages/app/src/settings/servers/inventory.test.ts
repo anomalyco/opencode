@@ -8,6 +8,7 @@ const ssh: ExtensionServer = {
   extension: "ssh",
   entry: { id: "build", name: "Build server", state: "stopped" },
 }
+
 const connection: ServerConnection.Extension = {
   type: "extension",
   key: "ssh:build",
@@ -31,7 +32,9 @@ test("settings project inventory reads metadata without acquiring directory stor
     sandboxes: [],
     worktrees: [],
   }))
+
   const tracked = { ...projects[0], expanded: true, icon: { override: "local-icon" } }
+
   const inventory = settingsProjects({
     projects: { list: () => [tracked], closed: () => [projects[1].worktree] },
     sync: { data: { project: projects } },

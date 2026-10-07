@@ -8,9 +8,12 @@ export function authTokenFromCredentials(input: { password: string }) {
 
 export function authFromToken(token: string | null) {
   const decoded = decode64(token ?? undefined)
+
   if (!decoded) return
   const separator = decoded.indexOf(":")
+
   if (separator === -1) return
+
   return {
     password: decoded.slice(separator + 1),
   }

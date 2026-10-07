@@ -803,7 +803,6 @@ export const dict = {
   "server.connect.button": "Повежи се",
   "server.connect.address.invalid": "Унесите важећу HTTP или HTTPS адресу сервера.",
   "server.connect.failed": "Није могуће повезати се. Проверите адресу сервера и лозинку, па покушајте поново.",
-  "server.connect.pair.description": "Покрените ову команду на рачунару да бисте добили податке за повезивање.",
   "server.connect.scan": "Скенирај QR код",
   "server.connect.scan.description": "Усмерите камеру на QR код који приказује opencode pair.",
   "server.connect.scan.invalid": "Ово није OpenCode код за повезивање. Скенирајте код који приказује opencode pair.",
@@ -811,7 +810,6 @@ export const dict = {
   "server.connect.camera.starting": "Отварање камере…",
   "server.connect.mixedContent":
     "Није могуће повезати се на овај HTTP сервер са HTTPS странице. Уместо тога користите HTTPS адресу сервера.",
-  "server.connect.camera.insecure": "Скенирање QR кода захтева отварање ове странице преко HTTPS-а или на лоцалхосту.",
   "server.connect.camera.unavailable": "Овај прегледник нема доступну камеру. Унесите податке за повезивање ручно.",
   "server.connect.camera.error":
     "Није могуће отворити камеру. Дозволите приступ камери или унесите податке за повезивање ручно.",

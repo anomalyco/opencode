@@ -19,12 +19,14 @@ function showRequestError(language: ReturnType<typeof useLanguage>, err: unknown
 function useDefaultServer() {
   const language = useLanguage()
   const platform = usePlatform()
+
   const [defaultKey, defaultKeyActions] = createResource(
     async () => {
       try {
         return (await platform.getDefaultServer?.()) ?? null
       } catch (err) {
         showRequestError(language, err)
+
         return null
       }
     },
@@ -53,17 +55,24 @@ export function sortServerConnections(input: {
   defaultKey: ServerConnection.Key | null
 }) {
   const order = new Map(input.servers.map((item, index) => [item, index] as const))
+
   const rank = (value?: ServerHealth) => {
     if (value?.healthy === true) return 0
+
     if (value?.healthy === false) return 2
+
     return 1
   }
+
   return input.servers.slice().sort((a, b) => {
     const preferred =
       Number(ServerConnection.key(b) === input.defaultKey) - Number(ServerConnection.key(a) === input.defaultKey)
+
     if (preferred !== 0) return preferred
     const health = rank(input.health[ServerConnection.key(a)]) - rank(input.health[ServerConnection.key(b)])
+
     if (health !== 0) return health
+
     return (order.get(a) ?? 0) - (order.get(b) ?? 0)
   })
 }
@@ -81,6 +90,7 @@ export function useServerActionsController() {
       await extensions.entry(key)?.entry.remove?.()
       tabs.removeServer(key)
       server.remove(key)
+
       if ((await platform.getDefaultServer?.()) === key) await defaults.set(null)
     } catch (err) {
       showRequestError(language, err)
@@ -94,6 +104,7 @@ export function useServerActionsController() {
       remove,
       canHide: (key: ServerConnection.Key) => {
         const conn = server.list.find((item) => ServerConnection.key(item) === key)
+
         return server.visible.length > 1 && !!conn && ServerConnection.builtin(conn)
       },
       isHidden: (key: ServerConnection.Key) => server.isHidden(key),
@@ -110,6 +121,7 @@ export function useServerCollectionController() {
   const actions = useServerActionsController()
 
   const items = createMemo(() => server.list)
+
   const sorted = createMemo(() =>
     sortServerConnections({
       servers: items(),

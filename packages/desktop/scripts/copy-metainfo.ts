@@ -1,10 +1,13 @@
 import { resolveChannel } from "./utils"
 
 const arg = process.argv[2]
+
 const channel = arg === "dev" || arg === "beta" || arg === "prod" ? arg : resolveChannel()
 
 const appId = channel === "prod" ? "ai.opencode.desktop" : `ai.opencode.desktop.${channel}`
+
 const productName = channel === "prod" ? "OpenCode" : `OpenCode ${channel.charAt(0).toUpperCase() + channel.slice(1)}`
+
 const summary = `Open source AI coding agent${channel !== "prod" ? ` (${channel})` : ""}`
 
 const xml = `<?xml version="1.0" encoding="UTF-8"?>
@@ -44,4 +47,5 @@ const xml = `<?xml version="1.0" encoding="UTF-8"?>
 `
 
 await Bun.write(`resources/${appId}.metainfo.xml`, xml)
+
 console.log(`Generated metainfo for ${channel} at resources/${appId}.metainfo.xml`)
