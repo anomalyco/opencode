@@ -1,6 +1,6 @@
 import { createStore } from "solid-js/store"
 import { dirname } from "node:path"
-import { createMemo, For, Match, Show, Switch } from "solid-js"
+import { createEffect, createMemo, For, Match, on, Show, Switch } from "solid-js"
 import { Portal, useRenderer, useTerminalDimensions, type JSX } from "@opentui/solid"
 import type { TextareaRenderable } from "@opentui/core"
 import { useTheme, selectedForeground } from "../../context/theme"
@@ -112,9 +112,15 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
   const sdk = useSDK()
   const project = useProject()
   const sync = useSync()
+  const tuiConfig = useTuiConfig()
+  const requestID = createMemo(() => props.request.id)
   const [store, setStore] = createStore({
     stage: "permission" as PermissionStage,
+    expanded: tuiConfig.permission_prompt?.default_expanded === true,
   })
+  createEffect(
+    on(requestID, () => setStore("expanded", tuiConfig.permission_prompt?.default_expanded === true), { defer: true }),
+  )
   const pathFormatter = usePathFormatter()
 
   const session = createMemo(() => sync.data.session.find((s) => s.id === props.request.sessionID))
@@ -405,6 +411,8 @@ export function PermissionPrompt(props: { request: PermissionRequest; directory?
               options={{ once: "Allow once", always: "Allow always", reject: "Reject" }}
               escapeKey="reject"
               fullscreen
+              expanded={store.expanded}
+              onToggleFullscreen={() => setStore("expanded", (value) => !value)}
               onSelect={(option) => {
                 if (option === "always") {
                   setStore("stage", "always")
@@ -529,6 +537,8 @@ function Prompt<const T extends Record<string, string>>(props: {
   options: T
   escapeKey?: keyof T
   fullscreen?: boolean
+  expanded?: boolean
+  onToggleFullscreen?: () => void
   onSelect: (option: keyof T) => void
 }) {
   const { theme } = useTheme()
@@ -537,7 +547,6 @@ function Prompt<const T extends Record<string, string>>(props: {
   const keys = Object.keys(props.options) as (keyof T)[]
   const [store, setStore] = createStore({
     selected: keys[0],
-    expanded: false,
   })
   const narrow = createMemo(() => dimensions().width < 80)
   const fullscreenHint = useCommandShortcut("permission.prompt.fullscreen")
@@ -560,7 +569,7 @@ function Prompt<const T extends Record<string, string>>(props: {
         category: "Permission",
         run() {
           if (!props.fullscreen) return
-          setStore("expanded", (v) => !v)
+          props.onToggleFullscreen?.()
         },
       },
     ],
@@ -626,7 +635,7 @@ function Prompt<const T extends Record<string, string>>(props: {
     ],
   }))
 
-  const hint = createMemo(() => (store.expanded ? "minimize" : "fullscreen"))
+  const hint = createMemo(() => (props.expanded ? "minimize" : "fullscreen"))
   useRenderer()
 
   const content = () => (
@@ -635,11 +644,11 @@ function Prompt<const T extends Record<string, string>>(props: {
       border={["left"]}
       borderColor={theme.warning}
       customBorderChars={SplitBorder.customBorderChars}
-      {...(store.expanded
+      {...(props.expanded
         ? { top: dimensions().height * -1 + 1, bottom: 1, left: 2, right: 2, position: "absolute" }
         : {
             top: 0,
-            maxHeight: 15,
+            maxHeight: tuiConfig.permission_prompt?.max_height ?? 15,
             bottom: 0,
             left: 0,
             right: 0,
@@ -712,7 +721,7 @@ function Prompt<const T extends Record<string, string>>(props: {
   )
 
   return (
-    <Show when={!store.expanded} fallback={<Portal>{content()}</Portal>}>
+    <Show when={!props.expanded} fallback={<Portal>{content()}</Portal>}>
       {content()}
     </Show>
   )

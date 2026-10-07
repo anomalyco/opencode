@@ -58,6 +58,15 @@ export const Prompt = Schema.Struct({
   }),
 }).annotate({ description: "Prompt size settings" })
 
+export const PermissionPrompt = Schema.Struct({
+  max_height: Schema.optional(PromptSize).annotate({
+    description: "Permission prompt max height in rows when not fullscreen (default: 15)",
+  }),
+  default_expanded: Schema.optional(Schema.Boolean).annotate({
+    description: "Open the permission prompt in fullscreen mode by default (default: false)",
+  }),
+}).annotate({ description: "Permission prompt size settings" })
+
 export const Info = Schema.Struct({
   $schema: Schema.optional(Schema.String),
   theme: Schema.optional(Schema.String),
@@ -67,6 +76,7 @@ export const Info = Schema.Struct({
   leader_timeout: Schema.optional(LeaderTimeout),
   attention: Schema.optional(Attention),
   prompt: Schema.optional(Prompt),
+  permission_prompt: Schema.optional(PermissionPrompt),
   scroll_speed: Schema.optional(ScrollSpeed).annotate({ description: "TUI scroll speed" }),
   scroll_acceleration: Schema.optional(ScrollAcceleration),
   diff_style: Schema.optional(DiffStyle),

@@ -29,6 +29,7 @@ test("validates config constraints", () => {
       leader_timeout: 250,
       attention: { volume: 1, sounds: { done: "done.wav" } },
       prompt: { max_height: 10, max_width: "auto" },
+      permission_prompt: { max_height: 30, default_expanded: true },
       scroll_speed: 0.001,
       diff_style: "stacked",
       cursor: { blinking: false },
@@ -37,12 +38,17 @@ test("validates config constraints", () => {
   ).toMatchObject({
     leader_timeout: 250,
     attention: { volume: 1 },
+    permission_prompt: { max_height: 30, default_expanded: true },
     diff_style: "stacked",
     cursor: { blinking: false },
   })
   expect(() => decodeInfo({ leader_timeout: 0 })).toThrow()
   expect(() => decodeInfo({ attention: { volume: 1.1 } })).toThrow()
   expect(() => decodeInfo({ prompt: { max_width: 0 } })).toThrow()
+  expect(() => decodeInfo({ permission_prompt: { max_height: 0 } })).toThrow()
+  expect(() => decodeInfo({ permission_prompt: { max_height: -1 } })).toThrow()
+  expect(() => decodeInfo({ permission_prompt: { max_height: 1.5 } })).toThrow()
+  expect(() => decodeInfo({ permission_prompt: { default_expanded: "true" } })).toThrow()
   expect(() => decodeInfo({ scroll_speed: 0 })).toThrow()
   expect(() => decodeInfo({ cursor: { style: "beam" } })).toThrow()
   expect(decodeInfo({ attention: { sounds: { unknown: "sound.wav" } } })).toEqual({ attention: { sounds: {} } })
@@ -64,6 +70,22 @@ test("resolves host-neutral defaults", () => {
   expect(config.keybinds.has("terminal.suspend")).toBe(true)
   expect(config.keybinds.has("session.list")).toBe(true)
   expect(config.cursor).toBeUndefined()
+  expect(config.permission_prompt).toBeUndefined()
+})
+
+test("preserves optional permission prompt settings", () => {
+  const inputs = [
+    { permission_prompt: {} },
+    { permission_prompt: { max_height: 1 } },
+    { permission_prompt: { max_height: 30 } },
+    { permission_prompt: { default_expanded: false } },
+    { permission_prompt: { default_expanded: true } },
+    { permission_prompt: { max_height: 30, default_expanded: true } },
+  ]
+
+  inputs.forEach((input) => {
+    expect(resolve(decodeInfo(input), { terminalSuspend: true }).permission_prompt).toEqual(input.permission_prompt)
+  })
 })
 
 test("resolves overrides without mutating input", () => {
