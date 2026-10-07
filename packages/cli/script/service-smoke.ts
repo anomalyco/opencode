@@ -52,6 +52,7 @@ try {
     signal: AbortSignal.timeout(5_000),
   })
   if (tokenOpenApi.status !== 200) throw new Error("Compiled application rejected query authentication")
+  await verifyWebUi(info.url)
   if ((await pluginIDs(info.url, headers)).includes("smoke")) throw new Error("Smoke plugin existed before creation")
   const plugin = path.join(root, ".opencode", "plugins", "smoke.ts")
   await fs.writeFile(plugin, pluginSource())
@@ -123,6 +124,18 @@ async function waitForRegistration() {
     await Bun.sleep(25)
   }
   throw new Error("Compiled service did not publish registration")
+}
+
+// Reads the web UI from the binary's embedded archive: the shell, and the entry script it names.
+async function verifyWebUi(url: string) {
+  const shell = await fetch(url, { signal: AbortSignal.timeout(5_000) })
+  const html = await shell.text()
+  if (shell.status !== 200 || !html.includes("<html")) throw new Error("Compiled service did not serve the web UI")
+  const script = html.match(/<script[^>]*\bsrc="(\/_assets\/[^"]+\.js)"/)?.[1]
+  if (!script) throw new Error("Compiled web UI names no entry script")
+  const entry = await fetch(new URL(script, url), { signal: AbortSignal.timeout(5_000) })
+  if (entry.status !== 200 || (await entry.text()).length === 0)
+    throw new Error(`Compiled service did not serve ${script}`)
 }
 
 async function waitForReady(url: string, headers: HeadersInit) {
