@@ -1,6 +1,6 @@
-# Changes in this fork
+# pusi project overview
 
-This fork extends OpenCode's desktop and web interface. Upstream installation commands and release downloads do not include these source changes. To run them locally, follow the [development setup](VOICE_INPUT.md#development-setup).
+pusi (Private Unified Super Intelligence) extends OpenCode's desktop and web interface. Upstream installation commands and release downloads do not include these source changes. To run them locally, follow the [development setup](VOICE_INPUT.md#development-setup).
 
 ## Voice input and model management
 
@@ -23,6 +23,12 @@ Session-panel sizing applies split-diff constraints only while the Review tab is
 ## Shared UI and desktop development
 
 Shared controls use Tabler icons and a common loading indicator. The Tabler MIT license is included in [packages/ui/TABLER-LICENSE](packages/ui/TABLER-LICENSE). The desktop predev script invokes Electron's installation script directly.
+
+## Application identity
+
+The desktop application uses pusi-specific names and `io.github.leejaywon.pusi` identifiers, with `.dev` and `.beta` variants. Desktop preferences and managed voice installations use the new application-data directories; existing OpenCode settings are not automatically copied. Backend configuration and internal workspace names retain their inherited conventions.
+
+Links use `pusi-app://`. Release metadata points to `leejaywon/pusi`, and automatic updates are disabled pending a tested pusi release pipeline. Upstream publication workflows remain guarded for the original repository and are not a configured pusi publishing service.
 
 ## Validation
 

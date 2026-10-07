@@ -39,6 +39,15 @@ const session = (input: Partial<Session> & Pick<Session, "id" | "directory">) =>
   }) as Session
 
 describe("layout deep links", () => {
+  test("parses pusi project and session links and rejects unrelated schemes", () => {
+    expect(parseDeepLink("pusi-app://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
+    expect(parseNewSessionDeepLink("pusi-app://new-session?directory=/tmp/demo&prompt=hello")).toEqual({
+      directory: "/tmp/demo",
+      prompt: "hello",
+    })
+    expect(parseDeepLink("sip://open-project?directory=/tmp/demo")).toBeUndefined()
+  })
+
   test("parses open-project deep links", () => {
     expect(parseDeepLink("opencode://open-project?directory=/tmp/demo")).toBe("/tmp/demo")
   })

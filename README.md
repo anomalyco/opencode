@@ -1,135 +1,38 @@
-<p align="center">
-  <a href="https://opencode.ai">
-    <picture>
-      <source srcset="packages/console/app/src/asset/logo-ornate-dark.svg" media="(prefers-color-scheme: dark)">
-      <source srcset="packages/console/app/src/asset/logo-ornate-light.svg" media="(prefers-color-scheme: light)">
-      <img src="packages/console/app/src/asset/logo-ornate-light.svg" alt="OpenCode logo">
-    </picture>
-  </a>
-</p>
-<p align="center">The open source AI coding agent.</p>
-<p align="center">
-  <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
-  <a href="https://www.npmjs.com/package/opencode-ai"><img alt="npm" src="https://img.shields.io/npm/v/opencode-ai?style=flat-square" /></a>
-  <a href="https://github.com/anomalyco/opencode/actions/workflows/publish.yml"><img alt="Build status" src="https://img.shields.io/github/actions/workflow/status/anomalyco/opencode/publish.yml?style=flat-square&branch=dev" /></a>
-</p>
+# pusi
 
-<p align="center">
-  <a href="README.md">English</a> |
-  <a href="README.zh.md">简体中文</a> |
-  <a href="README.zht.md">繁體中文</a> |
-  <a href="README.ko.md">한국어</a> |
-  <a href="README.de.md">Deutsch</a> |
-  <a href="README.es.md">Español</a> |
-  <a href="README.fr.md">Français</a> |
-  <a href="README.it.md">Italiano</a> |
-  <a href="README.da.md">Dansk</a> |
-  <a href="README.ja.md">日本語</a> |
-  <a href="README.pl.md">Polski</a> |
-  <a href="README.ru.md">Русский</a> |
-  <a href="README.bs.md">Bosanski</a> |
-  <a href="README.ar.md">العربية</a> |
-  <a href="README.no.md">Norsk</a> |
-  <a href="README.br.md">Português (Brasil)</a> |
-  <a href="README.th.md">ไทย</a> |
-  <a href="README.tr.md">Türkçe</a> |
-  <a href="README.uk.md">Українська</a> |
-  <a href="README.bn.md">বাংলা</a> |
-  <a href="README.gr.md">Ελληνικά</a> |
-  <a href="README.vi.md">Tiếng Việt</a>
-</p>
+**Private Unified Super Intelligence**
 
-[![OpenCode Terminal UI](packages/web/src/assets/lander/screenshot.png)](https://opencode.ai)
+pusi is an AI development workspace based on [OpenCode](https://github.com/anomalyco/opencode), maintained in [leejaywon/pusi](https://github.com/leejaywon/pusi).
 
----
+The desktop and web interface adds voice input, Ollama model management, a project/session sidebar, and reasoning disclosure with elapsed-time labels. See [the project overview](FORK.md) for the changes and [the voice guide](VOICE_INPUT.md) for setup and compatibility.
 
-### About this fork
+## Run from source
 
-This repository contains additional desktop and web UI work: voice input, Ollama model management, a project/session sidebar, reasoning disclosure and timing, and shared icon and layout updates. See [the fork overview](FORK.md) and [voice setup guide](VOICE_INPUT.md) for details and compatibility limits.
+Use the Bun version declared in `package.json` (currently 1.3.14) and install Node.js for Electron's installation script.
 
-The installation commands and release links below refer to upstream OpenCode. To run this fork’s changes, use the source development instructions in the voice setup guide.
-
-### Installation
-
-```bash
-# YOLO
-curl -fsSL https://opencode.ai/install | bash
-
-# Package managers
-npm i -g opencode-ai@latest        # or bun/pnpm/yarn
-scoop install opencode             # Windows
-choco install opencode             # Windows
-brew install anomalyco/tap/opencode # macOS and Linux (recommended, always up to date)
-brew install opencode              # macOS and Linux (official brew formula, updated less)
-sudo pacman -S opencode            # Arch Linux (Stable)
-paru -S opencode-bin               # Arch Linux (Latest from AUR)
-mise use -g opencode               # Any OS
-nix run nixpkgs#opencode           # or github:anomalyco/opencode for latest dev branch
+```sh
+git clone https://github.com/leejaywon/pusi.git
+cd pusi
+bun install
+bun run dev:desktop
 ```
 
-> [!TIP]
-> Remove versions older than 0.1.x before installing.
+The development application is named **pusi Dev**. This is a source-development workflow; this repository does not yet provide a tested pusi installer or automatic-update service. Upstream OpenCode installers do not include pusi's changes.
 
-### Desktop App (BETA)
+For the web app and backend commands, see [CONTRIBUTING.md](CONTRIBUTING.md). That document describes the inherited OpenCode development workflow; proposals for pusi belong in this repository.
 
-OpenCode is also available as a desktop application. Download directly from the [releases page](https://github.com/anomalyco/opencode/releases) or [opencode.ai/download](https://opencode.ai/download).
+## Project identity and compatibility
 
-| Platform              | Download                           |
-| --------------------- | ---------------------------------- |
-| macOS (Apple Silicon) | `opencode-desktop-mac-arm64.dmg`   |
-| macOS (Intel)         | `opencode-desktop-mac-x64.dmg`     |
-| Windows               | `opencode-desktop-windows-x64.exe` |
-| Linux                 | `.deb`, `.rpm`, or `.AppImage`     |
+- Desktop names are `pusi`, `pusi Beta`, and `pusi Dev`, with separate application identifiers and desktop settings directories.
+- Desktop links use `pusi-app://`, without registering OpenCode's URL scheme.
+- Desktop release metadata targets `leejaywon/pusi`. Automatic updates are disabled until a pusi release pipeline is tested.
+- Internal `@opencode-ai/*` workspace names, backend configuration conventions, and `OPENCODE_*` environment variables remain compatible with the inherited codebase. Changing the desktop identifier does not migrate existing OpenCode settings or isolate every backend data path.
+- Some inherited artwork, translations, and service integrations still refer to OpenCode. They are not a claim that pusi is an official OpenCode release.
 
-```bash
-# macOS (Homebrew)
-brew install --cask opencode-desktop
-# Windows (Scoop)
-scoop bucket add extras; scoop install extras/opencode-desktop
-```
+## Validation
 
-#### Installation Directory
+Run typechecks from the affected package directories, and use the focused checks documented in [FORK.md](FORK.md#validation) and [VOICE_INPUT.md](VOICE_INPUT.md#automated-checks). Physical microphone behavior, real speech models, and packaged releases need separate testing on the target device.
 
-The install script respects the following priority order for the installation path:
+## Attribution and license
 
-1. `$OPENCODE_INSTALL_DIR` - Custom installation directory
-2. `$XDG_BIN_DIR` - XDG Base Directory Specification compliant path
-3. `$HOME/bin` - Standard user binary directory (if it exists or can be created)
-4. `$HOME/.opencode/bin` - Default fallback
-
-```bash
-# Examples
-OPENCODE_INSTALL_DIR=/usr/local/bin curl -fsSL https://opencode.ai/install | bash
-XDG_BIN_DIR=$HOME/.local/bin curl -fsSL https://opencode.ai/install | bash
-```
-
-### Agents
-
-OpenCode includes two built-in agents you can switch between with the `Tab` key.
-
-- **build** - Default, full-access agent for development work
-- **plan** - Read-only agent for analysis and code exploration
-  - Denies file edits by default
-  - Asks permission before running bash commands
-  - Ideal for exploring unfamiliar codebases or planning changes
-
-Also included is a **general** subagent for complex searches and multistep tasks.
-This is used internally and can be invoked using `@general` in messages.
-
-Learn more about [agents](https://opencode.ai/docs/agents).
-
-### Documentation
-
-For more info on how to configure OpenCode, [**head over to our docs**](https://opencode.ai/docs).
-
-### Contributing
-
-If you're interested in contributing to OpenCode, please read our [contributing docs](./CONTRIBUTING.md) before submitting a pull request.
-
-### Building on OpenCode
-
-If you are working on a project that's related to OpenCode and is using "opencode" as part of its name, for example "opencode-dashboard" or "opencode-mobile", please add a note to your README to clarify that it is not built by the OpenCode team and is not affiliated with us in any way.
-
----
-
-**Join our community** [Discord](https://discord.gg/opencode) | [X.com](https://x.com/opencode)
+pusi derives from OpenCode. The original copyright and MIT license are preserved in [LICENSE](LICENSE). Tabler icons retain their [MIT license](packages/ui/TABLER-LICENSE). Existing translated README files describe upstream OpenCode and have not yet been adapted for pusi.

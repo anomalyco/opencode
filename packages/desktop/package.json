@@ -4,10 +4,10 @@
   "version": "1.18.34",
   "type": "module",
   "license": "MIT",
-  "homepage": "https://opencode.ai",
+  "homepage": "https://github.com/leejaywon/pusi",
   "author": {
-    "name": "OpenCode",
-    "email": "hello@opencode.ai"
+    "name": "leejaywon",
+    "url": "https://github.com/leejaywon"
   },
   "scripts": {
     "typecheck": "tsgo -b",
@@ -72,5 +72,6 @@
     "@parcel/watcher-linux-x64-musl": "2.5.1",
     "@parcel/watcher-win32-arm64": "2.5.1",
     "@parcel/watcher-win32-x64": "2.5.1"
-  }
+  },
+  "description": "pusi — Private Unified Super Intelligence"
 }

@@ -1,6 +1,6 @@
-# Voice input and model management in this fork
+# Voice input and model management in pusi
 
-This fork adds voice input to the chat composer and model management for Ollama and transcription providers. See [the fork overview](FORK.md) for the other desktop and UI changes.
+pusi adds voice input to the chat composer and model management for Ollama and transcription providers. See [the project overview](FORK.md) for the other desktop and UI changes.
 
 ## Development setup
 
@@ -11,7 +11,7 @@ bun install
 bun run dev:desktop
 ```
 
-The development app is named OpenCode Dev. Main-process and preload changes require reopening the development app. See [CONTRIBUTING.md](CONTRIBUTING.md) for the web app and backend development commands.
+The development app is named pusi Dev. Main-process and preload changes require reopening the development app. See [CONTRIBUTING.md](CONTRIBUTING.md) for the web app and backend development commands.
 
 Ollama and external transcription services must be installed or configured separately. The managed MLX option requires macOS on Apple Silicon and Python 3.10–3.13. Set `OPENCODE_VOICE_PYTHON` to a supported Python executable if it is not discoverable automatically.
 
