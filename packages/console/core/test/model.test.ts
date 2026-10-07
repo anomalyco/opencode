@@ -47,3 +47,18 @@ describe("ZenData cost200K threshold", () => {
     expect(entry(data).cost200K?.threshold).toBe(272_000)
   })
 })
+
+test("accepts the SystemOne provider format", () => {
+  expect(
+    ZenData.validate({
+      ...base,
+      providers: {
+        systemone: {
+          api: "https://api.typesafe.ai/v1",
+          apiKey: "test",
+          format: "systemone",
+        },
+      },
+    }).providers.systemone.format,
+  ).toBe("systemone")
+})

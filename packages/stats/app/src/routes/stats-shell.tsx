@@ -10,7 +10,7 @@ export type HeaderLink = { href: string; label: string }
 export const githubLink = {
   href: "https://github.com/anomalyco/opencode",
   apiHref: "https://api.github.com/repos/anomalyco/opencode",
-  fallbackStars: "195K",
+  fallbackStars: "208K",
 }
 export const themePreferences = ["dark", "light", "system"] as const
 export const themeStorageKey = "opencode:stats-theme"
@@ -231,6 +231,7 @@ export function Footer(props: {
     { href: "#cache-ratio", label: i18n.t("nav.cacheRatio") },
     { href: "#market-share", label: i18n.t("nav.marketShare") },
     { href: "#geo-breakdown", label: i18n.t("nav.geoBreakdown") },
+    { href: "#methodology", label: i18n.t("methodology.title") },
   ]
   const legal = [
     { href: "https://opencode.ai/legal/terms-of-service", label: i18n.t("footer.terms") },

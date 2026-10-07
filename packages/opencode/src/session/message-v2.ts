@@ -148,7 +148,11 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     if (model.api.npm === "@ai-sdk/anthropic") return true
     if (model.api.npm === "@ai-sdk/openai") return true
     if (model.api.npm === "@ai-sdk/amazon-bedrock/mantle") return true
-    if (model.api.npm === "@ai-sdk/amazon-bedrock") return attachment.mime.startsWith("image/")
+    if (model.api.npm === "@ai-sdk/amazon-bedrock") {
+      if (!attachment.mime.startsWith("image/")) return false
+      const id = model.api.id.toLowerCase()
+      return id.includes("anthropic.") || id.includes("nova") || id.includes("llama4") || id.includes("llama-4")
+    }
     if (model.api.npm === "@ai-sdk/xai") return attachment.mime.startsWith("image/")
     if (model.api.npm === "@ai-sdk/google-vertex/anthropic") return true
     if (model.api.npm === "@ai-sdk/google") {
@@ -157,6 +161,12 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
     }
     return false
   }
+
+  // xAI rejects any other image format (e.g. GIF) with invalid_image, failing the whole request.
+  const rejectedByProvider = (attachment: { mime: string }) =>
+    model.api.npm === "@ai-sdk/xai" &&
+    attachment.mime.startsWith("image/") &&
+    !["image/png", "image/jpeg", "image/webp"].includes(attachment.mime)
 
   const toModelOutput = (options: { toolCallId: string; input: unknown; output: unknown }) => {
     const output = options.output
@@ -293,7 +303,10 @@ export const toModelMessagesEffect = Effect.fnUntraced(function* (
             const outputText = part.state.time.compacted
               ? "[Old tool result content cleared]"
               : truncateToolOutput(part.state.output, options?.toolOutputMaxChars)
-            const attachments = part.state.time.compacted || options?.stripMedia ? [] : (part.state.attachments ?? [])
+            const attachments =
+              part.state.time.compacted || options?.stripMedia
+                ? []
+                : (part.state.attachments ?? []).filter((a) => !rejectedByProvider(a))
 
             // For providers that don't support media in tool results, extract media files
             // (images, PDFs) to be sent as a separate user message

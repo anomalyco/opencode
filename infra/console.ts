@@ -1,8 +1,6 @@
-import { deployAws, domain } from "./stage"
+import { domain } from "./stage"
 import { EMAILOCTOPUS_API_KEY } from "./app"
 import { SECRET } from "./secret"
-
-const lake = deployAws ? await import("./lake") : undefined
 
 ////////////////
 // DATABASE
@@ -150,8 +148,9 @@ const zenLitePrice = new stripe.Price("ZenLitePrice", {
 })
 const ZEN_LITE_PRICE = new sst.Linkable("ZEN_LITE_PRICE", {
   properties: {
-    product: zenLiteProduct.id,
-    price: zenLitePrice.id,
+    // Use existing Go resources in dev's checkout Stripe account.
+    product: $app.stage === "dev" ? "prod_U1tUscpmwtV2bG" : zenLiteProduct.id,
+    price: $app.stage === "dev" ? "price_1T3phhE7fOCwHSD4zS6w2NPy" : zenLitePrice.id,
     priceInr: 92900,
     firstMonth50Coupon: zenLiteCouponFirstMonth50.id,
     firstMonth100Coupon: zenLiteCouponFirstMonth100.id,
@@ -252,7 +251,7 @@ const SALESFORCE_INSTANCE_URL = new sst.Secret("SALESFORCE_INSTANCE_URL")
 
 const logProcessor = new sst.cloudflare.Worker("LogProcessor", {
   handler: "packages/console/function/src/log-processor.ts",
-  link: [SECRET.HoneycombApiKey, ...(lake?.lakeIngest ? [lake.lakeIngest] : [])],
+  link: [SECRET.HoneycombApiKey],
 })
 
 new sst.cloudflare.x.SolidStart("Console", {
@@ -282,6 +281,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     ZEN_LITE_PRICE,
     new sst.Secret("ZEN_LIMITS"),
     new sst.Secret("ZEN_SESSION_SECRET"),
+    new sst.Secret("CLOUDFLARE_ACCESS_CLIENT_ID"),
     ...ZEN_MODELS,
     ...($dev
       ? [
@@ -295,6 +295,7 @@ new sst.cloudflare.x.SolidStart("Console", {
     //VITE_API_URL: gateway.url.apply((url) => url!),
     VITE_AUTH_URL: auth.url.apply((url) => url!),
     VITE_STRIPE_PUBLISHABLE_KEY: STRIPE_PUBLISHABLE_KEY.value,
+    VITE_CONSOLE_MARKETING_ENABLED: $app.stage === "dev" ? "true" : "false",
   },
   transform: {
     server: {
