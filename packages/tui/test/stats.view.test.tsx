@@ -85,7 +85,14 @@ test("stats shows only this year and returns after errors or success", async () 
     expect(requests).toHaveLength(2)
     expect(setup.captureCharFrame()).toContain("TOKENS")
     expect(setup.captureCharFrame()).not.toContain("headline")
-    setup.mockInput.pressKey("ESCAPE")
+    for (const [width, height] of [[40, 18], [120, 42]]) {
+      setup.resize(width, height)
+      await setup.waitForVisualIdle()
+      const rows = setup.captureCharFrame().split("\n")
+      expect(rows[height - 2]?.trim()).toBe("esc back")
+      expect(rows[height - 2]?.indexOf("esc back")).toBe(width - 10)
+    }
+    await setup.mockMouse.click(111, 40)
     await setup.waitForFrame((frame) => frame.includes("commands") && !frame.includes("opencode / stats"))
   } finally {
     if (!setup.renderer.isDestroyed) setup.renderer.destroy()

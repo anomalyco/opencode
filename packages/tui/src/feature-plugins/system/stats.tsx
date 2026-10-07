@@ -156,6 +156,7 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
     <box width="100%" height="100%" backgroundColor={theme.background.base}>
       <scrollbox
         flexGrow={1}
+        minHeight={0}
         contentOptions={{
           alignItems: "center",
           justifyContent: "center",
@@ -175,7 +176,7 @@ function StatsPage(props: { context: Plugin.Context; onClose: () => void }) {
           </Show>
         </Show>
       </scrollbox>
-      <box flexDirection="row" justifyContent="flex-end" paddingRight={2} flexShrink={0}>
+      <box flexDirection="row" justifyContent="flex-end" paddingRight={2} paddingBottom={1} flexShrink={0}>
         <text fg={theme.text.action.secondary.base} selectable={false} onMouseUp={props.onClose}>
           esc back
         </text>
