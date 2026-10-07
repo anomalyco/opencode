@@ -444,7 +444,7 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
       openLocalFile={(href) => void links.open({ href, base: dir(), session: props.session })}
     >
       <div class="mx-auto w-full max-w-3xl px-8 py-6">
-        <Markdown text={props.text} cacheKey={props.cacheKey} class="select-text" />
+        <Markdown text={props.text} cacheKey={props.cacheKey} />
       </div>
     </MarkdownProvider>
   )
@@ -454,7 +454,7 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
 function ArtifactMermaid(props: { text: string; cacheKey?: string }) {
   return (
     <div class="mx-auto w-full max-w-4xl px-8 py-6">
-      <Markdown text={`\`\`\`mermaid\n${props.text}\n\`\`\``} cacheKey={props.cacheKey} class="select-text" />
+      <Markdown text={`\`\`\`mermaid\n${props.text}\n\`\`\``} cacheKey={props.cacheKey} />
     </div>
   )
 }
