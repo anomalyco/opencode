@@ -1,7 +1,8 @@
 import type { Component, JSX } from "solid-js"
-import { createMemo, splitProps } from "solid-js"
+import { Show, splitProps } from "solid-js"
 import sprite from "./provider-icons/sprite.svg"
 import { iconNames, type IconName } from "./provider-icons/types"
+import { TablerIcon } from "./tabler-icon"
 
 export type ProviderIconProps = JSX.SVGElementTags["svg"] & {
   id: string
@@ -9,17 +10,31 @@ export type ProviderIconProps = JSX.SVGElementTags["svg"] & {
 
 export const ProviderIcon: Component<ProviderIconProps> = (props) => {
   const [local, rest] = splitProps(props, ["id", "class", "classList"])
-  const resolved = createMemo(() => (iconNames.includes(local.id as IconName) ? local.id : "synthetic"))
   return (
-    <svg
-      data-component="provider-icon"
-      {...rest}
-      classList={{
-        ...local.classList,
-        [local.class ?? ""]: !!local.class,
-      }}
+    <Show
+      when={local.id !== "synthetic" && local.id !== "dinference" && iconNames.includes(local.id as IconName)}
+      fallback={
+        <TablerIcon
+          name={local.id === "dinference" ? "console" : "provider"}
+          data-component="provider-icon"
+          {...rest}
+          classList={{
+            ...local.classList,
+            [local.class ?? ""]: !!local.class,
+          }}
+        />
+      }
     >
-      <use href={`${sprite}#${resolved()}`} />
-    </svg>
+      <svg
+        data-component="provider-icon"
+        {...rest}
+        classList={{
+          ...local.classList,
+          [local.class ?? ""]: !!local.class,
+        }}
+      >
+        <use href={`${sprite}#${local.id}`} />
+      </svg>
+    </Show>
   )
 }

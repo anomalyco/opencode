@@ -1,3 +1,4 @@
+import { TablerIcon } from "@opencode-ai/ui/tabler-icon"
 import {
   createEffect,
   createMemo,
@@ -635,9 +636,7 @@ function TitlebarUpdateIconButton(props: { state: TitlebarUpdatePillState }) {
             when={!props.state.installing}
             fallback={<span data-slot="titlebar-update-loader" aria-hidden="true" />}
           >
-            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
-              <path d="M7 11V3M3.5 7.63128L7 11L10.5 7.63128" stroke="currentColor" />
-            </svg>
+            <TablerIcon name="arrowDown" width="14" height="14" aria-hidden="true" />
           </Show>
         </span>
       </button>

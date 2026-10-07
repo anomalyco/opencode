@@ -559,7 +559,7 @@ function SessionHeaderV2Actions(props: { state: SessionHeaderV2ActionsState }) {
             aria-label={props.state.reviewLabel}
             aria-expanded={props.state.reviewOpened}
             aria-controls="review-panel"
-            icon={<IconV2 name="sidebar-right" />}
+            icon={<IconV2 name={props.state.reviewOpened ? "rightPanelClose" : "rightPanelOpen"} />}
           />
         </TooltipV2>
       </Show>

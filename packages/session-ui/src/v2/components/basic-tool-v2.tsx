@@ -1,3 +1,4 @@
+import { TablerIcon } from "@opencode-ai/ui/tabler-icon"
 import { Collapsible } from "@kobalte/core/collapsible"
 import { type ComponentProps, type JSX, For, Show, createMemo, splitProps } from "solid-js"
 import { DiffChanges } from "@opencode-ai/ui/v2/diff-changes-v2"
@@ -5,22 +6,7 @@ import { TextShimmerV2 } from "@opencode-ai/ui/v2/text-shimmer-v2"
 import "./basic-tool-v2.css"
 
 function ChevronIcon() {
-  return (
-    <svg
-      data-slot="basic-tool-v2-chevron"
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      aria-hidden="true"
-    >
-      <path
-        d="M6.75194 10.6243C6.41861 10.8187 6 10.5783 6 10.1924V5.80837C6 5.42247 6.41861 5.18204 6.75194 5.37648L10.5096 7.56846C10.8404 7.7614 10.8404 8.2393 10.5096 8.43224L6.75194 10.6243Z"
-        fill="currentColor"
-      />
-    </svg>
-  )
+  return <TablerIcon name="chevron-right" data-slot="basic-tool-v2-chevron" width="16" height="16" aria-hidden="true" />
 }
 
 export interface BasicToolV2TriggerTitle {

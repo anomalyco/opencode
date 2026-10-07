@@ -1,3 +1,4 @@
+import { TablerIcon } from "../../components/tabler-icon"
 import { Toaster, toast, type ToasterProps } from "solid-sonner"
 import { isRTL } from "@kobalte/core/i18n"
 import type { ComponentProps, JSX } from "solid-js"
@@ -119,12 +120,7 @@ function ToastV2CloseButton(props: ComponentProps<"button">) {
 }
 
 function CloseIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-      <path d="M4.25 11.75L11.75 4.25" stroke="currentColor" />
-      <path d="M11.75 11.75L4.25 4.25" stroke="currentColor" />
-    </svg>
-  )
+  return <TablerIcon name="close" width="16" height="16" aria-hidden="true" />
 }
 
 export const ToastV2 = Object.assign(ToastV2Root, {

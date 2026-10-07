@@ -1,0 +1,17 @@
+[data-animation="loading-spin"] {
+  flex-shrink: 0;
+  animation: tabler-loading-spin 1s linear infinite;
+  transform-origin: center;
+}
+
+@keyframes tabler-loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-animation="loading-spin"] {
+    animation: none;
+  }
+}

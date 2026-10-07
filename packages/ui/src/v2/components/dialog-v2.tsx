@@ -1,3 +1,4 @@
+import { TablerIcon } from "../../components/tabler-icon"
 import { Dialog as Kobalte } from "@kobalte/core/dialog"
 import { type ComponentProps, type JSXElement, type ParentProps, Show, children, splitProps } from "solid-js"
 import { useI18n } from "../../context/i18n"
@@ -61,20 +62,7 @@ export function DialogHeader(props: DialogHeaderProps) {
       {local.children}
       {!hideClose() && (
         <Kobalte.CloseButton data-slot="dialog-close-button" aria-label={local.closeLabel ?? i18n.t("ui.common.close")}>
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
-            <path
-              d="M12.4446 3.55469L3.55566 12.4436M3.55566 3.55469L12.4446 12.4436"
-              stroke="currentColor"
-              stroke-linejoin="round"
-            />
-          </svg>
+          <TablerIcon name="close" width="16" height="16" aria-hidden="true" />
         </Kobalte.CloseButton>
       )}
     </div>

@@ -1,3 +1,4 @@
+import { TablerIcon } from "@opencode-ai/ui/tabler-icon"
 import {
   createEffect,
   createMemo,
@@ -1340,13 +1341,7 @@ export function MessageTimeline(props: {
             }}
             onClick={props.onResumeScroll}
           >
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M12.3333 8.66665L8 13L3.66667 8.66665M8 12.6667V2.83332"
-                stroke="currentColor"
-                stroke-linecap="square"
-              />
-            </svg>
+            <TablerIcon name="arrowDown" width="16" height="16" aria-hidden="true" />
           </button>
         </Show>
       </div>

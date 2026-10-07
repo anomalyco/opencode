@@ -1,33 +1,14 @@
+import { TablerIcon } from "../../components/tabler-icon"
 import { DropdownMenu } from "@kobalte/core/dropdown-menu"
 import { ContextMenu } from "@kobalte/core/context-menu"
 import { Show, splitProps, type Component, type ComponentProps, type JSX, type ParentProps } from "solid-js"
 import "./menu-v2.css"
 
 const ChevronRight: Component = () => (
-  <svg
-    data-slot="menu-v2-item-chevron"
-    width="16"
-    height="16"
-    viewBox="0 0 16 16"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden="true"
-  >
-    <path d="M6 4L10 8L6 12V4Z" fill="currentColor" />
-  </svg>
+  <TablerIcon name="chevron-right" data-slot="menu-v2-item-chevron" width="16" height="16" aria-hidden="true" />
 )
 
-const CheckMark: Component = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-    <path
-      d="M3.53564 8.17857L6.39279 11.75L12.4642 4.25"
-      stroke="currentColor"
-      stroke-width="1"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-    />
-  </svg>
-)
+const CheckMark: Component = () => <TablerIcon name="check" width="14" height="14" aria-hidden="true" />
 
 function ItemBody(
   props: ParentProps<{

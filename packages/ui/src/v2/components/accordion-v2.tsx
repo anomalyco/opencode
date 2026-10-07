@@ -1,19 +1,10 @@
+import { TablerIcon } from "../../components/tabler-icon"
 import { Accordion as Kobalte } from "@kobalte/core/accordion"
 import { Show, splitProps, type Component, type ComponentProps, type ParentProps } from "solid-js"
 import "./accordion-v2.css"
 
 const ChevronDown: Component = () => (
-  <svg
-    data-slot="accordion-v2-chevron"
-    width="14"
-    height="14"
-    viewBox="0 0 14 14"
-    fill="none"
-    xmlns="http://www.w3.org/2000/svg"
-    aria-hidden="true"
-  >
-    <path d="M4 5.5L7 8.5L10 5.5" stroke="currentColor" />
-  </svg>
+  <TablerIcon name="chevron-down" data-slot="accordion-v2-chevron" width="14" height="14" aria-hidden="true" />
 )
 
 export interface AccordionV2Props extends ComponentProps<typeof Kobalte> {}

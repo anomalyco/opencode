@@ -1,3 +1,4 @@
+import { TablerIcon } from "@opencode-ai/ui/tabler-icon"
 import { IconButton } from "@opencode-ai/ui/icon-button"
 import { useI18n } from "@opencode-ai/ui/context/i18n"
 import { SegmentedControlItemV2, SegmentedControlV2 } from "@opencode-ai/ui/v2/segmented-control-v2"
@@ -104,22 +105,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
               onClearClick={() => props.onFilterChange("")}
               placeholder={i18n.t("ui.sessionReviewV2.filterFiles")}
               aria-label={i18n.t("ui.sessionReviewV2.filterFiles")}
-              leadingIcon={
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 14 14"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  aria-hidden="true"
-                >
-                  <path
-                    d="M12.25 12.25L10.0625 10.0625M11.0833 6.41667C11.0833 8.994 8.994 11.0833 6.41667 11.0833C3.83934 11.0833 1.75 8.994 1.75 6.41667C1.75 3.83934 3.83934 1.75 6.41667 1.75C8.994 1.75 11.0833 3.83934 11.0833 6.41667Z"
-                    stroke="currentColor"
-                    stroke-linecap="square"
-                  />
-                </svg>
-              }
+              leadingIcon={<TablerIcon name="magnifying-glass" width="14" height="14" aria-hidden="true" />}
             />
           </div>
           <ScrollView

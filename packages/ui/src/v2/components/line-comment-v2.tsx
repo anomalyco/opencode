@@ -1,3 +1,4 @@
+import { TablerIcon } from "../../components/tabler-icon"
 import { For, Show, createSignal, onMount, splitProps, type ComponentProps, type JSX } from "solid-js"
 import { FileIcon } from "../../components/file-icon"
 import { useI18n } from "../../context/i18n"
@@ -8,19 +9,13 @@ import "./line-comment-v2.css"
 /** Horizontal “more” glyph for the display-card overflow control (Figma outline-dots). */
 export function LineCommentV2OverflowIcon(props: ComponentProps<"svg">) {
   return (
-    <svg
+    <TablerIcon
+      name="outline-dots"
       {...props}
       width={props.width ?? 16}
       height={props.height ?? 16}
-      viewBox="0 0 16 16"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
       aria-hidden={props["aria-hidden"] ?? "true"}
-    >
-      <path d="M2.5 7.5H3.5V8.5H2.5V7.5Z" stroke="currentColor" />
-      <path d="M7.5 7.5H8.5V8.5H7.5V7.5Z" stroke="currentColor" />
-      <path d="M12.5 7.5H13.5V8.5H12.5V7.5Z" stroke="currentColor" />
-    </svg>
+    />
   )
 }
 

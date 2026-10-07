@@ -1,3 +1,4 @@
+import { TablerIcon } from "@opencode-ai/ui/tabler-icon"
 import { Icon as IconV2 } from "@opencode-ai/ui/v2/icon"
 import { IconButtonV2 } from "@opencode-ai/ui/v2/icon-button-v2"
 import { isRTL } from "@kobalte/core/i18n"
@@ -35,16 +36,7 @@ export function TabsInfoPopup() {
             class="absolute top-3 end-3 z-10 size-5 flex items-center justify-center rounded-[4px] bg-[rgba(0,0,0,0.4)]"
             onClick={settings.general.dismissTabsToast}
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              aria-hidden="true"
-            >
-              <path d="M4.25 11.75L11.75 4.25M11.75 11.75L4.25 4.25" stroke="white" />
-            </svg>
+            <TablerIcon name="close" width="16" height="16" aria-hidden="true" style={{ color: "#fff" }} />
           </button>
           <button
             type="button"

@@ -62,7 +62,6 @@
     flex-shrink: 0;
     width: 16px;
     height: 16px;
-    animation: tool-error-card-spin 0.65s linear infinite;
     transform-origin: 50% 50%;
   }
 
@@ -190,11 +189,5 @@
     color: var(--tec-suffix);
     white-space: pre-wrap;
     word-break: break-word;
-  }
-}
-
-@keyframes tool-error-card-spin {
-  to {
-    transform: rotate(360deg);
   }
 }
