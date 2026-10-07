@@ -41,6 +41,20 @@ const noRemoteConfig = HttpClient.make((request) =>
   Effect.succeed(HttpClientResponse.fromWeb(request, new Response(null, { status: 404 }))),
 )
 
+// Periodic Console checks run on TestClock, but a loopback request takes real time that `drain` does not wait for.
+// Calling the server's handler in-process keeps each check within `drain`.
+const inProcess = (server: { fetch: (request: Request) => Response | Promise<Response> }) =>
+  Effect.provideService(
+    HttpClient.HttpClient,
+    HttpClient.make((request) =>
+      HttpClientRequest.toWeb(request).pipe(
+        Effect.orDie,
+        Effect.flatMap((web) => Effect.promise(async () => server.fetch(web))),
+        Effect.map((response) => HttpClientResponse.fromWeb(request, response)),
+      ),
+    ),
+  )
+
 function consoleServer(orgID: string | null | undefined, unavailable = false) {
   const config: { authorization: string | null; orgID: string | null }[] = []
   const requests: string[] = []
@@ -602,7 +616,7 @@ describe("OpencodePlugin", () => {
           yield* websearch.transform(() => {
             rebuilds.websearch++
           })
-          yield* addPlugin()
+          yield* addPlugin().pipe(inProcess(server))
           yield* drain
           const initial = { ...rebuilds }
           expect(state.requests).toBe(1)
@@ -723,6 +737,7 @@ describe("OpencodePlugin", () => {
                   }),
               }),
             ),
+            inProcess(server),
           )
           yield* drain
 
@@ -857,7 +872,7 @@ describe("OpencodePlugin", () => {
               metadata: { server: server.url.origin, orgID: "org_acme", orgName: "Acme" },
             }),
           })
-          yield* addPlugin()
+          yield* addPlugin().pipe(inProcess(server))
           yield* drain
           expect(managed.current()).toEqual({ statements: [sudo], organization: "Acme" })
 
@@ -930,7 +945,7 @@ describe("OpencodePlugin", () => {
             rebuilds.count++
           })
           const alpha = yield* account("org_alpha", "Alpha")
-          yield* addPlugin()
+          yield* addPlugin().pipe(inProcess(server))
           yield* drain
           const initial = rebuilds.count
           expect(state.requests).toBe(1)
@@ -1027,7 +1042,7 @@ describe("OpencodePlugin", () => {
               metadata: { server: `${server.url.origin}/console`, orgID: "org_acme", orgName: "Acme" },
             }),
           })
-          yield* addPlugin()
+          yield* addPlugin().pipe(inProcess(server))
           yield* drain
           expect(yield* status()).toBeUndefined()
 
@@ -1140,7 +1155,7 @@ describe("OpencodePlugin", () => {
             integrationID: Integration.ID.make("opencode"),
             value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
           })
-          yield* addPlugin()
+          yield* addPlugin().pipe(inProcess(server))
           yield* drain
 
           for (const body of [
@@ -1257,7 +1272,7 @@ describe("OpencodePlugin", () => {
           })
           const status = () =>
             integrations.get(Integration.ID.make("opencode")).pipe(Effect.map((item) => item?.connections[0]?.status))
-          yield* addPlugin()
+          yield* addPlugin().pipe(inProcess(server))
           yield* drain
 
           expect(yield* status()).toEqual({ status: "needs_auth", message: "Reconnect OpenCode Console to continue" })
