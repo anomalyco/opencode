@@ -251,17 +251,19 @@ Configure terminal integration:
 {
   "terminal": {
     "title": true,
-    "copy": "select"
+    "copy": "select",
+    "primary_selection": false
   }
 }
 ```
 
 <div class="docs-table-scroll" role="region" aria-label="Terminal settings" tabIndex={0}>
 
-| Setting          | Values               | Description                                                                                              |
-| ---------------- | -------------------- | -------------------------------------------------------------------------------------------------------- |
-| `terminal.title` | boolean              | Updates the terminal window title.                                                                       |
-| `terminal.copy`  | `manual` or `select` | Copies manually or immediately after selection. The platform default is `manual` on Windows and `select` elsewhere. |
+| Setting                      | Values               | Description                                                                                                            |
+| ---------------------------- | -------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `terminal.title`             | boolean              | Updates the terminal window title.                                                                                     |
+| `terminal.copy`              | `manual` or `select` | Copies manually or immediately after selection. The platform default is `manual` on Windows and `select` elsewhere.    |
+| `terminal.primary_selection` | boolean              | Also copies text to the primary selection used by middle-click paste. Off by default. Paste still reads the clipboard. |
 
 </div>
 

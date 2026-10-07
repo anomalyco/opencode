@@ -19,7 +19,7 @@ import { useRenderer, useTerminalDimensions } from "@opentui/solid"
 import { normalizePromptContent } from "../prompt/content"
 import { deduplicatePromptImages, promptAttachmentLabel } from "../prompt/attachment"
 import { resolvePastedAttachments } from "../component/prompt/local-attachment"
-import { createTuiClipboard, type ClipboardWriteSelection, type OwnedClipboardService } from "../clipboard"
+import { createTuiClipboard, type OwnedClipboardService } from "../clipboard"
 import type { ClipboardService } from "../context/clipboard"
 import fuzzysort from "fuzzysort"
 import path from "path"
@@ -127,7 +127,6 @@ type PromptInput = {
   mono: Accessor<boolean>
   imagePreview?: boolean
   clipboard?: Pick<ClipboardService, "read">
-  selection: ClipboardWriteSelection
   history?: Accessor<RunPrompt[]>
   queuedPrompts: Accessor<FooterQueuedPrompt[]>
   onQueuedPromptSteer: (inboxID: string) => Promise<boolean>
@@ -870,7 +869,7 @@ export function createPromptState(input: PromptInput): PromptState {
           disposed || area !== target || target.isDestroyed || revision !== before || !input.prompt()
         const content =
           text === undefined
-            ? await (input.clipboard ?? (clipboard ??= createTuiClipboard(renderer, input.selection))).read()
+            ? await (input.clipboard ?? (clipboard ??= createTuiClipboard(renderer))).read()
             : { mime: "text/plain", data: text }
         if (!content || changed()) return
         const image = content.mime.startsWith("image/")

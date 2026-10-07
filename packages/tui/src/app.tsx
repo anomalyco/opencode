@@ -4,7 +4,7 @@ import { Effect, Latch } from "effect"
 import { Service, type Endpoint } from "@opencode/client/effect/service"
 import { OpenCode, type SessionInfo } from "@opencode/client"
 import { Global } from "@opencode/util/global"
-import { ClipboardProvider, useClipboard } from "./context/clipboard"
+import { ClipboardProvider, useClipboard, type ClipboardService } from "./context/clipboard"
 import { LogProvider, type LogSink } from "./context/log"
 import { ExitProvider, useExit } from "./context/exit"
 import { EpilogueProvider } from "./context/epilogue"
@@ -29,6 +29,7 @@ import {
   onCleanup,
   batch,
   Show,
+  type JSX,
 } from "solid-js"
 import {
   TuiLifecycleProvider,
@@ -103,7 +104,7 @@ import { StorageProvider, useStorage } from "./context/storage"
 import { SessionTerminalsProvider } from "./context/session-terminals"
 import { PanelProvider, usePanel } from "./context/panel"
 import { SessionFrame } from "./component/session-frame"
-import { createTuiClipboard } from "./clipboard"
+import { createTuiClipboard, type OwnedClipboardService } from "./clipboard"
 
 registerOpencodeSpinner()
 
@@ -265,7 +266,7 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
       })
       renderer.setMaxListeners(15)
       const clipboard = yield* Effect.acquireRelease(
-        Effect.sync(() => createTuiClipboard(renderer, config.linux_clipboard_selection)),
+        Effect.sync(() => createTuiClipboard(renderer)),
         (clipboard) =>
           Effect.tryPromise(() => clipboard.dispose()).pipe(
             Effect.catch((error) => Effect.sync(() => log("error", "Failed to dispose TUI clipboard", { error }))),
@@ -352,13 +353,13 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                   skipInitialLoading: Boolean(process.env.OPENCODE_FAST_BOOT),
                                 }}
                               >
-                                <ClipboardProvider value={clipboard}>
-                                  <ArgsProvider {...input.args}>
-                                    <ConfigProvider
-                                      config={config}
-                                      service={input.config}
-                                      options={{ terminalSuspend: process.platform !== "win32" }}
-                                    >
+                                <ArgsProvider {...input.args}>
+                                  <ConfigProvider
+                                    config={config}
+                                    service={input.config}
+                                    options={{ terminalSuspend: process.platform !== "win32" }}
+                                  >
+                                    <ConfigClipboardProvider clipboard={clipboard}>
                                       <Keymap.Provider>
                                         <ToastProvider>
                                           <RouteProvider
@@ -420,9 +421,9 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
                                           </RouteProvider>
                                         </ToastProvider>
                                       </Keymap.Provider>
-                                    </ConfigProvider>
-                                  </ArgsProvider>
-                                </ClipboardProvider>
+                                    </ConfigClipboardProvider>
+                                  </ConfigProvider>
+                                </ArgsProvider>
                               </TuiStartupProvider>
                             </TuiTerminalEnvironmentProvider>
                           </TuiLifecycleProvider>
@@ -450,6 +451,15 @@ export const run = Effect.fn("Tui.run")(function* (input: TuiInput) {
     if (result.epilogue) process.stdout.write(result.epilogue + "\n")
   })
 })
+
+function ConfigClipboardProvider(props: { clipboard: OwnedClipboardService; children: JSX.Element }) {
+  const config = useConfig()
+  const clipboard: ClipboardService = {
+    read: () => props.clipboard.read(),
+    write: (text) => props.clipboard.write(text, { primary: config.data.terminal?.primary_selection === true }),
+  }
+  return <ClipboardProvider value={clipboard}>{props.children}</ClipboardProvider>
+}
 
 function App() {
   const app = useTuiApp()

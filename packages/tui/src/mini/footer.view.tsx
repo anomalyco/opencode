@@ -380,7 +380,6 @@ export function RunFooterView(props: RunFooterViewProps) {
     mono: () => props.mono,
     imagePreview: props.tuiConfig.prompt?.image_preview,
     clipboard: props.clipboard,
-    selection: props.tuiConfig.linux_clipboard_selection,
     history: props.history,
     queuedPrompts: queue,
     onQueuedPromptSteer: (inboxID) => queuedPromptAction("steer", inboxID),

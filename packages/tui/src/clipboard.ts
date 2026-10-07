@@ -3,40 +3,32 @@ import {
   createHostClipboard,
   createRendererClipboardAdapter,
   decodePasteBytes,
-  type ClipboardSelection,
   type ClipboardService as CoreClipboardService,
   type RendererClipboardBoundary,
 } from "@opentui/core"
 import type { ClipboardContent, ClipboardService } from "./context/clipboard"
 
-export type OwnedClipboardService = Required<ClipboardService> & Readonly<{ dispose(): Promise<void> }>
-export type ClipboardWriteSelection = ClipboardSelection | "both"
+export type OwnedClipboardService = Readonly<{
+  read: ClipboardService["read"]
+  write(text: string, options?: { primary?: boolean }): Promise<void>
+  dispose(): Promise<void>
+}>
 
-export function createTuiClipboard(
-  renderer: RendererClipboardBoundary,
-  selection: ClipboardWriteSelection,
-): OwnedClipboardService {
+export function createTuiClipboard(renderer: RendererClipboardBoundary): OwnedClipboardService {
   return createClipboardAdapter(
     createClipboard({
       host: createHostClipboard(),
       terminal: createRendererClipboardAdapter(renderer),
     }),
-    selection,
   )
 }
 
-export function createClipboardAdapter(
-  clipboard: CoreClipboardService,
-  selection: ClipboardWriteSelection = "clipboard",
-): OwnedClipboardService {
-  const readSelection: ClipboardSelection = selection === "primary" ? "primary" : "clipboard"
-  const writeSelections: ClipboardSelection[] = selection === "both" ? ["clipboard", "primary"] : [selection]
-
+export function createClipboardAdapter(clipboard: CoreClipboardService): OwnedClipboardService {
   return {
     async read(): Promise<ClipboardContent | undefined> {
       const result = await clipboard.read({
         preferredTypes: ["image/png", "text/plain"],
-        selection: readSelection,
+        selection: "clipboard",
       })
       if (result.status !== "read") {
         if (result.status === "failed") throw result.error
@@ -62,24 +54,19 @@ export function createClipboardAdapter(
       }
       throw new Error(`Unexpected clipboard MIME type: ${result.representation.mimeType}`)
     },
-    async write(text) {
+    async write(text, options) {
       // OpenTUI rejects NUL before any destination; host clipboard text cannot contain it.
       const payload = text.replaceAll("\0", "")
-      const results = await Promise.all(
-        writeSelections.map((selection) =>
-          clipboard.writeText(payload, {
-            destination: "all-available",
-            selection,
-          }),
-        ),
-      )
-      if (results.some((result) => result.host.status === "written" || result.terminal.status === "attempted")) return
-      const failure = results.map((result) => (result.host.status === "failed" ? result.host.error : undefined)).find(
-        (error) => error !== undefined,
-      )
-      if (failure) throw failure
-      const [first] = results
-      throw new Error(`Clipboard write failed (host: ${first.host.status}, terminal: ${first.terminal.status})`)
+      const [result] = await Promise.all([
+        clipboard.writeText(payload, { destination: "all-available", selection: "clipboard" }),
+        // The primary selection is best effort; the clipboard result decides success.
+        options?.primary
+          ? clipboard.writeText(payload, { destination: "all-available", selection: "primary" })
+          : undefined,
+      ])
+      if (result.host.status === "written" || result.terminal.status === "attempted") return
+      if (result.host.status === "failed") throw result.host.error
+      throw new Error(`Clipboard write failed (host: ${result.host.status}, terminal: ${result.terminal.status})`)
     },
     dispose() {
       return clipboard.dispose()
