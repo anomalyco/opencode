@@ -267,6 +267,7 @@ it.live("returns 404 when a previously readable file is deleted", () =>
 
         const readable = yield* Effect.promise(() => handler(new Request(url)))
         expect(readable.status).toBe(200)
+        expect(yield* Effect.promise(() => readable.text())).toBe("content")
 
         yield* Effect.promise(() => fs.unlink(file))
         const missing = yield* Effect.promise(() => handler(new Request(url)))
