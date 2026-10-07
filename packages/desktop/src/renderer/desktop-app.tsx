@@ -142,7 +142,6 @@ export function DesktopApp(props: { api: ElectronAPI; version: string }) {
               <DesktopFirstLaunchOnboarding
                 api={props.api}
                 initialUrl={initialUrl}
-                serverKey={key}
                 pending={firstLaunch() ?? false}
                 onReady={() => setStartup("onboardingReady", true)}
               />
