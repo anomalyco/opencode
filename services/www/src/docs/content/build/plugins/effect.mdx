@@ -1531,6 +1531,10 @@ share one runtime copy.
 - Plugins and their `node_modules` dependencies always execute against the host OpenCode release's `effect` instance.
   Use `effect` APIs and module paths compatible with the OpenCode release you target; dependencies built on another
   `effect` major (such as Effect 3) also receive the host's `effect` and are not supported.
+- Only public `effect` subpaths are provided. A plugin that imports one of Effect's private `internal` modules fails to
+  load with an error naming the path.
+- The compiled OpenCode binary does not include the Scalar and Swagger UI assets used by Effect's HTTP API docs pages;
+  serving those pages from a plugin shows a notice instead.
 
 The package entrypoint exports `Plugin.define` with an `effect` function.
 
