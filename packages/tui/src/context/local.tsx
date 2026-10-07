@@ -8,6 +8,7 @@ import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
 import { RGBA } from "@opentui/core"
 import { readJson, writeJsonAtomic } from "../util/persistence"
+import { Flock } from "@opencode/util/flock"
 import {
   createModelPreferenceRepository,
   cycleModelVariant,
@@ -25,6 +26,32 @@ import { useData } from "./data"
 import { usePermission } from "./permission"
 import { useLocation } from "./location"
 import { parse } from "../util/model"
+
+export function parsePinned(value: unknown) {
+  if (!value || typeof value !== "object") return []
+  const pinned = (value as Record<string, unknown>).pinned
+  if (!Array.isArray(pinned)) return []
+  return pinned.filter((item): item is string => typeof item === "string")
+}
+
+export function setPinned(pinned: string[], sessionID: string, pin: boolean) {
+  if (!pin) return pinned.filter((x) => x !== sessionID)
+  return pinned.includes(sessionID) ? pinned : [...pinned, sessionID]
+}
+
+// Every TUI instance shares this file, so apply the change to its current contents under
+// a lock instead of writing back a snapshot that may predate another instance's pins.
+export function persistPinned(filePath: string, sessionID: string, pin: boolean) {
+  return Flock.withLock(
+    filePath,
+    async () => {
+      const next = setPinned(parsePinned(await readJson<unknown>(filePath).catch(() => undefined)), sessionID, pin)
+      await writeJsonAtomic(filePath, { pinned: next })
+      return next
+    },
+    { dir: path.join(path.dirname(filePath), "locks") },
+  )
+}
 
 export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   name: "Local",
@@ -512,36 +539,26 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       const filePath = path.join(paths.state, "session.json")
-      const state = {
-        pending: false,
-      }
 
-      function save() {
-        if (!sessionStore.ready) {
-          state.pending = true
-          return
-        }
-        state.pending = false
-        void writeJsonAtomic(filePath, {
-          pinned: sessionStore.pinned,
-        })
-      }
-
-      readJson<unknown>(filePath)
+      // Writes chain off the initial read so they never run before it completes.
+      let pending = readJson<unknown>(filePath)
         .then((x) => {
-          if (!x || typeof x !== "object") return
-          const pinned = (x as Record<string, unknown>).pinned
-          if (Array.isArray(pinned))
-            setSessionStore(
-              "pinned",
-              pinned.filter((item): item is string => typeof item === "string"),
-            )
+          setSessionStore("pinned", parsePinned(x))
         })
         .catch(() => {})
         .finally(() => {
           setSessionStore("ready", true)
-          if (state.pending) save()
         })
+
+      function update(sessionID: string, pin: boolean) {
+        setSessionStore("pinned", setPinned(sessionStore.pinned, sessionID, pin))
+        pending = pending
+          .then(() => persistPinned(filePath, sessionID, pin))
+          .then((next) => {
+            setSessionStore("pinned", next)
+          })
+          .catch(() => {})
+      }
 
       const slots = createMemo(() => {
         const existing = new Set(
@@ -554,15 +571,8 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       })
 
       function prune(sessionID: string) {
-        batch(() => {
-          if (sessionStore.pinned.includes(sessionID)) {
-            setSessionStore(
-              "pinned",
-              sessionStore.pinned.filter((x) => x !== sessionID),
-            )
-          }
-          save()
-        })
+        if (!sessionStore.pinned.includes(sessionID)) return
+        update(sessionID, false)
       }
 
       event.on("session.deleted", (evt) => {
@@ -581,14 +591,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           return sessionStore.pinned.includes(sessionID)
         },
         togglePin(sessionID: string) {
-          batch(() => {
-            const exists = sessionStore.pinned.includes(sessionID)
-            const next = exists
-              ? sessionStore.pinned.filter((x) => x !== sessionID)
-              : [...sessionStore.pinned, sessionID]
-            setSessionStore("pinned", next)
-            save()
-          })
+          update(sessionID, !sessionStore.pinned.includes(sessionID))
         },
         quickSwitch(slot: number) {
           const target = slots()[slot - 1]
